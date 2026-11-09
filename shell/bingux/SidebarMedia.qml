@@ -97,15 +97,14 @@ ScrollView {
                 }
             }
         }
-        Text {
+        StateMessage {
+            objectName: "sidebarMediaEmpty"
             visible: root.players.length === 0
-            Layout.fillWidth: true
-            Layout.topMargin: 24
-            text: "Play music or a video in an app to control it here."
-            wrapMode: Text.Wrap
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
+            fill: true
+            Layout.preferredHeight: Math.max(implicitHeight, root.availableHeight)
+            iconName: "applications-multimedia-symbolic"
+            title: "Nothing is playing"
+            detail: "Play music or a video in an app to control it here."
         }
     }
 }

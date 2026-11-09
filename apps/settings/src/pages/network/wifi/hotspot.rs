@@ -292,10 +292,17 @@ impl Component for HotspotPage {
                     Element::from(status(Status::Info("A hardware switch has turned Wi-Fi off.".into()))),
                 ))),
                 Radio::Airplane => blocks.push(Element::from(Group::new(None::<String>).row(
-                    Element::from(status(Status::Info(
-                        "Airplane mode has turned Wi-Fi off. Turn off airplane mode on the Network page to share a connection."
-                            .into(),
-                    ))),
+                    Element::from(
+                        status(Status::Info(
+                            "Airplane mode has turned Wi-Fi off, so there is no connection to share."
+                                .into(),
+                        ))
+                        .action("Turn off airplane mode", move |_| {
+                            model::toggle_link(ui.ctx, "airplane".to_string(), false, || {
+                                model::set_airplane_mode(false)
+                            })
+                        }),
+                    ),
                 ))),
                 Radio::Off => blocks.push(Element::from(
                     Group::new(None::<String>).row(Element::from(

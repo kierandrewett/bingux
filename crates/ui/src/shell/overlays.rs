@@ -107,6 +107,10 @@ pub struct Overlays {
     toasts: State<Vec<(u64, Toast)>>,
     toast_closing: State<Option<u64>>,
     next_toast: State<u64>,
+    /// Where a docked sidebar sits across the window (start and end x), so
+    /// a toast centres on the page beside it, not on the whole window.
+    /// `None` when the window shows no docked sidebar.
+    sidebar: State<Option<(f32, f32)>>,
 }
 
 impl Overlays {
@@ -124,6 +128,16 @@ impl Overlays {
             toasts: State::create_in_scope(Vec::new(), scope),
             toast_closing: State::create_in_scope(None, scope),
             next_toast: State::create_in_scope(0, scope),
+            sidebar: State::create_in_scope(None, scope),
+        }
+    }
+
+    /// Tells the overlays where the window's docked sidebar is (its start and
+    /// end x, in window pixels), or that there is none. A toast then centres
+    /// on the content beside it. The split view's sidebar calls this.
+    pub(crate) fn set_sidebar(mut self, span: Option<(f32, f32)>) {
+        if *self.sidebar.peek() != span {
+            self.sidebar.set(span);
         }
     }
 
@@ -131,6 +145,13 @@ impl Overlays {
     pub fn show_dialog(mut self, dialog: Dialog) {
         self.dialog_closing.set(false);
         self.dialog.set(Some(dialog));
+    }
+
+    /// The `closing` flag of the open dialog: true while it fades out. A focus
+    /// scope in the dialog reads it to tell its own close from focus an app
+    /// moved afterwards.
+    pub(crate) fn dialog_closing_state(self) -> State<bool> {
+        self.dialog_closing
     }
 
     /// Whether a dialog is open or fading out. A component that floats its
@@ -245,8 +266,7 @@ impl Overlays {
             .focused_accessibility_id
             .peek()
             == self.menu_panel;
-        if let (Some(owner), Restore::ToOwner) = (owner, restore_on_close(owner.is_some(), holds))
-        {
+        if let (Some(owner), Restore::ToOwner) = (owner, restore_on_close(owner.is_some(), holds)) {
             owner.request_focus();
         }
     }
@@ -391,7 +411,9 @@ impl OverlayStack {
     /// is open.
     fn menu_layer(self, over_dialog: bool) -> Layer {
         match self {
-            Self::Window if over_dialog => crate::layers::level(crate::layers::LEVEL_MENU_OVER_DIALOG),
+            Self::Window if over_dialog => {
+                crate::layers::level(crate::layers::LEVEL_MENU_OVER_DIALOG)
+            }
             Self::Window => crate::layers::level(crate::layers::LEVEL_MENU),
             Self::Popup => crate::layers::PANEL,
         }
@@ -509,8 +531,11 @@ impl Component for ToastLayer {
         let mut pull = use_state(|| 0.0_f32);
         // One id per action and one for the dismiss cross.
         let buttons = self.toast.banner.action_count() + 1;
-        let button_ids =
-            use_hook(move || (0..buttons).map(|_| AccessibilityId::new_unique()).collect::<Vec<_>>());
+        let button_ids = use_hook(move || {
+            (0..buttons)
+                .map(|_| AccessibilityId::new_unique())
+                .collect::<Vec<_>>()
+        });
         let progress = use_presence(!self.closing, tokens.motion(140), move || {
             overlays.finish_toast(id)
         });
@@ -555,12 +580,19 @@ impl Component for ToastLayer {
 
         // `offset_y` shifts an element's children, not the element: the toast
         // slides inside a wrapper, so its background moves with its text.
+        // A toast centres on the content: beside a docked sidebar, on the
+        // page, not over the sidebar's edge.
+        let screen = crate::surface::window_size().width;
+        let (start, end) = content_span(*overlays.sidebar.read(), screen);
         rect()
             .position(
-                Position::new_absolute().bottom(S6.px() + Dim::SafeBottom.px()).left(0.0),
+                Position::new_absolute()
+                    .bottom(S6.px() + Dim::SafeBottom.px())
+                    .left(start),
             )
             .layer(self.layer)
-            .tw(&tokens, &[w_screen(), flex_col(), items(Align::Center)])
+            .width(Size::px((end - start).max(0.0)))
+            .tw(&tokens, &[flex_col(), items(Align::Center)])
             .child(
                 rect()
                     .component("Toast")
@@ -618,5 +650,38 @@ impl Component for ToastLayer {
                     })
                     .child(banner),
             )
+    }
+}
+
+/// The part of a window `screen` px wide that a toast centres on: all of it,
+/// or the side a docked sidebar (`sidebar`, its start and end x) leaves,
+/// whichever edge the sidebar is on.
+fn content_span(sidebar: Option<(f32, f32)>, screen: f32) -> (f32, f32) {
+    match sidebar {
+        Some((start, end)) if end > start && end - start < screen => {
+            if start <= screen - end {
+                (end, screen)
+            } else {
+                (0.0, start)
+            }
+        }
+        _ => (0.0, screen),
+    }
+}
+
+#[cfg(test)]
+mod toast_span_tests {
+    use super::content_span;
+
+    #[test]
+    fn a_toast_centres_on_the_page_beside_a_docked_sidebar() {
+        // No sidebar: the whole window.
+        assert_eq!(content_span(None, 1000.0), (0.0, 1000.0));
+        // A sidebar at the start: the page after it.
+        assert_eq!(content_span(Some((0.0, 280.0)), 1000.0), (280.0, 1000.0));
+        // Right to left, the sidebar at the end: the page before it.
+        assert_eq!(content_span(Some((720.0, 1000.0)), 1000.0), (0.0, 720.0));
+        // A sidebar that fills the window (a phone's page list): the window.
+        assert_eq!(content_span(Some((0.0, 1000.0)), 1000.0), (0.0, 1000.0));
     }
 }

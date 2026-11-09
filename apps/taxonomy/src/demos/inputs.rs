@@ -666,6 +666,23 @@ pub const TABS: &[Spec] = &[
         .page(FRAME_HEIGHT)
         .script("key tab; wait 300; save {out}"),
     Spec::forced(
+        "Unsaved changes: a dot before the title, the title stays plain",
+        || {
+            framed(
+                tab_strip(
+                    vec![
+                        TabItem::new(1, "Notes").edited(true),
+                        TabItem::new(2, "Budget"),
+                        TabItem::new(3, "Draft").edited(true),
+                    ],
+                    0,
+                )
+                .on_new(|_| {}),
+            )
+        },
+    )
+    .page(FRAME_HEIGHT),
+    Spec::forced(
         "Right to left: the first tab at the right, icons and close buttons mirrored",
         || {
             directed(

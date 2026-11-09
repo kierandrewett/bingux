@@ -48,15 +48,6 @@ InstallerPage {
                     ticked: entry.selected
                     onClicked: InstallerState.chooseLocale(entry.modelData)
                 }
-                Rectangle {
-                    visible: entry.selected
-                    anchors.left: parent.left
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Math.round(5 * InstallerState.uiScale)
-                    height: parent.height * 0.6
-                    radius: width / 2
-                    color: Theme.accent
-                }
             }
         }
     }

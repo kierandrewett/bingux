@@ -36,6 +36,9 @@ use crate::component::ComponentName;
 use crate::controls::{
     StopRing, focus_stop_press, focus_stop_pressed, icon_button, path_label, text_field, usage_bar,
 };
+use crate::dnd::{
+    DragAction, DragInfo, DropTarget, Dropped, Format, SPRING_DELAY, use_drop_target,
+};
 use crate::focus::{focus_node, step_focus};
 use crate::icons::{self, Icon};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
@@ -844,10 +847,48 @@ impl Component for PlaceRow {
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let session = use_hook(super::drag::file_drag);
-        let drop_here = match (&session, &self.drop) {
-            (Some(session), Some(folder)) => session.is_over(folder),
-            _ => false,
-        };
+        // Files from another program: dropped on the place, they go into
+        // its folder; held over it for a moment, the place opens, so they
+        // can be dropped further in.
+        let outside = use_drop_target(
+            DropTarget::new()
+                .accepts([Format::Uris])
+                .enabled(session.is_some() && self.drop.is_some())
+                .preferred(|info: DragInfo| {
+                    let held = freya_winit::modifiers::live();
+                    if held.contains(Modifiers::CONTROL) {
+                        DragAction::Copy
+                    } else if held.contains(Modifiers::SHIFT) || info.local {
+                        DragAction::Move
+                    } else {
+                        DragAction::Copy
+                    }
+                })
+                .spring_loaded(SPRING_DELAY, {
+                    let on_open = self.on_open.clone();
+                    move |_: DragInfo| on_open.call(())
+                })
+                .on_drop({
+                    let folder = self.drop.clone();
+                    move |dropped: Dropped| {
+                        let paths = dropped.data.files();
+                        if let (Some(session), Some(folder)) = (session, folder.clone())
+                            && !paths.is_empty()
+                        {
+                            session.drop_from_outside(
+                                paths,
+                                folder,
+                                dropped.action == DragAction::Copy,
+                            );
+                        }
+                    }
+                }),
+        );
+        let drop_here = outside.is_targeted()
+            || match (&session, &self.drop) {
+                (Some(session), Some(folder)) => session.is_over(folder),
+                _ => false,
+            };
         let silent = matches!(self.usage, UsageLine::NotResponding);
         let icon = if silent {
             self.icon.dimmed()
@@ -914,7 +955,8 @@ impl Component for PlaceRow {
         };
         let tall = line.is_some();
 
-        let content = rect()
+        let content = outside
+            .track(rect())
             .component("PlaceRow")
             .tw(&tokens, LIST_ITEM)
             .tw(&tokens, &[grow_children()])

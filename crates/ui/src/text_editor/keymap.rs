@@ -122,6 +122,27 @@ impl Command {
                 | Command::ToggleComment
         )
     }
+
+    /// What the command's undo step is called in a menu ("Undo duplicate
+    /// line"), for the commands that edit; `None` for a move.
+    pub fn label(&self) -> Option<&'static str> {
+        Some(match self {
+            Command::Type(_) | Command::Newline | Command::LineBelow | Command::LineAbove => {
+                "typing"
+            }
+            Command::Backspace | Command::Delete | Command::DeleteToLineStart => "delete",
+            Command::DeleteWord { .. } => "delete word",
+            Command::Indent => "indent",
+            Command::Outdent => "outdent",
+            Command::Cut => "cut",
+            Command::Duplicate => "duplicate line",
+            Command::DeleteLine => "delete line",
+            Command::MoveLines { .. } => "move line",
+            Command::JoinLines => "join lines",
+            Command::ToggleComment => "comment",
+            _ => return None,
+        })
+    }
 }
 
 /// The command for a key press, or `None` for a key the editor leaves to
@@ -242,8 +263,19 @@ pub enum ZoomStep {
     Reset,
 }
 
-/// Runs `command`. `page_rows` is how many rows Page Up and Down move.
+/// Runs `command`. `page_rows` is how many rows Page Up and Down move. An
+/// edit that makes an undo step names it by the command, for "Undo
+/// duplicate line".
 pub fn run(editor: &mut Editor, command: &Command, page_rows: usize, read_only: bool) -> Effect {
+    match command.label() {
+        Some(label) => editor.label_edit(label, |editor| {
+            execute(editor, command, page_rows, read_only)
+        }),
+        None => execute(editor, command, page_rows, read_only),
+    }
+}
+
+fn execute(editor: &mut Editor, command: &Command, page_rows: usize, read_only: bool) -> Effect {
     if read_only && command.edits() {
         // A read-only document still copies.
         return match command {

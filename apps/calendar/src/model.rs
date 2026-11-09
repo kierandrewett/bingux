@@ -11,6 +11,7 @@ use bingux_calendar_core::store::Loaded;
 use bingux_calendar_core::watch::{Event as WatchEvent, Watcher, Writer};
 use bingux_calendar_core::{Item, Key, Occurrence, Prefs, Snapshot, Store, ViewKind, Zone};
 use bingux_ui::calendar::Date;
+use bingux_ui::prelude::tr;
 use bingux_ui::task::{Feed, spawn_blocking};
 use freya::prelude::*;
 
@@ -160,7 +161,10 @@ impl Model {
                 let watcher = bingux_calendar_core::watch::watch(
                     store.clone(),
                     writer.clone(),
-                    || Prefs::load().twelve_hour(),
+                    || {
+                        Prefs::load()
+                            .twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour())
+                    },
                     move |event| watcher_feed.push(Message::Watch(event)),
                 );
                 (
@@ -209,11 +213,15 @@ impl Model {
     }
 
     pub fn first_weekday(&self) -> bingux_ui::calendar::Weekday {
-        convert::weekday_of(self.prefs.read().first_day())
+        convert::weekday_of(self.prefs.read().first_day(convert::chrono_weekday(
+            bingux_ui::locale::Locale::current().first_weekday(),
+        )))
     }
 
     pub fn twelve_hour(&self) -> bool {
-        self.prefs.read().twelve_hour()
+        self.prefs
+            .read()
+            .twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour())
     }
 
     pub fn hidden(&self) -> HashSet<String> {
@@ -423,7 +431,7 @@ impl Model {
 pub fn time_text(occurrence: &Occurrence, day: Date, twelve_hour: bool) -> String {
     use bingux_ui::calendar::format_clock;
     if occurrence.all_day {
-        return "All day".to_string();
+        return tr!("calendar-all-day");
     }
     let start_day = convert::date_of(occurrence.start.date());
     let end_day = convert::date_of(
@@ -435,13 +443,17 @@ pub fn time_text(occurrence: &Occurrence, day: Date, twelve_hour: bool) -> Strin
         if occurrence.end == occurrence.start {
             start
         } else {
-            format!("{start} to {end}")
+            tr!(
+                "calendar-time-span",
+                start = start.as_str(),
+                end = end.as_str()
+            )
         }
     } else if day == start_day {
-        format!("From {start}")
+        tr!("calendar-time-from", time = start.as_str())
     } else if day == end_day {
-        format!("Until {end}")
+        tr!("calendar-time-until", time = end.as_str())
     } else {
-        "All day".to_string()
+        tr!("calendar-all-day")
     }
 }

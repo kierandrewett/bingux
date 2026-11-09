@@ -433,6 +433,19 @@ fn browse_button(
     .into()
 }
 
+/// An invisible copy of the Browse button, at the end of a field with no
+/// button of its own, so every field in the card ends at the same edge.
+fn browse_slot() -> Element {
+    use bingux_ui::style::*;
+    let tokens = bingux_ui::surface::tokens_now();
+    rect()
+        .opacity(0.0)
+        .a11y_focusable(false)
+        .tw(&tokens, &[px(S3)])
+        .child(bingux_ui::typography::BODY.label(&tokens, "Browse…"))
+        .into()
+}
+
 /// The 802.1X form: the method and sign-in, then the certificates. Used by the wired page and by a
 /// Wi-Fi network with enterprise security.
 fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
@@ -546,6 +559,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
                 form_field("Private key password", draft.text("key_password"))
                     .password()
                     .optional()
+                    .trailing(browse_slot())
                     .wide(),
             );
     }

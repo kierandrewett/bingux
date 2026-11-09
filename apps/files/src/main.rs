@@ -8,10 +8,11 @@
 //! `bingux-ui` (the tabs and their tear-off into windows, `bingux_ui::tabs`;
 //! the compositor questions, `bingux_ui::window`; what a launch argument names,
 //! `bingux_ui::files::launch`) and in `bingux-files` (the file model). This
-//! crate is the Files window: its tabs' titles and menu, and the remembered
-//! window size.
+//! crate is the Files window: its tabs' titles and menu, the remembered
+//! window size and the tabs of the last session.
 
 mod app;
+mod session;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod window_size;
@@ -25,9 +26,10 @@ Opens each FOLDER in a new tab of the Files window, starting it if it is not\n\
 running. A FILE opens the folder that holds it, with the file selected. FOLDER\n\
 may be a path, ~, a file:// URI, bingux-files://PATH, recent:/// for the recent\n\
 files or trash:/// for the Trash. With no argument a new window opens on the\n\
-home folder, or the running window is raised. A name that is not there is\n\
-reported on stderr and opens nothing. An option other than --help is an error;\n\
-`--` ends the options, for a folder whose name starts with `-`.\n";
+tabs of the window closed last (or the home folder), or the running window is\n\
+raised. A name that is not there is reported on stderr and opens nothing. An\n\
+option other than --help is an error; `--` ends the options, for a folder\n\
+whose name starts with `-`.\n";
 
 fn main() {
     #[cfg(feature = "snapshot")]

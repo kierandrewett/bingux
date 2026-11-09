@@ -63,7 +63,7 @@ Copy picture needs `wl-copy` (Wayland) or `xclip`. Save a copy and Copy picture 
 | drag over text, `Ctrl+C`                     | select words and copy them                                         |
 | `+`, `-`, `0`, `1`, `9`, Ctrl and wheel      | zoom, fit width, 100 %, fit page                                   |
 
-The page field in the toolbar goes to a page number. The sidebar is not offered in a phone-width window.
+The page field in the toolbar goes to a page number. In a phone-width window the pages button opens the thumbnails and outline as a sheet over the page.
 
 ## Other commands
 

@@ -494,23 +494,11 @@ fn use_wired(ctx: NetCtx, name: &str) -> Result<Wired, Element> {
 }
 
 /// A page drawn blank under the veil while the device's profiles are read.
-fn loading_page(tokens: crate::ui::Tokens, wired: &Wired) -> Element {
-    veiled(
-        page_column()
-            .child(hero(
-                tokens,
-                Icon::NetworkWired,
-                "—".to_string(),
-                link_state(&wired.device),
-            ))
-            .child(
-                Group::new(None::<String>)
-                    .row(row("IP address").mono_value("—"))
-                    .row(row("Speed").value("—")),
-            ),
-        true,
-    )
-    .into()
+fn loading_page(_tokens: crate::ui::Tokens, _wired: &Wired) -> Element {
+    // The page's shape, in quiet bars: no placeholder values to dim.
+    page_column()
+        .child(bingux_ui::prelude::skeleton_rows(&["=", "--"]))
+        .into()
 }
 
 /// Run `work` and read the overview and the device's profiles again, with the error in a toast.
@@ -586,7 +574,7 @@ fn facts_group(ctx: NetCtx, device: &Device, owner: Owner) -> Group {
     if device.connected() && !unplugged(device) {
         let address = device.address4();
         if !address.is_empty() {
-            group = group.row(row("IP address").mono_value(address));
+            group = group.row(row("IP address").technical_value(address));
         }
         if let Some(speed) = device.speed {
             group = group.row(row("Speed").value(speed_text(speed)));
@@ -721,7 +709,7 @@ fn unconfigured_page(ctx: NetCtx, tokens: crate::ui::Tokens, wired: &Wired) -> E
     if device.connected() {
         let address = device.address4();
         if !address.is_empty() {
-            facts = facts.row(row("IP address").mono_value(address));
+            facts = facts.row(row("IP address").technical_value(address));
         }
         if let Some(speed) = device.speed {
             facts = facts.row(row("Speed").value(speed_text(speed)));

@@ -48,7 +48,7 @@ pub fn run_reminders() {
     bingux_calendar_core::alarm::run(
         &Store::open(),
         &stop,
-        || Prefs::load().twelve_hour(),
+        || Prefs::load().twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour()),
         |_, _| {},
     );
 }
@@ -85,9 +85,7 @@ impl Component for Content {
                         Message::Watch(WatchEvent::Reminder { title, body }) => {
                             overlays.toast(format!("{title}. {body}"));
                         }
-                        Message::SaveFailed(_) => overlays.toast(
-                            "Could not save the change. It is still on screen. Check that the calendar folder can be written to.",
-                        ),
+                        Message::SaveFailed(_) => overlays.toast(tr!("calendar-save-failed")),
                     }
                 }
             });
@@ -139,11 +137,15 @@ impl Component for Content {
         };
 
         let hint = (model.is_empty() && !*model.hint_dismissed.read() && !searching).then(|| {
-            banner("Double-click a day or press N to add an event. Drop a calendar file here to import it.")
-                .title("Your calendar is empty")
+            banner(tr!("calendar-empty-hint"))
+                .title(tr!("calendar-empty-title"))
                 .icon(Icon::XOfficeCalendar)
-                .action("Add Event", move |_| quick::open(model, window, overlays))
-                .action("Import", move |_| calendars::import(model, window, overlays))
+                .action(tr!("calendar-empty-add"), move |_| {
+                    quick::open(model, window, overlays)
+                })
+                .action(tr!("calendar-import"), move |_| {
+                    calendars::import(model, window, overlays)
+                })
                 .dismissible(move |_| {
                     let mut dismissed = model.hint_dismissed;
                     dismissed.set(true);
@@ -178,8 +180,8 @@ impl Component for Content {
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .tw(&tokens, &[w_full(), h_full(), center(), bg(Paint::Scrim)])
                 .child(
-                    status_page(Icon::DocumentOpen, "Drop to import events")
-                        .description("Calendar files (.ics) are added to your calendar."),
+                    status_page(Icon::DocumentOpen, tr!("calendar-drop-title"))
+                        .description(tr!("calendar-drop-description")),
                 )
         });
 
@@ -253,6 +255,11 @@ fn keys(
     event: &Event<KeyboardEventData>,
 ) {
     if bingux_ui::nav::modal_open() || overlays.dialog_open() {
+        return;
+    }
+    // A text field keeps its letters and digits: 1-5, t, n and e typed in it
+    // must not switch views or open a dialog.
+    if bingux_ui::focus::text_entry_focused() {
         return;
     }
     let Key::Character(text) = &event.key else {

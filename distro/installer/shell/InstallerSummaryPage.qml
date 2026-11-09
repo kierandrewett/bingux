@@ -119,7 +119,24 @@ InstallerPage {
         page.wizard.go("progress");
     }
 
+    // The consent row stays pinned under the scrolling summary. Install
+    // depends on it, so it must be reachable at any scroll position.
+    InstallerSwitchRow {
+        id: consent
+        objectName: "summaryConsent"
+        anchors.bottom: parent.bottom
+        label: InstallerState.storageMode === "erase"
+            ? "I understand that everything on " + (page.disk ? page.disk.path : "the disk") + " will be erased."
+            : "I understand the changes above will be made to " + (page.disk ? page.disk.path : "the disk") + "."
+        note: page.primaryEnabled ? "" : "Turn this on to continue."
+        checked: page.confirmedDisk !== "" && page.confirmedDisk === InstallerState.diskPath
+        onToggled: value => page.confirmedDisk = value ? InstallerState.diskPath : ""
+    }
+
     InstallerScroll {
+        objectName: "summaryScroll"
+        width: parent.width
+        height: parent.height - consent.height - Math.round(14 * page.us)
         spacing: Math.round(16 * page.us)
 
         InstallerNotice {
@@ -195,15 +212,6 @@ InstallerPage {
                     }
                 }
             }
-        }
-
-        InstallerSwitchRow {
-            visible: page.disk !== null
-            label: InstallerState.storageMode === "erase"
-                ? "I understand that everything on " + (page.disk ? page.disk.path : "the disk") + " will be erased."
-                : "I understand the changes above will be made to " + (page.disk ? page.disk.path : "the disk") + "."
-            checked: page.confirmedDisk !== "" && page.confirmedDisk === InstallerState.diskPath
-            onToggled: value => page.confirmedDisk = value ? InstallerState.diskPath : ""
         }
     }
 }

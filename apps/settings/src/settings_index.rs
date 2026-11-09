@@ -507,8 +507,8 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (
         PageId::Search,
-        "Add a folder",
-        "folder index include directory",
+        "New folder",
+        "add choose folder index include directory",
     ),
     (
         PageId::Search,
@@ -543,8 +543,8 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     ),
     (
         PageId::Search,
-        "Add engine",
-        "new search provider web address shortcut",
+        "New search engine",
+        "add new search provider web address shortcut",
     ),
     (PageId::Search, "Assistant", "ai chat model helper answers"),
     (
@@ -642,20 +642,20 @@ const SETTINGS: &[(PageId, &str, &str)] = &[
     (PageId::About, "Processor", "cpu chip cores"),
     (PageId::About, "Memory", "ram size gigabytes"),
     (PageId::About, "Graphics", "gpu video card driver"),
-    (PageId::About, "Disk", "storage drive space capacity"),
+    (PageId::About, "Capacity", "disk storage drive space"),
     (PageId::About, "Kernel", "linux version system"),
     (
         PageId::About,
         "Operating system",
         "bingux distribution name version",
     ),
-    (PageId::About, "Desktop version", "gnoblin shell version"),
+    (PageId::About, "Desktop", "gnoblin shell version"),
     (
         PageId::About,
-        "Display server",
-        "wayland x11 graphics session",
+        "Display",
+        "display server wayland x11 graphics session",
     ),
-    (PageId::About, "Bingux version", "release system version"),
+    (PageId::About, "Version", "bingux release system version"),
 ];
 
 /// The subpage a setting lives on, when it is not on the page itself.

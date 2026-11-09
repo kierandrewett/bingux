@@ -22,11 +22,11 @@
 //! [`WindowHost`]: crate::window::WindowHost
 
 pub mod owner;
+#[cfg(all(test, feature = "testing"))]
+mod ring_anim_tests;
 pub mod ring_check;
 #[cfg(all(test, feature = "testing"))]
 mod ring_layout_tests;
-#[cfg(all(test, feature = "testing"))]
-mod ring_anim_tests;
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -218,6 +218,23 @@ pub fn step_focus(back: bool) {
 pub fn focus_node(id: AccessibilityId) {
     set_keyboard_mode();
     spawn(async move { send(AccessibilityFocusStrategy::Node(id)) });
+}
+
+/// Whether the focused control is a text entry (a text field, a multiline
+/// editor or a search box). A window's own single-letter shortcuts must stand
+/// aside then, so typing `3` or `t` into a field does not run a command. Reads
+/// the focused node's accessibility role, the same one screen readers see.
+pub fn text_entry_focused() -> bool {
+    matches!(
+        Platform::get()
+            .current_window()
+            .focused_accessibility_node
+            .peek()
+            .role(),
+        accesskit::Role::TextInput
+            | accesskit::Role::MultilineTextInput
+            | accesskit::Role::SearchInput
+    )
 }
 
 impl FocusCore {
@@ -427,7 +444,8 @@ pub fn press_claimed(core: &FocusCore) -> bool {
 
 /// A press that opens something on `id`: records `id` as the pressed control
 /// and requests its focus. A popup opened by the press returns focus to `id`
-/// when it closes. Call from a control's press handler, after its action.
+/// when it closes. Call from a control's press handler, before its action, so
+/// an action that focuses another control (a dialog's result) keeps that focus.
 pub fn press_focus(core: &FocusCore, id: AccessibilityId) {
     note_press(core, id);
     id.request_focus();
@@ -540,6 +558,20 @@ pub fn trap_inline(child: impl Into<Element>) -> Trap {
     }
 }
 
+/// Whether the scope that hosts a trap is closing: a popup or a dialog provides
+/// it, so a trap can tell focus its own close moved from focus an app moved
+/// afterwards.
+#[derive(Clone)]
+pub(crate) struct ScopeClosing(pub(crate) State<bool>);
+
+/// The closing flag of the popup or dialog above the caller, if any. Read it
+/// while rendering. A control inside a closing scope takes no focus: the
+/// scope's exit hands focus back to the opener, and the control must not pull
+/// it away first.
+pub(crate) fn closing_scope() -> Option<State<bool>> {
+    try_consume_context::<ScopeClosing>().map(|closing| closing.0)
+}
+
 impl Component for Trap {
     fn render(&self) -> impl IntoElement {
         let start = use_a11y();
@@ -562,6 +594,15 @@ impl Component for Trap {
             }
         });
 
+        // Whether the popup or dialog hosting this scope is closing. A closing
+        // one keeps its controls until its exit ends, so focus moved during the
+        // exit belongs to whatever claimed it.
+        let closing = try_consume_context::<ScopeClosing>().map(|closing| closing.0);
+        let closing_now = move || closing.as_ref().is_some_and(|closing| *closing.peek());
+        // The last focus this scope held while open: the control the user was
+        // on when the scope closed.
+        let held_focus = use_hook(|| Rc::new(std::cell::Cell::new(None::<AccessibilityId>)));
+
         let drop_core = core.clone();
         use_hook({
             let core = core.clone();
@@ -569,6 +610,7 @@ impl Component for Trap {
         });
         use_drop({
             let window = window.clone();
+            let held_focus = held_focus.clone();
             move || {
                 let restore = drop_core.0.borrow_mut().scopes.remove(start);
                 // The window may already be gone at shutdown; then there is
@@ -578,7 +620,13 @@ impl Component for Trap {
                     return;
                 }
                 drop_core.publish_depth();
-                if let Some(opener) = restore {
+                // An app that focused another control while the scope closed
+                // (a dialog's result callback focusing the editor) keeps that
+                // focus. The opener takes it back only over nothing, or over
+                // the scope's own last control.
+                let focus = *window.focused_accessibility_id.peek();
+                let own = focus == ACCESSIBILITY_ROOT_ID || held_focus.get() == Some(focus);
+                if let Some(opener) = restore.filter(|_| own) {
                     let mut mode = window.navigation_mode;
                     mode.set(NavigationMode::Keyboard);
                     window.send(UserEvent::FocusAccessibilityNode(
@@ -602,10 +650,17 @@ impl Component for Trap {
         // window's root, so a scope that opens with its card taking the focus
         // is not pulled onto its start first.
         let held = use_hook(|| Rc::new(std::cell::Cell::new(false)));
+        let focus_seen = held_focus.clone();
         use_side_effect(move || {
-            if *focused.read() != ACCESSIBILITY_ROOT_ID {
+            let focus = *focused.read();
+            if focus != ACCESSIBILITY_ROOT_ID {
                 held.set(true);
-            } else if held.get() && fallback_core.0.borrow().scopes.is_live(start) {
+                // Focus a closing popup gives up is not the scope's own.
+                if !closing_now() {
+                    focus_seen.set(Some(focus));
+                }
+            } else if held.get() && fallback_core.0.borrow().scopes.is_live(start) && !closing_now()
+            {
                 send(AccessibilityFocusStrategy::Node(start));
             }
         });
@@ -636,7 +691,9 @@ impl Component for Trap {
             // The scope is modal: assistive technology treats the page behind
             // as inert, and the inspector marks it so.
             .a11y_builder(|builder| builder.set_modal())
-            .maybe(self.fill, |root| root.width(Size::fill()).height(Size::fill()))
+            .maybe(self.fill, |root| {
+                root.width(Size::fill()).height(Size::fill())
+            })
             .child(Sentinel {
                 id: start,
                 edge: Edge::TrapStart(end),
@@ -676,12 +733,18 @@ mod edge_tests {
 
     #[test]
     fn tab_off_a_traps_last_control_wraps_to_its_start() {
-        assert_eq!(edge_step(Edge::TrapEnd(START), Dir::Forward), Step::Enter(START));
+        assert_eq!(
+            edge_step(Edge::TrapEnd(START), Dir::Forward),
+            Step::Enter(START)
+        );
     }
 
     #[test]
     fn shift_tab_off_a_traps_first_control_wraps_to_its_end() {
-        assert_eq!(edge_step(Edge::TrapStart(END), Dir::Backward), Step::Enter(END));
+        assert_eq!(
+            edge_step(Edge::TrapStart(END), Dir::Backward),
+            Step::Enter(END)
+        );
     }
 
     #[test]
@@ -751,16 +814,17 @@ mod tab_tests {
     }
 
     fn focused(shot: &mut Snapshot) -> AccessibilityId {
-        shot.runner()
-            .run_in(|| *Platform::get().current_window().focused_accessibility_id.peek())
+        shot.runner().run_in(|| {
+            *Platform::get()
+                .current_window()
+                .focused_accessibility_id
+                .peek()
+        })
     }
 
     #[test]
     fn each_tab_press_moves_focus_one_control_and_shift_tab_walks_back() {
-        let mut shot = Snapshot::new(
-            || Root.into_element(),
-            (520.0, 520.0),
-        );
+        let mut shot = Snapshot::new(|| Root.into_element(), (520.0, 520.0));
         shot.settle(Duration::from_millis(300));
         let tab = || Key::Named(NamedKey::Tab);
 
@@ -778,7 +842,12 @@ mod tab_tests {
             walk.push(now);
         }
         shot.key(tab());
-        assert_eq!(focused(&mut shot), walk[0], "Tab {} wraps to the first control", STOPS + 1);
+        assert_eq!(
+            focused(&mut shot),
+            walk[0],
+            "Tab {} wraps to the first control",
+            STOPS + 1
+        );
 
         // Shift+Tab retraces the lap one control per press.
         for (back, want) in walk.iter().rev().enumerate() {
@@ -791,5 +860,84 @@ mod tab_tests {
                 STOPS - 1 - back
             );
         }
+    }
+
+    /// The editor's focusable surface, outside the dialog's trap. A dialog's
+    /// result callback focuses it, as the editor does after a file is chosen.
+    const EDITOR: AccessibilityId = AccessibilityId(0x0ED1_70);
+
+    /// Root for the result test: it provides the tokens the window host reads.
+    #[derive(PartialEq)]
+    struct ResultRoot;
+
+    impl Component for ResultRoot {
+        fn render(&self) -> impl IntoElement {
+            let _ = provide_tokens();
+            WindowHost::new(ResultPage)
+        }
+    }
+
+    /// An opener, the editor, and a dialog that answers by focusing the editor.
+    /// The dialog provides its closing flag as the real dialog layer does, and
+    /// stays mounted through its exit before it unmounts.
+    #[derive(PartialEq)]
+    struct ResultPage;
+
+    impl Component for ResultPage {
+        fn render(&self) -> impl IntoElement {
+            let tokens = use_tokens();
+            let open = use_state(|| false);
+            let closing = use_state(|| false);
+            use_provide_context(move || super::ScopeClosing(closing));
+            let mut page = rect()
+                .expanded()
+                .tw(&tokens, &[flex_col(), p(S4), gap(S2)])
+                .child(action_button("Open", move |_: ()| {
+                    let mut open = open;
+                    open.set(true);
+                }))
+                .child(
+                    rect()
+                        .width(Size::px(200.0))
+                        .height(Size::px(40.0))
+                        .a11y_id(EDITOR)
+                        .a11y_focusable(true),
+                );
+            if *open.read() {
+                let dialog = rect().child(action_button("Finish", move |_: ()| {
+                    let mut closing = closing;
+                    closing.set(true);
+                    // The response focuses the editor, then the dialog starts its exit.
+                    EDITOR.request_focus();
+                    spawn(async move {
+                        // The exit animation keeps the trap mounted for a while.
+                        timer(Duration::from_millis(150)).await;
+                        let mut open = open;
+                        open.set(false);
+                    });
+                }));
+                page = page.child(super::trap(dialog));
+            }
+            page
+        }
+    }
+
+    /// A dialog's result callback focuses another control while the dialog
+    /// closes: that focus stays, and the trap does not restore the opener over it.
+    #[test]
+    fn result_focus_from_a_closing_dialog_wins_over_the_opener_restore() {
+        let mut shot = Snapshot::new(|| ResultRoot.into_element(), (520.0, 520.0));
+        assert!(shot.click_text("Open"), "the opener is on screen");
+        shot.settle(Duration::from_millis(200));
+        assert!(
+            shot.click_text("Finish"),
+            "the dialog's result button is on screen"
+        );
+        shot.settle(Duration::from_millis(200));
+        assert_eq!(
+            focused(&mut shot),
+            EDITOR,
+            "the editor the result callback focused keeps the focus"
+        );
     }
 }

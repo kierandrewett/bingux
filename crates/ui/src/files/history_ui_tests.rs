@@ -40,7 +40,8 @@ struct Tree {
 
 impl Tree {
     fn new(tag: &str) -> Self {
-        let root = std::env::temp_dir().join(format!("bingux-history-ui-{}-{tag}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("bingux-history-ui-{}-{tag}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         for dir in ["alpha/one", "alpha/two", "beta/inner", "gamma"] {
             std::fs::create_dir_all(root.join(dir)).expect("a folder in the temporary directory");
@@ -51,11 +52,19 @@ impl Tree {
     }
 
     fn at(&self, below: &str) -> Where {
-        Where::Folder(if below.is_empty() { self.root.clone() } else { self.root.join(below) })
+        Where::Folder(if below.is_empty() {
+            self.root.clone()
+        } else {
+            self.root.join(below)
+        })
     }
 
     fn name(&self) -> String {
-        self.root.file_name().expect("a name").to_string_lossy().into_owned()
+        self.root
+            .file_name()
+            .expect("a name")
+            .to_string_lossy()
+            .into_owned()
     }
 }
 
@@ -92,16 +101,20 @@ impl Component for Window {
         rect()
             .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                if event.modifiers.contains(Modifiers::CONTROL) && event.key == Key::Named(NamedKey::Tab) {
+                if event.modifiers.contains(Modifiers::CONTROL)
+                    && event.key == Key::Named(NamedKey::Tab)
+                {
                     event.stop_propagation();
                     let next = (*active.peek() + 1) % count;
                     active.set(next);
                 }
             })
             .child(OverlayHost::new(
-                rect().tw(&tokens, &[w_full(), h_flex(), flex_col()]).child(browse(
-                    Browse::new(memory).on_new_tab(EventHandler::new(move |path: PathBuf| opened.0.borrow_mut().push(path))),
-                )),
+                rect()
+                    .tw(&tokens, &[w_full(), h_flex(), flex_col()])
+                    .child(browse(Browse::new(memory).on_new_tab(EventHandler::new(
+                        move |path: PathBuf| opened.0.borrow_mut().push(path),
+                    )))),
             ))
     }
 }
@@ -109,7 +122,16 @@ impl Component for Window {
 fn open(tabs: Vec<TabMemory>) -> (Snapshot, Opened) {
     let opened = Opened::default();
     let shared = opened.clone();
-    let mut shot = Snapshot::new(move || Window { tabs: tabs.clone(), opened: shared.clone() }.into_element(), SIZE);
+    let mut shot = Snapshot::new(
+        move || {
+            Window {
+                tabs: tabs.clone(),
+                opened: shared.clone(),
+            }
+            .into_element()
+        },
+        SIZE,
+    );
     shot.settle(Duration::from_millis(1200));
     (shot, opened)
 }
@@ -132,7 +154,11 @@ fn names(tree: &Tree, trail: &Trail) -> (Vec<String>, String, Vec<String>) {
         },
         Where::Recent => "recent".to_string(),
     };
-    (trail.back.iter().map(name).collect(), name(&trail.current), trail.forward.iter().map(name).collect())
+    (
+        trail.back.iter().map(name).collect(),
+        name(&trail.current),
+        trail.forward.iter().map(name).collect(),
+    )
 }
 
 fn strings(list: &[&str]) -> Vec<String> {
@@ -158,10 +184,13 @@ fn named(shot: &mut Snapshot, class: &'static str) -> Vec<Area> {
 }
 
 fn centre(area: &Area) -> (f32, f32) {
-    (area.min_x() + area.width() / 2.0, area.min_y() + area.height() / 2.0)
+    (
+        area.min_x() + area.width() / 2.0,
+        area.min_y() + area.height() / 2.0,
+    )
 }
 
-/// The toolbar's icon buttons, left to right: Back, Forward, Up, Refresh, …
+/// The header's icon buttons, left to right: Back, Forward, then the rest.
 fn toolbar(shot: &mut Snapshot) -> Vec<Area> {
     let mut buttons = named(shot, "IconButton");
     let top = buttons.iter().map(Area::min_y).fold(f32::MAX, f32::min);
@@ -174,7 +203,11 @@ fn toolbar(shot: &mut Snapshot) -> Vec<Area> {
 fn mouse(shot: &mut Snapshot, at: (f32, f32), button: MouseButton) {
     let cursor = CursorPoint::new(at.0 as f64, at.1 as f64);
     for name in [MouseEventName::MouseDown, MouseEventName::MouseUp] {
-        shot.runner().send_event(PlatformEvent::Mouse { name, cursor, button: Some(button) });
+        shot.runner().send_event(PlatformEvent::Mouse {
+            name,
+            cursor,
+            button: Some(button),
+        });
         shot.runner().sync_and_update();
     }
     rest(shot);
@@ -211,7 +244,13 @@ fn labels(shot: &mut Snapshot) -> Vec<String> {
             return Some(label.text.to_string());
         }
         let paragraph = Paragraph::try_downcast(element)?;
-        Some(paragraph.spans.iter().map(|span| span.text.to_string()).collect())
+        Some(
+            paragraph
+                .spans
+                .iter()
+                .map(|span| span.text.to_string())
+                .collect(),
+        )
     })
 }
 
@@ -226,40 +265,77 @@ fn alt_left_alt_right_alt_up_and_backspace_walk_the_history() {
     let (mut shot, _) = open(vec![memory.clone()]);
     enter(&mut shot, "alpha");
     enter(&mut shot, "one");
-    assert_eq!(names(&tree, &trail(&memory)), (strings(&["root", "alpha"]), "alpha/one".into(), vec![]));
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        (strings(&["root", "alpha"]), "alpha/one".into(), vec![])
+    );
 
     alt(&mut shot, NamedKey::ArrowLeft);
-    assert_eq!(names(&tree, &trail(&memory)), (strings(&["root"]), "alpha".into(), strings(&["alpha/one"])), "Alt+Left");
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        (strings(&["root"]), "alpha".into(), strings(&["alpha/one"])),
+        "Alt+Left"
+    );
     alt(&mut shot, NamedKey::ArrowRight);
-    assert_eq!(names(&tree, &trail(&memory)), (strings(&["root", "alpha"]), "alpha/one".into(), vec![]), "Alt+Right");
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        (strings(&["root", "alpha"]), "alpha/one".into(), vec![]),
+        "Alt+Right"
+    );
 
     alt(&mut shot, NamedKey::ArrowUp);
     assert_eq!(
         names(&tree, &trail(&memory)),
-        (strings(&["root", "alpha", "alpha/one"]), "alpha".into(), vec![]),
+        (
+            strings(&["root", "alpha", "alpha/one"]),
+            "alpha".into(),
+            vec![]
+        ),
         "Alt+Up is a move: an entry, and Back returns to where it was pressed"
     );
     shot.key(Key::Named(NamedKey::Backspace));
     rest(&mut shot);
     assert_eq!(
         names(&tree, &trail(&memory)),
-        (strings(&["root", "alpha", "alpha/one", "alpha"]), "root".into(), vec![]),
+        (
+            strings(&["root", "alpha", "alpha/one", "alpha"]),
+            "root".into(),
+            vec![]
+        ),
         "Backspace goes to the parent folder"
     );
     alt(&mut shot, NamedKey::ArrowLeft);
-    assert_eq!(names(&tree, &trail(&memory)).1, "alpha", "Back after Up returns to the child");
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "alpha",
+        "Back after Up returns to the child"
+    );
     alt(&mut shot, NamedKey::ArrowLeft);
     alt(&mut shot, NamedKey::ArrowLeft);
     alt(&mut shot, NamedKey::ArrowLeft);
     alt(&mut shot, NamedKey::ArrowLeft);
-    assert_eq!(names(&tree, &trail(&memory)).0, Vec::<String>::new(), "Back stops at the first entry");
+    assert_eq!(
+        names(&tree, &trail(&memory)).0,
+        Vec::<String>::new(),
+        "Back stops at the first entry"
+    );
     alt(&mut shot, NamedKey::ArrowLeft);
-    assert_eq!(names(&tree, &trail(&memory)).1, "root", "Back with nothing behind does nothing");
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "root",
+        "Back with nothing behind does nothing"
+    );
 
     // Going somewhere from the root, with entries ahead, forgets them.
-    assert_eq!(names(&tree, &trail(&memory)).2, strings(&["alpha", "alpha/one", "alpha", "root"]));
+    assert_eq!(
+        names(&tree, &trail(&memory)).2,
+        strings(&["alpha", "alpha/one", "alpha", "root"])
+    );
     enter(&mut shot, "gamma");
-    assert_eq!(names(&tree, &trail(&memory)), (strings(&["root"]), "gamma".into(), vec![]));
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        (strings(&["root"]), "gamma".into(), vec![])
+    );
 }
 
 #[test]
@@ -270,16 +346,27 @@ fn the_mouse_back_and_forward_buttons_walk_the_history() {
     enter(&mut shot, "beta");
     enter(&mut shot, "inner");
     mouse(&mut shot, (500.0, 300.0), MouseButton::Back);
-    assert_eq!(names(&tree, &trail(&memory)).1, "beta", "the Back button of the mouse");
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "beta",
+        "the Back button of the mouse"
+    );
     mouse(&mut shot, (500.0, 300.0), MouseButton::Back);
     assert_eq!(names(&tree, &trail(&memory)).1, "root");
     mouse(&mut shot, (500.0, 300.0), MouseButton::Back);
     assert_eq!(names(&tree, &trail(&memory)).1, "root", "nothing behind");
     mouse(&mut shot, (500.0, 300.0), MouseButton::Forward);
     mouse(&mut shot, (500.0, 300.0), MouseButton::Forward);
-    assert_eq!(names(&tree, &trail(&memory)), (strings(&["root", "beta"]), "beta/inner".into(), vec![]));
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        (strings(&["root", "beta"]), "beta/inner".into(), vec![])
+    );
     mouse(&mut shot, (500.0, 300.0), MouseButton::Forward);
-    assert_eq!(names(&tree, &trail(&memory)).1, "beta/inner", "nothing ahead");
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "beta/inner",
+        "nothing ahead"
+    );
 }
 
 #[test]
@@ -298,7 +385,10 @@ fn the_toolbar_buttons_and_their_menus_belong_to_the_tab_on_show() {
 
     // The second tab's Back menu: nearest first, plain text.
     let buttons = toolbar(&mut shot);
-    assert!(buttons.len() >= 3, "Back, Forward and Up are there: {buttons:?}");
+    assert!(
+        buttons.len() >= 3,
+        "Back, Forward and Up are there: {buttons:?}"
+    );
     let (back, forward) = (centre(&buttons[0]), centre(&buttons[1]));
     shot.right_click(back.0, back.1);
     rest(&mut shot);
@@ -327,7 +417,11 @@ fn the_toolbar_buttons_and_their_menus_belong_to_the_tab_on_show() {
     rest(&mut shot);
     let rows = menu(&mut shot);
     let texts: Vec<&str> = rows.iter().map(|(text, _)| text.as_str()).collect();
-    assert_eq!(texts, ["alpha", tree.name().as_str()], "the Back menu of the first tab");
+    assert_eq!(
+        texts,
+        ["alpha", tree.name().as_str()],
+        "the Back menu of the first tab"
+    );
 
     // A choice crosses the entries between: one move, and Forward lists them.
     let root_row = rows[1].1;
@@ -339,11 +433,19 @@ fn the_toolbar_buttons_and_their_menus_belong_to_the_tab_on_show() {
         (vec![], "root".into(), strings(&["alpha", "alpha/one"])),
         "choosing the oldest row goes there in one move"
     );
-    assert_eq!(names(&tree, &trail(&second)).1, "beta/inner", "the other tab did not move");
+    assert_eq!(
+        names(&tree, &trail(&second)).1,
+        "beta/inner",
+        "the other tab did not move"
+    );
     shot.right_click(forward.0, forward.1);
     rest(&mut shot);
     let texts: Vec<String> = menu(&mut shot).into_iter().map(|(text, _)| text).collect();
-    assert_eq!(texts, strings(&["alpha", "one"]), "the Forward menu, nearest first");
+    assert_eq!(
+        texts,
+        strings(&["alpha", "one"]),
+        "the Forward menu, nearest first"
+    );
     shot.key(Key::Named(NamedKey::Escape));
     rest(&mut shot);
 
@@ -353,8 +455,16 @@ fn the_toolbar_buttons_and_their_menus_belong_to_the_tab_on_show() {
     let rows = menu(&mut shot);
     let one = centre(&rows[1].1);
     mouse(&mut shot, one, MouseButton::Middle);
-    assert_eq!(opened.0.borrow().clone(), vec![tree.root.join("alpha/one")], "opened in a new tab");
-    assert_eq!(names(&tree, &trail(&first)), (vec![], "root".into(), strings(&["alpha", "alpha/one"])), "no move");
+    assert_eq!(
+        opened.0.borrow().clone(),
+        vec![tree.root.join("alpha/one")],
+        "opened in a new tab"
+    );
+    assert_eq!(
+        names(&tree, &trail(&first)),
+        (vec![], "root".into(), strings(&["alpha", "alpha/one"])),
+        "no move"
+    );
     assert!(menu(&mut shot).is_empty(), "the menu closed");
 }
 
@@ -372,17 +482,29 @@ fn a_refresh_and_a_search_are_not_moves() {
     rest(&mut shot);
     shot.key_with(Key::Character("r".into()), Modifiers::CONTROL);
     rest(&mut shot);
-    assert_eq!(names(&tree, &trail(&memory)), before, "F5 and Ctrl+R read the folder again and nothing else");
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        before,
+        "F5 and Ctrl+R read the folder again and nothing else"
+    );
 
     shot.key_with(Key::Character("f".into()), Modifiers::CONTROL);
     for letter in ["a", "l"] {
         shot.key(Key::Character(letter.into()));
     }
     rest(&mut shot);
-    assert_eq!(names(&tree, &trail(&memory)), before, "searching adds no entry and keeps Forward");
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        before,
+        "searching adds no entry and keeps Forward"
+    );
     shot.key(Key::Named(NamedKey::Escape));
     rest(&mut shot);
-    assert_eq!(names(&tree, &trail(&memory)), before, "ending the search adds no entry");
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        before,
+        "ending the search adds no entry"
+    );
 }
 
 #[test]
@@ -396,24 +518,44 @@ fn a_folder_that_is_gone_stays_in_the_history_and_the_view_says_so() {
     std::fs::remove_dir_all(tree.root.join("alpha/one")).expect("the folder is removed");
     alt(&mut shot, NamedKey::ArrowRight);
     shot.settle(Duration::from_millis(900));
-    assert_eq!(names(&tree, &trail(&memory)).1, "alpha/one", "Forward went to the entry that was kept");
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "alpha/one",
+        "Forward went to the entry that was kept"
+    );
     let found = labels(&mut shot);
-    assert!(shown(&mut shot, "Folder not found"), "the view says the folder is not there: {found:?}");
-    // The toolbar still works from it, and Up goes by the name. (The error
-    // page has no focused row, so Alt+Left and Alt+Up do not reach the view
-    // from it: a known gap, left unfixed.)
-    let buttons = toolbar(&mut shot);
-    let (back, up) = (centre(&buttons[0]), centre(&buttons[2]));
-    shot.click(up.0, up.1);
+    assert!(
+        shown(&mut shot, "Folder not found"),
+        "the view says the folder is not there: {found:?}"
+    );
+    // The keys still work from it (they are the window's commands, which
+    // need no focused row), and Up goes by the name.
+    alt(&mut shot, NamedKey::ArrowUp);
     shot.settle(Duration::from_millis(600));
     assert_eq!(names(&tree, &trail(&memory)).1, "alpha");
     assert!(!shown(&mut shot, "Folder not found"));
-    shot.click(back.0, back.1);
+    alt(&mut shot, NamedKey::ArrowLeft);
     shot.settle(Duration::from_millis(600));
-    assert_eq!(names(&tree, &trail(&memory)).1, "alpha/one", "Back to the missing folder is allowed too");
-    shot.click(back.0, back.1);
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "alpha/one",
+        "Back to the missing folder is allowed too"
+    );
+    alt(&mut shot, NamedKey::ArrowLeft);
     shot.settle(Duration::from_millis(600));
     assert_eq!(names(&tree, &trail(&memory)).1, "alpha");
+    // Back is the header's button too.
+    alt(&mut shot, NamedKey::ArrowRight);
+    shot.settle(Duration::from_millis(600));
+    assert_eq!(names(&tree, &trail(&memory)).1, "alpha/one");
+    let back = centre(&toolbar(&mut shot)[0]);
+    shot.click(back.0, back.1);
+    shot.settle(Duration::from_millis(600));
+    assert_eq!(
+        names(&tree, &trail(&memory)).1,
+        "alpha",
+        "the Back button works from the page"
+    );
 }
 
 #[test]
@@ -431,7 +573,11 @@ fn a_typed_path_that_is_not_there_adds_nothing() {
     }
     shot.key(Key::Named(NamedKey::Enter));
     shot.settle(Duration::from_millis(900));
-    assert_eq!(names(&tree, &trail(&memory)), before, "an address that is not there is not a place");
+    assert_eq!(
+        names(&tree, &trail(&memory)),
+        before,
+        "an address that is not there is not a place"
+    );
     assert!(shown(&mut shot, "Not found"), "and the bar says why");
 }
 

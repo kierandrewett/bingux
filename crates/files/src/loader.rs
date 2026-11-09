@@ -811,7 +811,7 @@ impl Loader {
         if spawned.is_err() {
             self.reading = false;
             self.emit(Event::Failed(ListError::Other(
-                "no thread to read the folder".into(),
+                "Could not read the folder. Try again.".into(),
             )));
         }
     }

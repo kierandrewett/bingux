@@ -447,7 +447,7 @@ impl Component for FileRow {
             let size = if entry.is_dir() {
                 String::new()
             } else {
-                bingux_files::display::size(entry.size)
+                super::display::size(entry.size)
             };
             let when = if entry.trash.is_some() {
                 // In the Trash the date that matters is when it was deleted.
@@ -508,7 +508,11 @@ impl Component for FileRow {
             .on_pointer_enter({
                 let shared = self.shared.clone();
                 move |event: Event<PointerEventData>| {
-                    hovering.set(true);
+                    // A finger that lands on a row is not hovering it, as in
+                    // the Settings sidebar: the highlight is the pressed state.
+                    if !crate::controls::press::is_touch(&event) {
+                        hovering.set(true);
+                    }
                     shared.get().row_enter(row, &event);
                 }
             })

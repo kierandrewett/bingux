@@ -11,7 +11,8 @@ SessionShadow {
     property date now: new Date()
 
     // Qt's "h" is a 12 hour field only together with an AM/PM marker, so the
-    // 12 hour clock face is composed by hand and shows no marker.
+    // 12 hour clock face is composed by hand; the marker is drawn beside it.
+    readonly property string periodText: root.theme.twelveHourClock ? Qt.formatTime(root.now, "AP") : ""
     readonly property string timeText: {
         if (!root.theme.twelveHourClock)
             return Qt.formatTime(root.now, "HH:mm");
@@ -34,16 +35,37 @@ SessionShadow {
             font.weight: Font.DemiBold
             opacity: 0.9
         }
-        Text {
-            textFormat: Text.PlainText
+        Item {
+            // The time stays centred; AM or PM hangs off its right edge on the
+            // same baseline, so 5:58 is never ambiguous.
             anchors.horizontalCenter: parent.horizontalCenter
-            text: root.timeText
-            color: root.theme.ink
-            font.family: Theme.fontFamily
-            font.pixelSize: 120
-            font.weight: Font.Light
-            font.letterSpacing: -3
-            lineHeight: 0.85
+            width: timeLabel.width
+            height: timeLabel.height
+            Text {
+                id: timeLabel
+                objectName: "authClockTime"
+                textFormat: Text.PlainText
+                text: root.timeText
+                color: root.theme.ink
+                font.family: Theme.fontFamily
+                font.pixelSize: 120
+                font.weight: Font.Light
+                font.letterSpacing: -3
+                lineHeight: 0.85
+            }
+            Text {
+                objectName: "authClockPeriod"
+                visible: root.periodText !== ""
+                x: timeLabel.width + 8
+                anchors.baseline: timeLabel.baseline
+                textFormat: Text.PlainText
+                text: root.periodText
+                color: root.theme.ink
+                font.family: Theme.fontFamily
+                font.pixelSize: 32
+                font.weight: Font.DemiBold
+                opacity: 0.8
+            }
         }
     }
 

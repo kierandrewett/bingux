@@ -175,7 +175,7 @@ The standalone lock screen and the greeter draw with the same components in
 | ----------------- | -------------------------------------------------------------------------------- |
 | `AuthScreen`      | The layout: wallpaper, clock, account card, corners and the slots a host fills.  |
 | `AuthCard`        | Picture, name, status line, response field and retry link.                       |
-| `AuthClock`       | Date and time in the account's clock format.                                     |
+| `AuthClock`       | Date and time in the account's clock format; the 12-hour clock shows AM or PM.   |
 | `BackgroundView`  | Wallpaper with a cross-fade between accounts and a tint when there is none.      |
 | `UserAvatar`      | The round picture, or a monogram.                                                |
 | `AccountPicker`   | The account list with session states and slide-up reveal.                        |

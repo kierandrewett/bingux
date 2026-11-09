@@ -781,9 +781,9 @@ pub fn build(
                 .arg(if seven_zip { "-t7z" } else { "-tzip" })
                 .args(["-bb1", "-bsp1", "-spd", "-r-", "-scsUTF-8"])
                 .arg(options.level.seven());
-            if !options.follow_links {
-                spec = spec.arg("-snl");
-            }
+            // `-snl` keeps a link as a link; `-l` stores what it points to.
+            // A plain run keeps links on 7-Zip 26 too, so both are spelt out.
+            spec = spec.arg(if options.follow_links { "-l" } else { "-snl" });
             if let Some(mib) = options.split_mib {
                 spec = spec.arg(format!("-v{mib}m"));
             }
@@ -1440,6 +1440,7 @@ mod tests {
             text(&one(&built).args)
         };
         assert!(args(false).contains(&"-snl".to_string()));
+        assert!(args(true).contains(&"-l".to_string()));
         assert!(!args(true).contains(&"-snl".to_string()));
         assert!(
             args(false).contains(&"-spd".to_string()),

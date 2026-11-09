@@ -13,6 +13,11 @@
 //!
 //! Without a provided [`FileDrag`] a drag only reaches the folders of its own
 //! list, as in the chooser.
+//!
+//! Files dragged in from another program onto a target outside the view (a
+//! sidebar place) are handed to the view the same way: the target calls
+//! [`FileDrag::drop_from_outside`], and the view moves or copies them, with
+//! its progress, undo and messages.
 
 use std::path::{Path, PathBuf};
 
@@ -24,6 +29,17 @@ use freya::prelude::*;
 pub struct FileDrag {
     active: State<bool>,
     over: State<Option<PathBuf>>,
+    outside: State<Option<OutsideDrop>>,
+}
+
+/// Files from another program dropped on a target outside the view.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct OutsideDrop {
+    /// Counts the drops, so the view acts on each once.
+    pub id: u64,
+    pub paths: Vec<PathBuf>,
+    pub dest: PathBuf,
+    pub copy: bool,
 }
 
 /// Provide the window's [`FileDrag`], from a component above every target
@@ -32,6 +48,7 @@ pub fn provide_file_drag() -> FileDrag {
     use_provide_root_context(|| FileDrag {
         active: State::create(false),
         over: State::create(None),
+        outside: State::create(None),
     })
 }
 
@@ -79,5 +96,27 @@ impl FileDrag {
         let over = self.over.peek().clone();
         self.over.set_if_modified(None);
         over
+    }
+
+    /// Files from another program were dropped on the target of `dest`:
+    /// the view moves them there, or copies them when `copy`.
+    pub fn drop_from_outside(mut self, paths: Vec<PathBuf>, dest: PathBuf, copy: bool) {
+        let id = self.outside.peek().as_ref().map_or(1, |last| last.id + 1);
+        self.outside.set(Some(OutsideDrop {
+            id,
+            paths,
+            dest,
+            copy,
+        }));
+    }
+
+    /// The last drop from outside. Reactive.
+    pub(super) fn outside(&self) -> Option<OutsideDrop> {
+        self.outside.read().clone()
+    }
+
+    /// The id of the last drop from outside, without subscribing.
+    pub(super) fn outside_seen(&self) -> u64 {
+        self.outside.peek().as_ref().map_or(0, |last| last.id)
     }
 }

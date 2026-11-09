@@ -23,7 +23,7 @@ address opens the folder that holds it.
 
 | Argument                             | Opens                                                                  |
 | ------------------------------------ | ---------------------------------------------------------------------- |
-| none                                 | the home folder on first launch; raises the window if it runs          |
+| none                                 | the tabs of the window closed last (else home); raises a running one   |
 | `/srv/data`, `~/Music`, `Documents`  | that folder (a relative path is relative to where you ran the command) |
 | `file:///home/me/My%20Files`         | that folder                                                            |
 | `recent:///`                         | the recent files                                                       |
@@ -31,6 +31,13 @@ address opens the folder that holds it.
 | `bingux-files://home/me`             | that folder                                                            |
 
 Only the first argument is used; Files opens one folder per launch.
+
+With no argument Files opens the window as it was when it was last closed:
+the same tabs, at the same folders, with the same tab on show. A folder that
+has gone since is left out; with none left it opens the home folder. The tabs
+are kept in the state file beside the per-folder views
+(`$XDG_STATE_HOME/bingux/files/view.json`, key `files-session`), written as
+they change, so closing the window any way at all keeps them.
 
 A folder's name is bytes, not text. A name that is not valid UTF-8 (`café` saved
 as Latin-1, `caf\xe9`) is a valid argument and opens that exact folder: the
@@ -196,11 +203,12 @@ so a folder looks the same wherever it shows.
   data (JSON, YAML, TOML), markup (HTML, Markdown, XML), spreadsheet,
   presentation, PDF, document, e-book, image, audio, video, archive, disk image,
   program or script, font, 3D model, database, certificate or key, torrent, and
-  a page with a question mark when the type is unknown. The colours follow the
-  theme: lighter pages with a deep tone of the family's hue for the ink in the
-  dark scheme, deeper pages with white ink in the light one (the yellows stay
-  light and saturated and keep a deep ink; every page has a darker rim of its
-  own colour that holds its edge on any background).
+  a page with a question mark when the type is unknown. A family is one colour
+  in both schemes: a deep page with white ink in the light scheme, and the same
+  colour made only as much lighter as it needs to stand out against the dark
+  list in the dark one, so a PDF is red and a spreadsheet green on both (the
+  yellows stay light and saturated and keep a deep ink; every page has a darker
+  rim of its own colour that holds its edge on a light background).
 - Every **folder** icon, the plain folder, the user folders and the Trash,
   is in the **accent colour** of the system, resting, selected or hidden. A
   folder is the app icon's folder: a tab and a back in the accent darkened, a
@@ -285,8 +293,10 @@ matching GStreamer plugins (`gstreamer1-plugin-libav`, `gstreamer1-plugins-bad-f
 
 The address bar is one box that is either the trail of folders or, once you
 edit it, the place to type a path **and** to search. Press its empty end, press
-Ctrl+L (the path), press Ctrl+F or the search button (an empty field), or just
-type `/`, `~` or a letter on the list. Editing alone shows a plain field. When
+Ctrl+L (the path), press Ctrl+F or the search button (an empty field), or
+type `/` or `~` on the list. Letters typed on the list do not search: they
+select the first name that starts with them (type `re` for `Reports`; the same
+letter again moves on to the next name with it, and a pause starts afresh). Editing alone shows a plain field. When
 you type, a card grows out of the field: it has the field's left edge and
 width, the field is its first row, and it lies over the list below it (the list
 does not move). The card follows the window when it is resized, never leaves it,
@@ -420,18 +430,18 @@ on a tab, Ctrl+W and a middle click run, and reports every persistent element
 in any frame; `cargo test --lib --features testing files::tab_tests` does the
 same pass by pass in the headless runner.
 
-| Do                                                                                                           | Result                                                                                                                                                                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ctrl+T, or the **+** button                                                                                  | New tab at the folder on show                                                                                                                                                                                                                                                                                                                             |
-| Ctrl+W, middle click on a tab, or its **x** (every tab has one, a lone tab too)                              | Close the tab; the tab on its right is shown, else the one on its left. The last tab closes the window, and asks first only if a copy, move or compression is still running                                                                                                                                                                               |
-| Ctrl+Shift+T, or **Reopen closed tab**                                                                       | Bring back the tab closed last, at its folder and its place, with its Back and Forward history (the last 10 are kept)                                                                                                                                                                                                                                     |
-| Right click on a tab                                                                                         | Close tab, Close other tabs, Close tabs to the left (greyed out on the first tab), Close tabs to the right, Duplicate tab, Reopen closed tab, Move left, Move right. Reopen brings a closed group back left to right at its places                                                                                                                        |
-| Wheel over the tab bar (vertical or sideways), two fingers on a touchpad, or a finger dragged along the tabs | Scroll the tabs when they do not all fit; the **+** and the tab list button stay put. The tab list button (a menu of every tab with its icon, the open one ticked) is there when they overflow. A title too long for its tab fades out at its end instead of ending in an ellipsis                                                                        |
-| Close several tabs one after another with the **x**                                                          | The tabs keep their width while the pointer stays in the tab bar, so the next **x** is under the pointer; they grow back when it leaves                                                                                                                                                                                                                   |
-| Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+Page Down, Ctrl+Page Up                                                       | Next and previous tab                                                                                                                                                                                                                                                                                                                                     |
-| Alt+1 to Alt+8, Alt+9                                                                                        | Go to that tab, or the last                                                                                                                                                                                                                                                                                                                               |
-| Drag a tab down or up past the strip by a strip's height (a lone tab: drag it)                               | Tear it off: its window follows the pointer, and the other tabs go to a window of their own. Letting go over another Files window's tab strip adds the tab there and closes the carried window; elsewhere the window stays. Let go beyond the strip with the button already up: the tab opens a window. What each compositor allows is in the table below |
-| Middle click a folder, or **Open in new tab** in a folder's or a place's menu                                | Open it in a new tab                                                                                                                                                                                                                                                                                                                                      |
+| Do                                                                                                           | Result                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ctrl+T, or the **+** button                                                                                  | New tab at the folder on show                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Ctrl+W, middle click on a tab, or its **x** (every tab has one, a lone tab too)                              | Close the tab; the tab on its right is shown, else the one on its left. The last tab closes the window, and asks first only if a copy, move or compression is still running                                                                                                                                                                                                                                                                                                                                                   |
+| Ctrl+Shift+T, or **Reopen closed tab**                                                                       | Bring back the tab closed last, at its folder and its place, with its Back and Forward history (the last 10 are kept)                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Right click on a tab                                                                                         | Close tab, Close other tabs, Close tabs to the left (greyed out on the first tab), Close tabs to the right, Duplicate tab, Reopen closed tab, Move left, Move right. Reopen brings a closed group back left to right at its places                                                                                                                                                                                                                                                                                            |
+| Wheel over the tab bar (vertical or sideways), two fingers on a touchpad, or a finger dragged along the tabs | Scroll the tabs when they do not all fit; the **+** and the tab list button stay put. The tab list button (a menu of every tab with its icon, the open one ticked) is there when they overflow. A title too long for its tab fades out at its end instead of ending in an ellipsis                                                                                                                                                                                                                                            |
+| Close several tabs one after another with the **x**                                                          | The tabs keep their width while the pointer stays in the tab bar, so the next **x** is under the pointer; they grow back when it leaves                                                                                                                                                                                                                                                                                                                                                                                       |
+| Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+Page Down, Ctrl+Page Up                                                       | Next and previous tab                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Alt+1 to Alt+8, Alt+9                                                                                        | Go to that tab, or the last                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Drag a tab down or up past the strip by a strip's height (a lone tab: drag it)                               | Tear it off: its window follows the pointer, and the other tabs go to a window of their own. Letting go over another Files window's tab strip adds the tab there and closes the carried window (a window with one tab has no strip on show: its header takes the tab, which goes after its own, and the strip appears with the marker while the tab is held there); elsewhere the window stays. Let go beyond the strip with the button already up: the tab opens a window. What each compositor allows is in the table below |
+| Middle click a folder, or **Open in new tab** in a folder's or a place's menu                                | Open it in a new tab                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### Tearing a tab off, by compositor
 
@@ -465,7 +475,7 @@ only code that changes a history, and they are tested without a window.
 | Open a folder (double click, Enter, a crumb, a sidebar place, a bookmark, a typed path, Alt+Home, Up, Alt+Up or Backspace) | A new entry after the current one; Forward is forgotten                                                                                                                                                      |
 | Go to the folder already shown (also written with a trailing slash, `.`, `..` or `//`)                                     | Nothing: no entry, Forward stays                                                                                                                                                                             |
 | Back, Forward, a choice from the Back or Forward menu                                                                      | Only moves along the list; choosing a row several entries away is one move                                                                                                                                   |
-| Refresh (F5, Ctrl+R), a search (Ctrl+F, typing), Escape                                                                    | Nothing                                                                                                                                                                                                      |
+| Refresh (F5, Ctrl+R), a search (Ctrl+F), Escape                                                                            | Nothing                                                                                                                                                                                                      |
 | A typed path that is not there, is a file or cannot be entered                                                             | The address bar says why and stays: no entry. A file is opened with its program                                                                                                                              |
 | The tab's first folder                                                                                                     | The only entry. Starting at a folder never adds it twice                                                                                                                                                     |
 | The recent files, the Trash and the root folder `/`                                                                        | Places like any other, each with its entry. The Trash is `trash:///` however it was reached, and its rows say `Trash` (and the name an item had before it was deleted), not `files`; Up from it goes nowhere |
@@ -549,19 +559,22 @@ entry in a history. The same rules hold for Settings and every other
 
 | Keys                                    | Action                                                                                                                       |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Ctrl+N                                  | New window at the folder on show                                                                                             |
 | Alt+Left, Alt+Right, Alt+Up, Alt+Home   | Back, Forward, parent folder, home                                                                                           |
 | Backspace                               | Parent folder                                                                                                                |
 | Ctrl+L, or type `/` or `~`              | Edit the path                                                                                                                |
-| Ctrl+F, or just start typing a name     | Search in the location field (see Location and search)                                                                       |
+| Ctrl+F                                  | Search in the location field (see Location and search)                                                                       |
+| Type a name                             | Select the first name that starts with it; the same letter again moves to the next                                           |
 | F5, Ctrl+R                              | Read the folder again                                                                                                        |
 | Escape                                  | Stop reading the folder while the toolbar shows Stop (see Reload and Stop); in a search, clear the text, then end the search |
 | Ctrl+H                                  | Show or hide hidden files                                                                                                    |
 | Ctrl+Shift+N                            | New folder                                                                                                                   |
 | F2                                      | Rename                                                                                                                       |
 | Ctrl+C, Ctrl+X, Ctrl+V                  | Copy, cut, paste                                                                                                             |
+| Ctrl+D                                  | Duplicate: a copy beside each selected item, named as Keep both names one (`Report (copy).pdf`)                              |
 | Delete                                  | Move to the Trash (inside the Trash: delete permanently, after a question)                                                   |
 | Shift+Delete                            | Delete permanently, after a question that names the files                                                                    |
-| Ctrl+Z                                  | Undo the last move, rename, trash, restore or create                                                                         |
+| Ctrl+Z                                  | Undo the last move, rename, trash, restore, create or duplicate (the copies go to the Trash)                                 |
 | Ctrl+A                                  | Select all                                                                                                                   |
 | Space                                   | Preview the file (Quick Look)                                                                                                |
 | Enter                                   | Open the folder, or open the file in its default application                                                                 |
@@ -569,13 +582,26 @@ entry in a history. The same rules hold for Settings and every other
 | Ctrl+mouse wheel, Ctrl+plus, Ctrl+minus | Zoom the icons                                                                                                               |
 | Shift+F10, Menu                         | Context menu                                                                                                                 |
 
+Every key above is a command (`bingux_ui::commands`): the window's own (New
+window, the tab keys), the browser's Go and View commands (Back, Forward,
+Parent folder, Home, Go to location…, Search, Show hidden files, Reload), which
+work wherever the focus is, a "Folder not found" page included, and the file
+view's (Duplicate, Rename…, Copy, Paste and the rest), which apply while the
+list has the focus. So the main menu has File, Edit, View and Go submenus, the
+command palette (Ctrl+Shift+P) finds them, and the shortcuts sheet (Ctrl+? or
+Ctrl+/) lists them; nothing is written out by hand. Undo and Redo (Ctrl+Z,
+Ctrl+Shift+Z) are the window's undo stack: a move, rename, rename of several,
+trash, restore, new item or duplicate is one step, and each but a restore can
+be redone.
+
 ## Reload and Stop
 
-The toolbar's fourth button is Reload (`Refresh (F5)`) and becomes Stop
-(`Stop (Esc)`) while the folder is being read: the first load of a folder, the
-check of a listing shown from the cache, a read that F5 or the button asked
-for, and a search of folders. A change that the watcher noticed is read
-quietly and does not turn the button into Stop.
+A window's header has no Reload button: F5, Ctrl+R and View > Reload read the
+folder again. While the folder is being read (the first load, the check of a
+listing shown from the cache, a read that F5 asked for, a search of folders)
+Stop (`Stop (Esc)`) joins the header after Back and Forward. A change that the
+watcher noticed is read quietly and shows no Stop. A dialog's toolbar keeps
+its Reload button, which turns into Stop.
 
 - **One button.** It is the same `IconButton` all the time, 16 px icon in the
   same box (nothing moves), with the same hover, pressed and focus state. The
@@ -595,12 +621,15 @@ quietly and does not turn the button into Stop.
   the loader to give up the read and ignore its late answers) and keeps the
   listing as it is:
 
-    | Read stopped                            | Listing                                                                                                                                   |
-    | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-    | A re-read of a folder on show           | Untouched; nothing is taken away                                                                                                          |
-    | A first load that had read some entries | Those entries stay, marked stopped (`Listing::stopped`), and the status pill says "Stopped · 12,000 items read so far"; F5 reads the rest |
-    | A first load that had read nothing      | The page says "Loading stopped" and offers F5                                                                                             |
-    | A search of folders                     | The search stops and what it found stays, with the line "stopped"                                                                         |
+    | Read stopped                            | Listing                                                                                                                                                                                 |
+    | --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | A re-read of a folder on show           | Untouched; nothing is taken away                                                                                                                                                        |
+    | A first load that had read some entries | Those entries stay, marked stopped (`Listing::stopped`), under a banner ("Loading stopped before every item was read") with Reload; the status bar says "Stopped · 12,000 items so far" |
+    | A first load that had read nothing      | The page says "Loading stopped" and offers F5                                                                                                                                           |
+    | A search of folders                     | The search stops and what it found stays, with the line "stopped"                                                                                                                       |
+
+    While a folder loads the status bar says "Loading…", then "Loading · 1,204
+    items so far" once rows arrive.
 
     The folder is still followed, and F5 or Ctrl+R reads it again whatever the
     button shows. Escape does the same as pressing Stop, but only while Stop shows,
@@ -641,8 +670,9 @@ accept the file's type. A file that cannot be opened says why under the list.
 
 ## Moving and copying by dragging
 
-Drag files onto a folder in the list, a place in the sidebar or a tab: they
-move there. Hold Ctrl to copy. The target under the pointer is highlighted.
+Drag files onto a folder in the list, a place in the sidebar, a folder of the
+path in the address bar (any but the one on show) or a tab: they move there.
+Hold Ctrl to copy. The target under the pointer is highlighted.
 Dragging uses the same operations as cut and paste, so a move between drives
 copies, checks and then removes the source, and nothing is half-written.
 
@@ -656,7 +686,19 @@ drop, `docs/bingux-ui.md`, "Drag and drop"):
 | Hold a drag still on a folder for 0.7 seconds    | The folder opens, so you can drop further in (spring-loaded folders). Drags from Files itself do this once they have left the window and come back |
 | Files dragged out of the window                  | Once the pointer leaves the window the drag belongs to the desktop: drop on another Files window or any app that takes files                       |
 
-The sidebar places and tabs take drops from Files itself only for now.
+Files from another app dropped on a **sidebar place** go into its folder as a
+drop on a folder does; held over it for 0.7 seconds the place opens. Tabs take
+drops from Files itself only for now.
+
+**Cut, copy and paste** use the typed clipboard: Files offers a URI list,
+GNOME's `x-special/gnome-copied-files` (which says cut or copy) and the paths
+as text, so files cut in Files move when pasted in Nautilus or Dolphin, and
+the other way round.
+
+Sizes and dates are written in the person's language by `bingux_ui::format`
+(`2.4 MB`, `9 Mar`, `Yesterday 14:03`). An error never shows the system's own
+wording or an `(os error N)`: each kind of failure has a plain sentence with
+what to do next, and the raw error goes to the log.
 
 ## Drives
 

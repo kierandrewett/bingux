@@ -59,7 +59,7 @@ impl ListError {
             io::ErrorKind::NotFound => ListError::NotFound,
             io::ErrorKind::PermissionDenied => ListError::PermissionDenied,
             io::ErrorKind::NotADirectory => ListError::NotADirectory,
-            _ => ListError::Other(error.to_string()),
+            _ => ListError::Other(crate::ops::plain(error)),
         }
     }
 }
@@ -75,7 +75,7 @@ impl fmt::Display for ListError {
             ListError::NotADirectory => f.write_str("This is not a folder."),
             ListError::Cancelled => f.write_str("Cancelled."),
             ListError::Unresponsive => f.write_str("The drive this folder is on is not answering."),
-            ListError::Other(detail) => write!(f, "This folder could not be read: {detail}"),
+            ListError::Other(detail) => f.write_str(detail),
         }
     }
 }

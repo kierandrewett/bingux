@@ -150,7 +150,8 @@ QtObject {
                 return;
             }
             if (result === PamResult.Success) {
-                root.status = "The lock session ended before authentication completed";
+                console.warn("lock: the session lock ended before authentication completed");
+                root.status = "Could not unlock the screen. Try again.";
                 root.statusIsError = true;
                 return;
             }

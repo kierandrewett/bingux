@@ -1,6 +1,6 @@
 //! The rows of the Info panel: pure, from what the viewer loaded.
 
-use bingux_files::display;
+use crate::files::display;
 use bingux_preview_core::{Loaded, PreviewSource};
 
 use super::subject::Resolved;

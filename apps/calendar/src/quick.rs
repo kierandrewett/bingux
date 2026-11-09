@@ -19,9 +19,12 @@ use crate::model::Model;
 /// Opens the quick add popup.
 pub fn open(model: Model, window: Window, overlays: Overlays) {
     window.open(
-        popup("New event", QuickBody { model, overlays })
-            .width(Dim::PopupNarrow)
-            .flags(PopupFlags::FORM),
+        popup(
+            tr!("calendar-new-event-title"),
+            QuickBody { model, overlays },
+        )
+        .width(Dim::PopupNarrow)
+        .flags(PopupFlags::FORM),
     );
 }
 
@@ -29,7 +32,7 @@ pub fn open(model: Model, window: Window, overlays: Overlays) {
 pub fn read(model: &Model, text: &str) -> (Quick, NewEvent) {
     let clock = *model.clock.read();
     let now = convert::at_minutes(clock.today, clock.minutes);
-    let month_first = bingux_calendar_core::Locale::current().month_first;
+    let month_first = bingux_ui::locale::Locale::current().month_first();
     let quick = quickadd::parse(text, now, month_first);
     let length = model.prefs.read().default_length.max(15);
     let anchor = *model.anchor.read();
@@ -123,7 +126,7 @@ impl Component for QuickBody {
             let new = new.clone();
             move || {
                 let Some(item) = item_of(&model, &new) else {
-                    overlays.toast("There is no calendar to add the event to.");
+                    overlays.toast(tr!("calendar-no-calendar-to-add"));
                     return;
                 };
                 let day = convert::date_of(new.start.date());
@@ -135,7 +138,7 @@ impl Component for QuickBody {
         let press = add.clone();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Add".into(),
+                label: tr!("calendar-add").into(),
                 enabled: ready,
                 on_press: EventHandler::new(move |_: ()| press()),
             }),
@@ -165,7 +168,7 @@ impl Component for QuickBody {
         }
         let preview: Element = if lines.is_empty() {
             CAPTION
-                .label(&tokens, "Say what, when and where. For example: Lunch with Sam at Nando\u{2019}s tomorrow 1pm.")
+                .label(&tokens, tr!("calendar-quick-hint"))
                 .into_element()
         } else {
             let mut column = vstack(S1);
@@ -201,7 +204,7 @@ impl Component for QuickBody {
                             enter();
                         }
                     })
-                    .placeholder("Lunch with Sam tomorrow 1pm")
+                    .placeholder(tr!("calendar-quick-placeholder"))
                     .autofocus()
                     .fill_width(),
                 ),
@@ -210,7 +213,11 @@ impl Component for QuickBody {
             .child(
                 rect()
                     .tw(&tokens, &[w_full(), flex_row(), justify(Align::End)])
-                    .child(action_button("More Options", more).flat().enabled(true)),
+                    .child(
+                        action_button(tr!("calendar-more-options"), more)
+                            .flat()
+                            .enabled(true),
+                    ),
             )
     }
 }

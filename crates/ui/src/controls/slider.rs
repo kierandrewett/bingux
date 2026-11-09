@@ -39,6 +39,9 @@ pub struct Slider {
     max: f64,
     /// A tick on the track at this percent, such as the 100% clipping point.
     mark: Option<f64>,
+    /// Where the fill starts, in percent: 0 (the start of the track) unless
+    /// the value is bipolar, such as a balance whose centre is 100 of 200.
+    origin: f64,
     /// Where the travel turns to the danger colour, in percent, such as the
     /// clipping zone past 100%. The value still goes that high.
     danger_from: Option<f64>,
@@ -67,6 +70,7 @@ pub fn slider(value: f64, on_moved: impl Into<EventHandler<f64>>) -> Slider {
         value,
         max: PERCENT,
         mark: None,
+        origin: 0.0,
         danger_from: None,
         enabled: true,
         on_moved: on_moved.into(),
@@ -172,6 +176,16 @@ impl Slider {
     /// starts to clip. The tick does not limit the value.
     pub fn mark(mut self, percent: f64) -> Self {
         self.mark = Some(percent);
+        self
+    }
+
+    /// Fill the track from `percent` to the thumb instead of from the start,
+    /// for a value that runs either way from a centre: balance (Left to
+    /// Right, origin at the middle), fade, a pitch or a tint offset. The fill
+    /// then shows which way and how far the value has moved. It does not
+    /// limit the value; add [`Slider::mark`] at the same point for a tick.
+    pub fn origin(mut self, percent: f64) -> Self {
+        self.origin = percent;
         self
     }
 
@@ -338,7 +352,16 @@ impl Component for Slider {
         // Whole pixels keep the knob's edge crisp; a fractional left blurs it.
         let thumb_x = (travel * ((value / max) as f32)).round();
         let centre_x = thumb_size / 2.0 + thumb_x;
-        let fill_width = centre_x;
+        // The fill runs from the origin to the thumb, whichever side the
+        // thumb is on: from the start of the track for a plain level, from
+        // the centre for a balance.
+        let origin_x = if self.origin > 0.0 {
+            thumb_size / 2.0 + (travel * ((self.origin.clamp(0.0, max) / max) as f32)).round()
+        } else {
+            0.0
+        };
+        let fill_left = origin_x.min(centre_x);
+        let fill_width = (centre_x - origin_x).abs();
         let gradient = self
             .gradient
             .as_deref()
@@ -426,7 +449,7 @@ impl Component for Slider {
                     .position(
                         Position::new_absolute()
                             .top(centre - track_height / 2.0)
-                            .left(0.0),
+                            .left(fill_left),
                     )
                     .width(Size::px(fill_width))
                     .height(Size::px(track_height))

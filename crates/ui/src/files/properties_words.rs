@@ -5,8 +5,10 @@
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use bingux_files::Entry;
 use bingux_files::ops::{ChildSize, FileDetails, Totals};
-use bingux_files::{Entry, display};
+
+use super::display;
 
 /// A fact that has not arrived yet, and one that does not exist.
 pub(super) const PENDING: &str = "…";
@@ -27,11 +29,16 @@ pub(super) fn grouped(number: u64) -> String {
 
 /// `2.5 MB (2,500,000 bytes)`, or `512 bytes` when the unit is bytes.
 pub(super) fn size_with_bytes(bytes: u64) -> String {
-    let size = display::size(bytes);
+    // Isolated (`format::isolate`): in a right-to-left interface the size
+    // does not read "MB (2,500,000 bytes) 2.5".
+    let size = crate::format::isolate(display::size(bytes));
     if bytes < 1000 {
         size
     } else {
-        format!("{size} ({} bytes)", grouped(bytes))
+        format!(
+            "{size} ({})",
+            crate::format::isolate(format!("{} bytes", grouped(bytes)))
+        )
     }
 }
 
@@ -152,7 +159,11 @@ pub(super) fn read_line(done: u64, total: u64) -> String {
         return String::new();
     }
     let percent = (done as f64 / total as f64 * 100.0).clamp(0.0, 100.0);
-    format!("{} of {} ({percent:.0}%)", display::size(done), display::size(total))
+    format!(
+        "{} of {} ({percent:.0}%)",
+        display::size(done),
+        display::size(total)
+    )
 }
 
 /// A digest as two lines of 32 digits, so it fits a narrow card without a
@@ -167,6 +178,11 @@ mod tests {
     use bingux_files::Kind;
 
     use super::*;
+
+    /// The text with its no-break spaces (before a unit) as plain ones.
+    fn plain(text: String) -> String {
+        text.replace('\u{a0}', " ")
+    }
 
     fn entry(path: &str, kind: Kind) -> Entry {
         let path = PathBuf::from(path);
@@ -185,9 +201,12 @@ mod tests {
 
     #[test]
     fn a_size_has_its_byte_count_past_a_kilobyte() {
-        assert_eq!(size_with_bytes(512), "512 bytes");
-        assert_eq!(size_with_bytes(1), "1 byte");
-        assert_eq!(size_with_bytes(2_500_000), "2.5 MB (2,500,000 bytes)");
+        assert_eq!(plain(size_with_bytes(512)), "512 bytes");
+        assert_eq!(plain(size_with_bytes(1)), "1 byte");
+        assert_eq!(
+            plain(size_with_bytes(2_500_000)),
+            "2.5 MB (2,500,000 bytes)"
+        );
     }
 
     #[test]
@@ -198,13 +217,16 @@ mod tests {
             folders: 1,
             ..Totals::default()
         };
-        assert_eq!(total_size(running), "1.5 MB (1,500,000 bytes) so far…");
+        assert_eq!(
+            plain(total_size(running)),
+            "1.5 MB (1,500,000 bytes) so far…"
+        );
         assert_eq!(contents(running), "4 items so far…");
         let done = Totals {
             done: true,
             ..running
         };
-        assert_eq!(total_size(done), "1.5 MB (1,500,000 bytes)");
+        assert_eq!(plain(total_size(done)), "1.5 MB (1,500,000 bytes)");
         assert_eq!(contents(done), "4 items");
         assert_eq!(kinds(done), ("3".to_owned(), "1".to_owned()));
         let stopped = Totals {
@@ -212,14 +234,20 @@ mod tests {
             cancelled: true,
             ..running
         };
-        assert_eq!(total_size(stopped), "At least 1.5 MB (1,500,000 bytes) (stopped)");
+        assert_eq!(
+            plain(total_size(stopped)),
+            "At least 1.5 MB (1,500,000 bytes) (stopped)"
+        );
         assert_eq!(contents(stopped), "At least 4 items (stopped)");
         let locked = Totals {
             done: true,
             unreadable: 1,
             ..running
         };
-        assert_eq!(total_size(locked), "At least 1.5 MB (1,500,000 bytes)");
+        assert_eq!(
+            plain(total_size(locked)),
+            "At least 1.5 MB (1,500,000 bytes)"
+        );
     }
 
     #[test]
@@ -235,10 +263,16 @@ mod tests {
     #[test]
     fn a_location_under_home_is_written_with_a_tilde() {
         let home = Path::new("/home/ana");
-        assert_eq!(home_relative(Path::new("/home/ana/Pictures"), home), "~/Pictures");
+        assert_eq!(
+            home_relative(Path::new("/home/ana/Pictures"), home),
+            "~/Pictures"
+        );
         assert_eq!(home_relative(Path::new("/home/ana"), home), "~");
         assert_eq!(home_relative(Path::new("/srv/data"), home), "/srv/data");
-        assert_eq!(home_relative(Path::new("/home/anabel"), home), "/home/anabel");
+        assert_eq!(
+            home_relative(Path::new("/home/anabel"), home),
+            "/home/anabel"
+        );
     }
 
     #[test]
@@ -264,20 +298,23 @@ mod tests {
             bytes: 2_000_000,
             items: 0,
         };
-        assert_eq!(child_line(&file), "2.0 MB");
+        assert_eq!(plain(child_line(&file)), "2 MB");
         let folder = ChildSize {
             is_dir: true,
             items: 1,
             ..file
         };
-        assert_eq!(child_line(&folder), "2.0 MB, 1 item");
+        assert_eq!(plain(child_line(&folder)), "2 MB, 1 item");
     }
 
     #[test]
     fn a_read_says_how_far_it_is() {
         assert_eq!(read_line(0, 0), "");
-        assert_eq!(read_line(500_000, 2_000_000), "500 kB of 2.0 MB (25%)");
-        assert_eq!(read_line(3_000_000, 2_000_000), "3.0 MB of 2.0 MB (100%)");
+        assert_eq!(plain(read_line(500_000, 2_000_000)), "500 kB of 2 MB (25%)");
+        assert_eq!(
+            plain(read_line(3_000_000, 2_000_000)),
+            "3 MB of 2 MB (100%)"
+        );
     }
 
     #[test]

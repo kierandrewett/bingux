@@ -231,9 +231,10 @@ pub(super) fn icon_of(source: &PreviewSource, folder: bool) -> FileIcon {
     }
 }
 
-/// "3 of 22".
+/// "3 of 22", as one unit: in a right-to-left interface it does not read
+/// "of 22 3" (`format::isolate`).
 pub(super) fn position_text(position: (usize, usize)) -> String {
-    format!("{} of {}", position.0, position.1)
+    crate::format::isolate(format!("{} of {}", position.0, position.1))
 }
 
 /// The header: icon, name and position share the room the buttons leave, then

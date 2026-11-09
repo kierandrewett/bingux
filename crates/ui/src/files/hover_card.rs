@@ -35,7 +35,9 @@
 
 use std::time::{Duration, Instant, SystemTime};
 
-use bingux_files::{Entry, display};
+use bingux_files::Entry;
+
+use super::display;
 use freya::prelude::*;
 
 use super::columns::{Column, DateStyle, cell_text_styled};
@@ -712,7 +714,7 @@ mod tests {
         );
         assert_eq!(before.len(), after.len(), "{before:?} against {after:?}");
         assert_eq!(before[2], "Modified …");
-        assert_eq!(after[1], "Text document · 2 bytes");
+        assert_eq!(after[1].replace('\u{a0}', " "), "Text document · 2 bytes");
         assert_eq!(after[2], "Modified 15 Nov 2023");
     }
 
@@ -726,7 +728,10 @@ mod tests {
             Some(std::path::Path::new("/mnt/x/a.txt")),
         );
         assert_eq!(lines.len(), 3);
-        assert_eq!(lines[1], "Text document · 2 bytes · Link to /mnt/x/a.txt");
+        assert_eq!(
+            lines[1].replace('\u{a0}', " "),
+            "Text document · 2 bytes · Link to /mnt/x/a.txt"
+        );
     }
 
     #[test]

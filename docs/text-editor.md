@@ -44,15 +44,15 @@ time, including any changes you had not saved.
 The status bar shows the language, the indentation, the encoding and the line
 endings of the document; each is a menu.
 
-| Situation                                                       | What happens                                                                                                  |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| UTF-8, with or without a byte order mark                        | Read and written back the same way                                                                            |
-| UTF-16 (with or without a byte order mark)                      | Detected and written back as UTF-16                                                                           |
-| A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                      |
-| UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                        |
-| Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; Encoding ▸ Read again with encoding tries another |
-| A character the file's encoding cannot hold, on save            | Save stops and offers Save in UTF-8                                                                           |
-| CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                   |
+| Situation                                                       | What happens                                                                                                |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| UTF-8, with or without a byte order mark                        | Read and written back the same way                                                                          |
+| UTF-16 (with or without a byte order mark)                      | Detected and written back as UTF-16                                                                         |
+| A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                    |
+| UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                      |
+| Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; the encoding menu ▸ Read again as tries another |
+| A character the file's encoding cannot hold, on save            | Save stops and offers Save in UTF-8                                                                         |
+| CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                 |
 
 The editor reads `.editorconfig` files from the file's folder upwards:
 `indent_style`, `indent_size`, `tab_width`, `end_of_line`,
@@ -93,6 +93,22 @@ and a selection typed over with a bracket is wrapped instead. Enter keeps the
 indentation and indents after an opening bracket. Copy and Cut with nothing
 selected take the whole line, and pasting it puts it above the caret's line.
 Main menu ▸ Text has sort lines, change case and remove trailing spaces.
+
+Every action is a command, so the main menu, the command palette and the
+shortcuts sheet are one list: Ctrl+Shift+P finds any of them by name
+("sort", "wrap", "save as"), and Ctrl+? shows each with its keys. Edit ▸ Undo
+and Redo say what they take back ("Undo typing", "Redo duplicate line"), and
+Undo keeps working through a save: the history is per document.
+
+## Drag and drop
+
+- **Files** dragged into the window from the file manager or another program
+  open in tabs.
+- **Selected text** can be dragged: press on it and drag. Dropped in the same
+  document it moves, as one undo step (hold Ctrl to copy); dropped in another
+  program it is typed there. A click on selected text puts the caret there.
+- **Text from another program** dropped on the editor lands at the pointer,
+  with a caret marking the place, and is selected.
 
 ## Find and replace
 
@@ -136,7 +152,7 @@ Main menu ▸ View and ▸ Editing hold the preferences, kept in
 | Markdown preview          | On      |
 | Close brackets and quotes | On      |
 | Trim spaces on save       | Off     |
-| End with a new line       | On      |
+| Add final new line        | On      |
 
 ## Make it the default text editor
 

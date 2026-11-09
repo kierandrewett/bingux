@@ -224,8 +224,8 @@ pub fn focus_stop_pressed(
                     if !press.tap(&event) {
                         return;
                     }
-                    on_activate.call(());
                     press_focus(&core, a11y_id);
+                    on_activate.call(());
                 })
                 .on_key_down(move |event: Event<KeyboardEventData>| {
                     // Alt+Enter is Properties across the file views, not a press.

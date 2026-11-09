@@ -274,7 +274,8 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
             let target = connection_target(ov, device);
             let internet = match ov.connectivity.as_str() {
                 "limited" => "Limited",
-                "portal" => "Sign-in required",
+                // The sign-in row under this one says it, so it is not said twice.
+                "portal" => "",
                 "none" => "No internet",
                 _ => "",
             };
@@ -289,7 +290,7 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
                 .value(internet)
                 .navigates()
                 .on_press(move |_| ctx.router.open(target.clone()));
-            if internet.is_empty() {
+            if internet.is_empty() && ov.connectivity != "portal" {
                 line = line.leading_tone(crate::ui::Tone::Accent);
             }
             group = group.row(line);
@@ -302,10 +303,18 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
             }
         }
         (_, true) => {
-            group = group.row(row("Airplane mode is on"));
+            group = group.row(
+                row("Airplane mode is on")
+                    .leading(Icon::AirplaneMode)
+                    .subtitle("Turn it off below to connect."),
+            );
         }
         _ => {
-            group = group.row(row("Not connected"));
+            group = group.row(
+                row("Not connected")
+                    .leading(Icon::Network)
+                    .subtitle("Choose a Wi-Fi network or plug in a cable."),
+            );
         }
     }
     group = group.row(usage::usage_row(ctx));
@@ -336,7 +345,7 @@ impl Component for NetworkPage {
         };
         let airplane = model::pending_for("airplane").unwrap_or(ov.airplane);
         let head = PageHead::new().subtitle(if loading {
-            "—".to_string()
+            "Loading…".to_string()
         } else {
             summary(&ov, airplane)
         });

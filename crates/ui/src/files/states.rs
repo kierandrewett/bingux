@@ -23,22 +23,32 @@ pub fn loading_state() -> Element {
 /// that "Show hidden files" would reveal, and `filtered` that a filter
 /// removed them; both are offered as the reason.
 pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element {
-    let (title, description) = if recent {
-        ("No recent files", "Files you open appear here.")
+    let (icon, title, description) = if recent {
+        (
+            Icon::DocumentOpenRecent,
+            "No recent files",
+            "Files you open appear here.",
+        )
     } else if filtered {
         (
+            Icon::Filter,
             "No matching files",
             "There are no files of the chosen type in this folder. Choose another type, or open another folder.",
         )
     } else if hidden_items {
         (
+            Icon::ViewConceal,
             "No files to show",
             "This folder only has hidden files. Choose Show hidden files in the view menu to see them.",
         )
     } else {
-        ("Folder is empty", "There is nothing in this folder.")
+        (
+            FileKind::Folder.glyph(),
+            "Folder is empty",
+            "There is nothing in this folder.",
+        )
     };
-    Element::from(status_page(FileKind::Folder.glyph(), title).description(description))
+    Element::from(status_page(icon, title).description(description))
 }
 
 /// A folder whose read was stopped before anything was in: say so, and how
@@ -46,7 +56,7 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
 pub fn stopped_state() -> Element {
     Element::from(
         status_page(Icon::MediaPlaybackStop, "Loading stopped")
-            .description("Press Refresh (F5) to read this folder."),
+            .description("Press F5 to read the folder again."),
     )
 }
 
@@ -70,10 +80,15 @@ pub fn no_results_state(
     hints: Vec<(String, EventHandler<()>)>,
 ) -> Element {
     if let Some(reason) = invalid {
-        return Element::from(status_page(Icon::DialogWarning, "Cannot search").description(reason.to_string()));
+        return Element::from(
+            status_page(Icon::DialogWarning, "Cannot search").description(reason.to_string()),
+        );
     }
     let (title, description) = match running {
-        Some(true) => ("Searching…".to_string(), "Nothing has matched yet.".to_string()),
+        Some(true) => (
+            "Searching".to_string(),
+            "Nothing has matched yet.".to_string(),
+        ),
         _ if words.trim().is_empty() => (
             "Nothing found".to_string(),
             format!("Nothing in {place} fits these filters."),
@@ -101,7 +116,16 @@ impl Component for HintRow {
         let tokens = use_tokens();
         rect()
             .component("SearchHints")
-            .tw(&tokens, &[flex_row(), justify(Align::Center), items(Align::Center), gap(S2), w_full()])
+            .tw(
+                &tokens,
+                &[
+                    flex_row(),
+                    justify(Align::Center),
+                    items(Align::Center),
+                    gap(S2),
+                    w_full(),
+                ],
+            )
             .children(self.hints.iter().map(|(label, on_press)| {
                 Element::from(action_button(label.clone(), on_press.clone()))
             }))
@@ -110,11 +134,14 @@ impl Component for HintRow {
 
 /// A folder that could not be read, with the reason in plain words.
 pub fn error_state(error: &ListError) -> Element {
+    // Each reason has its own picture: a padlock for no permission, a folder
+    // that is not there, a file for "not a folder", the drive for one that
+    // does not answer. A warning sign says none of that.
     let (icon, title) = match error {
-        ListError::PermissionDenied => (Icon::ChangesPrevent, "No permission"),
-        ListError::NotFound => (Icon::DialogWarning, "Folder not found"),
-        ListError::NotADirectory => (Icon::DialogWarning, "Not a folder"),
-        ListError::Unresponsive => (Icon::DialogWarning, "Drive not responding"),
+        ListError::PermissionDenied => (Icon::NetworkWirelessEncrypted, "No permission"),
+        ListError::NotFound => (Icon::FolderMissing, "Folder not found"),
+        ListError::NotADirectory => (Icon::ApplicationXGeneric, "Not a folder"),
+        ListError::Unresponsive => (Icon::DriveHarddisk, "Drive not responding"),
         ListError::Cancelled | ListError::Other(_) => (Icon::DialogError, "Cannot open folder"),
     };
     Element::from(status_page(icon, title).description(error.to_string()))

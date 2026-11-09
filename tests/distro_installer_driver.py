@@ -257,9 +257,10 @@ def page_title(frame: np.ndarray) -> str | None:
 
 def error_page_up(frame: np.ndarray) -> bool:
     """Whether the installer's error page is up. Its title is one of the Schema.errorTitle messages rather
-    than a page title, so call this only when page_title finds nothing. Its primary button reads Retry,
-    and no other installer page has that word."""
-    return text_on_screen(frame, "Retry") is not None
+    than a page title, so call this only when page_title finds nothing. Its lead line says "Read the notice",
+    and no other installer page has those words. The primary button varies with the failure (Try again,
+    Choose another disk, Review settings), so it is not used."""
+    return text_on_screen(frame, "Read the notice") is not None
 
 
 def headline(frame: np.ndarray) -> str:

@@ -248,6 +248,16 @@ impl<P: TabContent> Tabs<P> {
         tearoff::begin(&entry, detach.pointer, detach.press);
     }
 
+    /// Open a window of its own for one tab showing `content`, as big as
+    /// this window: Files' New window (Ctrl+N), an editor's new window. The
+    /// window is one of the application's windows like any other, so its tab
+    /// can be dragged back onto this one.
+    pub fn open_window(self, content: P) {
+        let size =
+            windows::find(Platform::window_id()).map_or((0.0, 0.0), |entry| entry.size.get());
+        windows::open(vec![super::set::Moved { content }], 0, size);
+    }
+
     /// The tab strip of the window, wired to every action above. `items`
     /// are the tabs as the strip draws them, `window` is what
     /// [`use_tab_window`](super::use_tab_window) returned and `new_tab` opens a

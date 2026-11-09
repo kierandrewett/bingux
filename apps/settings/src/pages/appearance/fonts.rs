@@ -221,9 +221,9 @@ fn copy_text(overlays: Overlays, name: &str) {
         move || freya::clipboard::Clipboard::set(text).is_ok(),
         move |copied| {
             if copied {
-                overlays.toast("Font name copied.");
+                overlays.toast("Font name copied");
             } else {
-                overlays.toast("The font name could not be copied.");
+                overlays.toast("Could not copy the font name. Try again.");
             }
         },
     );
@@ -397,7 +397,7 @@ impl Component for FontPage {
         }));
         let mut list = Group::new(None::<String>).rows(rows);
         if loaded && names.is_empty() {
-            list = list.row(status(Status::Empty("Nothing matches.".to_string())));
+            list = list.row(status(Status::Empty("No matching fonts".to_string())));
         }
 
         let filter_options = vec![
@@ -421,7 +421,7 @@ impl Component for FontPage {
             .child(
                 rect().tw(&tokens, &[flex_row(), w_flex()]).child(
                     search_field(query, |_: String| {})
-                        .placeholder("Search for a font")
+                        .placeholder("Search fonts")
                         .fill_width(),
                 ),
             )

@@ -34,12 +34,12 @@ use super::columns::ColumnLayout;
 use super::properties;
 use super::zoom::Zoom;
 use crate::shell::Overlays;
-use crate::window::Window;
 use crate::task::spawn_blocking;
+use crate::window::Window;
 
+pub(super) use clipboard::is_cut;
 pub(super) use names::{check_name, stem_chars};
 pub(super) use open_with::{App, apps_for, launch, open_default, warm as warm_open_with};
-pub(super) use clipboard::is_cut;
 
 /// The sidebar's Empty Trash asks the file view beside it to empty the Trash:
 /// the view owns the busy line and the status notice the work reports in. The
@@ -142,7 +142,9 @@ pub(super) fn operation_began() {
 
 /// An operation gave the busy slot up.
 pub(super) fn operation_ended() {
-    let _ = RUNNING.fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| count.checked_sub(1));
+    let _ = RUNNING.fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+        count.checked_sub(1)
+    });
 }
 
 /// Whether a file operation is running: closing the window now would stop
@@ -236,6 +238,8 @@ pub(super) enum Command {
     OpenInNewTab,
     Cut,
     Copy,
+    /// A copy of each selected item beside it, named as Keep both names one.
+    Duplicate,
     /// Into the folder on show.
     Paste,
     /// Into this folder, from a folder's own menu.
@@ -284,10 +288,11 @@ pub(super) enum Command {
 
 impl Command {
     /// Whether this changes files, so a view that cannot change them hides it.
-    fn changes_files(&self) -> bool {
+    pub(super) fn changes_files(&self) -> bool {
         matches!(
             self,
             Command::Cut
+                | Command::Duplicate
                 | Command::Paste
                 | Command::PasteInto(_)
                 | Command::Rename
@@ -373,7 +378,9 @@ impl Facts {
                 && single.is_some_and(|entry| !entry.is_dir() && backend::can_extract(&entry.path)),
             can_compress: env.caps.modify
                 && !selected.is_empty()
-                && bingux_files::ops::Format::ALL.iter().any(|format| format.is_available()),
+                && bingux_files::ops::Format::ALL
+                    .iter()
+                    .any(|format| format.is_available()),
             shown: env.order.len(),
             undo: env.undo.can_undo().then(|| env.undo.undo_title()),
             trash: TrashView::of(env.folder.as_deref()),
@@ -429,6 +436,7 @@ fn in_trash(facts: &Facts, command: &Command) -> Option<Availability> {
         }
         Command::Paste => Disabled("Nothing can be put inside a folder in the Trash."),
         Command::Cut
+        | Command::Duplicate
         | Command::PasteInto(_)
         | Command::Rename
         | Command::Trash
@@ -500,6 +508,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             }
         }
         Command::Cut
+        | Command::Duplicate
         | Command::Trash
         | Command::DeletePermanently
         | Command::Copy
@@ -527,8 +536,9 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
                 Disabled("There is nothing to paste.")
             }
         }
+        // One item is renamed in place; several in the Rename sheet.
         Command::Rename => {
-            if one {
+            if some {
                 Enabled
             } else {
                 Hidden
@@ -653,6 +663,11 @@ pub(super) fn can_paste() -> bool {
 }
 
 /// Show `text` in the status line for a few seconds.
+/// Rename each `(path, new name)` at once, as one Undo (the Rename sheet).
+pub(super) fn rename_many(env: &Env, pairs: Vec<(PathBuf, String)>) {
+    transfer::rename_many(env, pairs);
+}
+
 pub(super) fn notify(ui: Ui, text: impl Into<String>, error: bool) {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -666,7 +681,10 @@ pub(super) fn notify(ui: Ui, text: impl Into<String>, error: bool) {
     );
     spawn_in_window(async move {
         timer(NOTICE_TIME).await;
-        let current = ui.notice.try_peek().and_then(|slot| (*slot).as_ref().map(|notice| notice.id));
+        let current = ui
+            .notice
+            .try_peek()
+            .and_then(|slot| (*slot).as_ref().map(|notice| notice.id));
         if current == Some(id) {
             set(ui.notice, None);
         }
@@ -709,7 +727,11 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
             if let [entry] = selected
                 && let Err(error) = open_with::launch(&app, &entry.path)
             {
-                notify(env.ui, format!("Could not start {}: {error}.", app.name), true);
+                notify(
+                    env.ui,
+                    format!("Could not start {}: {error}.", app.name),
+                    true,
+                );
             }
         }
         Command::OpenInNewTab => {
@@ -719,23 +741,24 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
         }
         Command::Cut => clipboard::put(paths_of(selected), true),
         Command::Copy => clipboard::put(paths_of(selected), false),
+        Command::Duplicate => transfer::duplicate(env, paths_of(selected)),
         Command::Paste => {
             if let Some(folder) = env.folder.clone() {
                 transfer::paste(env, folder);
             }
         }
         Command::PasteInto(folder) => transfer::paste(env, folder),
-        Command::Rename => {
-            if let [entry] = selected {
-                set(
-                    env.ui.rename,
-                    Some(Rename {
-                        path: entry.path.clone(),
-                        created: false,
-                    }),
-                );
-            }
-        }
+        Command::Rename => match selected {
+            [entry] => set(
+                env.ui.rename,
+                Some(Rename {
+                    path: entry.path.clone(),
+                    created: false,
+                }),
+            ),
+            [] => {}
+            several => super::batch_rename::show_batch_rename(env, several),
+        },
         Command::NewFolder => create(env, true),
         Command::NewFile => create(env, false),
         Command::NewFromTemplate(template) => create_from_template(env, template),
@@ -757,7 +780,13 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
                 .map(|entry| file_uri(&entry.path))
                 .collect::<Vec<_>>()
                 .join("\n");
-            copy_text(env, text, "Location copied.", "Locations copied.", selected.len());
+            copy_text(
+                env,
+                text,
+                "Location copied.",
+                "Locations copied.",
+                selected.len(),
+            );
         }
         Command::AddBookmark => bookmark(env, selected, true),
         Command::RemoveBookmark => bookmark(env, selected, false),
@@ -863,7 +892,11 @@ fn bookmark(env: &Env, selected: &[Entry], add: bool) {
         .await;
         match outcome {
             Ok(()) => reload.call(()),
-            Err(error) => notify(ui, format!("Could not change the bookmarks: {error}."), true),
+            Err(error) => notify(
+                ui,
+                format!("Could not change the bookmarks: {error}."),
+                true,
+            ),
         }
     });
 }
@@ -909,10 +942,13 @@ fn create(env: &Env, folder: bool) {
         .await;
         match outcome {
             Ok(path) => {
-                undo::push(&env, undo::Step::Create {
-                    path: path.clone(),
-                    folder,
-                });
+                undo::push(
+                    &env,
+                    undo::Step::Create {
+                        path: path.clone(),
+                        folder,
+                    },
+                );
                 let mut selection = env.selection;
                 selection.write().select_only(&path);
                 set(
@@ -956,7 +992,9 @@ fn create_from_template(env: &Env, template: PathBuf) {
         let outcome = spawn_blocking(move || {
             let pick = |taken: &[String]| {
                 let stem = names::unused_name(&stem, |stem| {
-                    taken.iter().any(|name| *name == format!("{stem}{extension}"))
+                    taken
+                        .iter()
+                        .any(|name| *name == format!("{stem}{extension}"))
                 });
                 format!("{stem}{extension}")
             };
@@ -983,10 +1021,13 @@ fn create_from_template(env: &Env, template: PathBuf) {
         .await;
         match outcome {
             Ok(path) => {
-                undo::push(&env, undo::Step::Create {
-                    path: path.clone(),
-                    folder: false,
-                });
+                undo::push(
+                    &env,
+                    undo::Step::Create {
+                        path: path.clone(),
+                        folder: false,
+                    },
+                );
                 let mut selection = env.selection;
                 selection.write().select_only(&path);
                 set(
@@ -1026,10 +1067,13 @@ pub(super) fn rename(
                 if selection.peek().contains(&from) {
                     selection.write().select_only(&to);
                 }
-                undo::push(&env, undo::Step::Rename {
-                    from,
-                    to: to.clone(),
-                });
+                undo::push(
+                    &env,
+                    undo::Step::Rename {
+                        from,
+                        to: to.clone(),
+                    },
+                );
                 env.reload.call(());
                 done(Ok(()));
             }
@@ -1062,6 +1106,7 @@ pub(super) fn handle_key(env: &Env, selected: &[Entry], event: &Event<KeyboardEv
         Key::Character(text) if ctrl && !alt => match text.to_ascii_lowercase().as_str() {
             "c" if shift => Command::CopyPath,
             "c" => Command::Copy,
+            "d" if !shift => Command::Duplicate,
             "x" if !shift => Command::Cut,
             "v" if !shift => Command::Paste,
             "z" if !shift => Command::Undo,
@@ -1089,6 +1134,7 @@ pub(super) fn shortcut(command: &Command) -> Option<&'static str> {
         Command::Preview => "Space",
         Command::Cut => "Ctrl+X",
         Command::Copy => "Ctrl+C",
+        Command::Duplicate => "Ctrl+D",
         Command::Paste | Command::PasteInto(_) => "Ctrl+V",
         Command::Rename => "F2",
         Command::NewFolder => "Ctrl+Shift+N",
@@ -1135,6 +1181,7 @@ mod tests {
         let empty = facts(Capabilities::FILES_APP, 0, 0);
         assert_eq!(state(&empty, Command::Open), Availability::Hidden);
         assert_eq!(state(&empty, Command::Copy), Availability::Hidden);
+        assert_eq!(state(&empty, Command::Duplicate), Availability::Hidden);
         assert_eq!(state(&empty, Command::Rename), Availability::Hidden);
         assert_eq!(state(&empty, Command::Trash), Availability::Hidden);
         assert!(state(&empty, Command::NewFolder).is_enabled());
@@ -1151,8 +1198,16 @@ mod tests {
         assert!(state(&file, Command::Trash).is_enabled());
         assert!(state(&file, Command::Compress).is_enabled());
         assert!(
-            state(&file, Command::OpenWith(App { name: String::new(), exec: String::new(), icon: String::new(), mimes: vec![] }))
-                .is_enabled()
+            state(
+                &file,
+                Command::OpenWith(App {
+                    name: String::new(),
+                    exec: String::new(),
+                    icon: String::new(),
+                    mimes: vec![]
+                })
+            )
+            .is_enabled()
         );
         assert_eq!(state(&file, Command::OpenInNewTab), Availability::Hidden);
         assert_eq!(state(&file, Command::AddBookmark), Availability::Hidden);
@@ -1163,7 +1218,10 @@ mod tests {
         let mut folder = facts(Capabilities::FILES_APP, 1, 1);
         assert!(state(&folder, Command::OpenInNewTab).is_enabled());
         assert!(state(&folder, Command::AddBookmark).is_enabled());
-        assert_eq!(state(&folder, Command::RemoveBookmark), Availability::Hidden);
+        assert_eq!(
+            state(&folder, Command::RemoveBookmark),
+            Availability::Hidden
+        );
         folder.bookmarked = true;
         assert_eq!(state(&folder, Command::AddBookmark), Availability::Hidden);
         assert!(state(&folder, Command::RemoveBookmark).is_enabled());
@@ -1171,7 +1229,12 @@ mod tests {
         assert_eq!(
             state(
                 &folder,
-                Command::OpenWith(App { name: String::new(), exec: String::new(), icon: String::new(), mimes: vec![] })
+                Command::OpenWith(App {
+                    name: String::new(),
+                    exec: String::new(),
+                    icon: String::new(),
+                    mimes: vec![]
+                })
             ),
             Availability::Hidden
         );
@@ -1180,9 +1243,11 @@ mod tests {
     #[test]
     fn several_items() {
         let many = facts(Capabilities::FILES_APP, 3, 1);
-        assert_eq!(state(&many, Command::Rename), Availability::Hidden);
+        // Several are renamed together, in the Rename sheet.
+        assert!(state(&many, Command::Rename).is_enabled());
         assert!(state(&many, Command::Trash).is_enabled());
         assert!(state(&many, Command::Copy).is_enabled());
+        assert!(state(&many, Command::Duplicate).is_enabled());
         assert!(matches!(
             state(&many, Command::OpenInNewTab),
             Availability::Disabled(_)
@@ -1198,7 +1263,12 @@ mod tests {
     #[test]
     fn chooser_cannot_leave_the_dialog() {
         let file = facts(Capabilities::CHOOSER, 1, 0);
-        let app = App { name: String::new(), exec: String::new(), icon: String::new(), mimes: vec![] };
+        let app = App {
+            name: String::new(),
+            exec: String::new(),
+            icon: String::new(),
+            mimes: vec![],
+        };
         assert_eq!(state(&file, Command::OpenWith(app)), Availability::Hidden);
         let folder = facts(Capabilities::CHOOSER, 1, 1);
         assert_eq!(state(&folder, Command::OpenInNewTab), Availability::Hidden);
@@ -1215,6 +1285,7 @@ mod tests {
         let file = facts(caps, 1, 0);
         for command in [
             Command::Cut,
+            Command::Duplicate,
             Command::Rename,
             Command::Trash,
             Command::DeletePermanently,
@@ -1224,7 +1295,11 @@ mod tests {
             Command::Compress,
             Command::Undo,
         ] {
-            assert_eq!(state(&file, command.clone()), Availability::Hidden, "{command:?}");
+            assert_eq!(
+                state(&file, command.clone()),
+                Availability::Hidden,
+                "{command:?}"
+            );
         }
         assert!(state(&file, Command::Copy).is_enabled());
         assert!(state(&file, Command::Properties).is_enabled());
@@ -1234,25 +1309,43 @@ mod tests {
     fn paste_and_create_need_a_folder_and_a_clipboard() {
         let mut recent = facts(Capabilities::FILES_APP, 0, 0);
         recent.in_folder = false;
-        assert!(matches!(state(&recent, Command::NewFolder), Availability::Disabled(_)));
-        assert!(matches!(state(&recent, Command::Paste), Availability::Disabled(_)));
-        assert!(matches!(state(&recent, Command::Properties), Availability::Disabled(_)));
+        assert!(matches!(
+            state(&recent, Command::NewFolder),
+            Availability::Disabled(_)
+        ));
+        assert!(matches!(
+            state(&recent, Command::Paste),
+            Availability::Disabled(_)
+        ));
+        assert!(matches!(
+            state(&recent, Command::Properties),
+            Availability::Disabled(_)
+        ));
         let mut empty_clipboard = facts(Capabilities::FILES_APP, 0, 0);
         empty_clipboard.can_paste = false;
-        assert!(matches!(state(&empty_clipboard, Command::Paste), Availability::Disabled(_)));
+        assert!(matches!(
+            state(&empty_clipboard, Command::Paste),
+            Availability::Disabled(_)
+        ));
     }
 
     #[test]
     fn undo_and_extract_follow_their_facts() {
         let mut file = facts(Capabilities::FILES_APP, 1, 0);
-        assert!(matches!(state(&file, Command::Undo), Availability::Disabled(_)));
+        assert!(matches!(
+            state(&file, Command::Undo),
+            Availability::Disabled(_)
+        ));
         assert_eq!(state(&file, Command::Extract), Availability::Hidden);
         file.undo = Some("Undo rename".to_owned());
         file.extractable = true;
         assert!(state(&file, Command::Undo).is_enabled());
         assert!(state(&file, Command::Extract).is_enabled());
         file.can_compress = false;
-        assert!(matches!(state(&file, Command::Compress), Availability::Disabled(_)));
+        assert!(matches!(
+            state(&file, Command::Compress),
+            Availability::Disabled(_)
+        ));
     }
 
     #[test]

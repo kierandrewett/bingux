@@ -1973,7 +1973,7 @@ PanelWindow {
         anchors.verticalCenter: parent.verticalCenter
         anchors.verticalCenterOffset: root.enterOffset
         x: root.preferences.dockAlignment === "left" ? Theme.padding : root.preferences.dockAlignment === "right" ? root.width - width - Theme.padding : (root.width - width) / 2
-        width: Math.min(root.width - Theme.padding * 2, Math.max(DesktopEditing.active ? root.itemSize + 16 : 0, dockRow.implicitWidth + dockSurface.itemPadding * 2))
+        width: Math.min(root.width - Theme.padding * 2, Math.max(DesktopEditing.active ? (dockEmptyHint.visible ? 240 : root.itemSize + 16) : 0, dockRow.implicitWidth + dockSurface.itemPadding * 2))
         height: root.itemSize + 16
         radius: Theme.shellRadius
         color: Theme.shellSurface
@@ -1981,6 +1981,17 @@ PanelWindow {
         border.color: Theme.outline
         PanelOutline {
             surface: dockSurface
+        }
+        // The empty dock in edit mode says where to drop, as the sidebar does.
+        StateMessage {
+            id: dockEmptyHint
+            objectName: "dockEmptyHint"
+            anchors.fill: parent
+            fill: true
+            compact: true
+            visible: DesktopEditing.active && root.appGroups.length === 0 && (root.preferences.layout?.dock.length || 0) === 0
+            iconName: "list-add-symbolic"
+            title: "Drop apps here"
         }
         visible: DesktopEditing.active || root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
 

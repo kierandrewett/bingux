@@ -135,6 +135,7 @@ ColumnLayout {
         objectName: "taskList"
         Layout.fillWidth: true
         Layout.fillHeight: true
+        visible: root.tasks.length > 0
         clip: true
         model: root.tasks
         spacing: 0
@@ -221,17 +222,13 @@ ColumnLayout {
             font.family: Theme.fontFamily
             font.pixelSize: Theme.fontSmall
         }
-        Text {
-            visible: root.tasks.length === 0
-            width: parent.width - 16
-            x: 8
-            y: 32
-            text: "Nothing on your list yet."
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.Wrap
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSmall
-        }
+    }
+    StateMessage {
+        objectName: "sidebarTasksEmpty"
+        visible: root.tasks.length === 0
+        fill: true
+        iconName: "checkbox-checked-symbolic"
+        title: "No tasks"
+        detail: "Add one above to start your list."
     }
 }

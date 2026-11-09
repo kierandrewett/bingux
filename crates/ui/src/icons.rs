@@ -72,6 +72,9 @@ pub enum Icon {
     NetworkWirelessSignalOk,
     NetworkWirelessSignalGood,
     NetworkWirelessSignalExcellent,
+    /// The padlock: a secured network, and anything locked or not permitted
+    /// (a folder the person has no permission to read). It is the set's only
+    /// padlock.
     NetworkWirelessEncrypted,
     NetworkWired,
     NetworkVpn,
@@ -154,6 +157,8 @@ pub enum Icon {
     ViewGrid,
     TopBar,
     NotificationsDisabled,
+    /// A coffee cup: keep the computer awake. Not a padlock: something locked
+    /// is [`Icon::NetworkWirelessEncrypted`].
     ChangesPrevent,
     Bookmarks,
     AddOn,
@@ -169,6 +174,8 @@ pub enum Icon {
     AudioXGeneric,
     PackageXGeneric,
     FolderNew,
+    /// A folder drawn in dashes: a folder that is not there (not found).
+    FolderMissing,
     MediaEject,
     MediaOptical,
     FolderTemplates,
@@ -265,7 +272,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 191] = [
+    pub const ALL: [Icon; 192] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -408,6 +415,7 @@ impl Icon {
         Self::AudioXGeneric,
         Self::PackageXGeneric,
         Self::FolderNew,
+        Self::FolderMissing,
         Self::MediaEject,
         Self::MediaOptical,
         Self::FolderTemplates,
@@ -641,6 +649,7 @@ impl Icon {
             Self::AudioXGeneric => include_bytes!("../icons/audio-x-generic-symbolic.svg"),
             Self::PackageXGeneric => include_bytes!("../icons/package-x-generic-symbolic.svg"),
             Self::FolderNew => include_bytes!("../icons/folder-new-symbolic.svg"),
+            Self::FolderMissing => include_bytes!("../icons/folder-missing-symbolic.svg"),
             Self::MediaEject => include_bytes!("../icons/media-eject-symbolic.svg"),
             Self::MediaOptical => include_bytes!("../icons/media-optical-symbolic.svg"),
             Self::FolderTemplates => include_bytes!("../icons/folder-templates-symbolic.svg"),

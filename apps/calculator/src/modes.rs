@@ -169,13 +169,17 @@ impl Component for ConvertPanel {
                 &[flex_row(), items(Align::Center), gap(S2), grow_children()],
             )
             .child(
-                rect().width(Size::flex(1.0)).child(
-                    dropdown(unit_options.clone(), from.clone(), move |id: String| {
-                        from_calc.with(|s| s.set_units(&id, &keep_to));
-                        from_calc.changed();
-                    })
-                    .dense(),
-                ),
+                rect()
+                    .width(Size::flex(1.0))
+                    .min_width(Size::px(0.0))
+                    .child(
+                        dropdown(unit_options.clone(), from.clone(), move |id: String| {
+                            from_calc.with(|s| s.set_units(&id, &keep_to));
+                            from_calc.changed();
+                        })
+                        .dense()
+                        .width(Dim::FieldMin),
+                    ),
             )
             .child(
                 rect()
@@ -199,13 +203,17 @@ impl Component for ConvertPanel {
                     ),
             )
             .child(
-                rect().width(Size::flex(1.0)).child(
-                    dropdown(unit_options, to.clone(), move |id: String| {
-                        to_calc.with(|s| s.set_units(&keep_from, &id));
-                        to_calc.changed();
-                    })
-                    .dense(),
-                ),
+                rect()
+                    .width(Size::flex(1.0))
+                    .min_width(Size::px(0.0))
+                    .child(
+                        dropdown(unit_options, to.clone(), move |id: String| {
+                            to_calc.with(|s| s.set_units(&keep_from, &id));
+                            to_calc.changed();
+                        })
+                        .dense()
+                        .width(Dim::FieldMin),
+                    ),
             );
 
         let mut column = rect()

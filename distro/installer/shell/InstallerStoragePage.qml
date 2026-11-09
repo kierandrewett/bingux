@@ -27,11 +27,11 @@ InstallerPage {
 
     // Detail line of a filesystem row: what it does, or that this build cannot do it yet.
     function fsDetail(name, text) {
-        return InstallerState.offers("filesystems", name) ? text : "Not in this installer build yet";
+        return InstallerState.offers("filesystems", name) ? text : "Not available on this computer";
     }
 
     function swapDetail(name, text) {
-        return InstallerState.offers("swap", name) ? text : "Not in this installer build yet";
+        return InstallerState.offers("swap", name) ? text : "Not available on this computer";
     }
 
     InstallerScroll {
@@ -166,7 +166,7 @@ InstallerPage {
                 InstallerSwitchRow {
                     label: "Encrypt the system disk (LUKS2)"
                     note: !InstallerState.firmware ? "Checking the firmware."
-                        : !page.encryptionOffered ? "Encryption is not in this installer build for " + (page.bios ? "BIOS" : "UEFI") + " firmware yet."
+                        : !page.encryptionOffered ? "Encryption is not available with " + (page.bios ? "BIOS" : "UEFI") + " firmware."
                         : page.homeOnOwnPartition && !InstallerState.encryption ? "A separate home partition on the Partitions page cannot be encrypted. Remove it to encrypt the system."
                         : page.bios ? "You type the passphrase at every start. /boot stays unencrypted, so only the root is encrypted."
                         : "You type the passphrase at every start. Bingux cannot recover a lost passphrase."

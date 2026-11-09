@@ -33,18 +33,23 @@ pub(super) enum Step {
     Create { path: PathBuf, folder: bool },
     /// Each item was `(original, now)`: moved out of its folder.
     Move(Vec<(PathBuf, PathBuf)>),
+    /// Copies made beside their originals (Duplicate), each `(original, copy)`.
+    Duplicate(Vec<(PathBuf, PathBuf)>),
+    /// Several items renamed at once, each `(old, now)`.
+    Renames(Vec<(PathBuf, PathBuf)>),
 }
 
 impl Step {
     /// The change's name, as Edit > Undo shows it: "Undo rename".
     pub(super) fn name(&self) -> &'static str {
         match self {
-            Step::Rename { .. } => "Rename",
+            Step::Rename { .. } | Step::Renames(_) => "Rename",
             Step::Trash(_) => "Move to Trash",
             Step::Restore(_) => "Restore",
             Step::Create { folder: true, .. } => "New folder",
             Step::Create { folder: false, .. } => "New file",
             Step::Move(_) => "Move",
+            Step::Duplicate(_) => "Duplicate",
         }
     }
 
@@ -179,6 +184,10 @@ mod tests {
         assert_eq!(Step::Restore(Vec::new()).name(), "Restore");
         assert_eq!(Step::Move(Vec::new()).name(), "Move");
         assert!(!Step::Restore(Vec::new()).redoable());
+        assert_eq!(Step::Duplicate(Vec::new()).name(), "Duplicate");
+        assert_eq!(Step::Renames(Vec::new()).name(), "Rename");
+        assert!(Step::Duplicate(Vec::new()).redoable());
+        assert!(Step::Renames(Vec::new()).redoable());
         assert!(rename.redoable());
     }
 }

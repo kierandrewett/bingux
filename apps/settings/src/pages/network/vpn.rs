@@ -238,12 +238,21 @@ fn vpn_row(ctx: NetCtx, ov: &Overview, vpn: &Vpn) -> Element {
     if link == Link::Connecting {
         trailing = trailing.child(Element::from(spinner(SpinnerSize::Small)));
     }
-    trailing = trailing.child(Element::from(switch(link.on(), move |next: bool| {
-        set_link(ctx, toggle_name.clone(), next)
-    })));
+    // A VPN that is off cannot start without a connection to run over.
+    let needs_connection = !link.on() && (ov.airplane || ov.connectivity == "none");
+    trailing = trailing.child(Element::from(
+        switch(link.on(), move |next: bool| {
+            set_link(ctx, toggle_name.clone(), next)
+        })
+        .enabled(!needs_connection),
+    ));
     let mut item = row(vpn.name.clone())
         .leading(Icon::NetworkVpn)
-        .subtitle(link.line())
+        .subtitle(if needs_connection {
+            "Needs a connection".to_string()
+        } else {
+            link.line()
+        })
         .subtitle_one_line()
         .trailing(trailing)
         .trailing_control()
@@ -390,7 +399,7 @@ impl Component for VpnPage {
                         tokens,
                         Icon::NetworkVpn,
                         name.clone(),
-                        "—".to_string(),
+                        "Loading…".to_string(),
                     )),
                     true,
                 );
@@ -437,13 +446,13 @@ impl Component for VpnPage {
                     .and_then(|loaded| loaded.as_ref().ok())
                     .map(gateway_of)
                     .unwrap_or_default();
-                info = info.row(row("Server").mono_value(dash(server)));
+                info = info.row(row("Server").technical_value(dash(server)));
             }
         }
         if let Link::Connected(address) = &link
             && !address.is_empty()
         {
-            info = info.row(row("IP address").mono_value(address.clone()));
+            info = info.row(row("IP address").technical_value(address.clone()));
         }
         let owner = Owner::Vpn { name: name.clone() };
         info = info.row(usage::connection_usage_row(

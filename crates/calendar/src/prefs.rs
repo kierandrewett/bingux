@@ -1,4 +1,5 @@
-//! Preferences, and what the locale says about weeks and clocks.
+//! Preferences. The locale's week and clock conventions come from the app
+//! (`bingux_ui::locale`), so this crate stays free of the UI stack.
 
 use std::fs;
 use std::path::PathBuf;
@@ -86,20 +87,22 @@ impl Prefs {
         }
     }
 
-    /// The first day of the week: the choice, else the locale's.
-    pub fn first_day(&self) -> Weekday {
+    /// The first day of the week: the choice, else `locale_first`, the
+    /// locale's first day.
+    pub fn first_day(&self, locale_first: Weekday) -> Weekday {
         match self.first_weekday {
             Some(day) => weekday_from_index(day),
-            None => Locale::current().first_weekday,
+            None => locale_first,
         }
     }
 
-    /// Whether times are written on a 12-hour clock.
-    pub fn twelve_hour(&self) -> bool {
+    /// Whether times are written on a 12-hour clock: the choice, else
+    /// `locale_twelve_hour`, what the locale writes.
+    pub fn twelve_hour(&self, locale_twelve_hour: bool) -> bool {
         match self.hour_format {
             HourFormat::H12 => true,
             HourFormat::H24 => false,
-            HourFormat::Auto => Locale::current().twelve_hour,
+            HourFormat::Auto => locale_twelve_hour,
         }
     }
 }
@@ -116,110 +119,19 @@ pub fn weekday_from_index(index: u8) -> Weekday {
     }
 }
 
-/// What the locale says about calendars.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Locale {
-    pub first_weekday: Weekday,
-    pub twelve_hour: bool,
-    /// Whether a date such as 3/4 is the fourth of March.
-    pub month_first: bool,
-}
-
-impl Locale {
-    /// Read from `LC_ALL`, `LC_TIME`, `LANG` and `LANGUAGE`, in that order.
-    pub fn current() -> Locale {
-        let name = ["LC_ALL", "LC_TIME", "LANG", "LANGUAGE"]
-            .iter()
-            .filter_map(|variable| std::env::var(variable).ok())
-            .find(|value| !value.is_empty() && value != "C" && value != "POSIX")
-            .unwrap_or_default();
-        Locale::of(&name)
-    }
-
-    /// The locale named `name`, such as `en_US.UTF-8`.
-    pub fn of(name: &str) -> Locale {
-        let name = name.split(['.', '@']).next().unwrap_or("");
-        let (language, region) = match name.split_once(['_', '-']) {
-            Some((language, region)) => (language.to_lowercase(), region.to_uppercase()),
-            None => (name.to_lowercase(), String::new()),
-        };
-        // CLDR's week data: the territories whose weeks start on a Sunday,
-        // on a Saturday, or (the Maldives) on a Friday. Everyone else
-        // starts on Monday.
-        const SUNDAY: &[&str] = &[
-            "AG", "AS", "BD", "BR", "BS", "BT", "BW", "BZ", "CA", "CO", "DM", "DO", "ET", "GT",
-            "GU", "HK", "HN", "ID", "IL", "IN", "JM", "JP", "KE", "KH", "KR", "LA", "MH", "MM",
-            "MO", "MT", "MX", "MZ", "NI", "NP", "PA", "PE", "PH", "PK", "PR", "PT", "PY", "SA",
-            "SG", "SV", "TH", "TT", "TW", "UM", "US", "VE", "VI", "WS", "YE", "ZA", "ZW",
-        ];
-        const SATURDAY: &[&str] = &[
-            "AE", "AF", "BH", "DJ", "DZ", "EG", "IQ", "IR", "JO", "KW", "LY", "OM", "QA", "SD",
-            "SY",
-        ];
-        let region = if region.is_empty() {
-            default_region(&language)
-        } else {
-            region
-        };
-        let first_weekday = if SUNDAY.contains(&region.as_str()) {
-            Weekday::Sun
-        } else if SATURDAY.contains(&region.as_str()) {
-            Weekday::Sat
-        } else {
-            Weekday::Mon
-        };
-        // Territories that write 12-hour times, and those that write the
-        // month before the day.
-        const TWELVE: &[&str] = &[
-            "US", "CA", "AU", "NZ", "IN", "PH", "EG", "SA", "CO", "MX", "PK", "BD", "MY",
-        ];
-        let twelve_hour = TWELVE.contains(&region.as_str());
-        let month_first = matches!(region.as_str(), "US" | "PH" | "CA" | "FM" | "PW" | "MH");
-        Locale {
-            first_weekday,
-            twelve_hour,
-            month_first,
-        }
-    }
-}
-
-/// The region a bare language usually means, for `LANG=en`.
-fn default_region(language: &str) -> String {
-    match language {
-        "en" => "GB",
-        "fr" => "FR",
-        "de" => "DE",
-        "es" => "ES",
-        "it" => "IT",
-        "pt" => "PT",
-        "ja" => "JP",
-        "ko" => "KR",
-        "zh" => "CN",
-        "ar" => "EG",
-        _ => "",
-    }
-    .to_string()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn weeks_start_where_the_locale_says() {
-        assert_eq!(Locale::of("en_US.UTF-8").first_weekday, Weekday::Sun);
-        assert_eq!(Locale::of("en_GB.UTF-8").first_weekday, Weekday::Mon);
-        assert_eq!(Locale::of("de_DE").first_weekday, Weekday::Mon);
-        assert_eq!(Locale::of("ar_EG").first_weekday, Weekday::Sat);
-        assert_eq!(Locale::of("").first_weekday, Weekday::Mon);
-    }
-
-    #[test]
-    fn clocks_and_dates_follow_the_region() {
-        assert!(Locale::of("en_US").twelve_hour);
-        assert!(!Locale::of("en_GB").twelve_hour);
-        assert!(Locale::of("en_US").month_first);
-        assert!(!Locale::of("fr_FR").month_first);
+    fn choices_override_the_locale() {
+        let mut prefs = Prefs::default();
+        assert_eq!(prefs.first_day(Weekday::Sun), Weekday::Sun);
+        assert!(prefs.twelve_hour(true));
+        prefs.first_weekday = Some(2);
+        prefs.hour_format = HourFormat::H24;
+        assert_eq!(prefs.first_day(Weekday::Sun), Weekday::Wed);
+        assert!(!prefs.twelve_hour(true));
     }
 
     #[test]

@@ -36,10 +36,15 @@ Item {
         contentHeight: content.implicitHeight
         clip: true
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: ScrollBar {
+            width: 8
+        }
         ColumnLayout {
             id: content
-            width: parent.width
+            // A gutter for the scroll bar, always reserved: the bar sits over
+            // the right edge when Advanced makes the page scroll, so the
+            // controls stop short of it and the page does not reflow.
+            width: parent.width - 14
             spacing: Theme.padding
             RowLayout {
                 Layout.fillWidth: true

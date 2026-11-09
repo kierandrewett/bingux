@@ -268,12 +268,12 @@ impl Component for WallpaperPicker {
         if all.is_empty() {
             rows.push(
                 status(Status::Empty(
-                    "No pictures found. Add one with Add picture.".to_string(),
+                    "No pictures. Add one to use it as the wallpaper.".to_string(),
                 ))
                 .into(),
             );
         } else if shown.is_empty() {
-            rows.push(status(Status::Empty("Nothing matches.".to_string())).into());
+            rows.push(status(Status::Empty("No matching pictures".to_string())).into());
         }
 
         Element::from(Group::titled("Wallpaper").rows(rows))
@@ -331,7 +331,7 @@ fn system_tile(
     tile(
         tokens,
         thumb(tokens, selected, face.into()),
-        "System background",
+        "System wallpaper",
         move |_| set_wallpaper(model, overlays, None),
     )
 }

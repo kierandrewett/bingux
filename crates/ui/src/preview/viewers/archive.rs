@@ -3,7 +3,9 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use bingux_files::{Kind, display};
+use bingux_files::Kind;
+
+use crate::files::display;
 use bingux_preview_core::Loaded;
 use bingux_preview_core::archive::ArchiveListing;
 use freya::prelude::*;
@@ -58,14 +60,32 @@ impl Component for EntryRow {
         };
         rect()
             .width(Size::px(self.data.width))
-            .tw(&tokens, &[flex_row(), h(Dim::MenuItem), items(Align::Center), gap(S3), px(S4)])
+            .tw(
+                &tokens,
+                &[
+                    flex_row(),
+                    h(Dim::MenuItem),
+                    items(Align::Center),
+                    gap(S3),
+                    px(S4),
+                ],
+            )
             .child(file_icon_view(&tokens, &icon, IconSize::Row, false))
-            .child(rect().tw(&tokens, &[w_flex(), clip()]).child(path_label(entry.path.clone()).style(BODY)))
+            .child(
+                rect()
+                    .tw(&tokens, &[w_flex(), clip()])
+                    .child(path_label(entry.path.clone()).style(BODY)),
+            )
             .child(
                 rect()
                     .width(Size::px(size_room()))
                     .tw(&tokens, &[flex_row(), justify(Align::End)])
-                    .maybe_child(entry.size.map(|size| CAPTION.in_ink(Ink::Muted).label(&tokens, display::size(size)).max_lines(1))),
+                    .maybe_child(entry.size.map(|size| {
+                        CAPTION
+                            .in_ink(Ink::Muted)
+                            .label(&tokens, display::size(size))
+                            .max_lines(1)
+                    })),
             )
     }
 }
@@ -85,7 +105,11 @@ impl Component for ArchiveView {
             files,
             if files == 1 { "file" } else { "files" },
             if listing.truncated { " or more" } else { "" },
-            if bytes > 0 { format!(" · {} unpacked", display::size(bytes)) } else { String::new() }
+            if bytes > 0 {
+                format!(" · {} unpacked", display::size(bytes))
+            } else {
+                String::new()
+            }
         );
         let data = ListData {
             listing: listing.clone(),
@@ -105,11 +129,33 @@ impl Component for ArchiveView {
             .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
             .child(
                 rect()
-                    .tw(&tokens, &[w_full(), h(Dim::Control), px(S4), flex_row(), items(Align::Center), bg(Paint::Surface)])
-                    .child(CAPTION.in_ink(Ink::Muted).label(&tokens, summary).max_lines(1).text_overflow(TextOverflow::Ellipsis)),
+                    .tw(
+                        &tokens,
+                        &[
+                            w_full(),
+                            h(Dim::Control),
+                            px(S4),
+                            flex_row(),
+                            items(Align::Center),
+                            bg(Paint::Surface),
+                        ],
+                    )
+                    .child(
+                        CAPTION
+                            .in_ink(Ink::Muted)
+                            .label(&tokens, summary)
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis),
+                    ),
             )
             .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
-            .child(rect().width(Size::fill()).height(Size::flex(1.0)).min_height(Size::px(0.0)).child(list))
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::flex(1.0))
+                    .min_height(Size::px(0.0))
+                    .child(list),
+            )
             .into_element()
     }
 }

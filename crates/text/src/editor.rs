@@ -182,6 +182,18 @@ impl Editor {
         &mut self.history
     }
 
+    /// Runs `edit` and, when it made an undo step, names the step `label`
+    /// ("duplicate line"), so a menu can say "Undo duplicate line". A step
+    /// that already has a name keeps it.
+    pub fn label_edit<R>(&mut self, label: &'static str, edit: impl FnOnce(&mut Self) -> R) -> R {
+        let before = self.history.stamp();
+        let result = edit(self);
+        if self.history.stamp() != before {
+            self.history.label_last(label);
+        }
+        result
+    }
+
     pub fn is_modified(&self) -> bool {
         self.history.is_modified()
     }
@@ -596,6 +608,10 @@ impl Editor {
     /// Pasting: whole lines copied with no selection go above each caret's
     /// line; as many lines as there are carets go one to each caret.
     pub fn paste(&mut self, text: &str) {
+        self.label_edit("paste", |editor| editor.paste_text(text));
+    }
+
+    fn paste_text(&mut self, text: &str) {
         let text = crate::encoding::normalise_line_endings(text);
         let all_carets = !self.selection.has_selection();
         if all_carets && self.linewise.as_deref() == Some(text.as_str()) {
@@ -1340,7 +1356,62 @@ impl Editor {
             .last()
             .map(|edit| map_through(&edits, edit.start) + edit.text.chars().count())
             .unwrap_or(0);
-        self.apply(edits, Selection::caret(last), EditKind::Other);
+        self.label_edit("replace", |editor| {
+            editor.apply(edits, Selection::caret(last), EditKind::Other)
+        });
+    }
+
+    /// Text dropped at `at` (from another program, or copied from this
+    /// document): inserted, and selected, as one undo step.
+    pub fn drop_text(&mut self, at: usize, text: &str) {
+        let text = crate::encoding::normalise_line_endings(text);
+        if text.is_empty() {
+            return;
+        }
+        let at = at.min(self.rope.len_chars());
+        let selection = Selection::single(Range::new(at, at + text.chars().count()));
+        self.label_edit("drop text", |editor| {
+            editor.apply(vec![Edit::insert(at, text)], selection, EditKind::Other)
+        });
+    }
+
+    /// Moves the text of `source` (char indices) to `to`, as one undo step,
+    /// and selects it there. Returns false, changing nothing, when `to` is
+    /// inside the source: dropping text on itself.
+    pub fn move_text(&mut self, source: (usize, usize), to: usize) -> bool {
+        let len = self.rope.len_chars();
+        let (start, end) = (source.0.min(len), source.1.min(len));
+        if start >= end || (start..=end).contains(&to) {
+            return false;
+        }
+        let text = self.rope.slice(start..end).to_string();
+        let count = end - start;
+        let landed = if to > end { to - count } else { to };
+        let selection = Selection::single(Range::new(landed, landed + count));
+        self.label_edit("move text", |editor| {
+            editor.apply(
+                vec![Edit::delete(start, end), Edit::insert(to, text)],
+                selection,
+                EditKind::Other,
+            )
+        });
+        true
+    }
+
+    /// Removes `range` if it still holds `text`: the source of a drag that
+    /// another program took as a move. A document edited since the drag
+    /// began is left alone.
+    pub fn remove_if_unchanged(&mut self, range: (usize, usize), text: &str) -> bool {
+        let len = self.rope.len_chars();
+        let (start, end) = range;
+        if start >= end || end > len || self.rope.slice(start..end) != text {
+            return false;
+        }
+        let selection = Selection::caret(start);
+        self.label_edit("move text", |editor| {
+            editor.apply(vec![Edit::delete(start, end)], selection, EditKind::Other)
+        });
+        true
     }
 
     // ---------------------------------------------------------------------

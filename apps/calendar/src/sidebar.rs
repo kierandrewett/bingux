@@ -108,13 +108,13 @@ impl Component for Sidebar {
                     .child(
                         rect()
                             .tw(&tokens, &[w_flex()])
-                            .child(section_label("Calendars")),
+                            .child(section_label(tr!("calendar-calendars"))),
                     )
                     .child(
                         icon_button(Icon::ListAdd, move |_| {
                             calendars::add(model, overlays, &tokens);
                         })
-                        .tooltip("Add calendar"),
+                        .tooltip(&tr!("calendar-add-calendar")),
                     ),
             )
             .child(
@@ -123,7 +123,7 @@ impl Component for Sidebar {
                     .children(rows),
             )
             .child(
-                action_button("Import Events", move |_| {
+                action_button(tr!("calendar-import-events-button"), move |_| {
                     calendars::import(model, window, overlays)
                 })
                 .icon(Icon::DocumentOpen)
@@ -162,12 +162,12 @@ impl Component for CalendarRow {
         let toggle_id = self.id.clone();
 
         let mut menu = vec![
-            menu_item("Rename\u{2026}", {
+            menu_item(tr!("calendar-rename-ellipsis"), {
                 let (id, name) = (id.clone(), self.name.clone());
                 move |_| calendars::rename(model, overlays, id.clone(), name.clone())
             }),
             submenu(
-                "Colour",
+                tr!("calendar-colour"),
                 calendars::colours()
                     .into_iter()
                     .map(|(hex, label)| {
@@ -178,14 +178,14 @@ impl Component for CalendarRow {
                     })
                     .collect(),
             ),
-            menu_item("Export\u{2026}", {
+            menu_item(tr!("calendar-export-ellipsis"), {
                 let (id, name) = (id.clone(), self.name.clone());
                 move |_| calendars::export(model, window, overlays, id.clone(), name.clone())
             }),
             menu_separator(),
         ];
         menu.push(
-            menu_item("Delete\u{2026}", {
+            menu_item(tr!("calendar-delete-ellipsis"), {
                 let (id, name, count) = (id.clone(), self.name.clone(), self.count);
                 move |_| calendars::remove(model, overlays, id.clone(), name.clone(), count)
             })

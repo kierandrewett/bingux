@@ -198,6 +198,9 @@ fn magic(head: &[u8]) -> Option<Magic> {
         || starts(head, 0, b"GIF87a")
         || starts(head, 0, b"GIF89a")
         || (starts(head, 0, b"RIFF") && starts(head, 8, b"WEBP"))
+        || starts(head, 0, &[0x76, 0x2F, 0x31, 0x01])
+        || starts(head, 0, b"#?RADIANCE")
+        || starts(head, 0, b"#?RGBE")
         || starts(head, 0, b"II*\0")
         || starts(head, 0, b"MM\0*")
     {

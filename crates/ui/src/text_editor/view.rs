@@ -21,6 +21,11 @@ use bingux_text::{Editor, Matches, Range, TokenKind};
 use super::keymap::{self, Effect, ZoomStep};
 use super::palette::{SyntaxPalette, code_row, code_span};
 use super::{EditorHandle, HighlightCache, ScrollPos};
+use crate::dnd::{
+    DRAG_SLOP, DragAction, DragActions, DragEnd, DragImage, DragInfo, DragRequest, DropTarget,
+    Dropped, Format, Payload, use_drag, use_drop_target,
+};
+use crate::drag::{Point, is_touch, point_of};
 use crate::shell::{MenuItem, Overlays, menu_item, menu_separator};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -177,9 +182,22 @@ impl TextEditorView {
 /// words or lines from `anchor`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Drag {
-    Text { unit: Unit, anchor: (usize, usize) },
-    Gutter { anchor_line: usize },
-    Thumb { grab: f32 },
+    Text {
+        unit: Unit,
+        anchor: (usize, usize),
+    },
+    Gutter {
+        anchor_line: usize,
+    },
+    Thumb {
+        grab: f32,
+    },
+    /// A press inside the selection: a click that places the caret, unless
+    /// the pointer travels far enough to drag the selected text.
+    TextPending,
+    /// The selected text is being dragged inside this window (no Wayland
+    /// drag and drop to hand it to).
+    TextInWindow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -194,6 +212,30 @@ enum Unit {
 struct PointerState {
     drag: Option<Drag>,
     last_press: Option<(Instant, (f64, f64), usize)>,
+    /// The press that may become a drag of the selected text.
+    grab: Option<TextGrab>,
+}
+
+/// A press inside the selection.
+#[derive(Clone, Copy, Debug)]
+struct TextGrab {
+    /// Where, in window pixels.
+    from: Point,
+    /// The selected range it is in (chars).
+    range: (usize, usize),
+    /// The character the press was on, where a click puts the caret.
+    pos: usize,
+}
+
+/// What a drag of selected text carries inside this program: where the text
+/// came from, so a drop on the same document moves it as one undo step and
+/// the source is not removed twice.
+#[derive(Clone)]
+struct TextDrag {
+    handle: EditorHandle,
+    range: (usize, usize),
+    /// Set by the drop that moved the text itself.
+    moved: Rc<std::cell::Cell<bool>>,
 }
 
 /// The sizes of the grid this frame.
@@ -244,6 +286,10 @@ impl Component for TextEditorView {
         let mut moved_at = use_state(Instant::now);
         let highlight_pending = use_hook(|| Rc::new(std::cell::Cell::new(false)));
         let overlays = try_consume_context::<Overlays>();
+        // The editor stops the keys and presses it uses, so the command scope
+        // around it is told it holds the focus.
+        let scope = crate::commands::use_scope_notifier();
+        let key_scope = scope.clone();
         let mut was_focused = use_state(|| false);
         if *was_focused.peek() != focused {
             was_focused.set(focused);
@@ -290,6 +336,69 @@ impl Component for TextEditorView {
             text_width,
             wrap,
         };
+
+        // Text dragged in (from another program, or this document's own
+        // selection) lands where the pointer lets go. A move inside the
+        // document is one undo step.
+        let dragger = use_drag();
+        let drop_handle = handle.clone();
+        let drop_read_only = self.read_only;
+        let text_drop = use_drop_target(
+            DropTarget::new()
+                .accepts([Format::Text])
+                .actions(DragActions::COPY_MOVE)
+                .highlight(false)
+                .enabled(!drop_read_only)
+                // Files carry their paths as text too: they are the window's
+                // to open, not text to type in.
+                .accept_if(|info: DragInfo| !info.formats.contains(&Format::Uris))
+                // Text dragged within this program moves, as in every text
+                // field (Ctrl copies); text from other programs is copied
+                // here, and its source decides whether it is then removed.
+                .preferred(|info: DragInfo| {
+                    if info.local
+                        && info.source_actions.contains(DragAction::Move)
+                        && !held().contains(Modifiers::CONTROL)
+                    {
+                        DragAction::Move
+                    } else {
+                        DragAction::Copy
+                    }
+                })
+                .on_drop(move |dropped: Dropped| {
+                    let Some(text) = dropped.data.text() else {
+                        return;
+                    };
+                    let found = {
+                        let editor = drop_handle.peek();
+                        let scroll = drop_handle.memory().scroll;
+                        position_at(
+                            &editor,
+                            &scroll,
+                            &metrics,
+                            dropped.position.0,
+                            dropped.position.1,
+                        )
+                    };
+                    let Some((pos, _)) = found else {
+                        return;
+                    };
+                    let ours = dropped
+                        .data
+                        .local::<TextDrag>()
+                        .filter(|drag| drag.handle.same(&drop_handle));
+                    match ours {
+                        Some(drag) if dropped.action == DragAction::Move => {
+                            drop_handle.update(|editor| editor.move_text(drag.range, pos));
+                            // The text is where it is going: the drag's end
+                            // must not remove it from the source.
+                            drag.moved.set(true);
+                        }
+                        _ => drop_handle.update(|editor| editor.drop_text(pos, &text)),
+                    }
+                    a11y.request_focus();
+                }),
+        );
 
         // Scroll to follow the caret when the text or the selection changed.
         let mut memory = handle.memory();
@@ -449,6 +558,22 @@ impl Component for TextEditorView {
             ) {
                 layers.push(band(&tokens, rect.0, rect.1, rect.2, row_height, paint));
             }
+        }
+
+        // Where dragged text would land.
+        if let Some(over) = text_drop.over()
+            && let Some((pos, false)) =
+                position_at(&editor, &scroll, &metrics, over.position.0, over.position.1)
+            && let Some((x, y)) = caret_point(&editor, &shown, &layout_of, pos, &metrics, text_left)
+        {
+            layers.push(
+                rect()
+                    .position(Position::new_absolute().left(x).top(y))
+                    .width(Size::px(CARET))
+                    .height(Size::px(row_height))
+                    .tw(&tokens, &[bg(Paint::Accent)])
+                    .into(),
+            );
         }
 
         // The bracket at the caret and its match.
@@ -691,6 +816,7 @@ impl Component for TextEditorView {
             if !preedit.peek().is_empty() {
                 return;
             }
+            key_scope.focused();
             let page = metrics.fit().saturating_sub(1);
             let effect = key_handle.update(|editor| {
                 editor.set_wrap(metrics.wrap);
@@ -775,6 +901,7 @@ impl Component for TextEditorView {
             let global = event.global_location();
             let button = event.button();
             a11y.request_focus();
+            scope.focused();
             let editor_pos = {
                 let editor = press_handle.peek();
                 let scroll = press_handle.memory().scroll;
@@ -847,6 +974,31 @@ impl Component for TextEditorView {
                 _ => 1,
             };
             state.last_press = Some((now, (global.x, global.y), count));
+            // A press on selected text may be the start of dragging it away.
+            if count == 1
+                && !alt
+                && !shift
+                && button == Some(MouseButton::Left)
+                && !is_touch(&event)
+            {
+                let inside = press_handle
+                    .peek()
+                    .selection()
+                    .ranges()
+                    .iter()
+                    .find(|range| !range.is_empty() && range.start() <= pos && pos < range.end())
+                    .map(|range| (range.start(), range.end()));
+                if let Some(range) = inside {
+                    state.grab = Some(TextGrab {
+                        from: point_of(&event),
+                        range,
+                        pos,
+                    });
+                    state.drag = Some(Drag::TextPending);
+                    event.stop_propagation();
+                    return;
+                }
+            }
             let unit = match count {
                 2 => Unit::Word,
                 3 => Unit::Line,
@@ -874,10 +1026,22 @@ impl Component for TextEditorView {
 
         let move_handle = handle.clone();
         let move_pointer = pointer.clone();
+        let move_dragger = dragger.clone();
         let on_global_pointer_move = move |event: Event<PointerEventData>| {
             let Some(drag) = move_pointer.borrow().drag else {
                 return;
             };
+            match drag {
+                Drag::TextPending => {
+                    start_text_drag(&move_handle, &move_pointer, &move_dragger, point_of(&event));
+                    return;
+                }
+                Drag::TextInWindow => {
+                    move_dragger.moved(point_of(&event));
+                    return;
+                }
+                _ => {}
+            }
             let global = event.global_location();
             let (ox, oy) = *origin.peek();
             let x = global.x as f32 - ox;
@@ -942,13 +1106,26 @@ impl Component for TextEditorView {
                     };
                     editor.set_selection(bingux_text::Selection::single(range));
                 }
-                Drag::Thumb { .. } => {}
+                Drag::Thumb { .. } | Drag::TextPending | Drag::TextInWindow => {}
             });
             moved_at.set(Instant::now());
         };
         let up_pointer = pointer.clone();
-        let on_global_pointer_up = move |_: Event<PointerEventData>| {
-            up_pointer.borrow_mut().drag = None;
+        let up_handle = handle.clone();
+        let up_dragger = dragger;
+        let on_global_pointer_up = move |event: Event<PointerEventData>| {
+            let (drag, grab) = {
+                let mut state = up_pointer.borrow_mut();
+                (state.drag.take(), state.grab.take())
+            };
+            match (drag, grab) {
+                // A click inside the selection: the caret goes there.
+                (Some(Drag::TextPending), Some(grab)) => {
+                    up_handle.update(|editor| editor.set_cursor(grab.pos, false));
+                }
+                (Some(Drag::TextInWindow), _) => up_dragger.released(point_of(&event)),
+                _ => {}
+            }
         };
 
         rect()
@@ -960,6 +1137,7 @@ impl Component for TextEditorView {
                 if *size.peek() != next {
                     size.set(next);
                 }
+                text_drop.set_area(event.visible_area);
                 let corner = (event.area.min_x(), event.area.min_y());
                 if *origin.peek() != corner {
                     origin.set(corner);
@@ -1323,6 +1501,56 @@ fn thumb_geometry(
     Some((S1.px() + fraction * (track - length), length))
 }
 
+/// The pointer moved with the button down inside the selection: once it is
+/// past the drag slop, the selected text is dragged. It goes to the system
+/// (other programs take it as text, and a drop on this document moves it);
+/// without drag and drop it stays in the window.
+fn start_text_drag(
+    handle: &EditorHandle,
+    pointer: &Rc<RefCell<PointerState>>,
+    dragger: &crate::dnd::Dragger,
+    at: Point,
+) {
+    let Some(grab) = pointer.borrow().grab else {
+        return;
+    };
+    if (at.0 - grab.from.0).hypot(at.1 - grab.from.1) <= DRAG_SLOP {
+        return;
+    }
+    let text = handle
+        .peek()
+        .rope()
+        .slice(grab.range.0..grab.range.1)
+        .to_string();
+    let moved = Rc::new(std::cell::Cell::new(false));
+    let source = handle.clone();
+    let removal = text.clone();
+    let flag = moved.clone();
+    let payload = Payload::new().text(text).local(TextDrag {
+        handle: handle.clone(),
+        range: grab.range,
+        moved,
+    });
+    let request = DragRequest::new(payload, grab.from)
+        .actions(DragActions::COPY_MOVE)
+        .image(DragImage::None)
+        .on_end(move |end: DragEnd| {
+            // Another program took the text as a move: it is gone from here.
+            if matches!(end, DragEnd::Dropped(DragAction::Move)) && !flag.get() {
+                source.update(|editor| editor.remove_if_unchanged(grab.range, &removal));
+            }
+        });
+    let system = dragger.start(request);
+    {
+        let mut state = pointer.borrow_mut();
+        state.grab = None;
+        state.drag = (!system).then_some(Drag::TextInWindow);
+    }
+    if !system {
+        dragger.moved(at);
+    }
+}
+
 /// Moves the view so the thumb's top is at `top` px.
 fn drag_thumb(handle: &EditorHandle, metrics: &Metrics, top: f32) {
     {
@@ -1458,11 +1686,23 @@ pub fn caret_caption(editor: &Editor) -> String {
     let range = selection.primary();
     if !range.is_empty() {
         let chars = range.len();
-        let lines = editor.line_of(range.end()) - editor.line_of(range.start()) + 1;
-        return if lines > 1 {
-            format!("{chars} characters, {lines} lines selected")
+        // A selection that ends at the start of a line (a whole line picked
+        // from the gutter or with Ctrl+L) does not reach into that line.
+        let mut last = editor.line_of(range.end());
+        let first = editor.line_of(range.start());
+        if last > first && editor.line_col(range.end()).1 == 0 {
+            last -= 1;
+        }
+        let lines = last - first + 1;
+        let characters = if chars == 1 {
+            "1 character".to_string()
         } else {
-            format!("{chars} characters selected")
+            format!("{chars} characters")
+        };
+        return if lines > 1 {
+            format!("{characters}, {lines} lines selected")
+        } else {
+            format!("{characters} selected")
         };
     }
     let (line, col) = editor.line_col(range.head);

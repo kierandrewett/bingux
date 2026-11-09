@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::Duration;
 
-use bingux_files::display;
+use crate::files::display;
 use bingux_files::ops::{Counting, Totals};
 use freya::prelude::*;
 
@@ -77,8 +77,16 @@ impl Component for FolderView {
         let size_px = FileIconSize::Px((IconSize::Hero.px() * ICON_SCALE).round() as u16);
         rect()
             .component("PreviewFolder")
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), center(), gap(S2)])
-            .child(file_icon_view(&tokens, &super::icon(&self.resolved), size_px, false))
+            .tw(
+                &tokens,
+                &[w_full(), h_full(), flex_col(), center(), gap(S2)],
+            )
+            .child(file_icon_view(
+                &tokens,
+                &super::icon(&self.resolved),
+                size_px,
+                false,
+            ))
             .child(TITLE.label(&tokens, items))
             .child(BODY.in_ink(Ink::Muted).label(&tokens, size))
     }
@@ -88,29 +96,65 @@ impl Component for FolderView {
 mod tests {
     use super::*;
 
+    /// The lines with their no-break spaces (before a unit) as plain ones.
+    trait Plain {
+        fn plain(self) -> Self;
+    }
+
+    impl Plain for String {
+        fn plain(self) -> Self {
+            self.replace('\u{a0}', " ")
+        }
+    }
+
+    impl Plain for (String, String) {
+        fn plain(self) -> Self {
+            (self.0.plain(), self.1.plain())
+        }
+    }
+
+    fn plain<T: Plain>(text: T) -> T {
+        text.plain()
+    }
+
     #[test]
     fn a_folder_counts_up_then_settles() {
-        assert_eq!(folder_lines(Totals::default()), ("Counting…".to_owned(), " ".to_owned()));
+        assert_eq!(
+            folder_lines(Totals::default()),
+            ("Counting…".to_owned(), " ".to_owned())
+        );
         let counting = Totals {
             bytes: 1_500_000,
             files: 3,
             folders: 1,
             ..Totals::default()
         };
-        assert_eq!(folder_lines(counting), ("4 items".into(), "1.5 MB so far…".into()));
+        assert_eq!(
+            plain(folder_lines(counting)),
+            ("4 items".into(), "1.5 MB so far…".into())
+        );
         let done = Totals {
             done: true,
             files: 1,
             folders: 0,
             ..counting
         };
-        assert_eq!(folder_lines(done), ("1 item".into(), "1.5 MB".into()));
-        let partial = Totals { unreadable: 2, ..done };
-        assert_eq!(folder_lines(partial).1, "at least 1.5 MB");
+        assert_eq!(
+            plain(folder_lines(done)),
+            ("1 item".into(), "1.5 MB".into())
+        );
+        let partial = Totals {
+            unreadable: 2,
+            ..done
+        };
+        assert_eq!(plain(folder_lines(partial).1), "at least 1.5 MB");
         let empty = Totals {
             done: true,
             ..Totals::default()
         };
-        assert_eq!(folder_lines(empty), ("0 items".into(), "0 bytes".into()));
+        assert_eq!(
+            plain(folder_lines(empty)),
+            ("0 items".into(), "0 bytes".into())
+        );
     }
 }

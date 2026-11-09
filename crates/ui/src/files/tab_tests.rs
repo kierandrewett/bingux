@@ -60,7 +60,8 @@ struct Folders {
 
 impl Folders {
     fn new(tag: &str) -> Self {
-        let root = std::env::temp_dir().join(format!("bingux-tab-tests-{}-{tag}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("bingux-tab-tests-{}-{tag}", std::process::id()));
         for (name, count) in [("short", 6), ("long", 80), ("fresh", 40)] {
             let dir = root.join(name);
             std::fs::create_dir_all(&dir).expect("a folder in the temporary directory");
@@ -106,7 +107,9 @@ impl Component for Window {
             // Global: a key reaches the window whatever has the focus, which a tab
             // switch moves (the focused row of the tab that went is gone).
             .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                if event.modifiers.contains(Modifiers::CONTROL) && event.key == Key::Named(NamedKey::Tab) {
+                if event.modifiers.contains(Modifiers::CONTROL)
+                    && event.key == Key::Named(NamedKey::Tab)
+                {
                     event.stop_propagation();
                     let next = (*active.peek() + 1) % count;
                     active.set(next);
@@ -158,13 +161,18 @@ fn chrome(shot: &mut Snapshot) -> Chrome {
     all
 }
 
-/// The status pill: its right and bottom edges and its height. Its width is
-/// its text, which is the tab's.
+/// The status bar at the window's foot (a window's; the chooser's pill in a
+/// dialog): its right and bottom edges and its height. A pill's width is its
+/// text, which is the tab's.
 fn pill(shot: &mut Snapshot) -> Option<(f32, f32, f32)> {
     let pills: Vec<Area> = shot.runner().find_many(|node, element| {
-        (element.accessibility().builder.class_name() == Some("StatusLine")).then(|| node.layout().area)
+        let data = element.accessibility();
+        matches!(data.builder.class_name(), Some("StatusBar" | "StatusLine"))
+            .then(|| node.layout().area)
     });
-    pills.first().map(|area| (area.max_x(), area.max_y(), area.height()))
+    pills
+        .first()
+        .map(|area| (area.max_x(), area.max_y(), area.height()))
 }
 
 /// The names of the files whose rows are drawn, with where each is: `(x, y,
@@ -173,7 +181,10 @@ fn rows_at(shot: &mut Snapshot) -> Vec<(f32, f32, String)> {
     let mut rows: Vec<(f32, f32, String)> = shot.runner().find_many(|node, element| {
         let label = Label::try_downcast(element)?;
         let area = node.layout().area;
-        label.text.ends_with(".txt").then(|| (area.min_x(), area.min_y(), label.text.to_string()))
+        label
+            .text
+            .ends_with(".txt")
+            .then(|| (area.min_x(), area.min_y(), label.text.to_string()))
     });
     rows.sort_by(|a, b| a.1.total_cmp(&b.1).then(a.0.total_cmp(&b.0)));
     rows
@@ -185,7 +196,10 @@ fn rows_at(shot: &mut Snapshot) -> Vec<(f32, f32, String)> {
 fn rows(shot: &mut Snapshot) -> Vec<String> {
     let all = rows_at(shot);
     let column = all.iter().map(|row| row.0).fold(f32::MAX, f32::min);
-    all.into_iter().filter(|row| (row.0 - column).abs() < 1.0).map(|(_, _, text)| text).collect()
+    all.into_iter()
+        .filter(|row| (row.0 - column).abs() < 1.0)
+        .map(|(_, _, text)| text)
+        .collect()
 }
 
 /// Every element of `chrome` that is not where it was in `expected`.
@@ -211,9 +225,16 @@ fn switching_tabs_moves_nothing_around_the_file_view() {
     shot.settle(Duration::from_millis(900));
     let before = chrome(&mut shot);
     let pill_before = pill(&mut shot);
+    assert!(pill_before.is_some(), "the window has its status bar");
     let shown_before = rows(&mut shot);
-    assert!(before["PlaceRow"].len() >= 4, "the sidebar lists the places: {before:?}");
-    assert!(shown_before.iter().all(|row| row.starts_with("short-")), "the first tab shows its folder: {shown_before:?}");
+    assert!(
+        before["PlaceRow"].len() >= 4,
+        "the sidebar lists the places: {before:?}"
+    );
+    assert!(
+        shown_before.iter().all(|row| row.starts_with("short-")),
+        "the first tab shows its folder: {shown_before:?}"
+    );
 
     next_tab(&mut shot);
     let mut changed = Vec::new();
@@ -229,12 +250,21 @@ fn switching_tabs_moves_nothing_around_the_file_view() {
             _ => false,
         };
         if !same_corner {
-            changed.push(format!("pass {index}: the status pill was {pill_before:?} and is {pill_now:?}"));
+            changed.push(format!(
+                "pass {index}: the status pill was {pill_before:?} and is {pill_now:?}"
+            ));
         }
     }
-    assert!(changed.is_empty(), "persistent elements moved:\n{}", changed.join("\n"));
+    assert!(
+        changed.is_empty(),
+        "persistent elements moved:\n{}",
+        changed.join("\n")
+    );
     let shown_after = rows(&mut shot);
-    assert!(shown_after.iter().all(|row| row.starts_with("long-")), "the second tab shows its folder: {shown_after:?}");
+    assert!(
+        shown_after.iter().all(|row| row.starts_with("long-")),
+        "the second tab shows its folder: {shown_after:?}"
+    );
 }
 
 #[test]
@@ -244,13 +274,20 @@ fn the_first_pass_of_a_tab_has_its_rows() {
     next_tab(&mut shot);
     shot.settle(Duration::from_millis(900));
     let settled = rows(&mut shot);
-    assert!(settled.len() > 8, "a screenful of rows of the long folder: {settled:?}");
+    assert!(
+        settled.len() > 8,
+        "a screenful of rows of the long folder: {settled:?}"
+    );
     next_tab(&mut shot);
     shot.settle(Duration::from_millis(900));
 
     next_tab(&mut shot);
     pass(&mut shot);
-    assert_eq!(rows(&mut shot), settled, "the first pass of a tab that was shown before has all its rows");
+    assert_eq!(
+        rows(&mut shot),
+        settled,
+        "the first pass of a tab that was shown before has all its rows"
+    );
 }
 
 #[test]
@@ -260,7 +297,11 @@ fn a_tab_comes_back_scrolled_in_its_first_pass() {
     shot.scroll(500.0, 300.0, -900.0);
     shot.settle(Duration::from_millis(900));
     let scrolled = rows(&mut shot);
-    assert_ne!(scrolled.first().map(String::as_str), Some("long-000.txt"), "the wheel moved the list: {scrolled:?}");
+    assert_ne!(
+        scrolled.first().map(String::as_str),
+        Some("long-000.txt"),
+        "the wheel moved the list: {scrolled:?}"
+    );
     next_tab(&mut shot);
     shot.settle(Duration::from_millis(900));
 
@@ -277,7 +318,12 @@ fn a_tab_comes_back_scrolled_in_its_first_pass() {
     // And it stays there.
     for _ in 0..PASSES {
         pass(&mut shot);
-        assert_eq!(rows(&mut shot), scrolled, "the list moved after its first pass (at {:?})", rows_at(&mut shot));
+        assert_eq!(
+            rows(&mut shot),
+            scrolled,
+            "the list moved after its first pass (at {:?})",
+            rows_at(&mut shot)
+        );
     }
 }
 
@@ -300,13 +346,20 @@ fn a_new_tab_on_the_folder_on_show_is_whole_in_its_first_pass() {
             changed.push(format!("pass {index}: {finding}"));
         }
         if pill(&mut shot) != pill_before {
-            changed.push(format!("pass {index}: the status pill was {pill_before:?} and is {:?}", pill(&mut shot)));
+            changed.push(format!(
+                "pass {index}: the status pill was {pill_before:?} and is {:?}",
+                pill(&mut shot)
+            ));
         }
         if rows(&mut shot) != settled {
             changed.push(format!("pass {index}: the rows are not the folder's rows"));
         }
     }
-    assert!(changed.is_empty(), "the new tab differs from the loaded one:\n{}", changed.join("\n"));
+    assert!(
+        changed.is_empty(),
+        "the new tab differs from the loaded one:\n{}",
+        changed.join("\n")
+    );
 }
 
 #[test]
@@ -326,12 +379,19 @@ fn a_new_tab_on_another_folder_has_the_chrome_of_the_loaded_view() {
         }
         seen.push(rows(&mut shot).len());
     }
-    assert!(changed.is_empty(), "the chrome of the new tab moved while it loaded:\n{}", changed.join("\n"));
+    assert!(
+        changed.is_empty(),
+        "the chrome of the new tab moved while it loaded:\n{}",
+        changed.join("\n")
+    );
     // The rows come into the places the loaded view has them: once there,
     // they are never fewer than before.
     let mut most = 0;
     for (index, count) in seen.iter().enumerate() {
-        assert!(*count >= most, "pass {index}: {count} rows after {most}: the list was emptied again: {seen:?}");
+        assert!(
+            *count >= most,
+            "pass {index}: {count} rows after {most}: the list was emptied again: {seen:?}"
+        );
         most = most.max(*count);
     }
     assert!(most > 8, "the folder's rows came: {seen:?}");
@@ -360,23 +420,39 @@ fn a_folder_left_while_it_loads_is_read_on_and_whole_when_the_tab_comes_back() {
     next_tab(&mut shot);
     pass(&mut shot);
     let left_for = rows(&mut shot);
-    assert!(left_for.iter().all(|row| row.starts_with("short-")), "the tab was left for the short folder: {left_for:?}");
+    assert!(
+        left_for.iter().all(|row| row.starts_with("short-")),
+        "the tab was left for the short folder: {left_for:?}"
+    );
 
     // The read goes on unseen and keeps the whole listing.
     let deadline = std::time::Instant::now() + Duration::from_secs(60);
     while remembered(&folders.at("big")).is_none() {
-        assert!(std::time::Instant::now() < deadline, "the folder left half-read was never read to its end");
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the folder left half-read was never read to its end"
+        );
         shot.settle(Duration::from_millis(200));
     }
     let whole = remembered(&folders.at("big")).expect("kept");
-    assert_eq!(whole.entries.len(), BIG_FILES, "the kept listing is the whole folder");
+    assert_eq!(
+        whole.entries.len(),
+        BIG_FILES,
+        "the kept listing is the whole folder"
+    );
 
     // And the tab that comes back to it has its rows in its first pass.
     next_tab(&mut shot);
     pass(&mut shot);
     let first_pass = rows(&mut shot);
-    assert!(first_pass.len() > 8, "the first pass of the tab has its rows: {first_pass:?}");
-    assert!(first_pass.iter().all(|row| row.starts_with("big-")), "the rows are the big folder's: {first_pass:?}");
+    assert!(
+        first_pass.len() > 8,
+        "the first pass of the tab has its rows: {first_pass:?}"
+    );
+    assert!(
+        first_pass.iter().all(|row| row.starts_with("big-")),
+        "the rows are the big folder's: {first_pass:?}"
+    );
 }
 
 #[test]
@@ -389,17 +465,27 @@ fn what_a_closed_tab_kept_is_given_up_only_when_the_host_lets_go_of_the_tab() {
     assert_eq!(bank.states(kept.id(), Some(kept.downgrade()), || 1), 1);
     assert_eq!(bank.states(closed.id(), Some(closed.downgrade()), || 2), 2);
     // A tab shown again finds what it left, and `create` does not run.
-    assert_eq!(bank.states(kept.id(), Some(kept.downgrade()), || unreachable!()), 1);
+    assert_eq!(
+        bank.states(kept.id(), Some(kept.downgrade()), || unreachable!()),
+        1
+    );
     assert!(bank.closed().is_empty(), "both tabs are still the host's");
 
     // The host keeps a closed tab for Reopen closed tab; letting go of it
     // is what frees its states.
     let kept_alive = closed.clone();
     drop(closed);
-    assert!(bank.closed().is_empty(), "a tab the host can reopen keeps its states");
+    assert!(
+        bank.closed().is_empty(),
+        "a tab the host can reopen keeps its states"
+    );
     drop(kept_alive);
     assert_eq!(bank.closed(), vec![2]);
-    assert_eq!(bank.states(kept.id(), None, || unreachable!()), 1, "the open tab is untouched");
+    assert_eq!(
+        bank.states(kept.id(), None, || unreachable!()),
+        1,
+        "the open tab is untouched"
+    );
 }
 
 #[test]
@@ -426,29 +512,42 @@ fn the_placeholder_rows_are_as_high_as_the_rows_they_stand_for() {
     impl Component for Scene {
         fn render(&self) -> impl IntoElement {
             let tokens = provide_tokens();
-            rect().tw(&tokens, &[w_full(), h_full()]).child(skeleton(self.px, self.viewport))
+            rect()
+                .tw(&tokens, &[w_full(), h_full()])
+                .child(skeleton(self.px, self.viewport))
         }
     }
 
     for px in [16_u16, 24] {
         let viewport = Area::new((0.0, 0.0).into(), (900.0, 400.0).into());
-        let mut shot = Snapshot::new(move || Scene { px, viewport }.into_element(), (900.0, 400.0));
+        let mut shot = Snapshot::new(
+            move || Scene { px, viewport }.into_element(),
+            (900.0, 400.0),
+        );
         // The placeholder waits a moment before it draws, so a folder that
         // opens at once never flashes it.
         shot.settle(Duration::from_millis(400));
-        let heights: Vec<f32> = shot.runner().find_many(|node, element| {
-            (element.accessibility().builder.class_name() == Some("FileSkeleton")).then(|| {
-                node.children().iter().map(|row| row.layout().area.height()).collect::<Vec<f32>>()
+        let heights: Vec<f32> = shot
+            .runner()
+            .find_many(|node, element| {
+                (element.accessibility().builder.class_name() == Some("FileSkeleton")).then(|| {
+                    node.children()
+                        .iter()
+                        .map(|row| row.layout().area.height())
+                        .collect::<Vec<f32>>()
+                })
             })
-        })
-        .into_iter()
-        .flatten()
-        .collect();
+            .into_iter()
+            .flatten()
+            .collect();
         assert!(heights.len() >= 8, "{px} px: rows are drawn: {heights:?}");
         // Token sizes are read inside the app's runtime.
         let real = shot.runner().run_in(|| row_height(px));
         for height in &heights {
-            assert!((height - real).abs() < 0.5, "{px} px: a row of {height} px, a real one is {real}");
+            assert!(
+                (height - real).abs() < 0.5,
+                "{px} px: a row of {height} px, a real one is {real}"
+            );
         }
     }
 }

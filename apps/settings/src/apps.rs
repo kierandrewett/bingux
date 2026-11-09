@@ -323,13 +323,17 @@ fn launch_blocking(file: &Path, name: &str) -> Result<(), String> {
         .spawn()
         .map_err(|error| {
             eprintln!("[launch] {name}: {error}");
-            format!("{name} could not be opened.")
+            format!("Could not open “{name}”. Check that it is still installed, then try again.")
         })?;
     let started = Instant::now();
     while started.elapsed() < LAUNCH_WATCH {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
-            Ok(Some(_)) => return Err(format!("{name} could not be opened.")),
+            Ok(Some(_)) => {
+                return Err(format!(
+                    "Could not open “{name}”. Check that it is still installed, then try again."
+                ));
+            }
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
             Err(_) => return Ok(()),
         }
@@ -606,7 +610,7 @@ fn classify(
             "",
             None,
             desktop_text,
-            Removal::Unavailable("Remove it with flatpak uninstall."),
+            Removal::Unavailable("Remove it from the store you installed it from."),
         );
     }
     if desktop.starts_with("/var/lib/snapd/") {
@@ -688,7 +692,7 @@ fn classify(
         "",
         None,
         desktop_text,
-        Removal::Unavailable("Installed by the system. Remove it with the system package tools."),
+        Removal::Unavailable("The system installed it. Ask an administrator to remove it."),
     )
 }
 

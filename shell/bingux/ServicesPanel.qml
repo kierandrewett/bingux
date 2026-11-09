@@ -9,7 +9,16 @@ ColumnLayout {
     property string scope: "User"
     property var selection: []
     property var services: []
-    property string error: ""
+    // Two kinds of failure. The list could not be read: a message replaces the
+    // table (Try again reloads it). An action on a service failed: a banner
+    // above the list that stays until the next action, because the reload that
+    // follows must not hide it.
+    // `status` is the short confirmation after an action succeeded; an error
+    // and a status never share a line.
+    property bool readFailed: false
+    property string actionError: ""
+    property string actionDetail: ""
+    property string status: ""
     spacing: 12
     function refresh() {
         if (!visible || worker.running)
@@ -28,10 +37,18 @@ ColumnLayout {
         services = [];
         selection = [];
         menu.visible = false;
-        error = "";
+        readFailed = false;
+        actionError = "";
+        actionDetail = "";
+        status = "";
         refresh();
     }
     Component.onCompleted: refresh()
+    Timer {
+        id: statusTimer
+        interval: 4000
+        onTriggered: root.status = ""
+    }
     Timer {
         interval: 10000
         repeat: true
@@ -50,15 +67,17 @@ ColumnLayout {
                     if (!Array.isArray(data))
                         throw new Error("Invalid service list");
                     root.services = data.filter(service => typeof service.unit === "string" && typeof service.description === "string" && typeof service.sub === "string");
-                    root.error = "";
+                    root.readFailed = false;
                 } catch (_) {
-                    root.error = "Could not read services";
+                    root.readFailed = true;
                 }
             }
         }
         stderr: StdioCollector {
-            onStreamFinished: if (text.trim() && worker.requestedScope === root.scope)
-                root.error = text.trim()
+            onStreamFinished: if (text.trim() && worker.requestedScope === root.scope) {
+                console.warn("services: systemctl said: " + text.trim());
+                root.readFailed = true;
+            }
         }
         onExited: if (requestedScope !== root.scope)
             root.refresh()
@@ -82,8 +101,36 @@ ColumnLayout {
             onSelected: value => root.scope = value
         }
     }
+    // A list that could not be read is not an empty list: the message takes
+    // the table's place, so there is no empty table and no 0 / 0 count.
+    StateMessage {
+        objectName: "servicesReadError"
+        fill: true
+        visible: root.readFailed
+        tone: "danger"
+        title: "Could not read services"
+        detail: "Check that the " + (root.scope === "User" ? "user" : "system") + " service manager is running."
+        actionText: "Try again"
+        onActionTriggered: root.refresh()
+    }
+    StateMessage {
+        objectName: "servicesError"
+        compact: true
+        visible: root.actionError !== ""
+        tone: "danger"
+        title: root.actionError
+        detail: root.actionDetail
+    }
+    StateMessage {
+        objectName: "servicesStatus"
+        compact: true
+        visible: root.status !== "" && root.actionError === "" && !root.readFailed
+        tone: "success"
+        title: root.status
+    }
     ProcessTable {
         objectName: "servicesTable"
+        visible: !root.readFailed
         Layout.fillWidth: true
         Layout.fillHeight: true
         Layout.minimumHeight: 160
@@ -108,32 +155,39 @@ ColumnLayout {
             Qt.callLater(() => startButton.forceActiveFocus());
         }
     }
-    Text {
-        visible: root.error.length > 0
-        Layout.fillWidth: true
-        wrapMode: Text.Wrap
-        text: root.error
-        color: Theme.text
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall
-    }
     function act(action) {
         if (actionWorker.running || !selection.length)
             return;
         menu.visible = false;
-        error = "";
+        actionError = "";
+        actionDetail = "";
+        status = "";
+        actionWorker.action = action;
+        actionWorker.targets = selection.slice();
         actionWorker.command = ["systemctl", scope === "User" ? "--user" : "--system", "--no-ask-password", action, "--"].concat(selection);
         actionWorker.running = true;
     }
     Process {
         id: actionWorker
+        property string action: ""
+        property var targets: []
+        readonly property string subject: targets.length === 1 ? targets[0] : targets.length + " services"
         stderr: StdioCollector {
             onStreamFinished: if (text.trim())
-                root.error = text.trim()
+                console.warn("services: systemctl said: " + text.trim())
         }
-        onExited: (code, status) => {
-            if (code === 0)
-                root.error = "Service action completed";
+        onExited: (code, exitStatus) => {
+            if (code === 0) {
+                root.status = ({
+                        start: "Started ",
+                        stop: "Stopped ",
+                        restart: "Restarted "
+                    })[action] + subject;
+                statusTimer.restart();
+            } else {
+                root.actionError = "Could not " + action + " " + subject + ".";
+                root.actionDetail = root.scope === "System" ? "Changing system services needs administrator permission." : "Check the service and try again.";
+            }
             root.refresh();
         }
     }
