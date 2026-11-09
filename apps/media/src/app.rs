@@ -35,8 +35,8 @@ use freya::prelude::*;
 use crate::engine::{engine, use_live};
 use crate::pages::{SearchResults, Ui, add_folder, location};
 use crate::stage::{
-    Stage, close_stage, repeat_mode, run_seek, run_transport, run_volume, toggle_fullscreen,
-    toggle_mini,
+    Stage, close_stage, repeat_mode, run_seek, run_transport, run_volume, set_fullscreen, set_mini,
+    toggle_fullscreen, toggle_mini,
 };
 use crate::strings as text;
 
