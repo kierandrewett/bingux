@@ -43,24 +43,24 @@ impl SaveError {
 
     /// What happened and what to do next, for the body of a dialog titled
     /// "Could not save “name”".
-    pub fn advice(&self) -> &'static str {
+    pub fn advice(&self) -> String {
         match self {
-            SaveError::Permission => {
-                "You do not have permission to change it. Save a copy somewhere else."
-            }
-            SaveError::Full => "The drive is full. Free some space, then save again.",
-            SaveError::FolderMissing => {
-                "Its folder is no longer there. Save a copy somewhere else."
-            }
-            SaveError::ReadOnly => "The drive is read-only. Save a copy somewhere else.",
-            SaveError::BadName => "The name is not allowed here. Choose another name.",
-            SaveError::Other(_) => "Check that the drive is connected, then try again.",
+            SaveError::Permission => crate::tr!("ui-document-save-error-permission"),
+            SaveError::Full => crate::tr!("ui-document-save-error-full"),
+            SaveError::FolderMissing => crate::tr!("ui-document-save-error-folder"),
+            SaveError::ReadOnly => crate::tr!("ui-document-save-error-read-only"),
+            SaveError::BadName => crate::tr!("ui-document-save-error-name"),
+            SaveError::Other(_) => crate::tr!("ui-document-save-error-other"),
         }
     }
 
     /// The whole message, for a place with no title of its own (a toast).
     pub fn message(&self, name: &str) -> String {
-        format!("Could not save “{name}”. {}", self.advice())
+        crate::tr!(
+            "ui-document-save-failed-message",
+            name = name,
+            advice = self.advice()
+        )
     }
 }
 

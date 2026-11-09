@@ -154,6 +154,15 @@ impl Prepared {
 /// rope), where it blocks nothing.
 pub type Preparer = Box<dyn FnOnce(Vec<u8>) -> Prepared + Send>;
 
+/// A way out of a save that cannot be turned into bytes, which the content
+/// offers ([`DocumentContent::save_fallback`]).
+pub struct SaveFallback {
+    /// What the button says: "Save in UTF-8".
+    pub label: String,
+    /// Changes the content so that it can be saved. The manager saves again.
+    pub apply: Rc<dyn Fn()>,
+}
+
 /// The app's side of one document: what it shows and how it becomes bytes.
 pub trait DocumentContent: Any {
     /// The document as it is now. Called on the UI thread, for a save or for
@@ -200,6 +209,14 @@ pub trait DocumentContent: Any {
     /// first words and an extension, say. `None` (the default) offers the
     /// document's title.
     fn suggested_name(&self) -> Option<String> {
+        None
+    }
+
+    /// When [`snapshot`](Self::snapshot) says the content cannot be saved the
+    /// way it is, the one change that would let it be: the save-failed dialog
+    /// shows it as its default button, and saves again once `apply` has run.
+    /// `None` (the default) offers nothing.
+    fn save_fallback(&self) -> Option<SaveFallback> {
         None
     }
 }
@@ -272,7 +289,7 @@ impl DocumentsConfig {
             app_name: app_name.into(),
             mime: None,
             filters: Vec::new(),
-            untitled: "Untitled".to_string(),
+            untitled: String::new(),
             autosave: Duration::from_secs(3),
             max_size: 512 * 1024 * 1024,
             restore: true,
@@ -451,8 +468,21 @@ impl Store {
     fn title_of(&self, entry: &Entry) -> String {
         match &entry.path {
             Some(path) => display_name(path),
-            None if entry.untitled <= 1 => self.settings.untitled.clone(),
-            None => format!("{} {}", self.settings.untitled, entry.untitled),
+            None => {
+                let name = match self.settings.untitled.as_str() {
+                    "" => crate::tr!("ui-document-untitled"),
+                    name => name.to_string(),
+                };
+                if entry.untitled <= 1 {
+                    name
+                } else {
+                    crate::tr!(
+                        "ui-document-untitled-numbered",
+                        name = name,
+                        number = entry.untitled
+                    )
+                }
+            }
         }
     }
 }
@@ -954,7 +984,9 @@ impl Documents {
                 .map(Path::to_path_buf);
             (store.settings.filters.clone(), folder)
         });
-        let mut request = ChooserRequest::open().title("Open").multiple(true);
+        let mut request = ChooserRequest::open()
+            .title(crate::tr!("ui-document-chooser-open"))
+            .multiple(true);
         let any = !filters.is_empty();
         for filter in filters {
             request = request.filter(filter);
@@ -978,7 +1010,7 @@ impl Documents {
     pub fn recent_menu(self) -> Vec<MenuItem> {
         let recent = self.watching(|store| store.recents.clone());
         if recent.is_empty() {
-            return vec![menu_item("No recent documents", |_| {}).disabled()];
+            return vec![menu_item(crate::tr!("ui-document-no-recent"), |_| {}).disabled()];
         }
         recent
             .into_iter()
@@ -1245,9 +1277,8 @@ impl Documents {
                     docs.apply_loaded(id, loaded, prepared, LoadReason::Reload);
                     if quiet {
                         let name = display_name(&path);
-                        docs.overlays.toast(format!(
-                            "“{name}” was reloaded after another program changed it."
-                        ));
+                        docs.overlays
+                            .toast(crate::tr!("ui-document-reloaded", name = name));
                     }
                 }
                 Err(OpenError::Missing) => {
@@ -1491,9 +1522,24 @@ impl Documents {
                 });
             }
             Err(SaveFailure::Encode(advice)) => {
-                let name = self.handle(id).title();
+                let fallback = self.with(|store| {
+                    store
+                        .entry(id)
+                        .and_then(|entry| entry.content.save_fallback())
+                });
+                let (docs, again) = (self, after.clone());
+                let target = is_save_as.then(|| path.clone());
                 self.ask(Some(id), true, move |_| {
-                    Some(dialogs::save_not_possible(&name, &advice))
+                    let name = docs.handle(id).title();
+                    Some(match fallback {
+                        Some(SaveFallback { label, apply }) => {
+                            dialogs::save_not_possible_offering(&name, &advice, &label, move || {
+                                apply();
+                                docs.begin_save(id, target.clone(), again.clone(), false);
+                            })
+                        }
+                        None => dialogs::save_not_possible(&name, &advice),
+                    })
                 });
                 (after.stopped)();
             }
@@ -1530,7 +1576,8 @@ impl Documents {
                     })
             })
             .unwrap_or(name);
-        let mut request = ChooserRequest::save(name).title("Save as");
+        let mut request =
+            ChooserRequest::save(name).title(crate::tr!("ui-document-chooser-save-as"));
         for filter in filters {
             request = request.filter(filter);
         }

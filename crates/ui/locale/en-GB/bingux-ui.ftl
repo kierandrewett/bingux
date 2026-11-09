@@ -510,3 +510,79 @@ ui-info-style = Style
 ui-info-version = Version
 ui-info-designer = Designer
 ui-info-glyphs = Glyphs
+
+## Documents (open, save, close, recover)
+
+# The name of a document that has no file yet.
+ui-document-untitled = Untitled
+# The second and later new documents. $name - the name above, $number (Number) - 2, 3, ...
+ui-document-untitled-numbered = { $name } { $number }
+ui-document-chooser-open = Open
+ui-document-chooser-save-as = Save as
+ui-document-no-recent = No recent documents
+# A toast. $name - the file's name
+ui-document-reloaded = “{ $name }” was reloaded after another program changed it.
+ui-document-cancel = Cancel
+ui-document-close = Close
+ui-document-discard = Discard
+ui-document-discard-all = Discard all
+ui-document-save = Save
+ui-document-save-all = Save all
+ui-document-save-as = Save as…
+ui-document-try-again = Try again
+ui-document-replace = Replace
+ui-document-revert = Revert
+ui-document-not-now = Not now
+ui-document-recover = Recover
+ui-document-keep-my-version = Keep my version
+ui-document-reload = Reload
+ui-document-keep-open = Keep open
+# The end of a list of names. $count (Number) - how many are not listed
+ui-document-more = { $count } more
+# $name - the document's name
+ui-document-unsaved-title = Save changes to “{ $name }”?
+# $count (Number) - how many documents have unsaved changes
+ui-document-unsaved-title-many = Save changes to { $count ->
+    [one] { $count } document
+   *[other] { $count } documents
+}?
+ui-document-unsaved-body = If you do not save, your changes are lost.
+# $names - a list of document names
+ui-document-unsaved-body-many = { $names } have unsaved changes. If you do not save them, they are lost.
+# $name - the document's name
+ui-document-recover-title = Recover “{ $name }”?
+# $app - the app's name, $when - how long ago
+ui-document-recover-body = { $app } closed before you saved this document. Its last copy was kept { $when }.
+# $count (Number) - how many documents
+ui-document-recover-title-many = Recover { $count ->
+    [one] { $count } unsaved document
+   *[other] { $count } unsaved documents
+}?
+# $app - the app's name, $names - a list of names, $when - how long ago
+ui-document-recover-body-many = { $app } closed before you saved { $names }. The latest copy was kept { $when }.
+ui-document-changed-title = “{ $name }” changed on disk
+ui-document-changed-body = Another program saved this file after you opened it. You also have unsaved changes here. Reloading replaces them.
+ui-document-removed-title = “{ $name }” is no longer there
+ui-document-removed-body = It was deleted or moved. Your copy stays open. Save it to keep it.
+ui-document-conflict-title = Replace “{ $name }”?
+ui-document-conflict-body = Another program changed this file after you opened it. Saving replaces its changes.
+ui-document-save-failed-title = Could not save “{ $name }”
+# $name - the file's name, $advice - what to do about it
+ui-document-save-failed-message = Could not save “{ $name }”. { $advice }
+ui-document-open-failed-title = Could not open “{ $name }”
+ui-document-open-failed-message = Could not open “{ $name }”. { $advice }
+ui-document-revert-title = Revert “{ $name }”?
+ui-document-revert-body = The file is read again, and your unsaved changes are lost.
+ui-document-open-elsewhere-title = “{ $name }” is already open
+ui-document-open-elsewhere-body = Close that document first, or save under another name.
+ui-document-save-error-permission = You do not have permission to change it. Save a copy somewhere else.
+ui-document-save-error-full = The drive is full. Free some space, then save again.
+ui-document-save-error-folder = Its folder is no longer there. Save a copy somewhere else.
+ui-document-save-error-read-only = The drive is read-only. Save a copy somewhere else.
+ui-document-save-error-name = The name is not allowed here. Choose another name.
+ui-document-save-error-other = Check that the drive is connected, then try again.
+ui-document-open-error-missing = It is no longer there. Check the name, or look for it in Files.
+ui-document-open-error-permission = You do not have permission to read it.
+ui-document-open-error-folder = It is a folder, not a file.
+ui-document-open-error-too-large = It is too big to open here.
+ui-document-open-error-other = Check that the drive is connected, then try again.

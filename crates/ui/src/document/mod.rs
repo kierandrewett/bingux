@@ -51,8 +51,8 @@ mod write;
 
 pub use documents::{
     Document, DocumentContent, DocumentEvent, DocumentId, DocumentInit, DocumentSnapshot,
-    Documents, DocumentsConfig, LoadReason, Origin, Phase, Prepared, Preparer, UNSAVED_MARK,
-    use_document_title, use_documents,
+    Documents, DocumentsConfig, LoadReason, Origin, Phase, Prepared, Preparer, SaveFallback,
+    UNSAVED_MARK, use_document_title, use_documents,
 };
 pub use drafts::{Draft, DraftMeta, Drafts};
 pub use io::OpenError;

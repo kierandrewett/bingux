@@ -2183,7 +2183,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Documents",
         category: Category::Files,
         page: "Documents",
-        api: "let documents = use_documents(DocumentsConfig::new(app_id, name).mime(m).filter(f).autosave_after(d).restore(bool).blank_when_empty(bool), |init| Rc::new(MyContent), |event| ..); documents.open_dialog() / open_path(p) / open_or_create(p) / new_document() / save_all() / request_close() / recent_menu() / list() / current() / set_current(doc) / check_changes() / claim(id); document.save() / save_then(f) / save_as() / reload() / close() / mark_edited() / set_edited(bool) / title() / display_title() / window_title(app) / is_unsaved() / path() / phase() / set_app_value(&v) / set_scroll(x, y); document.content_as::<T>(); impl DocumentContent { snapshot() -> DocumentSnapshot, load(bytes, LoadReason), will_save(), saved(path, clean), prepare(reason) -> Option<Preparer>, load_prepared(Prepared, reason) }; use_document_title(documents, name); use_scene_state() -> SceneState",
+        api: "let documents = use_documents(DocumentsConfig::new(app_id, name).mime(m).filter(f).autosave_after(d).restore(bool).blank_when_empty(bool), |init| Rc::new(MyContent), |event| ..); documents.open_dialog() / open_path(p) / open_or_create(p) / new_document() / save_all() / request_close() / recent_menu() / list() / current() / set_current(doc) / check_changes() / claim(id); document.save() / save_then(f) / save_as() / reload() / close() / mark_edited() / set_edited(bool) / title() / display_title() / window_title(app) / is_unsaved() / path() / phase() / set_app_value(&v) / set_scroll(x, y); document.content_as::<T>(); impl DocumentContent { snapshot() -> DocumentSnapshot, load(bytes, LoadReason), will_save(), saved(path, clean), prepare(reason) -> Option<Preparer>, save_fallback() -> Option<SaveFallback>, load_prepared(Prepared, reason) }; use_document_title(documents, name); use_scene_state() -> SceneState",
         doc: "documents",
         covers: &[
             "Documents",
@@ -2199,6 +2199,7 @@ pub static ENTRIES: &[Entry] = &[
             "Phase",
             "Prepared",
             "Preparer",
+            "SaveFallback",
             "UNSAVED_MARK",
             "use_documents",
             "use_document_title",
@@ -2212,7 +2213,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Document dialogs",
         category: Category::Files,
         page: "Documents",
-        api: "overlays.show_dialog(unsaved_changes(&names, |Unsaved| ..)); recover_work(app_name, &[Recoverable], |Recovery| ..); file_changed(name, |Changed| ..); file_removed(name, |Gone| ..); save_conflict(name, |Conflict| ..); save_failed(name, &SaveError, |Retry| ..); save_not_possible(name, advice); open_failed(name, &OpenError); revert_changes(name, |Revert| ..); already_open(name)",
+        api: "overlays.show_dialog(unsaved_changes(&names, |Unsaved| ..)); recover_work(app_name, &[Recoverable], |Recovery| ..); file_changed(name, |Changed| ..); file_removed(name, |Gone| ..); save_conflict(name, |Conflict| ..); save_failed(name, &SaveError, |Retry| ..); save_not_possible(name, advice); save_not_possible_offering(name, advice, label, apply); open_failed(name, &OpenError); revert_changes(name, |Revert| ..); already_open(name)",
         doc: "documents",
         covers: &[
             "unsaved_changes",
@@ -2229,6 +2230,7 @@ pub static ENTRIES: &[Entry] = &[
             "save_failed",
             "Retry",
             "save_not_possible",
+            "save_not_possible_offering",
             "open_failed",
             "revert_changes",
             "Revert",

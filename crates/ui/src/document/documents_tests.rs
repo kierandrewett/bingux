@@ -54,6 +54,10 @@ struct Text {
     appends_on_save: bool,
     /// Offers a file name for Save as.
     suggests: bool,
+    /// The content cannot be turned into bytes until the fallback has run.
+    broken: Rc<std::cell::Cell<bool>>,
+    /// Offers "Save in UTF-8" when it is broken.
+    offers: bool,
 }
 
 impl DocumentContent for Text {
@@ -62,7 +66,18 @@ impl DocumentContent for Text {
     }
 
     fn snapshot(&self) -> DocumentSnapshot {
+        if self.broken.get() {
+            return DocumentSnapshot::encode(|| Err("It has a character this cannot hold.".into()));
+        }
         DocumentSnapshot::bytes(self.text.borrow().clone().into_bytes())
+    }
+
+    fn save_fallback(&self) -> Option<SaveFallback> {
+        let broken = self.broken.clone();
+        self.offers.then(|| SaveFallback {
+            label: "Save in UTF-8".into(),
+            apply: Rc::new(move || broken.set(false)),
+        })
     }
 
     fn load(&self, bytes: Vec<u8>, reason: LoadReason) {
@@ -134,6 +149,8 @@ struct World {
     prepares: bool,
     appends_on_save: bool,
     suggests: bool,
+    broken: bool,
+    offers: bool,
     /// A second window's manager is made too: `other`.
     second: bool,
     other: Option<Documents>,
@@ -193,6 +210,8 @@ impl Component for Root {
                     prepares: world(|world| world.prepares),
                     appends_on_save: world(|world| world.appends_on_save),
                     suggests: world(|world| world.suggests),
+                    broken: Rc::new(std::cell::Cell::new(world(|world| world.broken))),
+                    offers: world(|world| world.offers),
                 })
             },
             |event| {
@@ -227,6 +246,8 @@ impl Component for Root {
                         prepares: false,
                         appends_on_save: false,
                         suggests: false,
+                        broken: Rc::default(),
+                        offers: false,
                     })
                 },
                 |_| {},
@@ -1258,4 +1279,43 @@ fn opening_and_saving_register_the_file_in_the_shared_list_and_the_menu_offers_i
         ),
         Vec::<PathBuf>::new()
     );
+}
+
+#[test]
+fn a_save_that_cannot_be_encoded_offers_the_contents_fix_and_saves_again_when_it_is_taken() {
+    reset();
+    world(|world| {
+        world.broken = true;
+        world.offers = true;
+    });
+    let mut session = Session::new("fallback");
+    let path = session.file("a.txt", "one");
+    let document = session.open(&path);
+    session.set_text(document, "two");
+    session.run(|_| document.save());
+    session.wait_for("Save in UTF-8");
+    assert!(session.shows("It has a character this cannot hold."));
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "one",
+        "nothing was written"
+    );
+    session.click("Save in UTF-8");
+    session.wait_until("saved", |_| !document.is_unsaved() && !document.is_saving());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "two");
+}
+
+#[test]
+fn a_save_that_cannot_be_encoded_offers_nothing_when_the_content_has_no_fix() {
+    reset();
+    world(|world| world.broken = true);
+    let mut session = Session::new("no-fallback");
+    let path = session.file("a.txt", "one");
+    let document = session.open(&path);
+    session.set_text(document, "two");
+    session.run(|_| document.save());
+    session.wait_for("It has a character this cannot hold.");
+    assert!(!session.shows("Save in UTF-8"));
+    session.click("Close");
+    assert!(document.is_unsaved());
 }

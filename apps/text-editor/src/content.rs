@@ -18,6 +18,7 @@ use bingux_text::encoding_rs::{self, Encoding};
 use bingux_text::{Editor, Indent, Language, Rope};
 use bingux_ui::document::{
     Document, DocumentContent, DocumentInit, DocumentSnapshot, LoadReason, Prepared, Preparer,
+    SaveFallback,
 };
 use bingux_ui::prelude::tr;
 use bingux_ui::text_editor::{EditorHandle, ScrollPos};
@@ -261,6 +262,7 @@ impl Shared {
     }
 }
 
+#[derive(Clone)]
 pub struct EditorContent {
     pub handle: EditorHandle,
     shared: Rc<Shared>,
@@ -510,6 +512,20 @@ impl DocumentContent for EditorContent {
         if let Some(read) = prepare(bytes).take::<Read>() {
             self.show(read, reason);
         }
+    }
+
+    /// A save that cannot hold a character offers UTF-8, which holds them all.
+    fn save_fallback(&self) -> Option<SaveFallback> {
+        if self.shared.format.get().encoding == encoding_rs::UTF_8 {
+            return None;
+        }
+        let content = self.clone();
+        Some(SaveFallback {
+            label: tr!("text-editor-save-in-utf8"),
+            apply: Rc::new(move || {
+                content.change_format(|format| format.encoding = encoding_rs::UTF_8)
+            }),
+        })
     }
 
     fn prepare(&self, reason: LoadReason) -> Option<Preparer> {

@@ -53,19 +53,23 @@ impl OpenError {
 
     /// What happened and what to do next, for the body of a dialog titled
     /// "Could not open “name”".
-    pub fn advice(&self) -> &'static str {
+    pub fn advice(&self) -> String {
         match self {
-            OpenError::Missing => "It is no longer there. Check the name, or look for it in Files.",
-            OpenError::Permission => "You do not have permission to read it.",
-            OpenError::NotAFile => "It is a folder, not a file.",
-            OpenError::TooLarge(_) => "It is too big to open here.",
-            OpenError::Other(_) => "Check that the drive is connected, then try again.",
+            OpenError::Missing => crate::tr!("ui-document-open-error-missing"),
+            OpenError::Permission => crate::tr!("ui-document-open-error-permission"),
+            OpenError::NotAFile => crate::tr!("ui-document-open-error-folder"),
+            OpenError::TooLarge(_) => crate::tr!("ui-document-open-error-too-large"),
+            OpenError::Other(_) => crate::tr!("ui-document-open-error-other"),
         }
     }
 
     /// The whole message, for a place with no title of its own (a toast).
     pub fn message(&self, name: &str) -> String {
-        format!("Could not open “{name}”. {}", self.advice())
+        crate::tr!(
+            "ui-document-open-failed-message",
+            name = name,
+            advice = self.advice()
+        )
     }
 }
 

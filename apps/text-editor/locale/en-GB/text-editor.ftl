@@ -40,6 +40,8 @@ text-editor-opening = Opening “{ $name }”…
 text-editor-binary-title = This file is not text
 text-editor-binary-description = It holds data that is not text. Saving it here can damage it.
 text-editor-binary-not-saved = This file is not text, so it cannot be saved from here. Choose Open anyway to edit it as text.
+# The button of the dialog that says the text has a character the file's encoding cannot hold.
+text-editor-save-in-utf8 = Save in UTF-8
 text-editor-open-anyway = Open anyway
 
 ## Saving
