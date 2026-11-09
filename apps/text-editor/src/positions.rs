@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 /// How many files' positions are remembered.
 const KEPT: usize = 500;
 
-fn folder() -> PathBuf {
+pub fn folder() -> PathBuf {
     let base = std::env::var_os("XDG_STATE_HOME")
         .map(PathBuf::from)
         .filter(|path| path.is_absolute())

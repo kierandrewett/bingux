@@ -62,15 +62,15 @@ time, including any changes you had not saved.
 The status bar shows the language, the indentation, the encoding and the line
 endings of the document; each is a menu.
 
-| Situation                                                       | What happens                                                                                                   |
-| --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| UTF-8, with or without a byte order mark                        | Read and written back the same way                                                                             |
-| UTF-16 (with or without a byte order mark)                      | Detected and written back as UTF-16                                                                            |
-| A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                       |
-| UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                         |
-| Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; the encoding menu ▸ Read again as tries another    |
-| A character the file's encoding cannot hold, on save            | Save stops and says which character; pick another encoding in the status bar (UTF-8 holds them all), then save |
-| CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                    |
+| Situation                                                       | What happens                                                                                                |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| UTF-8, with or without a byte order mark                        | Read and written back the same way                                                                          |
+| UTF-16 (with or without a byte order mark)                      | Detected and written back as UTF-16                                                                         |
+| A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                    |
+| UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                      |
+| Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; the encoding menu ▸ Read again as tries another |
+| A character the file's encoding cannot hold, on save            | Save stops, says which character, and offers Save in UTF-8 (the status bar picks any other encoding)        |
+| CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                 |
 
 The editor reads `.editorconfig` files from the file's folder upwards:
 `indent_style`, `indent_size`, `tab_width`, `end_of_line`,
@@ -194,6 +194,12 @@ a document moving to another window) is `bingux_ui::document`
 bytes into text on a worker (`decode`), text into bytes (`encode`), trims and
 ends the file as a save should (`tidy`), and tells the manager of each edit.
 Where files were left (`positions.rs`) is all the app keeps of its own.
+
+The first start with the shared manager imports what earlier builds kept in
+`~/.local/state/bingux/text-editor/` (`session.json` and `drafts/`): each old
+draft is offered by "Recover unsaved work?" and each file of the old session
+joins Open recent. A marker (`~/.local/state/bingux-text-editor/imported-earlier-session`)
+makes it happen once, and the old files are left where they are (`legacy.rs`).
 
 `bingux-text-editor --snapshot DIR [FILE]` (built with `--features snapshot`)
 renders the window to PNG without a compositor, and `--bench-typing FILE`

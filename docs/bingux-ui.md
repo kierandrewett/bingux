@@ -2021,6 +2021,13 @@ with a worker: `prepare(reason)` returns the function that turns the bytes into
 whatever `load_prepared(Prepared, reason)` shows, so the UI thread only takes
 the result. `Prepared::new(value)` and `prepared.take::<T>()` carry it.
 
+A content that cannot be turned into bytes says so in `snapshot`'s error (what is
+wrong and what to change). When one change would let it be saved (the text has a
+character its encoding cannot hold, and UTF-8 can), it offers it with
+`save_fallback() -> Option<SaveFallback { label, apply }>`: the save-failed dialog
+shows `label` as its default button (`dialogs::save_not_possible_offering`), and
+the manager saves again once `apply` has run.
+
 Reads and writes are owned bytes handed to and from a worker: **nothing here
 blocks the UI thread**, and an app never reads or writes the file itself.
 `Document::mark_edited()` is cheap (it counts the edit and schedules a draft),
@@ -2051,6 +2058,11 @@ between the watch and the save) asks before replacing it. Saves that follow
 each other never share a temporary file, and an edit made while the bytes are
 being written leaves the document unsaved (the document compares the revision
 it saved with the revision it has).
+
+Every string the manager shows (the chooser titles, the dialogs, the toast, the
+advice of an error, "Untitled") is a `ui-document-*` message in
+`locale/en-GB/bingux-ui.ftl`, so a translation of the catalogue translates them;
+an app that names its documents differently passes `DocumentsConfig::untitled`.
 
 ### The dialogs
 

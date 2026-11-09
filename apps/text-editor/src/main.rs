@@ -12,6 +12,7 @@
 mod app;
 mod content;
 mod launch;
+mod legacy;
 mod positions;
 mod prefs;
 #[cfg(feature = "snapshot")]
@@ -47,6 +48,7 @@ fn main() {
     }
     // The grammars load on a worker while the window opens.
     std::thread::spawn(bingux_text::highlight::warm);
+    legacy::import_earlier_session();
     app::prepare(prefs::load());
     let (width, height) = app::window_size();
     Application::new("bingux-text-editor")
