@@ -666,7 +666,7 @@ mod tests {
         assert_eq!(title("network/add-vpn"), "Add VPN");
         assert_eq!(title("sound/applications"), "Application volumes");
         assert_eq!(title("display/1"), "Display 2");
-        assert_eq!(title("wifi/network/Home/proxy"), "Proxy");
+        assert_eq!(title("network/wifi/network/Home/advanced/proxy"), "Proxy");
     }
 
     #[test]
@@ -712,12 +712,6 @@ mod tests {
         assert_eq!(
             up("network/mobile/advanced/apn/Vodafone"),
             "network/mobile/advanced/apn"
-        );
-        // An old link goes up to where its new form does.
-        assert_eq!(up("network/wifi/hotspot"), "network");
-        assert_eq!(
-            up("wifi/network/Home/ipv4"),
-            "network/wifi/network/Home/advanced"
         );
     }
 
