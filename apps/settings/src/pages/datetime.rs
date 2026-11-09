@@ -9,14 +9,10 @@ mod timezone_map;
 
 use std::time::Duration;
 
-use bingux_ui::motion::reveal_block_if;
-use bingux_ui::prelude::{
-    PageHead, PopupAction, PopupActions, Window, popup, use_popup_actions, use_window,
-};
+use bingux_ui::prelude::PageHead;
 use bingux_ui::runtime::optimistic_then;
-use bingux_ui::shell::MenuItem;
+use bingux_ui::shell::{MenuItem, form_dialog, open_form};
 use bingux_ui::style::*;
-use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
 use timezone_map::TimeZoneMap;
 
@@ -25,9 +21,9 @@ use crate::pages::bingux_config;
 use crate::routes;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
-    popup_column, row, search_field, skeleton_caption, skeleton_row, status, stepper, styled_label,
-    switch_row, typography, use_overlays, use_page_busy,
+    Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column, row,
+    search_field, skeleton_caption, skeleton_row, status, stepper, styled_label, switch_row,
+    typography, use_overlays, use_page_busy,
 };
 use bingux_ui::prelude::use_router;
 
@@ -463,7 +459,7 @@ struct DateForm {
 }
 
 /// Copies the live clock into the sheet's fields, then opens the sheet.
-fn open_date_sheet(window: Window, form: DateForm, now: State<Option<Result<Now, String>>>) {
+fn open_date_sheet(form: DateForm, now: State<Option<Result<Now, String>>>) {
     if let Some(Ok(reading)) = now.read().clone() {
         let DateForm {
             mut year,
@@ -479,12 +475,17 @@ fn open_date_sheet(window: Window, form: DateForm, now: State<Option<Result<Now,
         hour.set(reading.hour);
         minute.set(reading.minute);
     }
-    window.open(popup("Set date and time", DateBody { form }).flags(PopupFlags::FORM));
+    open_form(
+        form.ctx.overlays,
+        "Set date and time",
+        DateBody { form },
+        None,
+    );
 }
 
 /// Sets the clock to the sheet's fields. The sheet closes once the write
 /// succeeds; a failure is a toast and the sheet stays open.
-fn apply_date(form: DateForm, window: Window) {
+fn apply_date(form: DateForm) {
     let mut setting = form.setting;
     if setting() {
         return;
@@ -505,7 +506,7 @@ fn apply_date(form: DateForm, window: Window) {
             setting.set(false);
             match result {
                 Ok(_) => {
-                    window.close();
+                    form.ctx.overlays.dismiss_dialog();
                     reload(form.ctx);
                 }
                 Err(failure) => {
@@ -536,15 +537,7 @@ impl Component for DateBody {
             mut minute,
             ..
         } = self.form;
-        let window = use_window();
         let form = self.form;
-        use_popup_actions(PopupActions {
-            primary: Some(PopupAction {
-                label: "Set".into(),
-                enabled: true,
-                on_press: EventHandler::new(move |_: ()| apply_date(form, window)),
-            }),
-        });
         let setting = self.form.setting;
         let last_day = days_in_month(year(), month());
         let month_options = MONTHS
@@ -552,7 +545,11 @@ impl Component for DateBody {
             .enumerate()
             .map(|(index, name)| ((index + 1).to_string(), name.to_string()))
             .collect();
-        popup_column()
+        let body = rect()
+            .tw(
+                &bingux_ui::surface::tokens_now(),
+                &[flex_col(), w_full(), gap(S4)],
+            )
             .child(
                 Group::titled("Date")
                     .row(form_row(
@@ -581,15 +578,12 @@ impl Component for DateBody {
                         "Minute",
                         stepper(minute(), move |next| minute.set(next)).range(0, 59),
                     )),
-            )
-            .child(reveal_block_if(
-                S6,
-                setting().then(|| {
-                    Element::from(status(Status::Loading(
-                        "Setting the date and time…".to_string(),
-                    )))
-                }),
-            ))
+            );
+        form_dialog("Set date and time", body, "Set", move |_: ()| {
+            apply_date(form)
+        })
+        .busy(setting().then(|| "Setting the date and time…".to_string()))
+        .stays_open()
     }
 }
 
@@ -674,7 +668,6 @@ impl Component for DateTimePage {
             });
         });
 
-        let window = use_window();
         use_page_busy(setting());
 
         let loaded = ctx.model.read().clone();
@@ -703,9 +696,9 @@ impl Component for DateTimePage {
         // Shown only while "Set automatically" is off, so it needs no subtitle
         // or disabled state of its own.
         let time_row = row("Set date and time")
-            .on_press(move |_| open_date_sheet(window, form, now))
+            .on_press(move |_| open_date_sheet(form, now))
             .context_menu(vec![menu_item("Set date and time…", move |_| {
-                open_date_sheet(window, form, now)
+                open_date_sheet(form, now)
             })]);
         let auto_zone_on = model_data.auto_zone.unwrap_or(false);
         let zone = model_data.timezone.clone();

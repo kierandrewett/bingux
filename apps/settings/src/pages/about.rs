@@ -1,12 +1,12 @@
 //! About: the device, its operating system and the hardware it runs on. The
 //! facts are read once in the background when the page opens. The device name
-//! can be changed in a popup, and every fact can be copied as text.
+//! can be changed in a form dialog, and every fact can be copied as text.
 
 use std::time::Duration;
 
 use bingux_ui::motion::reveal_block_if;
+use bingux_ui::shell::{form_dialog, open_form};
 use bingux_ui::style::*;
-use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 use freya::prelude::*;
 
 use super::loading::revealed;
@@ -14,10 +14,9 @@ use crate::system::{self, CommandResult};
 use crate::theme::Tokens;
 use crate::ui::typography::{CAPTION, EMPHASIS, Ink, TITLE};
 use crate::ui::{
-    Group, Icon, Overlays, PopupAction, PopupActions, Status, Window, action_button, caption,
-    form_row, icon, menu_item, page_column, popup, popup_column, property_row, section_label,
-    status, text_field, usage_meter, use_overlays, use_page_busy, use_popup_actions, use_tokens,
-    use_window,
+    Group, Icon, Overlays, Status, action_button, caption, form_row, icon, menu_item, page_column,
+    property_row, section_label, status, text_field, usage_meter, use_overlays, use_page_busy,
+    use_tokens,
 };
 
 /// How long `hostnamectl` may take to write the new name.
@@ -324,21 +323,22 @@ struct RenameSheet {
 
 impl RenameSheet {
     /// Opens the sheet with `name` in its field.
-    fn open(self, name: String, window: Window) {
+    fn open(self, name: String) {
         let mut draft = self.draft;
         let mut error = self.error;
         draft.set(name);
         error.set(None);
-        self.show(window);
-    }
-
-    fn show(self, window: Window) {
-        window.open(popup("Device name", RenameBody { sheet: self }).flags(PopupFlags::FORM));
+        open_form(
+            self.overlays,
+            "Device name",
+            RenameBody { sheet: self },
+            None,
+        );
     }
 
     /// Checks the name, then writes it in the background. The hero shows the
     /// new name at once; a failure puts the old one back and says why.
-    fn submit(self, window: Window) {
+    fn submit(self) {
         let name = self.draft.read().trim().to_string();
         let mut error = self.error;
         if let Err(problem) = valid_hostname(&name) {
@@ -356,7 +356,7 @@ impl RenameSheet {
                     .map(|facts| facts.hostname.clone())
             })
             .unwrap_or_default();
-        window.close();
+        self.overlays.dismiss_dialog();
         error.set(None);
         system::optimistic(
             self.shown,
@@ -399,17 +399,11 @@ struct RenameBody {
 impl Component for RenameBody {
     fn render(&self) -> impl IntoElement {
         let sheet = self.sheet;
-        let window = use_window();
-        use_popup_actions(PopupActions {
-            primary: Some(PopupAction {
-                label: "Rename".into(),
-                enabled: !sheet.draft.read().trim().is_empty(),
-                on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
-            }),
-        });
-        let field = text_field(sheet.draft, move |_: String| sheet.submit(window));
+        let empty = sheet.draft.read().trim().is_empty();
+        let field = text_field(sheet.draft, move |_: String| sheet.submit());
         let error = sheet.error.read().clone();
-        popup_column()
+        let body = rect()
+            .tw(&bingux_ui::surface::tokens_now(), &[flex_col(), w_full(), gap(S4)])
             .child(
                 Group::new(None::<String>)
                     .row(form_row("Device name", field))
@@ -420,7 +414,10 @@ impl Component for RenameBody {
             .child(reveal_block_if(
                 S6,
                 error.map(|text| Element::from(status(Status::Error(text)))),
-            ))
+            ));
+        form_dialog("Device name", body, "Rename", move |_: ()| sheet.submit())
+            .blocked(empty.then(|| "Enter a device name.".to_string()))
+            .stays_open()
     }
 }
 
@@ -431,7 +428,6 @@ impl Component for AboutPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let overlays = use_overlays();
-        let window = use_window();
         let model = system::use_cached_saved("about", collect);
         let shown = use_state(|| None::<String>);
         let draft = use_state(String::new);
@@ -516,9 +512,7 @@ impl Component for AboutPage {
                 .child(
                     rect()
                         .tw(&tokens, &[flex_row(), gap(S2)])
-                        .child(action_button("Rename", move |_| {
-                            rename.open(name.clone(), window)
-                        }))
+                        .child(action_button("Rename", move |_| rename.open(name.clone())))
                         .child(
                             action_button("Copy system info", move |_| {
                                 copy(copy_text.clone(), overlays)
