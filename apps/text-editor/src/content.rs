@@ -7,21 +7,15 @@
 //! it. This type turns the text into bytes and bytes into text.
 
 use std::cell::RefCell;
-use std::rc::Rc;
 
 use bingux_text::encoding::{self, FileFormat};
 use bingux_text::{Editor, Rope};
 use bingux_ui::document::{DocumentContent, DocumentSnapshot, LoadReason};
 use bingux_ui::text_editor::EditorHandle;
 
-use crate::document::Notice;
-
 pub struct EditorContent {
     pub handle: EditorHandle,
     pub format: RefCell<FileFormat>,
-    pub notices: RefCell<Vec<Notice>>,
-    /// The bytes of the file as read, kept for Reopen with Encoding when small.
-    pub raw: RefCell<Option<Rc<Vec<u8>>>>,
     /// The text belongs to the tab's own loader: the manager's load is ignored.
     text_from_tab: bool,
 }
@@ -31,8 +25,6 @@ impl EditorContent {
         Self {
             handle: EditorHandle::new(editor, crate::document::signal()),
             format: RefCell::new(FileFormat::default()),
-            notices: RefCell::new(Vec::new()),
-            raw: RefCell::new(None),
             text_from_tab: false,
         }
     }
@@ -42,8 +34,6 @@ impl EditorContent {
         Self {
             handle,
             format: RefCell::new(format),
-            notices: RefCell::new(Vec::new()),
-            raw: RefCell::new(None),
             text_from_tab: true,
         }
     }
