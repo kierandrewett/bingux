@@ -52,7 +52,7 @@ pub(super) fn header(
             icon_button(Icon::Inspect, move |_| {
                 super::set_picking(!super::picking());
             })
-            .tooltip("Inspect an element (Ctrl+Shift+C)")
+            .tooltip("Inspect an element (Ctrl+Shift+I)")
             .active(inspecting),
         )
         .leading(

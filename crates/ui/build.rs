@@ -10,6 +10,12 @@ use std::process::Command;
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
+    println!("cargo:rustc-check-cfg=cfg(bingux_debug)");
+    // `cfg!(debug_assertions)` is per crate, and apps override it for this
+    // package in the dev profile, so the gate reads cargo's profile instead.
+    if env::var("PROFILE").is_ok_and(|profile| profile == "debug") {
+        println!("cargo:rustc-cfg=bingux_debug");
+    }
 
     let rustc = env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     if let Ok(output) = Command::new(rustc).arg("--version").output()

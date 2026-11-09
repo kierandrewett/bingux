@@ -1,7 +1,8 @@
 //! The inspector: a devtools window that watches one other window.
 //!
-//! [`plugin`] is installed by [`crate::app`]'s single launch function, so every
-//! bingux-ui window has it and no application writes any code for it.
+//! [`plugin`] is installed by [`crate::app`]'s single launch function when
+//! [`enabled`] says so: every debug build, or any build with `BINGUX_INSPECTOR=1`.
+//! A release build without the variable has no inspector and no shortcut.
 //! Ctrl+Alt+Shift+I, pressed in any window (the main window, an inspector,
 //! whichever has keyboard focus) opens an inspector over that window, or
 //! closes the one that is open. The plugin sees the key before the window's
@@ -65,8 +66,17 @@ use freya_winit::renderer::{NativeEvent, NativeWindowEvent, NativeWindowEventAct
 use snapshot::Snapshot;
 use target::{InstanceId, Registry, Throttle, Toggle};
 
+/// Whether this process carries the inspector: every debug build, and any
+/// build started with `BINGUX_INSPECTOR=1`. A release build without the
+/// variable has no inspector, no shortcut and no cost.
+pub(crate) fn enabled() -> bool {
+    // `bingux_debug` comes from build.rs (cargo PROFILE), not `debug_assertions`,
+    // which apps turn off for this package in their dev profile.
+    cfg!(bingux_debug) || std::env::var_os("BINGUX_INSPECTOR").is_some_and(|value| value == "1")
+}
+
 /// The plugin that carries the inspector in every application. Only
-/// [`crate::app`] installs it.
+/// [`crate::app`] installs it, and only when [`enabled`] says so.
 pub(crate) fn plugin() -> InspectorPlugin {
     InspectorPlugin
 }
@@ -215,13 +225,13 @@ fn is_toggle_key(key: &Key, code: Code, modifiers: Modifiers) -> bool {
     modifiers.contains(chord) && is_letter(key, code, Code::KeyI, "i")
 }
 
-/// Ctrl+Shift+C: turns inspect mode on or off. Not with Alt, which is the
-/// toggle chord's.
+/// Ctrl+Shift+I: turns inspect mode on or off. Not with Alt, which is the
+/// toggle chord's. Ctrl+Shift+C is left to the application (copy).
 fn is_inspect_key(key: &Key, code: Code, modifiers: Modifiers) -> bool {
     let chord = Modifiers::CONTROL | Modifiers::SHIFT;
     modifiers.contains(chord)
         && !modifiers.contains(Modifiers::ALT)
-        && is_letter(key, code, Code::KeyC, "c")
+        && is_letter(key, code, Code::KeyI, "i")
 }
 
 /// `BINGUX_INSPECT_KEYLOG=1` prints every key event the plugin sees.
@@ -497,7 +507,7 @@ pub(crate) fn take_notice() -> Option<String> {
     with_me(|instance| instance.notice.take()).flatten()
 }
 
-/// Ctrl+Shift+C in `window`. In an inspector's window it is that inspector's
+/// Ctrl+Shift+I in `window`. In an inspector's window it is that inspector's
 /// own inspect button. In any other window it turns inspect mode on in the
 /// inspector watching it, opening one first when there is none.
 fn toggle_picking_in(window: WindowId, title: &str) {
