@@ -108,6 +108,9 @@ pub fn set_mini(ui: Ui, on: bool) {
     let (width, height) = if on { (360.0, 400.0) } else { (1100.0, 760.0) };
     Platform::get().with_window(Platform::window_id(), move |window| {
         let _ = window.request_inner_size(freya::winit::dpi::LogicalSize::new(width, height));
+        // Winit applies the new size at once but sends no resize event for it, so the
+        // redraw is what lays the mini layout out at the new size.
+        window.request_redraw();
     });
 }
 
