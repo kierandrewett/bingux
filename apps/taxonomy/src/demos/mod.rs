@@ -3,6 +3,7 @@
 
 pub mod accessibility;
 pub mod buttons;
+pub mod commands;
 pub mod common;
 pub mod containers;
 pub mod data;

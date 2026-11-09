@@ -153,6 +153,8 @@ impl Component for Content {
         // and Safari, and while a tab from another window is held over this
         // one, so there is somewhere to drop it. Its tabs share the width.
         let titles = tab_titles(&shown);
+        use_window_commands(window_commands(tabs));
+        let commands = use_commands();
         let strip = (shown.len() > 1 || tab_window.insertion().is_some()).then(|| {
             Element::from(
                 tabs.strip(
@@ -203,7 +205,11 @@ impl Component for Content {
                 .on_new_tab(move |path: std::path::PathBuf| {
                     tabs.open(FileTab::new(Where::Folder(path)));
                 })
-                .menu(main_menu(tabs, overlays))
+                .menu({
+                    let mut items = commands.main_menu_items();
+                    items.extend(bingux_ui::about::app_menu_items(overlays));
+                    items
+                })
                 .tab_bar(strip),
         );
 
@@ -245,36 +251,57 @@ fn here(tabs: Tabs<FileTab>) -> Where {
         .map_or_else(home, |tab| tab.content.at.clone())
 }
 
-/// What the shortcuts dialog says. The file view's keys are the chooser's.
-const SHORTCUTS: &str = "\
-Ctrl+T  New tab\n\
-Ctrl+W  Close tab (a middle click on a tab too)\n\
-Ctrl+Shift+T  Reopen the tab closed last\n\
-Ctrl+Tab  Next tab\n\
-Alt+1 to 9  Go to a tab\n\
-Alt+Left, Alt+Right, Alt+Up  Back, Forward, parent folder\n\
-Ctrl+L  Edit the path\n\
-Ctrl+F  Search\n\
-Ctrl+H  Show hidden files\n\
-Ctrl+Shift+N  New folder\n\
-F2  Rename\n\
-Delete  Move to the Trash\n\
-Shift+Delete  Delete permanently\n\
-Ctrl+C, Ctrl+X, Ctrl+V  Copy, cut, paste\n\
-Ctrl+Z  Undo\n\
-Space  Preview\n\
-Alt+Enter  Properties\n\
-Ctrl+Shift+?  About Files";
-
-fn main_menu(tabs: Tabs<FileTab>, overlays: Overlays) -> Vec<MenuItem> {
-    let mut items = tabs.menu_items(move |_: ()| {
+/// The window's commands: the tab commands, and the keys the file view
+/// answers itself, for the main menu, the palette and the shortcuts sheet
+/// (Ctrl+?).
+fn window_commands(tabs: Tabs<FileTab>) -> Vec<Command> {
+    let mut commands = tabs.commands(move |_: ()| {
         tabs.open(FileTab::new(here(tabs)));
     });
-    items.push(menu_separator());
-    items.push(menu_item("Keyboard shortcuts", move |_: ()| {
-        overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
-    }));
-    // Every application's menu ends with About.
-    items.extend(bingux_ui::about::app_menu_items(overlays));
-    items
+    for (id, title, keys, group) in [
+        (
+            "files.back",
+            "Back, forward, parent folder",
+            "Alt+Left, Alt+Right, Alt+Up",
+            CommandGroup::Go,
+        ),
+        ("files.path", "Edit the path", "Ctrl+L", CommandGroup::Go),
+        ("files.search", "Search", "Ctrl+F", CommandGroup::Edit),
+        (
+            "files.hidden",
+            "Show hidden files",
+            "Ctrl+H",
+            CommandGroup::View,
+        ),
+        (
+            "files.new-folder",
+            "New folder",
+            "Ctrl+Shift+N",
+            CommandGroup::File,
+        ),
+        ("files.rename", "Rename", "F2", CommandGroup::File),
+        ("files.trash", "Move to Trash", "Delete", CommandGroup::File),
+        (
+            "files.delete",
+            "Delete permanently",
+            "Shift+Delete",
+            CommandGroup::File,
+        ),
+        (
+            "files.clipboard",
+            "Copy, cut, paste",
+            "Ctrl+C, Ctrl+X, Ctrl+V",
+            CommandGroup::Edit,
+        ),
+        ("files.preview", "Preview", "Space", CommandGroup::View),
+        (
+            "files.properties",
+            "Properties",
+            "Alt+Enter",
+            CommandGroup::File,
+        ),
+    ] {
+        commands.push(Command::key_hint(id, title, keys).group(group));
+    }
+    commands
 }

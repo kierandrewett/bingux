@@ -472,20 +472,21 @@ include_str!(..)` (Bingux's apps embed the repository's `COPYING`).
   directory, for a build tree). Nothing is read until the page is opened.
 - **It cannot be forgotten.** `Application::run` registers the window whatever
   `main` says, so a bare `Application::new("id")` still has one, named after its
-  id and title with no version, and the shortcut and `about::open` work.
+  id and title with no version, and the palette's About and `about::open` work.
   `scripts/ui-lint.py` fails an app crate whose `src/main.rs` starts an
   `Application` without `.about(` and `app_info!`.
-- **The shortcut is Ctrl+Shift+?** in the main window of every application
-  (`about::is_shortcut`). It does nothing while a dialog is open: that dialog
-  holds a question. `about::open(overlays)` opens it from code, and the
-  headless runner's script command `key ctrl+shift+?` reaches it the way a
-  person does.
+- **It has no shortcut of its own**, as in GNOME: Ctrl+? is the
+  [keyboard shortcuts sheet](#the-keyboard-shortcuts-sheet). The command
+  palette (Ctrl+Shift+P) has **About <name>** (the window's `app.about`
+  command), so it is still a few keys away. `about::open(overlays)` opens it
+  from code.
 - **The main menu ends with "About <name>"** from `about::app_menu_items(overlays)`
-  (a separator and the item, with the shortcut shown). An app whose menu is a
-  list it builds appends them; an app with no menu puts `app_menu(items)` in
-  its header (`NavigationSplitView::header_trailing`). Settings, Files and
-  Taxonomy do. Settings' **System > About** page is about the computer; the
-  window the menu opens is about Settings.
+  (a separator and the item). An app whose menu is a list it builds appends
+  them; an app with no menu puts `app_menu(items)` in its header
+  (`NavigationSplitView::header_trailing`), which also lists the window's
+  [commands](#commands). Settings, Files and Taxonomy do. Settings' **System >
+  About** page is about the computer; the window the menu opens is about
+  Settings.
 - The page behind it is inert while it is open, Escape and a press on the scrim
   close it, Alt+Left goes back from a page to the main one, and the focus returns to
   where it was. The card has one size on every page.
@@ -956,7 +957,7 @@ Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compac
 When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. The rest is `bingux_ui::tabs`, the same for every application with tabs:
 
 - **`TabSet<P: TabContent>`** is the tabs as plain data (tested without a window): a new tab opens beside the one on show; `ClosedTabs<P>` is the stack behind Reopen closed tab (the last `CLOSED_TABS_KEPT`, 10, with their place and their content, and a closed group comes back left to right at its places); `duplicate` asks the content for a copy (`TabContent::duplicate`); `detach`, `detach_others`, `detach_all`, `insert_moved` and `adopt` move tabs between windows without losing or duplicating one, and tell the content it is leaving (`TabContent::depart`). What a tab shows is the application's `P`: Files' is `files::FileTab` (a place and its `TabMemory`, so Back and Forward come back with a reopened or moved tab).
-- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.menu_items(new_tab)` are the menu's New tab, Close tab and Reopen closed tab. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
+- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.commands(new_tab)` are the window commands New tab, Close tab, Reopen closed tab, Next tab and Previous tab (see [Commands](#commands)), for the main menu, the palette and the shortcuts sheet. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
 - **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip, and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
 - A second application's tabs are another `TabContent` and nothing else: no copy of the set, the window registry or the tear-off.
 
@@ -4146,6 +4147,7 @@ app in the same way.
 
 ```rust
 use bingux_ui::dnd::{drop_target, Dropped, Format, SPRING_DELAY};
+
 drop_target(status_page(Icon::Music, "No music").description("Drop music here."))
     // Read as the first of these the drag offers.
     .accepts([Format::Uris])
@@ -4180,6 +4182,7 @@ drop_target(status_page(Icon::Music, "No music").description("Drop music here.")
 
 ```rust
 use bingux_ui::dnd::{drag_source, DragActions, DragEnd, Payload};
+
 drag_source(track_row(&track), move |_| Payload::files([track.path.clone()]))
     .actions(DragActions::COPY)
     .on_end(|end: DragEnd| if let DragEnd::Dropped(DragAction::Move) = end { /* remove ours */ })
@@ -4202,20 +4205,21 @@ press_point).area(box))` while the button is held. It returns `true` when
 
 ### Payloads
 
-| Builder                                                                        | Types offered                                                                                    |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| `.text(t)`                                                                     | `text/plain;charset=utf-8`, `text/plain`, `UTF8_STRING`, `TEXT`, `STRING`                        |
-| `.html(h)`                                                                     | `text/html` (add `.text` for apps that take only text)                                           |
-| `.uris(list)`                                                                  | `text/uri-list`                                                                                  |
-| `Payload::files(paths)`                                                        | `text/uri-list` and the paths as text, one a line                                                |
-| `Payload::copied_files(paths, cut)`                                            | As `files`, plus `x-special/gnome-copied-files` and, for a cut, `application/x-kde-cutselection` |
-| `.image(mime, bytes)`, `.bytes(m, b)`                                          | That type                                                                                        |
-| `.lazy(mime, \|\| bytes)`                                                      | That type, made when asked for                                                                   |
-| `.local(value)`                                                                | Nothing outside the app: a drop in this app gets `value` from `Received::local::<T>()`           |
-| `Received` reads what came: `text()`, `uris()`, `files()` (local `file:` URIs, |
-| percent-decoded), `is_cut()` for copied files, `image()`, `bytes()`, `mime()`. |
-| A drop from this app is handed over in memory (`is_local()`), with its         |
-| `local` value; it never goes through a pipe.                                   |
+| Builder                               | Types offered                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `.text(t)`                            | `text/plain;charset=utf-8`, `text/plain`, `UTF8_STRING`, `TEXT`, `STRING`                        |
+| `.html(h)`                            | `text/html` (add `.text` for apps that take only text)                                           |
+| `.uris(list)`                         | `text/uri-list`                                                                                  |
+| `Payload::files(paths)`               | `text/uri-list` and the paths as text, one a line                                                |
+| `Payload::copied_files(paths, cut)`   | As `files`, plus `x-special/gnome-copied-files` and, for a cut, `application/x-kde-cutselection` |
+| `.image(mime, bytes)`, `.bytes(m, b)` | That type                                                                                        |
+| `.lazy(mime, \|\| bytes)`             | That type, made when asked for                                                                   |
+| `.local(value)`                       | Nothing outside the app: a drop in this app gets `value` from `Received::local::<T>()`           |
+
+`Received` reads what came: `text()`, `uris()`, `files()` (local `file:` URIs,
+percent-decoded), `is_cut()` for copied files, `image()`, `bytes()`, `mime()`.
+A drop from this app is handed over in memory (`is_local()`), with its
+`local` value; it never goes through a pipe.
 
 ### How it works on Wayland
 
@@ -4228,8 +4232,10 @@ selection must quote. `WindowHost` registers each window's `wl_surface` with it,
 so drag events go to the window they are over. Data is written and read on
 threads of their own, and a drag's data is made on the UI thread when a target
 asks, so a drop on a window of the same app cannot deadlock.
+
 With no Wayland (a test, X11) and for touch, a drag stays in its window and
 reaches that window's targets.
+
 What the compositor needs: `wl_data_device_manager` (version 3 for actions),
 `wl_shm` and `wl_compositor` for the drag picture, and
 `zwp_primary_selection_device_manager_v1` for the primary selection (optional).
@@ -4242,6 +4248,7 @@ paste the `Format` you want:
 ```rust
 use bingux_ui::clipboard::Clipboard;
 use bingux_ui::dnd::{Format, Payload};
+
 Clipboard::general().write(Payload::new().html(html).text(plain));
 Clipboard::general().write(Payload::copied_files(&paths, true)); // Cut
 let files = Clipboard::general().read(Format::Uris).map(|data| data.files());
@@ -4249,21 +4256,22 @@ let picture = Clipboard::general().read_async(Format::Image).await;
 Clipboard::primary().write_text(selected); // middle-click paste
 ```
 
-| Call                                                                          | What it does                                                                   |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `general()` / `primary()`                                                     | The clipboard of Copy and Paste, or the selection a middle click pastes        |
-| `write(payload)`, `write_text(t)`                                             | Own the clipboard with every type of the payload, made now                     |
-| `read(format)`                                                                | Read it in that format; waits at most `READ_TIMEOUT` (1.5 s) for the other app |
-| `read_async(format)`                                                          | The same on a worker thread, for a picture or anything large                   |
-| `read_text()`                                                                 | Plain text or `None`                                                           |
-| `formats()`, `has(&format)`                                                   | What is on it now: enable Paste from this                                      |
-| `clear()`                                                                     | Give it up                                                                     |
-| Once the Wayland connection is up, Freya's own clipboard calls (the text      |
-| field's Copy, Cut and Paste, `freya::clipboard::Clipboard`) go through this   |
-| clipboard too, so there is one clipboard per app. What the app copied is read |
-| back from memory. With no Wayland the general clipboard's text goes through   |
-| Freya's clipboard (a test's memory clipboard included) and the other types,   |
-| and the primary selection, stay in the app.                                   |
+| Call                              | What it does                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `general()` / `primary()`         | The clipboard of Copy and Paste, or the selection a middle click pastes        |
+| `write(payload)`, `write_text(t)` | Own the clipboard with every type of the payload, made now                     |
+| `read(format)`                    | Read it in that format; waits at most `READ_TIMEOUT` (1.5 s) for the other app |
+| `read_async(format)`              | The same on a worker thread, for a picture or anything large                   |
+| `read_text()`                     | Plain text or `None`                                                           |
+| `formats()`, `has(&format)`       | What is on it now: enable Paste from this                                      |
+| `clear()`                         | Give it up                                                                     |
+
+Once the Wayland connection is up, Freya's own clipboard calls (the text
+field's Copy, Cut and Paste, `freya::clipboard::Clipboard`) go through this
+clipboard too, so there is one clipboard per app. What the app copied is read
+back from memory. With no Wayland the general clipboard's text goes through
+Freya's clipboard (a test's memory clipboard included) and the other types,
+and the primary selection, stay in the app.
 
 ## Locale and formats
 
@@ -4273,6 +4281,7 @@ which, and `bingux_ui::format` writes the values. Nothing here reaches for the
 system: the data (Unicode CLDR through ICU4X, Unicode licence) and the time
 zone database (the IANA one, through `jiff`) are compiled in, so an app formats
 the same on every host and needs no file from the distribution.
+
 Do not format by hand. `format!("{:.1} MB", bytes / 1e6)`, a month table in the
 app or a comparison with `== 1` for a plural each say "English" in a place
 where the person may not read it. The last table of the section lists the
@@ -4284,36 +4293,43 @@ A `Locale` is a language with its region and script (`en-GB`, `de-CH`,
 `sr-Latn-RS`). `Locale::parse` reads a BCP 47 tag or a POSIX one
 (`de_DE.UTF-8@euro`); `Locale::current()` is the locale of the running
 process.
+
 POSIX has one variable for each family of conventions, and a program reads the
 one that matches what it writes. `Locale::for_category(Category)` does:
 
-| Category                                                                           | Variables read, first one set wins                                | Used by                                   |
-| ---------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------- |
-| `Messages`                                                                         | `LC_ALL`, `LC_MESSAGES`, `LANG`; `LANGUAGE` ranks languages first | Language, plurals, lists, time unit names |
-| `Numeric`                                                                          | `LC_ALL`, `LC_NUMERIC`, `LANG`                                    | Numbers, percentages, sizes, units        |
-| `Time`                                                                             | `LC_ALL`, `LC_TIME`, `LANG`                                       | Dates, times, relative times              |
-| `Monetary`                                                                         | `LC_ALL`, `LC_MONETARY`, `LANG`                                   | Currency                                  |
-| `C`, `POSIX` and `C.UTF-8` name no language, so they read as `Locale::fallback()`, |
-| British English (the language the Bingux apps are written in); `LANGUAGE` is       |
-| ignored under them, as `gettext` ignores it. The codeset (`.UTF-8`) is dropped     |
-| and `@latin` and `@cyrillic` set the script. A tag the data does not cover         |
-| (`xx-YY`) is not an error: formatters use the root locale's conventions.           |
-| `Locale::preferred()` is every language the person asked for, most wanted          |
-| first, for matching against the languages an app is translated into (a             |
-| message catalogue negotiates over it). `Locale::set_current(Some(locale))`         |
-| makes every default answer `locale` (the taxonomy's locale switch, tests;          |
-| `None` reads the environment again) and `Locale::revision()` changes when it       |
-| is called, so what was built from the locale can tell it must be built again.      |
+| Category   | Variables read, first one set wins                                | Used by                                   |
+| ---------- | ----------------------------------------------------------------- | ----------------------------------------- |
+| `Messages` | `LC_ALL`, `LC_MESSAGES`, `LANG`; `LANGUAGE` ranks languages first | Language, plurals, lists, time unit names |
+| `Numeric`  | `LC_ALL`, `LC_NUMERIC`, `LANG`                                    | Numbers, percentages, sizes, units        |
+| `Time`     | `LC_ALL`, `LC_TIME`, `LANG`                                       | Dates, times, relative times              |
+| `Monetary` | `LC_ALL`, `LC_MONETARY`, `LANG`                                   | Currency                                  |
+
+`C`, `POSIX` and `C.UTF-8` name no language, so they read as `Locale::fallback()`,
+British English (the language the Bingux apps are written in); `LANGUAGE` is
+ignored under them, as `gettext` ignores it. The codeset (`.UTF-8`) is dropped
+and `@latin` and `@cyrillic` set the script. A tag the data does not cover
+(`xx-YY`) is not an error: formatters use the root locale's conventions.
+
+`Locale::preferred()` is every language the person asked for, most wanted
+first, for matching against the languages an app is translated into (a
+message catalogue negotiates over it). `Locale::set_current(Some(locale))`
+makes every default answer `locale` (the taxonomy's locale switch, tests;
+`None` reads the environment again) and `Locale::revision()` changes when it
+is called, so what was built from the locale can tell it must be built again.
 
 ### Numbers and money
 
+```rust
 use bingux_ui::format::{Compact, Currency, Number, Percent, Quantity};
-Number::new(1234567.891).to_string(); // 1,234,567.891 (de-DE: 1.234.567,891)
-Number::new(0.125).max_fraction_digits(2).to_string(); // 0.13
+
+Number::new(1234567.891).to_string();                       // 1,234,567.891 (de-DE: 1.234.567,891)
+Number::new(0.125).max_fraction_digits(2).to_string();      // 0.13
 Number::new(1_234_567).compact(Compact::Short).to_string(); // 1.2M
-Percent::new(0.256).to_string(); // 26%
-Currency::new(1234.5, "GBP").to_string(); // £1,234.50
+Percent::new(0.256).to_string();                            // 26%
+Currency::new(1234.5, "GBP").to_string();                   // £1,234.50
 Number::new(Quantity::parse("12.50").unwrap()).fraction_digits(2, 2); // exact decimals keep every digit
+```
+
 Every formatter is a builder over one value, is `Display`, reads the person's
 locale unless given `.locale(&Locale)`, and has `.format()` for a `String`.
 
@@ -4335,12 +4351,15 @@ locale unless given `.locale(&Locale)`, and has `.format()` for a `String`.
 
 ### Sizes, units and time spans
 
+```rust
 use bingux_ui::format::{Bytes, Measure, Timespan, Unit};
-Bytes::new(2_400_000).to_string(); // 2.4 MB
-Bytes::new(2_400_000).binary().to_string(); // 2.3 MiB
-Measure::new(21.5, Unit::Celsius).to_string(); // 21.5°C (de-DE: 21,5 °C)
+
+Bytes::new(2_400_000).to_string();                 // 2.4 MB
+Bytes::new(2_400_000).binary().to_string();        // 2.3 MiB
+Measure::new(21.5, Unit::Celsius).to_string();     // 21.5°C (de-DE: 21,5 °C)
 Timespan::new(Duration::from_secs(3825)).to_string(); // 1 hr, 3 min
 Timespan::new(Duration::from_secs(3825)).digital().to_string(); // 1:03:45
+```
 
 - **`Bytes`** picks the largest unit that keeps the value at 1 or more, one
   decimal under 10 and none above (`2.4 MB`, `19 kB`, `340 kB`), without a
@@ -4372,14 +4391,19 @@ default), `Zone::Utc`, `Zone::Offset(seconds)` or `Zone::named("Europe/Paris")`
 (`Civil`), `zone.moment_of(civil)` the other way (the first reading of a repeated
 hour, the moment after the gap in a skipped one) and `zone.offset_at(moment)` the
 offset then.
+
+```rust
 use bingux_ui::format::{Date, DatePart, Moment, Time, TimePrecision, YearDisplay};
-Date::new(moment).to_string(); // 9 Nov 2025 (en-US: Nov 9, 2025)
-Date::new(moment).long().weekday().to_string(); // Sunday, 9 November 2025
-Date::new(moment).with_time(TimePrecision::Minutes); // 9 Nov 2025, 14:53
-Date::new(moment).year(YearDisplay::IfNotCurrent); // 9 Nov, then 9 Nov 2024 last year
-Date::new(moment).part(DatePart::MonthYear); // Nov 2025
-Date::civil(2025, 4, 30); // an all day event: no time, no zone
-Time::new(moment).hour_cycle(HourCycle::Hours24); // 14:53
+
+Date::new(moment).to_string();                              // 9 Nov 2025 (en-US: Nov 9, 2025)
+Date::new(moment).long().weekday().to_string();             // Sunday, 9 November 2025
+Date::new(moment).with_time(TimePrecision::Minutes);        // 9 Nov 2025, 14:53
+Date::new(moment).year(YearDisplay::IfNotCurrent);          // 9 Nov, then 9 Nov 2024 last year
+Date::new(moment).part(DatePart::MonthYear);                // Nov 2025
+Date::civil(2025, 4, 30);                                   // an all day event: no time, no zone
+Time::new(moment).hour_cycle(HourCycle::Hours24);           // 14:53
+```
+
 The order of day, month and year, the month and weekday names, the
 calendar (Thai years are 2568, Persian ones 1404) and the 12 or 24 hour clock
 come from the locale; `HourCycle` overrides the clock. A date that does not
@@ -4395,6 +4419,7 @@ calendar ones on the wall clock of `.zone(..)`, so "yesterday" is decided by
 the calendar and not by 24 hours. `.width(Width::Short | Narrow)` (`2 min. ago`,
 `2m ago`) and `.numeric()` (`1 day ago`, never `yesterday`). Pass the same
 `.now(moment)` for every row of a list so they agree.
+
 `Recent::new(moment)` is the cell of a list of files or messages: `Now` under a
 minute, the time (`14:03`) earlier today, `Yesterday` (`Tomorrow`), then the
 date without the current year (`12 Oct`) and with it for another (`12 Oct 2024`).
@@ -4404,6 +4429,7 @@ date without the current year (`12 Oct`) and with it for another (`12 Oct 2024`)
 `List::and(items)`, `List::or(items)` and `List::units(items)` join with the
 language's own separators and conjunction: `A, B and C`, `A, B, and C`
 (`en-US`), `x e Ibiza` (Spanish before an `i`), `A、B、C`.
+
 `plural_category(count, PluralKind::Cardinal | Ordinal, locale)` is the class of
 a count in the language: English has `One` and `Other`; Russian `One`, `Few`,
 `Many` and `Other`; Arabic all six; Japanese only `Other`. `Plural::new(n,
@@ -4415,20 +4441,196 @@ them.
 
 ### Where hand-rolled formatting was replaced, and where it stays
 
-| Was                                                                             | Is                                                                                                            |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `NumberFormat::for_locale` (a table of twenty languages)                        | The marks `Number` writes for the locale, with Latin digits (`Locale::latin_digits`): every language CLDR has |
-| Settings: `applications::size_text`, `about::size_text`                         | `Bytes`                                                                                                       |
-| Settings: `about::uptime`                                                       | `Timespan` (`3 days, 4 hours`, in the person's language)                                                      |
-| Settings: `power::duration_label` (`5 minutes`)                                 | `Measure` with a `TimeUnit`                                                                                   |
-| These are still their own, for a reason each. The Network usage page keeps a    |
-| fixed English format so that a screenshot reads the same everywhere             |
-| (`pages/network/usage/format.rs`). The chart axes (`charts/format.rs`) pick     |
-| their decimals from the spacing of the ticks and have their own `Unit`; they    |
-| move to `format` with the chart work that needs a unit it does not have. Files' |
-| columns and the file sizes in `bingux_files::display` belong to the Files       |
-| app, which adopts `Bytes` and `Recent` (`bingux_files` cannot depend on         |
-| bingux-ui).                                                                     |
-| The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and      |
-| times, Relative times, Lists and counts and Locale pages show every formatter   |
-| in ten languages.                                                               |
+| Was                                                      | Is                                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NumberFormat::for_locale` (a table of twenty languages) | The marks `Number` writes for the locale, with Latin digits (`Locale::latin_digits`): every language CLDR has |
+| Settings: `applications::size_text`, `about::size_text`  | `Bytes`                                                                                                       |
+| Settings: `about::uptime`                                | `Timespan` (`3 days, 4 hours`, in the person's language)                                                      |
+| Settings: `power::duration_label` (`5 minutes`)          | `Measure` with a `TimeUnit`                                                                                   |
+
+These are still their own, for a reason each. The Network usage page keeps a
+fixed English format so that a screenshot reads the same everywhere
+(`pages/network/usage/format.rs`). The chart axes (`charts/format.rs`) pick
+their decimals from the spacing of the ticks and have their own `Unit`; they
+move to `format` with the chart work that needs a unit it does not have. Files'
+columns and the file sizes in `bingux_files::display` belong to the Files
+app, which adopts `Bytes` and `Recent` (`bingux_files` cannot depend on
+bingux-ui).
+
+The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and
+times, Relative times, Lists and counts and Locale pages show every formatter
+in ten languages.
+
+## Commands
+
+A command is one thing an application can do: an id, a title, an optional
+icon, its keyboard shortcuts, whether it is enabled or checked, the menu
+group and section it belongs to, and what it runs. An app declares its
+commands where their state lives, and every window gets, with no more code:
+
+| Built from the commands      | What it is                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| Keyboard shortcuts           | One router per window. A shortcut runs its command; a disabled command takes the key.      |
+| The main menu                | `app_menu` in the header: a submenu per group (File, Edit, View...), then General, About.  |
+| Context menus                | `commands.context_menu(&[&[ids], ..])`: unavailable commands left out, no shortcuts shown. |
+| The keyboard shortcuts sheet | Ctrl+? or Ctrl+/: every shortcut the window answers, by group, with a filter.              |
+| The command palette          | Ctrl+Shift+P: fuzzy search over the enabled commands, the ones run last first.             |
+
+```rust
+use bingux_ui::prelude::*;
+
+// Commands for the whole window, available wherever the focus is. Call it on
+// every render with the commands as they are now.
+use_window_commands(vec![
+    Command::new("file.new-window", "New window", move |_| open_window())
+        .shortcut("Ctrl+N")
+        .group(CommandGroup::File),
+    Command::new("view.hidden", "Show hidden files", move |_| hidden.toggle())
+        .shortcut("Ctrl+H")
+        .checked(hidden())            // a tick in the menu
+        .group(CommandGroup::View)
+        .keywords(["dotfiles"]),      // the palette finds it by these too
+]);
+
+// Commands of a view, ahead of the window's while the focus is inside it.
+command_scope(
+    "File list",
+    vec![
+        Command::new("file.rename", "Rename…", move |_| rename())
+            .shortcut("F2")
+            .enabled(selection.len() == 1)
+            .group(CommandGroup::File)
+            .section("change"),
+    ],
+    list,
+)
+.fill()
+```
+
+| Builder                                         | Effect                                                                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `.shortcut("Ctrl+Shift+P")`                     | Adds a shortcut. Several are allowed; menus show the first. Text that is not a shortcut panics in debug.                       |
+| `.enabled(false)`                               | Dimmed in menus, left out of context menus and the palette; its shortcut does nothing.                                         |
+| `.checked(bool)`                                | A state the command toggles: a tick in menus.                                                                                  |
+| `.group(CommandGroup::Edit)`                    | The menu it is in: `App` (top level, "General" in the sheet), `File`, `Edit`, `View`, `Go`, `Window`, `Other("Name")`, `Help`. |
+| `.section("clipboard")`                         | Commands of one section sit together, with a separator between sections.                                                       |
+| `.icon(Icon)`                                   | Shown in the palette.                                                                                                          |
+| `.keywords([..])`                               | Other words the palette finds it by.                                                                                           |
+| `.destructive()`                                | Its menu item is coloured as destructive.                                                                                      |
+| `.hidden_from_menu()`, `.hidden_from_palette()` | Leaves it out of one of them; it still answers its shortcut.                                                                   |
+| `Command::key_hint(id, title, "Alt+1 to 9")`    | A key a control handles itself, listed in the sheet only.                                                                      |
+
+**Scopes, as a responder chain.** `use_window_commands` adds commands that
+are always available. `command_scope(name, commands, child)` wraps a view;
+its commands apply while the keyboard focus is inside it, and scopes nest. The
+innermost scope that holds the focus wins: its Ctrl+A shadows the window's,
+and a command id it shares with an outer scope replaces that command. The
+router learns which scopes hold the focus from the key itself, which travels
+from the focused control up through every scope it is in, so a view's
+shortcut never runs while the focus is elsewhere. Menus and the palette list
+the commands of the view that last had the focus (by keyboard or a click
+inside it), so opening the header menu with the pointer keeps them.
+
+**What the router leaves alone.** A control that handles a key stops it, and
+no command sees it: a text field keeps its own Ctrl+Z, Ctrl+C and Ctrl+A,
+and a list keeps its arrows. While a dialog or a menu is open, the router
+stands aside (the palette and the sheet are dialogs).
+
+**Shortcuts.** `Shortcut::parse` reads what people write: modifiers then the
+key, joined by `+` (`Ctrl+Shift+P`, `F2`, `Alt+Left`, `Ctrl+?`, `Ctrl+Plus`,
+`Page Down`, `Space`). Ctrl, Alt and Super must be held exactly as written,
+and Shift too for a letter, digit or named key. A symbol is the character the
+layout types, so `Ctrl+?` works whether the layout needs Shift for `?` or
+not; write the symbol, not `Ctrl+Shift+/`. A layout with no Latin letters
+reaches `Ctrl+C` by the key's position. `label()` is the text menus show
+(`Ctrl+Shift+P`, GNOME's order: Ctrl, Alt, Shift, Super), `caps()` the key
+caps, and `key_caps(&shortcut)` draws them.
+
+**Checks in a debug build.** Two commands of one scope (or of two window
+scopes) with one shortcut are reported on stderr once, as is a window command
+on a bare key (a letter with no Ctrl or Alt), which must belong to a view
+(WCAG 2.1.4, character key shortcuts).
+
+**Every window has** `app.command-palette` (Ctrl+Shift+P),
+`app.shortcuts` (Ctrl+? and Ctrl+/) and, in an `Application`, `app.about`
+(the palette's About; the main menu ends with About). A window whose
+components call `use_undo` also has `edit.undo` and `edit.redo` (below). An
+app's own command with one of these ids replaces it.
+
+`use_commands()` returns the window's registry: `run(id)`, `get(id)`,
+`all()`, `recent()`, `main_menu_items()`, `context_menu(..)`,
+`show_palette()` and `show_shortcuts()`. The registry and the router live in
+the window's `OverlayHost` (and `Application::run` provides the registry, so
+the app's root component may declare commands above its host). A host inside
+another leaves routing to the outer one, so a key never runs a command twice.
+`MenuButton::items_on_open(f)` builds items when the menu opens, which is how
+`app_menu` reads titles such as "Undo rename" that change without a redraw.
+
+### The command palette
+
+Ctrl+Shift+P, `commands.show_palette()` or `open_palette(overlays, commands)`.
+A card with a search field and the window's enabled commands: with nothing
+typed, the ones run last first and then the rest in menu order; typing
+filters by fuzzy match ("tgsb" finds "Toggle sidebar"), letters together and
+at the starts of words first, with the matched letters marked. Keywords and
+the group name find a command too, ranked below title matches. Each row shows
+the icon, title, group and shortcut, so the palette teaches the keys. Up and
+Down move the highlight, Enter or a click runs it, Escape closes. The command
+runs after the palette has closed and the focus is back, so a command that
+opens a dialog or starts a rename finds the window as it left it.
+
+### The keyboard shortcuts sheet
+
+Ctrl+? or Ctrl+/, `commands.show_shortcuts()` or
+`open_shortcuts(overlays, commands)`. A card titled "Keyboard shortcuts" with
+a filter and a group per menu (General, File, Edit...), each row the title and
+its shortcuts as key caps. It lists the focused view's commands and the
+window's; a shortcut an inner view has taken is listed once, under the command
+that has it. `Command::key_hint` rows list keys controls handle themselves.
+The filter matches titles (fuzzy) and keys (`ctrl+z`). An app no longer
+writes its own shortcuts dialog: the sheet is generated.
+
+## Undo and redo
+
+`use_undo()` returns the window's `UndoStack`, one for all of its views
+(AppKit's `NSUndoManager`). A change that can be taken back is pushed as an
+`UndoStep`: a name as people read it, what undoes it and what does it again.
+
+```rust
+let undo = use_undo();
+let old = name.peek().clone();
+name.set(new.clone());
+undo.push(UndoStep::new(
+    "Rename",
+    move || name.set(old.clone()),
+    move || name.set(new.clone()),
+));
+```
+
+| Call                                                  | What it does                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `undo.push(step)`                                     | Remembers a change and empties the redo stack.                                                                    |
+| `UndoStep::new(name, undo, redo)`                     | A step. The name is a verb and its object in sentence case ("Move to Trash").                                     |
+| `UndoStep::undo_only(name, undo)`                     | A step that cannot be redone. Undoing it drops the redo history behind it.                                        |
+| `.coalesce(key)`                                      | Steps with one key, pushed within `COALESCE` (1.5 s) of each other, are one step: a run of typing.                |
+| `undo.group(name, \|\| ..)`                           | Every step pushed inside is one step called `name`. Groups nest.                                                  |
+| `undo.undo()`, `undo.redo()`                          | Take back or do again; return the step's name.                                                                    |
+| `undo.undo_title()`, `redo_title()`                   | "Undo rename" / "Redo rename", or "Undo" / "Redo" with nothing to do. Reading them in `render` redraws on change. |
+| `can_undo()`, `can_redo()`, `set_limit(n)`, `clear()` | State, the depth (`DEFAULT_LIMIT`, 100), and forgetting everything after a save that cannot be undone.            |
+| `UndoStack::detached()`                               | A stack of its own: one per document in a window of several.                                                      |
+
+**Edit > Undo and Redo follow the stack.** A window whose components call
+`use_undo` has the commands `edit.undo` ("Undo rename", Ctrl+Z) and
+`edit.redo` ("Redo rename", Ctrl+Shift+Z and Ctrl+Y) in its Edit menu, its
+palette (while there is something to undo) and its shortcuts sheet, disabled
+with nothing to take back. A window that never calls it shows neither.
+
+**Text fields keep their own undo.** Ctrl+Z in a text field undoes typing in
+that field, and the field stops the key, so the window's Undo runs only while
+the focus is elsewhere.
+
+**Work that takes time.** The closures run on the UI thread and return at
+once. A step that moves files starts the work on a worker and reports when it
+is done, as anything else on the UI thread does. A step pushed while the stack
+runs a step is ignored, so an undo that goes through the app's own code path
+does not record itself.

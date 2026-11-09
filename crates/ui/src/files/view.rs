@@ -1558,6 +1558,7 @@ impl Component for FileView {
             },
             focus: a11y_id,
             window: use_try_consume::<crate::window::Window>(),
+            undo: crate::undo::use_undo(),
             preview: {
                 let target = preview_target.clone();
                 EventHandler::new(move |()| {

@@ -357,22 +357,13 @@ impl Component for OverlayHost {
         let page = use_try_consume::<crate::nav::Router>().map(|router| router.use_current_id());
         use_side_effect_with_deps(&page, move |_| overlays.forget_menu());
 
-        // Every application window answers the About shortcut: the main window
-        // of an app that went through `Application::run` (which registered its
-        // facts) and has a router. A gallery, a test host and the inspector's
-        // window have none of the two. A dialog that is already open keeps the
-        // window: it holds a question.
-        let about = page.is_some() && crate::about::registered();
-        rect()
-            .expanded()
-            .maybe(about, |host| {
-                host.on_global_key_down(move |event: Event<KeyboardEventData>| {
-                    if crate::about::is_shortcut(&event) && !overlays.dialog_open() {
-                        event.stop_propagation();
-                        crate::about::open(overlays);
-                    }
-                })
-            })
+        // The window's commands: one router per window answers every
+        // shortcut (the palette, the shortcuts sheet, About, Undo and the
+        // app's own). A host inside another leaves routing to the outer one.
+        let commands = crate::commands::provide_commands();
+        let undo = crate::undo::provide_undo();
+        let router = crate::commands::use_router(commands, overlays, undo);
+        crate::commands::attach_router(rect().expanded(), commands, overlays, router)
             .child(crate::window::WindowHost::new(self.child.clone()))
             .child(OverlayLayers {
                 overlays,

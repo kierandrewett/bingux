@@ -8,8 +8,8 @@
 
 use crate::demos::transfer;
 use crate::demos::{
-    accessibility, buttons, containers, data, feedback, files, formats, foundations, icon_set,
-    inputs, inspector, navigation, platform,
+    accessibility, buttons, commands, containers, data, feedback, files, formats, foundations,
+    icon_set, inputs, inspector, navigation, platform,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -1212,7 +1212,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "About window",
         category: Category::Containers,
         page: "Overlays",
-        api: "Application::new(id).about(app_info!(name = \"Files\", licence_text = include_str!(..))); about::open(overlays); items.extend(about::app_menu_items(overlays)); app_menu(items) in a header; Ctrl+Shift+? opens it; details_text(&info, &env) is what Copy details copies",
+        api: "Application::new(id).about(app_info!(name = \"Files\", licence_text = include_str!(..))); about::open(overlays); items.extend(about::app_menu_items(overlays)); app_menu(items) in a header lists the window's commands, then About; the palette has About; details_text(&info, &env) is what Copy details copies",
         doc: "about-window",
         covers: &[
             "AppInfo",
@@ -1222,12 +1222,10 @@ pub static ENTRIES: &[Entry] = &[
             "AppMenu",
             "Environment",
             "Facts",
-            "SHORTCUT",
             "app_menu",
             "app_menu_items",
             "details_text",
             "info",
-            "is_shortcut",
             "open",
             "open_at",
             "open_with",
@@ -1940,5 +1938,61 @@ pub static ENTRIES: &[Entry] = &[
             "TEXT_TYPES",
         ],
         body: Body::States(transfer::CLIPBOARD),
+    },
+    // ---- Navigation: Commands and undo (UiCommands) -------------------------
+    Entry {
+        name: "Commands and shortcuts",
+        category: Category::Navigation,
+        page: "Commands and undo",
+        api: "Command::new(id, title, on_run).shortcut(\"Ctrl+Shift+P\").icon(Icon).enabled(bool).checked(bool).group(CommandGroup::Edit).section(s).keywords([..]); use_window_commands(vec![..]); command_scope(name, commands, child).fill(); use_commands().run(id) / main_menu_items() / context_menu(&[&[ids]]); Shortcut::parse(text).label() / caps(); key_caps(&shortcut); MenuButton::items_on_open(f)",
+        doc: "commands",
+        covers: &[
+            "Command",
+            "CommandGroup",
+            "Commands",
+            "CommandScope",
+            "command_scope",
+            "use_commands",
+            "use_window_commands",
+            "Shortcut",
+            "ParseError",
+            "IntoShortcut",
+            "KeyCaps",
+            "key_caps",
+        ],
+        body: Body::States(commands::COMMANDS),
+    },
+    Entry {
+        name: "Command palette",
+        category: Category::Navigation,
+        page: "Commands and undo",
+        api: "Ctrl+Shift+P in every window, or use_commands().show_palette() / open_palette(overlays, commands): fuzzy search over the enabled commands, the ones run last first, each with its shortcut",
+        doc: "the-command-palette",
+        covers: &["CommandPalette", "open_palette"],
+        body: Body::States(commands::PALETTE),
+    },
+    Entry {
+        name: "Keyboard shortcuts sheet",
+        category: Category::Navigation,
+        page: "Commands and undo",
+        api: "Ctrl+? or Ctrl+/ in every window, or use_commands().show_shortcuts() / open_shortcuts(overlays, commands): every shortcut the window answers, by group, with a filter; Command::key_hint(id, title, \"Alt+1 to 9\") lists a key a control handles itself",
+        doc: "the-keyboard-shortcuts-sheet",
+        covers: &["ShortcutsSheet", "open_shortcuts"],
+        body: Body::States(commands::SHEET),
+    },
+    Entry {
+        name: "Undo stack",
+        category: Category::Navigation,
+        page: "Commands and undo",
+        api: "let undo = use_undo(); undo.push(UndoStep::new(name, undo_fn, redo_fn).coalesce(key)); UndoStep::undo_only(name, f); undo.group(name, || ..); undo.undo() / redo() / undo_title() / can_undo() / set_limit(n) / clear(); UndoStack::detached(); Edit > Undo and Redo follow it",
+        doc: "undo-and-redo",
+        covers: &[
+            "UndoStack",
+            "UndoStep",
+            "use_undo",
+            "DEFAULT_LIMIT",
+            "COALESCE",
+        ],
+        body: Body::States(commands::UNDO),
     },
 ];
