@@ -2,7 +2,7 @@
 name = "bingux-ui"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "GPL-3.0-or-later"
 description = "Bingux design system for Freya applications"
 
@@ -46,6 +46,20 @@ toml = "1"
 # Notifications, ScreenSaver, logind. Blocking calls, on worker threads, each
 # with its own time limit. Already in the build through Freya's accessibility.
 zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
+# Locale data and formatters behind bingux_ui::format (numbers, dates, lists,
+# plurals, relative time, currency): ICU4X, Unicode licence.
+icu = "2.4"
+# The relative time, percent, currency and time unit formatters, which ICU4X
+# has not stabilised: pinned to the minor version.
+icu_experimental = "0.7"
+# Calendar and time zone arithmetic for bingux_ui::format (local time, DST,
+# named zones). The zone database is bundled: no host file is needed.
+jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
+# File change notifications (inotify) behind bingux_ui::document.
+notify = { version = "8", default-features = false }
+# The decimal type of ICU4X (exact digits, rounding modes), the same version
+# `icu` uses.
+fixed_decimal = "0.7"
 
 [dev-dependencies]
 # A test's clipboard is memory (`controls::select_text::test_clipboard`): the
