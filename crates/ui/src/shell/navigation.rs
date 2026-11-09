@@ -1525,13 +1525,19 @@ impl Component for NavigationSplitView {
                     // right from where it was, over the screen beneath it.
                     let x = slide.at(time);
                     memory.borrow_mut().shown = Some((slide.motion, x));
-                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
                     stage.child(at_rest(screen)).child(slide_frame(
                         x * width,
                         1.0,
                         Some(card_amount(x)),
                         &tokens,
-                        rect().width(Size::fill()).height(Size::fill()).child(outgoing),
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .child(outgoing),
                     ))
                 }
                 Some(slide) => {
@@ -1689,7 +1695,7 @@ impl Component for NavigationSplitView {
                     }
                     search_id.request_focus();
                 } else if control && (letter == "q" || letter == "w") {
-                    Platform::get().close_window(Platform::window_id());
+                    crate::document::guard::request_close(Platform::window_id());
                 } else if event.key == Key::Named(NamedKey::Enter)
                     && searching
                     && search_focus.read().is_focused()
