@@ -40,6 +40,7 @@
 //! touches the disk runs on a worker; the results come back to the UI thread
 //! in order.
 
+use std::any::Any;
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
@@ -76,6 +77,18 @@ pub const UNSAVED_MARK: &str = "\u{2022} ";
 const DRAFT_LIFE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
 /// How many recent documents the menu offers.
 const RECENT_MENU: usize = 10;
+
+thread_local! {
+    /// The managers of this thread's windows, so that a tab moved from one
+    /// window to another finds its document ([`Documents::claim`]).
+    static LIVE: RefCell<Vec<Documents>> = const { RefCell::new(Vec::new()) };
+    /// The files of documents closed lately, newest last, for
+    /// [`Documents::claim`] to open again.
+    static CLOSED: RefCell<VecDeque<(DocumentId, PathBuf)>> = const { RefCell::new(VecDeque::new()) };
+}
+
+/// How many closed documents are remembered for reopening.
+const CLOSED_KEPT: usize = 30;
 
 /// Serialises writing and removing drafts, so that a draft being written
 /// cannot come back after the document it belongs to was saved or closed.
@@ -121,8 +134,28 @@ impl DocumentSnapshot {
     }
 }
 
+/// What a worker made of a file's bytes, for [`DocumentContent::load_prepared`]:
+/// whatever the content put in it with [`Prepared::new`].
+pub struct Prepared(Box<dyn Any + Send>);
+
+impl Prepared {
+    pub fn new<T: Send + 'static>(value: T) -> Prepared {
+        Prepared(Box::new(value))
+    }
+
+    /// The value, if it is a `T`.
+    pub fn take<T: 'static>(self) -> Option<T> {
+        self.0.downcast::<T>().ok().map(|value| *value)
+    }
+}
+
+/// The worker's share of loading: turns the file's bytes into what
+/// [`DocumentContent::load_prepared`] shows (decoding, parsing, building a
+/// rope), where it blocks nothing.
+pub type Preparer = Box<dyn FnOnce(Vec<u8>) -> Prepared + Send>;
+
 /// The app's side of one document: what it shows and how it becomes bytes.
-pub trait DocumentContent {
+pub trait DocumentContent: Any {
     /// The document as it is now. Called on the UI thread, for a save or for
     /// a draft; it should only copy, and leave the work to the closure it
     /// returns (see [`DocumentSnapshot`]).
@@ -137,6 +170,31 @@ pub trait DocumentContent {
     /// The document this content belongs to, once it exists. Keep it to call
     /// [`Document::mark_edited`] when the content changes.
     fn attached(&self, _document: Document) {}
+
+    /// Called on the UI thread just before [`snapshot`](Self::snapshot) for a
+    /// save to a file (not for a draft): the moment to do what is done to
+    /// the content on the way to disk (trim trailing spaces, add a final new
+    /// line). Edits made here, with [`Document::mark_edited`], are in the
+    /// bytes that are written.
+    fn will_save(&self) {}
+
+    /// A save wrote the bytes of [`snapshot`](Self::snapshot) to `path`: the
+    /// document's file, or the one it was saved as. `clean` is false when the
+    /// content was edited while the bytes were being written, so it still
+    /// differs from the file. Called on the UI thread.
+    fn saved(&self, _path: &Path, _clean: bool) {}
+
+    /// The worker's share of [`load`](Self::load), for a content whose
+    /// decoding is heavy: return the function that turns the file's bytes
+    /// into what [`load_prepared`](Self::load_prepared) shows. `None` (the
+    /// default) has `load` do it all on the UI thread.
+    fn prepare(&self, _reason: LoadReason) -> Option<Preparer> {
+        None
+    }
+
+    /// Show what [`prepare`](Self::prepare)'s function made. Like
+    /// [`load`](Self::load) in every other way.
+    fn load_prepared(&self, _prepared: Prepared, _reason: LoadReason) {}
 }
 
 /// Where a document came from, for the app that makes its content.
@@ -352,7 +410,6 @@ struct Store {
     recents: Vec<PathBuf>,
     recents_file: Option<PathBuf>,
     current: Option<DocumentId>,
-    next_id: Cell<u64>,
     queue: RefCell<VecDeque<Queued>>,
     pumping: Cell<bool>,
     draft_armed: Cell<bool>,
@@ -373,9 +430,8 @@ impl Store {
     }
 
     fn next_id(&self) -> DocumentId {
-        let id = self.next_id.get();
-        self.next_id.set(id + 1);
-        DocumentId(id)
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        DocumentId(NEXT.fetch_add(1, Ordering::Relaxed))
     }
 
     /// The smallest "Untitled n" number no open document has.
@@ -491,7 +547,6 @@ pub fn use_documents(
         entries: Vec::new(),
         recents: Vec::new(),
         current: None,
-        next_id: Cell::new(1),
         queue: RefCell::new(VecDeque::new()),
         pumping: Cell::new(false),
         draft_armed: Cell::new(false),
@@ -505,6 +560,7 @@ pub fn use_documents(
         window,
     };
     use_hook(move || {
+        LIVE.with(|live| live.borrow_mut().push(documents));
         let (changes, requests) =
             documents.with(|store| (store.feed.clone(), store.close_requests.clone()));
         let asked = requests.clone();
@@ -528,7 +584,10 @@ pub fn use_documents(
         });
         spawn_in_window(documents.start());
     });
-    use_drop(move || guard::unregister(u64::from(window_id)));
+    use_drop(move || {
+        guard::unregister(u64::from(window_id));
+        LIVE.with(|live| live.borrow_mut().retain(|other| *other != documents));
+    });
     // A file that changed while the window was not looking is noticed when it
     // is looked at again: inotify does not reach network shares.
     let focus = crate::runtime::window_focus();
@@ -651,7 +710,7 @@ impl Documents {
             origin: Origin::New,
         });
         let number = self.with(Store::free_untitled);
-        self.add(init, Drafts::new_id(), None, move |entry| {
+        self.add(init, Drafts::new_id(), move |entry| {
             entry.untitled = number;
             entry.phase = Phase::Ready;
         })
@@ -662,7 +721,6 @@ impl Documents {
         self,
         mut init: DocumentInit,
         draft: String,
-        preset: Option<Rc<dyn DocumentContent>>,
         setup: impl FnOnce(&mut Entry),
     ) -> Document {
         let hooks = self.hooks();
@@ -690,7 +748,7 @@ impl Documents {
         setup(&mut entry);
         self.edit(|store| store.entries.push(entry));
         init.title = self.handle(id).title();
-        let content = preset.unwrap_or_else(|| (hooks.make)(&init));
+        let content = (hooks.make)(&init);
         self.edit(|store| {
             if let Some(entry) = store.entry_mut(id) {
                 entry.content = content.clone();
@@ -710,20 +768,6 @@ impl Documents {
         self.open_with(Plan::new(path.into(), Origin::Opened))
     }
 
-    /// Like [`open_or_create`](Self::open_or_create), but the document's text
-    /// is `content`: the app's own editor, which gets the file's bytes through
-    /// [`DocumentContent::load`] like any other document's.
-    pub fn open_path_with(
-        self,
-        path: impl Into<PathBuf>,
-        content: Rc<dyn DocumentContent>,
-    ) -> Document {
-        let mut plan = Plan::new(path.into(), Origin::Opened);
-        plan.create = true;
-        plan.content = Some(content);
-        self.open_with(plan)
-    }
-
     /// Like [`open_path`](Self::open_path), and a file that is not there yet
     /// is a new document that will be saved there: what a command line that
     /// names a file that does not exist yet means.
@@ -731,6 +775,89 @@ impl Documents {
         let mut plan = Plan::new(path.into(), Origin::Opened);
         plan.create = true;
         self.open_with(plan)
+    }
+
+    /// The document `id`, for a window that does not have it. An app whose
+    /// tabs hold ids calls it for a tab it finds that its window has no
+    /// document for:
+    ///
+    /// - the tab came from another window (it was torn off, or dropped on
+    ///   this one): the document moves here, with its content, its unsaved
+    ///   changes and its draft;
+    /// - the tab was closed and brought back (Reopen closed tab): the file
+    ///   the document had is opened again, as a new document. The unsaved
+    ///   changes it had when it was closed are not in it.
+    ///
+    /// A document this window has is returned as it is. `None` when `id` is
+    /// neither, or is still being read in the other window.
+    pub fn claim(self, id: DocumentId) -> Option<Document> {
+        if let Some(document) = self.get(id) {
+            return Some(document);
+        }
+        let others: Vec<Documents> = LIVE.with(|live| {
+            live.borrow()
+                .iter()
+                .copied()
+                .filter(|other| *other != self)
+                .collect()
+        });
+        for other in others {
+            if let Some(entry) = other.take_entry(id) {
+                return Some(self.adopt_entry(entry));
+            }
+        }
+        let path = CLOSED.with(|closed| {
+            let mut closed = closed.borrow_mut();
+            let at = closed.iter().position(|(closed_id, _)| *closed_id == id)?;
+            closed.remove(at).map(|(_, path)| path)
+        })?;
+        Some(self.open_path(path))
+    }
+
+    /// Takes the entry of document `id` out of this window, for another to
+    /// adopt. Not a close: nobody is asked, and the draft stays.
+    fn take_entry(self, id: DocumentId) -> Option<Entry> {
+        let entry = self.edit(|store| {
+            let at = store.entries.iter().position(|entry| entry.id == id)?;
+            // A document still being read has nobody to hand the bytes to.
+            if store.entries[at].phase == Phase::Loading {
+                return None;
+            }
+            if store.current == Some(id) {
+                store.current = None;
+            }
+            Some(store.entries.remove(at))
+        })?;
+        // The watch reports to this window's feed; the other starts its own.
+        entry.watch.take();
+        self.publish_scene();
+        Some(entry)
+    }
+
+    fn adopt_entry(self, mut entry: Entry) -> Document {
+        let id = entry.id;
+        // A save that was running reports to the window it began in.
+        entry.saving = false;
+        let content = entry.content.clone();
+        let has_path = entry.path.is_some();
+        self.edit(|store| store.entries.push(entry));
+        let document = self.handle(id);
+        content.attached(document);
+        if has_path {
+            self.start_watch(id);
+        }
+        self.publish_scene();
+        document
+    }
+
+    /// The share of reading that the content of `id` does on the worker, if
+    /// it does one.
+    fn preparer_of(self, id: DocumentId, reason: LoadReason) -> Option<Preparer> {
+        self.with(|store| {
+            store
+                .entry(id)
+                .and_then(|entry| entry.content.prepare(reason))
+        })
     }
 
     fn open_with(self, plan: Plan) -> Document {
@@ -756,14 +883,15 @@ impl Documents {
         });
         let id = init.id;
         let scroll = plan.scroll;
-        let document = self.add(init, Drafts::new_id(), plan.content.clone(), move |entry| {
+        let document = self.add(init, Drafts::new_id(), move |entry| {
             entry.scroll.set(scroll);
         });
         let limit = self.with(|store| store.settings.max_size);
+        let preparer = self.preparer_of(id, LoadReason::Open);
         let docs = self;
         spawn_in_window(async move {
             let reading = path.clone();
-            let result = spawn_blocking(move || io::read(&reading, limit)).await;
+            let result = spawn_blocking(move || read_prepared(&reading, limit, preparer)).await;
             docs.finish_open(id, path, result, plan);
         });
         document
@@ -773,11 +901,11 @@ impl Documents {
         self,
         id: DocumentId,
         path: PathBuf,
-        result: Result<Loaded, OpenError>,
+        result: Result<(Loaded, Option<Prepared>), OpenError>,
         plan: Plan,
     ) {
         match result {
-            Ok(loaded) => self.apply_loaded(id, loaded, LoadReason::Open),
+            Ok((loaded, prepared)) => self.apply_loaded(id, loaded, prepared, LoadReason::Open),
             Err(OpenError::Missing) if plan.create => {
                 let writable = io::is_writable(&path);
                 self.edit(|store| {
@@ -791,6 +919,7 @@ impl Documents {
             Err(error) => {
                 let name = display_name(&path);
                 self.remove_entry(id);
+                forget_closed(id);
                 if error == OpenError::Missing {
                     self.recents_job(move |list_path, _| {
                         let _ = recents::forget_at(&list_path, &path);
@@ -859,7 +988,13 @@ impl Documents {
 
     // ---- What the disk says -----------------------------------------------
 
-    fn apply_loaded(self, id: DocumentId, loaded: Loaded, reason: LoadReason) {
+    fn apply_loaded(
+        self,
+        id: DocumentId,
+        loaded: Loaded,
+        prepared: Option<Prepared>,
+        reason: LoadReason,
+    ) {
         let content = self.edit(|store| {
             let entry = store.entry_mut(id)?;
             entry.stamp.set(Some(loaded.stamp));
@@ -874,7 +1009,7 @@ impl Documents {
         // A reload has replaced whatever the draft held.
         self.discard_draft(id);
         self.with(|store| store.loading.set(store.loading.get() + 1));
-        content.load(loaded.bytes, reason);
+        show(&content, loaded.bytes, prepared, reason);
         self.with(|store| store.loading.set(store.loading.get() - 1));
         match reason {
             LoadReason::Open => {
@@ -1093,13 +1228,14 @@ impl Documents {
         else {
             return;
         };
+        let preparer = self.preparer_of(id, LoadReason::Reload);
         let docs = self;
         spawn_in_window(async move {
             let reading = path.clone();
-            let result = spawn_blocking(move || io::read(&reading, limit)).await;
+            let result = spawn_blocking(move || read_prepared(&reading, limit, preparer)).await;
             match result {
-                Ok(loaded) => {
-                    docs.apply_loaded(id, loaded, LoadReason::Reload);
+                Ok((loaded, prepared)) => {
+                    docs.apply_loaded(id, loaded, prepared, LoadReason::Reload);
                     if quiet {
                         let name = display_name(&path);
                         docs.overlays.toast(format!(
@@ -1219,6 +1355,13 @@ impl Documents {
             return;
         }
         let expected = if is_save_as || replace { None } else { stamp };
+        content.will_save();
+        // `will_save` may have edited the content: the snapshot is of that.
+        let revision = self.with(|store| {
+            store
+                .entry(id)
+                .map_or(revision, |entry| entry.revision.get())
+        });
         let snapshot = content.snapshot();
         self.edit(|store| {
             if let Some(entry) = store.entry_mut(id) {
@@ -1289,6 +1432,8 @@ impl Documents {
                 } else {
                     self.discard_draft(id);
                 }
+                self.with(|store| store.entry(id).map(|entry| entry.content.clone()))
+                    .inspect(|content| content.saved(&path, !still_edited));
                 if is_save_as {
                     self.with(|store| {
                         if let Some(entry) = store.entry(id) {
@@ -1438,6 +1583,9 @@ impl Documents {
             Some(store.entries.remove(at))
         });
         let Some(entry) = removed else { return };
+        if let Some(path) = entry.path.clone() {
+            remember_closed(entry.id, path);
+        }
         self.discard_draft_of(&entry);
         // The content and the watch go after the store is free.
         drop(entry);
@@ -1806,10 +1954,17 @@ impl Documents {
             .and_then(Value::as_u64)
             .map(|n| n as u32)
             .unwrap_or(0);
+        // A blank nobody typed in (an app makes one before the start has
+        // finished) does not keep its number from the work that comes back.
         let number = self.with(|store| {
             if draft.meta.path.is_some() {
                 0
-            } else if wanted > 0 && !store.entries.iter().any(|entry| entry.untitled == wanted) {
+            } else if wanted > 0
+                && !store
+                    .entries
+                    .iter()
+                    .any(|entry| entry.untitled == wanted && entry.edited)
+            {
                 wanted
             } else {
                 store.free_untitled()
@@ -1825,12 +1980,13 @@ impl Documents {
         let base = draft.meta.base;
         let has_path = draft.meta.path.is_some();
         let draft_id = draft.id.clone();
-        let document = self.add(init, draft_id.clone(), None, move |entry| {
+        let document = self.add(init, draft_id.clone(), move |entry| {
             entry.untitled = number;
             entry.edited = true;
             entry.stamp.set(base);
             entry.scroll.set(scroll);
         });
+        let preparer = self.preparer_of(id, LoadReason::Recover);
         let docs = self;
         spawn_in_window(async move {
             let reading = draft_id.clone();
@@ -1838,11 +1994,13 @@ impl Documents {
                 // This process owns the draft from now on: another copy of
                 // the app does not offer it again.
                 drafts.adopt(&reading)?;
-                drafts.bytes(&reading)
+                drafts
+                    .bytes(&reading)
+                    .map(|bytes| prepare_bytes(bytes, preparer))
             })
             .await;
             match bytes {
-                Ok(bytes) => {
+                Ok((bytes, prepared)) => {
                     let content = docs.edit(|store| {
                         let entry = store.entry_mut(id)?;
                         entry.phase = Phase::Ready;
@@ -1852,7 +2010,7 @@ impl Documents {
                     });
                     if let Some(content) = content {
                         docs.with(|store| store.loading.set(store.loading.get() + 1));
-                        content.load(bytes, LoadReason::Recover);
+                        show(&content, bytes, prepared, LoadReason::Recover);
                         docs.with(|store| store.loading.set(store.loading.get() - 1));
                         if has_path {
                             docs.start_watch(id);
@@ -1862,7 +2020,10 @@ impl Documents {
                         docs.publish_scene();
                     }
                 }
-                Err(_) => docs.remove_entry(id),
+                Err(_) => {
+                    docs.remove_entry(id);
+                    forget_closed(id);
+                }
             }
         });
         Some(document)
@@ -1929,6 +2090,57 @@ fn discard(drafts: &Drafts, entry: &Entry) {
     });
 }
 
+/// Reads `path` and, when the content shares the work, prepares what was read:
+/// all on the worker.
+fn read_prepared(
+    path: &Path,
+    limit: u64,
+    preparer: Option<Preparer>,
+) -> Result<(Loaded, Option<Prepared>), OpenError> {
+    let mut loaded = io::read(path, limit)?;
+    let prepared = preparer.map(|prepare| prepare(std::mem::take(&mut loaded.bytes)));
+    Ok((loaded, prepared))
+}
+
+fn prepare_bytes(bytes: Vec<u8>, preparer: Option<Preparer>) -> (Vec<u8>, Option<Prepared>) {
+    match preparer {
+        Some(prepare) => (Vec::new(), Some(prepare(bytes))),
+        None => (bytes, None),
+    }
+}
+
+/// Hands what was read to the content: prepared when it prepared it.
+fn show(
+    content: &Rc<dyn DocumentContent>,
+    bytes: Vec<u8>,
+    prepared: Option<Prepared>,
+    reason: LoadReason,
+) {
+    match prepared {
+        Some(prepared) => content.load_prepared(prepared, reason),
+        None => content.load(bytes, reason),
+    }
+}
+
+fn remember_closed(id: DocumentId, path: PathBuf) {
+    CLOSED.with(|closed| {
+        let mut closed = closed.borrow_mut();
+        closed.push_back((id, path));
+        while closed.len() > CLOSED_KEPT {
+            closed.pop_front();
+        }
+    });
+}
+
+/// A document that never opened is not one to reopen.
+fn forget_closed(id: DocumentId) {
+    CLOSED.with(|closed| {
+        closed
+            .borrow_mut()
+            .retain(|(closed_id, _)| *closed_id != id)
+    });
+}
+
 /// The content of a document that is being made, until the app's is.
 struct Placeholder;
 
@@ -1946,7 +2158,6 @@ struct Plan {
     path: PathBuf,
     origin: Origin,
     create: bool,
-    content: Option<Rc<dyn DocumentContent>>,
     app_value: Value,
     scroll: (f32, f32),
 }
@@ -1957,7 +2168,6 @@ impl Plan {
             path,
             origin,
             create: false,
-            content: None,
             app_value: Value::Null,
             scroll: (0.0, 0.0),
         }
@@ -1970,6 +2180,16 @@ impl Document {
     /// The id, to look the document up again or to keep in the app's own tab model.
     pub fn id(self) -> DocumentId {
         self.id
+    }
+
+    /// The app's content of this document, if it is a `T`: what its `make`
+    /// returned. The app keeps no list of its own.
+    pub fn content_as<T: DocumentContent>(self) -> Option<Rc<T>> {
+        let content = self
+            .docs
+            .with(|store| store.entry(self.id).map(|entry| entry.content.clone()))?;
+        let content: Rc<dyn Any> = content;
+        content.downcast::<T>().ok()
     }
 
     /// Whether the document is still open.

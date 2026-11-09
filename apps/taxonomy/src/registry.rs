@@ -2183,7 +2183,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Documents",
         category: Category::Files,
         page: "Documents",
-        api: "let documents = use_documents(DocumentsConfig::new(app_id, name).mime(m).filter(f).autosave_after(d).restore(bool).blank_when_empty(bool), |init| Rc::new(MyContent), |event| ..); documents.open_dialog() / open_path(p) / open_or_create(p) / new_document() / save_all() / request_close() / recent_menu() / list() / current() / set_current(doc) / check_changes(); document.save() / save_then(f) / save_as() / reload() / close() / mark_edited() / set_edited(bool) / title() / display_title() / window_title(app) / is_unsaved() / path() / phase() / set_app_value(&v) / set_scroll(x, y); impl DocumentContent { snapshot() -> DocumentSnapshot, load(bytes, LoadReason) }; use_document_title(documents, name); use_scene_state() -> SceneState",
+        api: "let documents = use_documents(DocumentsConfig::new(app_id, name).mime(m).filter(f).autosave_after(d).restore(bool).blank_when_empty(bool), |init| Rc::new(MyContent), |event| ..); documents.open_dialog() / open_path(p) / open_or_create(p) / new_document() / save_all() / request_close() / recent_menu() / list() / current() / set_current(doc) / check_changes() / claim(id); document.save() / save_then(f) / save_as() / reload() / close() / mark_edited() / set_edited(bool) / title() / display_title() / window_title(app) / is_unsaved() / path() / phase() / set_app_value(&v) / set_scroll(x, y); document.content_as::<T>(); impl DocumentContent { snapshot() -> DocumentSnapshot, load(bytes, LoadReason), will_save(), saved(path, clean), prepare(reason) -> Option<Preparer>, load_prepared(Prepared, reason) }; use_document_title(documents, name); use_scene_state() -> SceneState",
         doc: "documents",
         covers: &[
             "Documents",
@@ -2197,6 +2197,8 @@ pub static ENTRIES: &[Entry] = &[
             "LoadReason",
             "Origin",
             "Phase",
+            "Prepared",
+            "Preparer",
             "UNSAVED_MARK",
             "use_documents",
             "use_document_title",
