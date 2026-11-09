@@ -218,13 +218,13 @@ impl TextSize {
     /// The size in logical pixels at the current size class.
     pub fn px(self) -> f32 {
         let (regular, compact) = self.sizes();
-        resolve(regular, compact) * crate::stress::text_scale()
+        resolve(regular, compact) * crate::access::text_scale()
     }
 
     /// The size in logical pixels at `class`; see [`Space::px_in`].
     pub fn px_in(self, class: SizeClass) -> f32 {
         let (regular, compact) = self.sizes();
-        class.pick(regular, compact) * crate::stress::text_scale()
+        class.pick(regular, compact) * crate::access::text_scale()
     }
 
     /// The (regular, compact) sizes. Compact text is a step larger, so body
@@ -821,7 +821,8 @@ pub enum Paint {
     /// Header bars.
     Surface,
     /// The header bar that floats over a scrolling page: the page colour at
-    /// 82 %, so the blurred content behind it shows through faintly.
+    /// 82 %, so the blurred content behind it shows through faintly; opaque
+    /// under reduce transparency.
     Frosted,
     /// The sidebar and the window frame around the page panel.
     Sidebar,
@@ -977,6 +978,8 @@ impl Paint {
             Paint::Backdrop => Color::BLACK,
             Paint::Bg => tokens.bg,
             Paint::Surface => tokens.surface,
+            // Reduce transparency: the header is the page's own colour.
+            Paint::Frosted if tokens.reduce_transparency => tokens.bg,
             Paint::Frosted => tokens.bg.with_af32(0.82),
             Paint::Sidebar => tokens.sidebar,
             Paint::Recess => tokens.recess,

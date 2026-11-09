@@ -9,7 +9,11 @@
 //! [`theme::provide_tokens`] at the window root and read with
 //! [`surface::use_tokens`].
 
+pub mod a11y;
+#[cfg(all(test, feature = "testing"))]
+mod a11y_tests;
 pub mod about;
+pub mod access;
 pub mod app;
 pub mod app_icon;
 pub mod charts;
@@ -62,6 +66,9 @@ pub mod window;
 
 /// Everything an application window normally needs.
 pub mod prelude {
+    pub use crate::a11y::{
+        Announcer, FieldLabel, Politeness, Semantics, SemanticsExt, use_announcer, use_field_label,
+    };
     pub use crate::about::{AppInfo, app_menu};
     pub use crate::app::Application;
     pub use crate::app_icon::{AppChoice, AppIcon, app_icon};

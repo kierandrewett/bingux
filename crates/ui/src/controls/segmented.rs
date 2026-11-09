@@ -212,8 +212,13 @@ impl Component for SegmentRail {
                 .collect()
         };
         let key_ids = ids.clone();
+        let field = crate::a11y::use_field_label();
         Element::from(
             rect()
+                // A segmented control is one choice of several: a radio group
+                // named by its row, each segment a radio button.
+                .a11y_role(AccessibilityRole::RadioGroup)
+                .a11y_builder(move |builder| crate::a11y::label_from_field(builder, field.as_ref()))
                 .tw(
                     &tokens,
                     &[
@@ -313,8 +318,8 @@ impl Component for Segment {
             .a11y_id(a11y_id)
             .a11y_focusable(enabled && self.selected)
             .a11y_enabled(enabled)
-            .a11y_role(AccessibilityRole::Tab)
-            .a11y_builder(|builder| builder.set_selected(self.selected))
+            .a11y_role(AccessibilityRole::RadioButton)
+            .a11y_builder(|builder| builder.set_toggled(accesskit::Toggled::from(self.selected)))
             .tw(
                 &tokens,
                 &[

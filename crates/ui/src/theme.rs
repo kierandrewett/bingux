@@ -7,7 +7,7 @@
 //! components read them from [`Tokens`].
 
 pub use crate::contrast::on_colour;
-use crate::contrast::{AA_LARGE, AA_TEXT, composite, ensure_contrast, on_colour_over};
+use crate::contrast::{AA_LARGE, AA_TEXT, AAA_TEXT, composite, ensure_contrast, on_colour_over};
 use crate::task::use_resource;
 use freya::prelude::*;
 
@@ -113,6 +113,12 @@ pub struct Tokens {
     pub accent_name: &'static str,
     pub scheme: Scheme,
     pub reduced_motion: bool,
+    /// Increase contrast is on: the palette was derived for it (text at 7:1,
+    /// edges that show), and control fills draw an outline.
+    pub high_contrast: bool,
+    /// Reduce transparency is on: surfaces that let content show through are
+    /// opaque.
+    pub reduce_transparency: bool,
     /// Page background.
     pub bg: Color,
     /// Window frame and header bars.
@@ -196,17 +202,40 @@ impl Tokens {
     /// sits one step off it, and the group cards, controls and popups step
     /// up from there. Hover, press and selection are white (dark) or black
     /// (light) overlays, so they read on every layer.
+    ///
+    /// Increase contrast and reduce transparency come from the preferences in
+    /// force ([`crate::access::Access::current`]); [`Tokens::with_access`]
+    /// gives them explicitly.
     pub fn new(accent_name: &'static str, scheme: Scheme, reduced_motion: bool) -> Self {
+        let access = crate::access::Access::current();
+        Self::with_access(
+            accent_name,
+            scheme,
+            crate::access::Access {
+                reduced_motion,
+                ..access
+            },
+        )
+    }
+
+    /// The palette for an accent and scheme under the given accessibility
+    /// preferences. Its text scale is not read: text size is process-wide
+    /// ([`crate::access::set`]).
+    pub fn with_access(
+        accent_name: &'static str,
+        scheme: Scheme,
+        access: crate::access::Access,
+    ) -> Self {
         // Deriving the contrast-safe colours searches lightness, so each
-        // accent and scheme is derived once.
+        // accent, scheme and contrast is derived once.
         static DERIVED: std::sync::OnceLock<
-            std::sync::Mutex<std::collections::HashMap<(&'static str, bool), Tokens>>,
+            std::sync::Mutex<std::collections::HashMap<(&'static str, bool, bool), Tokens>>,
         > = std::sync::OnceLock::new();
-        let key = (accent_name, scheme.is_dark());
+        let key = (accent_name, scheme.is_dark(), access.high_contrast);
         let cache = DERIVED.get_or_init(Default::default);
         let cached = cache.lock().ok().and_then(|map| map.get(&key).copied());
         let derived = cached.unwrap_or_else(|| {
-            let fresh = Self::derive(accent_name, scheme, false);
+            let fresh = Self::derive(accent_name, scheme, false, access.high_contrast);
             if let Ok(mut map) = cache.lock() {
                 map.insert(key, fresh);
             }
@@ -214,17 +243,24 @@ impl Tokens {
         });
         Self {
             scheme,
-            reduced_motion,
+            reduced_motion: access.reduced_motion,
+            reduce_transparency: access.reduce_transparency,
             ..derived
         }
     }
 
-    pub(crate) fn derive(accent_name: &'static str, scheme: Scheme, reduced_motion: bool) -> Self {
+    pub(crate) fn derive(
+        accent_name: &'static str,
+        scheme: Scheme,
+        reduced_motion: bool,
+        high_contrast: bool,
+    ) -> Self {
         let accent = accent_for(accent_name, scheme.is_dark());
-        let p = if scheme.is_dark() {
-            Palette::dark()
-        } else {
-            Palette::light()
+        let p = match (scheme.is_dark(), high_contrast) {
+            (true, false) => Palette::dark(),
+            (false, false) => Palette::light(),
+            (true, true) => Palette::dark().high_contrast(true),
+            (false, true) => Palette::light().high_contrast(false),
         };
         let floating = rgba(0.12, 0.12, 0.13, 1.0);
         // Fills that stand for state (accent, status colours) and the edges
@@ -234,12 +270,14 @@ impl Tokens {
         let fill = |colour: Color| fit_fill(ensure_contrast(colour, &layers, AA_LARGE), &p);
         let accent = fill(accent);
         let (success, warning, danger) = (fill(p.success), fill(p.warning), fill(p.danger));
-        let outline = ensure_contrast(p.outline, &layers, AA_LARGE);
+        let outline = ensure_contrast(p.outline, &layers, p.edge_min());
         Self {
             accent,
             accent_name,
             scheme,
             reduced_motion,
+            high_contrast,
+            reduce_transparency: false,
             bg: p.content,
             surface: p.content,
             sidebar: p.sidebar,
@@ -270,8 +308,13 @@ impl Tokens {
                 [accent, success, warning, danger],
                 floating,
                 on_colour(composite(floating, p.content)),
+                &p,
             ),
-            danger_on_floating: ensure_contrast(danger, &[composite(floating, p.content)], AA_TEXT),
+            danger_on_floating: ensure_contrast(
+                danger,
+                &[composite(floating, p.content)],
+                p.text_min(),
+            ),
             accent_ink: text_ink(accent, &p),
             danger_ink: text_ink(danger, &p),
             success_ink: text_ink(success, &p),
@@ -288,6 +331,18 @@ impl Tokens {
             syntax_value: p.readable(p.syntax_value),
             syntax_text: p.readable(p.syntax_text),
             syntax_comment: p.readable(p.syntax_comment),
+        }
+    }
+
+    /// The accessibility preferences these tokens were made under, with the
+    /// text scale in force: what a second palette (a light and a dark
+    /// specimen side by side) is made with to match this one.
+    pub fn access(&self) -> crate::access::Access {
+        crate::access::Access {
+            reduced_motion: self.reduced_motion,
+            high_contrast: self.high_contrast,
+            reduce_transparency: self.reduce_transparency,
+            text_scale: crate::access::text_scale(),
         }
     }
 
@@ -372,8 +427,9 @@ fn notice_palettes(
     hues: [Color; 4],
     floating: Color,
     on_floating: Color,
+    p: &Palette,
 ) -> [NoticePalette; 5] {
-    use crate::contrast::{AAA_TEXT, Oklch};
+    use crate::contrast::Oklch;
     let (fill_l, keep, max) = if dark {
         NOTICE_FILL_DARK
     } else {
@@ -393,7 +449,14 @@ fn notice_palettes(
             h: h.h,
         }
         .to_colour();
-        let ink = ensure_contrast(seed, &[fill], AAA_TEXT);
+        // The ink reads on the fill, and under increase contrast on the fill
+        // under the (stronger) hover and press layers of its action button.
+        let grounds = if p.high_contrast {
+            vec![fill, composite(p.hover, fill), composite(p.pressed, fill)]
+        } else {
+            vec![fill]
+        };
+        let ink = ensure_contrast(seed, &grounds, AAA_TEXT);
         let glyph = ensure_contrast(hue, &[fill], AA_LARGE);
         let edge = composite(ink.with_af32(NOTICE_EDGE_ALPHA), fill);
         NoticePalette {
@@ -431,6 +494,9 @@ fn fill_states(fill: Color, p: &Palette) -> [Color; 4] {
 
 /// The most the lightness of a fill moves to make its ink reach AA.
 const FILL_NUDGE_MAX: f32 = 0.12;
+/// The most it moves under increase contrast, where the ink must reach AAA:
+/// a light scheme's mid-tone accent becomes a deep one under white ink.
+const FILL_NUDGE_MAX_HIGH: f32 = 0.40;
 const FILL_NUDGE_STEP: f32 = 0.004;
 
 /// `fill` as it is drawn: unchanged when its on-colour reaches AA in every
@@ -440,7 +506,7 @@ fn fit_fill(fill: Color, p: &Palette) -> Color {
     let layers = p.layers();
     let reads = |candidate: Color| {
         let states = fill_states(candidate, p);
-        crate::contrast::worst_ratio(on_colour_over(&states), &states) >= AA_TEXT
+        crate::contrast::worst_ratio(on_colour_over(&states), &states) >= p.text_min()
             && crate::contrast::worst_ratio(candidate, &layers) >= AA_LARGE
     };
     if reads(fill) {
@@ -448,7 +514,8 @@ fn fit_fill(fill: Color, p: &Palette) -> Color {
     }
     let base = crate::contrast::Oklch::from_colour(fill);
     let mut step = FILL_NUDGE_STEP;
-    while step <= FILL_NUDGE_MAX {
+    let max = if p.high_contrast { FILL_NUDGE_MAX_HIGH } else { FILL_NUDGE_MAX };
+    while step <= max {
         for direction in [-1.0, 1.0] {
             let candidate = crate::contrast::Oklch {
                 l: base.l + direction * step,
@@ -468,14 +535,14 @@ fn fit_fill(fill: Color, p: &Palette) -> Color {
 /// scheme's text reads on it at AA: the fill behind a search hit.
 fn highlight(colour: Color, alpha: f32, p: &Palette) -> Color {
     let fill = composite(colour.with_af32(alpha), p.card);
-    ensure_contrast(fill, &[p.text, p.syntax_text], AA_TEXT)
+    ensure_contrast(fill, &[p.text, p.syntax_text], p.text_min())
 }
 
 /// A ring colour that shows on every layer and on the raised fill.
 fn ring_colour(colour: Color, p: &Palette) -> Color {
     let mut surfaces = p.layers().to_vec();
     surfaces.push(p.raised);
-    ensure_contrast(colour, &surfaces, AA_LARGE)
+    ensure_contrast(colour, &surfaces, p.edge_min())
 }
 
 /// `colour` as text: moved in lightness until it reads at AA on every layer
@@ -483,7 +550,7 @@ fn ring_colour(colour: Color, p: &Palette) -> Color {
 /// where badges and banners set it.
 fn text_ink(colour: Color, p: &Palette) -> Color {
     let tint = |under: Color| composite(colour.with_af32(0.18), under);
-    let surfaces = [
+    let mut surfaces = vec![
         p.content,
         p.sidebar,
         p.card,
@@ -495,7 +562,12 @@ fn text_ink(colour: Color, p: &Palette) -> Color {
         tint(p.content),
         tint(p.popup),
     ];
-    ensure_contrast(colour, &surfaces, AA_TEXT)
+    // Increase contrast holds a link at 7:1 under the hover, press and
+    // selection layers too.
+    if p.high_contrast {
+        surfaces.extend(p.grounds());
+    }
+    ensure_contrast(colour, &surfaces, p.text_min())
 }
 
 /// The surface and ink colours of one colour scheme.
@@ -530,9 +602,61 @@ pub(crate) struct Palette {
     pub(crate) syntax_value: Color,
     pub(crate) syntax_text: Color,
     pub(crate) syntax_comment: Color,
+    /// Derived for increase contrast: text holds 7:1 and edges 4.5:1.
+    pub(crate) high_contrast: bool,
 }
 
 impl Palette {
+    /// The least ratio text reaches on every ground: AA, or AAA (7:1) under
+    /// increase contrast.
+    fn text_min(&self) -> f32 {
+        if self.high_contrast { AAA_TEXT } else { AA_TEXT }
+    }
+
+    /// The least ratio control edges and the focus ring reach on every
+    /// layer: 3:1 (WCAG 1.4.11), or 4.5:1 under increase contrast.
+    fn edge_min(&self) -> f32 {
+        if self.high_contrast { AA_TEXT } else { AA_LARGE }
+    }
+
+    /// This palette for increase contrast, after Apple's and GNOME's
+    /// high-contrast styles: the text at full strength, secondary text and the
+    /// code face pushed to 7:1, separators and control edges that are seen at
+    /// a glance, and stronger hover, press and selection layers. The surface
+    /// greys and the hues stay, so the window is still the same window.
+    ///
+    /// White text reaches 7:1 only on a ground darker than about 9 %
+    /// luminance, so the dark scheme's layers step down a little and its
+    /// raised fill most; the light scheme's greys stay.
+    fn high_contrast(self, dark: bool) -> Self {
+        let (ink, overlay) = if dark { (1.0, 1.0) } else { (0.0, 0.0) };
+        let layers = if dark {
+            Self {
+                content: hex(0x1a1a1d),
+                recess: hex(0x111113),
+                sidebar: hex(0x242428),
+                card: hex(0x2a2a2e),
+                control: hex(0x36363a),
+                raised: hex(0x3e3e42),
+                popup: hex(0x303034),
+                ..self
+            }
+        } else {
+            self
+        };
+        Self {
+            text: rgba(ink, ink, ink, 1.0),
+            muted: if dark { hex(0xdcdce0) } else { hex(0x3a3a3f) },
+            separator: rgba(overlay, overlay, overlay, if dark { 0.42 } else { 0.40 }),
+            outline: if dark { hex(0xb4b4ba) } else { hex(0x55555b) },
+            hover: rgba(overlay, overlay, overlay, 0.08),
+            pressed: rgba(overlay, overlay, overlay, if dark { 0.12 } else { 0.14 }),
+            selection: rgba(overlay, overlay, overlay, if dark { 0.12 } else { 0.14 }),
+            high_contrast: true,
+            ..layers
+        }
+    }
+
     /// The opaque layers a control or text can sit on.
     fn layers(&self) -> [Color; 5] {
         [
@@ -561,14 +685,15 @@ impl Palette {
     /// Ink that must read on every ground: secondary text and the code face.
     fn readable(&self, ink: Color) -> Color {
         let grounds = self.grounds();
+        let target = self.text_min();
         if ink.a() == 255 {
-            return ensure_contrast(ink, &grounds, AA_TEXT);
+            return ensure_contrast(ink, &grounds, target);
         }
         // A translucent ink gains opacity until it reads on every ground.
         (ink.a()..=255)
             .map(|alpha| Color::from((ink.r(), ink.g(), ink.b(), alpha)))
-            .find(|candidate| crate::contrast::worst_ratio(*candidate, &grounds) >= AA_TEXT)
-            .unwrap_or_else(|| Color::from((ink.r(), ink.g(), ink.b(), 255u8)))
+            .find(|candidate| crate::contrast::worst_ratio(*candidate, &grounds) >= target)
+            .unwrap_or_else(|| ensure_contrast(Color::from((ink.r(), ink.g(), ink.b(), 255u8)), &grounds, target))
     }
 
     pub(crate) fn dark() -> Self {
@@ -596,6 +721,7 @@ impl Palette {
             syntax_value: hex(0x8fe2a4),
             syntax_text: hex(0xf0f0f2),
             syntax_comment: hex(0x8a8a92),
+            high_contrast: false,
         }
     }
 
@@ -624,6 +750,7 @@ impl Palette {
             syntax_value: hex(0x1d7a3a),
             syntax_text: hex(0x2e2e32),
             syntax_comment: hex(0x7a7a80),
+            high_contrast: false,
         }
     }
 }

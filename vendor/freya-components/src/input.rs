@@ -161,6 +161,9 @@ pub struct Input {
     text_align: TextAlign,
     font_family: Option<&'static str>,
     a11y_id: Option<AccessibilityId>,
+    a11y_label: Option<Cow<'static, str>>,
+    a11y_description: Option<Cow<'static, str>>,
+    a11y_invalid: bool,
     leading: Option<Element>,
     role: Option<AccessibilityRole>,
     hover_background: Option<Color>,
@@ -309,6 +312,9 @@ impl Input {
             text_align: TextAlign::default(),
             font_family: None,
             a11y_id: None,
+            a11y_label: None,
+            a11y_description: None,
+            a11y_invalid: false,
             leading: None,
             role: None,
             hover_background: None,
@@ -473,6 +479,25 @@ impl Input {
 
     pub fn a11y_id(mut self, a11y_id: impl Into<AccessibilityId>) -> Self {
         self.a11y_id = Some(a11y_id.into());
+        self
+    }
+
+    /// Bingux patch: the field's name for assistive technology ("Address"), read with the
+    /// text as its value. Without one the placeholder names it.
+    pub fn a11y_label(mut self, label: impl Into<Cow<'static, str>>) -> Self {
+        self.a11y_label = Some(label.into());
+        self
+    }
+
+    /// Bingux patch: the help line under the field, read after its name.
+    pub fn a11y_description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
+        self.a11y_description = Some(description.into());
+        self
+    }
+
+    /// Bingux patch: the text is wrong (the field shows an error).
+    pub fn a11y_invalid(mut self, invalid: bool) -> Self {
+        self.a11y_invalid = invalid;
         self
     }
 
@@ -1079,11 +1104,17 @@ impl Component for Input {
         };
 
         let value = self.value.read();
-        let a11y_text: Cow<str> = match (self.mode, &self.placeholder) {
-            (_, Some(ph)) if display_placeholder => Cow::Borrowed(ph.as_ref()),
-            (InputMode::Hidden(ch), _) => Cow::Owned(ch.to_string().repeat(value.len())),
-            (InputMode::Shown, _) => Cow::Borrowed(value.as_ref()),
+        // Bingux patch: the text is the value, the field's name the label, the placeholder a
+        // placeholder (upstream read the text, or the placeholder, as the name).
+        let a11y_text: String = match self.mode {
+            InputMode::Hidden(ch) => ch.to_string().repeat(value.chars().count()),
+            InputMode::Shown => value.to_string(),
         };
+        let a11y_label = self.a11y_label.clone().or_else(|| self.placeholder.clone());
+        let a11y_placeholder = self.placeholder.clone();
+        let a11y_description = self.a11y_description.clone();
+        let a11y_invalid = self.a11y_invalid;
+        let a11y_read_only = self.read_only;
 
         let a11_role = match (self.role, self.mode) {
             (Some(role), _) => role,
@@ -1098,8 +1129,25 @@ impl Component for Input {
             .a11y_enabled(self.enabled)
             .a11y_focusable(self.enabled)
             .a11y_auto_focus(self.auto_focus)
-            .a11y_alt(a11y_text)
             .a11y_role(a11_role)
+            .a11y_builder(move |node| {
+                node.set_value(a11y_text);
+                if let Some(label) = a11y_label {
+                    node.set_label(label.into_owned());
+                }
+                if let Some(placeholder) = a11y_placeholder {
+                    node.set_placeholder(placeholder.into_owned());
+                }
+                if let Some(description) = a11y_description {
+                    node.set_description(description.into_owned());
+                }
+                if a11y_invalid {
+                    node.set_invalid(accesskit::Invalid::True);
+                }
+                if a11y_read_only {
+                    node.set_read_only();
+                }
+            })
             .maybe(self.enabled, |el| {
                 el.on_key_up(on_key_up)
                     .on_key_down(on_key_down)

@@ -12,7 +12,6 @@ use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
-use crate::rows::RowTitle;
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::menu_query::{Candidate, Mark, Reaction};
 use crate::shell::type_ahead::{dimmed, marked_label, use_list_query};
@@ -210,6 +209,7 @@ impl Component for Dropdown {
         let press = use_press();
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(self.enabled);
+        let field = crate::a11y::use_field_label();
         let on_select = self.on_select.clone();
         let unavailable = self.unavailable.clone();
         let options = self.options.clone();
@@ -429,7 +429,22 @@ impl Component for Dropdown {
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::ComboBox)
-            .a11y_builder(move |builder| builder.set_expanded(open()))
+            .a11y_builder({
+                // Named by its title or its row's ("Theme"), its value the
+                // choice shown ("Dark"), as GTK's drop-downs read.
+                let named = self.title.clone().map(|title| crate::a11y::FieldLabel {
+                    title,
+                    hint: None,
+                });
+                let field = named.or_else(|| field.clone());
+                let current = current.clone();
+                move |builder| {
+                    builder.set_expanded(open());
+                    builder.set_has_popup(accesskit::HasPopup::Listbox);
+                    builder.set_value(current);
+                    crate::a11y::label_from_field(builder, field.as_ref());
+                }
+            })
             .width(if fills { Size::fill() } else { Size::px(width) })
             .tw(
                 &tokens,
@@ -562,7 +577,7 @@ impl Component for Dropdown {
             highlighted.set(None);
             ahead.clear();
         });
-        let row_title = try_consume_context::<RowTitle>();
+
         let mut panel = Panel::new(
             PanelKind::Choice,
             open(),
@@ -586,7 +601,7 @@ impl Component for Dropdown {
         if let Some(title) = self
             .title
             .clone()
-            .or_else(|| row_title.map(|row| row.0.read().clone()))
+            .or_else(|| field.as_ref().map(|field| field.title.clone()))
         {
             panel = panel.title(title);
         }

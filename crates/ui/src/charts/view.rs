@@ -1768,7 +1768,7 @@ fn donut_values(donut: &Donut) -> (Vec<f64>, f64) {
 /// accessibility setting. The ring grows with it so its centre text keeps
 /// its size.
 fn text_unit() -> f32 {
-    crate::stress::text_scale().clamp(1.0, 2.0)
+    crate::access::text_scale().clamp(1.0, 2.0)
 }
 
 /// A share of a whole, the same width of text for every row.
