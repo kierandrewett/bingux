@@ -50,25 +50,7 @@ impl LineLayout {
         let tab_width = tab_width.max(1);
         let len = line.chars().count();
         if len > LONG_LINE {
-            let rows = match wrap {
-                Some(width) if width > 0 => (0..len.div_ceil(width).max(1))
-                    .map(|index| Row {
-                        start: index * width,
-                        end: ((index + 1) * width).min(len),
-                        start_col: index * width,
-                    })
-                    .collect(),
-                _ => vec![Row {
-                    start: 0,
-                    end: len,
-                    start_col: 0,
-                }],
-            };
-            return Self {
-                cols: Vec::new(),
-                len,
-                rows,
-            };
+            return Self::long(len, wrap);
         }
         let mut cols = Vec::with_capacity(len + 1);
         let mut col = 0usize;
@@ -86,6 +68,36 @@ impl LineLayout {
             }],
         };
         Self { cols, len, rows }
+    }
+
+    /// The layout of a line of `len` chars longer than [`LONG_LINE`]: a cell
+    /// a char, cut into rows of `wrap` cells. Needs no text, so a view never
+    /// copies a line of a hundred megabytes to lay it out.
+    pub fn long(len: usize, wrap: Option<usize>) -> Self {
+        let rows = match wrap {
+            Some(width) if width > 0 => (0..len.div_ceil(width).max(1))
+                .map(|index| Row {
+                    start: index * width,
+                    end: ((index + 1) * width).min(len),
+                    start_col: index * width,
+                })
+                .collect(),
+            _ => vec![Row {
+                start: 0,
+                end: len,
+                start_col: 0,
+            }],
+        };
+        Self {
+            cols: Vec::new(),
+            len,
+            rows,
+        }
+    }
+
+    /// Whether this line is laid out a cell a char ([`LONG_LINE`]).
+    pub fn is_long(&self) -> bool {
+        self.cols.is_empty() && self.len > 0
     }
 
     pub fn len(&self) -> usize {

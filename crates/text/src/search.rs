@@ -130,6 +130,12 @@ impl Matches {
     }
 }
 
+/// `text` with the characters a regular expression treats specially
+/// escaped, so it matches itself.
+pub fn escape(text: &str) -> String {
+    regex::escape(text)
+}
+
 /// Every match of `pattern` in `rope`. Empty matches (from `^` or `a*`) are
 /// left out: they cannot be shown or replaced one at a time.
 pub fn find_all(rope: &Rope, pattern: &Regex) -> Matches {

@@ -287,7 +287,17 @@ impl Editor {
     }
 
     pub fn layout(&self, line: usize) -> LineLayout {
-        LineLayout::new(&self.line(line), self.settings.tab_width, self.wrap)
+        self.layout_wrapped(line, self.wrap)
+    }
+
+    /// The layout of `line` at row width `wrap`, without copying a line
+    /// longer than [`crate::layout::LONG_LINE`].
+    pub fn layout_wrapped(&self, line: usize, wrap: Option<usize>) -> LineLayout {
+        let len = self.line_len(line);
+        if len > crate::layout::LONG_LINE {
+            return LineLayout::long(len, wrap);
+        }
+        LineLayout::new(&self.line(line), self.settings.tab_width, wrap)
     }
 
     // ---------------------------------------------------------------------

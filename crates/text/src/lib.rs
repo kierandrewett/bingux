@@ -25,6 +25,7 @@ pub mod stats;
 
 pub use editor::{Case, Copied, Edit, Editor, Settings};
 pub use encoding::{FileFormat, LineEnding};
+pub use encoding_rs;
 pub use highlight::{Highlighter, TokenKind};
 pub use indent::Indent;
 pub use language::Language;
