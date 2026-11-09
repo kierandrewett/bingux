@@ -9,23 +9,23 @@ use freya::prelude::*;
 
 use super::menu_query::Pill;
 use super::sheet_gesture::{Claim, Metrics, Outcome, Seconds, SheetGesture, lift_limit};
-use crate::component::ComponentName;
-use crate::controls::direction::{Direction, use_direction};
-use crate::nav::ModalKind;
-use crate::nav::router::use_modal;
-use crate::motion::{PRESENCE_SCALE, use_presence};
-use crate::style::*;
-use crate::focus::{FocusCore, claim_press, release_press, use_focus_core};
-use crate::surface::use_tokens;
-use crate::theme::Tokens;
 use super::sheet_motion::{
     Release, SHEET_MS, SHEET_SPRING_MS, openness, release_offset, use_sheet_clock, use_sheet_spring,
 };
-use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
+use crate::component::ComponentName;
+use crate::controls::direction::{Direction, use_direction};
+use crate::focus::{FocusCore, claim_press, release_press, use_focus_core};
+use crate::motion::{PRESENCE_SCALE, use_presence};
+use crate::nav::ModalKind;
+use crate::nav::router::use_modal;
+use crate::popup_windows::MARGIN;
 use crate::popup_windows::backend::{Parent, PopupBackend};
 use crate::popup_windows::place;
 use crate::popup_windows::portal::{NativePopup, ParentSlot, Want, use_native_popup};
-use crate::popup_windows::MARGIN;
+use crate::style::*;
+use crate::surface::use_tokens;
+use crate::theme::Tokens;
+use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
 use std::rc::Rc;
 
 /// Space kept between a floating panel and the window edges.
@@ -414,7 +414,15 @@ pub(crate) fn place(
     gap: f32,
     direction: Direction,
 ) -> (f32, f32) {
-    place_aligned(anchor, size, window, prefer, gap, EdgeAlign::Start, direction)
+    place_aligned(
+        anchor,
+        size,
+        window,
+        prefer,
+        gap,
+        EdgeAlign::Start,
+        direction,
+    )
 }
 
 /// Where a panel of `size` sits beside `anchor` in a window of `window`. It
@@ -548,7 +556,15 @@ pub(crate) fn text_bar_rect(
 ) -> PanelRect {
     let room_above = anchor.y - PANEL_GAP - size.1 >= Dim::Header.px();
     let prefer = if room_above { Side::Above } else { Side::Below };
-    let (x, y) = place_aligned(anchor, size, window, prefer, PANEL_GAP, EdgeAlign::Centre, direction);
+    let (x, y) = place_aligned(
+        anchor,
+        size,
+        window,
+        prefer,
+        PANEL_GAP,
+        EdgeAlign::Centre,
+        direction,
+    );
     PanelRect {
         x,
         y,
@@ -881,14 +897,15 @@ impl Component for Panel {
         let root = crate::surface::window_size();
         // A popup window is placed by the compositor, which knows the outputs: the window's
         // size is no limit, and the layout assumes none.
-        let window = if native.is_some() { (0.0, 0.0) } else { (root.width, root.height) };
+        let window = if native.is_some() {
+            (0.0, 0.0)
+        } else {
+            (root.width, root.height)
+        };
         let dismiss = self.on_dismiss.clone();
         // Escape closes the panel, unless the panel has something to take back
         // first (a typed query, an open submenu).
-        let escape = self
-            .on_escape
-            .clone()
-            .unwrap_or_else(|| dismiss.clone());
+        let escape = self.on_escape.clone().unwrap_or_else(|| dismiss.clone());
         let eased = use_sheet_spring(
             pull,
             release,
@@ -985,7 +1002,12 @@ impl Panel {
         };
         let size = (self.width, viewport + 2.0 * S2.px());
         let placed = match local {
-            Some(local) => PanelRect { x: local.margin, y: local.margin, width: size.0, height: size.1 },
+            Some(local) => PanelRect {
+                x: local.margin,
+                y: local.margin,
+                width: size.0,
+                height: size.1,
+            },
             None => menu_rect(self.trigger, size, window, use_direction()),
         };
         let height = Dim::Box7.px();
@@ -1025,7 +1047,11 @@ impl Panel {
                                 shadow(Elevation::Raised),
                             ],
                         )
-                        .child(BODY.in_ink(Ink::Text).label(tokens, pill.query.clone()).max_lines(1))
+                        .child(
+                            BODY.in_ink(Ink::Text)
+                                .label(tokens, pill.query.clone())
+                                .max_lines(1),
+                        )
                         .child(
                             CAPTION
                                 .in_ink(Ink::Muted)
@@ -1041,7 +1067,13 @@ impl Panel {
     /// The centred dialog: a scrim over the window and the card centred on
     /// it. The scrim and the card fade and scale in separately. A press on the
     /// scrim, or Escape, dismisses; the card stops its own presses.
-    fn centred(&self, tokens: &Tokens, core: FocusCore, dismiss: EventHandler<()>, progress: f32) -> Rect {
+    fn centred(
+        &self,
+        tokens: &Tokens,
+        core: FocusCore,
+        dismiss: EventHandler<()>,
+        progress: f32,
+    ) -> Rect {
         shield(tokens, core, dismiss.clone(), dismiss)
             .layer(self.layer)
             .child(
@@ -1149,7 +1181,12 @@ impl Panel {
         // compositor's business.
         let (placed, origin, progress) = match local {
             Some(local) => (
-                PanelRect { x: local.margin, y: local.margin, width: size.0, height: size.1 },
+                PanelRect {
+                    x: local.margin,
+                    y: local.margin,
+                    width: size.0,
+                    height: size.1,
+                },
                 TransformOrigin::top_left(),
                 1.0,
             ),
@@ -1216,7 +1253,8 @@ impl Panel {
     fn edit_bar(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Rect {
         let measure = self.measure;
         let size = measure.and_then(|measure| *measure.read());
-        let at = size.map(|size| text_bar_rect(self.trigger.anchor(), size, window, use_direction()));
+        let at =
+            size.map(|size| text_bar_rect(self.trigger.anchor(), size, window, use_direction()));
         let (x, y) = at.map_or((0.0, 0.0), |rect| (rect.x, rect.y));
         rect()
             .position(Position::new_global().top(y).left(x))
@@ -1362,9 +1400,9 @@ impl Panel {
             }))
             .child(self.body(tokens, layout.viewport, true, layout.tail, Some(drag)))
             .child(rect().height(Size::px(overhang)));
-        let (left, width) = layout.column.map_or((0.0, Size::fill()), |(left, width)| {
-            (left, Size::px(width))
-        });
+        let (left, width) = layout
+            .column
+            .map_or((0.0, Size::fill()), |(left, width)| (left, Size::px(width)));
         rect()
             .component("SheetSlot")
             .position(Position::new_absolute().bottom(-overhang).left(left))
@@ -1412,7 +1450,12 @@ fn sheet_shield(tokens: &Tokens, on_escape: EventHandler<()>) -> Rect {
 }
 
 /// The dim layer behind a sheet, `amount` of it showing. A press on it dismisses.
-fn sheet_scrim(tokens: &Tokens, core: FocusCore, amount: f32, on_dismiss: EventHandler<()>) -> Rect {
+fn sheet_scrim(
+    tokens: &Tokens,
+    core: FocusCore,
+    amount: f32,
+    on_dismiss: EventHandler<()>,
+) -> Rect {
     let release = core.clone();
     rect()
         .position(Position::new_global().top(0.0).left(0.0))
@@ -1454,7 +1497,10 @@ impl Panel {
 
     /// What a popup window shows: the card, and the query pill under it.
     fn native_content(&self, tokens: &Tokens, origin: (f32, f32)) -> Element {
-        let local = LocalMenu { margin: MARGIN, origin };
+        let local = LocalMenu {
+            margin: MARGIN,
+            origin,
+        };
         rect()
             .expanded()
             .child(self.menu(tokens, (0.0, 0.0), 1.0, Some(local)))
@@ -1488,13 +1534,17 @@ impl Panel {
         let direction = use_direction();
         let placed = menu_rect(self.trigger, size, (0.0, 0.0), direction);
         let from = match &parent {
-            Some(slot) => slot.token().map(|token| (Parent::Popup(token), slot.card_origin())),
-            None => Some((Parent::Window(<Platform as freya_winit::WinitPlatformExt>::window_id()), (0.0, 0.0))),
+            Some(slot) => slot
+                .token()
+                .map(|token| (Parent::Popup(token), slot.card_origin())),
+            None => Some((
+                Parent::Window(<Platform as freya_winit::WinitPlatformExt>::window_id()),
+                (0.0, 0.0),
+            )),
         };
         let origin = (placed.x - MARGIN, placed.y - MARGIN);
         if let Some((parent, card_origin)) = from {
-            let placement = place::request(self.trigger, size, direction)
-                .relative_to(card_origin);
+            let placement = place::request(self.trigger, size, direction).relative_to(card_origin);
             popup.sync(
                 backend,
                 Want {
