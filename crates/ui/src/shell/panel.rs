@@ -9,23 +9,23 @@ use freya::prelude::*;
 
 use super::menu_query::Pill;
 use super::sheet_gesture::{Claim, Metrics, Outcome, Seconds, SheetGesture, lift_limit};
-use crate::component::ComponentName;
-use crate::controls::direction::{Direction, use_direction};
-use crate::nav::ModalKind;
-use crate::nav::router::use_modal;
-use crate::motion::{PRESENCE_SCALE, use_presence};
-use crate::style::*;
-use crate::focus::{FocusCore, claim_press, release_press, use_focus_core};
-use crate::surface::use_tokens;
-use crate::theme::Tokens;
 use super::sheet_motion::{
     Release, SHEET_MS, SHEET_SPRING_MS, openness, release_offset, use_sheet_clock, use_sheet_spring,
 };
-use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
+use crate::component::ComponentName;
+use crate::controls::direction::{Direction, use_direction};
+use crate::focus::{FocusCore, claim_press, release_press, use_focus_core};
+use crate::motion::{PRESENCE_SCALE, use_presence};
+use crate::nav::ModalKind;
+use crate::nav::router::use_modal;
+use crate::popup_windows::MARGIN;
 use crate::popup_windows::backend::{Parent, PopupBackend};
 use crate::popup_windows::place;
 use crate::popup_windows::portal::{NativePopup, ParentSlot, Want, use_native_popup};
-use crate::popup_windows::MARGIN;
+use crate::style::*;
+use crate::surface::use_tokens;
+use crate::theme::Tokens;
+use crate::typography::{BODY, CAPTION, EMPHASIS, Ink};
 use std::rc::Rc;
 
 /// Space kept between a floating panel and the window edges.
@@ -47,6 +47,8 @@ pub(crate) const GRABBER_HEIGHT: f32 = 4.0;
 pub(crate) const SHEET_MAX_HEIGHT_PERCENT: f32 = 92.0;
 /// The tallest a choice sheet grows, so the dimmed page shows above it.
 pub(crate) const CHOICE_SHEET_MAX_HEIGHT_PERCENT: f32 = 70.0;
+/// The tallest a sheet with no size of its own grows before its rows scroll.
+pub(crate) const UNSIZED_SHEET_MAX_HEIGHT_PERCENT: f32 = 85.0;
 /// How tall the fade at the bottom of a sheet's rows is.
 pub(crate) const SHEET_FADE: f32 = 28.0;
 /// How far a sheet is dragged down before it dismisses on release, or half
@@ -414,7 +416,15 @@ pub(crate) fn place(
     gap: f32,
     direction: Direction,
 ) -> (f32, f32) {
-    place_aligned(anchor, size, window, prefer, gap, EdgeAlign::Start, direction)
+    place_aligned(
+        anchor,
+        size,
+        window,
+        prefer,
+        gap,
+        EdgeAlign::Start,
+        direction,
+    )
 }
 
 /// Where a panel of `size` sits beside `anchor` in a window of `window`. It
@@ -548,7 +558,15 @@ pub(crate) fn text_bar_rect(
 ) -> PanelRect {
     let room_above = anchor.y - PANEL_GAP - size.1 >= Dim::Header.px();
     let prefer = if room_above { Side::Above } else { Side::Below };
-    let (x, y) = place_aligned(anchor, size, window, prefer, PANEL_GAP, EdgeAlign::Centre, direction);
+    let (x, y) = place_aligned(
+        anchor,
+        size,
+        window,
+        prefer,
+        PANEL_GAP,
+        EdgeAlign::Centre,
+        direction,
+    );
     PanelRect {
         x,
         y,
@@ -840,6 +858,10 @@ impl Component for Panel {
         let sheet = self.kind == PanelKind::Choice && is_compact();
         let pull = use_state(|| 0.0_f32);
         let release = use_state(Release::default);
+        // A sheet given no size is measured: its rows' height is read once laid
+        // out, and it scrolls past the share of the window it may take.
+        let measured = use_state(|| 0.0_f32);
+        let own_scroll = use_scroll_controller(ScrollConfig::default);
         let drag = use_sheet_drag(pull, release);
         // A sheet that has left forgets its pull, so it opens at rest again. A
         // sheet is not a presence: it is moved by its own clock, and the
@@ -881,14 +903,15 @@ impl Component for Panel {
         let root = crate::surface::window_size();
         // A popup window is placed by the compositor, which knows the outputs: the window's
         // size is no limit, and the layout assumes none.
-        let window = if native.is_some() { (0.0, 0.0) } else { (root.width, root.height) };
+        let window = if native.is_some() {
+            (0.0, 0.0)
+        } else {
+            (root.width, root.height)
+        };
         let dismiss = self.on_dismiss.clone();
         // Escape closes the panel, unless the panel has something to take back
         // first (a typed query, an open submenu).
-        let escape = self
-            .on_escape
-            .clone()
-            .unwrap_or_else(|| dismiss.clone());
+        let escape = self.on_escape.clone().unwrap_or_else(|| dismiss.clone());
         let eased = use_sheet_spring(
             pull,
             release,
@@ -901,7 +924,16 @@ impl Component for Panel {
         let backdrop = if self.kind == PanelKind::Dialog {
             self.centred(&tokens, core, dismiss, progress)
         } else if sheet {
-            let layout = self.sheet_layout(window);
+            let unsized_sheet = self.content_height <= 0.0;
+            let content = if unsized_sheet {
+                *measured.read()
+            } else {
+                self.content_height
+            };
+            let layout = self.sheet_layout(window, content);
+            // A sheet always scrolls its rows: a body taller than the sheet's cap scrolls inside it.
+            let scroll = Some(self.scroll.clone().unwrap_or_else(|| own_scroll.clone()));
+            let measure = unsized_sheet.then_some(measured);
             let dismissed = !self.open && *pull.read() > 0.0;
             let offset = sheet_position(
                 clock,
@@ -920,7 +952,15 @@ impl Component for Panel {
                     scrim_amount(offset, layout.metrics.travel),
                     dismiss.clone(),
                 ))
-                .child(self.sheet(&tokens, &layout, offset, drag, dismiss.clone()))
+                .child(self.sheet(
+                    &tokens,
+                    &layout,
+                    offset,
+                    drag,
+                    dismiss.clone(),
+                    scroll,
+                    measure,
+                ))
         } else if let Some(backend) = &native {
             self.native_backdrop(
                 &tokens,
@@ -965,6 +1005,27 @@ impl Component for Panel {
     }
 }
 
+/// A choice sheet given no size: on a phone it rises from the bottom edge and
+/// is as tall as its rows, up to 85% of the window and then scrolls. On a desktop
+/// it opens at the window's top-left corner, since it has no trigger of its own.
+pub fn choice_sheet(
+    open: bool,
+    title: impl Into<String>,
+    rows: Vec<Element>,
+    on_dismiss: impl Into<EventHandler<()>>,
+) -> Element {
+    Element::from(
+        Panel::new(
+            PanelKind::Choice,
+            open,
+            PanelTrigger::Pointer((0.0, 0.0)),
+            rows,
+        )
+        .title(title)
+        .on_dismiss(on_dismiss),
+    )
+}
+
 impl Panel {
     /// The query pill of a menu or list that has type-ahead: a small pill
     /// under the surface (above it when there is no room below), aligned to
@@ -985,7 +1046,12 @@ impl Panel {
         };
         let size = (self.width, viewport + 2.0 * S2.px());
         let placed = match local {
-            Some(local) => PanelRect { x: local.margin, y: local.margin, width: size.0, height: size.1 },
+            Some(local) => PanelRect {
+                x: local.margin,
+                y: local.margin,
+                width: size.0,
+                height: size.1,
+            },
             None => menu_rect(self.trigger, size, window, use_direction()),
         };
         let height = Dim::Box7.px();
@@ -1025,7 +1091,11 @@ impl Panel {
                                 shadow(Elevation::Raised),
                             ],
                         )
-                        .child(BODY.in_ink(Ink::Text).label(tokens, pill.query.clone()).max_lines(1))
+                        .child(
+                            BODY.in_ink(Ink::Text)
+                                .label(tokens, pill.query.clone())
+                                .max_lines(1),
+                        )
                         .child(
                             CAPTION
                                 .in_ink(Ink::Muted)
@@ -1041,7 +1111,13 @@ impl Panel {
     /// The centred dialog: a scrim over the window and the card centred on
     /// it. The scrim and the card fade and scale in separately. A press on the
     /// scrim, or Escape, dismisses; the card stops its own presses.
-    fn centred(&self, tokens: &Tokens, core: FocusCore, dismiss: EventHandler<()>, progress: f32) -> Rect {
+    fn centred(
+        &self,
+        tokens: &Tokens,
+        core: FocusCore,
+        dismiss: EventHandler<()>,
+        progress: f32,
+    ) -> Rect {
         shield(tokens, core, dismiss.clone(), dismiss)
             .layer(self.layer)
             .child(
@@ -1092,22 +1168,32 @@ impl Panel {
         inset: bool,
         tail: f32,
         drag: Option<SheetDrag>,
+        scroll: Option<ScrollController>,
+        measure: Option<State<f32>>,
     ) -> Rect {
         let column = rect()
             .width(Size::fill())
             .children(self.children.clone())
             .maybe_child((tail > 0.0).then(|| rect().height(Size::px(tail))));
+        let column = match measure {
+            // An unsized sheet is sized by its rows: their height, without the tail.
+            Some(mut measure) => column.on_sized(move |event: Event<SizedEventData>| {
+                measure.set_if_modified((event.area.height() - tail).max(0.0));
+            }),
+            None => column,
+        };
         let padding = [px(S4)];
         let column = if inset {
             column.tw(tokens, &padding)
         } else {
             column
         };
-        let Some(scroll) = self.scroll.clone() else {
+        let Some(scroll) = scroll else {
             return column;
         };
         let offset = <(i32, i32)>::from(scroll.clone()).1 as f32;
-        let below = -offset + viewport < self.content_height + tail - 0.5;
+        let content = measure.map_or(self.content_height, |measure| *measure.read());
+        let below = -offset + viewport < content + tail - 0.5;
         // A floating list shows that it continues with its scrollbar alone.
         // An edge hairline under the last visible row read as a stray line
         // at the bottom of the panel. A sheet fades its rows out instead.
@@ -1149,7 +1235,12 @@ impl Panel {
         // compositor's business.
         let (placed, origin, progress) = match local {
             Some(local) => (
-                PanelRect { x: local.margin, y: local.margin, width: size.0, height: size.1 },
+                PanelRect {
+                    x: local.margin,
+                    y: local.margin,
+                    width: size.0,
+                    height: size.1,
+                },
                 TransformOrigin::top_left(),
                 1.0,
             ),
@@ -1176,7 +1267,15 @@ impl Panel {
             // A press or wheel turn inside the panel never reaches the shield.
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
-            .child(self.body(tokens, viewport, false, 0.0, None));
+            .child(self.body(
+                tokens,
+                viewport,
+                false,
+                0.0,
+                None,
+                self.scroll.clone(),
+                None,
+            ));
         // A popup window never has the keyboard: the window it grew from holds the focus node
         // and the key handler (see `native_backdrop`).
         if local.is_none() {
@@ -1216,7 +1315,8 @@ impl Panel {
     fn edit_bar(&self, tokens: &Tokens, window: (f32, f32), progress: f32) -> Rect {
         let measure = self.measure;
         let size = measure.and_then(|measure| *measure.read());
-        let at = size.map(|size| text_bar_rect(self.trigger.anchor(), size, window, use_direction()));
+        let at =
+            size.map(|size| text_bar_rect(self.trigger.anchor(), size, window, use_direction()));
         let (x, y) = at.map_or((0.0, 0.0), |rect| (rect.x, rect.y));
         rect()
             .position(Position::new_global().top(y).left(x))
@@ -1250,7 +1350,7 @@ impl Panel {
     /// rows, the grabber and the title, and the bottom padding that ends its
     /// scroll content, up to the share of the window it may take. The rows
     /// scroll inside what is left.
-    fn sheet_layout(&self, window: (f32, f32)) -> SheetLayout {
+    fn sheet_layout(&self, window: (f32, f32), content: f32) -> SheetLayout {
         let overhang = sheet_overhang();
         let header = if self.title.is_some() {
             Dim::Control.px()
@@ -1259,13 +1359,15 @@ impl Panel {
         };
         let tail = sheet_bottom();
         let chrome = GRABBER_ROW + header;
-        let percent = if self.kind == PanelKind::Choice && !self.tall {
+        let percent = if self.content_height <= 0.0 {
+            UNSIZED_SHEET_MAX_HEIGHT_PERCENT
+        } else if self.kind == PanelKind::Choice && !self.tall {
             CHOICE_SHEET_MAX_HEIGHT_PERCENT
         } else {
             SHEET_MAX_HEIGHT_PERCENT
         };
         let cap = (window.1 * percent / 100.0 - chrome).max(0.0);
-        let viewport = (self.content_height + tail).min(cap);
+        let viewport = (content + tail).min(cap);
         // A device preview holds the page to a phone-wide column in the middle
         // of the window: the sheet rises from the bottom of that column, as the
         // page's own sheets do, not across the whole window.
@@ -1296,10 +1398,12 @@ impl Panel {
         offset: f32,
         drag: SheetDrag,
         dismiss: EventHandler<()>,
+        scroll: Option<ScrollController>,
+        measure: Option<State<f32>>,
     ) -> Rect {
         let overhang = sheet_overhang();
         let metrics = layout.metrics;
-        let scroll = self.scroll;
+        let body_scroll = scroll.clone();
         let card = rect()
             .component("Sheet")
             .tw(
@@ -1360,11 +1464,19 @@ impl Panel {
                             .text_overflow(TextOverflow::Ellipsis),
                     )
             }))
-            .child(self.body(tokens, layout.viewport, true, layout.tail, Some(drag)))
+            .child(self.body(
+                tokens,
+                layout.viewport,
+                true,
+                layout.tail,
+                Some(drag),
+                body_scroll,
+                measure,
+            ))
             .child(rect().height(Size::px(overhang)));
-        let (left, width) = layout.column.map_or((0.0, Size::fill()), |(left, width)| {
-            (left, Size::px(width))
-        });
+        let (left, width) = layout
+            .column
+            .map_or((0.0, Size::fill()), |(left, width)| (left, Size::px(width)));
         rect()
             .component("SheetSlot")
             .position(Position::new_absolute().bottom(-overhang).left(left))
@@ -1412,7 +1524,12 @@ fn sheet_shield(tokens: &Tokens, on_escape: EventHandler<()>) -> Rect {
 }
 
 /// The dim layer behind a sheet, `amount` of it showing. A press on it dismisses.
-fn sheet_scrim(tokens: &Tokens, core: FocusCore, amount: f32, on_dismiss: EventHandler<()>) -> Rect {
+fn sheet_scrim(
+    tokens: &Tokens,
+    core: FocusCore,
+    amount: f32,
+    on_dismiss: EventHandler<()>,
+) -> Rect {
     let release = core.clone();
     rect()
         .position(Position::new_global().top(0.0).left(0.0))
@@ -1454,7 +1571,10 @@ impl Panel {
 
     /// What a popup window shows: the card, and the query pill under it.
     fn native_content(&self, tokens: &Tokens, origin: (f32, f32)) -> Element {
-        let local = LocalMenu { margin: MARGIN, origin };
+        let local = LocalMenu {
+            margin: MARGIN,
+            origin,
+        };
         rect()
             .expanded()
             .child(self.menu(tokens, (0.0, 0.0), 1.0, Some(local)))
@@ -1488,13 +1608,17 @@ impl Panel {
         let direction = use_direction();
         let placed = menu_rect(self.trigger, size, (0.0, 0.0), direction);
         let from = match &parent {
-            Some(slot) => slot.token().map(|token| (Parent::Popup(token), slot.card_origin())),
-            None => Some((Parent::Window(<Platform as freya_winit::WinitPlatformExt>::window_id()), (0.0, 0.0))),
+            Some(slot) => slot
+                .token()
+                .map(|token| (Parent::Popup(token), slot.card_origin())),
+            None => Some((
+                Parent::Window(<Platform as freya_winit::WinitPlatformExt>::window_id()),
+                (0.0, 0.0),
+            )),
         };
         let origin = (placed.x - MARGIN, placed.y - MARGIN);
         if let Some((parent, card_origin)) = from {
-            let placement = place::request(self.trigger, size, direction)
-                .relative_to(card_origin);
+            let placement = place::request(self.trigger, size, direction).relative_to(card_origin);
             popup.sync(
                 backend,
                 Want {

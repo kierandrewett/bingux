@@ -52,5 +52,6 @@ pub use menu::{
 };
 pub use navigation::{NavigationSplitView, PageAction, PageHead, Profile, use_page_busy};
 pub use overlays::{OverlayHost, Overlays, Toast, use_overlays};
+pub use panel::choice_sheet;
 pub use status_page::{StatusPage, status_page};
 pub use window::{HeaderBar, InertControls, WindowControls, drag_on_pointer_down, with_window};

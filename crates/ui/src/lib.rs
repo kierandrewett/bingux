@@ -142,8 +142,8 @@ pub mod prelude {
         BackButton, Banner, BannerKind, CANCEL_ID, Dialog, DialogIcon, ForwardButton, HeaderBar,
         MenuButton, MenuItem, NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead,
         Profile, ResponseKind, StatusPage, Toast, WindowControls, app_menu_item, app_menu_items,
-        banner, dialog, framed_dialog, history_menu, menu_button, menu_item, menu_separator,
-        status_page, submenu, use_overlays, use_page_busy,
+        banner, choice_sheet, dialog, framed_dialog, history_menu, menu_button, menu_item,
+        menu_separator, status_page, submenu, use_overlays, use_page_busy,
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;

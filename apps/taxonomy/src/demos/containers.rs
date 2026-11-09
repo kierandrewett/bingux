@@ -952,6 +952,31 @@ pub const POPUP: &[Spec] = &[
         })
         .into_element()
     }),
+    Spec::live("Choice sheet without a size: as tall as its rows", || {
+        let mut open = use_state(|| false);
+        let mut choice = use_state(|| "b".to_string());
+        rect()
+            .child(action_button("Open sheet", move |_| open.set(true)).into_element())
+            .child(choice_sheet(
+                open(),
+                "Choose",
+                vec![
+                    choice_list(
+                        vec![
+                            ("a".into(), "First".into()),
+                            ("b".into(), "Second".into()),
+                            ("c".into(), "Third".into()),
+                        ],
+                        choice.read().clone(),
+                        move |key: String| choice.set(key),
+                    )
+                    .into_element(),
+                ],
+                move |_| open.set(false),
+            ))
+            .into_element()
+    })
+    .script("click-text Open sheet; wait 600; save {out}"),
 ];
 
 fn action_items() -> Vec<MenuItem> {
