@@ -35,6 +35,43 @@ impl Component for App {
             query.set(String::new());
         })
         .into();
+        // Every page is a command: the palette (Ctrl+Shift+P) opens any page
+        // by its name or the words the sidebar search knows it by. The
+        // sidebar already lists them, so the main menu does not.
+        let mut pages: Vec<PageId> = PageId::ALL.to_vec();
+        if signed_in.is_some() {
+            pages.push(PageId::Users);
+        }
+        let mut commands: Vec<Command> = pages
+            .into_iter()
+            .map(|page| {
+                Command::new(
+                    format!("go.{}", page.panel_name()),
+                    page.title(),
+                    move |_| router.switch_root(&page.location()),
+                )
+                .icon(page.icon())
+                .keywords(page.keywords().split_whitespace())
+                .group(CommandGroup::Go)
+                .hidden_from_menu()
+            })
+            .collect();
+        // Keys the split view handles itself, listed in the shortcuts sheet.
+        commands.push(
+            Command::key_hint("settings.search", "Search settings", "Ctrl+F")
+                .group(CommandGroup::Edit),
+        );
+        commands
+            .push(Command::key_hint("settings.back", "Back", "Alt+Left").group(CommandGroup::Go));
+        commands.push(
+            Command::key_hint(
+                "settings.regions",
+                "Move between the sidebar and the page",
+                "F6",
+            )
+            .group(CommandGroup::Go),
+        );
+        use_window_commands(commands);
         // The window's main menu: About Settings, the application. The About
         // page under System is the computer's.
         let mut split = NavigationSplitView::new("Settings")

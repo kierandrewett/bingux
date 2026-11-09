@@ -51,7 +51,11 @@ pub(super) fn finish(env: &Env) {
 
 /// Select `paths` once they are listed: what a person expects after a paste.
 pub(super) fn select_paths(env: &Env, paths: &[PathBuf]) {
-    let mut selection = env.selection;
+    select_in(env.selection, paths);
+}
+
+/// [`select_paths`] for a step that keeps the selection and not the view.
+pub(super) fn select_in(mut selection: State<super::Selection>, paths: &[PathBuf]) {
     let mut selection = selection.write();
     if let Some((first, rest)) = paths.split_first() {
         selection.select_only(first);
@@ -330,7 +334,7 @@ fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held
                     }
                     let moved = pair_moves(&paths, &made);
                     if !moved.is_empty() {
-                        undo::push(Step::Move(moved));
+                        undo::push(&env, Step::Move(moved));
                     }
                 }
                 notify(
@@ -380,33 +384,79 @@ pub(super) fn pair_moves(originals: &[PathBuf], arrived: &[PathBuf]) -> Vec<(Pat
 // Undo
 // ---------------------------------------------------------------------------
 
-/// Take back the newest change.
+/// Take back the newest change: the window's Undo, which the toasts' Undo
+/// and Ctrl+Z in a file view reach too.
 pub(super) fn undo(env: &Env) {
-    let Some(step) = undo::pop() else {
+    if env.undo.undo().is_none() {
         notify(env.ui, "There is nothing to undo.", false);
-        return;
-    };
-    let env = env.clone();
-    spawn_in_window(async move {
-        let again = step.clone();
-        let outcome = spawn_blocking(move || reverse(&step)).await;
-        match outcome {
-            Ok(restored) => {
-                notify(env.ui, "Undone.", false);
-                select_paths(&env, &restored);
-            }
-            Err(error) => {
-                // Still the newest change: try again once the cause is gone.
-                undo::push(again);
-                notify(env.ui, error_text("undo that", &error), true);
-            }
+    }
+}
+
+/// The last part of a path, as a name to give back.
+fn name_of(path: &Path) -> Result<String, OpError> {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .ok_or(OpError::Invalid(bingux_files::location::NameError::Empty))
+}
+
+/// Do an undone step again. Blocking. `back` is what its undo put back.
+/// Returns the step as it is now, for the next Undo, and what to select.
+pub(super) fn redo_step(step: &Step, back: &[PathBuf]) -> Result<(Step, Vec<PathBuf>), OpError> {
+    match step {
+        Step::Rename { from, to } => {
+            let now = backend::rename(from, &name_of(to)?)?;
+            Ok((
+                Step::Rename {
+                    from: from.clone(),
+                    to: now.clone(),
+                },
+                vec![now],
+            ))
         }
-        env.reload.call(());
-    });
+        Step::Trash(_) => Ok((Step::Trash(backend::trash(back)?), Vec::new())),
+        Step::Create { path, folder } => {
+            let parent = path
+                .parent()
+                .ok_or(OpError::Invalid(bingux_files::location::NameError::Empty))?;
+            let name = name_of(path)?;
+            let made = if *folder {
+                backend::create_dir(parent, &name)?
+            } else {
+                backend::create_file(parent, &name)?
+            };
+            Ok((
+                Step::Create {
+                    path: made.clone(),
+                    folder: *folder,
+                },
+                vec![made],
+            ))
+        }
+        Step::Move(pairs) => {
+            let mut again = Vec::new();
+            for (original, now) in pairs {
+                let Some(folder) = now.parent() else {
+                    continue;
+                };
+                let moved = backend::move_to(
+                    std::slice::from_ref(original),
+                    folder,
+                    &ConflictPolicy::KeepBoth,
+                    &Progress::new(),
+                    &Cancel::new(),
+                )?;
+                again.extend(moved.into_iter().map(|path| (original.clone(), path)));
+            }
+            let shown = again.iter().map(|(_, now)| now.clone()).collect();
+            Ok((Step::Move(again), shown))
+        }
+        // Never offered: a restore cannot be redone (see `Step::redoable`).
+        Step::Restore(_) => Ok((step.clone(), Vec::new())),
+    }
 }
 
 /// Reverse one step. Blocking. Returns what is back in place.
-fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
+pub(super) fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
     match step {
         Step::Rename { from, to } => {
             let name = from
