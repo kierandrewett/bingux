@@ -29,6 +29,7 @@
 //! digits, so a count that ticks up while a big folder loads does not
 //! shimmer.
 
+use crate::format::isolate;
 use crate::layout::divider;
 use bingux_files::display;
 use freya::prelude::*;
@@ -91,20 +92,22 @@ fn grouped(number: usize) -> String {
     text
 }
 
+// Counts and sizes are isolated (`format::isolate`): in a right-to-left
+// interface "3 items" and "1.2 MB" keep their order inside the sentence.
 fn item_count(count: usize) -> String {
-    format!(
+    isolate(format!(
         "{} {}",
         grouped(count),
         if count == 1 { "item" } else { "items" }
-    )
+    ))
 }
 
 fn folder_count(count: usize) -> String {
-    format!(
+    isolate(format!(
         "{} {}",
         grouped(count),
         if count == 1 { "folder" } else { "folders" }
-    )
+    ))
 }
 
 /// The text of the line while nothing else is going on.
@@ -120,19 +123,19 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
     }
     let mut size = String::new();
     if info.selected_bytes > 0 {
-        size = format!(" ({})", display::size(info.selected_bytes));
+        size = format!(" ({})", isolate(display::size(info.selected_bytes)));
     }
     // The drive's free space follows the count, not a selection: a selection
     // has its own size to say.
     let free = info.free.map_or_else(String::new, |free| {
-        format!(", {} free", display::size(free))
+        format!(", {} free", isolate(display::size(free)))
     });
     match () {
         _ if info.selected > 0 => format!(
             "{}{} of {} selected{size}{}",
             if info.trash { "Trash · " } else { "" },
-            grouped(info.selected),
-            grouped(info.shown),
+            isolate(grouped(info.selected)),
+            isolate(grouped(info.shown)),
             info.link
                 .as_ref()
                 .map_or_else(String::new, |target| format!(" · Link to {target}"))

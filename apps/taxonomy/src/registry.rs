@@ -9,7 +9,7 @@
 use crate::demos::transfer;
 use crate::demos::{
     accessibility, buttons, commands, containers, data, feedback, files, formats, foundations,
-    icon_set, inputs, inspector, media, navigation, text, platform, table,
+    icon_set, inputs, inspector, media, navigation, platform, table, text,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -141,7 +141,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Slider",
         category: Category::Controls,
         page: "Sliders and steppers",
-        api: "slider(value, on_moved).step(f64).show_value().fill().mark(f64).danger_from(f64).gradient(stops).enabled(bool)",
+        api: "slider(value, on_moved).step(f64).show_value().fill().mark(f64).origin(f64).danger_from(f64).gradient(stops).enabled(bool)",
         doc: "components",
         covers: &["Slider", "slider"],
         body: Body::States(buttons::SLIDER),
@@ -1001,10 +1001,18 @@ pub static ENTRIES: &[Entry] = &[
         name: "Sizes, units and spans",
         category: Category::Foundations,
         page: "Sizes and units",
-        api: "Bytes::new(u64).binary().words().fraction_digits(n); Measure::new(value, Unit::Celsius | TimeUnit::Hour).width(Width); Timespan::new(Duration).digital().max_units(n).width(Width)",
+        api: "Bytes::new(u64).binary().words().fraction_digits(n); Measure::new(value, Unit::Celsius | TimeUnit::Hour).width(Width); Timespan::new(Duration).digital().max_units(n).width(Width); format::isolate(text) keeps a value in one piece in a right-to-left interface (every formatter applies it)",
         doc: "sizes-units-and-time-spans",
         covers: &[
-            "Bytes", "ByteBase", "Measure", "Unit", "TimeUnit", "Timespan", "Width",
+            "Bytes",
+            "ByteBase",
+            "Measure",
+            "Unit",
+            "TimeUnit",
+            "Timespan",
+            "Width",
+            "isolate",
+            "isolate_in",
         ],
         body: Body::States(formats::SIZES),
     },
@@ -1374,7 +1382,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Status block",
         category: Category::Containers,
         page: "Feedback",
-        api: "status(Status::{Loading, Empty, Error, Info}(text)).action(label, f)",
+        api: "status(Status::{Loading, Empty, Error, Info}(text)).action(label, f): loading leads with a spinner, the others with a glyph (error danger, info accent, empty muted)",
         doc: "components",
         covers: &["Status", "StatusBlock", "status"],
         body: Body::States(containers::STATUS),
@@ -1707,7 +1715,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Level rows",
         category: Category::Data,
         page: "Meters and bars",
-        api: "level_row(title, value, on_moved).subtitle(text).mark(percent).danger_from(percent).enabled(bool); slider_row(title, value, on_moved)",
+        api: "level_row(title, value, on_moved).subtitle(text).mark(percent).origin(percent).danger_from(percent).value_text(text).widest_value(text).enabled(bool); slider_row(title, value, on_moved)",
         doc: "components",
         covers: &["LevelRow", "level_row", "slider_row"],
         body: Body::States(data::LEVEL_ROW),

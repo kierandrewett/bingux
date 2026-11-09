@@ -190,6 +190,7 @@ impl Component for Group {
         let tokens = use_tokens();
         let lit = use_state(Vec::<usize>::new);
         let matched = use_state(Vec::<usize>::new);
+        use_provide_context(|| ReadoutColumn(State::create(0.0)));
         let query = search_highlight::current();
         let searching = self.filtered && query.is_some();
         let group_hit = query.as_deref().is_some_and(|query| {
@@ -293,6 +294,13 @@ pub(crate) struct RowSlot {
     /// The indexes of the rows that match the search, in this group.
     pub matched: State<Vec<usize>>,
 }
+
+/// The width of the readout slot of the level rows in one group: the widest
+/// any of them has needed, so every track of the card ends at one x. It only
+/// grows while the group is shown, so a readout that gets longer moves its
+/// own track once, never back and forth.
+#[derive(Clone, Copy, PartialEq)]
+pub(crate) struct ReadoutColumn(pub State<f32>);
 
 /// Puts `index` in or out of `rows`, writing only when that changes it.
 fn list(mut rows: State<Vec<usize>>, index: usize, on: bool) {
@@ -562,13 +570,27 @@ impl StatusBlock {
 impl Component for StatusBlock {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // Every kind but loading leads with a glyph, so a notice is never
+        // taken for a data row: an error in the danger colour on a danger
+        // tint, information with the accent's "i", empty with a muted one.
         let (text, ink, glyph) = match &self.status {
             Status::Loading(text) => (text.clone(), Ink::Muted, None),
-            Status::Empty(text) => (text.clone(), Ink::Muted, None),
-            Status::Error(text) => (text.clone(), Ink::Danger, Some(Icon::DialogError)),
-            Status::Info(text) => (text.clone(), Ink::Text, None),
+            Status::Empty(text) => (
+                text.clone(),
+                Ink::Muted,
+                Some((Icon::DialogInformation, Ink::Muted)),
+            ),
+            Status::Error(text) => (
+                text.clone(),
+                Ink::Danger,
+                Some((Icon::DialogError, Ink::Danger)),
+            ),
+            Status::Info(text) => (
+                text.clone(),
+                Ink::Text,
+                Some((Icon::DialogInformation, Ink::Accent)),
+            ),
         };
-        let color = ink.color(&tokens);
         // Only an error is tinted; it is a danger layer over the card.
         let paint = if matches!(self.status, Status::Error(_)) {
             Paint::DangerSoft
@@ -624,7 +646,11 @@ impl Component for StatusBlock {
         let block = rect()
             .component("StatusBlock")
             // An error is read out when it appears, any other status politely.
-            .a11y_role(if error { AccessibilityRole::Alert } else { AccessibilityRole::Status })
+            .a11y_role(if error {
+                AccessibilityRole::Alert
+            } else {
+                AccessibilityRole::Status
+            })
             .a11y_builder(move |node| {
                 node.set_live(if error {
                     accesskit::Live::Assertive
@@ -642,13 +668,18 @@ impl Component for StatusBlock {
             row.maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
-            .maybe_child(glyph.map(|glyph| icons::icon(glyph, IconSize::Row, color)))
+            .maybe_child(
+                glyph.map(|(glyph, ink)| icons::icon(glyph, IconSize::Row, ink.color(&tokens))),
+            )
         };
         if stacked {
             block
                 .child(
-                    lead(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), w_full()]))
-                        .child(message),
+                    lead(rect().tw(
+                        &tokens,
+                        &[flex_row(), items(Align::Center), gap(S3), w_full()],
+                    ))
+                    .child(message),
                 )
                 .child(
                     rect()

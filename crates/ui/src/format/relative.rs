@@ -140,6 +140,12 @@ impl Relative {
 
     /// The text.
     pub fn format(&self) -> String {
+        super::isolate(self.compose())
+    }
+
+    /// The text without the isolate [`format`](Self::format) adds in a
+    /// right-to-left interface: for a formatter that writes it into its own.
+    pub(super) fn compose(&self) -> String {
         let locale = self
             .locale
             .clone()
@@ -255,6 +261,12 @@ impl Recent {
 
     /// The text.
     pub fn format(&self) -> String {
+        super::isolate(self.compose())
+    }
+
+    /// The text without the isolate [`format`](Self::format) adds in a
+    /// right-to-left interface: for a formatter that writes it into its own.
+    pub(super) fn compose(&self) -> String {
         let locale = self
             .locale
             .clone()
@@ -273,14 +285,14 @@ impl Recent {
                 .zone(self.zone.clone())
                 .hour_cycle(self.hour_cycle)
                 .locale(&locale)
-                .format(),
+                .compose(),
             1 | -1 => capitalised(&told(&locale, Width::Long, Unit::Day, Numeric::Auto, days)),
             _ => Date::new(self.moment)
                 .zone(self.zone.clone())
                 .year(YearDisplay::IfNotCurrent)
                 .now(now)
                 .locale(&locale)
-                .format(),
+                .compose(),
         }
     }
 }

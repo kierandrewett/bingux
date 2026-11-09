@@ -27,11 +27,16 @@ pub(super) fn grouped(number: u64) -> String {
 
 /// `2.5 MB (2,500,000 bytes)`, or `512 bytes` when the unit is bytes.
 pub(super) fn size_with_bytes(bytes: u64) -> String {
-    let size = display::size(bytes);
+    // Isolated (`format::isolate`): in a right-to-left interface the size
+    // does not read "MB (2,500,000 bytes) 2.5".
+    let size = crate::format::isolate(display::size(bytes));
     if bytes < 1000 {
         size
     } else {
-        format!("{size} ({} bytes)", grouped(bytes))
+        format!(
+            "{size} ({})",
+            crate::format::isolate(format!("{} bytes", grouped(bytes)))
+        )
     }
 }
 
@@ -152,7 +157,11 @@ pub(super) fn read_line(done: u64, total: u64) -> String {
         return String::new();
     }
     let percent = (done as f64 / total as f64 * 100.0).clamp(0.0, 100.0);
-    format!("{} of {} ({percent:.0}%)", display::size(done), display::size(total))
+    format!(
+        "{} of {} ({percent:.0}%)",
+        display::size(done),
+        display::size(total)
+    )
 }
 
 /// A digest as two lines of 32 digits, so it fits a narrow card without a
@@ -212,7 +221,10 @@ mod tests {
             cancelled: true,
             ..running
         };
-        assert_eq!(total_size(stopped), "At least 1.5 MB (1,500,000 bytes) (stopped)");
+        assert_eq!(
+            total_size(stopped),
+            "At least 1.5 MB (1,500,000 bytes) (stopped)"
+        );
         assert_eq!(contents(stopped), "At least 4 items (stopped)");
         let locked = Totals {
             done: true,
@@ -235,10 +247,16 @@ mod tests {
     #[test]
     fn a_location_under_home_is_written_with_a_tilde() {
         let home = Path::new("/home/ana");
-        assert_eq!(home_relative(Path::new("/home/ana/Pictures"), home), "~/Pictures");
+        assert_eq!(
+            home_relative(Path::new("/home/ana/Pictures"), home),
+            "~/Pictures"
+        );
         assert_eq!(home_relative(Path::new("/home/ana"), home), "~");
         assert_eq!(home_relative(Path::new("/srv/data"), home), "/srv/data");
-        assert_eq!(home_relative(Path::new("/home/anabel"), home), "/home/anabel");
+        assert_eq!(
+            home_relative(Path::new("/home/anabel"), home),
+            "/home/anabel"
+        );
     }
 
     #[test]

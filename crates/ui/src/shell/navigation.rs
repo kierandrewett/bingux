@@ -1525,13 +1525,19 @@ impl Component for NavigationSplitView {
                     // right from where it was, over the screen beneath it.
                     let x = slide.at(time);
                     memory.borrow_mut().shown = Some((slide.motion, x));
-                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
                     stage.child(at_rest(screen)).child(slide_frame(
                         x * width,
                         1.0,
                         Some(card_amount(x)),
                         &tokens,
-                        rect().width(Size::fill()).height(Size::fill()).child(outgoing),
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .child(outgoing),
                     ))
                 }
                 Some(slide) => {
@@ -1956,6 +1962,20 @@ impl Component for Sidebar {
             }));
         }
 
+        // A docked sidebar tells the window's overlays where it is, so a
+        // toast centres on the page beside it; it says it is gone when it goes.
+        let overlays = use_try_consume::<crate::shell::overlays::Overlays>();
+        let docked = !self.full_page;
+        use_side_effect_with_deps(&docked, move |docked| {
+            if !*docked && let Some(overlays) = overlays {
+                overlays.set_sidebar(None);
+            }
+        });
+        use_drop(move || {
+            if let Some(overlays) = overlays {
+                overlays.set_sidebar(None);
+            }
+        });
         let shell = if self.full_page {
             rect()
                 .component("Sidebar")
@@ -1963,7 +1983,14 @@ impl Component for Sidebar {
                 .height(Size::flex(1.0))
                 .tw(&tokens, &[flex_col(), bg(Paint::Bg)])
         } else {
-            rect().tw(&tokens, SIDEBAR).component("Sidebar")
+            rect().tw(&tokens, SIDEBAR).component("Sidebar").on_sized(
+                move |event: Event<SizedEventData>| {
+                    if let Some(overlays) = overlays {
+                        let area = event.area;
+                        overlays.set_sidebar(Some((area.min_x(), area.max_x())));
+                    }
+                },
+            )
         };
         let table = router.table();
         let card = self
