@@ -51,6 +51,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::focus::closing_scope;
 use bingux_files::selection::{TypeAhead, type_ahead_target};
 use bingux_files::{Entry, Listing, Selection, Sort, SortKey};
 use freya::prelude::*;
@@ -1749,13 +1750,21 @@ impl Component for FileView {
             });
         }
 
+        // A list in a closing popup or dialog takes no focus: the exit hands
+        // it back to the opener, and a late request would pull it away first.
+        let closing = closing_scope();
+        let closing_now = move || closing.as_ref().is_some_and(|closing| *closing.peek());
         let focus_seen =
             use_hook(|| Rc::new(Cell::new(self.focus.map_or(0, |trigger| *trigger.peek()))));
         if let Some(trigger) = self.focus {
             let wanted = *trigger.read();
             if focus_seen.get() != wanted {
                 focus_seen.set(wanted);
-                spawn(async move { a11y_id.request_focus() });
+                spawn(async move {
+                    if !closing_now() {
+                        a11y_id.request_focus();
+                    }
+                });
             }
         }
         // Sorting by size or date on a drive that is only read for the rows in
@@ -1780,8 +1789,10 @@ impl Component for FileView {
             move |_| stat_all(),
         );
         let autofocus = self.autofocus;
-        use_side_effect(move || {
-            if autofocus {
+        // Taken when autofocus turns on, not on every render: a re-render
+        // while a popup closes must not pull focus off the control it chose.
+        use_side_effect_with_deps(&autofocus, move |&autofocus: &bool| {
+            if autofocus && !closing_now() {
                 a11y_id.request_focus();
             }
         });

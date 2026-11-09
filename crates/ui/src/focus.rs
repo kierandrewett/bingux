@@ -564,6 +564,14 @@ pub fn trap_inline(child: impl Into<Element>) -> Trap {
 #[derive(Clone)]
 pub(crate) struct ScopeClosing(pub(crate) State<bool>);
 
+/// The closing flag of the popup or dialog above the caller, if any. Read it
+/// while rendering. A control inside a closing scope takes no focus: the
+/// scope's exit hands focus back to the opener, and the control must not pull
+/// it away first.
+pub(crate) fn closing_scope() -> Option<State<bool>> {
+    try_consume_context::<ScopeClosing>().map(|closing| closing.0)
+}
+
 impl Component for Trap {
     fn render(&self) -> impl IntoElement {
         let start = use_a11y();
