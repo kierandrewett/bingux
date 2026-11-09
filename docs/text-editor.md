@@ -195,12 +195,6 @@ bytes into text on a worker (`decode`), text into bytes (`encode`), trims and
 ends the file as a save should (`tidy`), and tells the manager of each edit.
 Where files were left (`positions.rs`) is all the app keeps of its own.
 
-The first start with the shared manager imports what earlier builds kept in
-`~/.local/state/bingux/text-editor/` (`session.json` and `drafts/`): each old
-draft is offered by "Recover unsaved work?" and each file of the old session
-joins Open recent. A marker (`~/.local/state/bingux-text-editor/imported-earlier-session`)
-makes it happen once, and the old files are left where they are (`legacy.rs`).
-
 `bingux-text-editor --snapshot DIR [FILE]` (built with `--features snapshot`)
 renders the window to PNG without a compositor, and `--bench-typing FILE`
 reports how long reading a file and each key press take.
