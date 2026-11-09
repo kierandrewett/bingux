@@ -399,7 +399,7 @@ impl Component for VpnPage {
                         tokens,
                         Icon::NetworkVpn,
                         name.clone(),
-                        "—".to_string(),
+                        "Loading…".to_string(),
                     )),
                     true,
                 );
