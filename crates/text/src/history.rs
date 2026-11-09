@@ -49,6 +49,9 @@ pub struct Transaction {
     pub before: Selection,
     pub after: Selection,
     pub kind: EditKind,
+    /// What the step did, as a menu names it ("duplicate line", for "Undo
+    /// duplicate line"). `None` falls back to the kind.
+    pub label: Option<&'static str>,
     at: Instant,
     /// A number that is never reused, so the saved state can be recognised.
     id: u64,
@@ -59,6 +62,15 @@ impl Transaction {
     /// index; the caller turns it into a line for invalidation.
     pub fn first_change(&self) -> Option<usize> {
         self.changes.iter().map(|change| change.at).min()
+    }
+
+    /// How the step is named: its label, else what its kind says.
+    fn name(&self) -> Option<&'static str> {
+        self.label.or(match self.kind {
+            EditKind::Typing => Some("typing"),
+            EditKind::Deleting => Some("delete"),
+            EditKind::Other => None,
+        })
     }
 }
 
@@ -120,6 +132,7 @@ impl History {
             before,
             after,
             kind,
+            label: None,
             at: now,
             id,
         });
@@ -160,6 +173,34 @@ impl History {
 
     pub fn redone(&mut self, transaction: Transaction) {
         self.undo.push(transaction);
+    }
+
+    /// Names the newest step, unless a command already did.
+    pub fn label_last(&mut self, label: &'static str) {
+        if let Some(last) = self.undo.last_mut() {
+            last.label.get_or_insert(label);
+        }
+    }
+
+    /// A value that changes when a step is recorded or merged into: what
+    /// `Editor::label_edit` compares to see that a command edited.
+    pub fn stamp(&self) -> (usize, u64, usize) {
+        (
+            self.undo.len(),
+            self.top(),
+            self.undo.last().map_or(0, |last| last.changes.len()),
+        )
+    }
+
+    /// What undoing the newest step takes back, as a noun or gerund:
+    /// "typing", "duplicate line". `None` for an edit with no name.
+    pub fn undo_label(&self) -> Option<&'static str> {
+        self.undo.last().and_then(Transaction::name)
+    }
+
+    /// What redoing the newest undone step does again.
+    pub fn redo_label(&self) -> Option<&'static str> {
+        self.redo.last().and_then(Transaction::name)
     }
 
     /// The document as it is now is the one on disk.

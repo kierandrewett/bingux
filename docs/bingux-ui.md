@@ -2732,6 +2732,30 @@ candidate list opens at the caret instead of the editor's corner; the text
 being composed is drawn underlined at the caret. This is a workaround until
 Freya takes a caret rectangle from the focused element.
 
+**Commands.** `editor_commands(&handle, read_only)` is every key above as a
+[command](#commands): Undo, Redo, Cut, Copy, Paste, Select all, Select line,
+the occurrence and caret commands, Go to matching bracket, and in the Text
+menu (`TEXT_GROUP`) Comment or uncomment, Duplicate, Delete, Move and Join
+lines, Sort lines, Remove trailing spaces and the case changes. Wrap the view
+in `command_scope("Editor", editor_commands(&handle, false), view).fill()`:
+the main menu, the palette and the shortcuts sheet then list them with their
+keys. The view answers the keys itself, so the commands are
+`keys_handled_by_view` and the router never runs one twice. Edit > Undo and
+Redo are named after the edit ("Undo typing", "Redo duplicate line"), from the
+engine's own per-document history: a step is named by the command that made
+it (`Editor::label_edit(label, f)` names the step `f` makes, and a step with no
+name takes its kind, typing or delete). Menu items for the editor's own
+commands in a context menu come from `commands.context_menu_of(&list, &[&[ids]])`.
+The view tells its scope it holds the keyboard focus with
+`use_scope_notifier()`, because it stops the keys and presses it uses.
+
+**Drag and drop.** Press on selected text and drag: the text is dragged, and
+a plain click there places the caret. Other programs take it as text, and a
+drop on the same document moves it as one undo step ("Undo move text"; Ctrl
+copies). Text dragged in from another program lands where it is let go, with a
+caret marking the place while it is over the view. A file dragged over the
+editor is not text: the window takes it (`Format::Uris`).
+
 ### Held modifier keys
 
 A wheel, pointer or touch event carries no modifier keys. `input::held_modifiers()`
@@ -5117,12 +5141,25 @@ app's own command with one of these ids replaces it.
 
 `use_commands()` returns the window's registry: `run(id)`, `get(id)`,
 `all()`, `recent()`, `main_menu_items()`, `context_menu(..)`,
+`context_menu_of(&list, ..)` (the same for the commands of a list you hold,
+which a view's own context menu uses: a right click does not move the
+keyboard focus the window's menus go by),
 `show_palette()` and `show_shortcuts()`. The registry and the router live in
 the window's `OverlayHost` (and `Application::run` provides the registry, so
 the app's root component may declare commands above its host). A host inside
 another leaves routing to the outer one, so a key never runs a command twice.
 `MenuButton::items_on_open(f)` builds items when the menu opens, which is how
 `app_menu` reads titles such as "Undo rename" that change without a redraw.
+
+`Command::submenu(id, title, items)` is a submenu of the main menu, in its
+group and section ("Open recent"), with the items you built; it has no
+shortcut or palette entry.
+
+A view that stops the keys and presses it uses (a text editor, a file list)
+never lets them bubble through its scope, so the scope would not learn it
+holds the focus. Such a view calls `use_scope_notifier()` and, from its key
+and press handlers, `.focused()`: the scopes around it then list their commands
+in the menus, the palette and the sheet.
 
 ### The command palette
 

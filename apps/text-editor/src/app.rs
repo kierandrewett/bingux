@@ -14,14 +14,18 @@ use std::time::Duration;
 
 use bingux_text::encoding::{self, LineEnding};
 use bingux_text::encoding_rs;
-use bingux_text::{Case, Editor, Indent, Language};
+use bingux_text::{Editor, Indent, Language};
 use bingux_ui::app::use_window_seed;
+use bingux_ui::commands::{
+    Command, CommandGroup, command_scope, use_commands, use_window_commands,
+};
+use bingux_ui::dnd::{DragActions, DropTarget, Dropped, Format, use_drop_target};
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::prelude::*;
 use bingux_ui::tabs::{Birth, Tab, TabContent, TabSet, Tabs, tab_items, use_tab_window};
 use bingux_ui::text_editor::{
-    EditorHandle, ScrollPos, ZoomStep, caret_caption, find_bar, go_to_line_bar, markdown_view,
-    status_caption, text_editor, use_find,
+    EditorHandle, FindState, ScrollPos, ZoomStep, caret_caption, editor_commands, find_bar,
+    go_to_line_bar, markdown_view, status_caption, text_editor, use_find,
 };
 use freya::prelude::*;
 
@@ -718,16 +722,22 @@ impl Component for Content {
             prefs,
             editor_id,
         };
-        // The tab commands (New, Close, Reopen, Next, Previous) live in the
-        // window's command set, so the palette and shortcuts sheet list them.
-        bingux_ui::commands::use_window_commands(
-            actions.tabs.commands(move |_: ()| actions.new_document()),
-        );
-        let tab_menu = bingux_ui::commands::use_commands().main_menu_items();
+        let commands = use_commands();
         let find = use_find();
         let mut go_to_open = use_state(|| false);
         let preview_on_phone = use_state(|| false);
-        let mut hovering_files = use_state(|| false);
+        // Files dragged in from other programs open in tabs.
+        let files_over = use_drop_target(
+            DropTarget::new()
+                .accepts([Format::Uris])
+                .actions(DragActions::COPY)
+                .highlight(false)
+                .on_drop(move |dropped: Dropped| {
+                    for path in dropped.data.files() {
+                        actions.open_path(path);
+                    }
+                }),
+        );
         let preview_ratio = use_state(|| 0.5f32);
         // The document the keyboard was last given to: a document that is
         // shown, or that finishes loading, takes the keyboard once.
@@ -803,6 +813,27 @@ impl Component for Content {
         let tab_window = use_tab_window(set, &title);
         let prefs_now = prefs.read().clone();
         let compact = is_compact();
+
+        // ---- Commands --------------------------------------------------
+        // Everything the window can do is a command: the main menu, the
+        // palette and the shortcuts sheet are built from them, and the keys
+        // run them. The editor's own come with its scope, below.
+        let any_dirty = document::ids().into_iter().any(|id| {
+            document::with(id, |doc| {
+                doc.is_modified() && doc.path.is_some() && !doc.read_only
+            })
+            .unwrap_or(false)
+        });
+        let shown_doc = ShownDoc {
+            id: doc_id,
+            handle: handle.clone(),
+            has_path: path.is_some(),
+            ready: phase == Phase::Ready,
+            any_dirty,
+        };
+        use_window_commands(window_commands(
+            actions, find, go_to_open, &shown_doc, &prefs_now,
+        ));
         if phase == Phase::Ready && *focused_doc.peek() != Some(doc_id) {
             let mut focused_doc = focused_doc;
             spawn(async move {
@@ -825,24 +856,31 @@ impl Component for Content {
                 .unwrap_or_default()
             })
             .collect();
-        let header = HeaderBar::new(title.clone())
-            .leading(
-                icon_button(Icon::DocumentOpen, move |_| actions.open_dialog())
-                    .tooltip("Open (Ctrl+O)"),
-            )
-            .trailing(
-                icon_button(Icon::DocumentSave, move |_| {
-                    if let Some(id) = actions.current() {
-                        actions.save(id, None);
-                    }
-                })
-                .tooltip("Save (Ctrl+S)")
-                .busy(saving),
-            )
-            .trailing(
-                menu_button("Main menu", main_menu(tab_menu, actions, find, go_to_open, doc_id))
-                    .icon(Icon::OpenMenu),
-            )
+        // A phone has no room for Open and Save beside the tabs and the
+        // window's buttons: they are in the main menu, and a document names
+        // itself in its tab at a readable width.
+        let mut header = HeaderBar::new(title.clone());
+        if compact {
+            header = header.busy(saving);
+        } else {
+            header =
+                header
+                    .leading(
+                        icon_button(Icon::DocumentOpen, move |_| actions.open_dialog())
+                            .tooltip(&tip(commands, "file.open", "Open")),
+                    )
+                    .trailing(
+                        icon_button(Icon::DocumentSave, move |_| {
+                            if let Some(id) = actions.current() {
+                                actions.save(id, None);
+                            }
+                        })
+                        .tooltip(&tip(commands, "file.save", "Save"))
+                        .busy(saving),
+                    );
+        }
+        let header = header
+            .trailing(app_menu(Vec::new()))
             .trailing(WindowControls)
             .tab_slot(tabs.strip(
                 tab_items(&shown, titles, |_| Icon::TextXGeneric),
@@ -927,6 +965,16 @@ impl Component for Content {
             }
             Phase::Ready => {
                 let marks = find.marks();
+                let scope = editor_commands(&handle, false);
+                let mut context =
+                    commands.context_menu_of(&scope, &[&["text.comment", "text.duplicate-line"]]);
+                let case = commands.context_menu_of(
+                    &scope,
+                    &[&["text.uppercase", "text.lowercase", "text.title-case"]],
+                );
+                if !case.is_empty() {
+                    context.push(submenu("Change case", case));
+                }
                 let view = text_editor(handle.clone())
                     .line_numbers(prefs_now.line_numbers && !compact)
                     .wrap(prefs_now.wrap)
@@ -936,12 +984,14 @@ impl Component for Content {
                     .placeholder("Start typing or drop a file")
                     .label(doc_title.clone())
                     .a11y_id(editor_id)
-                    .menu_extra(text_menu(handle.clone()));
+                    .menu_extra(context);
                 let view = match marks {
                     Some((matches, current)) => view.matches(matches, current),
                     None => view,
                 };
-                let editor: Element = view.into();
+                // The editor's keys are its own; the scope lists them in the
+                // menus, the palette and the shortcuts sheet.
+                let editor: Element = command_scope("Editor", scope, view).fill().into();
                 let small = handle.read().rope().len_bytes() <= PREVIEW_LIMIT;
                 if is_markdown && prefs_now.markdown_preview && small {
                     let source: Rc<str> = handle.read().text().into();
@@ -976,85 +1026,25 @@ impl Component for Content {
         );
 
         // ---- Keys --------------------------------------------------------
+        // The commands answer their own shortcuts. What is left here: the
+        // tab keys that are not commands (Alt+1 to 9) and Escape, which
+        // closes the find or go to line bar from the text too.
         let tab_keys = tabs.shortcuts(move |_: ()| actions.new_document());
-        let key_handle = handle.clone();
         let on_key_down = move |event: Event<KeyboardEventData>| {
-            let ctrl = event.modifiers.contains(Modifiers::CONTROL);
-            let shift = event.modifiers.contains(Modifiers::SHIFT);
-            let alt = event.modifiers.contains(Modifiers::ALT);
             let mut find_open = find.open;
-            let handled = match &event.key {
-                Key::Character(text) if ctrl && !alt => match (text.to_lowercase().as_str(), shift)
-                {
-                    ("n", false) => {
-                        actions.new_document();
-                        true
-                    }
-                    ("o", false) => {
-                        actions.open_dialog();
-                        true
-                    }
-                    ("s", false) => {
-                        actions.save(doc_id, None);
-                        true
-                    }
-                    ("s", true) => {
-                        actions.save_as(doc_id, None);
-                        true
-                    }
-                    ("f", false) => {
-                        go_to_open.set(false);
-                        find.open_from(&key_handle, false);
-                        true
-                    }
-                    ("h", false) => {
-                        go_to_open.set(false);
-                        find.open_from(&key_handle, true);
-                        true
-                    }
-                    ("i", false) => {
-                        find_open.set(false);
-                        go_to_open.set(true);
-                        true
-                    }
-                    ("g", _) => {
-                        if !*find.open.peek() && !find.query.peek().is_empty() {
-                            find_open.set(true);
-                        }
-                        find.step(&key_handle, !shift);
-                        true
-                    }
-                    ("v", true) => {
-                        actions
-                            .update_prefs(|prefs| prefs.markdown_preview = !prefs.markdown_preview);
-                        true
-                    }
-                    _ => false,
-                },
-                Key::Character(text) if alt && !ctrl && text.eq_ignore_ascii_case("z") => {
-                    actions.update_prefs(|prefs| prefs.wrap = !prefs.wrap);
-                    true
-                }
-                Key::Named(NamedKey::F3) if !ctrl && !alt => {
-                    find.step(&key_handle, !shift);
-                    true
-                }
-                Key::Named(NamedKey::Escape) if *find.open.peek() || *go_to_open.peek() => {
-                    find_open.set(false);
-                    go_to_open.set(false);
-                    actions.focus_editor();
-                    true
-                }
-                _ => false,
-            };
-            if handled {
+            if event.key == Key::Named(NamedKey::Escape)
+                && (*find.open.peek() || *go_to_open.peek())
+            {
+                find_open.set(false);
+                go_to_open.set(false);
+                actions.focus_editor();
                 event.stop_propagation();
                 return;
             }
             tab_keys(event);
         };
 
-        let drop_overlay = hovering_files.read().then(|| {
+        let drop_overlay = files_over.is_targeted().then(|| {
             rect()
                 .position(Position::new_absolute().left(0.0).top(0.0))
                 .tw(&tokens, &[w_full(), h_full(), center(), bg(Paint::Scrim)])
@@ -1094,15 +1084,8 @@ impl Component for Content {
                 ],
             )
             .on_key_down(on_key_down)
-            .on_global_file_hover(move |_| hovering_files.set_if_modified(true))
-            .on_global_file_hover_cancelled(move |_| hovering_files.set_if_modified(false))
-            .on_file_drop(move |event: Event<FileEventData>| {
-                hovering_files.set_if_modified(false);
-                for path in event.file_paths.clone() {
-                    actions.open_path(path);
-                }
-            })
             .on_sized(move |event: Event<SizedEventData>| {
+                files_over.set_area(event.visible_area);
                 tab_window.sized(event.area.width(), event.area.height());
                 if !is_compact() && !*maximized.peek() {
                     let size = (event.area.width().round(), event.area.height().round());
@@ -1376,56 +1359,34 @@ fn notice_banner(
     Some(banner_.into())
 }
 
-/// The editor's context menu after Cut, Copy, Paste and Select all.
-fn text_menu(handle: EditorHandle) -> Vec<MenuItem> {
-    let comment = handle.clone();
-    let duplicate = handle.clone();
-    vec![
-        menu_item("Comment or uncomment", move |_| {
-            comment.update(|editor| editor.toggle_comment())
-        })
-        .shortcut("Ctrl+/"),
-        menu_item("Duplicate line", move |_| {
-            duplicate.update(|editor| editor.duplicate())
-        })
-        .shortcut("Ctrl+D"),
-        submenu("Change case", case_items(handle)),
-    ]
-}
-
-fn case_items(handle: EditorHandle) -> Vec<MenuItem> {
-    let upper = handle.clone();
-    let lower = handle.clone();
-    let title = handle;
-    vec![
-        menu_item("Uppercase", move |_| {
-            upper.update(|editor| editor.transform_case(Case::Upper))
-        }),
-        menu_item("Lowercase", move |_| {
-            lower.update(|editor| editor.transform_case(Case::Lower))
-        }),
-        menu_item("Title case", move |_| {
-            title.update(|editor| editor.transform_case(Case::Title))
-        }),
-    ]
-}
-
-/// The main menu.
-fn main_menu(
-    tab_menu: Vec<MenuItem>,
-    actions: Actions,
-    find: bingux_ui::text_editor::FindState,
-    go_to_open: State<bool>,
+/// What the window's commands need to know of the document on show.
+struct ShownDoc {
     id: u64,
-) -> Vec<MenuItem> {
-    let prefs = actions.prefs.read().clone();
-    let handle = document::handle(id);
-    let has_path = document::with(id, |doc| doc.path.is_some()).unwrap_or(false);
-    let mut items = tab_menu;
-    items.push(menu_separator());
-    items.push(menu_item("Open…", move |_| actions.open_dialog()).shortcut("Ctrl+O"));
+    handle: EditorHandle,
+    has_path: bool,
+    ready: bool,
+    any_dirty: bool,
+}
+
+/// "Open (Ctrl+O)": `name` and the first shortcut of the command `id`, so a
+/// tooltip never disagrees with the key.
+fn tip(commands: bingux_ui::commands::Commands, id: &str, name: &str) -> String {
+    match commands
+        .get(id)
+        .and_then(|command| command.shortcuts().first().map(|shortcut| shortcut.label()))
+    {
+        Some(keys) => format!("{name} ({keys})"),
+        None => name.to_owned(),
+    }
+}
+
+/// The recent files, as the rows of the Open recent submenu.
+fn recent_items(actions: Actions) -> Vec<MenuItem> {
     let recent = session::recent();
-    let mut recent_items: Vec<MenuItem> = recent
+    if recent.is_empty() {
+        return vec![menu_item("No recent files", |_| {}).disabled()];
+    }
+    let mut items: Vec<MenuItem> = recent
         .iter()
         .take(12)
         .map(|path| {
@@ -1435,125 +1396,243 @@ fn main_menu(
             })
         })
         .collect();
-    if recent_items.is_empty() {
-        recent_items.push(menu_item("No recent files", |_| {}).disabled());
-    } else {
-        recent_items.push(menu_separator());
-        recent_items.push(menu_item("Clear recent files", |_| session::clear_recent()));
-    }
-    items.push(submenu("Open recent", recent_items));
-    items.push(menu_item("Save", move |_| actions.save(id, None)).shortcut("Ctrl+S"));
-    items.push(menu_item("Save as…", move |_| actions.save_as(id, None)).shortcut("Ctrl+Shift+S"));
-    items.push(menu_item("Save all", move |_| actions.save_all()));
-    let reload = menu_item("Read again from disk", move |_| actions.reload(id, None));
-    items.push(if has_path { reload } else { reload.disabled() });
     items.push(menu_separator());
-    if let Some(handle) = handle.clone() {
-        let find_handle = handle.clone();
-        let replace_handle = handle.clone();
-        let mut go_to = go_to_open;
-        items.push(
-            menu_item("Find…", move |_| find.open_from(&find_handle, false)).shortcut("Ctrl+F"),
-        );
-        items.push(
-            menu_item("Find and replace…", move |_| {
-                find.open_from(&replace_handle, true)
-            })
-            .shortcut("Ctrl+H"),
-        );
-        items.push(menu_item("Go to line…", move |_| go_to.set(true)).shortcut("Ctrl+I"));
-        let sort = handle.clone();
-        let join = handle.clone();
-        let trim = handle.clone();
-        let comment = handle.clone();
-        let duplicate = handle.clone();
-        let mut text = vec![
-            menu_item("Comment or uncomment", move |_| {
-                comment.update(|editor| editor.toggle_comment())
-            })
-            .shortcut("Ctrl+/"),
-            menu_item("Duplicate line", move |_| {
-                duplicate.update(|editor| editor.duplicate())
-            })
-            .shortcut("Ctrl+D"),
-            menu_item("Join lines", move |_| {
-                join.update(|editor| editor.join_lines())
-            })
-            .shortcut("Ctrl+J"),
-            menu_item("Sort lines", move |_| {
-                sort.update(|editor| editor.sort_lines())
-            }),
-            menu_item("Remove trailing spaces", move |_| {
-                trim.update(|editor| editor.trim_trailing_whitespace());
-            }),
-            menu_separator(),
-        ];
-        text.extend(case_items(handle.clone()));
-        items.push(submenu("Text", text));
-    }
-    let view = vec![
-        menu_item("Line numbers", move |_| {
-            actions.update_prefs(|prefs| prefs.line_numbers = !prefs.line_numbers)
-        })
-        .checked(prefs.line_numbers),
-        menu_item("Wrap lines", move |_| {
-            actions.update_prefs(|prefs| prefs.wrap = !prefs.wrap)
-        })
-        .checked(prefs.wrap)
-        .shortcut("Alt+Z"),
-        menu_item("Show spaces and tabs", move |_| {
-            actions.update_prefs(|prefs| prefs.show_whitespace = !prefs.show_whitespace)
-        })
-        .checked(prefs.show_whitespace),
-        menu_item("Highlight current line", move |_| {
-            actions.update_prefs(|prefs| prefs.highlight_line = !prefs.highlight_line)
-        })
-        .checked(prefs.highlight_line),
-        menu_item("Markdown preview", move |_| {
-            actions.update_prefs(|prefs| prefs.markdown_preview = !prefs.markdown_preview)
-        })
-        .checked(prefs.markdown_preview)
-        .shortcut("Ctrl+Shift+V"),
-        menu_separator(),
-        menu_item("Zoom in", move |_| actions.zoom(ZoomStep::In)).shortcut("Ctrl+="),
-        menu_item("Zoom out", move |_| actions.zoom(ZoomStep::Out)).shortcut("Ctrl+-"),
-        menu_item("Actual size", move |_| actions.zoom(ZoomStep::Reset)).shortcut("Ctrl+0"),
-    ];
-    items.push(submenu("View", view));
-    let editing = vec![
-        menu_item("Close brackets and quotes", move |_| {
-            actions.update_prefs(|prefs| prefs.auto_close = !prefs.auto_close);
-            let on = prefs_now().auto_close;
-            for id in document::ids() {
-                if let Some(handle) = document::handle(id) {
-                    handle.update(|editor| editor.settings.auto_close = on);
-                }
-            }
-        })
-        .checked(prefs.auto_close),
-        menu_item("Trim spaces on save", move |_| {
-            actions.update_prefs(|prefs| prefs.trim_on_save = !prefs.trim_on_save)
-        })
-        .checked(prefs.trim_on_save),
-        menu_item("End with a new line", move |_| {
-            actions.update_prefs(|prefs| prefs.final_newline = !prefs.final_newline)
-        })
-        .checked(prefs.final_newline),
-    ];
-    items.push(submenu("Editing", editing));
-    items.push(menu_item("Statistics", move |_| {
-        actions.show_statistics(id)
-    }));
-    items.push(menu_separator());
-    let overlays = actions.overlays;
-    items.push(
-        menu_item("Keyboard shortcuts", move |_| {
-            overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("OK"))
-        })
-        .shortcut("Ctrl+?"),
-    );
-    items.extend(bingux_ui::about::app_menu_items(overlays));
+    items.push(menu_item("Clear recent files", |_| session::clear_recent()));
     items
+}
+
+/// The commands that work wherever the keyboard is: files, find, view and
+/// editing choices. The keys of the editor itself (Undo, the clipboard, the
+/// line edits) come with its scope.
+fn window_commands(
+    actions: Actions,
+    find: FindState,
+    go_to_open: State<bool>,
+    shown: &ShownDoc,
+    prefs: &Prefs,
+) -> Vec<Command> {
+    let id = shown.id;
+    let ready = shown.ready;
+    let find_handle = shown.handle.clone();
+    let replace_handle = shown.handle.clone();
+    let next_handle = shown.handle.clone();
+    let previous_handle = shown.handle.clone();
+    let mut find_open = find.open;
+    let mut go_to_open = go_to_open;
+    let mut go_to_close = go_to_open;
+    let mut next_open = find.open;
+    let mut previous_open = find.open;
+    let auto_close = prefs.auto_close;
+
+    let toggle = |id: &'static str,
+                  title: &'static str,
+                  on: bool,
+                  group: CommandGroup,
+                  change: fn(&mut Prefs)| {
+        Command::new(id, title, move |_| actions.update_prefs(change))
+            .checked(on)
+            .group(group)
+    };
+
+    let mut list = vec![
+        Command::new("file.new", "New document", move |_| actions.new_document())
+            .shortcut("Ctrl+N")
+            .shortcut("Ctrl+T")
+            .group(CommandGroup::File)
+            .section("new"),
+        Command::new("file.open", "Open…", move |_| actions.open_dialog())
+            .shortcut("Ctrl+O")
+            .icon(Icon::DocumentOpen)
+            .group(CommandGroup::File)
+            .section("new"),
+        Command::submenu("file.open-recent", "Open recent", recent_items(actions))
+            .group(CommandGroup::File)
+            .section("new"),
+        Command::new("file.save", "Save", move |_| actions.save(id, None))
+            .shortcut("Ctrl+S")
+            .icon(Icon::DocumentSave)
+            .enabled(ready)
+            .group(CommandGroup::File)
+            .section("save"),
+        Command::new("file.save-as", "Save as…", move |_| {
+            actions.save_as(id, None)
+        })
+        .shortcut("Ctrl+Shift+S")
+        .enabled(ready)
+        .group(CommandGroup::File)
+        .section("save"),
+        Command::new("file.save-all", "Save all", move |_| actions.save_all())
+            .enabled(shown.any_dirty)
+            .group(CommandGroup::File)
+            .section("save"),
+        Command::new("file.reload", "Read again from disk", move |_| {
+            actions.reload(id, None)
+        })
+        .keywords(["revert", "reload"])
+        .enabled(ready && shown.has_path)
+        .group(CommandGroup::File)
+        .section("save"),
+        Command::new("find.find", "Find…", move |_| {
+            go_to_close.set(false);
+            find.open_from(&find_handle, false);
+        })
+        .shortcut("Ctrl+F")
+        .icon(Icon::Search)
+        .enabled(ready)
+        .group(CommandGroup::Edit)
+        .section("find"),
+        Command::new("find.replace", "Find and replace…", move |_| {
+            go_to_close.set(false);
+            find.open_from(&replace_handle, true);
+        })
+        .shortcut("Ctrl+H")
+        .keywords(["substitute"])
+        .enabled(ready)
+        .group(CommandGroup::Edit)
+        .section("find"),
+        Command::new("find.next", "Find next", move |_| {
+            if !*find.open.peek() && !find.query.peek().is_empty() {
+                next_open.set(true);
+            }
+            find.step(&next_handle, true);
+        })
+        .shortcut("Ctrl+G")
+        .shortcut("F3")
+        .enabled(ready)
+        .group(CommandGroup::Edit)
+        .section("find"),
+        Command::new("find.previous", "Find previous", move |_| {
+            if !*find.open.peek() && !find.query.peek().is_empty() {
+                previous_open.set(true);
+            }
+            find.step(&previous_handle, false);
+        })
+        .shortcut("Ctrl+Shift+G")
+        .shortcut("Shift+F3")
+        .enabled(ready)
+        .group(CommandGroup::Edit)
+        .section("find"),
+        Command::new("go.line", "Go to line…", move |_| {
+            find_open.set(false);
+            go_to_open.set(true);
+        })
+        .shortcut("Ctrl+I")
+        .keywords(["jump", "line number"])
+        .enabled(ready)
+        .group(CommandGroup::Go)
+        .section("lines"),
+        toggle(
+            "view.line-numbers",
+            "Line numbers",
+            prefs.line_numbers,
+            CommandGroup::View,
+            |prefs| prefs.line_numbers = !prefs.line_numbers,
+        )
+        .section("show"),
+        toggle(
+            "view.wrap",
+            "Wrap lines",
+            prefs.wrap,
+            CommandGroup::View,
+            |prefs| prefs.wrap = !prefs.wrap,
+        )
+        .shortcut("Alt+Z")
+        .keywords(["word wrap"])
+        .section("show"),
+        toggle(
+            "view.whitespace",
+            "Show spaces and tabs",
+            prefs.show_whitespace,
+            CommandGroup::View,
+            |prefs| prefs.show_whitespace = !prefs.show_whitespace,
+        )
+        .keywords(["invisibles", "whitespace"])
+        .section("show"),
+        toggle(
+            "view.highlight-line",
+            "Highlight current line",
+            prefs.highlight_line,
+            CommandGroup::View,
+            |prefs| prefs.highlight_line = !prefs.highlight_line,
+        )
+        .section("show"),
+        toggle(
+            "view.markdown-preview",
+            "Markdown preview",
+            prefs.markdown_preview,
+            CommandGroup::View,
+            |prefs| prefs.markdown_preview = !prefs.markdown_preview,
+        )
+        .shortcut("Ctrl+Shift+V")
+        .section("show"),
+        Command::new("view.zoom-in", "Zoom in", move |_| {
+            actions.zoom(ZoomStep::In)
+        })
+        .shortcut("Ctrl+Plus")
+        .shortcut("Ctrl+=")
+        .group(CommandGroup::View)
+        .section("zoom"),
+        Command::new("view.zoom-out", "Zoom out", move |_| {
+            actions.zoom(ZoomStep::Out)
+        })
+        .shortcut("Ctrl+-")
+        .group(CommandGroup::View)
+        .section("zoom"),
+        Command::new("view.zoom-reset", "Actual size", move |_| {
+            actions.zoom(ZoomStep::Reset)
+        })
+        .shortcut("Ctrl+0")
+        .group(CommandGroup::View)
+        .section("zoom"),
+        Command::new("text.statistics", "Statistics", move |_| {
+            actions.show_statistics(id)
+        })
+        .keywords(["word count", "characters", "reading time"])
+        .enabled(ready)
+        .group(bingux_ui::text_editor::TEXT_GROUP)
+        .section("info"),
+        Command::new(
+            "editing.auto-close",
+            "Close brackets and quotes",
+            move |_| {
+                actions.update_prefs(|prefs| prefs.auto_close = !auto_close);
+                for id in document::ids() {
+                    if let Some(handle) = document::handle(id) {
+                        handle.update(|editor| editor.settings.auto_close = !auto_close);
+                    }
+                }
+            },
+        )
+        .checked(auto_close)
+        .group(CommandGroup::Other("Editing"))
+        .section("typing"),
+        toggle(
+            "editing.trim-on-save",
+            "Trim spaces on save",
+            prefs.trim_on_save,
+            CommandGroup::Other("Editing"),
+            |prefs| prefs.trim_on_save = !prefs.trim_on_save,
+        )
+        .section("saving"),
+        toggle(
+            "editing.final-newline",
+            "Add final new line",
+            prefs.final_newline,
+            CommandGroup::Other("Editing"),
+            |prefs| prefs.final_newline = !prefs.final_newline,
+        )
+        .section("saving"),
+    ];
+    // New tab is New document here, with both keys; the rest of the tab
+    // commands (Close, Reopen, Next, Previous) are the tab set's own.
+    list.extend(
+        actions
+            .tabs
+            .commands(move |_: ()| actions.new_document())
+            .into_iter()
+            .filter(|command| command.id() != "tabs.new"),
+    );
+    list
 }
 
 /// The status bar: where the caret is, and the document's language,
@@ -1782,8 +1861,9 @@ fn encoding_items(actions: Actions, id: u64, format: encoding::FileFormat) -> Ve
             )
         })
         .collect();
-    let mut items = vec![submenu("Save with encoding", save_with)];
-    let reopen_item = submenu("Read again with encoding", reopen);
+    // Labels short enough for the narrow menu (`Dim::Menu`), which cuts longer ones off.
+    let mut items = vec![submenu("Encode as", save_with)];
+    let reopen_item = submenu("Read again as", reopen);
     items.push(if has_path {
         reopen_item
     } else {
@@ -1803,28 +1883,3 @@ fn encoding_items(actions: Actions, id: u64, format: encoding::FileFormat) -> Ve
     }
     items
 }
-
-const SHORTCUTS: &str = "\
-Ctrl+N, Ctrl+T  New document\n\
-Ctrl+O  Open\n\
-Ctrl+S, Ctrl+Shift+S  Save, save as\n\
-Ctrl+W  Close the document\n\
-Ctrl+Shift+T  Reopen the document closed last\n\
-Ctrl+F, Ctrl+H  Find, find and replace\n\
-Ctrl+G, F3  Next result (with Shift, the previous)\n\
-Ctrl+I  Go to line\n\
-Ctrl+D  Duplicate the line\n\
-Ctrl+Shift+K  Delete the line\n\
-Alt+Up, Alt+Down  Move the line\n\
-Ctrl+/  Comment or uncomment\n\
-Ctrl+J  Join lines\n\
-Ctrl+L  Select the line\n\
-Ctrl+Shift+D  Add the next occurrence\n\
-Ctrl+Shift+L  Select every occurrence\n\
-Ctrl+Alt+Up, Ctrl+Alt+Down  Add a caret above or below\n\
-Alt+click  Add or remove a caret\n\
-Ctrl+Backspace  Delete a word\n\
-Ctrl+M  Go to the matching bracket\n\
-Alt+Z  Wrap lines\n\
-Ctrl+Shift+V  Markdown preview\n\
-Ctrl+=, Ctrl+-, Ctrl+0  Zoom";

@@ -362,3 +362,106 @@ fn graphemes_move_as_one() {
     editor.backspace();
     assert_eq!(editor.text(), "x");
 }
+
+// Undo steps are named for the Edit menu ("Undo typing"). Failure modes: a
+// command that changes nothing naming the step before it; a burst of typing
+// losing its name when it merges; the redo name not following an undo.
+#[test]
+fn undo_steps_are_named_after_what_they_did() {
+    let mut editor = ed("|");
+    assert_eq!(editor.history().undo_label(), None);
+    editor.type_text("a");
+    editor.type_text("b");
+    assert_eq!(editor.history().undo_label(), Some("typing"));
+    editor.backspace();
+    assert_eq!(editor.history().undo_label(), Some("delete"));
+    editor.undo();
+    assert_eq!(editor.history().undo_label(), Some("typing"));
+    assert_eq!(editor.history().redo_label(), Some("delete"));
+}
+
+#[test]
+fn label_edit_names_the_step_it_made() {
+    let mut editor = ed("b\na|");
+    editor.label_edit("sort lines", |editor| {
+        editor.select_all();
+        editor.sort_lines();
+    });
+    assert_eq!(editor.text(), "a\nb");
+    assert_eq!(editor.history().undo_label(), Some("sort lines"));
+}
+
+#[test]
+fn label_edit_leaves_the_step_before_alone_when_nothing_changed() {
+    let mut editor = ed("a|");
+    editor.type_text("x");
+    editor.label_edit("sort lines", |editor| {
+        // One line: sorting changes nothing.
+        editor.sort_lines();
+    });
+    assert_eq!(editor.history().undo_label(), Some("typing"));
+}
+
+#[test]
+fn a_named_step_keeps_its_name() {
+    let mut editor = ed("a|");
+    editor.label_edit("duplicate line", |editor| editor.duplicate());
+    editor.label_edit("comment", |editor| editor.history_mut().label_last("other"));
+    assert_eq!(editor.history().undo_label(), Some("duplicate line"));
+}
+
+#[test]
+fn replace_and_paste_are_named() {
+    let mut editor = ed("a a|");
+    editor.replace_ranges(vec![((0, 1), "b".into())]);
+    assert_eq!(editor.history().undo_label(), Some("replace"));
+    editor.paste("zz");
+    assert_eq!(editor.history().undo_label(), Some("paste"));
+}
+
+// Drag and drop: text moved inside the document is one undo step; dropping on
+// the text itself does nothing; a drop from another program is selected; the
+// source of a drag another program moved is removed only if it is unchanged.
+#[test]
+fn moving_text_forward_and_back_is_one_step() {
+    let mut editor = ed("one two three|");
+    assert!(editor.move_text((0, 4), 8));
+    assert_eq!(editor.text(), "two one three");
+    assert_eq!(show(&editor), "two [one ]three");
+    assert_eq!(editor.history().undo_label(), Some("move text"));
+    editor.undo();
+    assert_eq!(editor.text(), "one two three");
+    assert!(editor.move_text((8, 13), 0));
+    assert_eq!(editor.text(), "threeone two ");
+}
+
+#[test]
+fn dropping_text_on_itself_changes_nothing() {
+    let mut editor = ed("hello world|");
+    let before = editor.revision();
+    assert!(!editor.move_text((0, 5), 3));
+    assert!(!editor.move_text((0, 5), 5));
+    assert_eq!(editor.revision(), before);
+    assert_eq!(editor.text(), "hello world");
+}
+
+#[test]
+fn dropped_text_is_inserted_selected_and_one_step() {
+    let mut editor = ed("ab|");
+    editor.drop_text(1, "X\r\nY");
+    assert_eq!(editor.text(), "aX\nYb");
+    assert_eq!(editor.selection().primary().start(), 1);
+    assert_eq!(editor.selection().primary().end(), 4);
+    assert_eq!(editor.history().undo_label(), Some("drop text"));
+    editor.undo();
+    assert_eq!(editor.text(), "ab");
+}
+
+#[test]
+fn the_source_of_a_moved_drag_is_removed_only_when_unchanged() {
+    let mut editor = ed("keep this|");
+    assert!(!editor.remove_if_unchanged((0, 4), "gone"));
+    assert_eq!(editor.text(), "keep this");
+    assert!(editor.remove_if_unchanged((0, 5), "keep "));
+    assert_eq!(editor.text(), "this");
+}

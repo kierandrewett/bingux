@@ -142,6 +142,8 @@ pub struct Command {
     /// handler answers the keys.
     routed: bool,
     on_run: Option<EventHandler<()>>,
+    /// The command is a submenu of these items (Open recent), not an action.
+    submenu: Option<Vec<MenuItem>>,
 }
 
 impl std::fmt::Debug for Command {
@@ -182,6 +184,7 @@ impl Command {
             in_palette: true,
             routed: true,
             on_run: Some(EventHandler::new(on_run)),
+            submenu: None,
         }
     }
 
@@ -196,6 +199,19 @@ impl Command {
         Self {
             keys_text: Some(keys.into()),
             in_menu: false,
+            in_palette: false,
+            on_run: None,
+            ..Self::new(id, title, |_| {})
+        }
+    }
+
+    /// A submenu of the main menu, in the group and section of the command:
+    /// "Open recent", with `items` as its rows. It has no shortcut and no
+    /// palette entry; the items are built when the window renders, so a list
+    /// of recent files is the one that applies.
+    pub fn submenu(id: impl Into<String>, title: impl Into<String>, items: Vec<MenuItem>) -> Self {
+        Self {
+            submenu: Some(items),
             in_palette: false,
             on_run: None,
             ..Self::new(id, title, |_| {})
@@ -311,7 +327,7 @@ impl Command {
     }
 
     fn runs(&self) -> bool {
-        self.on_run.is_some()
+        self.on_run.is_some() || self.submenu.is_some()
     }
 }
 
@@ -614,6 +630,14 @@ impl Commands {
     /// A menu item for `command`: its title, shortcut, tick and state.
     fn item(self, resolved: &Resolved, shortcut: bool) -> MenuItem {
         let command = resolved.command.clone();
+        if let Some(items) = command.submenu.clone() {
+            let item = submenu(command.title.clone(), items);
+            return if command.enabled {
+                item
+            } else {
+                item.disabled()
+            };
+        }
         let mut item = menu_item(command.title.clone(), move |_: ()| {
             self.invoke(&command);
         });
@@ -706,7 +730,26 @@ impl Commands {
     /// left out, and a section left empty takes no separator. Context menus
     /// show no shortcuts.
     pub fn context_menu(self, sections: &[&[&str]]) -> Vec<MenuItem> {
-        let resolved = self.resolved();
+        self.menu_from(&self.resolved(), sections)
+    }
+
+    /// [`context_menu`](Self::context_menu) for the commands of `list`, not
+    /// the ones the window has now. A view's context menu uses it for its
+    /// own commands: a right click does not move the keyboard focus the
+    /// window's menus go by, so the view says which commands it means.
+    pub fn context_menu_of(self, list: &[Command], sections: &[&[&str]]) -> Vec<MenuItem> {
+        let resolved: Vec<Resolved> = list
+            .iter()
+            .map(|command| Resolved {
+                command: command.clone(),
+                reachable: Vec::new(),
+                from_view: true,
+            })
+            .collect();
+        self.menu_from(&resolved, sections)
+    }
+
+    fn menu_from(self, resolved: &[Resolved], sections: &[&[&str]]) -> Vec<MenuItem> {
         let mut items = Vec::new();
         for section in sections {
             let rows: Vec<MenuItem> = section
@@ -839,6 +882,14 @@ impl Component for CommandScope {
         let key = use_hook(move || registry.add_scope(ScopeKind::View));
         use_drop(move || registry.remove_scope(key));
         registry.set_scope(key, self.name.clone(), self.commands.clone());
+        // The scopes this one is in, innermost first, for a view that stops
+        // its own input ([`use_scope_notifier`]).
+        let outer = try_consume_context::<ScopeChain>().map(|chain| chain.0);
+        use_provide_context(move || {
+            let mut chain = vec![key];
+            chain.extend(outer.unwrap_or_default());
+            ScopeChain(chain)
+        });
         rect()
             .component("CommandScope")
             .maybe(self.fill, |scope| scope.expanded())
@@ -867,6 +918,42 @@ fn keywords(list: String) -> Vec<String> {
         .filter(|word| !word.is_empty())
         .map(str::to_owned)
         .collect()
+}
+
+/// The command scopes around the component, innermost first.
+#[derive(Clone, PartialEq)]
+struct ScopeChain(Vec<u64>);
+
+/// What a view uses to say its [command scopes](command_scope) hold the
+/// keyboard focus. A scope learns this from the keys and presses that bubble
+/// up through it, which a view that stops its own (a text editor, a file
+/// list) never lets through: such a view calls [`focused`](Self::focused)
+/// from its key and press handlers, so the menus, the palette and the
+/// shortcuts sheet list its commands.
+#[derive(Clone)]
+pub struct ScopeNotifier {
+    commands: Commands,
+    chain: Vec<u64>,
+}
+
+impl ScopeNotifier {
+    /// The view took a key or a press: its scopes (and the ones around
+    /// them) hold the focus now. Does nothing outside a scope.
+    pub fn focused(&self) {
+        if self.chain.is_empty() {
+            return;
+        }
+        self.commands
+            .with(|registry| registry.focus = self.chain.clone());
+    }
+}
+
+/// The notifier of the scopes the calling component is in. Outside a scope it
+/// does nothing.
+pub fn use_scope_notifier() -> ScopeNotifier {
+    let commands = use_commands();
+    let chain = use_hook(|| try_consume_context::<ScopeChain>().map_or_else(Vec::new, |c| c.0));
+    ScopeNotifier { commands, chain }
 }
 
 /// The standard commands every window has: the palette, the shortcuts

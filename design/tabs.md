@@ -196,6 +196,12 @@ tab's.
   fades with `use_tween` on `MOVE_MS`; pressed is a stronger fill at once; a
   drag ends the pressed look explicitly (it takes the release). A tab's pieces
   are keyed so Freya never pairs one piece with another's body.
+- **The focus.** A click or tap selects a tab and leaves the keyboard where it
+  was, normally in the page: click a tab, then type, and the text goes into the
+  page. Only keyboard navigation in the strip (arrows, Home, End) moves the
+  focus onto a tab, and after a close from the keyboard the newly selected tab
+  takes it. A host that wants its page focused after a pointer switch focuses
+  it itself when the selection changes.
 - **Scrolling.** The strip keeps its own logical offset (`controls/tab_scroll.rs`):
   wheel (the vertical one too), touchpad pan and a finger scroll it; scroll into
   view only runs when the selection or the widths change. (An effect that called
