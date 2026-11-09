@@ -1812,6 +1812,8 @@ mod tests {
             kind: EntryKind::File,
             size,
             modified: modified.map(at),
+            created: None,
+            accessed: None,
             hidden: false,
             symlink: false,
             mime: mime::for_name(name),
