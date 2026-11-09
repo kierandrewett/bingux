@@ -13,6 +13,7 @@
 
 mod app;
 mod copy;
+mod crop_mode;
 mod edit;
 mod launch;
 mod playlist;

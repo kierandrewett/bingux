@@ -126,6 +126,8 @@ pub enum Icon {
     ZoomFitBest,
     /// Rotate counter-clockwise.
     ObjectRotateLeft,
+    /// Crop a picture.
+    Crop,
     /// Subtitles.
     MediaViewSubtitles,
     DialogPassword,
@@ -240,7 +242,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 179] = [
+    pub const ALL: [Icon; 180] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -344,6 +346,7 @@ impl Icon {
         Self::ZoomOut,
         Self::ZoomFitBest,
         Self::ObjectRotateLeft,
+        Self::Crop,
         Self::MediaViewSubtitles,
         Self::DialogPassword,
         Self::SendTo,
@@ -557,6 +560,7 @@ impl Icon {
             Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
             Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
             Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
+            Self::Crop => include_bytes!("../icons/crop-symbolic.svg"),
             Self::MediaViewSubtitles => {
                 include_bytes!("../icons/media-view-subtitles-symbolic.svg")
             }

@@ -8,6 +8,7 @@ pub const INFO_TOOLTIP: &str = "Info (I)";
 pub const PAGES_TOOLTIP: &str = "Pages (F9)";
 pub const TURN_LEFT_TOOLTIP: &str = "Turn left (Shift+R)";
 pub const TURN_RIGHT_TOOLTIP: &str = "Turn right (R)";
+pub const CROP_TOOLTIP: &str = "Crop (C)";
 pub const MAIN_MENU: &str = "Main menu";
 
 pub const MENU_OPEN: &str = "Open…";
@@ -15,6 +16,7 @@ pub const MENU_OPEN_WITH: &str = "Open with";
 pub const MENU_SHOW_IN_FILES: &str = "Show in Files";
 pub const MENU_COPY_PICTURE: &str = "Copy picture";
 pub const MENU_SAVE_COPY: &str = "Save a copy…";
+pub const MENU_CROP: &str = "Crop…";
 pub const MENU_TURN_LEFT: &str = "Turn left";
 pub const MENU_TURN_RIGHT: &str = "Turn right";
 pub const MENU_FLIP_HORIZONTALLY: &str = "Flip horizontally";
@@ -41,9 +43,15 @@ pub const SAVE_REQUEST_TITLE: &str = "Save a copy";
 pub const NOTHING_TO_SHOW: &str = "Nothing to show";
 
 pub const COPIED: &str = "Picture copied";
-pub const COPY_FAILED: &str = "Could not copy the picture. The clipboard is not available.";
+pub const COPY_FAILED: &str = "Could not copy the picture. Install wl-clipboard or xclip, then try again.";
 pub const SAVE_FAILED: &str =
     "Could not save the copy. Check that the folder can be written to, then try again.";
+pub const CROP_AREA: &str = "Crop area";
+pub const CROP_SAVE: &str = "Save a copy";
+pub const CANCEL: &str = "Cancel";
+pub const CROP_FAILED: &str = "Could not open the picture to crop it. Try another picture.";
+pub const UNDO_COPY_FAILED: &str =
+    "Could not remove the copy. Move it to the Trash from Files.";
 pub const UNDO: &str = "Undo";
 pub const UNDO_FAILED: &str = "Could not put the file back. Open the Trash in Files to restore it.";
 
@@ -70,6 +78,10 @@ pub fn trash_failed(name: &str) -> String {
 
 pub fn saved_copy(name: &str) -> String {
     format!("Copy saved as {}", quoted(name))
+}
+
+pub fn saved_crop(name: &str) -> String {
+    format!("Cropped copy saved as {}", quoted(name))
 }
 
 pub fn app_failed(app: &str) -> String {
@@ -100,8 +112,9 @@ Ctrl and wheel  Zoom at the pointer\n\
 Shift and an arrow  Move a zoomed picture\n\
 Ctrl+C  Copy the picture, or the selected text of a document\n\
 Ctrl+Shift+S  Save a copy of a picture\n\
+C  Crop a picture and save the result as a copy\n\
 Delete  Move a picture to the Trash\n\
-Ctrl+Z  Put the last file moved to the Trash back\n\
+Ctrl+Z  Put the last file moved to the Trash back, or remove the last cropped copy\n\
 S  Start or stop a slideshow of the folder\n\
 I  Show or hide the information\n\
 F9  Show or hide the pages of a document\n\

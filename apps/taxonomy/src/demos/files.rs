@@ -1102,6 +1102,106 @@ fn zoom_demo() -> Element {
         .into_element()
 }
 
+/// A crop box over a drawn 800 x 500 picture, with its shape list and buttons, to try the
+/// handles, the keys (arrows, Shift, Alt) and the aspect presets on.
+fn crop_demo() -> Element {
+    use bingux_ui::crop::{CropBar, CropOverlay, use_crop};
+    use bingux_ui::zoom_view::ZoomView;
+    let tokens = use_tokens();
+    let crop = use_crop((800.0, 500.0));
+    let picture = ZoomView::new(Some((800.0, 500.0)), move |width, height| {
+        let (sun_left, sun_top) = (width * 0.6, height * 0.15);
+        let (sun_width, sun_height) = (width * 0.2, height * 0.32);
+        rect()
+            .width(Size::px(width))
+            .height(Size::px(height))
+            .tw(&tokens, &[bg(Paint::Accent)])
+            .child(
+                rect()
+                    .position(Position::new_absolute().left(sun_left).top(sun_top))
+                    .width(Size::px(sun_width))
+                    .height(Size::px(sun_height))
+                    .tw(&tokens, &[bg(Paint::Warning), rounded(Radius::Pill)]),
+            )
+            .into()
+    })
+    .controls(false)
+    .keys_when(|| false)
+    .label("A drawn picture");
+    rect()
+        .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
+        .child(
+            rect()
+                .tw(&tokens, &[w_full(), h_flex()])
+                .child(CropOverlay::new(crop).autofocus(false).content(picture.into_element())),
+        )
+        .child(
+            rect()
+                .tw(&tokens, &[w_full(), flex_row(), justify(Align::Center), p(S2)])
+                .child(
+                    CropBar::new(crop)
+                        .commit_label("Crop")
+                        .on_commit(|_| {})
+                        .on_cancel(|_| {}),
+                ),
+        )
+        .into_element()
+}
+
+/// A crop for an avatar: square only, with a circle to show the shape it is worn in.
+fn crop_avatar_demo() -> Element {
+    use bingux_ui::crop::{Aspect, CropBar, CropOverlay, Guide, use_crop};
+    use bingux_ui::zoom_view::ZoomView;
+    let tokens = use_tokens();
+    let crop = use_crop((600.0, 400.0));
+    crop.set_aspect(Aspect::SQUARE);
+    let picture = ZoomView::new(Some((600.0, 400.0)), move |width, height| {
+        rect()
+            .width(Size::px(width))
+            .height(Size::px(height))
+            .tw(&tokens, &[bg(Paint::Success)])
+            .into()
+    })
+    .controls(false)
+    .keys_when(|| false)
+    .label("A drawn picture");
+    rect()
+        .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
+        .child(
+            rect().tw(&tokens, &[w_full(), h_flex()]).child(
+                CropOverlay::new(crop)
+                    .guide(Guide::Circle)
+                    .autofocus(false)
+                    .content(picture.into_element()),
+            ),
+        )
+        .child(
+            rect()
+                .tw(&tokens, &[w_full(), flex_row(), justify(Align::Center), p(S2)])
+                .child(
+                    CropBar::new(crop)
+                        .aspects([Aspect::SQUARE])
+                        .commit_label("Use photo")
+                        .on_commit(|_| {})
+                        .on_cancel(|_| {}),
+                ),
+        )
+        .into_element()
+}
+
+pub const CROP: &[Spec] = &[
+    Spec::live(
+        "Crop: drag inside to move, a handle to resize; arrows move the box, Shift moves ten times as far, Alt resizes; the list holds a shape",
+        crop_demo,
+    )
+    .page(440.0),
+    Spec::live(
+        "Square only with a circle guide: an avatar picker",
+        crop_avatar_demo,
+    )
+    .page(380.0),
+];
+
 pub const ZOOM: &[Spec] = &[Spec::live(
     "Picture: Ctrl and wheel zooms, drag pans, R turns, H flips, 0 fits, 1 is actual size",
     zoom_demo,

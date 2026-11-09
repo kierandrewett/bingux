@@ -8,6 +8,10 @@
 //! GIF's first frame, WebP, BMP, ICO, TIFF); for the rest (SVG, HEIF, camera
 //! files) the commands are not offered.
 //!
+//! A copy can also be cropped. The crop is a box in fractions of the picture as
+//! it looks (turned and mirrored), so the person's box and the decode here
+//! agree whatever a decoder's size says; it is cut after the turn.
+//!
 //! The orientation is a member of the eight-element group of turns and
 //! mirrors: `(turns, mirrored)` means mirror left to right, then turn that
 //! many quarters clockwise, the way `bingux_ui::zoom_view::View` says it.
@@ -90,10 +94,57 @@ pub fn can_copy(path: &Path) -> bool {
         .is_some_and(|format| format.reading_enabled())
 }
 
-/// The pixels of `path` with the person's turn and mirror applied. `stored` is
-/// how the file's own orientation tag turns it (which the decoder applies);
-/// `total` is how the picture looks now.
-fn picture(path: &Path, total: Orientation, home: Orientation) -> Result<DynamicImage, String> {
+/// A box in a picture as it looks: left, top, width and height as fractions
+/// of its width and height.
+pub type Crop = (f32, f32, f32, f32);
+
+/// The size of the picture as it looks when the file's own orientation tag is
+/// applied: what a viewer that applies it draws. Reads the header only.
+pub fn upright_size(path: &Path) -> Option<(u32, u32)> {
+    use image::metadata::Orientation as Tag;
+    let mut decoder = ImageReader::open(path)
+        .ok()?
+        .with_guessed_format()
+        .ok()?
+        .into_decoder()
+        .ok()?;
+    let tag = image::ImageDecoder::orientation(&mut decoder).unwrap_or(Tag::NoTransforms);
+    let (width, height) = image::ImageDecoder::dimensions(&decoder);
+    let sideways = matches!(
+        tag,
+        Tag::Rotate90 | Tag::Rotate270 | Tag::Rotate90FlipH | Tag::Rotate270FlipH
+    );
+    Some(if sideways { (height, width) } else { (width, height) })
+}
+
+/// The part of `picture` that `crop` names, at least one pixel each way.
+fn cut(picture: DynamicImage, crop: Crop) -> DynamicImage {
+    let size = (picture.width() as f32, picture.height() as f32);
+    let (left, top, width, height) = (
+        crop.0 * size.0,
+        crop.1 * size.1,
+        crop.2 * size.0,
+        crop.3 * size.1,
+    );
+    let (x, y, w, h) = bingux_ui::crop::CropRect {
+        x: left,
+        y: top,
+        width,
+        height,
+    }
+    .pixels(size);
+    picture.crop_imm(x, y, w, h)
+}
+
+/// The pixels of `path` with the person's turn and mirror applied, then cut to
+/// `crop`. The decoder applies the file's own orientation tag; `home` is the
+/// orientation the viewer started in and `total` how the picture looks now.
+fn picture(
+    path: &Path,
+    total: Orientation,
+    home: Orientation,
+    crop: Option<Crop>,
+) -> Result<DynamicImage, String> {
     let mut decoder = ImageReader::open(path)
         .and_then(ImageReader::with_guessed_format)
         .map_err(|error| error.to_string())?
@@ -103,7 +154,11 @@ fn picture(path: &Path, total: Orientation, home: Orientation) -> Result<Dynamic
         .unwrap_or(image::metadata::Orientation::NoTransforms);
     let mut picture = DynamicImage::from_decoder(decoder).map_err(|error| error.to_string())?;
     picture.apply_orientation(tag);
-    Ok(Orientation::relative(total, home).apply(picture))
+    let picture = Orientation::relative(total, home).apply(picture);
+    Ok(match crop {
+        Some(crop) => cut(picture, crop),
+        None => picture,
+    })
 }
 
 /// The name a copy of `path` gets: "photo edited.jpg", then "photo edited 2.jpg"
@@ -135,8 +190,9 @@ pub fn save_copy(
     to: &Path,
     total: Orientation,
     home: Orientation,
+    crop: Option<Crop>,
 ) -> Result<(), String> {
-    let picture = picture(path, total, home)?;
+    let picture = picture(path, total, home, crop)?;
     let format = to
         .extension()
         .and_then(ImageFormat::from_extension)
@@ -160,9 +216,15 @@ pub fn save_copy(
 }
 
 /// The bytes of a PNG of the picture as it looks.
-pub fn png_bytes(path: &Path, total: Orientation, home: Orientation) -> Result<Vec<u8>, String> {
+pub fn png_bytes(
+    path: &Path,
+    total: Orientation,
+    home: Orientation,
+    crop: Option<Crop>,
+) -> Result<Vec<u8>, String> {
     // A PNG nobody turned goes as it is: no re-encode, no loss.
-    let untouched = Orientation::relative(total, home).is_upright() && home.is_upright();
+    let untouched =
+        Orientation::relative(total, home).is_upright() && home.is_upright() && crop.is_none();
     if untouched
         && path
             .extension()
@@ -170,7 +232,7 @@ pub fn png_bytes(path: &Path, total: Orientation, home: Orientation) -> Result<V
     {
         return std::fs::read(path).map_err(|error| error.to_string());
     }
-    let picture = picture(path, total, home)?;
+    let picture = picture(path, total, home, crop)?;
     let mut out = Vec::new();
     picture
         .write_to(&mut std::io::Cursor::new(&mut out), ImageFormat::Png)
@@ -329,6 +391,7 @@ mod tests {
             &copy,
             Orientation::new(1, false),
             Orientation::UPRIGHT,
+            None,
         )
         .unwrap();
         let written = image::open(&copy).unwrap();
@@ -336,7 +399,7 @@ mod tests {
         assert_eq!(reds(&written), [3, 0, 4, 1, 5, 2]);
         // Nothing turned and a PNG: the bytes are the file's own.
         assert_eq!(
-            png_bytes(&original, Orientation::UPRIGHT, Orientation::UPRIGHT).unwrap(),
+            png_bytes(&original, Orientation::UPRIGHT, Orientation::UPRIGHT, None).unwrap(),
             std::fs::read(&original).unwrap()
         );
         assert!(
@@ -344,5 +407,51 @@ mod tests {
                 && !can_copy(&dir.join("logo.svg"))
                 && !can_copy(&dir.join("notes.txt"))
         );
+    }
+
+    #[test]
+    fn a_crop_is_cut_from_the_picture_as_it_looks() {
+        // 0 1 2 / 3 4 5, cropped to its right two columns: 1 2 / 4 5.
+        let right = cut(numbered(), (1.0 / 3.0, 0.0, 2.0 / 3.0, 1.0));
+        assert_eq!((right.width(), right.height()), (2, 2));
+        assert_eq!(reds(&right), [1, 2, 4, 5]);
+        // The crop box is in the turned picture: turned right it is 3 0 / 4 1 / 5 2,
+        // and its top row is 3 0.
+        let dir = std::env::temp_dir().join(format!("bingux-preview-crop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let original = dir.join("numbers.png");
+        numbered().save(&original).unwrap();
+        let turned_top = picture(
+            &original,
+            Orientation::new(1, false),
+            Orientation::UPRIGHT,
+            Some((0.0, 0.0, 1.0, 1.0 / 3.0)),
+        )
+        .unwrap();
+        assert_eq!(reds(&turned_top), [3, 0]);
+        // A box that is only a sliver is still a pixel; one off the edge is pulled in.
+        let sliver = cut(numbered(), (0.999, 0.999, 0.0, 0.0));
+        assert_eq!((sliver.width(), sliver.height()), (1, 1));
+        let beyond = cut(numbered(), (-1.0, -1.0, 9.0, 9.0));
+        assert_eq!((beyond.width(), beyond.height()), (3, 2));
+        // A cropped PNG is re-encoded: it is not the file's own bytes.
+        let cropped = png_bytes(
+            &original,
+            Orientation::UPRIGHT,
+            Orientation::UPRIGHT,
+            Some((0.0, 0.0, 0.5, 1.0)),
+        )
+        .unwrap();
+        assert_ne!(cropped, std::fs::read(&original).unwrap());
+    }
+
+    #[test]
+    fn the_size_of_a_sideways_photo_is_the_size_it_looks() {
+        let dir = std::env::temp_dir().join(format!("bingux-preview-size-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let plain = dir.join("plain.png");
+        numbered().save(&plain).unwrap();
+        assert_eq!(upright_size(&plain), Some((3, 2)));
+        assert_eq!(upright_size(&dir.join("missing.png")), None);
     }
 }

@@ -19,6 +19,7 @@ pub mod component;
 pub mod contrast;
 pub mod contrast_matrix;
 pub mod controls;
+pub mod crop;
 pub mod drag;
 pub mod elide;
 #[cfg(all(test, feature = "testing"))]
