@@ -104,3 +104,46 @@ settings-accessibility-bounce-keys = Bounce keys
 settings-accessibility-pointing = Pointing
 settings-accessibility-mouse-keys = Mouse keys
 settings-accessibility-locate-pointer = Locate pointer
+
+## Appearance
+
+# The wallpaper, font, accent and colour scheme on the Appearance page.
+settings-appearance-text = Text
+settings-appearance-font = Font
+settings-appearance-text-size = Text size
+settings-appearance-themes = Themes
+settings-appearance-icons = Icons
+settings-appearance-cursor = Cursor
+settings-appearance-accent-colour = Accent colour
+settings-appearance-accent-label = Accent colour { $name }
+settings-appearance-colour-scheme = Colour scheme
+settings-appearance-scheme-default = Default
+settings-appearance-scheme-light = Light
+settings-appearance-scheme-dark = Dark
+settings-appearance-gsettings-unavailable = Accent colour and colour scheme are not available on this system.
+settings-appearance-wallpaper = Wallpaper
+settings-appearance-choose-wallpaper = Choose a wallpaper
+settings-appearance-filter-pictures = Pictures
+settings-appearance-choose-picture = Choose picture
+settings-appearance-use-system-wallpaper = Use system wallpaper
+settings-appearance-system-wallpaper = System wallpaper
+settings-appearance-add-picture = Add picture…
+settings-appearance-search-pictures = Search pictures
+settings-appearance-source-system = System
+settings-appearance-source-yours = Your pictures
+settings-appearance-no-pictures = No pictures. Add one to use it as the wallpaper.
+settings-appearance-no-matching-pictures = No matching pictures
+settings-appearance-font-not-installed = Could not set the font “{ $family }”. Choose an installed font.
+settings-appearance-try-again = Try again
+settings-appearance-system-default = System default
+settings-appearance-font-name-copied = Font name copied
+settings-appearance-font-copy-failed = Could not copy the font name. Try again.
+settings-appearance-use-this-font = Use this font
+settings-appearance-copy-name = Copy name
+settings-appearance-no-matching-fonts = No matching fonts
+settings-appearance-filter-all = All
+settings-appearance-filter-sans-serif = Sans serif
+settings-appearance-filter-serif = Serif
+settings-appearance-filter-monospace = Monospace
+settings-appearance-filter-other = Other
+settings-appearance-search-fonts = Search fonts

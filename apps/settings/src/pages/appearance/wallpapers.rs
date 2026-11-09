@@ -18,6 +18,7 @@ use crate::ui::{
     Group, Icon, Overlays, Status, Window, dropdown, icon, path_label, search_field, status,
     tile_rows, use_overlays, use_tokens, use_window,
 };
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 
 const SOURCE_ALL: &str = "all";
@@ -187,9 +188,18 @@ fn matching<'a>(pictures: &'a [Picture], source: &str, query: &str) -> Vec<&'a P
 
 fn source_options() -> Vec<(String, String)> {
     vec![
-        (SOURCE_ALL.to_string(), "All".to_string()),
-        (SOURCE_SYSTEM.to_string(), "System".to_string()),
-        (SOURCE_YOURS.to_string(), "Your pictures".to_string()),
+        (
+            SOURCE_ALL.to_string(),
+            tr!("settings-appearance-filter-all"),
+        ),
+        (
+            SOURCE_SYSTEM.to_string(),
+            tr!("settings-appearance-source-system"),
+        ),
+        (
+            SOURCE_YOURS.to_string(),
+            tr!("settings-appearance-source-yours"),
+        ),
     ]
 }
 
@@ -230,7 +240,7 @@ impl Component for WallpaperPicker {
             .child(
                 rect().tw(&tokens, &[flex_row(), w_flex()]).child(
                     search_field(query, |_: String| {})
-                        .placeholder("Search pictures")
+                        .placeholder(tr!("settings-appearance-search-pictures"))
                         .fill_width(),
                 ),
             )
@@ -251,7 +261,7 @@ impl Component for WallpaperPicker {
             }
             tiles.extend((0..PLACEHOLDER_TILES).map(|_| placeholder_tile(&tokens)));
             rows.extend(tile_rows(&tokens, tiles, TILE_HEIGHT));
-            return Element::from(Group::titled("Wallpaper").rows(rows));
+            return Element::from(Group::titled(&tr!("settings-appearance-wallpaper")).rows(rows));
         };
         let all = with_current(loaded, &current);
         let shown = matching(&all, &source_key, &query_text);
@@ -266,17 +276,17 @@ impl Component for WallpaperPicker {
 
         rows.extend(tile_rows(&tokens, tiles, TILE_HEIGHT));
         if all.is_empty() {
+            rows.push(status(Status::Empty(tr!("settings-appearance-no-pictures"))).into());
+        } else if shown.is_empty() {
             rows.push(
-                status(Status::Empty(
-                    "No pictures. Add one to use it as the wallpaper.".to_string(),
-                ))
+                status(Status::Empty(tr!(
+                    "settings-appearance-no-matching-pictures"
+                )))
                 .into(),
             );
-        } else if shown.is_empty() {
-            rows.push(status(Status::Empty("No matching pictures".to_string())).into());
         }
 
-        Element::from(Group::titled("Wallpaper").rows(rows))
+        Element::from(Group::titled(&tr!("settings-appearance-wallpaper")).rows(rows))
     }
 }
 
@@ -316,7 +326,7 @@ fn add_tile(
     tile(
         tokens,
         thumb(tokens, false, face.into()),
-        "Add picture…",
+        &tr!("settings-appearance-add-picture"),
         move |_| choose_wallpaper(model, overlays, window),
     )
 }
@@ -331,7 +341,7 @@ fn system_tile(
     tile(
         tokens,
         thumb(tokens, selected, face.into()),
-        "System wallpaper",
+        &tr!("settings-appearance-system-wallpaper"),
         move |_| set_wallpaper(model, overlays, None),
     )
 }

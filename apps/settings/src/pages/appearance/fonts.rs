@@ -18,6 +18,7 @@ use crate::ui::{
     Group, Overlays, PageHead, Status, dropdown, menu_item, page_column, row, search_field,
     skeleton_row, skeleton_row_slot, status, use_overlays, use_tokens,
 };
+use bingux_ui::prelude::tr;
 use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
 
@@ -221,9 +222,9 @@ fn copy_text(overlays: Overlays, name: &str) {
         move || freya::clipboard::Clipboard::set(text).is_ok(),
         move |copied| {
             if copied {
-                overlays.toast("Font name copied");
+                overlays.toast(tr!("settings-appearance-font-name-copied"));
             } else {
-                overlays.toast("Could not copy the font name. Try again.");
+                overlays.toast(tr!("settings-appearance-font-copy-failed"));
             }
         },
     );
@@ -241,12 +242,16 @@ fn font_row(
     let is_chosen = name == chosen;
     let pick = on_pick.clone();
     let picked = name.to_string();
-    let mut use_font = menu_item("Use this font", move |_| pick.call(picked.clone()));
+    let mut use_font = menu_item(tr!("settings-appearance-use-this-font"), move |_| {
+        pick.call(picked.clone())
+    });
     if is_chosen {
         use_font = use_font.disabled();
     }
     let copied = name.to_string();
-    let copy = menu_item("Copy name", move |_| copy_text(overlays, &copied));
+    let copy = menu_item(tr!("settings-appearance-copy-name"), move |_| {
+        copy_text(overlays, &copied)
+    });
     let pick = on_pick.clone();
     let picked = name.to_string();
     row(name)
@@ -381,7 +386,7 @@ impl Component for FontPage {
         if loaded && !searching && filter_key == FILTER_ALL {
             let pick = on_pick.clone();
             rows.push(
-                row("System default")
+                row(tr!("settings-appearance-system-default"))
                     .selected(chosen.is_empty())
                     .on_press(move |_| pick.call(String::new()))
                     .into(),
@@ -397,15 +402,32 @@ impl Component for FontPage {
         }));
         let mut list = Group::new(None::<String>).rows(rows);
         if loaded && names.is_empty() {
-            list = list.row(status(Status::Empty("No matching fonts".to_string())));
+            list = list.row(status(Status::Empty(tr!(
+                "settings-appearance-no-matching-fonts"
+            ))));
         }
 
         let filter_options = vec![
-            (FILTER_ALL.to_string(), "All".to_string()),
-            (FILTER_SANS.to_string(), "Sans serif".to_string()),
-            (FILTER_SERIF.to_string(), "Serif".to_string()),
-            (FILTER_MONOSPACED.to_string(), "Monospace".to_string()),
-            (FILTER_OTHER.to_string(), "Other".to_string()),
+            (
+                FILTER_ALL.to_string(),
+                tr!("settings-appearance-filter-all"),
+            ),
+            (
+                FILTER_SANS.to_string(),
+                tr!("settings-appearance-filter-sans-serif"),
+            ),
+            (
+                FILTER_SERIF.to_string(),
+                tr!("settings-appearance-filter-serif"),
+            ),
+            (
+                FILTER_MONOSPACED.to_string(),
+                tr!("settings-appearance-filter-monospace"),
+            ),
+            (
+                FILTER_OTHER.to_string(),
+                tr!("settings-appearance-filter-other"),
+            ),
         ];
         let toolbar = rect()
             .tw(
@@ -421,7 +443,7 @@ impl Component for FontPage {
             .child(
                 rect().tw(&tokens, &[flex_row(), w_flex()]).child(
                     search_field(query, |_: String| {})
-                        .placeholder("Search fonts")
+                        .placeholder(tr!("settings-appearance-search-fonts"))
                         .fill_width(),
                 ),
             )
