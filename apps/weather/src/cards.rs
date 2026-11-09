@@ -206,7 +206,11 @@ impl Details {
             (Some(rise), Some(_)) => format!("Sunrise {} tomorrow", clock.time(rise)),
             _ => "No sunrise or sunset".to_string(),
         };
-        let mut body = vec![figure(tokens, headline), arc.into()];
+        let headline: Element = typography::HEADING
+            .label(tokens, headline)
+            .max_lines(1)
+            .into();
+        let mut body = vec![headline, arc.into()];
         if let (Some(rise), Some(set)) = (rise, set) {
             body.push(note(
                 tokens,
