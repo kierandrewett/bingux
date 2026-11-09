@@ -2155,6 +2155,9 @@ line_chart([Series::new("Charge", points)])
 | `donut(segments)`      | A share of a whole, with a legend. `unit`, `caption`, `label`.                                  |
 | `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range.                                     |
 | `flame_graph(tree)`    | Weighted calls as stacked bars, widest first.                                                   |
+| `range_bar(from, to)`  | A span on a scale, with a marker. `span`, `marker`, `colours`, `label`.                         |
+| `compass(bearing)`     | A rose with a pointer and a value in the middle. `centre`, `label`.                             |
+| `day_arc(progress)`    | The sun's path from sunrise to sunset. `times`, `label`.                                        |
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
@@ -2212,6 +2215,20 @@ ellipsis; the detail line beneath gives the full name and shares of the whole.
 A click zooms into a bar, Escape zooms out, and the view starts past the calls
 at the top that only call one thing. Down, Up, Left and Right walk the tree.
 
+**Range bar, compass and day arc.** `range_bar(from, to)` is a pill track for a
+scale. `span(low, high)` fills the part of it a value takes (a day's low and
+high among the week's), `marker(value)` puts a dot on it (now) and `colours`
+gives the colours along the _scale_ as `(position, colour)` pairs: the fill is
+that gradient cut to the span, so a column of bars that share the stops reads
+as one picture. A span narrower than a twentieth of the track is widened so a
+single value still shows. The bar fills the width it is given and is as tall as
+its marker. `compass(bearing)` draws a 132 px rose, north up, with a pointer on
+the rim at the bearing (degrees clockwise from north) and `centre(value,
+caption)` in the middle. `day_arc(Some(progress))` draws the sun on its path,
+0 at sunrise and 1 at sunset; `None` draws the path with no sun, for the
+night. `times(from, to)` writes the two ends. Dials are not mirrored in a
+right-to-left interface. Weather uses all three.
+
 `Unit` formats values: `Number`, `Percent` (values already in percent),
 `Bytes` (binary units, `3.2 GiB`), `DecimalBytes` (decimal units, `3.2 GB`,
 with ticks on round decimal numbers), `Duration` (seconds as `2 h 15 min`) and
@@ -2243,6 +2260,52 @@ a swipe that scrolls the page over a chart shows nothing.
 
 Keyboard: a chart with points is focusable. Left and Right move between
 points, Home and End jump to the ends, and the tooltip follows the point.
+
+## Location
+
+`bingux_ui::location` finds where the computer is, for an application that needs
+a position (Weather today; a map or a calendar's time zone later). It needs the
+`location` feature, which carries an HTTPS client and a D-Bus client that other
+applications leave out:
+
+```toml
+bingux-ui = { path = "../../crates/ui", features = ["location"] }
+```
+
+```rust
+use bingux_ui::location::{LocateError, Locator};
+
+// In a `spawn` task. The lookup blocks, so it runs on the background pool.
+match Locator::new().locate_async().await {
+    Ok(fix) => use_position(fix.latitude, fix.longitude, fix.name, fix.source.describe()),
+    Err(LocateError::Denied) => ask_for_a_city(),
+    Err(_) => ask_for_a_city(),
+}
+```
+
+`Locator::locate` tries, in order:
+
+1. **The location portal** (`org.freedesktop.portal.Location`, which GeoClue
+   serves where it is installed). The desktop asks the person once. A refusal
+   ends the search (`LocateError::Denied`): the network address is never used to
+   get round a "no". A missing portal, or none that answers within the timeout,
+   moves on.
+2. **The network address**, looked up with keyless services (ipwho.is, then
+   geojs.io, then ipapi.co). The position is about as good as the city, so
+   `Fix::accuracy` is 25 km. The service sees the computer's address, which is
+   why `Source::Network` exists: show `Source::describe()` ("Approximate, from
+   the network address") next to a position that came this way.
+3. **Nothing**: `LocateError::Offline` when no service could be reached,
+   `Unavailable` when some answered and none gave a position, `Disabled` when
+   the caller turned both sources off (`portal(false)`, `network(false)`).
+   The application asks for a city and keeps working.
+
+A fix that has no town name is named from its coordinates with OpenStreetMap's
+Nominatim (one request; `name_places(false)` skips it). `timeout` sets how long
+each source gets (ten seconds by default); the portal exchange runs on a thread
+of its own, so a portal that never answers costs a parked thread, never a hung
+window. The module keeps nothing: an application stores the last `Fix` itself
+and offers "use my location" as one entry among the places a person chose.
 
 ## Typography
 
@@ -3209,10 +3272,41 @@ The contrast matrix measures every pair under both contrasts
 (`light+`, `dark+` in its table). The taxonomy's header has a Contrast menu
 beside Text size, and Foundations > Accessibility shows these APIs.
 
+**Keyboard patterns** (WAI-ARIA APG). A menu is a `Menu` that keeps the
+focus and names the highlighted row as its active descendant; rows are named
+by their label, carry their shortcut as the keyboard shortcut (Orca reads
+"Copy, Ctrl+C"), a checkable row is a check item, and a submenu row says it has
+a popup and whether it is open. A menu button and a split button's arrow say
+they open a menu. A dropdown is a combo box that keeps the focus while the
+arrows move through its list; its options are list options with the chosen one
+selected and the reached one the active descendant. Sliders, steppers and
+faders take the arrows, Page Up and Page Down, Home and End; a pane divider
+(`Splitter`) takes the arrows and Home and End, and says its position as a
+value. Dialogs trap the focus and give it back (Keyboard focus, above).
+
+**Notices stay.** A toast does not go while the pointer is over it, a finger
+is on it or one of its buttons has the focus, and while a screen reader runs it
+stays at least 20 seconds after it is left alone (WCAG 2.2.1).
+
+**Text size reaches the boxes.** A row, control, button, menu item, sidebar
+item, row button and header grow with the text (`Dim::holds_text`,
+`access::grow`: the designed height plus one body line per 100 % of extra
+text), so 200 % text is not clipped. A banner whose action would leave its
+message less than its floor puts the action under the message, as a form
+line does (`controls::adaptive`).
+
 **Checking it.** `scripts/a11y-run.sh --app NAME --out FILE -- CMD` runs an app
 with the accessibility bus on and writes what a screen reader sees
 (`scripts/atspi-tree.py`: role, name, description, states, value, relations,
-actions), ending with findings such as an unnamed control. It needs
+actions), ending with findings such as an unnamed control;
+`BINGUX_A11Y_MIN_TARGET=24` (44 at phone width) also lists focusable controls
+smaller than that.
+
+Keys in a headless sway: `wtype` makes a virtual keyboard for each call and
+drops it when it exits, and the window then loses its keyboard focus, so a
+focus ring blurs out before a screenshot. Keep one keyboard alive for the run
+and give each call time for its keymap:
+`(wtype -s 60000 -k Shift_L &); sleep 1; wtype -s 300 -k Tab`. It needs
 `at-spi2-core`, `python3-gi` and `gir1.2-atspi-2.0`. `src/a11y_tests.rs` holds
 the names and roles above with real tree updates.
 

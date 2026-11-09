@@ -13,3 +13,4 @@ examples. Cargo package names keep the `bingux-` prefix.
 | `preview-core/` | `bingux-preview-core` | What a file is and which viewer opens it. The host process is `services/preview-host`.     |
 | `search/`       | `bingux-search`       | The search engine: documents, schema and inverted index. The daemon is `services/searchd`. |
 | `data-usage/`   | `bingux-data-usage`   | The network data usage recorder and reader.                                                |
+| `weather/`      | `bingux-weather`      | The Open-Meteo client, forecast model, units, moon and cache behind Weather.               |

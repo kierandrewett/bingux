@@ -83,11 +83,12 @@ fn parse_timedatectl(text: &str) -> Result<(String, bool), CommandError> {
             _ => {}
         }
     }
-    let timezone = timezone
-        .filter(|zone| !zone.is_empty())
-        .ok_or_else(|| CommandError("The time zone could not be read.".into()))?;
-    let ntp =
-        ntp.ok_or_else(|| CommandError("Whether the clock sets itself could not be read.".into()))?;
+    let timezone = timezone.filter(|zone| !zone.is_empty()).ok_or_else(|| {
+        CommandError("Could not read the time zone. Try again in a moment.".into())
+    })?;
+    let ntp = ntp.ok_or_else(|| {
+        CommandError("Could not read the clock setting. Try again in a moment.".into())
+    })?;
     Ok((timezone, ntp))
 }
 
@@ -163,7 +164,7 @@ fn read_now() -> Result<Now, String> {
     // The C library's local time, read in this process: the page asks once a
     // second, and a `date` process per tick is a fork and exec for nothing.
     // `tzset` picks up a zone changed since the last tick.
-    let failed = || "The time could not be read.".to_string();
+    let failed = || "Could not read the time. Try again in a moment.".to_string();
     // SAFETY: `time` accepts a null pointer, `localtime_r` and `strftime` write
     // only into the zeroed `tm` and the 64-byte buffer owned here, and the
     // buffer is NUL-terminated by `strftime` before it is read.
@@ -914,7 +915,7 @@ mod clock_tests {
 
     #[test]
     fn a_new_error_or_a_recovery_is_a_change() {
-        let failed = Err("The time could not be read.".to_string());
+        let failed = Err("Could not read the time. Try again in a moment.".to_string());
         assert!(same_face(&failed, &failed.clone(), false));
         assert!(!same_face(&failed, &at(5, 1), false));
         assert!(!same_face(&at(5, 1), &failed, false));

@@ -141,12 +141,16 @@ pub fn set_text_scale(scale: f32) {
         .store(clamp_scale(scale).to_bits(), Ordering::Relaxed);
 }
 
-/// How much a size that sits in a line of text (a row's height, a control's,
-/// an icon beside a label) grows with the text: by the text's growth, but
-/// never shrinking below its designed size, so 200 % text never makes a
-/// control smaller than 100 % does.
+/// The height one line of body text adds to a box at the designed size: the
+/// most a row or control grows by per 100 % of extra text.
+pub const TEXT_LINE: f32 = 19.0;
+
+/// A box that holds one line of text (a row, a control, a menu item) at a
+/// larger text size: its designed height plus what the line grew by, so its
+/// padding stays and the text is never clipped. A smaller text size keeps the
+/// designed height: a target never shrinks under its minimum.
 pub fn grow(designed: f32) -> f32 {
-    designed * text_scale().max(1.0)
+    designed + TEXT_LINE * (text_scale() - 1.0).max(0.0)
 }
 
 #[cfg(test)]

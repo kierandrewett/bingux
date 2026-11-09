@@ -81,6 +81,7 @@ SOURCES = [
     ROOT / "apps/settings/src",
     ROOT / "apps/files/src",
     ROOT / "apps/calculator/src",
+    ROOT / "apps/weather/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -130,6 +131,9 @@ SKIP_FILES = {
     ROOT / "crates/ui/src/preview/behaviour_tests.rs",
     ROOT / "crates/ui/src/inspector/state_checks/tests.rs",
     ROOT / "crates/ui/src/charts/svg.rs",
+    # The sky gradients, scale colours and weather pictures are art, not interface.
+    ROOT / "apps/weather/src/sky.rs",
+    ROOT / "apps/weather/src/glyph.rs",
 }
 
 STYLING = re.compile(
@@ -457,7 +461,14 @@ def blocking_problems() -> list[str]:
     return found
 
 
-RESILIENT_APPS = ("bingux-ui", "bingux-settings", "bingux-taxonomy", "bingux-files-app", "bingux-calculator-app")
+RESILIENT_APPS = (
+    "bingux-ui",
+    "bingux-settings",
+    "bingux-taxonomy",
+    "bingux-files-app",
+    "bingux-weather-app",
+    "bingux-calculator-app",
+)
 
 
 def panic_problems() -> list[str]:

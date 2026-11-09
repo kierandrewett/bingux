@@ -34,10 +34,17 @@ impl Holds {
     }
 }
 
+/// The least time a notice stays while a screen reader runs (WCAG 2.2.1): it
+/// is read after whatever is being read, and the person needs time to reach
+/// its buttons.
+pub(crate) const SCREEN_READER_DELAY: Duration = Duration::from_secs(20);
+
 /// When a notice may close. See the module's description.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct HideClock {
     delay: Duration,
+    /// A screen reader is running: the delay is at least [`SCREEN_READER_DELAY`].
+    screen_reader: bool,
     /// Time that has passed with nothing holding the notice, since the last
     /// time something did (or since it appeared).
     waited: Duration,
@@ -49,8 +56,23 @@ impl HideClock {
     pub(crate) fn new(delay: Duration) -> Self {
         Self {
             delay,
+            screen_reader: false,
             waited: Duration::ZERO,
             holds: Holds::default(),
+        }
+    }
+
+    /// Tell the clock whether a screen reader is running. While one is, the
+    /// notice stays at least [`SCREEN_READER_DELAY`] after it was left alone.
+    pub(crate) fn set_screen_reader(&mut self, on: bool) {
+        self.screen_reader = on;
+    }
+
+    fn delay(&self) -> Duration {
+        if self.screen_reader {
+            self.delay.max(SCREEN_READER_DELAY)
+        } else {
+            self.delay
         }
     }
 
@@ -101,7 +123,7 @@ impl HideClock {
             return false;
         }
         self.waited = self.waited.saturating_add(elapsed);
-        self.waited >= self.delay
+        self.waited >= self.delay()
     }
 
     /// How long until the notice goes if nothing takes hold of it. The whole
@@ -109,15 +131,27 @@ impl HideClock {
     #[cfg(test)]
     pub(crate) fn remaining(&self) -> Duration {
         if self.holds.any() {
-            self.delay
+            self.delay()
         } else {
-            self.delay.saturating_sub(self.waited)
+            self.delay().saturating_sub(self.waited)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_screen_reader_keeps_a_notice_up_for_at_least_twenty_seconds() {
+        use super::{HideClock, SCREEN_READER_DELAY};
+        use std::time::Duration;
+        let mut clock = HideClock::new(Duration::from_secs(4));
+        clock.set_screen_reader(true);
+        assert!(!clock.tick(Duration::from_secs(10)));
+        assert!(clock.tick(SCREEN_READER_DELAY));
+        let mut plain = HideClock::new(Duration::from_secs(4));
+        assert!(plain.tick(Duration::from_secs(4)), "without one the delay is the toast's own");
+    }
+
     use super::*;
 
     const DELAY: Duration = Duration::from_secs(6);

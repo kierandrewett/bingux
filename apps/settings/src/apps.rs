@@ -321,12 +321,15 @@ fn launch_blocking(file: &Path, name: &str) -> Result<(), String> {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|error| format!("Could not open {name}. {error}"))?;
+        .map_err(|error| {
+            eprintln!("[launch] {name}: {error}");
+            format!("{name} could not be opened.")
+        })?;
     let started = Instant::now();
     while started.elapsed() < LAUNCH_WATCH {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
-            Ok(Some(_)) => return Err(format!("Could not open {name}.")),
+            Ok(Some(_)) => return Err(format!("{name} could not be opened.")),
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
             Err(_) => return Ok(()),
         }

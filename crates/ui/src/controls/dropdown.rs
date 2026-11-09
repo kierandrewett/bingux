@@ -12,7 +12,6 @@ use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
-use crate::rows::RowTitle;
 use crate::shell::menu_query::{Candidate, Mark, Reaction};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::type_ahead::{dimmed, marked_label, use_list_query};
@@ -218,6 +217,18 @@ impl Component for Dropdown {
         let focus = use_focus(a11y_id);
         let enabled = use_enabled(self.enabled);
         let field = crate::a11y::use_field_label();
+        // One id per option, for the combo box's active descendant: the focus
+        // stays on the button while the arrows move through the list (WAI-ARIA
+        // combobox), and a screen reader reads the option they reach.
+        let option_ids =
+            use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Vec::<AccessibilityId>::new())));
+        let option_ids: Vec<AccessibilityId> = {
+            let mut ids = option_ids.borrow_mut();
+            while ids.len() < self.options.len() {
+                ids.push(AccessibilityId::new_unique());
+            }
+            ids[..self.options.len()].to_vec()
+        };
         let on_select = self.on_select.clone();
         let unavailable = self.unavailable.clone();
         let options = self.options.clone();
@@ -447,8 +458,15 @@ impl Component for Dropdown {
                     .map(|title| crate::a11y::FieldLabel { title, hint: None });
                 let field = named.or_else(|| field.clone());
                 let current = current.clone();
+                let active = open()
+                    .then(|| hovered_item().or(highlighted()))
+                    .flatten()
+                    .and_then(|index| option_ids.get(index).copied());
                 move |builder| {
                     builder.set_expanded(open());
+                    if let Some(active) = active {
+                        builder.set_active_descendant(active);
+                    }
                     builder.set_has_popup(accesskit::HasPopup::Listbox);
                     builder.set_value(current);
                     crate::a11y::label_from_field(builder, field.as_ref());
@@ -577,6 +595,7 @@ impl Component for Dropdown {
                     .find(|(off, _)| off == key)
                     .map(|(_, why)| why);
                 Element::from(DropdownItem {
+                    id: option_ids[index],
                     icon: option_icons.get(index).cloned(),
                     text: match reason {
                         Some(why) => format!("{text}: {why}"),
@@ -637,6 +656,7 @@ impl Component for Dropdown {
 
 #[derive(PartialEq)]
 struct DropdownItem {
+    id: AccessibilityId,
     icon: Option<OptionIcon>,
     text: String,
     /// Listed but not choosable: dimmed, and a press does nothing.
@@ -661,7 +681,12 @@ impl Component for DropdownItem {
         let on_leave = on_hover.clone();
         rect()
             .component("DropdownItem")
-            .a11y_role(AccessibilityRole::MenuItem)
+            .a11y_id(self.id)
+            .a11y_role(AccessibilityRole::ListBoxOption)
+            .a11y_builder({
+                let selected = self.selected;
+                move |node| node.set_selected(selected)
+            })
             .tw(&tokens, MENU_ITEM)
             .maybe(dimmed(&self.mark).is_some(), |row| {
                 row.opacity(dimmed(&self.mark).unwrap_or(1.0))

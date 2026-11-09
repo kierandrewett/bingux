@@ -8,7 +8,8 @@
 # reader runs. accesskit_unix (inside Freya's winit backend) only serves the
 # tree while that is on. Then runs CMD, waits, runs the optional --do snippet
 # (wtype keys, swaymsg pointer moves) and writes scripts/atspi-tree.py's dump of
-# the app named NAME to FILE.
+# the app named NAME to FILE. BINGUX_A11Y_MIN_TARGET=24 (44 at phone width)
+# also lists focusable controls smaller than that.
 #
 # With WAYLAND_DISPLAY set the app opens on that display; without it the run
 # goes through `wl-run` (a private headless sway), and --wl-run passes it
@@ -79,7 +80,7 @@ done
 bus org.freedesktop.DBus.Properties.Set string:org.a11y.Status string:IsEnabled variant:boolean:true
 bus org.freedesktop.DBus.Properties.Set string:org.a11y.Status string:ScreenReaderEnabled variant:boolean:true
 
-dump="python3 '$here/atspi-tree.py' --app '$app' --out '$out' >/dev/null"
+dump="python3 '$here/atspi-tree.py' --app '$app' --out '$out' ${BINGUX_A11Y_MIN_TARGET:+--min-target $BINGUX_A11Y_MIN_TARGET} >/dev/null"
 if [ -n "${WAYLAND_DISPLAY:-}" ]; then
     "$@" &
     pid=$!

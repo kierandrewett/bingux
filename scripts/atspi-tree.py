@@ -167,7 +167,8 @@ def extents_of(acc) -> tuple[int, int, int, int] | None:
 
 
 class Dump:
-    def __init__(self, keep_containers: bool) -> None:
+    def __init__(self, keep_containers: bool, min_target: int = 0) -> None:
+        self.min_target = min_target
         self.lines: list[str] = []
         self.findings: list[str] = []
         self.roles: dict[str, int] = {}
@@ -215,6 +216,15 @@ class Dump:
             self.findings.append(f'{role} "{name}" has no value')
         if "focusable" in states:
             extents = extents_of(acc)
+            if (
+                self.min_target
+                and extents is not None
+                and role in INTERACTIVE
+                and 0 < min(extents[2], extents[3]) < self.min_target
+            ):
+                self.findings.append(
+                    f'small target {role} "{name}" {extents[2]}x{extents[3]} (under {self.min_target})'
+                )
             if extents is not None and (extents[2] <= 0 or extents[3] <= 0):
                 self.findings.append(f'focusable {role} "{name}" has no size')
         for index in range(min(count, 2000)):
@@ -257,6 +267,12 @@ def main() -> int:
     parser.add_argument("--timeout", type=float, default=20.0)
     parser.add_argument("--containers", action="store_true", help="keep nameless panels")
     parser.add_argument("--strict", action="store_true", help="exit 2 when there are findings")
+    parser.add_argument(
+        "--min-target",
+        type=int,
+        default=0,
+        help="report focusable controls smaller than this (24 desktop, 44 phone; WCAG 2.5.8)",
+    )
     args = parser.parse_args()
 
     Atspi.init()
@@ -264,7 +280,7 @@ def main() -> int:
     if app is None:
         print(f"atspi-tree: no application matching {args.app!r}; the bus lists {seen}", file=sys.stderr)
         return 1
-    dump = Dump(args.containers)
+    dump = Dump(args.containers, args.min_target)
     dump.lines.append(f'application "{app.get_name()}" toolkit={app.get_toolkit_name()!r}')
     for index in range(app.get_child_count()):
         child = app.get_child_at_index(index)

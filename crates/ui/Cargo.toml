@@ -15,6 +15,10 @@ default = []
 testing = ["dep:freya-testing", "dep:freya-components"]
 # Every icon of the chat icon fork as `Icon::Chat(..)` (3 MB of outlines): for choosing glyphs.
 chat-icons = []
+# `bingux_ui::location`: where the computer is, from the desktop's location
+# portal or the network address. It carries an HTTPS client and a D-Bus client,
+# so an application that does not ask where it is leaves it off.
+location = ["dep:ureq"]
 
 [dependencies]
 # `gif`: the picture viewer plays animated GIFs.
@@ -60,6 +64,10 @@ notify = { version = "8", default-features = false }
 # The decimal type of ICU4X (exact digits, rounding modes), the same version
 # `icu` uses.
 fixed_decimal = "0.7"
+
+# `location` only: the keyless lookups over HTTPS. The location portal uses the
+# `zbus` above (blocking, on a thread of its own).
+ureq = { version = "3", optional = true }
 
 [dev-dependencies]
 # A test's clipboard is memory (`controls::select_text::test_clipboard`): the
