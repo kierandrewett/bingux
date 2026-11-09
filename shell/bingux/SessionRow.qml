@@ -35,7 +35,7 @@ AbstractButton {
 
     background: Rectangle {
         radius: 9
-        color: root.down ? Qt.rgba(1, 1, 1, 0.30) : root.selected ? Qt.rgba(1, 1, 1, root.hovered ? 0.26 : 0.20) : root.hovered ? Qt.rgba(1, 1, 1, 0.12) : root.destructive ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.14) : "transparent"
+        color: root.down ? Qt.rgba(1, 1, 1, 0.30) : root.selected ? Qt.rgba(1, 1, 1, root.hovered ? 0.26 : 0.20) : root.hovered ? Qt.rgba(1, 1, 1, 0.12) : root.destructive ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.1) : "transparent"
         border.width: root.visualFocus ? 2 : 0
         border.color: "#ffffff"
         Behavior on color {

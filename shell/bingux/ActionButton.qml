@@ -12,8 +12,8 @@ AbstractButton {
     // darkened version of the fill, never plain white.
     property string tone: ""
     readonly property bool toned: tone !== "" && enabled
-    readonly property color ink: !enabled ? Theme.muted : tone === "primary" ? Qt.darker(Theme.accent, 4.5) : tone === "danger" ? Theme.danger : Theme.text
-    readonly property color dangerFill: Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, down ? 0.4 : hovered ? 0.3 : 0.2)
+    readonly property color ink: !enabled ? Theme.muted : tone === "primary" ? Qt.darker(Theme.accent, 4.5) : tone === "danger" ? Theme.dangerInk : Theme.text
+    readonly property color dangerFill: Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, down ? 0.3 : hovered ? 0.26 : 0.2)
     property bool alignLeft: false
     property string iconName: ""
     property string trailingIconName: ""

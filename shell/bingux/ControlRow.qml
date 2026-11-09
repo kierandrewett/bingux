@@ -72,7 +72,7 @@ AbstractButton {
             // its existing checkmark, while quick-control tiles use icon/switch
             // colour rather than a full blue card.
             selected: root.selected && !root.tileSurface
-            baseColor: root.tileSurface ? Theme.elevated : root.destructive ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.14) : "transparent"
+            baseColor: root.tileSurface ? Theme.elevated : root.destructive ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.1) : "transparent"
             outlined: false
             radius: root.tileSurface ? 12 : root.leadingBadge ? 10 : 8
         }

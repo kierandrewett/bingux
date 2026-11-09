@@ -141,6 +141,9 @@ QtObject {
     readonly property color success: "#8ff0a4"
     readonly property color warning: "#f9f06b"
     readonly property color danger: "#ff7b63"
+    // Danger ink for text and glyphs set on a danger-tinted fill: a lighter
+    // danger, so the tint does not pull it under 4.5:1.
+    readonly property color dangerInk: "#ffffad90"
     function usageColor(percent, normal = text) {
         if (typeof percent !== "number" || !isFinite(percent))
             return normal;

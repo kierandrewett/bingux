@@ -26,6 +26,17 @@ ColumnLayout {
     readonly property bool failed: progress !== null && progress.failure !== null
     readonly property bool indeterminate: progress !== null && Progress.indeterminate(progress)
     readonly property int percent: progress === null ? 0 : Progress.fraction(progress)
+    // True when `detail` says the same as the failure title: most of its words
+    // are already in it ("did not draw its first frame" and "... in time").
+    function repeatsTitle(detail) {
+        const words = text => text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(word => word !== "");
+        const own = words(Progress.failureTitle(progress));
+        const other = words(detail);
+        if (other.length === 0)
+            return true;
+        const shared = other.filter(word => own.includes(word)).length;
+        return shared / other.length >= 0.7;
+    }
     readonly property string stageLabel: progress === null ? "" : failed ? Progress.failureTitle(progress) : Progress.label(progress)
     readonly property string countLabel: progress === null ? "" : Progress.counts(progress)
 
@@ -137,7 +148,8 @@ ColumnLayout {
         textFormat: Text.PlainText
         objectName: "progressFailure"
         Layout.fillWidth: true
-        visible: root.failed && text !== ""
+        // The backend's message shows only when it adds something to the title.
+        visible: root.failed && text !== "" && !root.repeatsTitle(text)
         text: root.failed ? root.progress.failure.message : ""
         color: root.theme.inkMuted
         font.family: Theme.fontFamily
