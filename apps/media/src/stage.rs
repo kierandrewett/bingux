@@ -411,7 +411,6 @@ impl Component for FilmStage {
         // heights of the stage and of the bar.
         let mut stage_size = use_state(|| (0.0f32, 0.0f32));
         let (stage_width, stage_height) = *stage_size.read();
-        let mut footer_height = use_state(|| 0.0f32);
         let edge = |position: Position| {
             rect()
                 .position(position)
@@ -433,11 +432,9 @@ impl Component for FilmStage {
                         (!fullscreen).then(|| card(rect()).child(WindowControls).into_element()),
                     ),
             );
-        let footer_top = (stage_height - *footer_height.read()).max(0.0);
-        let footer = edge(Position::new_absolute().top(footer_top).left(0.0))
-            .on_sized(move |event: Event<SizedEventData>| {
-                footer_height.set_if_modified(event.area.height())
-            })
+        let footer = rect()
+            .width(Size::fill())
+            .tw(&tokens, &[p(margin)])
             .on_pointer_enter(move |_| hovering_controls.set(true))
             .on_pointer_leave(move |_| hovering_controls.set(false))
             .child(controls);
@@ -463,6 +460,7 @@ impl Component for FilmStage {
                     .position(Position::new_absolute().top(0.0).left(0.0))
                     .width(Size::px(stage_width))
                     .height(Size::px(stage_height))
+                    .tw(&tokens, &[flex_col(), justify(Align::End)])
                     .opacity(fade)
                     .child(header)
                     .child(footer)
