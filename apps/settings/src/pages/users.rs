@@ -135,7 +135,7 @@ fn bool_property(path: &str, name: &str) -> Result<bool, CommandError> {
 }
 
 fn unexpected() -> CommandError {
-    CommandError("Account details could not be read.".into())
+    CommandError("Could not read the accounts. Restart Settings and try again.".into())
 }
 
 /// Set the full name of the account at `path` through polkit.
@@ -239,7 +239,7 @@ impl Component for UsersPage {
 
         let group = Group::titled("Accounts");
         let group = if accounts.is_empty() {
-            group.row(status(Status::Empty("No accounts found.".into())))
+            group.row(status(Status::Empty("No accounts".into())))
         } else {
             group.rows(accounts.iter().map(|account| {
                 let route =
@@ -357,9 +357,9 @@ impl Component for AccountDetails {
                         "Standard"
                     }))
                     .row(row("Automatic login").value(if account.automatic_login {
-                        "Enabled"
+                        "On"
                     } else {
-                        "Disabled"
+                        "Off"
                     }))
                     .row(row("Language").value(if account.language.is_empty() {
                         "Not set".to_string()
@@ -472,7 +472,7 @@ impl PasswordSheet {
                     Ok(()) => {
                         self.clear();
                         window.close();
-                        self.overlays.toast("Password changed.".to_string());
+                        self.overlays.toast("Password changed".to_string());
                     }
                     Err(message) => {
                         let mut error = self.error;
@@ -509,7 +509,7 @@ impl Component for PasswordBody {
         let window = use_window();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Change".into(),
+                label: "Change password".into(),
                 enabled: true,
                 on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
             }),
@@ -526,9 +526,9 @@ impl Component for PasswordBody {
         };
         let mut group = Group::new(None::<String>)
             .description("Enter your current password, then the new one twice.")
-            .row(form_row("Current", current))
-            .row(form_row("New", new))
-            .row(form_row("Retype", confirm));
+            .row(form_row("Current password", current))
+            .row(form_row("New password", new))
+            .row(form_row("Confirm password", confirm));
         if mismatch {
             group = group.footer("The new passwords do not match.");
         }
@@ -632,7 +632,7 @@ impl Component for NameBody {
         let on_press_path = path.clone();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Change".into(),
+                label: "Save".into(),
                 enabled: true,
                 on_press: EventHandler::new(move |_: ()| {
                     sheet.submit(on_press_path.clone(), window)
