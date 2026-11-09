@@ -12,7 +12,7 @@
 //!   [`store::Snapshot`] the views read.
 //! - [`quickadd`]: "Lunch with Sam tomorrow 1pm" as an event.
 //! - [`alarm`]: reminders, shown once, through the notification service.
-//! - [`prefs`]: preferences and the locale's week and clock.
+//! - [`prefs`]: preferences; the locale's week and clock are passed in.
 //! - [`watch`]: what a running window needs: ordered writes, a minute clock,
 //!   news of changes by other programs, and reminders.
 
@@ -31,7 +31,7 @@ pub use event::{
     Availability, Event, Exception, Item, Key, Occurrence, RawProp, Reminder, Series, Status,
     Trigger,
 };
-pub use prefs::{HourFormat, Locale, Prefs, ViewKind};
+pub use prefs::{HourFormat, Prefs, ViewKind};
 pub use recur::{Change, Repeat, RepeatEnd, Scope};
 pub use store::{Calendar, Snapshot, Store};
 pub use zone::Zone;

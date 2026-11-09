@@ -50,8 +50,7 @@ fn on_store(
     spawn(async move {
         let result = spawn_blocking(move || work(&backend.store, &snapshot)).await;
         if result.is_err() {
-            overlays
-                .toast("Could not change the calendar. Check that its folder can be written to.");
+            overlays.toast(tr!("calendar-change-failed"));
         }
         model.reload();
     });
@@ -68,7 +67,7 @@ pub fn add(model: Model, overlays: Overlays, tokens: &Tokens) {
     let content = vstack(S2)
         .child(
             text_field(name, move |_: String| {})
-                .placeholder("Calendar name")
+                .placeholder(tr!("calendar-name-placeholder"))
                 .autofocus()
                 .fill_width(),
         )
@@ -80,12 +79,12 @@ pub fn add(model: Model, overlays: Overlays, tokens: &Tokens) {
         );
     overlays.show_dialog(
         dialog(
-            "New calendar",
-            "Events in it share a colour and can be hidden together.",
+            tr!("calendar-new-calendar"),
+            tr!("calendar-new-calendar-description"),
         )
         .content(content)
-        .cancel("Cancel")
-        .response("Add", ResponseKind::Suggested, move |_| {
+        .cancel(tr!("calendar-cancel"))
+        .response(tr!("calendar-add"), ResponseKind::Suggested, move |_| {
             let text = name.peek().trim().to_string();
             if text.is_empty() {
                 return;
@@ -110,15 +109,15 @@ pub fn rename(model: Model, overlays: Overlays, id: String, current: String) {
     let mut name = model.draft_name;
     name.set(current);
     overlays.show_dialog(
-        dialog("Rename calendar", "")
+        dialog(tr!("calendar-rename-title"), "")
             .content(
                 text_field(name, move |_: String| {})
                     .autofocus()
                     .select_all_on_open()
                     .fill_width(),
             )
-            .cancel("Cancel")
-            .response("Rename", ResponseKind::Suggested, move |_| {
+            .cancel(tr!("calendar-cancel"))
+            .response(tr!("calendar-rename"), ResponseKind::Suggested, move |_| {
                 let text = name.peek().trim().to_string();
                 if text.is_empty() {
                     return;
@@ -153,23 +152,23 @@ pub fn colours() -> Vec<(String, String)> {
 
 /// Asks before a calendar and its events are removed.
 pub fn remove(model: Model, overlays: Overlays, id: String, name: String, count: usize) {
-    let events = match count {
-        0 => "It has no events.".to_string(),
-        1 => "Its 1 event is deleted with it.".to_string(),
-        n => format!("Its {n} events are deleted with it."),
-    };
+    let events = tr!("calendar-remove-events", count = count as i64);
     overlays.show_dialog(
-        dialog(format!("Delete \u{201c}{name}\u{201d}?"), events)
+        dialog(tr!("calendar-remove-title", name = name.as_str()), events)
             .icon(DialogIcon::Warning)
-            .cancel("Cancel")
-            .response("Delete", ResponseKind::Destructive, move |_| {
-                let id = id.clone();
-                on_store(
-                    model,
-                    move |store, _| store.delete_calendar(&id).map_err(|e| e.to_string()),
-                    overlays,
-                );
-            }),
+            .cancel(tr!("calendar-cancel"))
+            .response(
+                tr!("calendar-delete"),
+                ResponseKind::Destructive,
+                move |_| {
+                    let id = id.clone();
+                    on_store(
+                        model,
+                        move |store, _| store.delete_calendar(&id).map_err(|e| e.to_string()),
+                        overlays,
+                    );
+                },
+            ),
     );
 }
 
@@ -178,15 +177,15 @@ pub fn import(model: Model, window: Window, overlays: Overlays) {
     choose(
         window,
         ChooserRequest::open()
-            .title("Import events")
-            .accept_label("Import")
+            .title(tr!("calendar-import-events"))
+            .accept_label(tr!("calendar-import"))
             .filter(
-                Filter::new("Calendar files")
+                Filter::new(tr!("calendar-files-filter"))
                     .glob("*.ics")
                     .glob("*.ical")
                     .glob("*.ifb"),
             )
-            .filter(Filter::new("All files")),
+            .filter(Filter::new(tr!("calendar-all-files-filter"))),
         move |chosen| {
             if let Some(chosen) = chosen {
                 for path in chosen.paths {
@@ -245,7 +244,7 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
     let data = model.data();
     let writable: Vec<_> = data.calendars.iter().filter(|c| !c.read_only).collect();
     if writable.is_empty() {
-        overlays.toast("There is no calendar to import into. Add one first.");
+        overlays.toast(tr!("calendar-import-no-calendar"));
         return;
     }
     let mut target = model.draft_target;
@@ -265,14 +264,14 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
         format!("{message} {}", parsed.warnings[0])
     };
     overlays.show_dialog(
-        dialog("Import events", note)
+        dialog(tr!("calendar-import-events"), note)
             .content(dropdown(
                 options,
                 target.peek().clone(),
                 move |id: String| target.set(id),
             ))
-            .cancel("Cancel")
-            .response("Import", ResponseKind::Suggested, move |_| {
+            .cancel(tr!("calendar-cancel"))
+            .response(tr!("calendar-import"), ResponseKind::Suggested, move |_| {
                 let calendar = target.peek().clone();
                 let mut items = parsed.items.clone();
                 // An event already in the store keeps its calendar's copy
@@ -309,9 +308,9 @@ pub fn export(model: Model, window: Window, overlays: Overlays, id: String, name
     choose(
         window,
         ChooserRequest::save(format!("{name}.ics"))
-            .title("Export calendar")
-            .accept_label("Export")
-            .filter(Filter::new("Calendar files").glob("*.ics")),
+            .title(tr!("calendar-export-title"))
+            .accept_label(tr!("calendar-export"))
+            .filter(Filter::new(tr!("calendar-files-filter")).glob("*.ics")),
         move |chosen| {
             let Some(path) = chosen.and_then(|chosen| chosen.paths.into_iter().next()) else {
                 return;
@@ -320,9 +319,9 @@ pub fn export(model: Model, window: Window, overlays: Overlays, id: String, name
             spawn(async move {
                 let written = spawn_blocking(move || std::fs::write(&path, text.as_bytes())).await;
                 overlays.toast(if written.is_ok() {
-                    "Calendar exported."
+                    tr!("calendar-exported")
                 } else {
-                    "Could not export the calendar. Check that the folder can be written to."
+                    tr!("calendar-export-failed")
                 });
             });
         },
