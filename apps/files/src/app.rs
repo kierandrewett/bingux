@@ -73,8 +73,8 @@ fn title_of(at: &Where) -> String {
 /// stop it half way: ask first.
 fn close_guard() -> Option<CloseWarning> {
     files::operations_running().then(|| CloseWarning {
-        title: "Close Files?".into(),
-        message: "A file operation is still running. Closing the window stops it.".into(),
+        title: tr!("files-close-guard-title"),
+        message: tr!("files-close-guard-message"),
     })
 }
 
@@ -290,9 +290,13 @@ fn window_commands(tabs: Tabs<FileTab>) -> Vec<Command> {
     // Ctrl+N is a new window at the folder on show, as in Finder and GNOME
     // Files.
     let mut commands = vec![
-        Command::new("files.new-window", "New window", move |_| {
-            tabs.open_window(FileTab::new(here(tabs)));
-        })
+        Command::new(
+            "files.new-window",
+            tr!("files-command-new-window"),
+            move |_| {
+                tabs.open_window(FileTab::new(here(tabs)));
+            },
+        )
         .shortcut("Ctrl+N")
         .group(CommandGroup::File)
         .section("tabs"),
