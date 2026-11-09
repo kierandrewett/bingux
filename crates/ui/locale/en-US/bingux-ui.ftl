@@ -1631,7 +1631,3 @@ ui-media-spoken-seconds = { $count ->
 # A screen reader's name for a now-playing item. $title and $subtitle are the film or song's names.
 # $title (String) - the title; $subtitle (String) - the artist or year
 ui-media-item-a11y = { $title }, { $subtitle }. Open the player
-
-# Test fixtures in commands/conventions_tests.rs ask for these IDs by name.
-calendar-keyboard-shortcuts = Keyboard shortcuts
-settings-title = Settings

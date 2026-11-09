@@ -1,3 +1,4 @@
+// ftl-check: skip-file (the tests below pass IDs inside source fixtures, not UI strings)
 //! The commands convention, checked over the workspace source. An app lists
 //! its commands with `use_window_commands`, and its main menu with `app_menu`
 //! (which adds the window's commands and About). It builds no shortcut sheet

@@ -21,5 +21,3 @@ ui-about-title = Über { $app }
 # $free (String) - the free space on a drive, e.g. "230 GB"
 # $total (String) - the whole size of that drive, e.g. "465 GB"
 ui-files-usage-free = { $free } frei von { $total }
-calendar-keyboard-shortcuts = Tastenkürzel
-settings-title = Einstellungen
