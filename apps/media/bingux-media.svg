@@ -1,22 +1,88 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs>
-        <linearGradient id="back" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#e01b24"/>
-            <stop offset="1" stop-color="#a51d2d"/>
+        <linearGradient id="md-sleeve" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#c061cb"/>
+            <stop offset="1" stop-color="#9141ac"/>
         </linearGradient>
-        <linearGradient id="disc" x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="1" stop-color="#deddda"/>
+        <linearGradient id="md-vinyl" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#3d3846"/>
+            <stop offset="1" stop-color="#241f31"/>
         </linearGradient>
+        <linearGradient id="md-label" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffbe6f"/>
+            <stop offset="1" stop-color="#ff7800"/>
+        </linearGradient>
+        <linearGradient id="md-frame" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffbe6f"/>
+            <stop offset="1" stop-color="#f66151"/>
+        </linearGradient>
+        <filter height="1.4" id="md-soft" width="1.4" x="-0.2" y="-0.2">
+            <feGaussianBlur stdDeviation="2"/>
+        </filter>
+        <clipPath id="md-sleeve-clip">
+            <rect height="72" rx="4" width="72" x="12" y="27"/>
+        </clipPath>
+        <clipPath id="md-record-clip">
+            <circle cx="86" cy="63" r="33"/>
+        </clipPath>
     </defs>
-    <!-- The tile, rounded as the other Bingux app icons, lower edge darker for depth. -->
-    <rect fill="#77111c" height="104" rx="24" width="104" x="12" y="16"/>
-    <rect fill="url(#back)" height="104" rx="24" width="104" x="12" y="12"/>
-    <!-- A disc with its centre, for music. -->
-    <circle cx="64" cy="64" fill="url(#disc)" r="38"/>
-    <circle cx="64" cy="64" fill="none" r="28" stroke="#c0bfbc" stroke-width="2"/>
-    <circle cx="64" cy="64" fill="#c01c28" r="15"/>
-    <!-- A play mark over its centre, for films. -->
-    <path d="M59 56.5v15a2 2 0 0 0 3 1.7l12-7.5a2 2 0 0 0 0-3.4l-12-7.5a2 2 0 0 0-3 1.7z" fill="#ffffff"/>
+    <g transform="rotate(-6 64 64)">
+        <!-- One soft shadow under the sleeve and the record. -->
+        <g fill="#000000" filter="url(#md-soft)" opacity="0.3" transform="translate(0 4)">
+            <circle cx="86" cy="63" r="33"/>
+            <rect height="72" rx="4" width="72" x="12" y="27"/>
+        </g>
+        <!-- The record, half out of its sleeve. -->
+        <circle cx="86" cy="63" fill="url(#md-vinyl)" r="33"/>
+        <g fill="none" opacity="0.6" stroke="#77767b" stroke-width="0.7">
+            <circle cx="86" cy="63" r="28"/>
+            <circle cx="86" cy="63" r="22.5"/>
+            <circle cx="86" cy="63" r="17"/>
+        </g>
+        <g fill="none" opacity="0.3" stroke="#ffffff" stroke-linecap="round" stroke-width="2">
+            <path d="M101 38a29 29 0 0 1 11 14"/>
+            <path d="M71 88a29 29 0 0 1-11-14"/>
+        </g>
+        <circle cx="86" cy="63" fill="url(#md-label)" r="11"/>
+        <circle cx="86" cy="63" fill="none" opacity="0.25" r="7" stroke="#ffffff" stroke-width="0.8"/>
+        <circle cx="86" cy="63" fill="#241f31" r="1.8"/>
+        <!-- Where the record leaves the sleeve, the sleeve shades it. -->
+        <g clip-path="url(#md-record-clip)">
+            <rect fill="#000000" filter="url(#md-soft)" height="80" opacity="0.45" width="8" x="81" y="23"/>
+        </g>
+        <!-- The sleeve, its lower edge darker for depth. -->
+        <rect fill="#613583" height="72" rx="4" width="72" x="12" y="29"/>
+        <rect fill="url(#md-sleeve)" height="72" rx="4" width="72" x="12" y="27"/>
+        <rect fill="#ffffff" height="1.5" opacity="0.5" rx="0.75" width="62" x="17" y="28"/>
+        <!-- The sleeve art: a strip of film. -->
+        <g clip-path="url(#md-sleeve-clip)">
+            <rect fill="#241f31" height="36" width="72" x="12" y="45"/>
+            <g fill="url(#md-frame)">
+                <rect height="20" rx="2" width="20" x="16" y="53"/>
+                <rect height="20" rx="2" width="20" x="40" y="53"/>
+                <rect height="20" rx="2" width="20" x="64" y="53"/>
+            </g>
+            <g fill="#f6f5f4">
+                <rect height="3" rx="1" width="4" x="16" y="48"/>
+                <rect height="3" rx="1" width="4" x="24" y="48"/>
+                <rect height="3" rx="1" width="4" x="32" y="48"/>
+                <rect height="3" rx="1" width="4" x="40" y="48"/>
+                <rect height="3" rx="1" width="4" x="48" y="48"/>
+                <rect height="3" rx="1" width="4" x="56" y="48"/>
+                <rect height="3" rx="1" width="4" x="64" y="48"/>
+                <rect height="3" rx="1" width="4" x="72" y="48"/>
+                <rect height="3" rx="1" width="4" x="80" y="48"/>
+                <rect height="3" rx="1" width="4" x="16" y="75"/>
+                <rect height="3" rx="1" width="4" x="24" y="75"/>
+                <rect height="3" rx="1" width="4" x="32" y="75"/>
+                <rect height="3" rx="1" width="4" x="40" y="75"/>
+                <rect height="3" rx="1" width="4" x="48" y="75"/>
+                <rect height="3" rx="1" width="4" x="56" y="75"/>
+                <rect height="3" rx="1" width="4" x="64" y="75"/>
+                <rect height="3" rx="1" width="4" x="72" y="75"/>
+                <rect height="3" rx="1" width="4" x="80" y="75"/>
+            </g>
+        </g>
+    </g>
 </svg>
