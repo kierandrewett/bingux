@@ -1212,3 +1212,175 @@ ui-compress-about = about { $size }
 ui-compress-replace-originals = Replace the originals
 ui-compress-originals-trash-hint = The originals go to the Trash once the smaller files are made and checked. You will be asked.
 ui-compress-replace-needs-beside = Replacing needs the result to sit beside the original.
+
+
+## Files: views and states
+
+## What a folder shows when there is no list: loading, empty, stopped, failed.
+
+# Title of the page when a folder has nothing to show.
+ui-files-state-recent-title = No recent files
+ui-files-state-recent-description = Files you open appear here.
+ui-files-state-filtered-title = No matching files
+ui-files-state-filtered-description = There are no files of the chosen type in this folder. Choose another type, or open another folder.
+ui-files-state-hidden-title = No files to show
+ui-files-state-hidden-description = This folder only has hidden files. Choose Show hidden files in the view menu to see them.
+ui-files-state-empty-title = Folder is empty
+ui-files-state-empty-description = There is nothing in this folder.
+ui-files-state-stopped-title = Loading stopped
+ui-files-state-stopped-description = Press F5 to read the folder again.
+ui-files-state-trash-title = Trash is empty
+ui-files-state-trash-description = Things you move to the Trash appear here until you empty it.
+
+## A folder that could not be read. The title says what failed.
+
+ui-files-error-permission-title = No permission
+ui-files-error-not-found-title = Folder not found
+ui-files-error-not-folder-title = Not a folder
+ui-files-error-unresponsive-title = Drive not responding
+ui-files-error-open-title = Cannot open folder
+
+## Search with no results.
+
+ui-files-search-invalid-title = Cannot search
+ui-files-search-searching-title = Searching
+ui-files-search-searching-description = Nothing has matched yet.
+ui-files-search-none-title = Nothing found
+# $place (String) - the folder searched, such as "Home"
+ui-files-search-none-all-description = Nothing in { $place } fits these filters.
+# $place (String) - the folder searched, such as "Home"
+# $words (String) - what the person typed
+ui-files-search-none-words-description = No name in { $place } matches “{ $words }”.
+
+## The status line under a folder: what is on show, selected and free.
+
+ui-files-cancel = Cancel
+ui-files-status-unresponsive = Waiting for the drive to answer…
+ui-files-status-stopped = Stopped
+# $count (Number) - how many items have come in so far
+ui-files-status-stopped-so-far = { $count ->
+    [one] Stopped · { NUMBER($count) } item so far
+   *[other] Stopped · { NUMBER($count) } items so far
+}
+ui-files-status-loading = Loading…
+# $count (Number) - how many items have come in so far
+ui-files-status-loading-so-far = { $count ->
+    [one] Loading · { NUMBER($count) } item so far
+   *[other] Loading · { NUMBER($count) } items so far
+}
+# $count (Number) - how many items the folder shows
+ui-files-status-items = { $count ->
+    [one] { NUMBER($count) } item
+   *[other] { NUMBER($count) } items
+}
+# $count (Number) - how many items the folder shows
+# $free (String) - the free space on the drive, such as "4.2 GB"
+ui-files-status-items-free = { $count ->
+    [one] { NUMBER($count) } item, { $free } free
+   *[other] { NUMBER($count) } items, { $free } free
+}
+# $count (Number) - how many items the Trash shows
+ui-files-status-trash-items = { $count ->
+    [one] Trash · { NUMBER($count) } item
+   *[other] Trash · { NUMBER($count) } items
+}
+# $trash, $sized, $linked (String) - "yes" or "no", choosing the variant
+# $selected (Number) - how many items are selected
+# $shown (Number) - how many items the folder shows
+# $size (String) - the size of the selection, such as "1.2 MB"
+# $target (String) - where the one selected item links to
+ui-files-status-selected = { $trash ->
+    [yes] { $sized ->
+        [yes] { $linked ->
+            [yes] Trash · { NUMBER($selected) } of { NUMBER($shown) } selected ({ $size }) · Link to { $target }
+           *[no] Trash · { NUMBER($selected) } of { NUMBER($shown) } selected ({ $size })
+        }
+       *[no] { $linked ->
+            [yes] Trash · { NUMBER($selected) } of { NUMBER($shown) } selected · Link to { $target }
+           *[no] Trash · { NUMBER($selected) } of { NUMBER($shown) } selected
+        }
+    }
+   *[no] { $sized ->
+        [yes] { $linked ->
+            [yes] { NUMBER($selected) } of { NUMBER($shown) } selected ({ $size }) · Link to { $target }
+           *[no] { NUMBER($selected) } of { NUMBER($shown) } selected ({ $size })
+        }
+       *[no] { $linked ->
+            [yes] { NUMBER($selected) } of { NUMBER($shown) } selected · Link to { $target }
+           *[no] { NUMBER($selected) } of { NUMBER($shown) } selected
+        }
+    }
+}
+
+## Files: column headings, dates and sorting.
+
+ui-files-column-name = Name
+ui-files-column-size = Size
+ui-files-column-type = Type
+ui-files-column-modified = Modified
+ui-files-column-created = Created
+ui-files-column-accessed = Accessed
+ui-files-column-permissions = Permissions
+ui-files-column-owner = Owner
+ui-files-column-location = Location
+ui-files-column-original-location = Original Location
+ui-files-column-deleted = Deleted
+# $column (String) - the column's heading, such as "Modified"
+ui-files-column-sort-by = Sort by { $column }
+# $column (String) - the column's heading, for a column that cannot be sorted
+ui-files-column-heading-label = { $column } column
+ui-files-columns-reset = Reset columns
+ui-files-unknown = Unknown
+ui-files-date-just-now = Just now
+# $time (String) - the clock time, such as "14:05"
+ui-files-date-today = Today { $time }
+# $time (String) - the clock time, such as "14:05"
+ui-files-date-yesterday = Yesterday { $time }
+
+## Files: views, commands and the places they name.
+
+ui-files-a11y-files = Files
+ui-files-a11y-file-list = File list
+ui-files-drag-copy = Copy
+# $when (String) - when the item was deleted, such as "Today 14:05"
+ui-files-deleted-when = Deleted { $when }
+ui-files-root-computer = Computer
+ui-files-root-home = Home
+ui-files-root-recent = Recent
+ui-files-root-trash = Trash
+ui-files-view-list = List
+ui-files-view-grid = Grid
+# $when (String) - when the file was modified, such as "Today 14:05"
+ui-files-hover-modified = Modified { $when }
+ui-files-hover-modified-pending = Modified …
+ui-files-hover-modified-unknown = Modified unknown
+# $target (String) - the path a link points at
+ui-files-hover-link-to = Link to { $target }
+ui-files-cmd-new-folder = New folder
+ui-files-cmd-duplicate = Duplicate
+ui-files-cmd-rename = Rename…
+ui-files-cmd-compress = Compress…
+ui-files-cmd-extract-to = Extract to…
+ui-files-cmd-move-to-trash = Move to Trash
+ui-files-cmd-delete-permanently = Delete permanently…
+ui-files-cmd-properties = Properties
+ui-files-cmd-cut = Cut
+ui-files-cmd-copy = Copy
+ui-files-cmd-paste = Paste
+ui-files-cmd-copy-path = Copy path
+ui-files-cmd-select-all = Select all
+ui-files-cmd-invert-selection = Invert selection
+ui-files-cmd-preview = Preview
+ui-files-cmd-select-by-name = Select an item by its name
+ui-files-cmd-type-a-name = Type a name
+ui-files-cmd-show-as-list = Show as list
+ui-files-cmd-show-as-grid = Show as grid
+ui-files-cmd-zoom = Larger, smaller, actual size
+ui-files-cmd-sort-by = Sort by name, size, type, date
+ui-files-cmd-reverse-order = Reverse the order
+
+## Files: drives, mounts and ejecting.
+# Toast after a drive is safe to remove. $label is the drive's name.
+ui-files-drive-safe-to-remove = { $label } is safe to remove.
+# Toast when a drive is busy. $label is the drive's name.
+ui-files-drive-busy = { $label } is busy. Close the files on it and try again.

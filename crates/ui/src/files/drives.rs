@@ -19,6 +19,7 @@ use freya::prelude::*;
 
 use super::directory::Where;
 use super::places_model::{Release, carry_usage};
+use crate::prelude::tr;
 use crate::shell::Overlays;
 use crate::task::spawn_blocking;
 
@@ -150,7 +151,7 @@ impl Drives {
             match (outcome, overlays) {
                 (Err(sentence), Some(overlays)) => overlays.toast(sentence),
                 (Ok(()), Some(overlays)) if how == Release::Eject => {
-                    overlays.toast(format!("{label} is safe to remove."));
+                    overlays.toast(tr!("ui-files-drive-safe-to-remove", label = label));
                 }
                 _ => {}
             }
@@ -161,10 +162,7 @@ impl Drives {
 fn run_release(mount: &Mount, how: Release) -> Result<(), String> {
     if faked() {
         std::thread::sleep(Duration::from_secs(6));
-        return Err(format!(
-            "{} is busy. Close the files on it and try again.",
-            mount.label
-        ));
+        return Err(tr!("ui-files-drive-busy", label = mount.label.clone()));
     }
     match how {
         Release::Eject => bingux_files::mounts::eject(mount),

@@ -72,6 +72,7 @@
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
+use crate::prelude::tr;
 use freya::prelude::*;
 
 use crate::motion::{MOVE_MS, PRESENCE_SCALE, use_presence};
@@ -133,10 +134,10 @@ pub enum ViewKind {
 
 impl ViewKind {
     /// The name the zoom badge shows.
-    pub const fn name(self) -> &'static str {
+    pub fn name(self) -> String {
         match self {
-            ViewKind::List => "List",
-            ViewKind::Grid => "Grid",
+            ViewKind::List => tr!("ui-files-view-list"),
+            ViewKind::Grid => tr!("ui-files-view-grid"),
         }
     }
 }

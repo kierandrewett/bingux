@@ -1,5 +1,6 @@
 //! What a file view shows when there is no list: loading, empty, failed.
 
+use crate::prelude::tr;
 use bingux_files::ListError;
 use freya::prelude::*;
 
@@ -26,26 +27,26 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
     let (icon, title, description) = if recent {
         (
             Icon::DocumentOpenRecent,
-            "No recent files",
-            "Files you open appear here.",
+            tr!("ui-files-state-recent-title"),
+            tr!("ui-files-state-recent-description"),
         )
     } else if filtered {
         (
             Icon::Filter,
-            "No matching files",
-            "There are no files of the chosen type in this folder. Choose another type, or open another folder.",
+            tr!("ui-files-state-filtered-title"),
+            tr!("ui-files-state-filtered-description"),
         )
     } else if hidden_items {
         (
             Icon::ViewConceal,
-            "No files to show",
-            "This folder only has hidden files. Choose Show hidden files in the view menu to see them.",
+            tr!("ui-files-state-hidden-title"),
+            tr!("ui-files-state-hidden-description"),
         )
     } else {
         (
             FileKind::Folder.glyph(),
-            "Folder is empty",
-            "There is nothing in this folder.",
+            tr!("ui-files-state-empty-title"),
+            tr!("ui-files-state-empty-description"),
         )
     };
     Element::from(status_page(icon, title).description(description))
@@ -55,16 +56,16 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
 /// to read it.
 pub fn stopped_state() -> Element {
     Element::from(
-        status_page(Icon::MediaPlaybackStop, "Loading stopped")
-            .description("Press F5 to read the folder again."),
+        status_page(Icon::MediaPlaybackStop, tr!("ui-files-state-stopped-title"))
+            .description(tr!("ui-files-state-stopped-description")),
     )
 }
 
 /// The Trash with nothing in it: a status page, not an empty list.
 pub fn trash_empty_state() -> Element {
     Element::from(
-        status_page(Icon::UserTrash, "Trash is empty")
-            .description("Things you move to the Trash appear here until you empty it."),
+        status_page(Icon::UserTrash, tr!("ui-files-state-trash-title"))
+            .description(tr!("ui-files-state-trash-description")),
     )
 }
 
@@ -81,21 +82,26 @@ pub fn no_results_state(
 ) -> Element {
     if let Some(reason) = invalid {
         return Element::from(
-            status_page(Icon::DialogWarning, "Cannot search").description(reason.to_string()),
+            status_page(Icon::DialogWarning, tr!("ui-files-search-invalid-title"))
+                .description(reason.to_string()),
         );
     }
     let (title, description) = match running {
         Some(true) => (
-            "Searching".to_string(),
-            "Nothing has matched yet.".to_string(),
+            tr!("ui-files-search-searching-title"),
+            tr!("ui-files-search-searching-description"),
         ),
         _ if words.trim().is_empty() => (
-            "Nothing found".to_string(),
-            format!("Nothing in {place} fits these filters."),
+            tr!("ui-files-search-none-title"),
+            tr!("ui-files-search-none-all-description", place = place),
         ),
         _ => (
-            "Nothing found".to_string(),
-            format!("No name in {place} matches “{words}”."),
+            tr!("ui-files-search-none-title"),
+            tr!(
+                "ui-files-search-none-words-description",
+                place = place,
+                words = words
+            ),
         ),
     };
     let mut page = status_page(Icon::Search, title).description(description);
@@ -138,11 +144,22 @@ pub fn error_state(error: &ListError) -> Element {
     // that is not there, a file for "not a folder", the drive for one that
     // does not answer. A warning sign says none of that.
     let (icon, title) = match error {
-        ListError::PermissionDenied => (Icon::NetworkWirelessEncrypted, "No permission"),
-        ListError::NotFound => (Icon::FolderMissing, "Folder not found"),
-        ListError::NotADirectory => (Icon::ApplicationXGeneric, "Not a folder"),
-        ListError::Unresponsive => (Icon::DriveHarddisk, "Drive not responding"),
-        ListError::Cancelled | ListError::Other(_) => (Icon::DialogError, "Cannot open folder"),
+        ListError::PermissionDenied => (
+            Icon::NetworkWirelessEncrypted,
+            tr!("ui-files-error-permission-title"),
+        ),
+        ListError::NotFound => (Icon::FolderMissing, tr!("ui-files-error-not-found-title")),
+        ListError::NotADirectory => (
+            Icon::ApplicationXGeneric,
+            tr!("ui-files-error-not-folder-title"),
+        ),
+        ListError::Unresponsive => (
+            Icon::DriveHarddisk,
+            tr!("ui-files-error-unresponsive-title"),
+        ),
+        ListError::Cancelled | ListError::Other(_) => {
+            (Icon::DialogError, tr!("ui-files-error-open-title"))
+        }
     };
     Element::from(status_page(icon, title).description(error.to_string()))
 }

@@ -38,6 +38,7 @@ use std::time::{Duration, Instant, SystemTime};
 use bingux_files::Entry;
 
 use super::display;
+use crate::prelude::tr;
 use freya::prelude::*;
 
 use super::columns::{Column, DateStyle, cell_text_styled};
@@ -327,12 +328,18 @@ pub(super) fn card_lines(
         format!("{} · {}", entry.mime.description, display::size(entry.size))
     };
     if let Some(target) = link {
-        kind.push_str(&format!(" · Link to {}", target.display()));
+        kind.push_str(&format!(
+            " · {}",
+            tr!(
+                "ui-files-hover-link-to",
+                target = target.display().to_string()
+            )
+        ));
     }
     let date = match (modified, entry.sized) {
-        (Some(modified), _) => format!("Modified {modified}"),
-        (None, false) => "Modified …".to_string(),
-        (None, true) => "Modified unknown".to_string(),
+        (Some(modified), _) => tr!("ui-files-hover-modified", when = modified),
+        (None, false) => tr!("ui-files-hover-modified-pending"),
+        (None, true) => tr!("ui-files-hover-modified-unknown"),
     };
     let mut lines = vec![entry.name.clone(), kind, date];
     match place {

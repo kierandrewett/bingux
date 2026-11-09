@@ -39,6 +39,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use crate::format::{Date, DatePart, Moment, Relative, Time, YearDisplay, Zone};
+use crate::prelude::tr;
 use bingux_files::display::{Civil, local_offset};
 use bingux_files::{Entry, Kind as EntryKind, Sort, SortKey};
 use freya::prelude::*;
@@ -162,19 +163,19 @@ impl Column {
     ];
 
     /// The heading and the name in menus.
-    pub fn title(self) -> &'static str {
+    pub fn title(self) -> String {
         match self {
-            Column::Name => "Name",
-            Column::Size => "Size",
-            Column::Kind => "Type",
-            Column::Modified => "Modified",
-            Column::Created => "Created",
-            Column::Accessed => "Accessed",
-            Column::Permissions => "Permissions",
-            Column::Owner => "Owner",
-            Column::Location => "Location",
-            Column::OriginalLocation => "Original Location",
-            Column::Deleted => "Deleted",
+            Column::Name => tr!("ui-files-column-name"),
+            Column::Size => tr!("ui-files-column-size"),
+            Column::Kind => tr!("ui-files-column-type"),
+            Column::Modified => tr!("ui-files-column-modified"),
+            Column::Created => tr!("ui-files-column-created"),
+            Column::Accessed => tr!("ui-files-column-accessed"),
+            Column::Permissions => tr!("ui-files-column-permissions"),
+            Column::Owner => tr!("ui-files-column-owner"),
+            Column::Location => tr!("ui-files-column-location"),
+            Column::OriginalLocation => tr!("ui-files-column-original-location"),
+            Column::Deleted => tr!("ui-files-column-deleted"),
         }
     }
 
@@ -697,7 +698,7 @@ fn text_with(
         // info file is missing. The Trash says how long ago, as Recent does.
         Column::OriginalLocation => match entry.trash.as_ref() {
             Some(trash) => trash.original.as_deref().map_or_else(
-                || "Unknown".to_owned(),
+                || tr!("ui-files-unknown"),
                 |original| location_text(original, home),
             ),
             None => String::new(),
@@ -738,7 +739,7 @@ fn relative_date(seconds: i64, now: i64, offset: i64) -> String {
     if elapsed < 0 {
         // A clock a little behind the file's is not worth a date.
         return if elapsed > -60 {
-            "Just now".into()
+            tr!("ui-files-date-just-now")
         } else {
             absolute_date(seconds, now, offset)
         };
@@ -749,7 +750,7 @@ fn relative_date(seconds: i64, now: i64, offset: i64) -> String {
             .format()
     };
     if elapsed < 60 {
-        return "Just now".into();
+        return tr!("ui-files-date-just-now");
     }
     if elapsed < 6 * 3600 {
         return ago();
@@ -761,8 +762,8 @@ fn relative_date(seconds: i64, now: i64, offset: i64) -> String {
     let moment = Moment::from_unix(seconds);
     let clock = Time::new(moment).zone(zone_of(offset)).format();
     match today.day_number - then.day_number {
-        0 => format!("Today {clock}"),
-        1 => format!("Yesterday {clock}"),
+        0 => tr!("ui-files-date-today", time = clock),
+        1 => tr!("ui-files-date-yesterday", time = clock),
         2..=6 => {
             let weekday = Date::new(moment)
                 .zone(zone_of(offset))
@@ -855,7 +856,7 @@ pub fn columns_menu_items(layout: State<ColumnLayout>, set: impl Into<ColumnSet>
         });
     }
     items.push(menu_separator());
-    items.push(menu_item("Reset columns", move |_| {
+    items.push(menu_item(tr!("ui-files-columns-reset"), move |_| {
         let mut layout = layout;
         let mut next = layout.peek().clone();
         next.reset();
@@ -1293,7 +1294,7 @@ impl Component for HeaderCell {
         });
         let label = CAPTION
             .in_ink(ink)
-            .label(&tokens, column.title())
+            .label(&tokens, &column.title())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
         // The label keeps the edge its column's text keeps: a right-aligned
@@ -1382,8 +1383,8 @@ impl Component for HeaderCell {
             focus_stop_press(
                 content,
                 match column.sort_key() {
-                    Some(_) => format!("Sort by {}", column.title()),
-                    None => format!("{} column", column.title()),
+                    Some(_) => tr!("ui-files-column-sort-by", column = column.title()),
+                    None => tr!("ui-files-column-heading-label", column = column.title()),
                 },
                 AccessibilityRole::Button,
                 true,

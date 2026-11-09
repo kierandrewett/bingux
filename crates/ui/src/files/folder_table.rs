@@ -49,7 +49,7 @@ fn folder_title(params: &Params) -> String {
         RECENT_SCHEME => Where::Recent,
         TRASH_SCHEME => match roots.trash_folder() {
             Some(trash) => Where::Folder(trash.join(path)),
-            None => return Root::Trash.name().to_string(),
+            None => return Root::Trash.name(),
         },
         _ => Where::Folder(PathBuf::from("/").join(path)),
     };
@@ -83,10 +83,15 @@ pub fn place_of(location: &Location) -> Where {
         TRASH_SCHEME => match Roots::current().trash_folder() {
             Some(trash) => {
                 let mut path = trash.to_path_buf();
-                path.extend(location.os_path().components().filter_map(|part| match part {
-                    Component::Normal(name) => Some(name),
-                    _ => None,
-                }));
+                path.extend(
+                    location
+                        .os_path()
+                        .components()
+                        .filter_map(|part| match part {
+                            Component::Normal(name) => Some(name),
+                            _ => None,
+                        }),
+                );
                 Where::Folder(path)
             }
             None => Where::Folder(location.os_path()),
@@ -109,14 +114,22 @@ mod tests {
 
     #[test]
     fn a_place_and_its_location_name_each_other() {
-        for at in [folder("/"), folder("/etc"), folder("/srv/with space/a#b"), Where::Recent] {
+        for at in [
+            folder("/"),
+            folder("/etc"),
+            folder("/srv/with space/a#b"),
+            Where::Recent,
+        ] {
             let location = location_of(&at);
             assert_eq!(place_of(&location), at, "{location}");
             // Through the text form too: the URI is what travels.
             let parsed = Location::parse(&location.to_string()).unwrap();
             assert_eq!(place_of(&parsed), at, "{location}");
         }
-        assert_eq!(location_of(&folder("/home/me")).to_string(), "file:///home/me");
+        assert_eq!(
+            location_of(&folder("/home/me")).to_string(),
+            "file:///home/me"
+        );
         assert_eq!(location_of(&Where::Recent).to_string(), "recent:///");
     }
 
@@ -145,7 +158,11 @@ mod tests {
         for next in ["/srv/media", "/srv/media/films"] {
             model.navigate(&location_of(&folder(next)));
         }
-        let titles: Vec<_> = model.back_menu().into_iter().map(|item| item.title).collect();
+        let titles: Vec<_> = model
+            .back_menu()
+            .into_iter()
+            .map(|item| item.title)
+            .collect();
         assert_eq!(titles, ["media", "srv"]);
         // Up from the root of the file system has nowhere to go.
         assert_eq!(table.up(&location_of(&folder("/"))), None);
@@ -217,7 +234,10 @@ mod tests {
         let inside = Where::Folder(trash.join("Old folder"));
         let deeper = location_of(&inside);
         assert!(deeper.to_string().starts_with("trash:///Old"), "{deeper}");
-        assert_eq!(place_of(&Location::parse(&deeper.to_string()).unwrap()), inside);
+        assert_eq!(
+            place_of(&Location::parse(&deeper.to_string()).unwrap()),
+            inside
+        );
         // Titles and history rows say Trash, and the name an item had.
         assert_eq!(table.title_of(&location), "Trash");
         assert_eq!(table.title_of(&deeper), "Old folder");
@@ -230,7 +250,11 @@ mod tests {
         model.navigate(&location);
         model.navigate(&deeper);
         model.navigate(&location_of(&folder("/srv/media")));
-        let titles: Vec<_> = model.back_menu().into_iter().map(|item| item.title).collect();
+        let titles: Vec<_> = model
+            .back_menu()
+            .into_iter()
+            .map(|item| item.title)
+            .collect();
         assert_eq!(titles, ["Old folder", "Trash", "srv"]);
         // Up is `history::up`, which the Trash answers with nothing above it.
         assert_eq!(crate::files::history::parent(&at), None);
