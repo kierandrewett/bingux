@@ -8,13 +8,19 @@
 use std::sync::{Condvar, Mutex, PoisonError};
 
 use crate::pages::gnoblin;
+use bingux_ui::prelude::tr;
 
-const UNSUPPORTED: &str =
-    "Could not change the input sources. Edit the configuration file instead.";
-const UNREADABLE: &str =
-    "Could not read the configuration file. Check that it exists, then try again.";
-const UNWRITABLE: &str =
-    "Could not save the configuration file. Check that you can write to it, then try again.";
+fn unsupported() -> String {
+    tr!("settings-keyboard-err-unsupported")
+}
+
+fn unreadable() -> String {
+    tr!("settings-keyboard-err-unreadable")
+}
+
+fn unwritable() -> String {
+    tr!("settings-keyboard-err-unwritable")
+}
 const XKB_EVDEV: &str = "/usr/share/X11/xkb/rules/evdev.xml";
 const MAX_ID: usize = 64;
 
@@ -51,38 +57,31 @@ impl SourcesConfig {
         match edit {
             Edit::Add(source) => {
                 if !valid_source(source) {
-                    return Err(
-                        "Could not add that input source. Choose a different one.".to_string()
-                    );
+                    return Err(tr!("settings-keyboard-err-add"));
                 }
                 if next.sources.contains(source) {
-                    return Err("That input source is already in the list.".to_string());
+                    return Err(tr!("settings-keyboard-err-duplicate"));
                 }
                 next.sources.push(source.clone());
             }
             Edit::Remove(index) => {
                 if *index >= count {
-                    return Err(
-                        "Could not find that input source. Reopen the page and try again."
-                            .to_string(),
-                    );
+                    return Err(tr!("settings-keyboard-err-missing"));
                 }
                 if count == 1 {
-                    return Err("Keep at least one input source.".to_string());
+                    return Err(tr!("settings-keyboard-err-last"));
                 }
                 next.sources.remove(*index);
             }
             Edit::MoveUp(index) => {
                 if *index == 0 || *index >= count {
-                    return Err(
-                        "Could not move that input source. It is already first.".to_string()
-                    );
+                    return Err(tr!("settings-keyboard-err-first"));
                 }
                 next.sources.swap(index - 1, *index);
             }
             Edit::MoveDown(index) => {
                 if *index + 1 >= count {
-                    return Err("Could not move that input source. It is already last.".to_string());
+                    return Err(tr!("settings-keyboard-err-last-move"));
                 }
                 next.sources.swap(*index, index + 1);
             }
@@ -99,7 +98,7 @@ pub fn read() -> Result<SourcesConfig, String> {
         return Ok(config);
     }
     let path = gnoblin::config_path().map_err(|e| e.0)?;
-    let text = crate::system::read_to_string(&path).map_err(|_| UNREADABLE.to_string())?;
+    let text = crate::system::read_to_string(&path).map_err(|_| unreadable())?;
     parse(&text)
 }
 
@@ -161,7 +160,7 @@ fn apply_now(edit: Edit) -> Result<(), String> {
     let path = config_file()?;
     let path =
         std::fs::canonicalize(&path).map_or(path, |real| real.to_string_lossy().into_owned());
-    let original = crate::system::read_to_string(&path).map_err(|_| UNREADABLE.to_string())?;
+    let original = crate::system::read_to_string(&path).map_err(|_| unreadable())?;
     let current = parse(&original)?;
     let next = current.apply(&edit)?;
     if next == current {
@@ -181,14 +180,14 @@ fn apply_now(edit: Edit) -> Result<(), String> {
 fn reload(path: &str, original: &str) -> Result<(), String> {
     match gnoblin::gnoblinctl(&["config", "reload"]) {
         Ok(_) => Ok(()),
-        Err(e) if e.0 == gnoblin::NOT_RUNNING => Ok(()),
+        Err(e) if e.0 == gnoblin::not_running() => Ok(()),
         Err(e) => {
             let restored = write_file(path, original).is_ok();
             if restored {
                 let _ = gnoblin::gnoblinctl(&["config", "reload"]);
             }
             eprintln!("keyboard: the desktop did not accept the change: {}", e.0);
-            Err("The desktop did not accept the change, so it was undone. Try again.".to_string())
+            Err(tr!("settings-keyboard-err-undone"))
         }
     }
 }
@@ -197,8 +196,8 @@ fn reload(path: &str, original: &str) -> Result<(), String> {
 /// never leaves a half-written configuration.
 fn write_file(path: &str, text: &str) -> Result<(), String> {
     let temp = format!("{path}.bingux-settings-tmp");
-    std::fs::write(&temp, text).map_err(|_| UNWRITABLE.to_string())?;
-    std::fs::rename(&temp, path).map_err(|_| UNWRITABLE.to_string())
+    std::fs::write(&temp, text).map_err(|_| unwritable())?;
+    std::fs::rename(&temp, path).map_err(|_| unwritable())
 }
 
 /// The XKB layouts and layout variants in `evdev.xml`, with their descriptions.
@@ -458,7 +457,7 @@ fn locate(tokens: &[Token]) -> Result<Location, String> {
         for (key_index, value) in top_keys(tokens, open, close) {
             if matches!(&tokens[key_index].tok, Tok::Ident(name) if name == "input_sources") {
                 if !is_punct(tokens, value, b'{') {
-                    return Err(UNSUPPORTED.to_string());
+                    return Err(unsupported());
                 }
                 key = Some((key_index, value, matching(tokens, value)?));
             }
@@ -512,10 +511,10 @@ fn entries(tokens: &[Token], open: usize, close: usize) -> Result<Vec<Entry>, St
             continue;
         }
         let Tok::Ident(key) = &tokens[index].tok else {
-            return Err(UNSUPPORTED.to_string());
+            return Err(unsupported());
         };
         if !is_punct(tokens, index + 1, b'=') {
-            return Err(UNSUPPORTED.to_string());
+            return Err(unsupported());
         }
         let start = index + 2;
         let mut end = start;
@@ -524,9 +523,7 @@ fn entries(tokens: &[Token], open: usize, close: usize) -> Result<Vec<Entry>, St
             match &tokens[end].tok {
                 Tok::Punct(c) if is_open(*c) => depth += 1,
                 Tok::Punct(c) if is_close(*c) => {
-                    depth = depth
-                        .checked_sub(1)
-                        .ok_or_else(|| UNSUPPORTED.to_string())?;
+                    depth = depth.checked_sub(1).ok_or_else(unsupported)?;
                 }
                 Tok::Punct(b',') if depth == 0 => break,
                 _ => {}
@@ -534,7 +531,7 @@ fn entries(tokens: &[Token], open: usize, close: usize) -> Result<Vec<Entry>, St
             end += 1;
         }
         if end == start {
-            return Err(UNSUPPORTED.to_string());
+            return Err(unsupported());
         }
         found.push(Entry {
             key: key.clone(),
@@ -561,10 +558,10 @@ fn parse_table(tokens: &[Token], open: usize, close: usize) -> Result<SourcesCon
                 per_window = match sole(tokens, &entry) {
                     Some(Tok::Ident(value)) if value == "true" => true,
                     Some(Tok::Ident(value)) if value == "false" => false,
-                    _ => return Err(UNSUPPORTED.to_string()),
+                    _ => return Err(unsupported()),
                 }
             }
-            _ => return Err(UNSUPPORTED.to_string()),
+            _ => return Err(unsupported()),
         }
     }
     Ok(SourcesConfig {
@@ -576,7 +573,7 @@ fn parse_table(tokens: &[Token], open: usize, close: usize) -> Result<SourcesCon
 /// The list of source tables in `start..end`, which must be one table.
 fn parse_sources(tokens: &[Token], start: usize, end: usize) -> Result<Vec<Source>, String> {
     if !is_punct(tokens, start, b'{') || matching(tokens, start)? + 1 != end {
-        return Err(UNSUPPORTED.to_string());
+        return Err(unsupported());
     }
     let close = end - 1;
     let mut found = Vec::new();
@@ -587,11 +584,11 @@ fn parse_sources(tokens: &[Token], start: usize, end: usize) -> Result<Vec<Sourc
             continue;
         }
         if !is_punct(tokens, index, b'{') {
-            return Err(UNSUPPORTED.to_string());
+            return Err(unsupported());
         }
         let inner_close = matching(tokens, index)?;
         if inner_close >= close {
-            return Err(UNSUPPORTED.to_string());
+            return Err(unsupported());
         }
         found.push(parse_source(tokens, index, inner_close)?);
         index = inner_close + 1;
@@ -605,20 +602,20 @@ fn parse_source(tokens: &[Token], open: usize, close: usize) -> Result<Source, S
     let mut id = None;
     for entry in entries(tokens, open, close)? {
         let Some(Tok::Str(value)) = sole(tokens, &entry) else {
-            return Err(UNSUPPORTED.to_string());
+            return Err(unsupported());
         };
         match entry.key.as_str() {
             "type" => kind = Some(value.clone()),
             "id" => id = Some(value.clone()),
-            _ => return Err(UNSUPPORTED.to_string()),
+            _ => return Err(unsupported()),
         }
     }
     let (Some(kind), Some(id)) = (kind, id) else {
-        return Err(UNSUPPORTED.to_string());
+        return Err(unsupported());
     };
     let source = Source { kind, id };
     if !valid_source(&source) {
-        return Err(UNSUPPORTED.to_string());
+        return Err(unsupported());
     }
     Ok(source)
 }
@@ -669,7 +666,7 @@ fn matching(tokens: &[Token], open: usize) -> Result<usize, String> {
             }
         }
     }
-    Err(UNSUPPORTED.to_string())
+    Err(unsupported())
 }
 
 /// The level of a long bracket `[==[` starting at `at`, or `None`.
@@ -694,7 +691,7 @@ fn long_close(bytes: &[u8], from: usize, level: usize) -> Option<usize> {
 /// token kinds the table needs are kept apart; everything else is `Other`.
 fn lex(text: &str) -> Result<Vec<Token>, String> {
     let bytes = text.as_bytes();
-    let unterminated = || UNSUPPORTED.to_string();
+    let unterminated = || unsupported();
     let mut tokens = Vec::new();
     let mut at = 0;
     while at < bytes.len() {

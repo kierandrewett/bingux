@@ -21,7 +21,7 @@ use crate::ui::{
     row_button, search_field, skeleton, skeleton_shape, slider_row, status, switch_row, text_field,
     use_overlays,
 };
-use bingux_ui::prelude::{Router, use_router};
+use bingux_ui::prelude::{Router, i18n_id, tr, use_router};
 use bingux_ui::prelude::{Window, popup, use_window};
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
@@ -44,26 +44,38 @@ const BLINK_TIME_RANGE: (f64, f64) = (100.0, 2500.0);
 
 /// Caps Lock choices: each is an XKB option, and "" leaves Caps Lock alone.
 const CAPS_LOCK: [(&str, &str); 4] = [
-    ("", "Default"),
-    ("caps:escape", "Works as Escape"),
-    ("ctrl:nocaps", "Works as Control"),
-    ("caps:none", "Turned off"),
+    ("", i18n_id!("settings-keyboard-caps-default")),
+    ("caps:escape", i18n_id!("settings-keyboard-caps-escape")),
+    ("ctrl:nocaps", i18n_id!("settings-keyboard-caps-control")),
+    ("caps:none", i18n_id!("settings-keyboard-caps-off")),
 ];
 /// Compose key choices: the key that starts a sequence for accented letters.
 const COMPOSE_KEY: [(&str, &str); 4] = [
-    ("", "Off"),
-    ("compose:ralt", "Right Alt"),
-    ("compose:rctrl", "Right Ctrl"),
-    ("compose:menu", "Menu key"),
+    ("", i18n_id!("settings-keyboard-compose-off")),
+    ("compose:ralt", i18n_id!("settings-keyboard-compose-ralt")),
+    ("compose:rctrl", i18n_id!("settings-keyboard-compose-rctrl")),
+    ("compose:menu", i18n_id!("settings-keyboard-compose-menu")),
 ];
 /// Alternate characters key choices: the key that types the third-level
 /// characters, such as symbols. "" leaves the key alone.
 const ALTERNATE_KEY: [(&str, &str); 5] = [
-    ("", "Default"),
-    ("lv3:lalt_switch", "Left Alt"),
-    ("lv3:ralt_switch", "Right Alt"),
-    ("lv3:lwin_switch", "Left Super"),
-    ("lv3:rwin_switch", "Right Super"),
+    ("", i18n_id!("settings-keyboard-alt-default")),
+    (
+        "lv3:lalt_switch",
+        i18n_id!("settings-keyboard-alt-left-alt"),
+    ),
+    (
+        "lv3:ralt_switch",
+        i18n_id!("settings-keyboard-alt-right-alt"),
+    ),
+    (
+        "lv3:lwin_switch",
+        i18n_id!("settings-keyboard-alt-left-super"),
+    ),
+    (
+        "lv3:rwin_switch",
+        i18n_id!("settings-keyboard-alt-right-super"),
+    ),
 ];
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -109,9 +121,7 @@ fn gsettings_u32(schema: &str, key: &str) -> Result<f64, CommandError> {
         .parse::<f64>()
         .map_err(|_| {
             eprintln!("settings: could not parse keyboard {schema} {key}");
-            CommandError(
-                "Could not read the keyboard settings. Restart Settings and try again.".to_string(),
-            )
+            CommandError(tr!("settings-keyboard-read-error"))
         })
 }
 
@@ -148,11 +158,11 @@ fn selected_in(current: &[String], group: &[(&str, &str)]) -> String {
 fn managed_key(lua: &str, group: &[(&str, &str)]) -> String {
     let listed: Vec<String> = lua.split(',').map(|item| item.trim().to_string()).collect();
     let chosen = selected_in(&listed, group);
-    group
+    let label = group
         .iter()
         .find(|(key, _)| *key == chosen)
-        .map_or(group[0].1, |(_, label)| label)
-        .to_string()
+        .map_or(group[0].1, |(_, label)| label);
+    bingux_ui::i18n::text(label)
 }
 
 /// `current` with every option from `group` removed and `choice` added. Other
@@ -328,11 +338,7 @@ fn open_file(path: &str) -> CommandResult {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|_| {
-            CommandError(
-                "Could not open the file. Check that a text editor is installed.".to_string(),
-            )
-        })?;
+        .map_err(|_| CommandError(tr!("settings-keyboard-open-error")))?;
     std::thread::spawn(move || {
         let _ = child.wait();
     });
@@ -394,7 +400,7 @@ impl SourceEdits {
 fn open_add_sheet(edits: SourceEdits) {
     edits
         .window
-        .open(popup("Add input source", AddBody { edits }).flags(PopupFlags::FORM));
+        .open(popup(tr!("settings-keyboard-add-title"), AddBody { edits }).flags(PopupFlags::FORM));
 }
 
 /// The most catalogue rows the add sheet lists at once. The rest are one
@@ -439,9 +445,9 @@ impl Component for AddBody {
         let mut column = popup_column().child(search_field(query, |_| {}).fill_width());
         if total == 0 {
             let message = if needle.is_empty() {
-                "All input sources are in the list."
+                tr!("settings-keyboard-all-added")
             } else {
-                "No matching input sources"
+                tr!("settings-keyboard-no-matches")
             };
             column = column.child(status(Status::Empty(message.into())));
         } else {
@@ -459,12 +465,10 @@ impl Component for AddBody {
                         })
                         .into()
                 });
-            column = column.child(Group::titled("Available").rows(rows));
+            column = column.child(Group::titled(&tr!("settings-keyboard-available")).rows(rows));
             if total > SOURCE_LIST_CAP {
                 let more = total - SOURCE_LIST_CAP;
-                column = column.child(caption(format!(
-                    "{more} more not shown. Type to narrow the list."
-                )));
+                column = column.child(caption(tr!("settings-keyboard-more-hidden", count = more)));
             }
         }
         Element::from(column)
@@ -472,11 +476,11 @@ impl Component for AddBody {
 }
 
 /// The label for a source kind: an XKB layout or an IBus input method.
-fn kind_label(kind: &str) -> &'static str {
+fn kind_label(kind: &str) -> String {
     if kind == "xkb" {
-        "Keyboard layout"
+        tr!("settings-keyboard-kind-layout")
     } else {
-        "Input method"
+        tr!("settings-keyboard-kind-method")
     }
 }
 
@@ -493,12 +497,19 @@ fn source_name(source: &Source, catalog: &[(Source, String)]) -> String {
 /// remove it. An action that cannot apply is greyed out: the first cannot
 /// move up, the last cannot move down, and the last one left cannot go.
 fn source_menu(index: usize, count: usize, edits: SourceEdits) -> Vec<MenuItem> {
-    let up = menu_item("Move up", move |_| edits.run(Edit::MoveUp(index))).icon(Icon::PanUp);
-    let down =
-        menu_item("Move down", move |_| edits.run(Edit::MoveDown(index))).icon(Icon::PanDown);
-    let remove = menu_item("Remove", move |_| edits.run(Edit::Remove(index)))
-        .icon(Icon::Delete)
-        .destructive();
+    let up = menu_item(tr!("settings-keyboard-move-up"), move |_| {
+        edits.run(Edit::MoveUp(index))
+    })
+    .icon(Icon::PanUp);
+    let down = menu_item(tr!("settings-keyboard-move-down"), move |_| {
+        edits.run(Edit::MoveDown(index))
+    })
+    .icon(Icon::PanDown);
+    let remove = menu_item(tr!("settings-keyboard-remove"), move |_| {
+        edits.run(Edit::Remove(index))
+    })
+    .icon(Icon::Delete)
+    .destructive();
     vec![
         if index > 0 { up } else { up.disabled() },
         if index + 1 < count {
@@ -535,7 +546,7 @@ fn source_row(
 /// The heading for a shortcut group, from its Gnoblin name such as `wm`.
 fn group_title(group: &str) -> String {
     if group == "wm" {
-        return "Windows".to_string();
+        return tr!("settings-keyboard-group-windows");
     }
     let mut chars = group.chars();
     match chars.next() {
@@ -552,7 +563,7 @@ fn accelerator_text(accelerator: &str) -> String {
 /// The bindings of one shortcut, or `Not set` when it has none.
 fn bindings_text(bindings: &[String]) -> String {
     if bindings.is_empty() {
-        "Not set".to_string()
+        tr!("settings-keyboard-not-set")
     } else {
         bindings.join(", ")
     }
@@ -571,7 +582,7 @@ fn load_shortcuts() -> Result<ShortcutList, CommandError> {
         .collect();
     list.shortcuts.push(Shortcut {
         group: "input".to_string(),
-        title: "Switch input source".to_string(),
+        title: tr!("settings-keyboard-switch-input"),
         bindings: bindings_text(&switch),
     });
     Ok(list)
@@ -579,9 +590,7 @@ fn load_shortcuts() -> Result<ShortcutList, CommandError> {
 
 /// The actions Gnoblin lists, each with its default bindings.
 fn gnoblin_shortcuts() -> Result<ShortcutList, CommandError> {
-    let unreadable = || {
-        CommandError("Could not read the shortcuts. Restart the desktop and try again.".to_string())
-    };
+    let unreadable = || CommandError(tr!("settings-keyboard-shortcuts-read-error"));
     let output = gnoblin::gnoblinctl(&["--json", "shortcut", "actions"])?;
     let actions = Json::parse(&output).map_err(|_| unreadable())?;
     let actions = actions.as_array().ok_or_else(unreadable)?;
@@ -654,7 +663,9 @@ impl Component for KeyboardPage {
             Err(e) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, refresh)),
+                        .action(&tr!("settings-keyboard-try-again"), move |_| {
+                            background(loaded, refresh)
+                        }),
                 );
             }
         };
@@ -670,31 +681,40 @@ impl Component for KeyboardPage {
             .map_or(model.repeat, |value| value == "true");
 
         let repeat_switch = match repeat_lua {
-            Some(value) => gnoblin::managed_row("Repeat keys", gnoblin::on_off(&value)),
-            None => switch_row("Repeat keys", model.repeat, move |next: bool| {
-                commit(
-                    loaded,
-                    overlays,
-                    move |current| current.repeat = next,
-                    move || {
-                        system::gsettings_set(
-                            KEYBOARD,
-                            "repeat",
-                            if next { "true" } else { "false" },
-                        )
-                    },
-                )
-            }),
+            Some(value) => gnoblin::managed_row(
+                &tr!("settings-keyboard-repeat-keys"),
+                gnoblin::on_off(&value),
+            ),
+            None => switch_row(
+                tr!("settings-keyboard-repeat-keys"),
+                model.repeat,
+                move |next: bool| {
+                    commit(
+                        loaded,
+                        overlays,
+                        move |current| current.repeat = next,
+                        move || {
+                            system::gsettings_set(
+                                KEYBOARD,
+                                "repeat",
+                                if next { "true" } else { "false" },
+                            )
+                        },
+                    )
+                },
+            ),
         };
         // Delay, speed and the test box only matter while keys repeat, so
         // they are nested under the switch and shown while it is on.
         let repeat_nested: Vec<Element> = if repeat_on {
             let delay: Element = match delay_lua {
-                Some(value) => {
-                    gnoblin::managed_row("Delay before repeat", gnoblin::millis(&value)).into()
-                }
+                Some(value) => gnoblin::managed_row(
+                    &tr!("settings-keyboard-delay-before-repeat"),
+                    gnoblin::millis(&value),
+                )
+                .into(),
                 None => slider_row(
-                    "Delay before repeat",
+                    tr!("settings-keyboard-delay-before-repeat"),
                     to_percent(model.delay_ms, DELAY_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(percent, DELAY_RANGE);
@@ -711,9 +731,13 @@ impl Component for KeyboardPage {
                 .into(),
             };
             let interval: Element = match interval_lua {
-                Some(value) => gnoblin::managed_row("Repeat speed", gnoblin::millis(&value)).into(),
+                Some(value) => gnoblin::managed_row(
+                    &tr!("settings-keyboard-repeat-speed"),
+                    gnoblin::millis(&value),
+                )
+                .into(),
                 None => slider_row(
-                    "Repeat speed",
+                    tr!("settings-keyboard-repeat-speed"),
                     100.0 - to_percent(model.interval_ms, INTERVAL_RANGE),
                     move |percent: f64| {
                         let ms = from_percent(100.0 - percent, INTERVAL_RANGE);
@@ -731,13 +755,15 @@ impl Component for KeyboardPage {
                 .value_text(format!("{} ms", model.interval_ms))
                 .into(),
             };
-            let try_it: Element = row("Try it").trailing(text_field(try_text, |_| {})).into();
+            let try_it: Element = row(tr!("settings-keyboard-try-it"))
+                .trailing(text_field(try_text, |_| {}))
+                .into();
             vec![delay, interval, try_it]
         } else {
             Vec::new()
         };
-        let repeat_group =
-            Group::titled("Key repeat").row(repeat_switch.nested(repeat_on, repeat_nested));
+        let repeat_group = Group::titled(&tr!("settings-keyboard-key-repeat"))
+            .row(repeat_switch.nested(repeat_on, repeat_nested));
 
         // Num Lock: the remembered state wins when remembering is on, so the
         // starting state is only shown when remembering is off.
@@ -746,11 +772,14 @@ impl Component for KeyboardPage {
         let numlock_remembered = numlock_remember_lua
             .as_deref()
             .map_or(model.remember_numlock, |value| value == "true");
-        let mut typing_group = Group::titled("Typing");
+        let mut typing_group = Group::titled(&tr!("settings-keyboard-typing"));
         let remember_numlock_row = match numlock_remember_lua {
-            Some(value) => gnoblin::managed_row("Remember Num Lock state", gnoblin::on_off(&value)),
+            Some(value) => gnoblin::managed_row(
+                &tr!("settings-keyboard-remember-numlock"),
+                gnoblin::on_off(&value),
+            ),
             None => switch_row(
-                "Remember Num Lock state",
+                tr!("settings-keyboard-remember-numlock"),
                 model.remember_numlock,
                 move |next: bool| {
                     commit(
@@ -774,11 +803,13 @@ impl Component for KeyboardPage {
             Vec::new()
         } else {
             let sign_in: Element = match numlock_state_lua {
-                Some(value) => {
-                    gnoblin::managed_row("Num Lock on at sign-in", gnoblin::on_off(&value)).into()
-                }
+                Some(value) => gnoblin::managed_row(
+                    &tr!("settings-keyboard-numlock-sign-in"),
+                    gnoblin::on_off(&value),
+                )
+                .into(),
                 None => switch_row(
-                    "Num Lock on at sign-in",
+                    tr!("settings-keyboard-numlock-sign-in"),
                     model.numlock_on,
                     move |next: bool| {
                         commit(
@@ -809,11 +840,14 @@ impl Component for KeyboardPage {
         let compose_current = selected_in(&model.xkb_options, &COMPOSE_KEY);
         let alternate_current = selected_in(&model.xkb_options, &ALTERNATE_KEY);
         let caps_row = match xkb_lua.clone() {
-            Some(lua) => gnoblin::managed_row("Caps Lock key", managed_key(&lua, &CAPS_LOCK)),
+            Some(lua) => gnoblin::managed_row(
+                &tr!("settings-keyboard-caps-lock"),
+                managed_key(&lua, &CAPS_LOCK),
+            ),
             None => {
                 let options = model.xkb_options.clone();
                 choice_row(
-                    "Caps Lock key",
+                    tr!("settings-keyboard-caps-lock"),
                     CAPS_LOCK
                         .iter()
                         .map(|(key, label)| (key.to_string(), label.to_string()))
@@ -827,11 +861,14 @@ impl Component for KeyboardPage {
             }
         };
         let compose_row = match xkb_lua.clone() {
-            Some(lua) => gnoblin::managed_row("Compose key", managed_key(&lua, &COMPOSE_KEY)),
+            Some(lua) => gnoblin::managed_row(
+                &tr!("settings-keyboard-compose-key"),
+                managed_key(&lua, &COMPOSE_KEY),
+            ),
             None => {
                 let options = model.xkb_options.clone();
                 choice_row(
-                    "Compose key",
+                    tr!("settings-keyboard-compose-key"),
                     COMPOSE_KEY
                         .iter()
                         .map(|(key, label)| (key.to_string(), label.to_string()))
@@ -848,7 +885,7 @@ impl Component for KeyboardPage {
         // under the switch and shown while it is on.
         let blink_nested: Vec<Element> = if model.cursor_blink {
             let blink: Element = slider_row(
-                "Blink speed",
+                tr!("settings-keyboard-blink-speed"),
                 to_percent(model.cursor_blink_time, BLINK_TIME_RANGE),
                 move |percent: f64| {
                     let ms = from_percent(percent, BLINK_TIME_RANGE);
@@ -869,8 +906,10 @@ impl Component for KeyboardPage {
         } else {
             Vec::new()
         };
-        let cursor_blink_row =
-            switch_row("Cursor blinking", model.cursor_blink, move |next: bool| {
+        let cursor_blink_row = switch_row(
+            tr!("settings-keyboard-cursor-blinking"),
+            model.cursor_blink,
+            move |next: bool| {
                 commit(
                     loaded,
                     overlays,
@@ -883,21 +922,22 @@ impl Component for KeyboardPage {
                         )
                     },
                 )
-            })
-            .nested(model.cursor_blink, blink_nested);
+            },
+        )
+        .nested(model.cursor_blink, blink_nested);
         typing_group = typing_group.row(cursor_blink_row).row(caps_row);
 
         // Compose and the alternate characters key both type accented letters
         // and symbols, so they share a group.
         let alternate_row = match xkb_lua {
             Some(lua) => gnoblin::managed_row(
-                "Alternate characters key",
+                &tr!("settings-keyboard-alternate-key"),
                 managed_key(&lua, &ALTERNATE_KEY),
             ),
             None => {
                 let options = model.xkb_options.clone();
                 choice_row(
-                    "Alternate characters key",
+                    tr!("settings-keyboard-alternate-key"),
                     ALTERNATE_KEY
                         .iter()
                         .map(|(key, label)| (key.to_string(), label.to_string()))
@@ -910,7 +950,7 @@ impl Component for KeyboardPage {
                 )
             }
         };
-        let special_group = Group::titled("Special character entry")
+        let special_group = Group::titled(&tr!("settings-keyboard-special-entry"))
             .row(compose_row)
             .row(alternate_row);
 
@@ -925,25 +965,28 @@ impl Component for KeyboardPage {
             busy: sources_busy,
         };
         let busy = *sources_busy.read();
-        let sources_group = Group::titled("Input sources");
+        let sources_group = Group::titled(&tr!("settings-keyboard-input-sources"));
         let sources: Element = match sources_state.read().clone() {
             None => sources_group.row(skeleton()).into(),
             Some(Err(message)) => sources_group
-                .row(
-                    status(Status::Error(message)).action("Try again", move |_| {
+                .row(status(Status::Error(message)).action(
+                    &tr!("settings-keyboard-try-again"),
+                    move |_| {
                         let mut state = sources_state;
                         background_then(
                             move || system::load_persistent("keyboard-sources", sources::read),
                             move |config| state.set(Some(config)),
                         );
-                    }),
-                )
+                    },
+                ))
                 .into(),
             Some(Ok(config)) => {
                 let count = config.sources.len();
                 let catalog = edits.catalog.read().clone().unwrap_or_default();
                 let group = if config.sources.is_empty() {
-                    sources_group.row(status(Status::Empty("No input sources".into())))
+                    sources_group.row(status(Status::Empty(
+                        tr!("settings-keyboard-no-sources").into(),
+                    )))
                 } else {
                     sources_group.rows(config.sources.iter().enumerate().map(|(index, source)| {
                         source_row(index, count, source, edits, router, &catalog)
@@ -951,12 +994,12 @@ impl Component for KeyboardPage {
                 };
                 group
                     .row(switch_row(
-                        "Separate input per window",
+                        tr!("settings-keyboard-separate-per-window"),
                         config.per_window,
                         move |next: bool| edits.run(Edit::SetPerWindow(next)),
                     ))
                     .row(
-                        row("Add input source…")
+                        row(tr!("settings-keyboard-add-source"))
                             .leading(Icon::ListAdd)
                             .enabled(!busy)
                             .on_press(move |_| open_add_sheet(edits)),
@@ -974,14 +1017,14 @@ impl Component for KeyboardPage {
             Some(Ok(list)) => Some(list.shortcuts.len()),
             _ => None,
         };
-        let mut shortcuts_row = row("Keyboard shortcuts")
+        let mut shortcuts_row = row(tr!("settings-keyboard-shortcuts"))
             .leading(Icon::Keyboard)
             .navigates()
             .on_press(move |_| router.open(routes::shortcuts()));
         if let Some(count) = shortcut_count {
             shortcuts_row = shortcuts_row.value(format!("{count} shortcuts"));
         }
-        let shortcuts = Group::titled("Shortcuts").row(shortcuts_row);
+        let shortcuts = Group::titled(&tr!("settings-keyboard-shortcuts-group")).row(shortcuts_row);
 
         let page = page_column()
             .child(PageHead::new())
@@ -1018,18 +1061,21 @@ impl Component for ShortcutsPage {
         };
         let list = match result {
             Ok(list) => list,
-            Err(e) if e.0 == gnoblin::NOT_RUNNING => {
+            Err(e) if e.0 == gnoblin::not_running() => {
                 return page_column()
                     .child(PageHead::new())
                     .child(status(Status::Empty(e.0)));
             }
             Err(e) => {
                 return page_column().child(PageHead::new()).child(
-                    status(Status::Error(e.0)).action("Try again", move |_| {
-                        background(loaded, move || {
-                            system::load_persistent(SHORTCUTS, load_shortcuts)
-                        })
-                    }),
+                    status(Status::Error(e.0)).action(
+                        &tr!("settings-keyboard-try-again"),
+                        move |_| {
+                            background(loaded, move || {
+                                system::load_persistent(SHORTCUTS, load_shortcuts)
+                            })
+                        },
+                    ),
                 );
             }
         };
@@ -1050,7 +1096,9 @@ impl Component for ShortcutsPage {
             .child(PageHead::new())
             .child(search_field(query, |_| {}));
         if groups.is_empty() {
-            page = page.child(status(Status::Empty("No matching shortcuts".into())));
+            page = page.child(status(Status::Empty(
+                tr!("settings-keyboard-no-shortcuts").into(),
+            )));
         }
         for (group, items) in &groups {
             page = page.child(Group::titled(&group_title(group)).rows(items.iter().map(
@@ -1060,11 +1108,14 @@ impl Component for ShortcutsPage {
             )));
         }
         if let Some(path) = list.config_path.clone() {
-            page = page.child(Group::titled("Configuration").row(
-                row("Configuration file").trailing(row_button("Open", move |_| {
-                    open_config(path.clone(), overlays)
-                })),
-            ));
+            page = page.child(
+                Group::titled(&tr!("settings-keyboard-configuration")).row(
+                    row(tr!("settings-keyboard-config-file"))
+                        .trailing(row_button(tr!("settings-keyboard-open"), move |_| {
+                            open_config(path.clone(), overlays)
+                        })),
+                ),
+            );
         }
         page
     }
