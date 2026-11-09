@@ -1,0 +1,100 @@
+.TH BINGUX-PREVIEW 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-preview \- picture and document viewer for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-preview
+.RB [ \-\- ]
+.RI [ FILE | FOLDER | URI ]...
+.SH DESCRIPTION
+.B bingux-preview
+shows pictures and PDF documents in a window, with the other files of the same
+kind from the same folder one arrow key away.
+It zooms, pans, turns and flips pictures, plays animated GIFs, runs a
+slideshow, finds text in a document and shows a document's pages and outline
+in a sidebar.
+It crops a picture and saves the result as a copy; the original is never
+changed.
+.PP
+With no argument an empty window opens, or the window that is already running
+comes to the front.
+Only one Preview window runs.
+A second launch shows its file in the window that is already open.
+.SH ARGUMENTS
+.TP
+.I FILE
+One file is shown with the files of its folder that are of its kind, so Left
+and Right go through them.
+Several files are the list the arrows go through.
+.TP
+.I FOLDER
+Its pictures and documents.
+.TP
+.I URI
+.BR file:///path ,
+or
+.BR bingux\-preview:///path .
+A name that is not there is reported on standard error and opens nothing.
+.PP
+.B \-\-
+ends the options, for a file whose name starts with
+.BR \- .
+.SH FORMATS
+PNG, JPEG, WebP, GIF, BMP, ICO and SVG are drawn by the application.
+HEIF, HEIC, AVIF, TIFF, Radiance HDR, OpenEXR and the picture inside a camera
+RAW file are decoded by
+.BR bingux\-preview\-host (1),
+which also renders PDF documents with poppler.
+Its HEIF decoder is libheif; HEIC needs a libheif that has an HEVC decoder.
+High dynamic range pictures are tone mapped to an ordinary display.
+.SH KEYS
+.TP
+.B Left, Right
+The previous and next file.
+.TP
+.B + \-
+Zoom in and out.
+.B 0
+fits the window and
+.B 1
+shows one picture pixel on one screen pixel.
+.TP
+.B R, Shift+R, H, V
+Turn right and left, flip horizontally and vertically.
+.TP
+.B Space
+Play or pause an animated GIF.
+.TP
+.B S
+A slideshow of the folder; Escape stops it.
+.TP
+.B C
+Crop. Drag the box, or use the arrows (Shift moves further, Alt resizes), pick
+a shape, then Save a copy.
+.TP
+.B Delete, Ctrl+Z
+Move the picture to the Trash, and put it back.
+.TP
+.B Ctrl+C, Ctrl+Shift+S
+Copy the picture, and save a copy.
+.TP
+.B F9, Ctrl+F
+In a document, the pages sidebar and find.
+.TP
+.B I, F, F11
+Information, full screen.
+.SH FILES
+.TP
+.I $XDG_STATE_HOME/bingux/files/view.json
+Whether each kind of picture was last fitted or at actual size, the page a
+document was last read at, and the window size.
+.TP
+.I $XDG_DATA_HOME/Trash/
+Where deleted files go (the freedesktop.org Trash).
+.SH SEE ALSO
+.BR bingux\-files (1),
+.BR xdg\-open (1),
+.BR xdg\-mime (1)
+.PP
+Documentation: docs/preview-app.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

@@ -69,11 +69,14 @@ impl Component for DomTree {
         let roots = {
             let mut cached = cache.borrow_mut();
             match cached.as_ref() {
-                Some((shot, wrappers, nodes)) if *shot == self.snap && *wrappers == show_wrappers => {
+                Some((shot, wrappers, nodes))
+                    if *shot == self.snap && *wrappers == show_wrappers =>
+                {
                     nodes.clone()
                 }
                 _ => {
-                    let nodes: Rc<[TreeNode]> = tree_nodes(&snap, &snap.roots, show_wrappers).into();
+                    let nodes: Rc<[TreeNode]> =
+                        tree_nodes(&snap, &snap.roots, show_wrappers).into();
                     *cached = Some((self.snap.clone(), show_wrappers, nodes.clone()));
                     nodes
                 }
@@ -98,7 +101,8 @@ impl Component for DomTree {
                 let snap = snap.clone();
                 EventHandler::new(move |(id, at): (u64, (f32, f32))| {
                     if let Some(overlays) = overlays {
-                        overlays.show_menu(at, row_menu(snap.clone(), id, expanded, Some(overlays)));
+                        overlays
+                            .show_menu(at, row_menu(snap.clone(), id, expanded, Some(overlays)));
                     }
                 })
             });
@@ -443,8 +447,8 @@ fn copy_text(overlays: Option<Overlays>, text: String) {
         return;
     };
     match outcome {
-        Ok(()) => overlays.toast("Copied."),
-        Err(_) => overlays.toast("The text could not be copied."),
+        Ok(()) => overlays.toast(crate::tr!("ui-copy-done-status")),
+        Err(_) => overlays.toast(crate::tr!("ui-copy-failed-error")),
     }
 }
 
@@ -590,7 +594,6 @@ fn step_match(
     selected.set(Some(matches[next]));
 }
 
-
 /// Rows are laid out for real: a row with dozens of chips stays one line.
 #[cfg(all(test, feature = "testing"))]
 mod layout_tests {
@@ -613,7 +616,11 @@ mod layout_tests {
             max_width: if many { "900".into() } else { "auto".into() },
             max_height: if many { "900".into() } else { "auto".into() },
             gap: if many { 2.0 } else { 0.0 },
-            padding: if many { [8.0, 8.0, 16.0, 8.0] } else { [0.0; 4] },
+            padding: if many {
+                [8.0, 8.0, 16.0, 8.0]
+            } else {
+                [0.0; 4]
+            },
             margin: if many { [1.0, 2.0, 3.0, 4.0] } else { [0.0; 4] },
             main_align: if many { "space-between" } else { "start" },
             cross_align: if many { "center" } else { "start" },
@@ -657,14 +664,12 @@ mod layout_tests {
             let expanded = use_state(|| HashSet::from([1, 2, 3]));
             let selected = use_state(|| Some(4));
             let wrappers = use_state(|| true);
-            rect()
-                .expanded()
-                .child(DomTree {
-                    snap: self.snap.clone(),
-                    selected,
-                    expanded,
-                    wrappers,
-                })
+            rect().expanded().child(DomTree {
+                snap: self.snap.clone(),
+                selected,
+                expanded,
+                wrappers,
+            })
         }
     }
 

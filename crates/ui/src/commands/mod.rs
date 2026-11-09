@@ -90,17 +90,19 @@ pub enum CommandGroup {
 }
 
 impl CommandGroup {
-    /// The group's name, as a submenu and a heading in the shortcuts sheet.
-    pub fn title(self) -> &'static str {
+    /// The group's name in the language shown, as a submenu and a heading
+    /// in the shortcuts sheet. An `Other` group's name is the app's own text
+    /// (pass it a [`tr!`](crate::tr) result leaked once, or a fixed name).
+    pub fn title(self) -> String {
         match self {
-            CommandGroup::App => "General",
-            CommandGroup::File => "File",
-            CommandGroup::Edit => "Edit",
-            CommandGroup::View => "View",
-            CommandGroup::Go => "Go",
-            CommandGroup::Window => "Window",
-            CommandGroup::Other(name) => name,
-            CommandGroup::Help => "Help",
+            CommandGroup::App => crate::tr!("ui-command-group-app"),
+            CommandGroup::File => crate::tr!("ui-command-group-file"),
+            CommandGroup::Edit => crate::tr!("ui-command-group-edit"),
+            CommandGroup::View => crate::tr!("ui-command-group-view"),
+            CommandGroup::Go => crate::tr!("ui-command-group-go"),
+            CommandGroup::Window => crate::tr!("ui-command-group-window"),
+            CommandGroup::Other(name) => name.to_owned(),
+            CommandGroup::Help => crate::tr!("ui-command-group-help"),
         }
     }
 
@@ -858,37 +860,54 @@ impl Component for CommandScope {
     }
 }
 
+/// The search words of a catalogue attribute: a comma-separated list.
+fn keywords(list: String) -> Vec<String> {
+    list.split(',')
+        .map(str::trim)
+        .filter(|word| !word.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
 /// The standard commands every window has: the palette, the shortcuts
 /// sheet and About.
 fn standard(commands: Commands) -> Vec<Command> {
     let mut list = vec![
-        Command::new("app.command-palette", "Command palette", move |_| {
-            commands.show_palette()
-        })
+        Command::new(
+            "app.command-palette",
+            crate::tr!("ui-command-palette"),
+            move |_| commands.show_palette(),
+        )
         .shortcut("Ctrl+Shift+P")
         .icon(Icon::Search)
-        .keywords(["commands", "actions", "find"])
+        .keywords(keywords(crate::tr!("ui-command-palette.keywords")))
         .section("help")
         .hidden_from_palette(),
-        Command::new("app.shortcuts", "Keyboard shortcuts", move |_| {
-            commands.show_shortcuts()
-        })
+        Command::new(
+            "app.shortcuts",
+            crate::tr!("ui-command-shortcuts"),
+            move |_| commands.show_shortcuts(),
+        )
         .shortcut("Ctrl+?")
         .shortcut("Ctrl+/")
         .icon(Icon::Keyboard)
-        .keywords(["keys", "help"])
+        .keywords(keywords(crate::tr!("ui-command-shortcuts.keywords")))
         .section("help"),
     ];
     if crate::about::registered() {
         let name = crate::about::info().name;
         list.push(
-            Command::new("app.about", format!("About {name}"), move |_| {
-                if let Some(overlays) = commands.overlays() {
-                    crate::about::open(overlays);
-                }
-            })
+            Command::new(
+                "app.about",
+                crate::tr!("ui-about-title", app = name),
+                move |_| {
+                    if let Some(overlays) = commands.overlays() {
+                        crate::about::open(overlays);
+                    }
+                },
+            )
             .icon(Icon::About)
-            .keywords(["version", "licence", "credits"])
+            .keywords(keywords(crate::tr!("ui-command-about.keywords")))
             // The main menu ends with About from `about::app_menu_items`.
             .hidden_from_menu(),
         );

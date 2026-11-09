@@ -82,6 +82,8 @@ pub struct Row {
     /// Whether the row opens something: it shows a hover fill and a pointer.
     activatable: bool,
     selected: bool,
+    /// Whether a selected row also shows the checkmark. See [`Row::selection_fill_only`].
+    checkmark: bool,
     badge: Option<String>,
     destructive: bool,
     context_menu: Vec<MenuItem>,
@@ -110,6 +112,8 @@ pub struct Row {
     /// Whether the subtitle is kept to one line, cut with an ellipsis, and the
     /// row takes the subtitle height. See [`Row::subtitle_one_line`].
     subtitle_one_line: bool,
+    /// A second caption line under the subtitle. See [`Row::second_line`].
+    second_line: Option<String>,
     /// The radio of a radio row, set by [`radio_row`].
     radio: Option<RadioChoice>,
     /// Byte ranges of the title drawn on the search mark, from a search hit.
@@ -137,6 +141,7 @@ pub fn row(title: impl Into<String>) -> Row {
         navigates: false,
         activatable: false,
         selected: false,
+        checkmark: true,
         badge: None,
         destructive: false,
         context_menu: Vec::new(),
@@ -145,6 +150,7 @@ pub fn row(title: impl Into<String>) -> Row {
         value_trailing: false,
         value: None,
         subtitle_one_line: false,
+        second_line: None,
         trailing_control: false,
         trailing_fit: false,
         trailing_switch: false,
@@ -209,6 +215,17 @@ impl Row {
     /// one height per row: `Dim::RowSubtitle` at mouse density.
     pub fn subtitle_one_line(mut self) -> Self {
         self.subtitle_one_line = true;
+        self
+    }
+
+    /// A second caption line under the subtitle, for a row that says two
+    /// things that must not run together (a place and its conditions). Each
+    /// of the two lines is kept to one line and cut with its own ellipsis, so a
+    /// long first line never pushes the second onto a third. It does nothing
+    /// on a row with no subtitle.
+    pub fn second_line(mut self, text: impl Into<String>) -> Self {
+        let text = text.into();
+        self.second_line = (!text.is_empty()).then_some(text);
         self
     }
 
@@ -345,6 +362,15 @@ impl Row {
     /// An accent checkmark.
     pub fn selected(mut self, selected: bool) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// A selected row shows the selection fill and no checkmark: for a list
+    /// where the selection is the place that is on show (a sidebar), not a
+    /// choice that is ticked. Without the mark the trailing content of every
+    /// row ends at the same edge.
+    pub fn selection_fill_only(mut self) -> Self {
+        self.checkmark = false;
         self
     }
 
@@ -667,11 +693,13 @@ impl Component for Row {
             } else {
                 remembered_face(window_width).unwrap_or(window_width)
             };
-            let beyond = if self.navigates || self.selected || self.disclosure.is_some() {
-                IconSize::Mark.px() + S2.px()
-            } else {
-                0.0
-            };
+            let beyond =
+                if self.navigates || (self.selected && self.checkmark) || self.disclosure.is_some()
+                {
+                    IconSize::Mark.px() + S2.px()
+                } else {
+                    0.0
+                };
             // The gap the row lays out between the title's cell and the value: the row's own
             // (`S3`) and the trailing area's margin (`S1`, see `ROW_TRAILING`). Less than that
             // gives the value 4 px under what it was promised, and a title that was shrunk to
@@ -837,13 +865,14 @@ impl Component for Row {
                 )
                 .into(),
         };
-        let subtitle_lines: Option<usize> = if self.subtitle_one_line {
-            Some(1)
-        } else if self.disclosure.is_some() {
-            None
-        } else {
-            Some(3)
-        };
+        let subtitle_lines: Option<usize> =
+            if self.subtitle_one_line || (self.second_line.is_some() && self.subtitle.is_some()) {
+                Some(1)
+            } else if self.disclosure.is_some() {
+                None
+            } else {
+                Some(3)
+            };
         // A subtitle wraps onto a second or third line, so a row that has one
         // grows to fit it. A row without one has the row height, and its
         // text is centred by the row.
@@ -890,6 +919,17 @@ impl Component for Row {
             .maybe(fit && !single_line, |text| text.tw(&tokens, &[py(S1)]))
             .child(title_line)
             .maybe_child(subtitle_line)
+            .maybe_child(
+                self.subtitle
+                    .as_ref()
+                    .and(self.second_line.as_ref())
+                    .map(|text| {
+                        CAPTION
+                            .label(&tokens, text.clone())
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis)
+                    }),
+            )
             .maybe_child(stacked.then(|| {
                 if content_stackable {
                     // At its own width from the start edge, measured where it
@@ -931,7 +971,7 @@ impl Component for Row {
                 }
             });
         let trailing = (trailing_child.is_some()
-            || self.selected
+            || (self.selected && self.checkmark)
             || self.disclosure.is_some()
             || (self.navigates && !split))
             .then(|| {
@@ -955,9 +995,11 @@ impl Component for Row {
                             .min_width(Size::px(0.0))
                     })
                     .maybe_child(trailing_child)
-                    .maybe_child((self.selected && !self.navigates).then(|| {
-                        icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))
-                    }))
+                    .maybe_child(
+                        (self.selected && self.checkmark && !self.navigates).then(|| {
+                            icons::icon(Icon::Check, IconSize::Mark, Paint::Accent.color(&tokens))
+                        }),
+                    )
                     .maybe_child((self.navigates && !split).then(|| {
                         icons::icon(Icon::GoNext, IconSize::Mark, Paint::Muted.color(&tokens))
                     }))

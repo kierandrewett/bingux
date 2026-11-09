@@ -160,7 +160,7 @@ impl Component for SplitPane {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Splitter)
-            .a11y_alt("Pane divider")
+            .a11y_alt(crate::tr!("ui-split-divider.a11y"))
             // Its value is the first pane's share, so a screen reader says where it is.
             .a11y_builder(move |node| {
                 node.set_numeric_value(f64::from((value * 100.0).round()));

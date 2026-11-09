@@ -16,9 +16,11 @@
 //! on a canvas, which key means forward, which icon is a left arrow. A control
 //! with that asks [`use_direction`]: the direction a [`directed`] ancestor gave
 //! it, else the person's language ([`Direction::system`]; `BINGUX_DIRECTION=rtl`
-//! or `ltr` wins, then `LC_ALL`, `LC_MESSAGES`, `LANGUAGE` and `LANG`, so
-//! Arabic, Hebrew, Persian, Urdu and the other right-to-left scripts read from
-//! the right). `design/rtl.md` lists what mirrors and what does not.
+//! or `ltr` wins, then the language the interface is shown in,
+//! [`crate::i18n::direction`], so a window in Arabic, Hebrew, Persian, Urdu or
+//! another right-to-left script reads from the right, and one whose language
+//! has no catalogue is shown in English, left to right). `design/rtl.md` lists
+//! what mirrors and what does not.
 
 use std::sync::LazyLock;
 
@@ -34,27 +36,14 @@ pub enum Direction {
     Rtl,
 }
 
-/// The environment's direction: `BINGUX_DIRECTION` when set, else the first of
-/// the locale variables that has a value.
-static SYSTEM: LazyLock<Direction> = LazyLock::new(|| {
-    let var = |name: &str| {
-        std::env::var(name)
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-    };
-    if let Some(forced) = var("BINGUX_DIRECTION") {
-        return match forced.trim().to_ascii_lowercase().as_str() {
-            "rtl" | "right-to-left" => Direction::Rtl,
-            _ => Direction::Ltr,
-        };
+/// The direction `BINGUX_DIRECTION` forces, when it is set.
+static FORCED: LazyLock<Option<Direction>> = LazyLock::new(|| {
+    let forced = std::env::var("BINGUX_DIRECTION").ok()?;
+    match forced.trim().to_ascii_lowercase().as_str() {
+        "" => None,
+        "rtl" | "right-to-left" => Some(Direction::Rtl),
+        _ => Some(Direction::Ltr),
     }
-    ["LC_ALL", "LC_MESSAGES", "LANGUAGE", "LANG"]
-        .iter()
-        .find_map(|name| var(name))
-        .map_or(Direction::Ltr, |tag| {
-            // LANGUAGE is a list; its first entry is the preferred one.
-            Direction::from_language(tag.split(':').next().unwrap_or(""))
-        })
 });
 
 impl Direction {
@@ -137,9 +126,11 @@ impl Direction {
         }
     }
 
-    /// The direction the person's environment asks for. Read once.
+    /// The direction the window reads in: `BINGUX_DIRECTION` when set, else
+    /// the direction of the language the interface is shown in, which
+    /// changes with [`crate::i18n::set_locale`].
     pub fn system() -> Direction {
-        *SYSTEM
+        (*FORCED).unwrap_or_else(crate::i18n::direction)
     }
 }
 

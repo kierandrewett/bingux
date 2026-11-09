@@ -19,6 +19,10 @@ use crate::glyph;
 use crate::hourly::HOURS;
 use crate::sky;
 
+/// How many hours before now the temperature chart starts. The forecast keeps
+/// that many (`bingux-weather`'s `PAST_HOURS` in the request).
+const PAST_HOURS: usize = 3;
+
 /// A small card's height, at the regular and compact densities.
 const CARD_HEIGHT: f32 = 220.0;
 const MOON_SIZE: f32 = 84.0;
@@ -129,7 +133,7 @@ impl Details {
                     .label(format!(
                         "UV index {}, {}",
                         uv.round() as i64,
-                        text::uv_category(uv)
+                        text::uv_category(uv).to_lowercase()
                     ))
                     .into(),
                 note(tokens, text::uv_advice(uv)),
@@ -149,12 +153,12 @@ impl Details {
         let dial = compass(current.wind_direction.unwrap_or(0.0))
             .centre(shown, self.units.speed_unit())
             .label(match current.wind_direction {
-                Some(degrees) => format!(
-                    "Wind from the {} at {}",
-                    text::cardinal_long(degrees),
-                    self.units.speed(speed)
-                ),
-                None => format!("Wind at {}", self.units.speed(speed)),
+                Some(degrees) => {
+                    let mut point = text::cardinal_long(degrees);
+                    point[..1].make_ascii_uppercase();
+                    format!("{point} wind, {}", self.units.speed(speed))
+                }
+                None => format!("Wind, {}", self.units.speed(speed)),
             });
         body.push(
             rect()
@@ -322,7 +326,7 @@ impl Details {
             body.push(
                 sparkline(values)
                     .format(move |hpa| units.pressure(hpa))
-                    .label("Pressure from three hours ago to a day ahead")
+                    .label("Pressure trend")
                     .into(),
             );
         }
@@ -347,7 +351,7 @@ impl Details {
                 .label(format!(
                     "Air quality index {}, {}",
                     aqi.round() as i64,
-                    text::aqi_category(aqi)
+                    text::aqi_category(aqi).to_lowercase()
                 ))
                 .into(),
             say(tokens, text::aqi_advice(aqi)),
@@ -445,14 +449,21 @@ impl Component for Trends {
             return rect().into_element();
         };
         let clock = units.clock;
+        // The temperature chart reaches a few hours back, so that "now" is
+        // inside it, marked, and not the edge: the hour that holds now is x 0.
+        let before: Vec<Hour> = (1..=PAST_HOURS)
+            .rev()
+            .filter_map(|back| self.forecast.hour_before(self.local, back).cloned())
+            .collect();
         let hour_name = move |x: f64| clock.hour(first + x.round() as i64 * HOUR);
 
         let points = |pick: fn(&Hour) -> Option<f64>| {
-            hours
+            before
                 .iter()
-                .enumerate()
-                .filter_map(|(index, hour)| {
-                    Some((index as f64, units.temperature_value(pick(hour)?)))
+                .chain(&hours)
+                .filter_map(|hour| {
+                    let x = (hour.time - first) / HOUR;
+                    Some((x as f64, units.temperature_value(pick(hour)?)))
                 })
                 .collect::<Vec<_>>()
         };
@@ -464,7 +475,8 @@ impl Component for Trends {
         ])
         .x_format(hour_name)
         .y_format(move |value| format!("{}°", value.round() as i64))
-        .label("Temperature over the next 24 hours");
+        .marker(0.0, "Now")
+        .label("Temperature, next 24 hours");
 
         let rain_points: Vec<(f64, f64)> = hours
             .iter()

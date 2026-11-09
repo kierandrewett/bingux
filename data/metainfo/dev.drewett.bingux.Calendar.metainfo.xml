@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Calendar</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Calendar</name>
+  <summary>Keep track of events and reminders</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Calendar is the Bingux desktop's calendar. It keeps events in ordinary
+      calendar files, one folder for each calendar, so it needs no account and
+      works the first time it opens.
+    </p>
+    <ul>
+      <li>Day, week, month, year and agenda views</li>
+      <li>Quick add in plain words, such as "Lunch with Sam tomorrow 1pm"</li>
+      <li>Repeating events, changed for one occurrence, the following ones or all of them</li>
+      <li>Reminders that show when an event is due, with the window closed</li>
+      <li>Import of .ics files by opening them or dropping them on the window</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">bingux-calendar.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-calendar</binary>
+    <mediatype>text/calendar</mediatype>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Office</category>
+    <category>Calendar</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-09"/>
+  </releases>
+</component>

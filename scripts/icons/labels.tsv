@@ -5,7 +5,7 @@
 # `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/bingux-ui.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
-#policy action: checkbox-checked document-edit document-open-recent document-save edit-copy edit-delete edit-find-match-case edit-find-regex edit-find-whole-word find-location format-code format-quote format-text-bold format-text-italic format-text-plaintext format-text-strikethrough insert-link media-playlist-repeat media-playlist-repeat-song media-playlist-shuffle object-rotate-left object-rotate-right pencil send-to sidebar-show system-switch-user view-filter view-fullscreen view-grid view-list view-list-ordered view-pin view-pip view-refresh view-restore zoom-fit-best zoom-in zoom-out
+#policy action: checkbox-checked crop document-edit document-open-recent document-save edit-copy edit-delete edit-find-match-case edit-find-regex edit-find-whole-word find-location format-code format-quote format-text-bold format-text-italic format-text-plaintext format-text-strikethrough insert-link location-arrow media-playlist-repeat media-playlist-repeat-song media-playlist-shuffle object-rotate-left object-rotate-right pencil send-to sidebar-show system-switch-user view-filter view-fullscreen view-grid view-list view-list-ordered view-pin view-pip view-refresh view-restore zoom-fit-best zoom-in zoom-out
 #policy control: go-next go-previous list-add list-drag-handle list-remove non-starred object-select open-menu pan-down pan-end pan-up system-log-out system-reboot swap-horizontal system-shutdown view-more window-close window-maximize window-minimize window-new window-restore
 #policy detail: folder-missing accessories-text-editor action-unavailable default-app-documents default-app-text focus-top-bar input-tablet input-touchpad mail-unread media-view-subtitles phone preferences-other utilities-terminal view-conceal view-reveal web-browser x-office-calendar
 #policy drawn: network-offline network-wireless network-wireless-disabled network-wireless-signal-excellent network-wireless-signal-good network-wireless-signal-none network-wireless-signal-ok network-wireless-signal-weak emblem-symbolic-link
@@ -143,6 +143,7 @@ edit-delete | Delete | trash can | Trash fill
 user-trash | Forget, Trash | trash can | Trash fill
 view-filter | Filter | funnel | Funnel fill
 find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
+location-arrow | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
 document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil across the opening
 pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: tip, body and eraser, cut apart by 1 px seams
 document-open | Open | open folder | FolderOpen fill
@@ -226,6 +227,7 @@ zoom-in | Zoom in (image viewer) | magnifier with plus | MagnifyingGlassPlus bol
 zoom-out | Zoom out (image viewer) | magnifier with minus | MagnifyingGlassMinus bold
 zoom-fit-best | Fit to window (image viewer) | corner brackets | FrameCorners bold
 object-rotate-left | Rotate left (image viewer) | counter-clockwise circular arrow | ArrowCounterClockwise bold
+crop | Crop (Preview, image editing) | crop marks | Crop bold
 media-view-subtitles | Subtitles (preview player) | captions box | Subtitles bold
 edit-find-match-case | Match case (Text Editor find bar) | letters Aa | TextAa bold
 edit-find-regex | Regular expression (Text Editor find bar) | asterisk | Asterisk bold

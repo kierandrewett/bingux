@@ -30,7 +30,7 @@
 //! * **Reduced motion** makes every move instant.
 //! * **Assistive technology.** Each grip is a button named "Reorder
 //!   <label>" that knows its place ("3 of 5"), and a polite live region
-//!   says where an item went ("Compressor moved to position 2 of 4").
+//!   says where an item went ("Compressor now 2 of 4").
 //!
 //! The list does not reorder itself: see the contract of `on_reorder` in
 //! [`crate::reorder`]. The caller owns the items and gets
@@ -81,6 +81,7 @@ pub struct Sortable {
     labels: Vec<String>,
     on_reorder: EventHandler<(usize, usize)>,
     indicate: Indicate,
+    selected: Option<usize>,
 }
 
 /// A reorderable list of `items`: rows that the person drags or moves with
@@ -95,6 +96,7 @@ pub fn sortable(
         labels: Vec::new(),
         on_reorder: on_reorder.into(),
         indicate: Indicate::Slide,
+        selected: None,
     }
 }
 
@@ -103,6 +105,16 @@ impl Sortable {
     /// ("Reorder Compressor") and the announcement of its move.
     pub fn labels(mut self, labels: Vec<String>) -> Self {
         self.labels = labels;
+        self
+    }
+
+    /// The item that is selected (its row says `.selected(true)`). The row
+    /// draws the selection under itself, and the grip is outside the row, so the
+    /// list draws it under the grip and the inset beyond it too: the selection
+    /// then covers the whole row, as in any other list. (A hover is the row's
+    /// own and does not reach the grip.)
+    pub fn selected(mut self, index: Option<usize>) -> Self {
+        self.selected = index;
         self
     }
 
@@ -335,9 +347,14 @@ impl Env {
             .get(from)
             .filter(|name| !name.is_empty())
             .cloned()
-            .unwrap_or_else(|| "Item".to_string());
+            .unwrap_or_else(|| crate::tr!("ui-sortable-item"));
         let mut announce = self.announce;
-        announce.set(format!("{name} moved to position {} of {count}", to + 1));
+        announce.set(crate::tr!(
+            "ui-sortable-moved-status",
+            name = name,
+            position = to + 1,
+            count = count
+        ));
         let handler = self.shared.on_reorder.borrow().clone();
         handler.call((from, to));
         if let Some(index) = focus
@@ -474,6 +491,21 @@ impl Component for Sortable {
                 };
 
                 let lifted_fill = Paint::Popover.color(&tokens).with_af32(lift);
+                // The row's fill ends where the row does, and the grip and the
+                // inset after it are the list's, so the list fills them with
+                // what the row fills itself with when it is selected.
+                let chosen = self.selected == Some(index);
+                let tail_lit = chosen && !held;
+                // An underlay as wide as the grip and its inset, at the row's
+                // end and as tall as the row: absolute, so it takes no room.
+                let tail = tail_lit.then(|| {
+                    rect()
+                        .component("SortableTail")
+                        .position(Position::new_absolute().top(0.0).right(-ROW_INSET.px()))
+                        .width(Size::px(Dim::RowButton.px() + ROW_INSET.px()))
+                        .height(Size::fill())
+                        .tw(&tokens, &[surface(Paint::Transparent, false, false, true)])
+                });
                 let lifted = rect()
                     .tw(
                         &tokens,
@@ -498,6 +530,7 @@ impl Component for Sortable {
                             .scale(1.0 + LIFT_SCALE * lift)
                             .opacity(1.0 - LIFT_FADE * lift)
                     })
+                    .maybe_child(tail)
                     .child(
                         rect()
                             .key(*epoch.read())
@@ -627,11 +660,12 @@ impl Component for Grip {
         let on_down = self.on_down.clone();
         let on_step = self.on_step.clone();
         let name = if self.label.is_empty() {
-            "Reorder".to_string()
+            crate::tr!("ui-sortable-grip.a11y")
         } else {
-            format!("Reorder {}", self.label)
+            crate::tr!("ui-sortable-grip-named.a11y", name = &self.label)
         };
         let (position, count) = (self.index + 1, self.count);
+        let hint = crate::tr!("ui-sortable-grip.description");
         let down = movable && (self.held || pressing());
         let glow = movable && (hovering() || down);
         rect()
@@ -641,7 +675,7 @@ impl Component for Grip {
             .a11y_role(AccessibilityRole::Button)
             .a11y_alt(name)
             .a11y_builder(move |builder| {
-                builder.set_description("Press Up or Down to move, Home or End to send to an end");
+                builder.set_description(hint.clone());
                 builder.set_position_in_set(position);
                 builder.set_size_of_set(count);
             })

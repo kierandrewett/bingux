@@ -1,0 +1,53 @@
+.TH BINGUX-CALENDAR 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-calendar \- calendar for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-calendar
+.RB [ \-\-reminders ]
+.RI [ FILE.ics | YYYY-MM-DD | today ]...
+.SH DESCRIPTION
+.B bingux-calendar
+opens the Calendar window with day, week, month, year and agenda views, repeating
+events, quick add and reminders.
+Events are kept in ordinary calendar files, one folder for each calendar, so no
+account is needed.
+.PP
+Only one Calendar window runs.
+A second launch hands its argument to the running window, which comes to the
+front.
+.SH ARGUMENTS
+.TP
+.I FILE.ics
+A calendar file. Calendar offers to import its events.
+.TP
+.I YYYY-MM-DD
+Shows that day.
+.TP
+.B today
+Shows today.
+.SH OPTIONS
+.TP
+.B \-\-reminders
+Runs with no window and shows reminders as they come due.
+.SH FILES
+.TP
+.I $XDG_DATA_HOME/bingux-calendar/calendars/ID/
+One folder for each calendar: its events as
+.I .ics
+files, its name in
+.IR displayname ,
+and its colour in
+.IR color .
+Another program that writes the same layout (for example vdirsyncer) is read
+as it changes.
+.TP
+.I $XDG_CONFIG_HOME/bingux-calendar/settings.json
+The view, the first day of the week, the time format, the calendar new events
+go in and the calendars that are hidden.
+.SH SEE ALSO
+.BR bingux\-settings (1),
+.BR xdg\-open (1)
+.PP
+Documentation: docs/calendar-app.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

@@ -131,6 +131,8 @@ pub enum Icon {
     ZoomFitBest,
     /// Rotate counter-clockwise.
     ObjectRotateLeft,
+    /// Crop a picture.
+    Crop,
     /// Subtitles.
     MediaViewSubtitles,
     DialogPassword,
@@ -144,7 +146,8 @@ pub enum Icon {
     InputTablet,
     NetworkServer,
     AvatarDefault,
-    FindLocation,
+    /// An arrow pointing up and right: where the computer is (Weather's My Location).
+    LocationArrow,
     MailUnread,
     ApplicationsMultimedia,
     AccessoriesCalculator,
@@ -374,6 +377,7 @@ impl Icon {
         Self::ZoomOut,
         Self::ZoomFitBest,
         Self::ObjectRotateLeft,
+        Self::Crop,
         Self::MediaViewSubtitles,
         Self::DialogPassword,
         Self::SendTo,
@@ -386,7 +390,7 @@ impl Icon {
         Self::InputTablet,
         Self::NetworkServer,
         Self::AvatarDefault,
-        Self::FindLocation,
+        Self::LocationArrow,
         Self::MailUnread,
         Self::ApplicationsMultimedia,
         Self::AccessoriesCalculator,
@@ -599,6 +603,7 @@ impl Icon {
             Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
             Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
             Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
+            Self::Crop => include_bytes!("../icons/crop-symbolic.svg"),
             Self::MediaViewSubtitles => {
                 include_bytes!("../icons/media-view-subtitles-symbolic.svg")
             }
@@ -613,7 +618,7 @@ impl Icon {
             Self::InputTablet => include_bytes!("../icons/input-tablet-symbolic.svg"),
             Self::NetworkServer => include_bytes!("../icons/network-server-symbolic.svg"),
             Self::AvatarDefault => include_bytes!("../icons/avatar-default-symbolic.svg"),
-            Self::FindLocation => include_bytes!("../icons/find-location-symbolic.svg"),
+            Self::LocationArrow => include_bytes!("../icons/location-arrow-symbolic.svg"),
             Self::MailUnread => include_bytes!("../icons/mail-unread-symbolic.svg"),
             Self::ApplicationsMultimedia => {
                 include_bytes!("../icons/applications-multimedia-symbolic.svg")

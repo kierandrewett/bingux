@@ -361,12 +361,12 @@ impl UndoStack {
     /// The Undo command's title: "Undo rename", or "Undo" with nothing to
     /// undo.
     pub fn undo_title(self) -> String {
-        titled("Undo", self.undo_name())
+        titled(Verb::Undo, self.undo_name())
     }
 
     /// The Redo command's title: "Redo rename", or "Redo".
     pub fn redo_title(self) -> String {
-        titled("Redo", self.redo_name())
+        titled(Verb::Redo, self.redo_name())
     }
 
     /// How many steps the stack keeps. Older ones are forgotten at once.
@@ -402,21 +402,29 @@ impl UndoStack {
         let redo_name = history.redo.last().map(|entry| entry.name.clone());
         drop(history);
         vec![
-            Command::new("edit.undo", titled("Undo", undo_name.clone()), move |_| {
-                if let Some(name) = self.undo() {
-                    announcer.announce(titled("Undid", Some(name)));
-                }
-            })
+            Command::new(
+                "edit.undo",
+                titled(Verb::Undo, undo_name.clone()),
+                move |_| {
+                    if let Some(name) = self.undo() {
+                        announcer.announce(titled(Verb::Undid, Some(name)));
+                    }
+                },
+            )
             .shortcut("Ctrl+Z")
             .enabled(undo_name.is_some())
             .group(CommandGroup::Edit)
             .section("history")
             .hidden_from_palette_if(undo_name.is_none()),
-            Command::new("edit.redo", titled("Redo", redo_name.clone()), move |_| {
-                if let Some(name) = self.redo() {
-                    announcer.announce(titled("Redid", Some(name)));
-                }
-            })
+            Command::new(
+                "edit.redo",
+                titled(Verb::Redo, redo_name.clone()),
+                move |_| {
+                    if let Some(name) = self.redo() {
+                        announcer.announce(titled(Verb::Redid, Some(name)));
+                    }
+                },
+            )
             .shortcut("Ctrl+Shift+Z")
             .shortcut("Ctrl+Y")
             .enabled(redo_name.is_some())
@@ -427,20 +435,38 @@ impl UndoStack {
     }
 }
 
-/// "Undo rename": the verb, then the change's name with its first letter
-/// in lower case, so the title stays in sentence case ("Undo move to Trash"
-/// from "Move to Trash").
-fn titled(verb: &str, name: Option<String>) -> String {
-    match name {
-        Some(name) => {
-            let mut chars = name.chars();
-            let first: String = chars
-                .next()
-                .map(|c| c.to_lowercase().collect())
-                .unwrap_or_default();
-            format!("{verb} {first}{}", chars.as_str())
-        }
-        None => verb.to_owned(),
+/// What a title or an announcement says was, or will be, done.
+#[derive(Clone, Copy)]
+enum Verb {
+    Undo,
+    Redo,
+    Undid,
+    Redid,
+}
+
+/// "Undo rename": the catalogue's sentence with the change's name, its first
+/// letter in lower case, so the title stays in sentence case ("Undo move to
+/// Trash" from "Move to Trash"). With no name, the verb alone.
+fn titled(verb: Verb, name: Option<String>) -> String {
+    let Some(name) = name else {
+        return match verb {
+            Verb::Undo => crate::tr!("ui-undo"),
+            Verb::Redo => crate::tr!("ui-redo"),
+            Verb::Undid => crate::tr!("ui-undo-done-status"),
+            Verb::Redid => crate::tr!("ui-redo-done-status"),
+        };
+    };
+    let mut chars = name.chars();
+    let first: String = chars
+        .next()
+        .map(|c| c.to_lowercase().collect())
+        .unwrap_or_default();
+    let action = format!("{first}{}", chars.as_str());
+    match verb {
+        Verb::Undo => crate::tr!("ui-undo-named", action = action),
+        Verb::Redo => crate::tr!("ui-redo-named", action = action),
+        Verb::Undid => crate::tr!("ui-undo-named-done-status", action = action),
+        Verb::Redid => crate::tr!("ui-redo-named-done-status", action = action),
     }
 }
 
@@ -513,7 +539,7 @@ mod tests {
         let (history, log) = (Shared::default(), Log::default());
         add(&history, &log, 1);
         add(&history, &log, 2);
-        assert_eq!(titled("Undo", top_name(&history)), "Undo add 2");
+        assert_eq!(titled(Verb::Undo, top_name(&history)), "Undo add 2");
         assert_eq!(undo(&history).as_deref(), Some("Add 2"));
         assert_eq!(*log.borrow(), [1]);
         assert_eq!(redo(&history).as_deref(), Some("Add 2"));
@@ -628,9 +654,9 @@ mod tests {
     #[test]
     fn titles_are_sentence_case() {
         assert_eq!(
-            titled("Undo", Some("Move to Trash".into())),
+            titled(Verb::Undo, Some("Move to Trash".into())),
             "Undo move to Trash"
         );
-        assert_eq!(titled("Redo", None), "Redo");
+        assert_eq!(titled(Verb::Redo, None), "Redo");
     }
 }

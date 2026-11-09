@@ -62,7 +62,7 @@ pub fn colour_button(value: Color, on_change: impl Into<EventHandler<Color>>) ->
         accents: true,
         presets: None,
         recent: None,
-        title: "Colour".to_string(),
+        title: crate::tr!("ui-colour-title"),
         enabled: true,
         dense: false,
     }
@@ -285,9 +285,12 @@ impl Component for ColourButton {
                 &[w_full(), flex_row(), gap(S2), justify(Align::End)],
             );
             if !live {
-                row = row.child(action_button("Cancel", dismiss.clone()));
+                row = row.child(action_button(
+                    crate::tr!("ui-dialog-cancel"),
+                    dismiss.clone(),
+                ));
             }
-            row.child(primary_button("Done", done.clone()))
+            row.child(primary_button(crate::tr!("ui-colour-done"), done.clone()))
         };
         let header = {
             let side = |content: Option<Element>, end: bool| {
@@ -302,8 +305,9 @@ impl Component for ColourButton {
                     )
                     .maybe_child(content)
             };
-            let cancel =
-                (!live).then(|| Element::from(action_button("Cancel", dismiss.clone()).flat()));
+            let cancel = (!live).then(|| {
+                Element::from(action_button(crate::tr!("ui-dialog-cancel"), dismiss.clone()).flat())
+            });
             rect()
                 .component("ColourHeader")
                 .tw(
@@ -320,7 +324,10 @@ impl Component for ColourButton {
                     ),
                 )
                 .child(side(
-                    Some(Element::from(primary_button("Done", done.clone()))),
+                    Some(Element::from(primary_button(
+                        crate::tr!("ui-colour-done"),
+                        done.clone(),
+                    ))),
                     true,
                 ))
         };

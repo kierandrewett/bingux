@@ -28,7 +28,7 @@ view-reveal view-conceal starred non-starred window-close window-minimize window
 
 [buttons-and-menus]
 open-menu view-more view-refresh object-rotate-right sidebar-show focus-top-bar edit-copy edit-delete
-user-trash view-filter find-location document-edit pencil document-open send-to view-list view-grid
+user-trash view-filter find-location location-arrow document-edit pencil document-open send-to view-list view-grid
 media-playback-pause media-playback-stop preferences-system emblem-system folder folder-download bookmarks
 
 [status]

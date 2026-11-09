@@ -16,6 +16,7 @@ pub mod about;
 pub mod access;
 pub mod app;
 pub mod app_icon;
+pub mod calendar;
 pub mod charts;
 #[cfg(feature = "chat-icons")]
 pub mod chat_icons;
@@ -23,6 +24,8 @@ pub mod component;
 pub mod contrast;
 pub mod contrast_matrix;
 pub mod controls;
+pub mod crop;
+pub mod document;
 pub mod drag;
 pub mod elide;
 #[cfg(all(test, feature = "testing"))]
@@ -31,6 +34,7 @@ pub mod files;
 pub mod focus;
 pub mod format;
 pub mod group;
+pub mod i18n;
 pub mod icons;
 pub mod input;
 pub(crate) mod inspector;
@@ -93,7 +97,7 @@ pub mod prelude {
         Announcer, FieldLabel, Politeness, Semantics, SemanticsExt, use_announcer, use_field_label,
     };
     pub use crate::about::{AppInfo, app_menu};
-    pub use crate::app::Application;
+    pub use crate::app::{Application, Title};
     pub use crate::app_icon::{AppChoice, AppIcon, app_icon};
     pub use crate::charts::{
         Curve, Segment, Series, Unit, bar_chart, compass, day_arc, donut, line_chart, range_bar,
@@ -109,6 +113,7 @@ pub mod prelude {
         heading, section_label, skeleton, skeleton_caption, skeleton_row, skeleton_row_slot,
         skeleton_row_subtitled, skeleton_rows, skeleton_shape, status,
     };
+    pub use crate::i18n::Message;
     pub use crate::icons::{Icon, icon};
     pub use crate::layout::{
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, tile_rows, vstack,
@@ -157,4 +162,5 @@ pub mod prelude {
         Popup, PopupAction, PopupActions, PopupFlags, Window, WindowHost, WindowLike, WindowParent,
         popup, use_main_window, use_popup_actions, use_window,
     };
+    pub use crate::{i18n_id, tr};
 }

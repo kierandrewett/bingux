@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Calendar
+Comment=Keep track of events and reminders
+Exec=bingux-calendar %U
+Icon=bingux-calendar
+Terminal=false
+Categories=Office;Calendar;
+Keywords=Event;Appointment;Schedule;Reminder;Agenda;Diary;Date;
+MimeType=text/calendar;application/ics;
+StartupWMClass=bingux-calendar
+StartupNotify=true
+Actions=Today;
+
+[Desktop Action Today]
+Name=Today
+Exec=bingux-calendar today

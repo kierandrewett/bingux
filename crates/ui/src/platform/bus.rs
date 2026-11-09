@@ -32,8 +32,8 @@ pub enum BusError {
 impl std::fmt::Display for BusError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoBus => f.write_str("The desktop services are not available."),
-            Self::TimedOut => f.write_str("The desktop service did not answer."),
+            Self::NoBus => f.write_str(&crate::tr!("ui-bus-missing-error")),
+            Self::TimedOut => f.write_str(&crate::tr!("ui-bus-timeout-error")),
             Self::Failed(text) => f.write_str(text),
         }
     }

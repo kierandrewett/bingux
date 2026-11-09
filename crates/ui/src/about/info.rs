@@ -179,8 +179,12 @@ impl AppInfo {
     pub fn version_line(&self) -> String {
         match (self.version.is_empty(), self.commit.is_empty()) {
             (true, _) => String::new(),
-            (false, true) => format!("Version {}", self.version),
-            (false, false) => format!("Version {} ({})", self.version, short_commit(&self.commit)),
+            (false, true) => crate::tr!("ui-about-version", version = self.version.as_str()),
+            (false, false) => crate::tr!(
+                "ui-about-version-commit",
+                version = self.version.as_str(),
+                commit = short_commit(&self.commit)
+            ),
         }
     }
 }

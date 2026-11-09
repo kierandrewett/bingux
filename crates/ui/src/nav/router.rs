@@ -136,6 +136,13 @@ pub fn try_router() -> Option<Router> {
     WINDOW_ROUTER.with(Cell::get)
 }
 
+/// Whether a menu, choice, dialog or sheet is open in the window, read
+/// without subscribing; false before the window opened. Window-level key
+/// handlers call it so a shortcut never fires under a modal.
+pub fn modal_open() -> bool {
+    try_router().is_some_and(|router| router.modal_open_now())
+}
+
 /// The window's router, for code that only runs once a window exists.
 pub fn router() -> Router {
     try_router().expect("navigation used before the window opened")
@@ -214,6 +221,13 @@ impl Router {
     /// calling component, so it redraws when one opens or closes.
     pub fn modal_open(&self) -> bool {
         !self.model.read().modals().is_empty()
+    }
+
+    /// Whether a menu, choice, dialog or sheet is open in this window, read
+    /// without subscribing. For an event handler: a window shortcut checks it
+    /// and leaves the key to the modal.
+    pub fn modal_open_now(&self) -> bool {
+        !self.model.peek().modals().is_empty()
     }
 
     pub fn journal(&self) -> Journal {

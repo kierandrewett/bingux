@@ -104,7 +104,7 @@ impl HourStrip {
         let high = temperatures.iter().copied().reduce(f64::max);
         match (low, high) {
             (Some(low), Some(high)) => format!(
-                "Next 24 hours: low {}, high {}",
+                "Next 24 hours: low {}, high {}.",
                 self.units.temperature(low),
                 self.units.temperature(high)
             ),

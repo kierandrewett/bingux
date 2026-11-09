@@ -745,7 +745,12 @@ def child_env(scratch: Path | None = None) -> dict[str, str]:
 
 # The app binaries the checks render, and the package each is built from. A binary is stale when a source it was built
 # from (its cargo dep-info, `<name>.d`) changed after it was: a check that ran on it measured an older tree.
-APP_BINARIES = {"bingux-settings": "bingux-settings", "bingux-taxonomy": "bingux-taxonomy", "bingux-files": "bingux-files-app"}
+APP_BINARIES = {
+    "bingux-settings": "bingux-settings",
+    "bingux-taxonomy": "bingux-taxonomy",
+    "bingux-files": "bingux-files-app",
+    "bingux-weather": "bingux-weather-app",
+}
 
 
 def dep_sources(dep_file: Path) -> list[str]:

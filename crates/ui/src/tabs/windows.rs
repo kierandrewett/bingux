@@ -244,11 +244,12 @@ pub fn use_tab_window<P: TabContent>(set: State<TabSet<P>>, name: &str) -> TabWi
         move || register(entry)
     });
     use_drop(move || unregister(window_id));
+    crate::app::claim_window_title();
     // The compositor's title (the dock, the switcher) follows the tab. It
     // also tells this window from another on the same folder.
     use_side_effect_with_deps(&(name.to_string(), ordinal), {
         move |(name, ordinal): &(String, u32)| {
-            let title = title(name, crate::app::app_title(), *ordinal);
+            let title = title(name, &crate::app::app_title(), *ordinal);
             *title_cell.borrow_mut() = title.clone();
             with_window(move |window| window.set_title(&title));
         }

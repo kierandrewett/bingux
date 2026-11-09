@@ -41,12 +41,20 @@ fn main() {
         snapshot_mode::run(&dir);
         return;
     }
+    #[cfg(feature = "snapshot")]
+    if std::env::args().nth(1).as_deref() == Some("--sky-sheet") {
+        let dir = std::env::args()
+            .nth(2)
+            .unwrap_or_else(|| "/tmp/bingux-weather-snapshots".to_string());
+        snapshot_mode::sky_sheet(&dir);
+        return;
+    }
     Application::new("bingux-weather")
         .title("Weather")
         .size(980.0, 760.0)
         .borderless()
         .about(bingux_ui::app_info!(
-            description = "Forecasts for where you are and the cities you add",
+            description = "Forecasts for where you are and the cities you add.",
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)

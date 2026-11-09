@@ -158,6 +158,14 @@ def migrate_legacy_search_launcher(prefix):
     )
 
 
+def catalogues(source):
+    """Every Fluent catalogue (bingux-ui's and each app's) with its path below
+    share/bingux/locale: `<language>/<domain>.ftl`. The en-GB source is compiled
+    into each program too; installing it lets a translator compare against it."""
+    roots = [source / "crates/ui/locale"] + sorted((source / "apps").glob("*/locale"))
+    return [(path, path.relative_to(root)) for root in roots if root.is_dir() for path in sorted(root.glob("*/*.ftl"))]
+
+
 def build_payload(source, build, prefix, qml, target, managed=False, cargo=None, os_image=False):
     """Install payload files and return their paths relative to prefix.
 
@@ -210,8 +218,15 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         cargo / "release/bingux-media": prefix / "bin/bingux-media",
         source / "apps/media/bingux-media.desktop": prefix / "share/applications/bingux-media.desktop",
         source / "apps/media/bingux-media.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-media.svg",
+        cargo / "release/bingux-preview": prefix / "bin/bingux-preview",
+        source / "apps/preview/bingux-preview.desktop": prefix / "share/applications/bingux-preview.desktop",
+        source / "apps/preview/bingux-preview.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-preview.svg",
+        cargo / "release/bingux-calendar": prefix / "bin/bingux-calendar",
+        source / "apps/calendar/bingux-calendar.desktop": prefix / "share/applications/bingux-calendar.desktop",
+        source / "apps/calendar/bingux-calendar.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-calendar.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
-        # The helper Files runs for films, songs and PDFs; found beside bingux-files.
+        # The helper Files and Preview run for films, songs, PDFs and the pictures their own codecs
+        # do not read; found beside the application.
         cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
         source / "apps/taxonomy/bingux-taxonomy.desktop": prefix / "share/applications/bingux-taxonomy.desktop",
         source / "apps/taxonomy/bingux-taxonomy.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-taxonomy.svg",
@@ -243,6 +258,8 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         )
     for path in sorted((source / "data/metainfo").glob("*.metainfo.xml")):
         payload[path] = prefix / "share/metainfo" / path.name
+    for path, relative in catalogues(source):
+        payload[path] = prefix / "share/bingux/locale" / relative
     for path in sorted((source / "data/man").glob("*.1")):
         payload[path] = prefix / "share/man/man1" / path.name
     missing = [str(path) for path in payload if not path.is_file()]
@@ -713,7 +730,7 @@ def uninstall_user(prefix, no_systemd):
     print("  user configuration was kept")
 
 
-# The applications-only install: Settings, Files, Media and Taxonomy with what Settings
+# The applications-only install: Settings, Files, Calendar, Preview, Media and Taxonomy with what Settings
 # needs (the configuration command and the sound effects engine), put below one
 # prefix such as ~/.local. It never installs the shell: no Quickshell files, no
 # Gnoblin module, no session or user-service changes. A manifest records every
@@ -726,6 +743,8 @@ APPS_PROGRAMS = (
     "bingux-calculator",
     "bingux-weather",
     "bingux-text-editor",
+    "bingux-preview",
+    "bingux-calendar",
     "bingux-preview-host",
     "bingux-media",
     "bingux-taxonomy",
@@ -763,6 +782,8 @@ def apps_payload(source, cargo, prefix):
         ("apps/weather", "bingux-weather"),
         ("apps/text-editor", "bingux-text-editor"),
         ("apps/media", "bingux-media"),
+        ("apps/preview", "bingux-preview"),
+        ("apps/calendar", "bingux-calendar"),
         ("apps/taxonomy", "bingux-taxonomy"),
     ):
         directory = source / package
@@ -778,6 +799,8 @@ def apps_payload(source, cargo, prefix):
         entries.append(
             (prefix / "share/icons/hicolor/scalable/apps" / (name + ".svg"), directory / (name + ".svg"), 0o644, False)
         )
+    for path, relative in catalogues(source):
+        entries.append((prefix / "share/bingux/locale" / relative, path, 0o644, False))
     # No AppStream metainfo: appstreamcli and software centres index only the
     # system metainfo folders, so a copy below ~/.local would never be read.
     for path in sorted((source / "data/man").glob("*.1")):
@@ -937,6 +960,8 @@ def install_apps(source, prefix, cargo, strip=True, update_caches=True):
         "bingux-weather",
         "bingux-calculator",
         "bingux-media",
+        "bingux-preview",
+        "bingux-calendar",
         "bingux-taxonomy",
     ):
         print(f"  {prefix / 'bin' / name}")

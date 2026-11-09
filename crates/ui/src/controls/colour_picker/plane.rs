@@ -225,9 +225,13 @@ impl Component for Plane {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Slider)
-            .a11y_alt("Saturation and brightness")
+            .a11y_alt(crate::tr!("ui-colour-plane.a11y"))
             .a11y_builder(move |builder| {
-                builder.set_value(format!("Saturation {sat}%, brightness {val}%"));
+                builder.set_value(crate::tr!(
+                    "ui-colour-plane-value.a11y",
+                    saturation = sat,
+                    brightness = val
+                ));
             })
             .maybe(self.fill, |plane| plane.width(Size::fill()))
             .maybe(!self.fill, |plane| plane.width(Size::px(g.width)))

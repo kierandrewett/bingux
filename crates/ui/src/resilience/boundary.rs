@@ -263,26 +263,14 @@ impl PartialEq for FailureRef {
     }
 }
 
-/// The first line of a panic message, cut to `limit` characters.
-fn headline(message: &str, limit: usize) -> String {
-    let line = message.lines().next().unwrap_or("").trim();
-    if line.chars().count() <= limit {
-        line.to_string()
-    } else {
-        let mut cut: String = line.chars().take(limit).collect();
-        cut.push('…');
-        cut
-    }
-}
-
 /// Copy `details` to the clipboard and say so.
 fn copy_details(details: &str, overlays: Option<Overlays>) {
     let copied = freya::clipboard::Clipboard::set(details.to_string()).is_ok();
     if let Some(overlays) = overlays {
         overlays.toast(if copied {
-            "Details copied."
+            crate::tr!("ui-error-details-copied")
         } else {
-            "The details could not be copied."
+            crate::tr!("ui-error-details-not-copied")
         });
     }
 }
@@ -294,14 +282,21 @@ fn notify_user(failure: &Failure) {
         return;
     };
     let what = if failure.component.is_empty() {
-        failure.kind.label().to_string()
+        crate::app::app_title().to_string()
     } else {
-        format!("{} ({})", short_name(failure.component), failure.kind.label())
+        short_name(failure.component).to_string()
     };
     let details = failure.details();
+    // The panic message goes behind Copy details: the toast says what stopped
+    // and what to do, never the program's own words.
+    let text = if what.is_empty() {
+        crate::tr!("ui-error-toast-unnamed")
+    } else {
+        crate::tr!("ui-error-toast", what = what)
+    };
     overlays.toast_with_action(
-        format!("Something went wrong in {what}: {}", headline(&failure.message, 90)),
-        "Copy details",
+        text,
+        crate::tr!("ui-error-copy-details"),
         move |()| copy_details(&details, Some(overlays)),
     );
 }
@@ -344,10 +339,10 @@ impl Component for RichCard {
         let overlays = try_consume_context::<Overlays>();
         let details = failure.details();
         let copy = EventHandler::new(move |()| copy_details(&details, overlays));
-        let title = format!("{} ran into a problem", self.name);
-        let message = headline(&failure.message, 240);
+        let title = crate::tr!("ui-error-title", name = self.name.as_str());
+        let message = crate::tr!("ui-error-next-step");
         let place = where_line(failure);
-        let alert = format!("{title}: {message}");
+        let alert = format!("{title}. {message}");
         match self.look {
             Look::Window => rect()
                 .component("ErrorCard")
@@ -356,12 +351,12 @@ impl Component for RichCard {
                 .child(
                     status_page(Icon::DialogError, title)
                         .description(message)
-                        .action("Retry", self.retry.clone())
+                        .action(crate::tr!("ui-error-retry"), self.retry.clone())
                         .child(
                             rect()
                                 .tw(&tokens, &[flex_col(), items(Align::Center), gap(S2), mt(S3), w_full()])
                                 .child(centered_caption(place))
-                                .child(action_button("Copy details", copy).flat()),
+                                .child(action_button(crate::tr!("ui-error-copy-details"), copy).flat()),
                         ),
                 )
                 .into_element(),
@@ -388,8 +383,8 @@ impl Component for RichCard {
                         .child(
                             rect()
                                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-                                .child(action_button("Retry", self.retry.clone()).suggested())
-                                .child(action_button("Copy details", copy).flat()),
+                                .child(action_button(crate::tr!("ui-error-retry"), self.retry.clone()).suggested())
+                                .child(action_button(crate::tr!("ui-error-copy-details"), copy).flat()),
                         ),
                 )
                 .into_element(),
@@ -405,11 +400,11 @@ impl Component for RichCard {
                 ))
                 .child(
                     BODY.in_ink(Ink::Danger)
-                        .paragraph(&tokens, format!("{}: {}", self.name, headline(&failure.message, 90)))
+                        .paragraph(&tokens, crate::tr!("ui-error-title", name = self.name.as_str()))
                         .max_lines(1)
                         .width(Size::flex(1.0)),
                 )
-                .child(row_button("Retry", self.retry.clone()))
+                .child(row_button(&crate::tr!("ui-error-retry"), self.retry.clone()))
                 .into_element(),
         }
     }
@@ -462,10 +457,10 @@ impl Component for BareCard {
         let failure = &self.failure.0;
         let details = failure.details();
         let copy = EventHandler::new(move |()| copy_details(&details, None));
-        let title = format!("{} ran into a problem", self.name);
+        let title = crate::tr!("ui-error-title", name = self.name.as_str());
         rect()
             .component("ErrorCard")
-            .a11y_alt(format!("{title}: {}", headline(&failure.message, 240)))
+            .a11y_alt(format!("{title}. {}", crate::tr!("ui-error-next-step")))
             .tw(
                 &tokens,
                 &[
@@ -481,14 +476,14 @@ impl Component for BareCard {
             .child(HEADING.in_ink(Ink::Text).label(&tokens, title))
             .child(
                 BODY.in_ink(Ink::Muted)
-                    .paragraph(&tokens, headline(&failure.message, 240))
+                    .paragraph(&tokens, crate::tr!("ui-error-next-step"))
                     .text_align(TextAlign::Center),
             )
             .child(
                 rect()
                     .tw(&tokens, &[flex_row(), gap(S2), mt(S3)])
-                    .child(bare_button(&tokens, "Retry", self.retry.clone()))
-                    .child(bare_button(&tokens, "Copy details", copy)),
+                    .child(bare_button(&tokens, &crate::tr!("ui-error-retry"), self.retry.clone()))
+                    .child(bare_button(&tokens, &crate::tr!("ui-error-copy-details"), copy)),
             )
     }
 }

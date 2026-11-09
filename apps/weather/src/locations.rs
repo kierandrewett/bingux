@@ -33,7 +33,7 @@ pub enum HereView {
     Locating,
     /// The lookup failed; the text is why (`load::OFFLINE`, `load::DENIED`, ...).
     Failed(String),
-    /// "My Location" is turned off.
+    /// "My location" is turned off.
     Off,
 }
 
@@ -95,39 +95,50 @@ impl Component for PlaceRow {
         });
 
         let title = if self.here {
-            "My Location".to_string()
+            "My location".to_string()
         } else {
             self.place.name.clone()
         };
-        let mut subtitle: Vec<String> = Vec::new();
+        // What the row says under its title, a line each and each cut on its
+        // own: for My location the city, then the conditions; for a saved
+        // place the conditions. The day's range goes under the temperature,
+        // where it cannot be cut.
+        let mut lines: Vec<String> = Vec::new();
         if self.here {
-            subtitle.push(self.place.name.clone());
+            lines.push(self.place.name.clone());
         }
         let mut trailing: Option<Element> = None;
         if let Some(loaded) = &loaded {
             let forecast = &loaded.forecast;
             let current = &forecast.current;
             let code = current.code.unwrap_or(3);
-            if let Some(day) = forecast.day_at(current.time) {
-                subtitle.push(format!(
-                    "{}, {} / {}",
-                    codes::describe(code),
-                    format::temperature(&self.units, day.high),
-                    format::temperature(&self.units, day.low)
-                ));
-            } else {
-                subtitle.push(codes::describe(code).to_string());
-            }
+            lines.push(codes::describe(code).to_string());
+            let temperature = typography::HEADING
+                .label(
+                    &tokens,
+                    format::temperature(&self.units, current.temperature),
+                )
+                .max_lines(1);
+            let range = forecast.day_at(current.time).map(|day| {
+                typography::CAPTION
+                    .label(
+                        &tokens,
+                        format!(
+                            "{} / {}",
+                            format::temperature(&self.units, day.high),
+                            format::temperature(&self.units, day.low)
+                        ),
+                    )
+                    .max_lines(1)
+            });
             trailing = Some(
                 hstack(S2)
                     .child(glyph::view(Sky::of(code), current.is_day, ICON))
                     .child(
-                        typography::HEADING
-                            .label(
-                                &tokens,
-                                format::temperature(&self.units, current.temperature),
-                            )
-                            .max_lines(1),
+                        rect()
+                            .tw(&tokens, &[flex_col(), items(Align::End)])
+                            .child(temperature)
+                            .maybe_child(range),
                     )
                     .into(),
             );
@@ -135,18 +146,23 @@ impl Component for PlaceRow {
 
         let hub = self.hub;
         let key = self.key.clone();
+        let mut lines = lines.into_iter();
         let mut line = row(title)
-            .subtitle(subtitle.join(" · "))
+            .maybe_subtitle(lines.next())
             .selected(self.selected && !is_compact())
+            .selection_fill_only()
             .on_press({
                 let key = key.clone();
                 move |_| hub.select(&key)
             });
+        if let Some(second) = lines.next() {
+            line = line.second_line(second);
+        }
         if is_compact() {
             line = line.navigates();
         }
         if self.here {
-            line = line.leading(Icon::FindLocation);
+            line = line.leading(Icon::LocationArrow);
         } else {
             line = line.context_menu(vec![menu_item("Remove", {
                 let key = key.clone();
@@ -187,7 +203,7 @@ impl Component for Locations {
         match &self.here {
             HereView::Off => {}
             HereView::Found(here) => {
-                column = column.child(Group::new(Some("My location".to_string())).row(PlaceRow {
+                column = column.child(Group::new(None::<String>).row(PlaceRow {
                     key: HERE.to_string(),
                     place: here.place.clone(),
                     here: true,
@@ -199,18 +215,18 @@ impl Component for Locations {
             }
             HereView::Locating => {
                 column = column.child(
-                    Group::new(Some("My location".to_string())).row(
-                        row("My Location")
-                            .leading(Icon::FindLocation)
-                            .subtitle("Finding your location…"),
+                    Group::new(None::<String>).row(
+                        row("My location")
+                            .leading(Icon::LocationArrow)
+                            .subtitle("Finding your location"),
                     ),
                 );
             }
             HereView::Failed(code) => {
                 column = column.child(
-                    Group::new(Some("My location".to_string())).row(
-                        row("My Location")
-                            .leading(Icon::FindLocation)
+                    Group::new(None::<String>).row(
+                        row("My location")
+                            .leading(Icon::LocationArrow)
                             .subtitle(why(code))
                             .badge("Try again")
                             .on_press(move |_| hub.locate_again()),
@@ -237,11 +253,17 @@ impl Component for Locations {
                 })
                 .collect();
             let names: Vec<String> = self.saved.iter().map(|place| place.name.clone()).collect();
+            let showing = self
+                .saved
+                .iter()
+                .position(|place| self.selected.as_deref() == Some(place.key().as_str()))
+                .filter(|_| !is_compact());
             column = column.child(section_label("Saved places")).child(
                 sortable(rows, move |(from, to): (usize, usize)| {
                     hub.reorder(from, to)
                 })
-                .labels(names),
+                .labels(names)
+                .selected(showing),
             );
         }
 

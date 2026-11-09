@@ -31,26 +31,32 @@ FORMATS = ["rpm", "deb", "archlinux", "tar"]
 # `python3 scripts/cargo-licenses.py --summary` computes them and `--check` compares them with this table
 # (make package-check).
 LICENSES = {
-    "bingux": "Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND LGPL-3.0-or-later AND MIT AND Unicode-3.0 AND Zlib",
+    "bingux": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND LGPL-3.0-or-later AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-files": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-calculator": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-weather": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-text-editor": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
+    "bingux-preview": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-settings": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
+    "bingux-calendar": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-taxonomy": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-media": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
 }
 
-# The applications. Each is its own package: a program, a desktop entry, an icon, AppStream metadata and a
-# man page, and nothing else. `id` is the AppStream component id.
+# The applications. Each is its own package: a program, a desktop entry, an icon, AppStream metadata, a
+# man page and its Fluent catalogues, and nothing else. `id` is the AppStream component id; `domain` names
+# the app's catalogues (`/usr/share/bingux/locale/<language>/<domain>.ftl`). bingux-ui's own catalogue
+# (`bingux-ui.ftl`) is shared by every app and ships in `bingux`, which each app depends on.
 APPS = {
-    "bingux-settings": {"id": "dev.drewett.bingux.Settings", "extra": ["/usr/share/bingux/search-apps/bingux-settings.json"]},
-    "bingux-files": {"id": "dev.drewett.bingux.Files", "extra": []},
-    "bingux-calculator": {"id": "dev.drewett.bingux.Calculator", "extra": []},
-    "bingux-weather": {"id": "dev.drewett.bingux.Weather", "extra": []},
-    "bingux-text-editor": {"id": "dev.drewett.bingux.TextEditor", "extra": []},
-    "bingux-taxonomy": {"id": "dev.drewett.bingux.Taxonomy", "extra": []},
-    "bingux-media": {"id": "dev.drewett.bingux.Media", "extra": []},
+    "bingux-settings": {"id": "dev.drewett.bingux.Settings", "domain": "settings", "extra": ["/usr/share/bingux/search-apps/bingux-settings.json"]},
+    "bingux-files": {"id": "dev.drewett.bingux.Files", "domain": "files", "extra": []},
+    "bingux-calculator": {"id": "dev.drewett.bingux.Calculator", "domain": "calculator", "extra": []},
+    "bingux-weather": {"id": "dev.drewett.bingux.Weather", "domain": "weather", "extra": []},
+    "bingux-text-editor": {"id": "dev.drewett.bingux.TextEditor", "domain": "text-editor", "extra": []},
+    "bingux-preview": {"id": "dev.drewett.bingux.Preview", "domain": "preview", "extra": []},
+    "bingux-calendar": {"id": "dev.drewett.bingux.Calendar", "domain": "calendar", "extra": []},
+    "bingux-taxonomy": {"id": "dev.drewett.bingux.Taxonomy", "domain": "taxonomy", "extra": []},
+    "bingux-media": {"id": "dev.drewett.bingux.Media", "domain": "media", "extra": []},
 }
 
 # The paths of the prefix that belong to the application `name`, as globs of the installed system.
@@ -64,6 +70,7 @@ def app_files(name):
         "/usr/share/man/man1/" + name + ".1*",
         "/usr/share/doc/" + name,
         "/usr/share/licenses/" + name,
+        "/usr/share/bingux/locale/*/" + app["domain"] + ".ftl",
     ] + app["extra"]
 
 # The folders a package owns: its own, never the shared ones (/usr/share/applications, /etc/pam.d, /usr/lib/systemd, ...),

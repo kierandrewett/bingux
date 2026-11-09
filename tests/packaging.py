@@ -33,13 +33,14 @@ UNITS = (
     "xdg-desktop-portal-bingux.service",
 )
 # The packages: `bingux` is the desktop with every core service; each application is its own package.
-PACKAGES = ("bingux", "bingux-settings", "bingux-files", "bingux-text-editor", "bingux-calculator", "bingux-taxonomy")
+PACKAGES = ("bingux", "bingux-settings", "bingux-files", "bingux-preview", "bingux-text-editor", "bingux-calculator", "bingux-taxonomy")
 # Application packages: desktop entry directory and metainfo id.
 APPLICATIONS = {
     "bingux-settings": ("apps/settings", "dev.drewett.bingux.Settings"),
     "bingux-files": ("apps/files", "dev.drewett.bingux.Files"),
     "bingux-calculator": ("apps/calculator", "dev.drewett.bingux.Calculator"),
     "bingux-text-editor": ("apps/text-editor", "dev.drewett.bingux.TextEditor"),
+    "bingux-preview": ("apps/preview", "dev.drewett.bingux.Preview"),
     "bingux-taxonomy": ("apps/taxonomy", "dev.drewett.bingux.Taxonomy"),
 }
 # The packages `bingux` replaces: the split of 0.1.0.
@@ -47,6 +48,7 @@ OLD_NAMES = ("bingux-config", "bingux-audio-effects", "bingux-preview-host")
 MAN_PAGES = (
     "bingux-settings",
     "bingux-files",
+    "bingux-preview",
     "bingux-calculator",
     "bingux-text-editor",
     "bingux-taxonomy",

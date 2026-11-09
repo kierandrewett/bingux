@@ -30,7 +30,63 @@ use crate::nav::{Location, Mode, RouteTable, Router, provide_router};
 use crate::theme;
 
 /// Who the running application is: its id and the name its windows carry.
-static IDENTITY: std::sync::OnceLock<(String, &'static str)> = std::sync::OnceLock::new();
+static IDENTITY: std::sync::OnceLock<(String, Title)> = std::sync::OnceLock::new();
+
+/// The name of an application's windows: fixed text, or a catalogue message
+/// asked for again whenever the language changes.
+///
+/// ```ignore
+/// Application::new("bingux-calculator").title(Message::new(i18n_id!("calculator-title")))
+/// Application::new("bingux-demo").title("Demo") // a name that is never translated
+/// ```
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Title {
+    /// Text shown as it is, in every language.
+    Text(String),
+    /// The message with this ID (no variables), in the language shown.
+    Message(std::borrow::Cow<'static, str>),
+}
+
+impl Title {
+    /// The title in the language shown now.
+    pub fn text(&self) -> String {
+        match self {
+            Title::Text(text) => text.clone(),
+            Title::Message(id) => crate::i18n::text(id),
+        }
+    }
+}
+
+impl From<&str> for Title {
+    fn from(text: &str) -> Title {
+        Title::Text(text.to_owned())
+    }
+}
+
+impl From<String> for Title {
+    fn from(text: String) -> Title {
+        Title::Text(text)
+    }
+}
+
+impl From<crate::i18n::Message> for Title {
+    fn from(message: crate::i18n::Message) -> Title {
+        Title::Message(message.into_id())
+    }
+}
+
+/// Marks that a view in this window sets the window's title itself (a
+/// navigation shell, a tab window), so the window root leaves it alone.
+#[derive(Clone, Default)]
+pub(crate) struct TitleClaim(Rc<std::cell::Cell<bool>>);
+
+/// Called while rendering by a view that keeps the window's title up to date
+/// itself.
+pub(crate) fn claim_window_title() {
+    if let Some(claim) = try_consume_context::<TitleClaim>() {
+        claim.0.set(true);
+    }
+}
 
 /// The id the running application was started with ([`Application::new`]):
 /// what the compositor reports as the `app_id` of each of its windows. Empty
@@ -39,10 +95,12 @@ pub fn app_id() -> &'static str {
     IDENTITY.get().map_or("", |(id, _)| id.as_str())
 }
 
-/// The name of the running application, as [`Application::title`] gave it.
-/// Empty before [`Application::run`].
-pub fn app_title() -> &'static str {
-    IDENTITY.get().map_or("", |(_, title)| title)
+/// The name of the running application, as [`Application::title`] gave it,
+/// in the language shown now. Empty before [`Application::run`].
+pub fn app_title() -> String {
+    IDENTITY
+        .get()
+        .map_or_else(String::new, |(_, title)| title.text())
 }
 
 /// The settings of one application: its identity, its routes, its window and
@@ -50,7 +108,7 @@ pub fn app_title() -> &'static str {
 pub struct Application {
     app_id: String,
     routes: Option<RouteTable>,
-    title: &'static str,
+    title: Title,
     size: (f32, f32),
     min_size: (f32, f32),
     borderless: bool,
@@ -59,6 +117,7 @@ pub struct Application {
     normalise: Option<fn(&std::ffi::OsStr) -> String>,
     address_options: Vec<&'static str>,
     about: Option<crate::about::AppInfo>,
+    remember_window: bool,
 }
 
 impl Application {
@@ -72,7 +131,7 @@ impl Application {
             routes: None,
             usage: format!("Usage: {app_id} [URI]"),
             app_id,
-            title: "",
+            title: Title::Text(String::new()),
             size: (width as f32, height as f32),
             min_size: (min_width as f32, min_height as f32),
             borderless: false,
@@ -80,6 +139,7 @@ impl Application {
             normalise: None,
             address_options: Vec::new(),
             about: None,
+            remember_window: false,
         }
     }
 
@@ -92,8 +152,11 @@ impl Application {
         self
     }
 
-    pub fn title(mut self, title: &'static str) -> Self {
-        self.title = title;
+    /// The name on the app's windows and in its About window: fixed text, or
+    /// a catalogue message that follows a language switch
+    /// (`.title(Message::new(i18n_id!("calculator-title")))`). See [`Title`].
+    pub fn title(mut self, title: impl Into<Title>) -> Self {
+        self.title = title.into();
         self
     }
 
@@ -141,6 +204,15 @@ impl Application {
         self
     }
 
+    /// Open the window at the size it was closed with, as the document scene
+    /// ([`crate::document::SceneState`]) kept it. The first run uses
+    /// [`Application::size`]. A size that no longer fits is left to the
+    /// compositor to clamp.
+    pub fn remember_window(mut self) -> Self {
+        self.remember_window = true;
+        self
+    }
+
     /// Turn the command line's argument into the text of an address before
     /// anything reads it, in this copy and in the copy it is handed to. An
     /// application whose addresses name files makes a relative path absolute
@@ -180,7 +252,9 @@ impl Application {
                 .unwrap_or_else(|| RouteTable::new(&self.app_id)),
         );
         let scheme = table.scheme().to_string();
-        let _ = IDENTITY.set((self.app_id.clone(), self.title));
+        let _ = IDENTITY.set((self.app_id.clone(), self.title.clone()));
+        // What the window comes back to is read before the window exists.
+        crate::document::preload_scene(&self.app_id);
         tune_allocator();
         // Panics are never fatal: the panic hook, the failure log and the
         // relaunch plan exist before the first window and the first thread.
@@ -302,28 +376,27 @@ impl Application {
             self.about
                 .clone()
                 .unwrap_or_default()
-                .completed(&self.app_id, self.title),
+                .completed(&self.app_id, &self.title.text()),
         );
         crate::about::read_facts();
 
-        let (width, height) = self.size;
+        let (width, height) = match crate::document::loaded_window_size() {
+            Some(size) if self.remember_window => size,
+            _ => self.size,
+        };
         let (min_width, min_height) = self.min_size;
-        let title = self.title;
         let app_id = self.app_id.clone();
         // The window's content is built once, so the boundary below it sees the
         // same closure on every render of this root and does not rebuild the
         // whole window when the location changes.
         let root: Rc<dyn Fn() -> Element> = Rc::new(move || root().into_element());
-        let boundary_name = if title.is_empty() { "The app" } else { title };
         let blueprint = Blueprint {
             table,
             root,
-            title,
             app_id,
             min_size: (min_width, min_height),
             borderless: self.borderless,
             transparent: self.transparent,
-            boundary_name,
         };
         let window = blueprint.window(initial, (width, height), None);
         SPAWNER.with(|spawner| *spawner.borrow_mut() = Some(blueprint));
@@ -338,20 +411,17 @@ impl Application {
 struct Blueprint {
     table: Arc<RouteTable>,
     root: Rc<dyn Fn() -> Element>,
-    title: &'static str,
     app_id: String,
     min_size: (f32, f32),
     borderless: bool,
     transparent: bool,
-    boundary_name: &'static str,
 }
 
 impl Blueprint {
     /// The window opening on `initial`, `size` big. A window with a `seed`
     /// hands it to its root, which takes it with [`use_window_seed`].
     fn window(&self, initial: Location, size: (f32, f32), seed: Option<SeedCell>) -> WindowConfig {
-        let (table, root, boundary_name) =
-            (self.table.clone(), self.root.clone(), self.boundary_name);
+        let (table, root) = (self.table.clone(), self.root.clone());
         let window = WindowConfig::new(move || {
             // From here on the thread is the UI thread: blocking calls are reported.
             crate::runtime::mark_ui_thread();
@@ -378,14 +448,37 @@ impl Blueprint {
             // A relaunch after an unrecoverable failure opens this location.
             crate::resilience::note_location(&crate::nav::use_location().to_string());
             crate::resilience::use_window_notices();
+            // A language switch (`i18n::set_locale`) mounts the content again,
+            // so every string is asked for again; the router above keeps the
+            // location.
+            let language = crate::i18n::use_language();
+            // The window's title follows the language too, unless a view in it
+            // (a navigation shell, a tab window) keeps the title itself.
+            let claim = use_provide_context(TitleClaim::default);
+            use_side_effect_with_deps(&language, move |_| {
+                if !claim.0.get() {
+                    let title = app_title();
+                    crate::shell::window::with_window(move |window| window.set_title(&title));
+                }
+            });
+            let name = match app_title() {
+                name if name.is_empty() => crate::tr!("ui-app-unnamed"),
+                name => name,
+            };
             // The last resort: whatever fails below and has no boundary of its
             // own fails into this one, as a full-window error card.
-            crate::resilience::window_boundary(boundary_name, root.clone()).into_element()
+            crate::resilience::window_boundary(name, root.clone())
+                .key(language)
+                .into_element()
         })
-        .with_title(self.title)
+        // freya keeps the first title as `&'static str`; a window's title
+        // changes later through `set_title`, so this one string per window
+        // is all that is kept.
+        .with_title(Box::leak(app_title().into_boxed_str()))
         .with_app_id(self.app_id.clone())
         .with_size(f64::from(size.0), f64::from(size.1))
-        .with_min_size(f64::from(self.min_size.0), f64::from(self.min_size.1));
+        .with_min_size(f64::from(self.min_size.0), f64::from(self.min_size.1))
+        .with_on_close(|_, id| close_requested(id));
         // An alpha channel is not enough: freya clears the canvas to the window's background
         // (white by default) before it draws, so a root drawn at 0.4 opacity would be mixed with
         // white, not with the windows under it. The clear must be transparent too.
@@ -460,12 +553,7 @@ async fn open_window_under<T: 'static>(
     let cell = SeedCell(Rc::new(RefCell::new(Some(
         Box::new(seed) as Box<dyn std::any::Any>
     ))));
-    let mut window = blueprint
-        .window(initial, size, Some(cell))
-        .with_on_close(|_, id| {
-            crate::layers::with_stack(|stack| stack.close(u64::from(id)));
-            freya_winit::config::CloseDecision::Close
-        });
+    let mut window = blueprint.window(initial, size, Some(cell));
     if let Some(parent) = parent {
         window = window.with_parent(parent);
     }
@@ -503,6 +591,18 @@ pub fn use_window_seed<T: Clone + 'static>() -> Option<T> {
             .and_then(|seed| seed.downcast::<T>().ok())
             .map(|seed| *seed)
     })
+}
+
+/// What a window's close request (the compositor's close button, Alt+F4) does:
+/// a window whose documents hold unsaved work asks first and closes itself
+/// when it has been answered; any other window goes, and leaves the window
+/// stack.
+fn close_requested(id: freya::winit::window::WindowId) -> freya_winit::config::CloseDecision {
+    if crate::document::guard::must_wait(u64::from(id)) {
+        return freya_winit::config::CloseDecision::KeepOpen;
+    }
+    crate::layers::with_stack(|stack| stack.close(u64::from(id)));
+    freya_winit::config::CloseDecision::Close
 }
 
 /// The one place a bingux-ui process starts its event loop. It builds the
