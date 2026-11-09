@@ -195,6 +195,7 @@ RECOMMENDS = {
         # the folder handler it expects. A minimal install can drop them.
         "bingux-settings",
         "bingux-files",
+        "bingux-calendar",
         # The sound effects engine runs the published plugins that Easy Effects uses.
         "lsp-plugins-lv2",
         "lv2-calf-plugins",
@@ -218,6 +219,7 @@ RECOMMENDS = {
     "deb": [
         "bingux-settings",
         "bingux-files",
+        "bingux-calendar",
         "lsp-plugins-lv2",
         "calf-plugins",
         "zam-plugins",
@@ -238,6 +240,7 @@ RECOMMENDS = {
     "archlinux": [
         "bingux-settings: Settings, opened from the Control Centre and the dock",
         "bingux-files: file manager",
+        "bingux-calendar: calendar",
         "lsp-plugins: sound effects",
         "calf: sound effects: bass enhancer, exciter, crusher, de-esser, reverb and stereo tools",
         "zam-plugins: sound effects: maximizer",
