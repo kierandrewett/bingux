@@ -91,6 +91,17 @@ impl Hub {
         }
     }
 
+    /// Allows or withdraws the network lookup of the computer's position.
+    /// Withdrawing it forgets a position that was found that way.
+    pub fn set_network(self, on: bool) {
+        self.change(move |settings| settings.network_lookup = Some(on));
+        if !on {
+            load::forget_network_here();
+        }
+        let mut attempt = self.attempt;
+        *attempt.write() += 1;
+    }
+
     /// Fetches every place again: the forecasts are too old to reuse once half
     /// a minute has passed.
     pub fn refresh_all(self) {

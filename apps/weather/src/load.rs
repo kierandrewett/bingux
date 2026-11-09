@@ -2,7 +2,7 @@
 //! where the computer is, fetching a forecast and searching for a city. Each
 //! is a plain function of its key, for `bingux_ui::task::use_resource`.
 
-use bingux_ui::location::{Fix, LocateError, Locator};
+use bingux_ui::location::{Fix, LocateError, Locator, Source};
 use bingux_weather::time::unix_now;
 use bingux_weather::{Failure, Here, Loaded, Place, Settings, Store, units};
 
@@ -78,6 +78,8 @@ pub fn same(old: &Fetched, new: &Fetched) -> bool {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocateKey {
     pub on: bool,
+    /// Whether the person agreed to the network lookup.
+    pub network: bool,
     /// Counts the times the person asked to look again.
     pub attempt: u64,
 }
@@ -92,7 +94,11 @@ pub fn locate(key: LocateKey) -> Result<Here, String> {
     if !key.on {
         return Err(OFF.to_string());
     }
-    match Locator::new().locate() {
+    match Locator::new()
+        .network(key.network)
+        .name_places(key.network)
+        .locate()
+    {
         Ok(fix) => {
             let here = here_of(&fix);
             // The next start shows this place before the lookup has finished.
@@ -103,6 +109,20 @@ pub fn locate(key: LocateKey) -> Result<Here, String> {
         Err(LocateError::Offline) => Err(OFFLINE.to_string()),
         Err(LocateError::Unavailable | LocateError::Disabled) => Err(UNAVAILABLE.to_string()),
     }
+}
+
+/// Forgets a saved position that came from the network lookup, once the
+/// person has withdrawn consent. Runs off the window thread.
+pub fn forget_network_here() {
+    bingux_ui::task::spawn_detached("weather-forget-here", || {
+        let store = Store::open();
+        if store
+            .here()
+            .is_some_and(|here| here.source == Source::Network.id())
+        {
+            store.clear_here();
+        }
+    });
 }
 
 fn here_of(fix: &Fix) -> Here {

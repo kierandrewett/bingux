@@ -51,6 +51,11 @@ pub struct Settings {
     /// Whether "My location" is a place in the list.
     #[serde(default = "yes")]
     pub use_location: bool,
+    /// Whether the person allows a lookup of the network address, and of the
+    /// town name from coordinates. None until they have been asked; until
+    /// then only the desktop's location service is used.
+    #[serde(default)]
+    pub network_lookup: Option<bool>,
     /// The saved places, in the order the person put them.
     #[serde(default)]
     pub saved: Vec<Place>,
@@ -65,6 +70,7 @@ impl Default for Settings {
             units: None,
             use_location: true,
             saved: Vec::new(),
+            network_lookup: None,
             selected: None,
         }
     }
@@ -123,6 +129,11 @@ impl Store {
 
     fn here_path(&self) -> PathBuf {
         self.config.join("here.json")
+    }
+
+    /// Forgets where the computer was found.
+    pub fn clear_here(&self) {
+        let _ = fs::remove_file(self.here_path());
     }
 
     /// Where the computer was last found, kept apart from the settings so a
@@ -228,6 +239,7 @@ mod tests {
         let store = Store::in_dir(&dir);
         assert_eq!(store.settings(), Settings::default());
         assert!(store.settings().use_location);
+        assert_eq!(store.settings().network_lookup, None);
         let mut settings = Settings::default();
         settings.saved.push(Place::new("Leeds", 53.8, -1.55));
         settings.selected = Some("53.80,-1.55".into());

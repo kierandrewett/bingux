@@ -2542,7 +2542,9 @@ bingux-ui = { path = "../../crates/ui", features = ["location"] }
 use bingux_ui::location::{LocateError, Locator};
 
 // In a `spawn` task. The lookup blocks, so it runs on the background pool.
-match Locator::new().locate_async().await {
+// `network` is off by default: pass `true` only after the person has agreed
+// to the lookup, which sends the computer's address to a third party.
+match Locator::new().network(consented).locate_async().await {
     Ok(fix) => use_position(fix.latitude, fix.longitude, fix.name, fix.source.describe()),
     Err(LocateError::Denied) => ask_for_a_city(),
     Err(_) => ask_for_a_city(),
@@ -2556,11 +2558,14 @@ match Locator::new().locate_async().await {
    ends the search (`LocateError::Denied`): the network address is never used to
    get round a "no". A missing portal, or none that answers within the timeout,
    moves on.
-2. **The network address**, looked up with keyless services (ipwho.is, then
-   geojs.io, then ipapi.co). The position is about as good as the city, so
+2. **The network address**, only when the application turned it on with
+   `network(true)` (off by default), looked up with keyless services (ipwho.is,
+   then geojs.io, then ipapi.co). The position is about as good as the city, so
    `Fix::accuracy` is 25 km. The service sees the computer's address, which is
    why `Source::Network` exists: show `Source::describe()` ("Approximate, from
-   the network address") next to a position that came this way.
+   the network address") next to a position that came this way. An application
+   asks the person first (Weather shows a card, "Use your approximate location?"),
+   and remembers the answer.
 3. **Nothing**: `LocateError::Offline` when no service could be reached,
    `Unavailable` when some answered and none gave a position, `Disabled` when
    the caller turned both sources off (`portal(false)`, `network(false)`).
