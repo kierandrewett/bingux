@@ -316,7 +316,10 @@ impl Ui {
             move |result| match result {
                 Ok(Some(password)) => match freya::clipboard::Clipboard::set(password) {
                     Ok(()) => self.ctx.overlays.toast("Copied."),
-                    Err(_) => self.ctx.overlays.toast("The password could not be copied."),
+                    Err(_) => self
+                        .ctx
+                        .overlays
+                        .toast("Could not copy the password. Try again."),
                 },
                 Ok(None) => self
                     .ctx

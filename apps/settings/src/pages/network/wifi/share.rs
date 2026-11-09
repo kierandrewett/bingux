@@ -114,7 +114,7 @@ pub fn secret_row(
                 action_button("Copy", move |_| {
                     match freya::clipboard::Clipboard::set(copy.clone()) {
                         Ok(()) => overlays.toast("Copied."),
-                        Err(_) => overlays.toast("The password could not be copied."),
+                        Err(_) => overlays.toast("Could not copy the password. Try again."),
                     }
                 })
                 .compact()

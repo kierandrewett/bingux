@@ -515,8 +515,9 @@ fn technology_of(names: &[String]) -> Option<&'static str> {
 // ---------------------------------------------------------------------------
 
 fn parse_json(output: &str) -> Result<Value, CommandError> {
-    serde_json::from_str(output)
-        .map_err(|_| CommandError("ModemManager gave an answer that cannot be read.".into()))
+    serde_json::from_str(output).map_err(|_| {
+        CommandError("Could not read the modem details. Try again in a moment.".into())
+    })
 }
 
 /// The ids of the modems in `mmcli -J -L` output.
@@ -549,9 +550,9 @@ fn net_port(ports: &[String]) -> String {
 /// One modem from `mmcli -J -m <id>` output; the SIM is read separately.
 pub fn parse_modem(output: &str) -> Result<Modem, CommandError> {
     let value = parse_json(output)?;
-    let modem = value
-        .get("modem")
-        .ok_or_else(|| CommandError("ModemManager did not describe a modem.".into()))?;
+    let modem = value.get("modem").ok_or_else(|| {
+        CommandError("Could not read the modem details. Try again in a moment.".into())
+    })?;
     let generic = |key: &str| text(modem, &["generic", key]);
     let id = object_id(&text(modem, &["dbus-path"])).unwrap_or_default();
 
@@ -617,9 +618,9 @@ pub fn parse_modem(output: &str) -> Result<Modem, CommandError> {
 /// One SIM from `mmcli -J -i <id>` output.
 pub fn parse_sim(output: &str) -> Result<Sim, CommandError> {
     let value = parse_json(output)?;
-    let sim = value
-        .get("sim")
-        .ok_or_else(|| CommandError("ModemManager did not describe a SIM.".into()))?;
+    let sim = value.get("sim").ok_or_else(|| {
+        CommandError("Could not read the SIM details. Try again in a moment.".into())
+    })?;
     Ok(Sim {
         id: object_id(&text(sim, &["dbus-path"])).unwrap_or_default(),
         operator: text(sim, &["properties", "operator-name"]),

@@ -241,8 +241,11 @@ fn import_path(fx: Fx, path: PathBuf) {
     let overlays = fx.overlays;
     background_then(
         move || -> Result<(Option<String>, Vec<String>, String), String> {
-            let text = bingux_ui::runtime::read_to_string(&path)
-                .map_err(|e| format!("Could not read the file. {e}"))?;
+            let text = bingux_ui::runtime::read_to_string(&path).map_err(|e| {
+                eprintln!("bingux-settings: preset file could not be read: {e}");
+                "Could not read the file. Check that it is a valid preset and try again."
+                    .to_string()
+            })?;
             let stem = path.file_stem().map_or_else(
                 || "Imported".to_string(),
                 |stem| stem.to_string_lossy().into_owned(),

@@ -618,8 +618,10 @@ fn stem_of(path: &str) -> String {
 /// Import the file at `path`, as VPN type `kind` or the one it looks like.
 /// Returns the new profile's name.
 fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, String> {
-    let text = crate::system::read_to_string(path)
-        .map_err(|error| format!("The file could not be read: {error}."))?;
+    let text = crate::system::read_to_string(path).map_err(|error| {
+        eprintln!("bingux-settings: import file could not be read: {error}");
+        "Could not read the file. Check that it is a VPN profile and try again.".to_string()
+    })?;
     let head: String = text.lines().take(60).collect::<Vec<_>>().join("\n");
     let kind = if kind == "auto" {
         detect_kind(path, &head)
