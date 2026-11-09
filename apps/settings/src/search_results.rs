@@ -123,7 +123,10 @@ impl Component for SearchResults {
             // page itself adds a second row saying the same, so it is left out
             // whenever something more specific matched.
             if hits.len() > 1 {
-                hits.retain(|hit| hit.breadcrumb().len() > 1 || hit.title() != Some(page.title()));
+                let title = page.title();
+                hits.retain(|hit| {
+                    hit.breadcrumb().len() > 1 || hit.title() != Some(title.as_str())
+                });
             }
             let rows: Vec<Element> = hits
                 .into_iter()

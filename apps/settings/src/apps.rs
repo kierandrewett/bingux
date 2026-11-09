@@ -13,6 +13,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::system;
+use bingux_ui::prelude::tr;
 
 /// One installed application.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -323,16 +324,14 @@ fn launch_blocking(file: &Path, name: &str) -> Result<(), String> {
         .spawn()
         .map_err(|error| {
             eprintln!("[launch] {name}: {error}");
-            format!("Could not open “{name}”. Check that it is still installed, then try again.")
+            tr!("apps-launch-failed", name = name)
         })?;
     let started = Instant::now();
     while started.elapsed() < LAUNCH_WATCH {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
             Ok(Some(_)) => {
-                return Err(format!(
-                    "Could not open “{name}”. Check that it is still installed, then try again."
-                ));
+                return Err(tr!("apps-launch-failed", name = name));
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
             Err(_) => return Ok(()),
@@ -360,16 +359,17 @@ pub enum Source {
 }
 
 impl Source {
-    /// The name shown in lists and on the page.
-    pub fn label(self) -> &'static str {
+    /// The name shown in lists and on the page. Flatpak, Snap, AppImage and
+    /// Nix are product names, so they stay as written in every language.
+    pub fn label(self) -> String {
         match self {
-            Source::Flatpak => "Flatpak",
-            Source::Snap => "Snap",
-            Source::AppImage => "AppImage",
-            Source::Rpm => "RPM package",
-            Source::Nix => "Nix",
-            Source::Local => "Local desktop entry",
-            Source::System => "System",
+            Source::Flatpak => "Flatpak".to_string(),
+            Source::Snap => "Snap".to_string(),
+            Source::AppImage => "AppImage".to_string(),
+            Source::Nix => "Nix".to_string(),
+            Source::Rpm => tr!("settings-source-rpm"),
+            Source::Local => tr!("settings-source-local"),
+            Source::System => tr!("settings-source-system"),
         }
     }
 }
@@ -382,7 +382,7 @@ pub enum Removal {
     /// Delete these files.
     Files(Vec<PathBuf>),
     /// Not removed here. The text says what to do instead.
-    Unavailable(&'static str),
+    Unavailable(String),
 }
 
 /// Where an application came from and what it takes up. The package tools
@@ -610,7 +610,7 @@ fn classify(
             "",
             None,
             desktop_text,
-            Removal::Unavailable("Remove it from the store you installed it from."),
+            Removal::Unavailable(tr!("apps-remove-store")),
         );
     }
     if desktop.starts_with("/var/lib/snapd/") {
@@ -637,7 +637,7 @@ fn classify(
             "",
             None,
             if exec.is_empty() { desktop_text } else { exec },
-            Removal::Unavailable("Remove it from your Nix profile or configuration."),
+            Removal::Unavailable(tr!("apps-remove-nix")),
         );
     }
     if exec.to_ascii_lowercase().ends_with(".appimage") {
@@ -649,7 +649,7 @@ fn classify(
         let removal = if in_home(Path::new(&exec), home) {
             Removal::Files(files)
         } else {
-            Removal::Unavailable("Ask an administrator to remove it.")
+            Removal::Unavailable(tr!("apps-remove-admin"))
         };
         return details(
             Source::AppImage,
@@ -692,7 +692,7 @@ fn classify(
         "",
         None,
         desktop_text,
-        Removal::Unavailable("The system installed it. Ask an administrator to remove it."),
+        Removal::Unavailable(tr!("apps-remove-system")),
     )
 }
 
@@ -748,6 +748,6 @@ pub fn uninstall(app: &AppEntry) -> Result<(), String> {
         Removal::Files(files) => files.iter().try_for_each(|file| {
             std::fs::remove_file(file).map_err(|error| format!("{}: {error}", file.display()))
         }),
-        Removal::Unavailable(reason) => Err(reason.to_string()),
+        Removal::Unavailable(reason) => Err(reason.clone()),
     }
 }

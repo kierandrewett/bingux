@@ -58,23 +58,21 @@ impl Component for App {
             .collect();
         // Keys the split view handles itself, listed in the shortcuts sheet.
         commands.push(
-            Command::key_hint("settings.search", "Search settings", "Ctrl+F")
+            Command::key_hint("settings.search", tr!("settings-command-search"), "Ctrl+F")
                 .group(CommandGroup::Edit),
         );
-        commands
-            .push(Command::key_hint("settings.back", "Back", "Alt+Left").group(CommandGroup::Go));
         commands.push(
-            Command::key_hint(
-                "settings.regions",
-                "Move between the sidebar and the page",
-                "F6",
-            )
-            .group(CommandGroup::Go),
+            Command::key_hint("settings.back", tr!("settings-command-back"), "Alt+Left")
+                .group(CommandGroup::Go),
+        );
+        commands.push(
+            Command::key_hint("settings.regions", tr!("settings-command-regions"), "F6")
+                .group(CommandGroup::Go),
         );
         use_window_commands(commands);
         // The window's main menu: About Settings, the application. The About
         // page under System is the computer's.
-        let mut split = NavigationSplitView::new("Settings")
+        let mut split = NavigationSplitView::new(tr!("settings-title"))
             .search(query, results, open_first)
             .header_trailing(app_menu(Vec::new()));
         if let Some((name, _)) = &signed_in {
@@ -121,7 +119,7 @@ struct RelatedPages {
 impl Component for RelatedPages {
     fn render(&self) -> impl IntoElement {
         let router = use_router();
-        let mut group = Group::new(Some("Related".to_string()));
+        let mut group = Group::new(Some(tr!("settings-related-title")));
         for target in self.page.related().iter().copied() {
             group = group.row(
                 row(target.title())
