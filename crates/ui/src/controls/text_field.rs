@@ -32,6 +32,28 @@ use crate::typography::{BODY, CAPTION, Ink, TextStyle, mono_family};
 /// password fields do. Freya's own default is an asterisk.
 const MASK: char = '\u{2022}';
 
+/// Whether a character key, held with these modifiers, is a chord that must
+/// not type text. Ctrl and Super chords type nothing, except the field's own
+/// edits (select all, copy, cut, paste, undo, redo). Alt with a letter or
+/// digit is a chord too. On AltGr layouts Alt makes a symbol (Ctrl+Alt+Q gives
+/// `@` on German), and that types. An AltGr layout that makes a letter is
+/// treated as a chord, which is rare.
+fn chord_types_no_text(modifiers: &Modifiers, text: &str) -> bool {
+    let command = modifiers.intersects(Modifiers::CONTROL | Modifiers::META);
+    let alt = modifiers.contains(Modifiers::ALT);
+    let letter_or_digit = !text.is_empty() && text.chars().all(|c| c.is_ascii_alphanumeric());
+    if command {
+        if alt {
+            return letter_or_digit;
+        }
+        return !matches!(
+            text.to_lowercase().as_str(),
+            "a" | "c" | "x" | "v" | "z" | "y"
+        );
+    }
+    alt && letter_or_digit
+}
+
 /// An edit that something outside a [`TextField`] asks of it, through
 /// [`TextField::edits`]: `FieldEdit::Type(text)` types at the caret (replacing
 /// the selection), `FieldEdit::Backspace` deletes, and
@@ -596,9 +618,11 @@ impl Component for TextField {
         let changes_text = !self.read_only;
         let copyable = has_text && !self.password;
         let edit_menu = vec![
-            edit_item(&crate::tr!("ui-edit-cut"), copyable && changes_text, move |_| {
-                command.set(Some(InputCommand::Cut))
-            }),
+            edit_item(
+                &crate::tr!("ui-edit-cut"),
+                copyable && changes_text,
+                move |_| command.set(Some(InputCommand::Cut)),
+            ),
             edit_item(&crate::tr!("ui-edit-copy"), copyable, move |_| {
                 command.set(Some(InputCommand::Copy));
             }),
@@ -662,7 +686,9 @@ impl Component for TextField {
             })
             .a11y_invalid(a11y_invalid)
             .a11y_active_descendant(
-                self.semantics.as_ref().and_then(|semantics| semantics.active_descendant),
+                self.semantics
+                    .as_ref()
+                    .and_then(|semantics| semantics.active_descendant),
                 self.semantics
                     .as_ref()
                     .map(|semantics| semantics.controls.clone())
@@ -759,22 +785,11 @@ impl Component for TextField {
                     }
                     // Tab moves focus, as Freya's own field does.
                     Key::Named(NamedKey::Tab) => false,
-                    // A Ctrl or Meta chord the field has no edit for (Ctrl+F,
-                    // Ctrl+L, Ctrl+Shift+F...) belongs to the window: it must
-                    // not be typed as text, and it keeps bubbling. The field's
-                    // own are select all, copy, cut, paste, undo and redo.
-                    // Alt with Ctrl is how some layouts type a letter (AltGr),
-                    // so that stays text.
-                    Key::Character(text)
-                        if event.modifiers.intersects(Modifiers::ctrl_or_meta())
-                            && !event.modifiers.contains(Modifiers::ALT)
-                            && !matches!(
-                                text.to_lowercase().as_str(),
-                                "a" | "c" | "x" | "v" | "z" | "y"
-                            ) =>
-                    {
-                        false
-                    }
+                    // A chord the field has no edit for (Ctrl+F, Ctrl+Shift+I,
+                    // Super+I, Alt+I) belongs to the window: it must not be
+                    // typed as text, and it keeps bubbling. Ctrl+Alt with a
+                    // symbol is how some layouts type it (AltGr), so that stays.
+                    Key::Character(text) if chord_types_no_text(&event.modifiers, text) => false,
                     _ => {
                         // Keys the field edits stay here: a multiline Enter
                         // must not trigger a popup's primary action.
@@ -919,7 +934,11 @@ impl Component for TextField {
                 } else {
                     crate::tr!("ui-field-show-password")
                 };
-                let icon = if revealed() { Icon::ViewConceal } else { Icon::ViewReveal };
+                let icon = if revealed() {
+                    Icon::ViewConceal
+                } else {
+                    Icon::ViewReveal
+                };
                 trailing = trailing.child(
                     icon_button(icon, move |_| revealed.set(!revealed()))
                         .size(button)
@@ -1007,10 +1026,14 @@ impl Component for TextField {
                 press_claimed(&press_core)
                     || overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id))
             });
-        let cut = edit_item(&crate::tr!("ui-edit-cut"), copyable && changes_text, move |_| {
-            command.set(Some(InputCommand::Cut));
-            bar_open.set(false);
-        });
+        let cut = edit_item(
+            &crate::tr!("ui-edit-cut"),
+            copyable && changes_text,
+            move |_| {
+                command.set(Some(InputCommand::Cut));
+                bar_open.set(false);
+            },
+        );
         let copy = edit_item(&crate::tr!("ui-edit-copy"), copyable, move |_| {
             command.set(Some(InputCommand::Copy));
             bar_open.set(false);
@@ -1191,3 +1214,7 @@ impl Component for TextField {
 #[cfg(all(test, feature = "testing"))]
 #[path = "text_field_focus_tests.rs"]
 mod focus_tests;
+
+#[cfg(all(test, feature = "testing"))]
+#[path = "text_field_chord_tests.rs"]
+mod chord_tests;

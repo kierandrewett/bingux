@@ -5167,7 +5167,9 @@ inside it), so opening the header menu with the pointer keeps them.
 **What the router leaves alone.** A control that handles a key stops it, and
 no command sees it: a text field keeps its own Ctrl+Z, Ctrl+C and Ctrl+A,
 and a list keeps its arrows. While a dialog or a menu is open, the router
-stands aside (the palette and the sheet are dialogs).
+stands aside (the palette and the sheet are dialogs). A text field types no
+text for a Ctrl, Super or Alt chord, so Ctrl+Alt+Shift+I or Super+I reach the
+window and leave the text alone. Ctrl+Alt with a symbol still types (AltGr).
 
 **Shortcuts.** `Shortcut::parse` reads what people write: modifiers then the
 key, joined by `+` (`Ctrl+Shift+P`, `F2`, `Alt+Left`, `Ctrl+?`, `Ctrl+Plus`,
