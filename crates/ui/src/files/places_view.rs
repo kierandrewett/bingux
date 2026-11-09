@@ -297,12 +297,12 @@ impl Component for PlacesMenu {
                 .child(
                     icon_button(Icon::SidebarShow, move |_: ()| open.set(!open()))
                         .active(open())
-                        .tooltip("Places"),
+                        .tooltip(&crate::tr!("ui-files-places-title")),
                 )
         } else {
             focus_stop_press(
                 content,
-                "Places",
+                &crate::tr!("ui-files-places-title"),
                 AccessibilityRole::Button,
                 true,
                 Radius::Control,
@@ -360,7 +360,7 @@ impl Component for PlacesMenu {
         .size(area.read().width().max(Dim::DropdownMenu.px()), rows_height)
         .scroll(scroll)
         .on_dismiss(move |_: ()| open.set(false))
-        .title("Places");
+        .title(&crate::tr!("ui-files-places-title"));
 
         rect()
             .component("PlacesMenuHost")
@@ -428,8 +428,8 @@ impl Bookmarks {
                     }
                     if let (false, Some(overlays)) = (add, overlays) {
                         overlays.toast_with_action(
-                            format!("Removed {name} from the bookmarks."),
-                            "Undo",
+                            crate::tr!("ui-files-places-removed", name = &name),
+                            &crate::tr!("ui-files-places-undo"),
                             move |_: ()| {
                                 self.change(loaded.clone(), path.clone(), true, name.clone())
                             },
@@ -438,7 +438,10 @@ impl Bookmarks {
                 }
                 Err(error) => {
                     if let Some(overlays) = overlays {
-                        overlays.toast(format!("The bookmarks could not be changed: {error}."));
+                        overlays.toast(crate::tr!(
+                            "ui-files-places-change-failed",
+                            error = error.to_string()
+                        ));
                     }
                 }
             }
@@ -466,7 +469,10 @@ impl Bookmarks {
                 }
                 Err(error) => {
                     if let Some(overlays) = overlays {
-                        overlays.toast(format!("The bookmark could not be renamed: {error}."));
+                        overlays.toast(crate::tr!(
+                            "ui-files-places-rename-failed",
+                            error = error.to_string()
+                        ));
                     }
                 }
             }
@@ -567,17 +573,25 @@ impl PlaceList {
                     draft.set(name.clone());
                     let source = source.clone();
                     overlays.show_dialog(
-                        dialog("Rename bookmark", "")
+                        dialog(&crate::tr!("ui-files-places-rename-title"), "")
                             .content(Element::from(
                                 text_field(draft, |_: String| {})
                                     .fill_width()
-                                    .placeholder("Bookmark name")
+                                    .placeholder(&crate::tr!("ui-files-places-bookmark-name"))
                                     .autofocus(),
                             ))
-                            .cancel("Cancel")
-                            .response("Rename", ResponseKind::Suggested, move |_: ()| {
-                                bookmarks.rename(source.clone(), path.clone(), draft.peek().clone())
-                            }),
+                            .cancel(&crate::tr!("ui-files-places-cancel"))
+                            .response(
+                                &crate::tr!("ui-files-places-rename"),
+                                ResponseKind::Suggested,
+                                move |_: ()| {
+                                    bookmarks.rename(
+                                        source.clone(),
+                                        path.clone(),
+                                        draft.peek().clone(),
+                                    )
+                                },
+                            ),
                     );
                 }
                 PlaceCmd::Release(how) => {
@@ -595,8 +609,8 @@ impl PlaceList {
                         return;
                     };
                     let said = match freya::clipboard::Clipboard::set(path.display().to_string()) {
-                        Ok(()) => "Copied.",
-                        Err(_) => "The path could not be copied.",
+                        Ok(()) => crate::tr!("ui-files-places-copied"),
+                        Err(_) => crate::tr!("ui-files-places-copy-failed"),
                     };
                     if let Some(overlays) = overlays {
                         overlays.toast(said);
@@ -939,8 +953,13 @@ impl Component for PlaceRow {
                 Some(text.clone()),
             ),
             UsageLine::NotResponding => (
-                Some(CAPTION.label(&tokens, "Not responding").max_lines(1).into()),
-                Some("Not responding".to_string()),
+                Some(
+                    CAPTION
+                        .label(&tokens, &crate::tr!("ui-files-places-not-responding"))
+                        .max_lines(1)
+                        .into(),
+                ),
+                Some(crate::tr!("ui-files-places-not-responding")),
             ),
             UsageLine::Text(text) => (
                 Some(

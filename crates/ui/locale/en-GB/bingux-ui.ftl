@@ -628,3 +628,18 @@ ui-files-omni-no-results = No results
 ui-files-omni-placeholder = Type a path or search
 ui-files-omni-label = Location and search
 ui-files-omni-close-action = Show the path as folders
+ui-files-places-title = Places
+# $name (String) - the bookmark's name
+ui-files-places-removed = Removed { $name } from the bookmarks.
+ui-files-places-undo = Undo
+# $error (String) - why the change failed
+ui-files-places-change-failed = The bookmarks could not be changed: { $error }.
+# $error (String) - why the rename failed
+ui-files-places-rename-failed = The bookmark could not be renamed: { $error }.
+ui-files-places-rename-title = Rename bookmark
+ui-files-places-bookmark-name = Bookmark name
+ui-files-places-cancel = Cancel
+ui-files-places-rename = Rename
+ui-files-places-copied = Copied.
+ui-files-places-copy-failed = The path could not be copied.
+ui-files-places-not-responding = Not responding
