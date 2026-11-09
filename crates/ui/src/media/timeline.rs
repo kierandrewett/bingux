@@ -196,6 +196,7 @@ impl Component for Timeline {
         let enabled = use_enabled(self.duration.is_some_and(|duration| duration > 0.0));
         let duration = self.duration.unwrap_or(0.0).max(0.0);
         let mut width = use_state(|| 0.0f32);
+        let mut row_width = use_state(|| 0.0f32);
         let mut hover = use_state(|| None::<f32>);
         let mut drag = use_state(|| None::<f64>);
         let mut show_length = use_state(|| false);
@@ -323,7 +324,11 @@ impl Component for Timeline {
                     builder.set_value(text.clone());
                 }
             })
-            .width(Size::flex(1.0))
+            .width(if self.times {
+                Size::px((*row_width.read() - 2.0 * Dim::Box24.px()).max(0.0))
+            } else {
+                Size::flex(1.0)
+            })
             .min_width(Size::px(0.0))
             .tw(&tokens, &[h(Dim::Control)])
             .maybe(!enabled, |element| element.opacity(DISABLED_OPACITY))
@@ -500,13 +505,21 @@ impl Component for Timeline {
             .component("Timeline")
             .text_direction(TextDirection::Ltr)
             .width(Size::fill())
+            .on_sized(move |event: Event<SizedEventData>| {
+                if (*row_width.peek() - event.area.width()).abs() > 0.01 {
+                    row_width.set(event.area.width());
+                }
+            })
             .tw(
                 &tokens,
-                &[flex_row(), grow_children(), items(Align::Center), gap(S2)],
+                &[flex_row(), grow_children(), items(Align::Center)],
             )
             .child(
                 rect()
-                    .tw(&tokens, &[w(label_width), flex_row(), justify(Align::End)])
+                    .tw(
+                        &tokens,
+                        &[w(label_width), flex_row(), justify(Align::End), pl(S2)],
+                    )
                     .child(NUMERIC.in_ink(ink).label(&tokens, format_time(shown))),
             )
             .child(track)
@@ -514,7 +527,7 @@ impl Component for Timeline {
                 rect()
                     .tw(
                         &tokens,
-                        &[w(label_width), flex_row(), justify(Align::Start)],
+                        &[w(label_width), flex_row(), justify(Align::Start), pr(S2)],
                     )
                     .a11y_role(AccessibilityRole::Button)
                     .a11y_alt(if *show_length.read() {
