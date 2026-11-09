@@ -85,6 +85,9 @@ impl Component for Week {
         };
 
         let selected = chosen().filter(|index| *index < count);
+        // On a phone the fixed columns leave the bar too little room at S3,
+        // so the high temperature runs off the card.
+        let gap_token = if is_compact() { S2 } else { S3 };
         let mut rows = rect().tw(&tokens, &[w_full(), flex_col()]);
         for (index, day) in days.iter().enumerate() {
             let sky = Sky::of(day.code.unwrap_or(3));
@@ -118,7 +121,7 @@ impl Component for Week {
                             h(Dim::Row),
                             flex_row(),
                             items(Align::Center),
-                            gap(S3),
+                            gap(gap_token),
                             bg(if lit {
                                 Paint::Selection
                             } else {
@@ -161,13 +164,25 @@ impl Component for Week {
                                 .text_align(TextAlign::Right),
                         ),
                     )
-                    .child(rect().width(Size::flex(1.0)).child(bar))
                     .child(
-                        rect().tw_layout(&[w(Dim::Box9)]).child(
-                            typography::BODY
-                                .label(&tokens, format::temperature(&units, day.high))
-                                .max_lines(1),
-                        ),
+                        rect()
+                            .tw(&tokens, &[w_flex()])
+                            .min_width(Size::px(0.0))
+                            .padding((0.0, Dim::Box9.px() + gap_token.px(), 0.0, 0.0))
+                            .child(bar),
+                    )
+                    .child(
+                        rect()
+                            .position(Position::new_absolute().top(0.0).right(0.0))
+                            .width(Size::px(Dim::Box9.px()))
+                            .height(Size::fill())
+                            .tw(&tokens, &[flex_row(), items(Align::Center)])
+                            .child(
+                                typography::BODY
+                                    .label(&tokens, format::temperature(&units, day.high))
+                                    .max_lines(1)
+                                    .text_align(TextAlign::Right),
+                            ),
                     ),
             );
         }

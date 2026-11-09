@@ -251,6 +251,8 @@ ui-shortcuts-search =
 ui-shortcuts-none-empty = No keyboard shortcuts in this window
 # $query (String) - what the person typed
 ui-shortcuts-no-match-empty = No shortcuts match “{ $query }”
+# Between two keys that each run the command (Ctrl+/ or Ctrl+?).
+ui-shortcut-or = or
 
 ## Key names on key caps and in shortcut labels. Use the names printed on
 ## keyboards sold for the language (German: Strg, Umschalt, Entf).

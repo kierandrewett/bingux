@@ -80,9 +80,11 @@ pub(crate) fn nice(min: f64, max: f64, target: usize, include_zero: bool) -> Dom
     }
     if hi - lo <= 0.0 {
         // One value gets a window of one nice step either side: the value
-        // sits in the middle and the ticks are whole steps around it.
+        // sits in the middle and the ticks are whole steps around it. Bars
+        // and areas rest on zero, so a flat zero window starts at zero.
         let window = lone(lo);
-        return grid(window.lo, window.hi, window.step, 0.0);
+        let floor = if include_zero { 0.0 } else { window.lo };
+        return grid(floor, window.hi, window.step, 0.0);
     }
     let step = nice_step((hi - lo) / target.max(1) as f64);
     grid(lo, hi, step, 0.0)
@@ -193,6 +195,14 @@ mod tests {
         let domain = nice(5.0, 5.0, 4, false);
         assert!(domain.lo < 5.0 && domain.hi > 5.0);
         assert!(domain.ticks.len() >= 2);
+    }
+
+    #[test]
+    fn flat_zero_bars_start_at_zero() {
+        let domain = nice(0.0, 0.0, 4, true);
+        assert_eq!(domain.lo, 0.0);
+        assert!(domain.hi > 0.0);
+        assert!(domain.ticks.iter().all(|tick| *tick >= 0.0));
     }
 
     #[test]

@@ -34,6 +34,26 @@ pub fn open_shortcuts(overlays: Overlays, commands: Commands) {
     ));
 }
 
+/// One part of a command's key column: a shortcut's key caps, or the word
+/// "or" between two shortcuts that each run the command.
+enum Alternative<'a> {
+    Keys(&'a Shortcut),
+    Or,
+}
+
+/// The key column of a command, with "or" between alternatives. Without it
+/// `Ctrl+/` and `Ctrl+?` next to each other read as one key listed twice.
+fn alternatives(shortcuts: &[Shortcut]) -> Vec<Alternative<'_>> {
+    let mut parts = Vec::with_capacity(shortcuts.len() * 2);
+    for (index, shortcut) in shortcuts.iter().enumerate() {
+        if index > 0 {
+            parts.push(Alternative::Or);
+        }
+        parts.push(Alternative::Keys(shortcut));
+    }
+    parts
+}
+
 /// A shortcut as key caps: one small key per modifier and the key, as the
 /// sheet and the palette show them. See [`key_caps`].
 #[derive(Clone, PartialEq)]
@@ -172,11 +192,22 @@ impl Component for ShortcutsSheet {
                             let keys: Element = match (line.shortcuts.first(), &line.keys_text) {
                                 (Some(_), _) => rect()
                                     .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3)])
-                                    .children(
-                                        line.shortcuts
-                                            .iter()
-                                            .map(|shortcut| key_caps(shortcut).into_element()),
-                                    )
+                                    .children(alternatives(&line.shortcuts).into_iter().map(
+                                        |part| {
+                                            match part {
+                                                Alternative::Keys(shortcut) => {
+                                                    key_caps(shortcut).into_element()
+                                                }
+                                                Alternative::Or => CAPTION
+                                                    .in_ink(Ink::Muted)
+                                                    .label(
+                                                        &tokens,
+                                                        crate::tr!("ui-shortcut-or").to_string(),
+                                                    )
+                                                    .into_element(),
+                                            }
+                                        },
+                                    ))
                                     .into_element(),
                                 (None, Some(text)) => CAPTION
                                     .in_ink(Ink::Muted)
@@ -304,5 +335,23 @@ mod tests {
         assert_eq!(by_key.len(), 1);
         assert_eq!(by_key[0].title, "Find");
         assert!(lines(&commands(), "zzz").is_empty());
+    }
+
+    #[test]
+    fn alternative_shortcuts_are_separated_by_or() {
+        let shortcuts = [
+            Shortcut::parse("Ctrl+/").unwrap(),
+            Shortcut::parse("Ctrl+?").unwrap(),
+        ];
+        let shown: Vec<String> = alternatives(&shortcuts)
+            .iter()
+            .map(|part| match part {
+                Alternative::Keys(shortcut) => shortcut.to_string(),
+                Alternative::Or => "or".to_string(),
+            })
+            .collect();
+        assert_eq!(shown, ["Ctrl+/", "or", "Ctrl+?"]);
+        assert_eq!(alternatives(&shortcuts[..1]).len(), 1);
+        assert!(alternatives(&[]).is_empty());
     }
 }

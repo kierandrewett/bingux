@@ -27,17 +27,6 @@ use crate::search;
 /// that is a request.
 const POLL: Duration = Duration::from_secs(600);
 
-const SHORTCUTS: &str = "\
-Ctrl+R, F5  Refresh\n\
-Ctrl+N  Add a location\n\
-Ctrl+Shift+C  Copy the conditions\n\
-Ctrl+Page Down, Ctrl+Page Up  Next and previous place\n\
-Left, Right  Look at each hour\n\
-Up, Down  Look at each day\n\
-Alt+Up, Alt+Down  Move a place in the list\n\
-Delete  Remove the place in the list\n\
-Ctrl+Shift+?  About Weather";
-
 /// What the page is about.
 #[derive(Clone, PartialEq)]
 enum Current {
@@ -248,48 +237,50 @@ impl Component for Shell {
             }
         };
 
-        let on_key = {
-            let copy = copy.clone();
-            let step = step.clone();
-            move |event: Event<KeyboardEventData>| {
-                let ctrl = event.modifiers.contains(Modifiers::CONTROL);
-                let shift = event.modifiers.contains(Modifiers::SHIFT);
-                let alt = event.modifiers.contains(Modifiers::ALT);
-                match &event.key {
-                    Key::Character(key)
-                        if ctrl && !alt && !shift && key.eq_ignore_ascii_case("r") =>
-                    {
-                        event.stop_propagation();
-                        hub.refresh_all();
-                    }
-                    Key::Named(NamedKey::F5) => {
-                        event.stop_propagation();
-                        hub.refresh_all();
-                    }
-                    Key::Character(key)
-                        if ctrl && !alt && !shift && key.eq_ignore_ascii_case("n") =>
-                    {
-                        event.stop_propagation();
-                        search::open(overlays, hub);
-                    }
-                    Key::Character(key)
-                        if ctrl && !alt && shift && key.eq_ignore_ascii_case("c") =>
-                    {
-                        event.stop_propagation();
-                        copy();
-                    }
-                    Key::Named(NamedKey::PageDown) if ctrl && !alt => {
-                        event.stop_propagation();
-                        step(1);
-                    }
-                    Key::Named(NamedKey::PageUp) if ctrl && !alt => {
-                        event.stop_propagation();
-                        step(-1);
-                    }
-                    _ => {}
-                }
-            }
-        };
+        // The window's commands. The menu, the palette and the shortcuts sheet
+        // list them from here, and the router runs their keys. The hours, the
+        // days and Delete are keys a view handles itself: listed for the sheet.
+        let copy_enabled = conditions.is_some();
+        use_window_commands(vec![
+            Command::new("weather.refresh", "Refresh", move |_| hub.refresh_all())
+                .shortcut("Ctrl+R")
+                .shortcut("F5")
+                .group(CommandGroup::File),
+            Command::new("weather.add-location", "Add location…", move |_| {
+                search::open(overlays, hub)
+            })
+            .shortcut("Ctrl+N")
+            .group(CommandGroup::File),
+            Command::new("weather.copy-conditions", "Copy conditions", move |_| {
+                copy()
+            })
+            .shortcut("Ctrl+Shift+C")
+            .enabled(copy_enabled)
+            .group(CommandGroup::Edit),
+            Command::new("weather.next-place", "Next place", {
+                let step = step.clone();
+                move |_| step(1)
+            })
+            .shortcut("Ctrl+PageDown")
+            .group(CommandGroup::Go)
+            .hidden_from_menu(),
+            Command::new("weather.previous-place", "Previous place", move |_| {
+                step(-1)
+            })
+            .shortcut("Ctrl+PageUp")
+            .group(CommandGroup::Go)
+            .hidden_from_menu(),
+            Command::key_hint("weather.hours", "Look at each hour", "Left, Right")
+                .group(CommandGroup::Go),
+            Command::key_hint("weather.days", "Look at each day", "Up, Down")
+                .group(CommandGroup::Go),
+            Command::key_hint(
+                "weather.remove-place",
+                "Remove the place in the list",
+                "Delete",
+            )
+            .group(CommandGroup::Edit),
+        ]);
 
         // The menu.
         let automatic = settings.units.is_none();
@@ -359,20 +350,7 @@ impl Component for Shell {
             ],
         );
         let use_location = settings.use_location;
-        let mut menu = vec![
-            menu_item("Refresh", move |_| hub.refresh_all()).shortcut("Ctrl+R"),
-            menu_item("Add location…", move |_| search::open(overlays, hub)).shortcut("Ctrl+N"),
-        ];
-        let mut copy_item = menu_item("Copy conditions", {
-            let copy = copy.clone();
-            move |_| copy()
-        })
-        .shortcut("Ctrl+Shift+C");
-        if conditions.is_none() {
-            copy_item = copy_item.disabled();
-        }
-        menu.push(copy_item);
-        menu.push(menu_separator());
+        let mut menu = Vec::new();
         menu.push(units_menu);
         menu.push(
             menu_item("Use my location", move |_| hub.use_location(!use_location))
@@ -387,9 +365,6 @@ impl Component for Shell {
         }
         menu.push(lookup_item);
         menu.push(menu_separator());
-        menu.push(menu_item("Keyboard shortcuts", move |_| {
-            overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
-        }));
 
         // The header. The hero names the place, so the header does not say it
         // again: it names the app over the list and is empty over a page. (The
@@ -452,7 +427,7 @@ impl Component for Shell {
                             .child(primary_button("Use approximate location", move |_| {
                                 hub.set_network(true)
                             }))
-                            .child(action_button("Search for a city", move |_| {
+                            .child(action_button("Search by city", move |_| {
                                 hub.change(|settings| settings.network_lookup = Some(false));
                                 search::open(overlays, hub);
                             })),
@@ -500,7 +475,6 @@ impl Component for Shell {
         rect()
             .component("Weather")
             .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
-            .on_global_key_down(on_key)
             .child(header)
             .child(body)
     }
