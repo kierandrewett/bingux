@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#62a0ea"/>
+            <stop offset="1" stop-color="#3584e4"/>
+        </linearGradient>
+        <radialGradient id="sun" cx="0.4" cy="0.35" r="0.75">
+            <stop offset="0" stop-color="#fff0a0"/>
+            <stop offset="1" stop-color="#ffab2e"/>
+        </radialGradient>
+        <linearGradient id="cloud" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#d6e0ee"/>
+        </linearGradient>
+        <clipPath id="panel">
+            <rect height="104" rx="16" width="104" x="12" y="8"/>
+        </clipPath>
+    </defs>
+    <!-- The lower edge of the panel, as the Adwaita app icons draw depth. -->
+    <rect fill="#1a5fb4" height="104" rx="16" width="104" x="12" y="16"/>
+    <rect fill="url(#sky)" height="104" rx="16" width="104" x="12" y="8"/>
+    <rect fill="#ffffff" height="1.5" opacity="0.7" rx="0.75" width="88" x="20" y="8.5"/>
+    <g clip-path="url(#panel)">
+        <!-- The sun, with its rays, behind the cloud. -->
+        <g stroke="#ffbf33" stroke-linecap="round" stroke-width="5">
+            <path d="M84 20v-4M84 52v4M52 36h4M112 36h-4M61.4 13.4l2.8 2.8M106.6 58.6l-2.8-2.8M106.6 13.4l-2.8 2.8M61.4 58.6l2.8-2.8"/>
+        </g>
+        <circle cx="84" cy="36" r="17" fill="url(#sun)"/>
+        <!-- The cloud's shadow, then the cloud. -->
+        <g fill="#1a5fb4" opacity="0.25" transform="translate(0 3)">
+            <circle cx="46" cy="82" r="16"/>
+            <circle cx="66" cy="72" r="22"/>
+            <circle cx="88" cy="84" r="15"/>
+            <rect height="22" rx="11" width="76" x="28" y="80"/>
+        </g>
+        <g fill="url(#cloud)">
+            <circle cx="46" cy="82" r="16"/>
+            <circle cx="66" cy="72" r="22"/>
+            <circle cx="88" cy="84" r="15"/>
+            <rect height="22" rx="11" width="76" x="28" y="80"/>
+        </g>
+    </g>
+</svg>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Weather</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Weather</name>
+  <summary>Forecasts for where you are and the cities you add</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Weather shows the conditions now, the next 24 hours and the next ten days
+      for the place the computer is in and for the cities you add. It needs no
+      account and no setup.
+    </p>
+    <ul>
+      <li>A sky that follows the conditions, and a forecast for each hour and each day</li>
+      <li>UV index, wind, sunrise and sunset, the moon, humidity, pressure and visibility</li>
+      <li>Air quality, and the rain expected in the next hours</li>
+      <li>Units that follow your locale, or your own choice</li>
+      <li>The last forecast, with its age, when there is no network</li>
+    </ul>
+    <p>
+      Weather data is by Open-Meteo.com, licensed CC BY 4.0. The position comes
+      from the desktop's location service, or from the network address when
+      there is none; the window says which.
+    </p>
+  </description>
+  <launchable type="desktop-id">bingux-weather.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-weather</binary>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+    <internet>always</internet>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-09"/>
+  </releases>
+</component>

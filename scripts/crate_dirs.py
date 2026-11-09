@@ -10,9 +10,11 @@ from pathlib import Path
 CRATE_DIRS = {
     "bingux-settings": "apps/settings",
     "bingux-files-app": "apps/files",
+    "bingux-weather-app": "apps/weather",
     "bingux-taxonomy": "apps/taxonomy",
     "bingux-ui": "crates/ui",
     "bingux-files": "crates/files",
+    "bingux-weather": "crates/weather",
     "bingux-preview-core": "crates/preview-core",
     "bingux-search": "crates/search",
     "bingux-data-usage": "crates/data-usage",
