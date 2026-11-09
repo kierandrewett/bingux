@@ -5,21 +5,19 @@
 use std::time::Duration;
 
 use crate::system::{self, CommandError, CommandResult};
+use bingux_ui::prelude::tr;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Shown when the desktop session is not running, so nothing can be read.
 pub const NOT_RUNNING: &str = "The desktop is not running. Sign out and sign in again.";
 
-/// Shown beside a setting that the desktop configuration controls.
-pub const MANAGED: &str = "Set in your desktop configuration";
-
 /// A row for a setting the desktop configuration controls: read only, marked
 /// "Managed", with `value` already in words (see [`on_off`] and [`millis`]).
 pub fn managed_row(title: &str, value: impl Into<String>) -> crate::ui::Row {
     crate::ui::row(title)
-        .subtitle(MANAGED)
-        .badge("Managed")
+        .subtitle(tr!("gnoblin-managed-subtitle"))
+        .badge(tr!("gnoblin-managed-badge"))
         .value(value)
 }
 
@@ -294,9 +292,7 @@ impl Parser<'_> {
 }
 
 fn parse_error(_error: String) -> CommandError {
-    CommandError(
-        "Could not read the desktop settings. Restart the desktop and try again.".to_string(),
-    )
+    CommandError(tr!("gnoblin-settings-read-error").into())
 }
 
 /// Runs `gnoblinctl args`. A missing compositor socket becomes the short

@@ -887,3 +887,23 @@ settings-desktop-top-bar = Top bar
 settings-desktop-show-system-usage = Show system usage
 settings-desktop-show-clock-seconds = Show seconds in the clock
 settings-desktop-control-centre = Control Centre
+
+## Settings Leftovers
+
+apps-category-internet = Internet
+apps-category-email = Email
+apps-category-office = Office
+apps-category-graphics = Graphics
+apps-category-music-audio = Music and audio
+apps-category-video = Video
+apps-category-media = Media
+apps-category-development = Development
+apps-category-games = Games
+apps-category-education = Education
+apps-category-science = Science
+apps-category-system = System
+apps-category-utilities = Utilities
+gnoblin-managed-subtitle = Set in your desktop configuration
+gnoblin-managed-badge = Managed
+gnoblin-settings-read-error = Could not read the desktop settings. Restart the desktop and try again.
+sound-volume-read-error = Could not read the volume. Try again in a moment.
