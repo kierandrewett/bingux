@@ -9,7 +9,7 @@ mod timezone_map;
 
 use std::time::Duration;
 
-use bingux_ui::prelude::PageHead;
+use bingux_ui::prelude::{PageHead, tr};
 use bingux_ui::runtime::optimistic_then;
 use bingux_ui::shell::{MenuItem, form_dialog, open_form};
 use bingux_ui::style::*;
@@ -104,12 +104,10 @@ fn parse_timedatectl(text: &str) -> Result<(String, bool), CommandError> {
             _ => {}
         }
     }
-    let timezone = timezone.filter(|zone| !zone.is_empty()).ok_or_else(|| {
-        CommandError("Could not read the time zone. Try again in a moment.".into())
-    })?;
-    let ntp = ntp.ok_or_else(|| {
-        CommandError("Could not read the clock setting. Try again in a moment.".into())
-    })?;
+    let timezone = timezone
+        .filter(|zone| !zone.is_empty())
+        .ok_or_else(|| CommandError(tr!("datetime-read-timezone-error").into()))?;
+    let ntp = ntp.ok_or_else(|| CommandError(tr!("datetime-read-clock-error").into()))?;
     Ok((timezone, ntp))
 }
 
@@ -185,7 +183,7 @@ fn read_now() -> Result<Now, String> {
     // The C library's local time, read in this process: the page asks once a
     // second, and a `date` process per tick is a fork and exec for nothing.
     // `tzset` picks up a zone changed since the last tick.
-    let failed = || "Could not read the time. Try again in a moment.".to_string();
+    let failed = || tr!("datetime-read-time-error");
     // SAFETY: `time` accepts a null pointer, `localtime_r` and `strftime` write
     // only into the zeroed `tm` and the 64-byte buffer owned here, and the
     // buffer is NUL-terminated by `strftime` before it is read.
@@ -248,19 +246,27 @@ fn clock_text(now: &Now, twelve_hour: bool, seconds: bool) -> String {
         text.push_str(&format!(":{:02}", now.second));
     }
     if twelve_hour {
-        text.push_str(if now.hour < 12 { " AM" } else { " PM" });
+        let meridiem = if now.hour < 12 {
+            tr!("datetime-am")
+        } else {
+            tr!("datetime-pm")
+        };
+        text.push(' ');
+        text.push_str(&meridiem);
     }
     text
 }
 
 /// The date line under the clock, such as `Friday, 23 October 2026`.
 fn date_text(now: &Now) -> String {
-    let month = usize::try_from(now.month - 1)
-        .ok()
-        .and_then(|index| MONTHS.get(index))
-        .copied()
-        .unwrap_or("");
-    format!("{}, {} {month} {}", now.weekday, now.day, now.year)
+    let month = month_name(now.month);
+    tr!(
+        "datetime-date-line",
+        weekday = now.weekday.as_str(),
+        day = now.day,
+        month = month.as_str(),
+        year = now.year
+    )
 }
 
 fn flag(on: bool) -> &'static str {
@@ -302,7 +308,7 @@ fn reload(ctx: Ctx) {
 /// success reloads the model from the backend.
 fn apply(
     ctx: Ctx,
-    failed: &'static str,
+    failed: String,
     edit: impl FnOnce(&mut Model),
     work: impl FnOnce() -> CommandResult + Send + 'static,
 ) {
@@ -328,13 +334,18 @@ fn apply(
 
 /// The right-click item that flips a switch: "Turn on" while it is off.
 fn toggle_item(on: bool, set: impl Fn(bool) + 'static) -> MenuItem {
-    menu_item(if on { "Turn off" } else { "Turn on" }, move |_| set(!on))
+    let label = if on {
+        tr!("datetime-turn-off")
+    } else {
+        tr!("datetime-turn-on")
+    };
+    menu_item(&label, move |_| set(!on))
 }
 
 fn set_ntp(ctx: Ctx, on: bool) {
     apply(
         ctx,
-        "Could not change automatic time. Try again.",
+        tr!("datetime-auto-time-error"),
         move |model| model.ntp = on,
         move || backend::run("timedatectl", &["set-ntp", flag(on)]),
     );
@@ -344,7 +355,7 @@ fn set_clock_format(ctx: Ctx, key: String) {
     let quoted = format!("'{key}'");
     apply(
         ctx,
-        "Could not change the clock format. Try again.",
+        tr!("datetime-clock-format-error"),
         move |model| model.clock_format = key,
         move || backend::gsettings_set(INTERFACE, "clock-format", &quoted),
     );
@@ -353,7 +364,7 @@ fn set_clock_format(ctx: Ctx, key: String) {
 fn set_seconds(ctx: Ctx, on: bool) {
     apply(
         ctx,
-        "Could not change the seconds setting. Try again.",
+        tr!("datetime-seconds-error"),
         move |model| model.clock_seconds = Some(on),
         move || {
             backend::run(
@@ -367,7 +378,7 @@ fn set_seconds(ctx: Ctx, on: bool) {
 fn set_weekday(ctx: Ctx, on: bool) {
     apply(
         ctx,
-        "Could not change the weekday setting. Try again.",
+        tr!("datetime-weekday-error"),
         move |model| model.show_weekday = Some(on),
         move || backend::gsettings_set(INTERFACE, "clock-show-weekday", flag(on)),
     );
@@ -376,7 +387,7 @@ fn set_weekday(ctx: Ctx, on: bool) {
 fn set_show_date(ctx: Ctx, on: bool) {
     apply(
         ctx,
-        "Could not change the date setting. Try again.",
+        tr!("datetime-date-setting-error"),
         move |model| model.show_date = Some(on),
         move || backend::gsettings_set(INTERFACE, "clock-show-date", flag(on)),
     );
@@ -385,7 +396,7 @@ fn set_show_date(ctx: Ctx, on: bool) {
 fn set_auto_zone(ctx: Ctx, on: bool) {
     apply(
         ctx,
-        "Could not change automatic time zone. Try again.",
+        tr!("datetime-auto-zone-error"),
         move |model| model.auto_zone = Some(on),
         move || backend::gsettings_set(DATETIME, "automatic-timezone", flag(on)),
     );
@@ -394,7 +405,7 @@ fn set_auto_zone(ctx: Ctx, on: bool) {
 fn set_week_numbers(ctx: Ctx, on: bool) {
     apply(
         ctx,
-        "Could not change the week numbers setting. Try again.",
+        tr!("datetime-week-numbers-error"),
         move |model| model.week_numbers = Some(on),
         move || backend::gsettings_set(CALENDAR, "show-weekdate", flag(on)),
     );
@@ -405,34 +416,38 @@ fn pick_zone(ctx: Ctx, zone: String) {
     let work = zone.clone();
     apply(
         ctx,
-        "Could not set the time zone. Try again.",
+        tr!("datetime-set-zone-error"),
         move |model| model.timezone = zone,
         move || set_timezone(&work),
     );
 }
 
 /// Copies `text` to the clipboard and says so with a toast.
-fn copy_text(overlays: Overlays, text: String, done: &'static str) {
+fn copy_text(overlays: Overlays, text: String, done: String) {
     match freya::clipboard::Clipboard::set(text) {
         Ok(()) => overlays.toast(done),
-        Err(_) => overlays.toast("Could not copy the time zone"),
+        Err(_) => overlays.toast(tr!("datetime-copy-zone-error")),
     }
 }
 
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
+/// The month name for `month` (1 to 12), or an empty string outside that range.
+fn month_name(month: i64) -> String {
+    match month {
+        1 => tr!("datetime-month-january"),
+        2 => tr!("datetime-month-february"),
+        3 => tr!("datetime-month-march"),
+        4 => tr!("datetime-month-april"),
+        5 => tr!("datetime-month-may"),
+        6 => tr!("datetime-month-june"),
+        7 => tr!("datetime-month-july"),
+        8 => tr!("datetime-month-august"),
+        9 => tr!("datetime-month-september"),
+        10 => tr!("datetime-month-october"),
+        11 => tr!("datetime-month-november"),
+        12 => tr!("datetime-month-december"),
+        _ => String::new(),
+    }
+}
 
 /// Days in `month` (1 to 12) of `year`.
 fn days_in_month(year: i64, month: i64) -> i64 {
@@ -477,7 +492,7 @@ fn open_date_sheet(form: DateForm, now: State<Option<Result<Now, String>>>) {
     }
     open_form(
         form.ctx.overlays,
-        "Set date and time",
+        &tr!("datetime-set-date-title"),
         DateBody { form },
         None,
     );
@@ -511,9 +526,7 @@ fn apply_date(form: DateForm) {
                 }
                 Err(failure) => {
                     eprintln!("datetime: setting the time failed: {}", failure.0);
-                    form.ctx
-                        .overlays
-                        .toast("Could not set the date and time. Try again.");
+                    form.ctx.overlays.toast(tr!("datetime-set-date-error"));
                 }
             }
         },
@@ -540,10 +553,8 @@ impl Component for DateBody {
         let form = self.form;
         let setting = self.form.setting;
         let last_day = days_in_month(year(), month());
-        let month_options = MONTHS
-            .iter()
-            .enumerate()
-            .map(|(index, name)| ((index + 1).to_string(), name.to_string()))
+        let month_options = (1..=12)
+            .map(|index| (index.to_string(), month_name(index)))
             .collect();
         let body = rect()
             .tw(
@@ -551,38 +562,41 @@ impl Component for DateBody {
                 &[flex_col(), w_full(), gap(S4)],
             )
             .child(
-                Group::titled("Date")
+                Group::titled(&tr!("datetime-date-group"))
                     .row(form_row(
-                        "Day",
+                        &tr!("datetime-day"),
                         stepper(day().min(last_day), move |next| day.set(next)).range(1, last_day),
                     ))
                     .row(form_row(
-                        "Month",
+                        &tr!("datetime-month"),
                         dropdown(month_options, month().to_string(), move |key: String| {
                             month.set(key.parse().unwrap_or(1))
                         })
                         .min_width(Dim::Field),
                     ))
                     .row(form_row(
-                        "Year",
+                        &tr!("datetime-year"),
                         stepper(year(), move |next| year.set(next)).range(2000, 2099),
                     )),
             )
             .child(
-                Group::titled("Time")
+                Group::titled(&tr!("datetime-time-group"))
                     .row(form_row(
-                        "Hour",
+                        &tr!("datetime-hour"),
                         stepper(hour(), move |next| hour.set(next)).range(0, 23),
                     ))
                     .row(form_row(
-                        "Minute",
+                        &tr!("datetime-minute"),
                         stepper(minute(), move |next| minute.set(next)).range(0, 59),
                     )),
             );
-        form_dialog("Set date and time", body, "Set", move |_: ()| {
-            apply_date(form)
-        })
-        .busy(setting().then(|| "Setting the date and time…".to_string()))
+        form_dialog(
+            &tr!("datetime-set-date-title"),
+            body,
+            &tr!("datetime-set-action"),
+            move |_: ()| apply_date(form),
+        )
+        .busy(setting().then(|| tr!("datetime-setting-date")))
         .stays_open()
     }
 }
@@ -676,9 +690,10 @@ impl Component for DateTimePage {
             None => placeholder(),
             Some(Ok(data)) => data,
             Some(Err(e)) => {
-                return page_column()
-                    .child(PageHead::new())
-                    .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)));
+                return page_column().child(PageHead::new()).child(
+                    status(Status::Error(e.0))
+                        .action(&tr!("datetime-try-again"), move |_| reload(ctx)),
+                );
             }
         };
 
@@ -695,66 +710,70 @@ impl Component for DateTimePage {
 
         // Shown only while "Set automatically" is off, so it needs no subtitle
         // or disabled state of its own.
-        let time_row = row("Set date and time")
+        let time_row = row(tr!("datetime-set-date-title"))
             .leading(Icon::Clock)
             .navigates()
             .on_press(move |_| open_date_sheet(form, now))
-            .context_menu(vec![menu_item("Set date and time…", move |_| {
+            .context_menu(vec![menu_item(&tr!("datetime-set-date-menu"), move |_| {
                 open_date_sheet(form, now)
             })]);
         let auto_zone_on = model_data.auto_zone.unwrap_or(false);
         let zone = model_data.timezone.clone();
-        let zone_row = row("Time zone")
+        let zone_row = row(tr!("datetime-time-zone"))
             .subtitle(format!("UTC{}", model_data.utc_offset))
             .value(zone_label(&model_data.timezone))
             .navigates()
             .enabled(!auto_zone_on)
             .on_press(move |_| router.open(routes::time_zone()))
             .context_menu(vec![
-                menu_item("Change time zone", move |_| {
+                menu_item(&tr!("datetime-change-zone"), move |_| {
                     router.open(routes::time_zone())
                 }),
-                menu_item("Copy time zone", move |_| {
-                    copy_text(overlays, zone.clone(), "Time zone copied")
+                menu_item(&tr!("datetime-copy-zone"), move |_| {
+                    copy_text(overlays, zone.clone(), tr!("datetime-zone-copied"))
                 }),
             ]);
 
-        let other_format = if twelve_hour { "24h" } else { "12h" }.to_string();
+        let other_format = (if twelve_hour { "24h" } else { "12h" }).to_string();
+        let other_label = if twelve_hour {
+            tr!("datetime-use-24-hour")
+        } else {
+            tr!("datetime-use-12-hour")
+        };
         let format_row = choice_row(
-            "Clock format",
+            &tr!("datetime-clock-format"),
             vec![
-                ("24h".to_string(), "24-hour".to_string()),
-                ("12h".to_string(), "12-hour".to_string()),
+                ("24h".to_string(), tr!("datetime-format-24")),
+                ("12h".to_string(), tr!("datetime-format-12")),
             ],
             if twelve_hour { "12h" } else { "24h" },
             move |key: String| set_clock_format(ctx, key),
         )
-        .context_menu(vec![menu_item(
-            if twelve_hour {
-                "Use 24-hour"
-            } else {
-                "Use 12-hour"
-            },
-            move |_| set_clock_format(ctx, other_format.clone()),
-        )]);
+        .context_menu(vec![menu_item(&other_label, move |_| {
+            set_clock_format(ctx, other_format.clone())
+        })]);
 
         let page = page_column()
             .child(PageHead::new())
             .child(
-                Group::titled("Clock")
+                Group::titled(&tr!("datetime-clock"))
                     .row(clock_face)
                     .row(
-                        switch_row("Set automatically", ntp, move |next: bool| {
-                            set_ntp(ctx, next)
-                        })
+                        switch_row(
+                            &tr!("datetime-set-automatically"),
+                            ntp,
+                            move |next: bool| set_ntp(ctx, next),
+                        )
                         .context_menu(vec![toggle_item(ntp, move |next| set_ntp(ctx, next))])
                         .nested(!ntp, vec![time_row.into()]),
                     )
                     .rows(model_data.auto_zone.map(|on| {
                         Element::from(
-                            switch_row("Set time zone automatically", on, move |next: bool| {
-                                set_auto_zone(ctx, next)
-                            })
+                            switch_row(
+                                &tr!("datetime-set-zone-automatically"),
+                                on,
+                                move |next: bool| set_auto_zone(ctx, next),
+                            )
                             .context_menu(vec![toggle_item(on, move |next| {
                                 set_auto_zone(ctx, next)
                             })]),
@@ -763,11 +782,11 @@ impl Component for DateTimePage {
                     .row(zone_row),
             )
             .child(
-                Group::titled("Format")
+                Group::titled(&tr!("datetime-format-group"))
                     .row(format_row)
                     .rows(model_data.clock_seconds.map(|on| {
                         Element::from(
-                            switch_row("Show seconds", on, move |next: bool| {
+                            switch_row(&tr!("datetime-show-seconds"), on, move |next: bool| {
                                 set_seconds(ctx, next)
                             })
                             .context_menu(vec![toggle_item(on, move |next| {
@@ -777,7 +796,7 @@ impl Component for DateTimePage {
                     }))
                     .rows(model_data.show_weekday.map(|on| {
                         Element::from(
-                            switch_row("Show weekday in the top bar", on, move |next: bool| {
+                            switch_row(&tr!("datetime-show-weekday"), on, move |next: bool| {
                                 set_weekday(ctx, next)
                             })
                             .context_menu(vec![toggle_item(on, move |next| {
@@ -787,7 +806,7 @@ impl Component for DateTimePage {
                     }))
                     .rows(model_data.show_date.map(|on| {
                         Element::from(
-                            switch_row("Show date in the top bar", on, move |next: bool| {
+                            switch_row(&tr!("datetime-show-date"), on, move |next: bool| {
                                 set_show_date(ctx, next)
                             })
                             .context_menu(vec![toggle_item(on, move |next| {
@@ -798,7 +817,7 @@ impl Component for DateTimePage {
                     .rows(model_data.week_numbers.map(|on| {
                         Element::from(
                             switch_row(
-                                "Show week numbers in the calendar",
+                                &tr!("datetime-show-week-numbers"),
                                 on,
                                 move |next: bool| set_week_numbers(ctx, next),
                             )
@@ -879,12 +898,14 @@ impl Component for TimeZonePage {
                 });
             let set = zone.clone();
             let copy = zone.clone();
-            let mut set_item = menu_item("Set time zone", move |_| pick_zone(ctx, set.clone()));
+            let mut set_item = menu_item(&tr!("datetime-set-zone"), move |_| {
+                pick_zone(ctx, set.clone())
+            });
             if chosen {
                 set_item = set_item.disabled();
             }
-            let copy_item = menu_item("Copy time zone", move |_| {
-                copy_text(overlays, copy.clone(), "Time zone copied")
+            let copy_item = menu_item(&tr!("datetime-copy-zone"), move |_| {
+                copy_text(overlays, copy.clone(), tr!("datetime-zone-copied"))
             });
             Element::from(
                 item.on_press(move |_| pick_zone(ctx, zone.clone()))
@@ -902,10 +923,10 @@ impl Component for TimeZonePage {
             Some(Ok(_)) if model_ready => {
                 group = group.rows(rows);
                 if matching.is_empty() {
-                    group = group.row(status(Status::Empty("No matching cities".to_string())));
+                    group = group.row(status(Status::Empty(tr!("datetime-no-matching-cities"))));
                 }
                 if hidden > 0 {
-                    page_tail = Some(caption(format!("{hidden} more. Type to narrow the list.")));
+                    page_tail = Some(caption(&tr!("datetime-more-zones", count = hidden)));
                 }
             }
             _ => {
@@ -917,7 +938,11 @@ impl Component for TimeZonePage {
         page_column()
             .child(PageHead::new())
             .child(TimeZoneMap::new(current.clone(), ctx))
-            .child(search_field(query, |_| {}).placeholder("City").fill_width())
+            .child(
+                search_field(query, |_| {})
+                    .placeholder(tr!("datetime-city-placeholder"))
+                    .fill_width(),
+            )
             .child(group)
             .maybe_child(page_tail)
     }

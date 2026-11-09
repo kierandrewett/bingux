@@ -323,3 +323,77 @@ sound-effect-group-modes = Modes
 sound-effect-group-level = Level
 sound-effect-group-frequency = Frequency
 sound-effect-group-settings = Settings
+
+## Date and time
+
+# Error text for reads and writes of the clock, shown as a status or toast.
+datetime-read-timezone-error = Could not read the time zone. Try again in a moment.
+datetime-read-clock-error = Could not read the clock setting. Try again in a moment.
+datetime-read-time-error = Could not read the time. Try again in a moment.
+datetime-set-time-error = Could not set the time. Try again.
+datetime-auto-time-error = Could not change automatic time. Try again.
+datetime-clock-format-error = Could not change the clock format. Try again.
+datetime-seconds-error = Could not change the seconds setting. Try again.
+datetime-weekday-error = Could not change the weekday setting. Try again.
+datetime-date-setting-error = Could not change the date setting. Try again.
+datetime-auto-zone-error = Could not change automatic time zone. Try again.
+datetime-week-numbers-error = Could not change the week numbers setting. Try again.
+datetime-set-zone-error = Could not set the time zone. Try again.
+datetime-copy-zone-error = Could not copy the time zone
+datetime-zone-copied = Time zone copied
+datetime-set-date-error = Could not set the date and time. Try again.
+datetime-try-again = Try again
+# The clock settings page and its set-date sheet.
+datetime-set-date-title = Set date and time
+datetime-set-date-menu = Set date and time…
+datetime-date-group = Date
+datetime-day = Day
+datetime-month = Month
+datetime-year = Year
+datetime-time-group = Time
+datetime-hour = Hour
+datetime-minute = Minute
+datetime-set-action = Set
+datetime-setting-date = Setting the date and time…
+datetime-month-january = January
+datetime-month-february = February
+datetime-month-march = March
+datetime-month-april = April
+datetime-month-may = May
+datetime-month-june = June
+datetime-month-july = July
+datetime-month-august = August
+datetime-month-september = September
+datetime-month-october = October
+datetime-month-november = November
+datetime-month-december = December
+datetime-turn-on = Turn on
+datetime-turn-off = Turn off
+datetime-time-zone = Time zone
+datetime-change-zone = Change time zone
+datetime-copy-zone = Copy time zone
+datetime-set-zone = Set time zone
+datetime-clock = Clock
+datetime-clock-format = Clock format
+datetime-format-24 = 24-hour
+datetime-format-12 = 12-hour
+datetime-use-24-hour = Use 24-hour
+datetime-use-12-hour = Use 12-hour
+datetime-set-automatically = Set automatically
+datetime-set-zone-automatically = Set time zone automatically
+datetime-format-group = Format
+datetime-show-seconds = Show seconds
+datetime-show-weekday = Show weekday in the top bar
+datetime-show-date = Show date in the top bar
+datetime-show-week-numbers = Show week numbers in the calendar
+datetime-no-matching-cities = No matching cities
+# $count (Number) - how many zones are hidden below the list
+datetime-more-zones = { NUMBER($count) } more. Type to narrow the list.
+datetime-city-placeholder = City
+# $time (String) - the local time in the zone, such as 09:05
+datetime-local-time = Local time { $time }
+datetime-save-error = Could not save the change. Try again.
+datetime-am = AM
+datetime-pm = PM
+# $weekday (String) - the weekday name, such as Friday; $day (Number) - day of the month; $month (String) - the month name; $year (Number) - the year
+datetime-date-line = { $weekday }, { $day } { $month } { $year }

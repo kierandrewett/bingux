@@ -4,6 +4,7 @@
 
 use std::sync::LazyLock;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 use bingux_ui::surface::{over, use_tokens};
 use bingux_ui::theme::Tokens;
@@ -305,7 +306,7 @@ impl Component for Tooltip {
         if let Some(time) = &self.time {
             tip = tip.child(styled_label(
                 typography::CAPTION,
-                format!("Local time {time}"),
+                tr!("datetime-local-time", time = time.as_str()),
             ));
         }
         tip
