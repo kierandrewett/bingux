@@ -656,7 +656,9 @@ fn load_displays() -> Result<Displays, CommandError> {
             reason: "Display settings cannot be changed right now.".to_string(),
             records,
         }),
-        Err(_) => Err(CommandError("Display settings could not be read.".into())),
+        Err(_) => Err(CommandError(
+            "Could not read the display settings. Try again in a moment.".into(),
+        )),
     }
 }
 
@@ -912,7 +914,9 @@ fn load_night() -> Result<Night, CommandError> {
         .split_whitespace()
         .last()
         .and_then(|value| value.parse::<u32>().ok())
-        .ok_or_else(|| CommandError("Night light settings could not be read.".into()))?;
+        .ok_or_else(|| {
+            CommandError("Could not read the night light settings. Try again in a moment.".into())
+        })?;
     Ok(Night {
         enabled: enabled.trim() == "true",
         kelvin,
@@ -924,9 +928,9 @@ fn load_night() -> Result<Night, CommandError> {
 
 /// Reads a schedule hour such as `18.0`.
 fn hours(text: &str) -> Result<f64, CommandError> {
-    text.trim()
-        .parse::<f64>()
-        .map_err(|_| CommandError("Night light settings could not be read.".into()))
+    text.trim().parse::<f64>().map_err(|_| {
+        CommandError("Could not read the night light settings. Try again in a moment.".into())
+    })
 }
 
 /// Maps 1700..4700 K onto the slider's 0..100.

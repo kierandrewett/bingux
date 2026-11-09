@@ -27,7 +27,10 @@ fn busctl(args: &[&str]) -> Result<String, String> {
             std::io::ErrorKind::NotFound => {
                 "Peers cannot be read because busctl is not installed.".to_string()
             }
-            _ => format!("busctl could not be started: {error}."),
+            _ => {
+                eprintln!("bingux-settings: busctl could not start: {error}");
+                "Could not read the VPN settings. Try again in a moment.".to_string()
+            }
         })?;
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_string());
