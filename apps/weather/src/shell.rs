@@ -10,6 +10,7 @@
 use std::time::Duration;
 
 use bingux_ui::component::ComponentName;
+use bingux_ui::location::Source;
 use bingux_ui::prelude::*;
 use bingux_ui::task::{Resource, use_polled_resource, use_resource};
 use bingux_weather::store::HERE;
@@ -117,30 +118,51 @@ impl Component for Shell {
         let units = settings.units();
 
         // Where the computer is. The last place found is shown at once, and a
-        // new lookup replaces it when it lands.
+        // new lookup replaces it when it lands. The network address is used
+        // only with the person's agreement, so a place kept from an earlier
+        // network lookup is not shown without it.
+        let network = settings.network_lookup == Some(true);
         let located = use_resource(
             LocateKey {
                 on: settings.use_location,
+                network,
                 attempt: *hub.attempt.read(),
             },
             load::locate,
         );
-        let cached = boot.here.clone();
+        let allowed = |here: &Here| network || here.source != Source::Network.id();
+        let cached = boot.here.clone().filter(allowed);
         let here = if !settings.use_location {
             HereView::Off
         } else {
             located.with(|state| match state {
-                Resource::Ready(found) | Resource::Refreshing(found) => {
+                Resource::Ready(found) | Resource::Refreshing(found) if allowed(found) => {
                     HereView::Found(found.clone())
                 }
-                Resource::Loading => cached.clone().map_or(HereView::Locating, HereView::Found),
-                Resource::Error(code) => cached
-                    .clone()
-                    .map_or_else(|| HereView::Failed(code.clone()), HereView::Found),
+                Resource::Ready(_) | Resource::Refreshing(_) | Resource::Loading => {
+                    cached.clone().map_or(HereView::Locating, HereView::Found)
+                }
+                Resource::Error(code) => cached.clone().map_or_else(
+                    || {
+                        // Without the network lookup a failed portal has
+                        // nothing to retry: the card asks instead.
+                        if !network && code != load::DENIED {
+                            HereView::Off
+                        } else {
+                            HereView::Failed(code.clone())
+                        }
+                    },
+                    HereView::Found,
+                ),
             })
         };
 
         let now_showing = current(&settings, &here);
+        // Asked once, after the desktop's location service has not given a
+        // position: the network lookup sends this computer's address out.
+        let ask_network = settings.network_lookup.is_none()
+            && settings.use_location
+            && matches!(now_showing, Current::Nothing);
         let place = match &now_showing {
             Current::Place { place, .. } => Some(place.clone()),
             _ => None,
@@ -356,6 +378,14 @@ impl Component for Shell {
             menu_item("Use my location", move |_| hub.use_location(!use_location))
                 .checked(use_location),
         );
+        let lookup_on = settings.network_lookup == Some(true);
+        let mut lookup_item =
+            menu_item("Use network location", move |_| hub.set_network(!lookup_on))
+                .checked(lookup_on);
+        if !use_location {
+            lookup_item = lookup_item.disabled();
+        }
+        menu.push(lookup_item);
         menu.push(menu_separator());
         menu.push(menu_item("Keyboard shortcuts", move |_| {
             overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
@@ -409,6 +439,26 @@ impl Component for Shell {
             _ => None,
         };
         let page: Element = match &now_showing {
+            Current::Nothing if ask_network => {
+                let stack = if compact { flex_col() } else { flex_row() };
+                status_page(Icon::LocationArrow, "Use your approximate location?")
+                    .description(
+                        "Find the nearest town from this computer's network address. The address \
+                         goes to ipwho.is, GeoJS or ipapi.co.",
+                    )
+                    .child(
+                        rect()
+                            .tw(&tokens, &[stack, gap(S3), mt(S3)])
+                            .child(primary_button("Use approximate location", move |_| {
+                                hub.set_network(true)
+                            }))
+                            .child(action_button("Search for a city", move |_| {
+                                hub.change(|settings| settings.network_lookup = Some(false));
+                                search::open(overlays, hub);
+                            })),
+                    )
+                    .into()
+            }
             Current::Nothing => status_page(Icon::LocationArrow, "Add a city")
                 .description(
                     "Your location is not available. Search for a city to see its forecast.",

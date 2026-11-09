@@ -51,20 +51,26 @@ for warnings that matter for your safety.
 
 ## Where you are
 
-"My location" is found, in this order, with:
+"My location" is found, in this order:
 
 1. **The desktop's location service** (the Location portal, GeoClue behind it),
    when there is one. The desktop asks you once. If you say no, Weather does not
    go round it: it asks for a city instead.
-2. **The network address**, when there is no location service. A keyless lookup
-   (ipwho.is, then geojs.io, then ipapi.co) gives a position as good as the city,
-   about 25 km. The lookup service sees the computer's address.
+2. **The network address**, only if you agree. When there is no location service,
+   Weather asks first, with the card "Use your approximate location?". It names
+   the services that would see your address (ipwho.is, GeoJS or ipapi.co) and
+   OpenStreetMap, and offers **Use approximate location** or **Search for a
+   city**. Nothing is sent until you choose **Use approximate location**. The
+   lookup gives a position about as good as a city, about 25 km.
 3. **A city you choose**, when neither works.
 
-The list says which one was used, under "My location" ("From the location
-service", or "Approximate, from the network address"), and so does the hero.
-Turn **Use my location** off in the menu to use only the cities you add. A town
-name for a position is looked up from OpenStreetMap's Nominatim.
+Your answer is kept. To change it, open the app menu and tick or untick **Use
+network location**. Turning it off forgets a position that was
+found from the network address. The list says which one was used, under "My
+location" ("From the location service", or "Approximate, from the network
+address"), and so does the hero. Turn **Use my location** off in the menu to use
+only the cities you add. When you have allowed the network lookup, a town name
+for a position is looked up from OpenStreetMap's Nominatim.
 
 Nothing about the position is kept except the last place found, so the next
 launch shows it before the new lookup has finished.
@@ -157,7 +163,7 @@ test or a screenshot that must leave your own alone. `HTTPS_PROXY` is honoured.
   privacy settings and choose **Try again**.
 - **The wrong city**: a position from the network address is approximate and can
   name a neighbouring city, or the city of the network's provider. Add the city
-  you want, or turn **Use my location** off.
+  you want, or untick **Use network location** in the app menu.
 
 ## For developers
 

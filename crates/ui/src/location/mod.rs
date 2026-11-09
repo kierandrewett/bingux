@@ -9,7 +9,9 @@
 //! 2. **The network address**: a coarse position, to about the city, from a
 //!    keyless lookup. It is used only when there is no portal, and a [`Fix`]
 //!    says so ([`Source::Network`]), so the application can show where its
-//!    position came from.
+//!    position came from. The application must have the person's consent before
+//!    it turns this on ([`Locator::network`]): the lookup sends the computer's
+//!    address to a third-party service.
 //! 3. **Nothing**: [`LocateError::Unavailable`] or [`LocateError::Offline`].
 //!    The application asks for a city. It never stops working for want of a
 //!    position.
@@ -21,8 +23,9 @@
 //! ```ignore
 //! use bingux_ui::location::Locator;
 //!
-//! // On a worker, or awaited from a `spawn` task:
-//! let fix = Locator::new().locate_async().await;
+//! // On a worker, or awaited from a `spawn` task. `network` is off by default:
+//! // turn it on only once the person has agreed to the lookup.
+//! let fix = Locator::new().network(consented).locate_async().await;
 //! ```
 //!
 //! This module needs the `location` feature (it carries an HTTPS client and a
@@ -107,14 +110,14 @@ impl Default for Locator {
         Self::new()
     }
 }
-
 impl Locator {
     /// The portal, then the network address, naming the town if the source
-    /// did not.
+    /// did not. The application decides about consent: turn `network` and
+    /// `name_places` off until the person has agreed to a lookup.
     pub fn new() -> Self {
         Self {
             portal: true,
-            network: true,
+            network: false,
             timeout: Duration::from_secs(10),
             name: true,
         }
@@ -126,14 +129,16 @@ impl Locator {
         self
     }
 
-    /// Whether to fall back to the network address.
+    /// Whether to fall back to the network address. Off until the person has
+    /// agreed: the lookup sends the computer's address to a third party.
     pub fn network(mut self, on: bool) -> Self {
         self.network = on;
         self
     }
 
     /// Whether to look the town up from the coordinates when the source gave
-    /// none (one request to OpenStreetMap's Nominatim).
+    /// none (one request to OpenStreetMap's Nominatim). The coordinates go to
+    /// that service, so it is turned off with `network`.
     pub fn name_places(mut self, on: bool) -> Self {
         self.name = on;
         self
