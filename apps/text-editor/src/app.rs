@@ -650,6 +650,13 @@ impl Actions {
 
     /// Reads the file again, as one undo step (Undo brings the text back).
     fn reload(&self, id: u64, encoding: Option<&'static encoding_rs::Encoding>) {
+        let shared = document::with(id, |doc| doc.shared).flatten();
+        if let (Some(shared), None) = (shared, encoding) {
+            if let Some(document) = self.documents.get(shared) {
+                document.reload();
+            }
+            return;
+        }
         let Some(path) = document::with(id, |doc| doc.path.clone()).flatten() else {
             return;
         };
