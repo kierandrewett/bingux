@@ -25,23 +25,9 @@
             <stop offset="0" stop-color="#f9f06b"/>
             <stop offset="1" stop-color="#f6d32d"/>
         </radialGradient>
-        <linearGradient gradientUnits="userSpaceOnUse" id="pv-rim" x1="66" x2="98" y1="59" y2="95">
-            <stop offset="0" stop-color="#f6f5f4"/>
-            <stop offset="0.5" stop-color="#9a9996"/>
-            <stop offset="1" stop-color="#5e5c64"/>
-        </linearGradient>
-        <linearGradient id="pv-handle" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#77767b"/>
-            <stop offset="1" stop-color="#241f31"/>
-        </linearGradient>
-        <linearGradient id="pv-collar" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#deddda"/>
-            <stop offset="1" stop-color="#77767b"/>
-        </linearGradient>
-        <linearGradient gradientUnits="userSpaceOnUse" id="pv-glare" x1="67" x2="82" y1="79" y2="62">
-            <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
-            <stop offset="0.6" stop-color="#ffffff" stop-opacity="0.9"/>
-            <stop offset="1" stop-color="#ffffff" stop-opacity="0.2"/>
+        <linearGradient id="pv-rim" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#c0bfbc"/>
+            <stop offset="1" stop-color="#9a9996"/>
         </linearGradient>
         <filter height="1.4" id="pv-soft" width="1.4" x="-0.2" y="-0.2">
             <feGaussianBlur stdDeviation="1.5"/>
@@ -103,20 +89,17 @@
     </g>
     <!-- The handle, then the lens with the scene enlarged under it. -->
     <g transform="translate(82 77) rotate(45)">
-        <rect fill="url(#pv-handle)" height="11" rx="5.5" width="30" x="22" y="-5.5"/>
-        <rect fill="#ffffff" height="1.2" opacity="0.35" rx="0.6" width="22" x="28" y="-4.2"/>
-        <rect fill="url(#pv-collar)" height="9" rx="1.5" width="6" x="19.5" y="-4.5"/>
+        <rect fill="#3d3846" height="11" rx="5.5" width="30" x="22" y="-5.5"/>
+        <rect fill="#ffffff" height="2" opacity="0.2" rx="1" width="20" x="28" y="-3.5"/>
+        <rect fill="#9a9996" height="9" rx="1.5" width="5" x="20" y="-4.5"/>
     </g>
     <g clip-path="url(#pv-lens)">
         <g transform="translate(82 77) scale(1.6) translate(-82 -77)">
             <rect fill="url(#pv-paper)" height="74" rx="3" transform="rotate(-5 60 79)" width="94" x="13" y="42"/>
             <use href="#pv-scene" transform="rotate(-5 60 79)"/>
         </g>
-        <circle cx="82" cy="77" fill="none" opacity="0.3" r="18" stroke="#1a5fb4" stroke-width="3"/>
-        <path d="M67 79a15 15 0 0 1 13-17" fill="none" stroke="url(#pv-glare)" stroke-linecap="round" stroke-width="3.5"/>
-        <circle cx="72.5" cy="67" fill="#ffffff" opacity="0.8" r="1.6"/>
+        <path d="M68 80a14.5 14.5 0 0 1 12-17" fill="none" opacity="0.5" stroke="#ffffff" stroke-linecap="round" stroke-width="3"/>
     </g>
     <circle cx="82" cy="77" fill="none" r="20" stroke="url(#pv-rim)" stroke-width="5"/>
-    <circle cx="82" cy="77" fill="none" opacity="0.45" r="22.5" stroke="#241f31" stroke-width="0.8"/>
-    <path d="M65 69a19 19 0 0 1 26-9" fill="none" opacity="0.8" stroke="#ffffff" stroke-linecap="round" stroke-width="1.2"/>
+    <circle cx="82" cy="77" fill="none" opacity="0.4" r="22.5" stroke="#5e5c64" stroke-width="0.8"/>
 </svg>
