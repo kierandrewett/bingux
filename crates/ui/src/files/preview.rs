@@ -131,7 +131,7 @@ fn open_in(shared: &Shared, mode: Mode) {
             let mut pane = ctx.pane;
             pane.set(true);
         }
-        Mode::Popup | Mode::Fullscreen => {
+        Mode::Popup | Mode::Fullscreen | Mode::Window => {
             if subject_row(&ctx).is_none() {
                 return;
             }

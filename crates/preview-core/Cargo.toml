@@ -16,3 +16,6 @@ libc = "0.2"
 ttf-parser = "0.25"
 # Inflating the head of a .tar.gz to list it.
 flate2 = "1"
+# Reading EXIF from TIFF, HEIF, PNG and WebP containers and the tags (software,
+# GPS) the in-tree reader of JPEG's APP1 does not know.
+kamadak-exif = "0.6"

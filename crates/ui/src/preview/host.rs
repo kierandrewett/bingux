@@ -57,7 +57,8 @@ impl PreviewHost {
 impl Component for PreviewHost {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let info = use_state(|| false);
+        let own_info = use_state(|| false);
+        let info = self.nav.info.unwrap_or(own_info);
         let compact = crate::style::is_compact();
         // What the viewer's own load found out, for an owner that did not say.
         // It is kept with its source, so a step never shows the last file's kind.
@@ -69,7 +70,8 @@ impl Component for PreviewHost {
                 .filter(|(source, _)| self.source.as_ref() == Some(source))
                 .is_some_and(|(_, folder)| *folder)
         });
-        let header = header(&tokens, self.source.as_ref(), folder, self.mode, &self.nav, info, compact);
+        // A window's owner draws the title line itself.
+        let header = (self.mode != Mode::Window).then(|| header(&tokens, self.source.as_ref(), folder, self.mode, &self.nav, info, compact));
         // The keyboard belongs to the content, not to the first button of the
         // header: a popup takes it when it opens, so Space, the arrows and the
         // viewer's own keys work at once and no button shows a ring nobody
@@ -86,8 +88,8 @@ impl Component for PreviewHost {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
-            .child(header)
-            .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
+            .maybe_child(header)
+            .maybe_child((self.mode != Mode::Window).then(|| rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)])))
             .child(match &self.source {
                 Some(source) => Element::from(Subject {
                     source: source.clone(),
@@ -202,6 +204,10 @@ impl Component for Subject {
             let Some(command) = keys::route(&event.key, event.modifiers, nav.grid, direction) else {
                 return;
             };
+            // In a window Space is the viewer's (a page down, play and pause).
+            if mode == Mode::Window && matches!(&event.key, Key::Character(text) if text.as_str() == " ") {
+                return;
+            }
             if keyboard.is_pane() && command == Command::Close {
                 // Space is the viewer's in a pane (a page down, play and pause).
                 if !matches!(event.key, Key::Named(NamedKey::Escape)) {
@@ -260,7 +266,7 @@ fn run(nav: &PreviewNav, mode: Mode, info: State<bool>, command: Command) {
             }
         }
         Command::Open => {
-            if mode != Mode::Pane {
+            if !matches!(mode, Mode::Pane | Mode::Window) {
                 nav.on_close.call(());
             }
             if let Some(open) = &nav.on_open {
@@ -268,7 +274,7 @@ fn run(nav: &PreviewNav, mode: Mode, info: State<bool>, command: Command) {
             }
         }
         Command::Properties => {
-            if mode != Mode::Pane {
+            if !matches!(mode, Mode::Pane | Mode::Window) {
                 nav.on_close.call(());
             }
             if let Some(show) = &nav.on_properties {
@@ -282,7 +288,8 @@ fn run(nav: &PreviewNav, mode: Mode, info: State<bool>, command: Command) {
         }
         Command::Fullscreen => {
             if let Some(switch) = &nav.on_mode {
-                switch.call(if mode == Mode::Fullscreen { Mode::Popup } else { Mode::Fullscreen });
+                let back = if mode == Mode::Window { Mode::Window } else { Mode::Popup };
+                switch.call(if mode == Mode::Fullscreen { back } else { Mode::Fullscreen });
             }
         }
         Command::SwitchMode => {

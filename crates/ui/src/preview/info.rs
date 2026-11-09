@@ -39,6 +39,8 @@ pub fn rows(resolved: &Resolved) -> Vec<InfoRow> {
             rows.extend(exif.lens.clone().map(|text| row("Lens", text)));
             rows.extend(exif.taken.clone().map(|text| row("Taken", text)));
             rows.extend(exif.exposure.clone().map(|text| row("Exposure", text)));
+            rows.extend(exif.software.clone().map(|text| row("Software", text)));
+            rows.extend(exif.location.clone().map(|text| row("Place", text)));
         }
         Loaded::Media(Some(info)) => {
             rows.extend(info.seconds.map(|seconds| row("Length", bingux_preview_core::media::clock(seconds))));

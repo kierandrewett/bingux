@@ -12,6 +12,10 @@ pub enum Mode {
     /// The whole window, with the chrome out of the way until the pointer
     /// moves.
     Fullscreen,
+    /// The content of an application's own window (the Preview app): the
+    /// owner draws the title line, Space and Escape do not close it, and Enter
+    /// and the Properties key leave it open.
+    Window,
 }
 
 impl Mode {
@@ -29,7 +33,7 @@ impl Mode {
     /// undocks into a popup.
     pub fn switched(self) -> Mode {
         match self {
-            Mode::Popup | Mode::Fullscreen => Mode::Pane,
+            Mode::Popup | Mode::Fullscreen | Mode::Window => Mode::Pane,
             Mode::Pane => Mode::Popup,
         }
     }
@@ -40,6 +44,7 @@ impl Mode {
             Mode::Popup => "popup",
             Mode::Pane => "pane",
             Mode::Fullscreen => "fullscreen",
+            Mode::Window => "window",
         }
     }
 

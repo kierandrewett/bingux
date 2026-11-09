@@ -101,6 +101,7 @@ mod omnibox;
 mod omnibox_model;
 #[cfg(all(test, feature = "testing"))]
 mod omnibox_tests;
+mod open_with_menu;
 mod place_menu;
 #[cfg(all(test, feature = "testing"))]
 mod place_tests;
@@ -167,6 +168,7 @@ pub use search::{Deep, DeepResults, Find, RunKey, use_search_run};
 pub use skeleton::skeleton;
 pub use states::{empty_state, error_state, loading_state};
 pub use view::FileView;
+pub use open_with_menu::{open_in_default_application, open_with_items, show_in_files, warm_open_with};
 pub use view_state::{load as remembered, save as remember};
 pub use zoom::default_zoom_px;
 

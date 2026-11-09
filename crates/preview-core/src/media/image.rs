@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
 
-use super::exif::{Exif, parse_exif};
+use super::exif::{Exif, parse_container, parse_exif};
 
 /// What a picture's header says.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -54,6 +54,15 @@ pub fn image_info_from(mut source: impl Read + Seek) -> Option<ImageInfo> {
         (width, height, Exif::default())
     } else if head.starts_with(&[0xFF, 0xD8]) {
         jpeg(&mut source)?
+    } else if head.starts_with(b"II*\0")
+        || head.starts_with(b"MM\0*")
+        || head.get(4..8) == Some(b"ftyp")
+    {
+        // TIFF, HEIF and AVIF keep their size and camera in EXIF.
+        source.seek(SeekFrom::Start(0)).ok()?;
+        let (exif, size) = parse_container(&mut source)?;
+        let (width, height) = size?;
+        (width, height, exif)
     } else {
         return None;
     };
