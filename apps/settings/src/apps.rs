@@ -110,31 +110,31 @@ fn exec_program(exec: &str) -> String {
 
 /// The first `Categories` entry that has a plain name, or nothing.
 fn plain_category(categories: &str) -> String {
-    const NAMES: [(&str, &str); 14] = [
-        ("WebBrowser", "Internet"),
-        ("Network", "Internet"),
-        ("Email", "Email"),
-        ("Office", "Office"),
-        ("Graphics", "Graphics"),
-        ("Audio", "Music and audio"),
-        ("Video", "Video"),
-        ("AudioVideo", "Media"),
-        ("Development", "Development"),
-        ("Game", "Games"),
-        ("Education", "Education"),
-        ("Science", "Science"),
-        ("System", "System"),
-        ("Utility", "Utilities"),
-    ];
     categories
         .split(';')
-        .find_map(|category| {
-            NAMES
-                .iter()
-                .find(|(key, _)| *key == category)
-                .map(|(_, name)| name.to_string())
-        })
+        .find_map(category_name)
         .unwrap_or_default()
+}
+
+/// The reader-facing name of a freedesktop main category, if it has one.
+fn category_name(category: &str) -> Option<String> {
+    let name = match category {
+        "WebBrowser" | "Network" => tr!("apps-category-internet"),
+        "Email" => tr!("apps-category-email"),
+        "Office" => tr!("apps-category-office"),
+        "Graphics" => tr!("apps-category-graphics"),
+        "Audio" => tr!("apps-category-music-audio"),
+        "Video" => tr!("apps-category-video"),
+        "AudioVideo" => tr!("apps-category-media"),
+        "Development" => tr!("apps-category-development"),
+        "Game" => tr!("apps-category-games"),
+        "Education" => tr!("apps-category-education"),
+        "Science" => tr!("apps-category-science"),
+        "System" => tr!("apps-category-system"),
+        "Utility" => tr!("apps-category-utilities"),
+        _ => return None,
+    };
+    Some(name)
 }
 
 fn data_dirs() -> Vec<PathBuf> {
