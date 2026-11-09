@@ -21,7 +21,9 @@ pub(super) const PX_PER_POINT: f32 = 96.0 / 72.0;
 pub(super) const MIN_ZOOM: f32 = 0.1;
 pub(super) const MAX_ZOOM: f32 = 8.0;
 /// The factors a zoom step moves between.
-const STEPS: [f32; 13] = [0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0];
+const STEPS: [f32; 13] = [
+    0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 6.0, 8.0,
+];
 /// How far past the viewport pages are still drawn and rendered, in viewports.
 const OVERSCAN: f32 = 0.75;
 /// The width of a thumbnail in the sidebar, in logical pixels.
@@ -55,19 +57,31 @@ impl Zoom {
             }
             Zoom::FitPage => {
                 let (width, height) = sizes.get(current).copied().unwrap_or((612.0, 792.0));
-                ((viewport.0 - 2.0 * MARGIN) / width.max(1.0)).min((viewport.1 - 2.0 * MARGIN) / height.max(1.0))
+                ((viewport.0 - 2.0 * MARGIN) / width.max(1.0))
+                    .min((viewport.1 - 2.0 * MARGIN) / height.max(1.0))
             }
         };
-        scale.clamp(MIN_ZOOM * PX_PER_POINT, MAX_ZOOM * PX_PER_POINT).max(0.01)
+        scale
+            .clamp(MIN_ZOOM * PX_PER_POINT, MAX_ZOOM * PX_PER_POINT)
+            .max(0.01)
     }
 
     /// The zoom one step in (`1`) or out (`-1`) from the scale on screen now.
     pub fn step(scale: f32, direction: i32) -> Zoom {
         let factor = scale / PX_PER_POINT;
         let next = if direction > 0 {
-            STEPS.iter().copied().find(|step| *step > factor * 1.001).unwrap_or(MAX_ZOOM)
+            STEPS
+                .iter()
+                .copied()
+                .find(|step| *step > factor * 1.001)
+                .unwrap_or(MAX_ZOOM)
         } else {
-            STEPS.iter().rev().copied().find(|step| *step < factor / 1.001).unwrap_or(MIN_ZOOM)
+            STEPS
+                .iter()
+                .rev()
+                .copied()
+                .find(|step| *step < factor / 1.001)
+                .unwrap_or(MIN_ZOOM)
         };
         Zoom::Percent(next)
     }
@@ -107,14 +121,23 @@ pub(super) fn layout(sizes: &[PageSize], scale: f32) -> Layout {
     let mut y = MARGIN;
     let mut widest = 0.0_f32;
     for (width, height) in sizes {
-        let (w, h) = ((width * scale).round().max(1.0), (height * scale).round().max(1.0));
+        let (w, h) = (
+            (width * scale).round().max(1.0),
+            (height * scale).round().max(1.0),
+        );
         tops.push(y);
         widths.push(w);
         heights.push(h);
         widest = widest.max(w);
         y += h + GAP;
     }
-    Layout { tops, widths, heights, height: y - GAP + MARGIN, width: widest }
+    Layout {
+        tops,
+        widths,
+        heights,
+        height: y - GAP + MARGIN,
+        width: widest,
+    }
 }
 
 impl Layout {
@@ -153,7 +176,8 @@ impl Layout {
         let (from, to) = (scroll, scroll + viewport_h);
         let mut best = (0.0_f32, 0usize);
         for page in self.page_at(scroll)..=self.page_at(to) {
-            let overlap = (self.tops[page] + self.heights[page]).min(to) - self.tops[page].max(from);
+            let overlap =
+                (self.tops[page] + self.heights[page]).min(to) - self.tops[page].max(from);
             if overlap > best.0 {
                 best = (overlap, page);
             }
@@ -174,7 +198,14 @@ impl Layout {
     /// The scroll that shows a hit at `rect` (points, from the page's top) on
     /// `page`, or `None` when it is already inside the viewport. A hit is
     /// brought a third of the way down the viewport.
-    pub fn scroll_to_hit(&self, page: usize, rect: Rect, scale: f32, scroll: f32, viewport_h: f32) -> Option<f32> {
+    pub fn scroll_to_hit(
+        &self,
+        page: usize,
+        rect: Rect,
+        scale: f32,
+        scroll: f32,
+        viewport_h: f32,
+    ) -> Option<f32> {
         let y = self.tops.get(page)? + rect.y0 as f32 / 1000.0 * scale;
         let bottom = self.tops[page] + rect.y1 as f32 / 1000.0 * scale;
         if y >= scroll + 8.0 && bottom <= scroll + viewport_h - 8.0 {
@@ -203,14 +234,22 @@ pub(super) struct RenderCache<T> {
 
 impl<T: Clone> RenderCache<T> {
     pub fn new(limit: usize) -> Self {
-        RenderCache { entries: HashMap::new(), clock: 0, limit }
+        RenderCache {
+            entries: HashMap::new(),
+            clock: 0,
+            limit,
+        }
     }
 
     pub fn insert(&mut self, page: usize, key: u32, value: T) {
         self.clock += 1;
         self.entries.insert((page, key), (value, self.clock));
         while self.entries.len() > self.limit {
-            let oldest = self.entries.iter().min_by_key(|(_, (_, used))| *used).map(|(key, _)| *key);
+            let oldest = self
+                .entries
+                .iter()
+                .min_by_key(|(_, (_, used))| *used)
+                .map(|(key, _)| *key);
             match oldest {
                 Some(oldest) => {
                     self.entries.remove(&oldest);
@@ -231,7 +270,11 @@ impl<T: Clone> RenderCache<T> {
         let found = if self.has(page, key) {
             key
         } else {
-            self.entries.keys().filter(|(p, _)| *p == page).map(|(_, k)| *k).min_by_key(|k| k.abs_diff(key))?
+            self.entries
+                .keys()
+                .filter(|(p, _)| *p == page)
+                .map(|(_, k)| *k)
+                .min_by_key(|k| k.abs_diff(key))?
         };
         self.clock += 1;
         let clock = self.clock;
@@ -270,7 +313,11 @@ pub(super) fn word_at(words: &[Word], x: f32, y: f32) -> Option<usize> {
 
 /// The words from `a` to `b` in reading order, either way round, as a list of
 /// (page, first, last) runs that covers every selected word.
-pub(super) fn selected_runs(a: WordRef, b: WordRef, counts: impl Fn(usize) -> usize) -> Vec<(usize, usize, usize)> {
+pub(super) fn selected_runs(
+    a: WordRef,
+    b: WordRef,
+    counts: impl Fn(usize) -> usize,
+) -> Vec<(usize, usize, usize)> {
     let (from, to) = if a <= b { (a, b) } else { (b, a) };
     let mut runs = Vec::new();
     for page in from.page..=to.page {
@@ -295,7 +342,8 @@ pub(super) fn text_of(words: &[&Word]) -> String {
     for word in words {
         if let Some(before) = previous {
             let height = (before.rect.y1 - before.rect.y0).max(1);
-            let new_line = (word.rect.y0 - before.rect.y0).abs() > height / 2 || word.rect.x0 < before.rect.x0 - height;
+            let new_line = (word.rect.y0 - before.rect.y0).abs() > height / 2
+                || word.rect.x0 < before.rect.x0 - height;
             out.push(if new_line { '\n' } else { ' ' });
         }
         out.push_str(&word.text);
@@ -318,13 +366,27 @@ pub(super) fn next_hit(current: Option<usize>, count: usize, direction: i32) -> 
 }
 
 /// "3 of 12" for a find, or "No matches" / "Searching…".
-pub(super) fn find_status(current: Option<usize>, count: usize, searching: bool, query: &str) -> String {
+pub(super) fn find_status(
+    current: Option<usize>,
+    count: usize,
+    searching: bool,
+    query: &str,
+) -> String {
     if query.is_empty() {
         String::new()
     } else if count == 0 {
-        if searching { "Searching\u{2026}".to_owned() } else { "No matches".to_owned() }
+        if searching {
+            "Searching\u{2026}".to_owned()
+        } else {
+            "No matches".to_owned()
+        }
     } else {
-        format!("{} of {}{}", current.map_or(1, |at| at + 1), count, if searching { "+" } else { "" })
+        format!(
+            "{} of {}{}",
+            current.map_or(1, |at| at + 1),
+            count,
+            if searching { "+" } else { "" }
+        )
     }
 }
 
@@ -343,7 +405,10 @@ mod tests {
     }
 
     fn word(text: &str, x0: i32, y0: i32, x1: i32, y1: i32) -> Word {
-        Word { rect: rect(x0, y0, x1, y1), text: text.to_owned() }
+        Word {
+            rect: rect(x0, y0, x1, y1),
+            text: text.to_owned(),
+        }
     }
 
     #[test]
@@ -358,9 +423,15 @@ mod tests {
     fn fit_width_fills_the_width_of_the_widest_page_and_fit_page_shows_one_whole() {
         let sizes = vec![LETTER, (792.0, 612.0)];
         let width = Zoom::FitWidth.scale(&sizes, 0, (900.0, 700.0));
-        assert!((792.0 * width - (900.0 - 2.0 * MARGIN)).abs() < 0.01, "the widest page fills the width");
+        assert!(
+            (792.0 * width - (900.0 - 2.0 * MARGIN)).abs() < 0.01,
+            "the widest page fills the width"
+        );
         let page = Zoom::FitPage.scale(&sizes, 0, (900.0, 700.0));
-        assert!(792.0 * page <= 700.0 - 2.0 * MARGIN + 0.01 && 612.0 * page <= 900.0 - 2.0 * MARGIN + 0.01);
+        assert!(
+            792.0 * page <= 700.0 - 2.0 * MARGIN + 0.01
+                && 612.0 * page <= 900.0 - 2.0 * MARGIN + 0.01
+        );
         // The landscape page is limited by the width instead.
         let landscape = Zoom::FitPage.scale(&sizes, 1, (900.0, 700.0));
         assert!(landscape > page);
@@ -389,7 +460,10 @@ mod tests {
     #[test]
     fn pages_stack_with_gaps_and_the_stack_has_a_height() {
         let layout = layout(&pages(3), 1.0);
-        assert_eq!(layout.tops, vec![MARGIN, MARGIN + 792.0 + GAP, MARGIN + 2.0 * (792.0 + GAP)]);
+        assert_eq!(
+            layout.tops,
+            vec![MARGIN, MARGIN + 792.0 + GAP, MARGIN + 2.0 * (792.0 + GAP)]
+        );
         assert_eq!(layout.height, MARGIN + 3.0 * 792.0 + 2.0 * GAP + MARGIN);
         assert_eq!(layout.width, 612.0);
         assert_eq!(layout.page_at(0.0), 0);
@@ -428,15 +502,25 @@ mod tests {
         // The last page cannot go past the end.
         assert_eq!(layout.scroll_to_page(4, 800.0), layout.tops[4] - MARGIN);
         assert!(layout.scroll_to_page(4, 800.0) <= layout.max_scroll(800.0));
-        assert_eq!(layout.scroll_to_page(99, 800.0), 0.0, "a page that is not there stays at the top");
+        assert_eq!(
+            layout.scroll_to_page(99, 800.0),
+            0.0,
+            "a page that is not there stays at the top"
+        );
     }
 
     #[test]
     fn a_find_hit_scrolls_into_view_only_when_it_is_not_already() {
         let layout = layout(&pages(3), 1.0);
         let hit = rect(72_000, 100_000, 140_000, 120_000);
-        assert_eq!(layout.scroll_to_hit(0, hit, 1.0, 0.0, 800.0), None, "already visible");
-        let on_page_two = layout.scroll_to_hit(1, hit, 1.0, 0.0, 800.0).expect("scrolls");
+        assert_eq!(
+            layout.scroll_to_hit(0, hit, 1.0, 0.0, 800.0),
+            None,
+            "already visible"
+        );
+        let on_page_two = layout
+            .scroll_to_hit(1, hit, 1.0, 0.0, 800.0)
+            .expect("scrolls");
         assert!((on_page_two - (layout.tops[1] + 100.0 - 800.0 / 3.0)).abs() < 0.01);
         assert_eq!(layout.scroll_to_hit(9, hit, 1.0, 0.0, 800.0), None);
     }
@@ -445,7 +529,11 @@ mod tests {
     fn render_keys_quantise_the_scale_and_the_cache_forgets_the_oldest() {
         assert_eq!(render_key(1.0, 1.0), 16);
         assert_eq!(render_key(1.0, 2.0), 32);
-        assert_eq!(render_key(1.01, 1.0), 16, "a hair of zoom is the same render");
+        assert_eq!(
+            render_key(1.01, 1.0),
+            16,
+            "a hair of zoom is the same render"
+        );
         assert_eq!(key_scale(32), 2.0);
         let mut cache = RenderCache::new(2);
         cache.insert(0, 16, "a");
@@ -468,10 +556,17 @@ mod tests {
 
     #[test]
     fn a_point_picks_the_word_under_it_or_the_nearest_within_a_few_points() {
-        let words = vec![word("one", 10_000, 10_000, 40_000, 22_000), word("two", 50_000, 10_000, 80_000, 22_000)];
+        let words = vec![
+            word("one", 10_000, 10_000, 40_000, 22_000),
+            word("two", 50_000, 10_000, 80_000, 22_000),
+        ];
         assert_eq!(word_at(&words, 20.0, 15.0), Some(0));
         assert_eq!(word_at(&words, 60.0, 15.0), Some(1));
-        assert_eq!(word_at(&words, 44.0, 15.0), Some(0), "in the gap, the nearer");
+        assert_eq!(
+            word_at(&words, 44.0, 15.0),
+            Some(0),
+            "in the gap, the nearer"
+        );
         assert_eq!(word_at(&words, 300.0, 300.0), None);
     }
 
@@ -481,7 +576,11 @@ mod tests {
         let a = WordRef { page: 0, index: 3 };
         let b = WordRef { page: 3, index: 1 };
         let forward = selected_runs(a, b, counts);
-        assert_eq!(forward, vec![(0, 3, 4), (2, 0, 3), (3, 0, 1)], "the empty page has no run");
+        assert_eq!(
+            forward,
+            vec![(0, 3, 4), (2, 0, 3), (3, 0, 1)],
+            "the empty page has no run"
+        );
         assert_eq!(selected_runs(b, a, counts), forward);
         assert_eq!(selected_runs(a, a, counts), vec![(0, 3, 3)]);
     }
