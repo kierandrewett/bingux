@@ -64,6 +64,7 @@ const THUMB_KEY: u32 = 1 << 31;
 const SIDEBAR_WIDTH: f32 = THUMB_WIDTH + 2.0 * S4_PX;
 const S4_PX: f32 = 16.0;
 const THUMB_LABEL: f32 = 20.0;
+const PAGES_SPACING: f32 = 8.0;
 
 /// The request that asks for the outline.
 const OUTLINE_REQUEST: u32 = 2;
@@ -1275,7 +1276,7 @@ impl Component for Reading {
                     .key("pages")
                     .width(Size::fill())
                     .height(Size::fill())
-                    .spacing(8.0)
+                    .spacing(PAGES_SPACING)
                     .child(
                         rect()
                             .width(Size::fill())
@@ -1425,6 +1426,11 @@ impl Component for Reading {
         let (docked, sheet) = match thumbs {
             Some(list) if compact => {
                 let mut close = sidebar;
+                // The list is a fill-height scroll view, so the sheet cannot measure it: its
+                // height is the thumbnail rows, the gaps between them and the list's padding.
+                let layout = thumb_layout(&now.sizes);
+                let gaps = PAGES_SPACING * layout.heights.len().saturating_sub(1) as f32;
+                let content = layout.heights.iter().sum::<f32>() + gaps + 2.0 * S4_PX;
                 let panel = Panel::new(
                     PanelKind::Choice,
                     true,
@@ -1432,6 +1438,7 @@ impl Component for Reading {
                     vec![list],
                 )
                 .title("Pages")
+                .size(SIDEBAR_WIDTH, content)
                 .on_dismiss(EventHandler::new(move |_: ()| close.set(false)));
                 (None, Some(Element::from(panel)))
             }
