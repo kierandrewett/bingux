@@ -77,8 +77,8 @@ fn facts_line(facts: &FontFacts) -> String {
 }
 
 /// How many cells of the grid fit `width`.
-pub(super) fn columns(width: f32) -> usize {
-    ((width - 2.0 * S3.px()) / CELL).floor().max(1.0) as usize
+pub(super) fn columns(width: f32, gutter: f32) -> usize {
+    ((width - 2.0 * gutter) / CELL).floor().max(1.0) as usize
 }
 
 /// "U+00E9", as Unicode writes a code point.
@@ -306,7 +306,7 @@ impl Component for FontView {
 
         // The grid of characters.
         let characters = Arc::new(facts.characters.clone());
-        let columns = columns(*width.read());
+        let columns = columns(*width.read(), S3.px());
         let rows = characters.len().div_ceil(columns);
         let on_select = EventHandler::new(move |character: char| selected.set(Some(character)));
         let data = GridData {
@@ -431,9 +431,9 @@ mod tests {
 
     #[test]
     fn the_grid_has_at_least_one_column() {
-        assert_eq!(columns(0.0), 1);
-        assert_eq!(columns(10_000.0), ((10_000.0 - 2.0 * S3.px()) / CELL).floor() as usize);
-        assert!(columns(400.0) >= 8);
+        assert_eq!(columns(0.0, 14.0), 1);
+        assert_eq!(columns(10_000.0, 14.0), ((10_000.0 - 2.0 * 14.0) / CELL).floor() as usize);
+        assert!(columns(400.0, 14.0) >= 8);
     }
 
     #[test]
