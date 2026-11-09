@@ -213,6 +213,9 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         cargo / "release/bingux-preview": prefix / "bin/bingux-preview",
         source / "apps/preview/bingux-preview.desktop": prefix / "share/applications/bingux-preview.desktop",
         source / "apps/preview/bingux-preview.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-preview.svg",
+        cargo / "release/bingux-calendar": prefix / "bin/bingux-calendar",
+        source / "apps/calendar/bingux-calendar.desktop": prefix / "share/applications/bingux-calendar.desktop",
+        source / "apps/calendar/bingux-calendar.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-calendar.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
         # The helper Files and Preview run for films, songs, PDFs and the pictures their own codecs
         # do not read; found beside the application.
@@ -717,7 +720,7 @@ def uninstall_user(prefix, no_systemd):
     print("  user configuration was kept")
 
 
-# The applications-only install: Settings, Files, Preview, Media and Taxonomy with what Settings
+# The applications-only install: Settings, Files, Calendar, Preview, Media and Taxonomy with what Settings
 # needs (the configuration command and the sound effects engine), put below one
 # prefix such as ~/.local. It never installs the shell: no Quickshell files, no
 # Gnoblin module, no session or user-service changes. A manifest records every
@@ -731,6 +734,7 @@ APPS_PROGRAMS = (
     "bingux-weather",
     "bingux-text-editor",
     "bingux-preview",
+    "bingux-calendar",
     "bingux-preview-host",
     "bingux-media",
     "bingux-taxonomy",
@@ -769,6 +773,7 @@ def apps_payload(source, cargo, prefix):
         ("apps/text-editor", "bingux-text-editor"),
         ("apps/media", "bingux-media"),
         ("apps/preview", "bingux-preview"),
+        ("apps/calendar", "bingux-calendar"),
         ("apps/taxonomy", "bingux-taxonomy"),
     ):
         directory = source / package
@@ -944,6 +949,7 @@ def install_apps(source, prefix, cargo, strip=True, update_caches=True):
         "bingux-calculator",
         "bingux-media",
         "bingux-preview",
+        "bingux-calendar",
         "bingux-taxonomy",
     ):
         print(f"  {prefix / 'bin' / name}")

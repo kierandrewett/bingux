@@ -83,6 +83,7 @@ SOURCES = [
     ROOT / "apps/calculator/src",
     ROOT / "apps/weather/src",
     ROOT / "apps/text-editor/src",
+    ROOT / "apps/calendar/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -122,6 +123,9 @@ SKIP_FILES = {
     # The colours of highlighted code: derived from tokens per kind of text and
     # lifted to 4.5:1, as the chart series colours are; the code runs set them.
     ROOT / "crates/ui/src/text_editor/palette.rs",
+    # Calendar colours are data (a hex colour another program wrote): this is
+    # where they become colours, with the tints an event is drawn in.
+    ROOT / "crates/ui/src/calendar/palette.rs",
     # The tones of the colour file icons are derived from, and checked against,
     # the raw token colours of every ground a row is drawn on.
     ROOT / "crates/ui/src/files/colour.rs",
@@ -480,6 +484,7 @@ RESILIENT_APPS = (
     "bingux-files-app",
     "bingux-weather-app",
     "bingux-calculator-app",
+    "bingux-calendar",
 )
 
 
@@ -550,6 +555,9 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/files/search.rs": "a whole row is the button: start or stop the deep search",
     "crates/ui/src/files/address_list.rs": "the address bar's completion list rows",
     "crates/ui/src/files/address_crumbs.rs": "path crumbs, which are navigation, not icon buttons",
+    "crates/ui/src/calendar/month_grid.rs": "a day of the month grid: a cell with a round face and the neutral selection fill, which no library button draws",
+    "crates/ui/src/calendar/month_view.rs": "the month view's day cells and event chips: a cell and a chip fill the way an event does and are not buttons",
+    "crates/ui/src/calendar/time_grid.rs": "the time grid's day headers and bars of whole-day events: parts of one grid, not buttons",
     "crates/ui/src/charts/flame.rs": "chart hit areas",
     "crates/ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
 }

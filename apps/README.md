@@ -14,6 +14,7 @@ is short; the Cargo package and the installed program keep their full names.
 | `text-editor/` | `bingux-text-editor`    | `bingux-text-editor` | The Text Editor application. See `docs/text-editor.md`.       |
 | `media/`       | `bingux-media-app`      | `bingux-media`       | The Media application: music and videos. See `docs/media.md`. |
 | `preview/`  | `bingux-preview`   | `bingux-preview`  | The Preview application: pictures and PDF documents. See `docs/preview-app.md`. |
+| `calendar/` | `bingux-calendar`  | `bingux-calendar` | The Calendar application. See `docs/calendar-app.md`.       |
 
 Background programs belong in `services/`, and code that apps share belongs in
 `crates/`.

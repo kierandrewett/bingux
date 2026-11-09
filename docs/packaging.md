@@ -27,6 +27,7 @@ publishes.
 | `bingux-files`    | The Files app                                                                               |
 | `bingux-weather`  | The Weather app                                                                             |
 | `bingux-preview`  | The Preview app (pictures and PDF documents)                                                |
+| `bingux-calendar` | The Calendar app                                                                            |
 | `bingux-taxonomy` | The Taxonomy app (a reference window for the UI library, a development tool)                |
 
 **Why this split.** The desktop does not work without its services, so they are one
@@ -130,11 +131,11 @@ pkgsmith has no published release, so `install-pkgsmith.sh` builds the commit na
 in `.github/pkgsmith.ref`. `scripts/build-packages.sh` runs one script for each
 family:
 
-| Script                 | Writes                                                                                   |
-| ---------------------- | ---------------------------------------------------------------------------------------- |
-| `pkgsmith/bingux.star` | `bingux`                                                                                 |
-| `pkgsmith/apps.star`   | `bingux-settings`, `bingux-files`, `bingux-weather`, `bingux-preview`, `bingux-taxonomy` |
-| `pkgsmith/common.star` | Shared by both: versions, licences, dependency helpers, the file lists of the apps       |
+| Script                 | Writes                                                                                                      |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `pkgsmith/bingux.star` | `bingux`                                                                                                    |
+| `pkgsmith/apps.star`   | `bingux-settings`, `bingux-files`, `bingux-weather`, `bingux-preview`, `bingux-calendar`, `bingux-taxonomy` |
+| `pkgsmith/common.star` | Shared by both: versions, licences, dependency helpers, the file lists of the apps                          |
 
 Each script writes `rpm`, `deb`, `archlinux` and `tar`; `FORMATS` (or `-F` of
 pkgsmith) picks some. A prefix holds one distribution's libraries, so CI writes one

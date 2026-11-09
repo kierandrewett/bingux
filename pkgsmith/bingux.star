@@ -201,6 +201,7 @@ RECOMMENDS = {
         "bingux-files",
         "bingux-calculator",
         "bingux-preview",
+        "bingux-calendar",
         # The sound effects engine runs the published plugins that Easy Effects uses.
         "lsp-plugins-lv2",
         "lv2-calf-plugins",
@@ -226,6 +227,7 @@ RECOMMENDS = {
         "bingux-files",
         "bingux-calculator",
         "bingux-preview",
+        "bingux-calendar",
         "lsp-plugins-lv2",
         "calf-plugins",
         "zam-plugins",
@@ -248,6 +250,7 @@ RECOMMENDS = {
         "bingux-files: file manager",
         "bingux-calculator: calculator",
         "bingux-preview: picture and document viewer",
+        "bingux-calendar: calendar",
         "lsp-plugins: sound effects",
         "calf: sound effects: bass enhancer, exciter, crusher, de-esser, reverb and stereo tools",
         "zam-plugins: sound effects: maximizer",

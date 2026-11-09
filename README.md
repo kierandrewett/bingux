@@ -49,7 +49,7 @@ and a `nightly` channel, are described in
 
 The packages are `bingux` (the desktop and every core service, including the
 sound effects engine and the configuration command) and the apps `bingux-settings`,
-`bingux-files`, `bingux-preview` and `bingux-taxonomy`. They are written with pkgsmith for Fedora 43,
+`bingux-files`, `bingux-calendar`, `bingux-preview` and `bingux-taxonomy`. They are written with pkgsmith for Fedora 43,
 Debian 13 and Arch Linux (`make prefix`, then `make packages`) and published at
 `repo.gnoblin.org`; see [package management](docs/package-management.md) and
 [packaging](docs/packaging.md). The repository does not publish a ready package

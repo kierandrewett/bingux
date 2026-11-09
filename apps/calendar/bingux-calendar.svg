@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="page" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#ebeae8"/>
+        </linearGradient>
+        <linearGradient id="band" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#e5495a"/>
+            <stop offset="1" stop-color="#c01c28"/>
+        </linearGradient>
+    </defs>
+    <!-- The lower edge of the page, as the Adwaita app icons draw depth. -->
+    <rect fill="#9a9996" height="104" rx="16" width="104" x="12" y="18"/>
+    <rect fill="url(#page)" height="104" rx="16" width="104" x="12" y="10"/>
+    <!-- The header band of the page, with the month along it. -->
+    <path d="M12 26a16 16 0 0 1 16-16h72a16 16 0 0 1 16 16v14H12z" fill="url(#band)"/>
+    <rect fill="#ffffff" height="1.5" opacity="0.6" rx="0.75" width="88" x="20" y="10.5"/>
+    <!-- The two rings the pages hang from. -->
+    <rect fill="#5e5c64" height="16" rx="4" width="8" x="36" y="4"/>
+    <rect fill="#5e5c64" height="16" rx="4" width="8" x="84" y="4"/>
+    <!-- The days: a row of dots for the week, and today as a filled day. -->
+    <g fill="#c0bfbc">
+        <rect height="9" rx="2.5" width="9" x="24" y="52"/>
+        <rect height="9" rx="2.5" width="9" x="40" y="52"/>
+        <rect height="9" rx="2.5" width="9" x="56" y="52"/>
+        <rect height="9" rx="2.5" width="9" x="72" y="52"/>
+        <rect height="9" rx="2.5" width="9" x="88" y="52"/>
+        <rect height="9" rx="2.5" width="9" x="104" y="52"/>
+        <rect height="9" rx="2.5" width="9" x="24" y="68"/>
+        <rect height="9" rx="2.5" width="9" x="40" y="68"/>
+        <rect height="9" rx="2.5" width="9" x="72" y="68"/>
+        <rect height="9" rx="2.5" width="9" x="88" y="68"/>
+        <rect height="9" rx="2.5" width="9" x="104" y="68"/>
+        <rect height="9" rx="2.5" width="9" x="24" y="84"/>
+        <rect height="9" rx="2.5" width="9" x="40" y="84"/>
+        <rect height="9" rx="2.5" width="9" x="56" y="84"/>
+        <rect height="9" rx="2.5" width="9" x="72" y="84"/>
+    </g>
+    <rect fill="#1c71d8" height="13" rx="4" width="13" x="54" y="66"/>
+    <rect fill="#99c1f1" height="1.5" opacity="0.8" rx="0.75" width="9" x="56" y="66.75"/>
+    <rect fill="#33d17a" height="6" rx="3" width="20" x="82" y="100"/>
+    <rect fill="#62a0ea" height="6" rx="3" width="28" x="24" y="100"/>
+</svg>

@@ -1,4 +1,4 @@
-# The application packages of Bingux: Settings, Files, Preview, Media, Weather and Taxonomy. Each is its own package, holds the files
+# The application packages of Bingux: Settings, Files, Calendar, Preview, Media, Weather and Taxonomy. Each is its own package, holds the files
 # listed for it in common.star (APPS) and depends on `bingux`, which has the core services the apps talk to:
 # the configuration command, the sound effects engine, the preview helper and the search daemon.
 #
@@ -30,6 +30,9 @@ and line ending, a Markdown preview and drafts that keep unsaved text across res
 Preview shows pictures and PDF documents, with the other files of the folder one arrow key away. It zooms, turns and
 crops pictures, plays animated GIFs, runs a slideshow and shows a document's pages and outline. HEIF, AVIF, TIFF,
 HDR, OpenEXR and camera pictures and PDFs are read by the preview helper in the bingux package.""",
+    "bingux-calendar": """Calendar for the Bingux desktop
+Calendar keeps events and reminders in plain calendar files, one folder per calendar. It has day, week, month, year and
+agenda views, repeating events, quick add in plain words, reminders and import of .ics files. It needs no account.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
@@ -66,6 +69,11 @@ DEPENDS = {
         "archlinux": ["shared-mime-info", "xdg-utils"],
     },
     "bingux-preview": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
+    },
+    "bingux-calendar": {
         "rpm": ["shared-mime-info", "xdg-utils"],
         "deb": ["shared-mime-info", "xdg-utils"],
         "archlinux": ["shared-mime-info", "xdg-utils"],
@@ -146,6 +154,11 @@ RECOMMENDS = {
         "deb": [],
         "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
     },
+    "bingux-calendar": {
+        "rpm": ["adwaita-sans-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
@@ -166,6 +179,7 @@ SUGGESTS = {
     "bingux-weather": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-text-editor": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-preview": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
+    "bingux-calendar": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-media": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
 }

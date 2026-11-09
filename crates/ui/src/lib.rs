@@ -16,6 +16,7 @@ pub mod about;
 pub mod access;
 pub mod app;
 pub mod app_icon;
+pub mod calendar;
 pub mod charts;
 #[cfg(feature = "chat-icons")]
 pub mod chat_icons;

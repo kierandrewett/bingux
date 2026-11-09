@@ -4,6 +4,7 @@
 pub mod accessibility;
 pub mod buttons;
 pub mod commands;
+pub mod calendar;
 pub mod common;
 pub mod containers;
 pub mod data;

@@ -16,6 +16,8 @@ CRATE_DIRS = {
     "bingux-text-editor": "apps/text-editor",
     "bingux-text": "crates/text",
     "bingux-preview": "apps/preview",
+    "bingux-calendar": "apps/calendar",
+    "bingux-calendar-core": "crates/calendar",
     "bingux-taxonomy": "apps/taxonomy",
     "bingux-ui": "crates/ui",
     "bingux-files": "crates/files",

@@ -8,7 +8,7 @@
 
 use crate::demos::transfer;
 use crate::demos::{
-    accessibility, buttons, commands, containers, data, documents, feedback, files, formats,
+    accessibility, buttons, calendar, commands, containers, data, documents, feedback, files, formats,
     foundations, icon_set, inputs, inspector, media, navigation, text, platform, table,
 };
 use crate::model::{Body, Category, Entry};
@@ -667,7 +667,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Type ramp",
         category: Category::Foundations,
         page: "Typography",
-        api: "TextStyle::{HERO, TITLE, PAGE_TITLE, SECTION, HEADING, BODY, EMPHASIS, VALUE, NUMERIC, CAPTION, BADGE, OVERLINE, LINK, CODE}.in_ink(Ink).label(&tokens, text); styled_label(style, text); styled_paragraph(style, text)",
+        api: "TextStyle::{HERO, TITLE, PAGE_TITLE, SECTION, HEADING, BODY, EMPHASIS, VALUE, NUMERIC, EVENT_TITLE, CAPTION, BADGE, OVERLINE, LINK, CODE}.in_ink(Ink).label(&tokens, text); styled_label(style, text); styled_paragraph(style, text)",
         doc: "typography",
         covers: &[
             "TextStyle",
@@ -681,6 +681,7 @@ pub static ENTRIES: &[Entry] = &[
             "EMPHASIS",
             "VALUE",
             "NUMERIC",
+            "EVENT_TITLE",
             "CAPTION",
             "BADGE",
             "OVERLINE",
@@ -1474,6 +1475,7 @@ pub static ENTRIES: &[Entry] = &[
             "open_uri",
             "router",
             "try_router",
+            "modal_open",
         ],
         body: Body::States(navigation::BACK_STACK),
     },
@@ -1549,6 +1551,57 @@ pub static ENTRIES: &[Entry] = &[
         body: Body::States(navigation::SEARCH),
     },
     // ---- Data --------------------------------------------------------------
+    // ---- Data: Calendar ----------------------------------------------------
+    Entry {
+        name: "Time grid",
+        category: Category::Data,
+        page: "Calendar",
+        api: "time_grid(days, today).blocks(Vec<Block>).banners(Vec<Banner>).now(minutes).selected(id).twelve_hour(bool).step(minutes).default_length(minutes).scroll_to(minutes, nonce).on_open(id).on_select(id).on_create(SlotRange).on_edit(BlockEdit).on_day(Date): a day or a week of hours; drag empty time to make an event, drag a block to move it, its edges to resize; Up and Down choose a block, Enter opens it",
+        doc: "calendar-views",
+        covers: &[
+            "TimeGrid",
+            "time_grid",
+            "Block",
+            "Banner",
+            "SlotRange",
+            "BlockEdit",
+            "EditKind",
+        ],
+        body: Body::States(calendar::TIME_GRID),
+    },
+    Entry {
+        name: "Month view",
+        category: Category::Data,
+        page: "Calendar",
+        api: "month_view(month, today, on_select).selected(day).first_weekday(Weekday).week_numbers(bool).items(Vec<MonthItem>).selected_item(id).on_pick(Option<id>).on_open(id).on_create(Date).on_activate(Date): a month of day cells with events; Enter chooses the first event of the day, then Up and Down walk them",
+        doc: "calendar-views",
+        covers: &["MonthView", "month_view", "MonthItem"],
+        body: Body::States(calendar::MONTH_VIEW),
+    },
+    Entry {
+        name: "Month grid",
+        category: Category::Data,
+        page: "Calendar",
+        api: "month_grid(month, today, on_select).selected(day).marked(days).first_weekday(Weekday).week_numbers(bool).bare().inside_only().on_choose(Date).on_page(delta)",
+        doc: "calendar-views",
+        covers: &["MonthGrid", "month_grid"],
+        body: Body::States(calendar::MONTH_GRID),
+    },
+    Entry {
+        name: "Date and time pickers",
+        category: Category::Data,
+        page: "Calendar",
+        api: "date_picker(value, today, on_change).first_weekday(Weekday).enabled(bool); time_picker(minutes, twelve_hour, on_change).after(start).enabled(bool); format_length(minutes)",
+        doc: "calendar-views",
+        covers: &[
+            "DatePicker",
+            "date_picker",
+            "TimePicker",
+            "time_picker",
+            "format_length",
+        ],
+        body: Body::States(calendar::PICKERS),
+    },
     Entry {
         name: "Line chart",
         category: Category::Data,
