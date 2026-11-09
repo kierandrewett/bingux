@@ -23,7 +23,7 @@ use freya::prelude::*;
 use bingux_audio_effects::service::{self, StageState};
 use bingux_audio_effects::store::{State as Saved, Store};
 use bingux_audio_effects::{Catalog, Direction, Preset, graph};
-use bingux_ui::prelude::{Window, popup, use_window};
+use bingux_ui::prelude::{Window, popup, tr, use_window};
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 use crate::system::background_then;
@@ -121,7 +121,7 @@ fn probe(direction: Direction, saved_device: Option<String>) -> Runtime {
                         stage.id,
                         stage
                             .reason
-                            .unwrap_or_else(|| "It is not running.".to_string()),
+                            .unwrap_or_else(|| tr!("sound-effects-not-running")),
                     )
                 })
                 .collect()
@@ -247,9 +247,7 @@ impl Fx {
                             entry.preset = shown;
                         }
                     }),
-                    Err(raw) => {
-                        super::report(overlays, "Could not save the effects. Try again.", &raw)
-                    }
+                    Err(raw) => super::report(overlays, &tr!("sound-effects-save-failed"), &raw),
                 }
                 // A new effect needs a moment to start before its state is known.
                 spawn(async move {
@@ -274,7 +272,7 @@ impl Fx {
             },
             move |result: Result<(), String>| {
                 if let Err(raw) = result {
-                    super::report(overlays, "Could not change the effects. Try again.", &raw);
+                    super::report(overlays, &tr!("sound-effects-change-failed"), &raw);
                 }
                 spawn(async move {
                     timer(Duration::from_millis(1200)).await;
@@ -320,7 +318,7 @@ fn use_fx(direction: Direction) -> Fx {
 /// Open the effects popup. A bottom sheet on a phone.
 pub fn open(window: Window) {
     window.open(
-        popup("Effects", body::EffectsBody)
+        popup(tr!("sound-effects"), body::EffectsBody)
             .size(1040.0, 760.0)
             .flags(PopupFlags::OK | PopupFlags::GRABBER | PopupFlags::FILL),
     );

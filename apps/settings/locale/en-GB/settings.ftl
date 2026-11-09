@@ -200,3 +200,126 @@ sound-application-volumes = Application volumes
 sound-effects = Effects
 sound-off = Off
 sound-output-effects = Output effects
+sound-applications-empty = Nothing playing or recording
+sound-meter-output-level = Output level
+sound-meter-input-level = Input level
+sound-meter-application-level = Application level
+sound-eq-mode = Mode
+sound-eq-mid = Mid
+sound-eq-side = Side
+sound-eq-channel = Channel
+sound-eq-band-gain = Band { $number } gain
+sound-eq-edit-band = Edit band { $number }
+sound-eq-add-band = Add band
+sound-eq-remove-band = Remove band
+sound-eq-flat-response = Flat response
+sound-eq-bands = Bands
+sound-eq-type = Type
+sound-eq-frequency = Frequency
+sound-eq-quality-factor = Quality factor
+sound-eq-slope = Slope
+sound-eq-mute = Mute
+sound-eq-gain = Gain
+sound-eq-band-title = Band { $number }
+
+# Presets menu and dialogs. "Flat" and "Imported" are stored preset names, not UI text, so they stay literal.
+sound-action-cancel = Cancel
+sound-action-close = Close
+sound-file-filter-all = All files
+sound-preset-menu-compact = Presets
+# $name (String) - the name of the preset in use
+sound-preset-menu = Preset: { $name }
+sound-preset-new = New preset…
+sound-preset-new-title = New preset
+sound-preset-create = Create
+sound-preset-duplicate = Duplicate
+sound-preset-rename = Rename…
+sound-preset-rename-title = Rename preset
+sound-preset-import = Import…
+sound-preset-import-title = Import preset
+sound-preset-filter = Presets
+sound-preset-export = Export…
+sound-preset-export-title = Export preset
+sound-preset-delete = Delete
+# $name (String) - the name of the preset being deleted
+sound-preset-delete-title = Delete “{ $name }”?
+sound-preset-delete-warning = You cannot undo this.
+# $name (String) - the name the user typed that is already taken
+sound-preset-exists = A preset called “{ $name }” already exists. Choose another name.
+sound-preset-switch-failed = Could not switch preset. Try again.
+sound-preset-change-failed = Could not change the preset. Try again.
+# $error (String) - the underlying error text
+sound-preset-read-failed = Could not read the file. { $error }
+# $name (String) - the imported preset name
+sound-preset-imported = “{ $name }” imported
+# $lines (String) - one line per setting that did not map exactly
+sound-preset-import-approximate = Some settings have no exact match. They were left out or approximated:
+    { $lines }
+sound-preset-import-failed = Could not import the preset. Check that the file is a preset, then try again.
+sound-preset-exported = Preset exported
+sound-preset-export-failed = Could not export the preset. Check the folder, then try again.
+
+# Effects chain picker and tabs.
+sound-effects-done = Done
+sound-effects-tab-output = Output
+sound-effects-tab-input = Input
+sound-effects-add-title = Add effect
+sound-effects-search-placeholder = Search effects
+sound-effects-looking = Looking for effects…
+# $package (String) - the Fedora package name to install
+sound-effects-not-installed = Not installed. Install { $package }.
+sound-effects-none-match = No matching effects
+
+# Effects chain stack and device rows.
+sound-effects-not-running = It is not running.
+sound-effects-save-failed = Could not save the effects. Try again.
+sound-effects-change-failed = Could not change the effects. Try again.
+sound-effects-empty = No effects added
+sound-effects-remove = Remove effect
+sound-effects-off = Off
+sound-effects-add-button = Add effect
+sound-default-speakers = Speakers
+sound-default-microphone = Microphone
+sound-meter-in = In
+sound-meter-out = Out
+# Effect page (apps/settings/src/pages/sound/effects/page.rs)
+sound-effect-add-prompt = Add an effect to the stack.
+sound-effect-unavailable = This effect is not available.
+sound-effect-reset = Reset
+sound-effect-reading = Reading the effect…
+# $name (String) - the effect's display name
+# $package (String) - the Fedora package that provides the effect
+sound-effect-not-installed-full = { $name } is not installed. Install { $package } to use it.
+# $project (String) - the upstream project that makes the effect
+sound-effect-using = Using { $project }
+sound-effect-file = File
+sound-effect-none = None
+sound-effect-choose = Choose…
+sound-effect-choose-title = Choose an impulse response
+sound-effect-audio-files = Audio files
+sound-effect-group-compression = Compression
+sound-effect-group-timing = Timing
+sound-effect-group-mix = Mix
+sound-effect-group-side-chain = Side-chain
+sound-effect-group-limit = Limit
+sound-effect-group-level-regulation = Level regulation
+sound-effect-group-quality = Quality
+sound-effect-group-gate = Gate
+sound-effect-group-hysteresis = Hysteresis
+sound-effect-group-expansion = Expansion
+sound-effect-group-controls = Controls
+sound-effect-group-room = Room
+sound-effect-group-tone = Tone
+sound-effect-group-left = Left
+sound-effect-group-right = Right
+sound-effect-group-filter = Filter
+sound-effect-group-mode = Mode
+sound-effect-group-gain = Gain
+sound-effect-group-input-gain = Input gain
+sound-effect-group-output-gain = Output gain
+sound-effect-group-impulse-response = Impulse response
+sound-effect-group-options = Options
+sound-effect-group-modes = Modes
+sound-effect-group-level = Level
+sound-effect-group-frequency = Frequency
+sound-effect-group-settings = Settings

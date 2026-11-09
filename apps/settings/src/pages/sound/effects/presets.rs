@@ -12,6 +12,7 @@ use freya::prelude::*;
 
 use bingux_ui::prelude::{
     CANCEL_ID, ResponseKind, dialog, dropdown, menu_button, menu_item, menu_separator, text_field,
+    tr,
 };
 use bingux_ui::style::*;
 
@@ -32,31 +33,33 @@ pub(super) fn menu(fx: Fx, data: &Loaded) -> Element {
         })
         .collect();
     items.push(menu_separator());
-    items.push(menu_item("New preset…", move |_| new_preset(fx)));
-    items.push(menu_item("Duplicate", {
+    items.push(menu_item(&tr!("sound-preset-new"), move |_| new_preset(fx)));
+    items.push(menu_item(&tr!("sound-preset-duplicate"), {
         let current = current.clone();
         move |_| duplicate(fx, current.clone())
     }));
-    items.push(menu_item("Rename…", {
+    items.push(menu_item(&tr!("sound-preset-rename"), {
         let current = current.clone();
         move |_| rename(fx, current.clone())
     }));
     items.push(menu_separator());
-    items.push(menu_item("Import…", move |_| import_file(fx)));
-    items.push(menu_item("Export…", {
+    items.push(menu_item(&tr!("sound-preset-import"), move |_| {
+        import_file(fx)
+    }));
+    items.push(menu_item(&tr!("sound-preset-export"), {
         let current = current.clone();
         move |_| export_file(fx, current.clone())
     }));
     items.push(menu_separator());
-    items.push(menu_item("Delete", {
+    items.push(menu_item(&tr!("sound-preset-delete"), {
         let current = current.clone();
         move |_| confirm_delete(fx, current.clone())
     }));
     menu_button(
         if is_compact() {
-            "Presets".to_string()
+            tr!("sound-preset-menu-compact")
         } else {
-            format!("Preset: {current}")
+            tr!("sound-preset-menu", name = current.clone())
         },
         items,
     )
@@ -83,7 +86,7 @@ fn select(fx: Fx, name: String) {
                 data.write().preset = preset;
                 fx.commit_now(direction);
             }
-            Err(raw) => super::super::report(overlays, "Could not switch preset. Try again.", &raw),
+            Err(raw) => super::super::report(overlays, &tr!("sound-preset-switch-failed"), &raw),
         },
     );
 }
@@ -127,18 +130,21 @@ fn ask_name(
         initial: initial.to_string(),
         text: Rc::clone(&text),
     };
-    fx.overlays
-        .show_dialog(dialog(title, "").content(entry).cancel("Cancel").response(
-            accept_label,
-            ResponseKind::Suggested,
-            move |_| {
+    fx.overlays.show_dialog(
+        dialog(title, "")
+            .content(entry)
+            .cancel(&tr!("sound-action-cancel"))
+            .response(accept_label, ResponseKind::Suggested, move |_| {
                 let name = text.borrow().trim().to_string();
                 if !name.is_empty() {
                     accept(name);
                 }
-            },
-        ));
+            }),
+    );
 }
+/// Marks a store error as "name already taken" so the UI can localise it
+/// without matching on English text.
+const DUPLICATE_MARK: &str = "\u{1}duplicate:";
 
 /// Run a store change in the background, then show the result, and select
 /// `chosen` when it names the preset to play next.
@@ -153,28 +159,33 @@ fn change(
         move |result| match result {
             Ok(Some(name)) => select(fx, name),
             Ok(None) => fx.reload(),
-            Err(message) if message.starts_with("A preset called") => overlays.toast(message),
-            Err(raw) => {
-                super::super::report(overlays, "Could not change the preset. Try again.", &raw)
+            Err(message) if message.starts_with(DUPLICATE_MARK) => {
+                let name = &message[DUPLICATE_MARK.len()..];
+                overlays.toast(tr!("sound-preset-exists", name = name.to_string()))
             }
+            Err(raw) => super::super::report(overlays, &tr!("sound-preset-change-failed"), &raw),
         },
     );
 }
 
 fn new_preset(fx: Fx) {
-    ask_name(fx, "New preset", "", "Create", move |name| {
-        change(fx, move |store, direction| {
-            if store.exists(direction, &name) {
-                return Err(format!(
-                    "A preset called “{name}” already exists. Choose another name."
-                ));
-            }
-            store
-                .save(&Preset::new(name.clone(), direction))
-                .map_err(|e| e.0)?;
-            Ok(Some(name))
-        });
-    });
+    ask_name(
+        fx,
+        &tr!("sound-preset-new-title"),
+        "",
+        &tr!("sound-preset-create"),
+        move |name| {
+            change(fx, move |store, direction| {
+                if store.exists(direction, &name) {
+                    return Err(format!("{DUPLICATE_MARK}{name}"));
+                }
+                store
+                    .save(&Preset::new(name.clone(), direction))
+                    .map_err(|e| e.0)?;
+                Ok(Some(name))
+            });
+        },
+    );
 }
 
 fn duplicate(fx: Fx, name: String) {
@@ -185,21 +196,33 @@ fn duplicate(fx: Fx, name: String) {
 
 fn rename(fx: Fx, name: String) {
     let initial = name.clone();
-    ask_name(fx, "Rename preset", &initial, "Rename", move |new_name| {
-        let name = name.clone();
-        change(fx, move |store, direction| {
-            store.rename(direction, &name, &new_name).map_err(|e| e.0)?;
-            Ok(Some(new_name))
-        });
-    });
+    ask_name(
+        fx,
+        &tr!("sound-preset-rename-title"),
+        &initial,
+        &tr!("sound-preset-rename"),
+        move |new_name| {
+            let name = name.clone();
+            change(fx, move |store, direction| {
+                store.rename(direction, &name, &new_name).map_err(|e| e.0)?;
+                Ok(Some(new_name))
+            });
+        },
+    );
 }
 
 fn confirm_delete(fx: Fx, name: String) {
     fx.overlays.show_dialog(
-        dialog(format!("Delete “{name}”?"), "You cannot undo this.")
-            .cancel("Cancel")
-            .default_action(CANCEL_ID)
-            .response("Delete", ResponseKind::Destructive, move |_| {
+        dialog(
+            tr!("sound-preset-delete-title", name = name.clone()),
+            &tr!("sound-preset-delete-warning"),
+        )
+        .cancel(&tr!("sound-action-cancel"))
+        .default_action(CANCEL_ID)
+        .response(
+            &tr!("sound-preset-delete"),
+            ResponseKind::Destructive,
+            move |_| {
                 let name = name.clone();
                 change(fx, move |store, direction| {
                     store.delete(direction, &name).map_err(|e| e.0)?;
@@ -218,7 +241,8 @@ fn confirm_delete(fx: Fx, name: String) {
                         }
                     }
                 });
-            }),
+            },
+        ),
     );
 }
 
@@ -226,9 +250,9 @@ fn import_file(fx: Fx) {
     choose(
         fx.window,
         ChooserRequest::open()
-            .title("Import preset")
-            .filter_spec("Presets", "*.json *.txt")
-            .filter_spec("All files", "*"),
+            .title(&tr!("sound-preset-import-title"))
+            .filter_spec(&tr!("sound-preset-filter"), "*.json *.txt")
+            .filter_spec(&tr!("sound-file-filter-all"), "*"),
         move |answer| {
             let Some(path) = answer.and_then(|answer| answer.paths.into_iter().next()) else {
                 return;
@@ -244,7 +268,7 @@ fn import_path(fx: Fx, path: PathBuf) {
     background_then(
         move || -> Result<(Option<String>, Vec<String>, String), String> {
             let text = bingux_ui::runtime::read_to_string(&path)
-                .map_err(|e| format!("Could not read the file. {e}"))?;
+                .map_err(|e| tr!("sound-preset-read-failed", error = e.to_string()))?;
             let stem = path.file_stem().map_or_else(
                 || "Imported".to_string(),
                 |stem| stem.to_string_lossy().into_owned(),
@@ -277,10 +301,10 @@ fn import_path(fx: Fx, path: PathBuf) {
                         unmapped.iter().map(|line| format!("- {line}")).collect();
                     fx.overlays.show_dialog(
                         dialog(
-                            format!("“{stem}” imported"),
-                            format!("Some settings have no exact match. They were left out or approximated:\n{}", lines.join("\n")),
+                            tr!("sound-preset-imported", name = stem.clone()),
+                            tr!("sound-preset-import-approximate", lines = lines.join("\n")),
                         )
-                        .cancel("Close"),
+                        .cancel(&tr!("sound-action-close")),
                     );
                 }
                 match chosen {
@@ -288,11 +312,7 @@ fn import_path(fx: Fx, path: PathBuf) {
                     None => fx.reload(),
                 }
             }
-            Err(raw) => super::super::report(
-                overlays,
-                "Could not import the preset. Check that the file is a preset, then try again.",
-                &raw,
-            ),
+            Err(raw) => super::super::report(overlays, &tr!("sound-preset-import-failed"), &raw),
         },
     );
 }
@@ -303,7 +323,7 @@ fn export_file(fx: Fx, name: String) {
     let file_name = format!("{name}.json");
     choose(
         fx.window,
-        ChooserRequest::save(file_name).title("Export preset"),
+        ChooserRequest::save(file_name).title(&tr!("sound-preset-export-title")),
         move |answer| {
             let Some(path) = answer.and_then(|answer| answer.paths.into_iter().next()) else {
                 return;
@@ -316,12 +336,10 @@ fn export_file(fx: Fx, name: String) {
                         .map_err(|e| e.0)
                 },
                 move |result| match result {
-                    Ok(()) => overlays.toast("Preset exported"),
-                    Err(raw) => super::super::report(
-                        overlays,
-                        "Could not export the preset. Check the folder, then try again.",
-                        &raw,
-                    ),
+                    Ok(()) => overlays.toast(&tr!("sound-preset-exported")),
+                    Err(raw) => {
+                        super::super::report(overlays, &tr!("sound-preset-export-failed"), &raw)
+                    }
                 },
             );
         },

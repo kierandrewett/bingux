@@ -8,7 +8,7 @@
 use bingux_audio_effects::catalog::{Control, PluginInfo};
 use bingux_audio_effects::eq::{self, BANDS, BandKind, Side, Symbols};
 use bingux_audio_effects::{PluginSlot, Unit};
-use bingux_ui::prelude::{dropdown, fader, segmented};
+use bingux_ui::prelude::{dropdown, fader, segmented, tr};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
@@ -73,20 +73,20 @@ impl Component for EqPage {
         let selected = (*chosen.read()).min(bands - 1);
         let id = slot.id.clone();
 
-        let mut mode_row = Group::titled("Mode");
+        let mut mode_row = Group::titled(&tr!("sound-eq-mode"));
         if let Some(control) = info.control("mode") {
             mode_row = mode_row.row(control_row(fx, &slot.id, control, value("mode")));
         }
         if mid_side {
             let tabs = segmented(
                 vec![
-                    ("0".to_string(), "Mid".to_string()),
-                    ("1".to_string(), "Side".to_string()),
+                    ("0".to_string(), tr!("sound-eq-mid")),
+                    ("1".to_string(), tr!("sound-eq-side")),
                 ],
                 &side_state.read().to_string(),
                 move |picked: String| side_state.set(picked.parse().unwrap_or(0)),
             );
-            mode_row = mode_row.row(row("Channel").trailing(tabs));
+            mode_row = mode_row.row(row(tr!("sound-eq-channel")).trailing(tabs));
         }
 
         let mut strips = rect().tw(&tokens, &[flex_row(), w_full(), gap(S1), py(S2)]);
@@ -113,7 +113,7 @@ impl Component for EqPage {
             )
             .step(100.0 / (2.0 * RANGE_DB))
             .enabled(active)
-            .label(format!("Band {} gain", index + 1));
+            .label(tr!("sound-eq-band-gain", number = index + 1));
             let pick = if index == selected {
                 Paint::Accent
             } else {
@@ -139,7 +139,7 @@ impl Component for EqPage {
                                 ],
                             )
                             .a11y_role(AccessibilityRole::Button)
-                            .a11y_alt(format!("Edit band {}", index + 1))
+                            .a11y_alt(tr!("sound-eq-edit-band", number = index + 1))
                             .on_pointer_down(move |_| chosen.set(index))
                             .child(caption(format!("{}", index + 1))),
                     )
@@ -154,7 +154,7 @@ impl Component for EqPage {
         let (add_sides, remove_id, remove_sides) = (sides.clone(), id.clone(), sides.clone());
         let actions = hstack(S2)
             .child(
-                action_button("Add band", move |_| {
+                action_button(&tr!("sound-eq-add-band"), move |_| {
                     if bands < BANDS {
                         chosen.set(bands);
                         for side in &add_sides {
@@ -170,7 +170,7 @@ impl Component for EqPage {
                 .compact(),
             )
             .child(
-                action_button("Remove band", move |_| {
+                action_button(&tr!("sound-eq-remove-band"), move |_| {
                     if bands > 1 {
                         for side in &remove_sides {
                             set_control(
@@ -186,7 +186,7 @@ impl Component for EqPage {
                 .compact(),
             )
             .child(
-                action_button("Flat response", {
+                action_button(&tr!("sound-eq-flat-response"), {
                     let (flat_id, flat_sides) = (id.clone(), sides.clone());
                     move |_| {
                         for index in 0..BANDS {
@@ -207,7 +207,7 @@ impl Component for EqPage {
             .tw(&tokens, &[flex_col(), w_full(), gap(S4)])
             .child(mode_row)
             .child(
-                Group::titled("Bands").content(
+                Group::titled(&tr!("sound-eq-bands")).content(
                     rect()
                         .tw(
                             &tokens,
@@ -239,12 +239,12 @@ fn band_editor(
     };
     let mut rows: Vec<Element> = Vec::new();
     let id = slot.id.clone();
-    let rows_for: [(&str, fn(&Symbols) -> &String); 5] = [
-        ("Type", |s| &s.kind),
-        ("Frequency", |s| &s.frequency),
-        ("Quality factor", |s| &s.quality),
-        ("Slope", |s| &s.slope),
-        ("Mute", |s| &s.mute),
+    let rows_for: [(String, fn(&Symbols) -> &String); 5] = [
+        (tr!("sound-eq-type"), |s| &s.kind),
+        (tr!("sound-eq-frequency"), |s| &s.frequency),
+        (tr!("sound-eq-quality-factor"), |s| &s.quality),
+        (tr!("sound-eq-slope"), |s| &s.slope),
+        (tr!("sound-eq-mute"), |s| &s.mute),
     ];
     for (title, symbol_of) in rows_for {
         let symbol = symbol_of(&lead).clone();
@@ -252,7 +252,7 @@ fn band_editor(
             continue;
         };
         let mut named = control.clone();
-        named.name = title.to_string();
+        named.name = title;
         // A change goes to every side being edited.
         let sides: Vec<Side> = sides.to_vec();
         let id = id.clone();
@@ -267,7 +267,7 @@ fn band_editor(
         let range = (control.min, control.max);
         rows.push(
             level_row(
-                "Gain",
+                tr!("sound-eq-gain"),
                 (db + RANGE_DB) / (2.0 * RANGE_DB) * 100.0,
                 move |percent: f64| {
                     let db = ((percent / 100.0 * 2.0 * RANGE_DB - RANGE_DB) * 2.0).round() / 2.0;
@@ -285,7 +285,7 @@ fn band_editor(
             .into(),
         );
     }
-    Group::titled(&format!("Band {}", index + 1))
+    Group::titled(&tr!("sound-eq-band-title", number = index + 1))
         .rows(rows)
         .into()
 }

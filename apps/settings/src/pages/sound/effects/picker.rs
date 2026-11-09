@@ -5,15 +5,17 @@
 use bingux_audio_effects::effects::{self, Category};
 use freya::prelude::*;
 
-use bingux_ui::prelude::{PageHead, popup, search_field, use_window};
+use bingux_ui::prelude::{PageHead, popup, search_field, tr, use_window};
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 use super::Fx;
 use crate::ui::{Group, Status, page_column, row, status};
 
 pub(super) fn open(fx: Fx) {
-    fx.window
-        .open(popup("Add effect", Picker { fx }).flags(PopupFlags::CANCEL | PopupFlags::GRABBER));
+    fx.window.open(
+        popup(tr!("sound-effects-add-title"), Picker { fx })
+            .flags(PopupFlags::CANCEL | PopupFlags::GRABBER),
+    );
 }
 
 fn matches(effect: &effects::Effect, query: &str) -> bool {
@@ -38,13 +40,13 @@ impl Component for Picker {
 
         let mut page = page_column().child(PageHead::new()).child(
             search_field(query, |_| {})
-                .placeholder("Search effects")
+                .placeholder(tr!("sound-effects-search-placeholder"))
                 .fill_width(),
         );
         let Some(catalog) = catalog else {
             return page.child(
                 Group::new(None::<String>)
-                    .row(status(Status::Loading("Looking for effects…".to_string()))),
+                    .row(status(Status::Loading(tr!("sound-effects-looking")))),
             );
         };
         let mut any = false;
@@ -62,7 +64,10 @@ impl Component for Picker {
                 let subtitle = if installed {
                     effect.summary.to_string()
                 } else {
-                    format!("Not installed. Install {}.", effect.package.fedora())
+                    tr!(
+                        "sound-effects-not-installed",
+                        package = effect.package.fedora()
+                    )
                 };
                 let mut item = row(effect.name).subtitle(subtitle);
                 if installed {
@@ -84,7 +89,7 @@ impl Component for Picker {
         if !any {
             page = page.child(
                 Group::new(None::<String>)
-                    .row(status(Status::Empty("No matching effects".to_string()))),
+                    .row(status(Status::Empty(tr!("sound-effects-none-match")))),
             );
         }
         page

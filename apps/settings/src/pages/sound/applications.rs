@@ -16,7 +16,7 @@
 
 use freya::prelude::*;
 
-use bingux_ui::prelude::PageHead;
+use bingux_ui::prelude::{PageHead, tr};
 use bingux_ui::style::*;
 
 use super::{Stream, app_row, application_key, by_application, reload, use_ctx};
@@ -94,7 +94,7 @@ impl Component for ApplicationsPage {
                 return veiled(
                     page_column().child(PageHead::new()).child(
                         status(Status::Error(message))
-                            .action("Try again", move |_| reload(ctx.model)),
+                            .action(&tr!("sound-try-again"), move |_| reload(ctx.model)),
                     ),
                     false,
                 );
@@ -103,7 +103,8 @@ impl Component for ApplicationsPage {
 
         let list = held.read().clone();
         let group = if list.is_empty() {
-            Group::new(None::<String>).row(row("Nothing playing or recording").leading(Icon::Sound))
+            Group::new(None::<String>)
+                .row(row(tr!("sound-applications-empty")).leading(Icon::Sound))
         } else {
             Group::new(None::<String>).rows(
                 list.iter()
