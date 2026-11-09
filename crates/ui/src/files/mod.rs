@@ -63,6 +63,8 @@ mod address_target;
 #[cfg(all(test, feature = "testing"))]
 mod address_tests;
 mod address_trail;
+mod batch_rename;
+mod batch_rename_model;
 mod browser;
 mod chooser;
 mod colour;
@@ -77,6 +79,7 @@ mod compress_run;
 mod compress_tests;
 mod context_menu;
 mod directory;
+pub(crate) mod display;
 mod drag;
 mod drives;
 mod extract_dialog;
@@ -163,12 +166,14 @@ pub use file_icon::{
 };
 pub use folder_table::{APP_SCHEME, FOLDER_SCHEME, folder_table, location_of, place_of};
 pub use named::{RECENT_SCHEME, Root, Roots, TRASH_SCHEME, Typed};
+pub use open_with_menu::{
+    open_in_default_application, open_with_items, show_in_files, warm_open_with,
+};
 pub use places_view::{PlacesMenu, PlacesSidebar};
 pub use search::{Deep, DeepResults, Find, RunKey, use_search_run};
 pub use skeleton::skeleton;
 pub use states::{empty_state, error_state, loading_state};
 pub use view::FileView;
-pub use open_with_menu::{open_in_default_application, open_with_items, show_in_files, warm_open_with};
 pub use view_state::{load as remembered, save as remember};
 pub use zoom::default_zoom_px;
 

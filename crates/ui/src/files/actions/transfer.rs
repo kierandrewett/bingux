@@ -172,9 +172,10 @@ fn ask_about(overlays: Overlays, ask: Ask) {
         .existing
         .parent()
         .and_then(Path::file_name)
-        .map_or_else(|| "the destination".to_owned(), |name| {
-            format!("“{}”", name.to_string_lossy())
-        });
+        .map_or_else(
+            || "the destination".to_owned(),
+            |name| format!("“{}”", name.to_string_lossy()),
+        );
     let answer = |resolution: Resolution| {
         let reply = reply.clone();
         move |_: ()| {
@@ -189,8 +190,16 @@ fn ask_about(overlays: Overlays, ask: Ask) {
         .content(Element::from(ApplyToAll(remember)))
         .cancel("Cancel")
         .response("Skip", ResponseKind::Default, answer(Resolution::Skip))
-        .response("Keep both", ResponseKind::Default, answer(Resolution::KeepBoth))
-        .response("Replace", ResponseKind::Destructive, answer(Resolution::Replace))
+        .response(
+            "Keep both",
+            ResponseKind::Default,
+            answer(Resolution::KeepBoth),
+        )
+        .response(
+            "Replace",
+            ResponseKind::Destructive,
+            answer(Resolution::Replace),
+        )
         .default_action("keep_both"),
     );
 }
@@ -355,6 +364,167 @@ fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held
     });
 }
 
+/// Rename each `(path, new name)` in place. Blocking. Names may move around
+/// within the batch (`a` to `b` while `b` becomes `c`, or a swap), so every
+/// item first takes a hidden name of its own and then its new one; nothing
+/// is ever replaced. On a failure what was done is put back as far as it can
+/// be, and the error is returned. Returns `(old, new)` for each item renamed.
+pub(super) fn rename_pairs(
+    pairs: &[(PathBuf, String)],
+) -> Result<Vec<(PathBuf, PathBuf)>, OpError> {
+    let moving: Vec<&(PathBuf, String)> = pairs
+        .iter()
+        .filter(|(path, name)| path.file_name().is_none_or(|old| old != name.as_str()))
+        .collect();
+    let name_of = |path: &Path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default()
+    };
+    let mut parked: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(moving.len());
+    let unpark = |parked: &[(PathBuf, PathBuf)]| {
+        for (original, hidden) in parked.iter().rev() {
+            let _ = backend::rename(hidden, &name_of(original));
+        }
+    };
+    for (index, (path, _)) in moving.iter().enumerate() {
+        let hidden = format!(".{}.renaming-{}-{index}", name_of(path), std::process::id());
+        match backend::rename(path, &hidden) {
+            Ok(at) => parked.push((path.clone(), at)),
+            Err(error) => {
+                unpark(&parked);
+                return Err(error);
+            }
+        }
+    }
+    let mut done: Vec<(PathBuf, PathBuf)> = Vec::with_capacity(moving.len());
+    for ((original, hidden), (_, name)) in parked.iter().zip(&moving) {
+        match backend::rename(hidden, name) {
+            Ok(at) => done.push((original.clone(), at)),
+            Err(error) => {
+                // Back to the hidden names, then to the old ones.
+                for (original, now) in done.iter().rev() {
+                    if let Some((_, hidden)) = parked.iter().find(|(known, _)| known == original) {
+                        let _ = backend::rename(now, &name_of(hidden));
+                    }
+                }
+                unpark(&parked);
+                return Err(error);
+            }
+        }
+    }
+    Ok(done)
+}
+
+/// Rename several items at once (the Rename sheet for a selection), select
+/// them under their new names and remember the whole batch as one Undo.
+pub(super) fn rename_many(env: &Env, pairs: Vec<(PathBuf, String)>) {
+    if pairs.is_empty() {
+        return;
+    }
+    let count = pairs.len();
+    if !begin(env, "Renaming…".to_string(), None) {
+        return;
+    }
+    let env = env.clone();
+    spawn_in_window(async move {
+        let outcome = spawn_blocking(move || rename_pairs(&pairs)).await;
+        finish(&env);
+        match outcome {
+            Ok(done) => {
+                let now: Vec<PathBuf> = done.iter().map(|(_, now)| now.clone()).collect();
+                if !done.is_empty() {
+                    undo::push(&env, Step::Renames(done));
+                }
+                let text = if count == 1 {
+                    "Renamed 1 item.".to_string()
+                } else {
+                    format!("Renamed {count} items.")
+                };
+                notify(env.ui, text, false);
+                select_paths(&env, &now);
+            }
+            Err(error) => notify(env.ui, error_text("rename these items", &error), true),
+        }
+        env.reload.call(());
+    });
+}
+
+/// Copy each of `paths` into the folder that holds it, under the name Keep
+/// both gives a copy (`Report (copy).pdf`), select the copies and remember
+/// them for Undo. Items from several folders (a search, Recent) are each
+/// copied beside their own original.
+pub(super) fn duplicate(env: &Env, paths: Vec<PathBuf>) {
+    let mut groups: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+    for path in paths {
+        let Some(folder) = path.parent().map(Path::to_path_buf) else {
+            continue;
+        };
+        match groups.iter_mut().find(|(known, _)| *known == folder) {
+            Some((_, members)) => members.push(path),
+            None => groups.push((folder, vec![path])),
+        }
+    }
+    if groups.is_empty() {
+        return;
+    }
+    let all: Vec<PathBuf> = groups
+        .iter()
+        .flat_map(|(_, members)| members.clone())
+        .collect();
+    let whole = describe(&all);
+    let cancel = Cancel::new();
+    if !begin(env, format!("Duplicating {whole}"), Some(cancel.clone())) {
+        return;
+    }
+    let progress = Progress::new();
+    let done = Arc::new(AtomicBool::new(false));
+    spawn_in_window(follow(
+        env.clone(),
+        "Duplicating",
+        whole.clone(),
+        progress.clone(),
+        cancel.clone(),
+        Arc::new(Asker::default()),
+        done.clone(),
+    ));
+    let env = env.clone();
+    spawn_in_window(async move {
+        let outcome = spawn_blocking(move || {
+            let mut made = Vec::new();
+            for (folder, members) in &groups {
+                // A copy into the folder it came from is never a conflict:
+                // it takes the next free copy name.
+                let copies = backend::copy(
+                    members,
+                    folder,
+                    &ConflictPolicy::KeepBoth,
+                    &progress,
+                    &cancel,
+                )?;
+                made.extend(pair_moves(members, &copies));
+            }
+            Ok::<_, OpError>(made)
+        })
+        .await;
+        done.store(true, Ordering::Release);
+        finish(&env);
+        match outcome {
+            Ok(made) => {
+                let copies: Vec<PathBuf> = made.iter().map(|(_, copy)| copy.clone()).collect();
+                if !made.is_empty() {
+                    undo::push(&env, Step::Duplicate(made));
+                }
+                notify(env.ui, format!("Duplicated {whole}."), false);
+                select_paths(&env, &copies);
+            }
+            Err(OpError::Cancelled) => notify(env.ui, "Duplicating stopped.", false),
+            Err(error) => notify(env.ui, error_text("duplicate", &error), true),
+        }
+        env.reload.call(());
+    });
+}
+
 /// Pair what a move made with what it moved: `(original, now)` for each item
 /// that arrived. A skipped item has no destination, and a kept-both item
 /// arrives under another name, so a name match comes first and the rest pair
@@ -450,6 +620,33 @@ pub(super) fn redo_step(step: &Step, back: &[PathBuf]) -> Result<(Step, Vec<Path
             let shown = again.iter().map(|(_, now)| now.clone()).collect();
             Ok((Step::Move(again), shown))
         }
+        Step::Duplicate(pairs) => {
+            let mut again = Vec::new();
+            for (original, _) in pairs {
+                let Some(folder) = original.parent() else {
+                    continue;
+                };
+                let copies = backend::copy(
+                    std::slice::from_ref(original),
+                    folder,
+                    &ConflictPolicy::KeepBoth,
+                    &Progress::new(),
+                    &Cancel::new(),
+                )?;
+                again.extend(copies.into_iter().map(|copy| (original.clone(), copy)));
+            }
+            let shown = again.iter().map(|(_, copy)| copy.clone()).collect();
+            Ok((Step::Duplicate(again), shown))
+        }
+        Step::Renames(pairs) => {
+            let names: Vec<(PathBuf, String)> = pairs
+                .iter()
+                .map(|(old, now)| Ok((old.clone(), name_of(now)?)))
+                .collect::<Result<_, OpError>>()?;
+            let again = rename_pairs(&names)?;
+            let shown = again.iter().map(|(_, now)| now.clone()).collect();
+            Ok((Step::Renames(again), shown))
+        }
         // Never offered: a restore cannot be redone (see `Step::redoable`).
         Step::Restore(_) => Ok((step.clone(), Vec::new())),
     }
@@ -482,6 +679,22 @@ pub(super) fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Vec::new()),
                 Err(_) => backend::trash(std::slice::from_ref(path)).map(|_| Vec::new()),
             }
+        }
+        // The copies go to the Trash, not out of existence: one may have
+        // been edited since.
+        Step::Duplicate(pairs) => {
+            let copies: Vec<PathBuf> = pairs.iter().map(|(_, copy)| copy.clone()).collect();
+            backend::trash(&copies).map(|_| Vec::new())
+        }
+        Step::Renames(pairs) => {
+            let back: Vec<(PathBuf, String)> = pairs
+                .iter()
+                .filter_map(|(old, now)| {
+                    let name = old.file_name()?.to_string_lossy().into_owned();
+                    Some((now.clone(), name))
+                })
+                .collect();
+            rename_pairs(&back).map(|done| done.into_iter().map(|(_, at)| at).collect())
         }
         Step::Move(pairs) => {
             let mut back = Vec::new();
@@ -541,7 +754,10 @@ mod tests {
     #[test]
     fn a_renamed_arrival_pairs_in_order() {
         let pairs = pair_moves(&paths(&["/a/x"]), &paths(&["/b/x (copy)"]));
-        assert_eq!(pairs, [(PathBuf::from("/a/x"), PathBuf::from("/b/x (copy)"))]);
+        assert_eq!(
+            pairs,
+            [(PathBuf::from("/a/x"), PathBuf::from("/b/x (copy)"))]
+        );
     }
 
     #[test]
@@ -551,9 +767,19 @@ mod tests {
 
     #[test]
     fn the_busy_line_says_finishing_while_the_drive_is_written() {
-        assert_eq!(busy_text("Copying", "12 items", false, 12, 3, None), "Copying 4 of 12");
-        assert_eq!(busy_text("Copying", "“a”", false, 1, 0, None), "Copying “a”");
-        assert_eq!(busy_text("Copying", "12 items", true, 5, 2, None), "Copying 12 items", "still counting");
+        assert_eq!(
+            busy_text("Copying", "12 items", false, 12, 3, None),
+            "Copying 4 of 12"
+        );
+        assert_eq!(
+            busy_text("Copying", "“a”", false, 1, 0, None),
+            "Copying “a”"
+        );
+        assert_eq!(
+            busy_text("Copying", "12 items", true, 5, 2, None),
+            "Copying 12 items",
+            "still counting"
+        );
         assert_eq!(
             busy_text("Copying", "12 items", false, 12, 12, Some("My Disk")),
             "Finishing… writing to My Disk"
@@ -567,5 +793,61 @@ mod tests {
             done_text("Copied", "“a”", Some("My Disk")),
             "Copied “a”. Everything is written to My Disk."
         );
+    }
+
+    /// A folder of its own under the system's temporary folder.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("bingux-rename-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_batch_can_swap_and_shift_names_and_its_undo_puts_them_back() {
+        let dir = scratch("swap");
+        for (name, text) in [("a", "A"), ("b", "B"), ("c", "C")] {
+            fs::write(dir.join(name), text).unwrap();
+        }
+        // a and b swap; c becomes d.
+        let pairs = vec![
+            (dir.join("a"), "b".to_string()),
+            (dir.join("b"), "a".to_string()),
+            (dir.join("c"), "d".to_string()),
+        ];
+        let done = rename_pairs(&pairs).unwrap();
+        assert_eq!(fs::read_to_string(dir.join("b")).unwrap(), "A");
+        assert_eq!(fs::read_to_string(dir.join("a")).unwrap(), "B");
+        assert_eq!(fs::read_to_string(dir.join("d")).unwrap(), "C");
+        assert!(!dir.join("c").exists());
+        reverse(&Step::Renames(done)).unwrap();
+        for (name, text) in [("a", "A"), ("b", "B"), ("c", "C")] {
+            assert_eq!(fs::read_to_string(dir.join(name)).unwrap(), text);
+        }
+        assert_eq!(
+            fs::read_dir(&dir).unwrap().count(),
+            3,
+            "no hidden name is left"
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_batch_that_fails_half_way_is_put_back() {
+        let dir = scratch("fail");
+        fs::write(dir.join("a"), "A").unwrap();
+        fs::write(dir.join("b"), "B").unwrap();
+        fs::write(dir.join("taken"), "T").unwrap();
+        // b cannot become "taken", which something outside the batch has.
+        let pairs = vec![
+            (dir.join("a"), "x".to_string()),
+            (dir.join("b"), "taken".to_string()),
+        ];
+        assert!(rename_pairs(&pairs).is_err());
+        for (name, text) in [("a", "A"), ("b", "B"), ("taken", "T")] {
+            assert_eq!(fs::read_to_string(dir.join(name)).unwrap(), text, "{name}");
+        }
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 3);
+        fs::remove_dir_all(dir).unwrap();
     }
 }

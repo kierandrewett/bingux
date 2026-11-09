@@ -442,7 +442,7 @@ fn a_file_tone_shows_on_every_ground_and_its_ink_reads_on_it() {
         let grounds = grounds(&tokens);
         for icon in ColourIcon::ALL.iter().filter(|icon| !icon.is_folder()) {
             let tone = colour_tone(*icon, &tokens);
-            // The silhouette is the rim (assert_reads); the body inside it stands apart.
+            // The body inside the rim stands apart from every ground.
             let shown = worst_ratio(tone.body, &grounds);
             assert!(
                 shown >= PAGE_BODY - 0.01,
@@ -453,8 +453,57 @@ fn a_file_tone_shows_on_every_ground_and_its_ink_reads_on_it() {
                 read >= AA_TEXT - 0.01,
                 "{icon:?} on {scheme:?}: the ink reads {read:.2}:1"
             );
-            assert_reads(*icon, tone, &grounds, &format!("on {scheme:?}"));
+            if scheme.is_dark() {
+                // The page itself is the silhouette on the dark list.
+                let off = ratio_opaque(tone.body, tokens.bg);
+                assert!(
+                    off >= AA_LARGE - 0.01,
+                    "{icon:?}: the page stands {off:.2}:1 off the dark list"
+                );
+            } else {
+                // The silhouette is the rim.
+                assert_reads(*icon, tone, &grounds, "on the light scheme");
+            }
         }
+    }
+}
+
+/// A family is one colour in both schemes: the dark page has the light page's hue and chroma,
+/// only lighter, and no lighter than it needs to stand 3:1 off the dark list. It is not the pale
+/// grey-white page the dark set once drew.
+#[test]
+fn a_dark_page_is_the_light_colour_raised_to_3_to_1() {
+    let dark = tokens("blue", Scheme::PreferDark);
+    for icon in ColourIcon::ALL.iter().filter(|icon| !icon.is_folder()) {
+        let (hue, chroma) = icon.hue().expect("a file family has a hue");
+        let body = Oklch::from_colour(colour_tone(*icon, &dark).body);
+        if chroma >= 0.08 {
+            let apart = ((body.h - hue).abs() + 180.0).rem_euclid(360.0) - 180.0;
+            assert!(
+                apart.abs() < 6.0,
+                "{icon:?} has left its hue {hue}: {}",
+                body.h
+            );
+            assert!(
+                body.c >= chroma * 0.8,
+                "{icon:?} has gone grey on the dark scheme: C {:.3} of {chroma}",
+                body.c
+            );
+        }
+        assert!(
+            body.l <= 0.86,
+            "{icon:?} is a pale page on the dark scheme: L {:.2}",
+            body.l
+        );
+    }
+    // The everyday families sit near the light scheme's lightness, not near white.
+    for icon in [
+        ColourIcon::FilePdf,
+        ColourIcon::FileDocument,
+        ColourIcon::FileSpreadsheet,
+    ] {
+        let body = Oklch::from_colour(colour_tone(icon, &dark).body);
+        assert!(body.l <= 0.66, "{icon:?}: L {:.2}", body.l);
     }
 }
 
@@ -497,7 +546,7 @@ fn the_rim_is_the_one_the_compiler_draws() {
 
 /// On the light scheme the yellow families stay yellow: a light, saturated body of the family's
 /// hue (the rim holds the edge, the ink is deep), not the olive-brown a body darkened to 3:1 on
-/// white turns into. On the dark scheme they are as light as every other family.
+/// white turns into. The dark scheme starts from the same yellow.
 #[test]
 fn the_yellow_families_stay_yellow_on_the_light_scheme() {
     let light = tokens("blue", Scheme::PreferLight);

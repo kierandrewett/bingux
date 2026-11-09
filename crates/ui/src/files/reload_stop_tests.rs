@@ -1,5 +1,9 @@
-//! The toolbar's Reload button as Stop, in a headless Files window with a
-//! folder that reads slowly on purpose.
+//! Reload and Stop in a headless Files window with a folder that reads slowly
+//! on purpose.
+//!
+//! A window's header has no Reload button: F5 (and the view menu) reads the
+//! folder again. Stop joins the header's start only while a read has gone on
+//! for a moment, so it can be pressed, and leaves when the read ends.
 //!
 //! A folder whose `.hidden` is a pipe blocks the read of the folder for as
 //! long as nobody writes to the pipe, as a dead network mount would (the
@@ -22,7 +26,6 @@ use crate::style::*;
 use crate::theme::provide_tokens;
 
 const SIZE: (f32, f32) = (1000.0, 600.0);
-const REFRESH: &str = "Refresh (F5)";
 const STOP: &str = "Stop (Esc)";
 
 /// A folder with two files, and optionally the pipe that stalls its read.
@@ -40,7 +43,10 @@ impl Slow {
         std::fs::create_dir_all(&root).expect("a folder in the temporary directory");
         std::fs::write(root.join("alpha.txt"), "a").expect("a file");
         std::fs::write(root.join("beta.txt"), "b").expect("a file");
-        let slow = Slow { pipe: root.join(".hidden"), root };
+        let slow = Slow {
+            pipe: root.join(".hidden"),
+            root,
+        };
         if stalled {
             slow.stall();
         }
@@ -51,7 +57,11 @@ impl Slow {
     fn stall(&self) {
         let path = std::ffi::CString::new(self.pipe.as_os_str().as_bytes()).expect("a path");
         // SAFETY: `path` is a valid NUL-terminated path.
-        assert_eq!(unsafe { libc::mkfifo(path.as_ptr(), 0o600) }, 0, "a pipe named .hidden");
+        assert_eq!(
+            unsafe { libc::mkfifo(path.as_ptr(), 0o600) },
+            0,
+            "a pipe named .hidden"
+        );
     }
 
     /// Let the read that is stuck on the pipe go, and take the pipe away, so
@@ -83,30 +93,48 @@ impl Component for Window {
         rect()
             .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
             .child(OverlayHost::new(
-                rect().tw(&tokens, &[w_full(), h_flex(), flex_col()]).child(browse(Browse::new(memory))),
+                rect()
+                    .tw(&tokens, &[w_full(), h_flex(), flex_col()])
+                    .child(browse(Browse::new(memory))),
             ))
     }
 }
 
 fn open(path: &Path) -> Snapshot {
     let memory = TabMemory::new(Where::Folder(path.to_path_buf()));
-    Snapshot::new(move || Window { memory: memory.clone() }.into_element(), SIZE)
+    Snapshot::new(
+        move || {
+            Window {
+                memory: memory.clone(),
+            }
+            .into_element()
+        },
+        SIZE,
+    )
 }
 
 fn rest(shot: &mut Snapshot, ms: u64) {
     shot.settle(Duration::from_millis(ms));
 }
 
-/// The name and box of the toolbar's Reload / Stop button.
-fn reload_button(shot: &mut Snapshot) -> (String, torin::prelude::Area) {
+/// The header's Stop button, if it is on show. There is never more than one.
+fn stop_button(shot: &mut Snapshot) -> Option<torin::prelude::Area> {
     let mut found: Vec<_> = shot
         .icon_buttons()
         .into_iter()
-        .filter(|button| button.name == REFRESH || button.name == STOP)
+        .filter(|button| button.name == STOP)
         .collect();
-    assert_eq!(found.len(), 1, "one Reload / Stop button: {found:?}");
-    let button = found.remove(0);
-    (button.name, button.area)
+    assert!(found.len() <= 1, "at most one Stop button: {found:?}");
+    found.pop().map(|button| button.area)
+}
+
+/// The box of the header's Back button, which Stop follows.
+fn back_button(shot: &mut Snapshot) -> torin::prelude::Area {
+    shot.icon_buttons()
+        .into_iter()
+        .find(|button| button.name == "Back")
+        .map(|button| button.area)
+        .expect("a Back button")
 }
 
 /// Whether a label or paragraph of the window has `text`. Nothing is clicked:
@@ -116,9 +144,18 @@ fn shows(shot: &mut Snapshot, text: &str) -> bool {
         .runner()
         .find_many(|_, element| Label::try_downcast(element).map(|label| label.text.to_string()));
     let paragraphs = shot.runner().find_many(|_, element| {
-        Paragraph::try_downcast(element).map(|paragraph| paragraph.spans.iter().map(|span| span.text.to_string()).collect::<String>())
+        Paragraph::try_downcast(element).map(|paragraph| {
+            paragraph
+                .spans
+                .iter()
+                .map(|span| span.text.to_string())
+                .collect::<String>()
+        })
     });
-    labels.iter().chain(&paragraphs).any(|found| found.contains(text))
+    labels
+        .iter()
+        .chain(&paragraphs)
+        .any(|found| found.contains(text))
 }
 
 fn key(shot: &mut Snapshot, key: NamedKey) {
@@ -130,38 +167,47 @@ fn escape_while_a_re_read_is_going_stops_it_and_keeps_the_listing() {
     let slow = Slow::new("escape-keeps", false);
     let mut shot = open(&slow.root);
     rest(&mut shot, 1200);
-    assert!(shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"), "the folder is listed");
-    let (name, box_before) = reload_button(&mut shot);
-    assert_eq!(name, REFRESH);
+    assert!(
+        shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"),
+        "the folder is listed"
+    );
+    assert_eq!(stop_button(&mut shot), None, "nothing is reading");
 
     // From now on reading the folder stalls. F5 asks for a read.
     slow.stall();
     rest(&mut shot, 400);
     key(&mut shot, NamedKey::F5);
     rest(&mut shot, 60);
-    let (name, _) = reload_button(&mut shot);
-    assert_eq!(name, REFRESH, "a read that has only just begun is not offered for stopping");
+    assert_eq!(
+        stop_button(&mut shot),
+        None,
+        "a read that has only just begun is not offered for stopping"
+    );
     rest(&mut shot, 400);
-    let (name, area) = reload_button(&mut shot);
-    assert_eq!(name, STOP, "the read has gone on for a moment");
-    assert_eq!(area, box_before, "the button keeps its box");
+    let stop = stop_button(&mut shot).expect("the read has gone on for a moment: Stop is on show");
+    let back = back_button(&mut shot);
+    assert!(
+        stop.min_x() > back.min_x(),
+        "Stop sits after Back and Forward, at the header's start"
+    );
 
     key(&mut shot, NamedKey::Escape);
     rest(&mut shot, 100);
-    assert!(shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"), "the old listing stays on show");
-    // The Stop state is held for a moment, then the button is Reload again:
-    // nothing is reading any more.
+    assert!(
+        shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"),
+        "the old listing stays on show"
+    );
+    // The Stop state is held for a moment, then it goes: nothing is reading
+    // any more.
     rest(&mut shot, 700);
-    let (name, area) = reload_button(&mut shot);
-    assert_eq!(name, REFRESH, "the stopped read is over");
-    assert_eq!(area, box_before);
+    assert_eq!(stop_button(&mut shot), None, "the stopped read is over");
     assert!(shows(&mut shot, "alpha.txt"));
 
     // And F5 reads the folder again, now that nothing stalls it.
     slow.free();
     key(&mut shot, NamedKey::F5);
     rest(&mut shot, 500);
-    assert_eq!(reload_button(&mut shot).0, REFRESH);
+    assert_eq!(stop_button(&mut shot), None);
     assert!(shows(&mut shot, "alpha.txt"));
 }
 
@@ -175,12 +221,17 @@ fn the_stop_button_stops_a_read_as_escape_does() {
     rest(&mut shot, 400);
     key(&mut shot, NamedKey::F5);
     rest(&mut shot, 500);
-    let (name, area) = reload_button(&mut shot);
-    assert_eq!(name, STOP);
-    shot.click(area.min_x() + area.width() / 2.0, area.min_y() + area.height() / 2.0);
+    let area = stop_button(&mut shot).expect("Stop is on show");
+    shot.click(
+        area.min_x() + area.width() / 2.0,
+        area.min_y() + area.height() / 2.0,
+    );
     rest(&mut shot, 1000);
-    let (name, _) = reload_button(&mut shot);
-    assert_eq!(name, REFRESH, "pressing Stop ended the read and the button went back to Reload");
+    assert_eq!(
+        stop_button(&mut shot),
+        None,
+        "pressing Stop ended the read and the button went"
+    );
     assert!(shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"));
 }
 
@@ -189,20 +240,29 @@ fn a_first_load_stopped_before_anything_came_in_says_so_and_reads_again_on_reque
     let slow = Slow::new("first-load", true);
     let mut shot = open(&slow.root);
     rest(&mut shot, 600);
-    assert_eq!(reload_button(&mut shot).0, STOP, "the first load has gone on for a moment");
+    assert!(
+        stop_button(&mut shot).is_some(),
+        "the first load has gone on for a moment"
+    );
     assert!(!shows(&mut shot, "alpha.txt"), "nothing has been read");
 
     key(&mut shot, NamedKey::Escape);
     rest(&mut shot, 200);
-    assert!(shows(&mut shot, "Loading stopped"), "the empty folder says the load was stopped");
+    assert!(
+        shows(&mut shot, "Loading stopped"),
+        "the empty folder says the load was stopped"
+    );
     assert!(!shows(&mut shot, "Folder is empty"));
     rest(&mut shot, 600);
-    assert_eq!(reload_button(&mut shot).0, REFRESH);
+    assert_eq!(stop_button(&mut shot), None);
 
     slow.free();
     key(&mut shot, NamedKey::F5);
     rest(&mut shot, 800);
-    assert!(shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"), "the folder is read after all");
+    assert!(
+        shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"),
+        "the folder is read after all"
+    );
     assert!(!shows(&mut shot, "Loading stopped"));
 }
 
@@ -212,15 +272,13 @@ fn a_folder_that_opens_at_once_never_shows_stop() {
     let mut shot = open(&slow.root);
     for _ in 0..60 {
         rest(&mut shot, 16);
-        let found = shot
-            .icon_buttons()
-            .into_iter()
-            .filter(|button| button.name == STOP)
-            .count();
-        assert_eq!(found, 0, "no flash of Stop while a quick folder loads");
+        assert_eq!(
+            stop_button(&mut shot),
+            None,
+            "no flash of Stop while a quick folder loads"
+        );
     }
     assert!(shows(&mut shot, "alpha.txt"));
-    assert_eq!(reload_button(&mut shot).0, REFRESH);
 }
 
 #[test]
@@ -232,5 +290,5 @@ fn escape_with_no_read_going_does_nothing_to_the_listing() {
     key(&mut shot, NamedKey::Escape);
     rest(&mut shot, 200);
     assert!(shows(&mut shot, "alpha.txt") && shows(&mut shot, "beta.txt"));
-    assert_eq!(reload_button(&mut shot).0, REFRESH);
+    assert_eq!(stop_button(&mut shot), None);
 }

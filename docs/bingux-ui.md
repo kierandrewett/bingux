@@ -967,7 +967,7 @@ When a tab closes the host picks the tab that takes the selection: `tab_close::s
 
 - **`TabSet<P: TabContent>`** is the tabs as plain data (tested without a window): a new tab opens beside the one on show; `ClosedTabs<P>` is the stack behind Reopen closed tab (the last `CLOSED_TABS_KEPT`, 10, with their place and their content, and a closed group comes back left to right at its places); `duplicate` asks the content for a copy (`TabContent::duplicate`); `detach`, `detach_others`, `detach_all`, `insert_moved` and `adopt` move tabs between windows without losing or duplicating one, and tell the content it is leaving (`TabContent::depart`). What a tab shows is the application's `P`: Files' is `files::FileTab` (a place and its `TabMemory`, so Back and Forward come back with a reopened or moved tab).
 - **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.commands(new_tab)` are the window commands New tab, Close tab, Reopen closed tab, Next tab and Previous tab (see [Commands](#commands)), for the main menu, the palette and the shortcuts sheet. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
-- **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip, and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
+- **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip (a window of one tab, whose strip is hidden, takes it anywhere on the band a header bar tall across its top: it goes after the tab there, and the window shows its strip with the marker while the tab is held over it), and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
 - A second application's tabs are another `TabContent` and nothing else: no copy of the set, the window registry or the tear-off.
 
 The taxonomy's Tabs entry shows each state in a bar over a page at both densities: select, close and add with drag; every close route and the menu; many tabs; the first, a middle and the last tab selected; nine tabs; long titles (faded); icons; a lone tab with its close button; no New tab button; keyboard focus; a right-to-left strip; the pointer on one tab. `controls/tab_geometry.rs` holds the geometry tests (the strip is a tab bar tall, a tab is the same distance from the strip's top and bottom and as tall as an end button, the content width and its inverse), `controls/tab_tests.rs` the rendered ones (every width, density and reading direction; a tab's four corners are one radius and its fill is the selection, hover or bar colour in both schemes; the page's corners and top edge are the page's colour whichever tab is selected), `controls/tab_close.rs` the closing rules (selection, `to_the_left`, `others`, `to_the_right`, the menu's rows and their order, rapid closure with a fake clock), `controls/tab_scroll.rs` the scroll rules (logical and screen offsets, wheel and finger, scroll into view, mirrored), `controls/tab_tear.rs` the tear thresholds and the layout a host asks (`index_at`, `boundary`, both directions), `controls/tabs.rs` the layout, the fill and the hit-test, and `controls/tab_tests.rs` renders strips at mouse and compact density: the selected tab's bottom edge is the content's top edge at every width, the card's margins are equal on the left, right and bottom and its corners are checked to the pixel, the New tab button is the same distance from the top, the bottom, the last tab and the trailing edge, everything is inside the strip, tab widths are uniform, the seam and the flares are checked to the pixel in both schemes, the close button's size, its press not reaching the drag region, the selection after a close, the menu (with Close tabs to the left), Reopen, rapid closure, and the keyboard, drag and motion behaviour.
@@ -1703,22 +1703,25 @@ draws the same picture at any scale.
   the file holds at every size and never its extension in letters (a pie for a
   presentation, a table for a spreadsheet, a drawer box for an archive, a rosette
   for a certificate, `</>` for source, a prompt for a program).
-  The page is OKLCH lightness 0.76 on the dark scheme (a deep ink of its own hue)
-  and 0.52 on the light one (white ink; the yellows, hue 70 to 128, start 0.28
-  lighter and 1.3 times as saturated there and take a deep ink: darkened to
-  stand off white at 3:1 they went olive and brown), at the family's hue and
-  chroma, with the sheen at the top (`LIT_TOP`) and a shade at the foot
-  (`DEEP_BOTTOM`, 10 %). Its silhouette is held by a **rim** (`RIM`, 26 % black
-  over the page, 1 px wide inside the outline, 3 px on the vector; the compiler
-  draws it as an outline stroke clipped to the page): the rim, not the body,
-  must stand off every ground, so a light body can keep its hue and the body
-  itself only has to stand apart by `PAGE_BODY` (1.4:1).
-  The body is moved along lightness until every edge of the picture shows on
-  every ground a row is drawn on (the five layers, and each under hover, press
-  and selection; `edges`, `edge_limits`): a page's rim over its body and over its
-  foot (under the shade) at 3:1 and over its top (under the sheen) at 2:1; a
-  folder's panel at 2.2:1, its top at 1.5:1 and its back at 1.5:1, since the pale
-  panel holds a folder's silhouette. The ink reads 4.5:1 under the share of sheen
+  The page starts at OKLCH lightness 0.52 (white ink; the yellows, hue 70 to
+  128, start 0.28 lighter and 1.3 times as saturated and take a deep ink:
+  darkened to stand off white at 3:1 they went olive and brown), at the
+  family's hue and chroma, with the sheen at the top (`LIT_TOP`) and a shade at
+  the foot (`DEEP_BOTTOM`, 10 %). Its silhouette on the light scheme is held by
+  a **rim** (`RIM`, 26 % black over the page, 1 px wide inside the outline, 3 px
+  on the vector; the compiler draws it as an outline stroke clipped to the
+  page): the rim, not the body, must stand off every ground, so a light body can
+  keep its hue and the body itself only has to stand apart by `PAGE_BODY`
+  (1.4:1). On the light scheme the body is moved along lightness until every
+  edge of the picture shows on every ground a row is drawn on (the five layers,
+  and each under hover, press and selection; `edges`, `edge_limits`): a page's
+  rim over its body and over its foot (under the shade) at 3:1 and over its top
+  (under the sheen) at 2:1. On the dark scheme a page is the same colour raised
+  in lightness only, until the body stands 3:1 off the list background
+  (`Paint::Bg`) and 1.4:1 off every other ground: a PDF is the light scheme's
+  red, not a pale grey page. A folder, in both schemes, needs its panel at
+  2.2:1, its top at 1.5:1 and its back at 1.5:1, since the pale panel holds a
+  folder's silhouette. The ink reads 4.5:1 under the share of sheen
   and shade a glyph sits in (`glyph_grounds`). `colour_tone(icon, &tokens)` gives
   the two colours (`Tone { body, ink }`); a test checks every family and every
   accent in both schemes, and that the yellow families are light and saturated

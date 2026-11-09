@@ -46,7 +46,7 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
 pub fn stopped_state() -> Element {
     Element::from(
         status_page(Icon::MediaPlaybackStop, "Loading stopped")
-            .description("Press Refresh (F5) to read this folder."),
+            .description("Press F5 to read the folder again."),
     )
 }
 
@@ -70,10 +70,15 @@ pub fn no_results_state(
     hints: Vec<(String, EventHandler<()>)>,
 ) -> Element {
     if let Some(reason) = invalid {
-        return Element::from(status_page(Icon::DialogWarning, "Cannot search").description(reason.to_string()));
+        return Element::from(
+            status_page(Icon::DialogWarning, "Cannot search").description(reason.to_string()),
+        );
     }
     let (title, description) = match running {
-        Some(true) => ("Searching…".to_string(), "Nothing has matched yet.".to_string()),
+        Some(true) => (
+            "Searching…".to_string(),
+            "Nothing has matched yet.".to_string(),
+        ),
         _ if words.trim().is_empty() => (
             "Nothing found".to_string(),
             format!("Nothing in {place} fits these filters."),
@@ -101,7 +106,16 @@ impl Component for HintRow {
         let tokens = use_tokens();
         rect()
             .component("SearchHints")
-            .tw(&tokens, &[flex_row(), justify(Align::Center), items(Align::Center), gap(S2), w_full()])
+            .tw(
+                &tokens,
+                &[
+                    flex_row(),
+                    justify(Align::Center),
+                    items(Align::Center),
+                    gap(S2),
+                    w_full(),
+                ],
+            )
             .children(self.hints.iter().map(|(label, on_press)| {
                 Element::from(action_button(label.clone(), on_press.clone()))
             }))

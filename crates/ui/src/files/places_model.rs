@@ -4,7 +4,7 @@
 
 use std::path::Path;
 
-use bingux_files::display;
+use super::display;
 use bingux_files::mounts::{Mount, MountKind, Usage, mount_for};
 use bingux_files::volumes::Volume;
 use bingux_files::{Place, PlaceKind, Places};
@@ -502,7 +502,7 @@ mod tests {
                 warn,
                 fraction,
             } => {
-                assert_eq!(text, "120 GB free of 500 GB");
+                assert_eq!(text, "120\u{a0}GB free of 500\u{a0}GB");
                 assert!(!warn);
                 assert!((fraction - 0.76).abs() < 1e-6);
             }
@@ -521,10 +521,13 @@ mod tests {
 
     #[test]
     fn usage_text_is_short() {
-        assert_eq!(usage_text(0, 1_000_000_000_000), "0 bytes free of 1.0 TB");
+        assert_eq!(
+            usage_text(0, 1_000_000_000_000).replace('\u{a0}', " "),
+            "0 bytes free of 1 TB"
+        );
         assert_eq!(
             usage_text(12_300_000_000, 64_000_000_000),
-            "12 GB free of 64 GB"
+            "12\u{a0}GB free of 64\u{a0}GB"
         );
     }
 

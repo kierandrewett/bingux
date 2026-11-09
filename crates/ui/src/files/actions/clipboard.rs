@@ -1,15 +1,18 @@
-//! Cut, copy and paste of files.
+//! Cut, copy and paste of files, on the typed clipboard
+//! ([`crate::clipboard`]), so files cut here paste in another file manager
+//! and the other way round.
 //!
-//! The held files live in a process-wide static, which is the source of
-//! truth: it knows whether the files were cut, and it needs no round trip
-//! through the windowing system. The same files are also written to the system
-//! clipboard as a `file://` URI list, one per line, so another program can
-//! paste them as text, and a URI list copied elsewhere can be pasted here.
+//! The clipboard is the source of truth. A process-wide note of what this
+//! app cut last is kept only to draw those files faded until they move; it
+//! is dropped once the clipboard holds something else.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, PoisonError};
 
-use bingux_files::location::{file_uri, from_file_uri};
+use bingux_files::location::from_file_uri;
+
+use crate::clipboard::Clipboard;
+use crate::dnd::{Format, GNOME_COPIED_FILES, Payload, Received};
 
 /// The files a person cut or copied last.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,15 +28,6 @@ fn held() -> std::sync::MutexGuard<'static, Option<Held>> {
     HELD.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// The URI list of `paths`, one `file://` URI per line.
-pub(super) fn uri_list(paths: &[PathBuf]) -> String {
-    paths
-        .iter()
-        .map(|path| file_uri(path))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// The paths in a block of text that is a URI list. Lines that are not
 /// `file://` URIs and blank lines are ignored; the comment lines of the
 /// `text/uri-list` format start with `#`.
@@ -45,30 +39,56 @@ pub(super) fn parse_uri_list(text: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Hold `paths` for a later paste, and offer them to other programs.
+/// Hold `paths` for a later paste, and offer them to other programs as file
+/// managers offer them: a URI list, GNOME's copied-files type (which says
+/// cut or copy, so Nautilus and Dolphin move cut files) and the paths as
+/// text.
 pub(super) fn put(paths: Vec<PathBuf>, cut: bool) {
-    // A system clipboard that cannot be written (no display, say) leaves the
-    // in-app copy working.
-    let _ = freya::clipboard::Clipboard::set(uri_list(&paths));
+    Clipboard::general().write(Payload::copied_files(&paths, cut));
     *held() = Some(Held { paths, cut });
 }
 
-/// What a paste would bring: the held files, else a URI list on the system
-/// clipboard (taken as a copy).
+/// What a paste would bring: the files on the clipboard, cut or copied as
+/// the program that put them there said (this one, or another file
+/// manager). A plain URI list is a copy.
 pub(super) fn take() -> Option<Held> {
-    if let Some(held) = held().clone() {
-        return Some(held);
+    let clipboard = Clipboard::general();
+    let from = |data: Received| {
+        let paths = data.files();
+        (!paths.is_empty()).then(|| Held {
+            cut: data.is_cut() == Some(true),
+            paths,
+        })
+    };
+    let found = clipboard
+        .read(Format::Mime(GNOME_COPIED_FILES.into()))
+        .ok()
+        .and_then(from)
+        .or_else(|| clipboard.read(Format::Uris).ok().and_then(from))
+        .or_else(|| {
+            // Text that is a URI list (a terminal's copy of `file://` lines).
+            let paths = parse_uri_list(&clipboard.read_text()?);
+            (!paths.is_empty()).then_some(Held { paths, cut: false })
+        });
+    // Something else took the clipboard: what this app cut is no longer
+    // waiting to move, so it stops looking cut.
+    let mut held = held();
+    if held.as_ref() != found.as_ref() {
+        *held = None;
     }
-    let text = freya::clipboard::Clipboard::get().ok()?;
-    let paths = parse_uri_list(&text);
-    (!paths.is_empty()).then_some(Held { paths, cut: false })
+    found
 }
 
-/// Whether a paste would bring any files.
+/// Whether a paste would bring any files: files on the clipboard (asked of
+/// the types on offer, with no round trip to the other program), or text
+/// that is a URI list.
 pub(super) fn has_files() -> bool {
-    held().is_some()
-        || freya::clipboard::Clipboard::get()
-            .is_ok_and(|text| !parse_uri_list(&text).is_empty())
+    let clipboard = Clipboard::general();
+    clipboard.has(&Format::Uris)
+        || (clipboard.has(&Format::Text)
+            && clipboard
+                .read_text()
+                .is_some_and(|text| !parse_uri_list(&text).is_empty()))
 }
 
 /// Forget the held files, after a cut was pasted: they are no longer there.
@@ -89,14 +109,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uri_list_round_trips() {
-        let paths = vec![
-            PathBuf::from("/home/a b/c.txt"),
-            PathBuf::from("/tmp/é"),
-        ];
-        let text = uri_list(&paths);
-        assert_eq!(text.lines().count(), 2);
+    fn a_uri_list_round_trips() {
+        let paths = vec![PathBuf::from("/home/a b/c.txt"), PathBuf::from("/tmp/é")];
+        let text = paths
+            .iter()
+            .map(|path| bingux_files::location::file_uri(path))
+            .collect::<Vec<_>>()
+            .join("\n");
         assert_eq!(parse_uri_list(&text), paths);
+    }
+
+    // Failure mode: files cut here paste as a copy, in this app or in
+    // another file manager, because the clipboard lost the word "cut".
+    #[test]
+    fn cut_files_paste_as_a_move() {
+        let paths = vec![PathBuf::from("/tmp/cut-a"), PathBuf::from("/tmp/cut b")];
+        put(paths.clone(), true);
+        assert!(has_files());
+        assert_eq!(
+            take(),
+            Some(Held {
+                paths: paths.clone(),
+                cut: true
+            })
+        );
+        assert!(is_cut(&paths[0]));
+        put(paths.clone(), false);
+        assert_eq!(take(), Some(Held { paths, cut: false }));
+        clear();
     }
 
     #[test]

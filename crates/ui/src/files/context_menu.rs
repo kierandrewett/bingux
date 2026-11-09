@@ -18,12 +18,13 @@ use std::sync::Arc;
 use bingux_files::places::{SpecialFolder, system_user_dirs};
 use bingux_files::{Entry, Sort, SortKey};
 
-use super::actions::{self, App, Availability, Command, Env, Facts, TrashView, availability, shortcut};
+use super::actions::{
+    self, App, Availability, Command, Env, Facts, TrashView, availability, shortcut,
+};
 use super::columns::columns_menu_items;
 use super::zoom::{LADDER, ViewKind, kind_of};
 use crate::app_icon::AppChoice;
 use crate::shell::{MenuItem, app_menu_item, menu_item, menu_separator, submenu};
-
 
 /// A change the menu makes to the view rather than to files.
 #[derive(Clone, Debug, PartialEq)]
@@ -167,7 +168,11 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
         Availability::Disabled(_) | Availability::Hidden => None,
     };
     let paste_into = folder.and_then(|path| {
-        Row::command("Paste into folder", facts, Command::PasteInto(path.to_path_buf()))
+        Row::command(
+            "Paste into folder",
+            facts,
+            Command::PasteInto(path.to_path_buf()),
+        )
     });
     join(vec![
         vec![
@@ -179,12 +184,21 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
         vec![
             Row::command("Cut", facts, Command::Cut),
             Row::command("Copy", facts, Command::Copy),
+            Row::command("Duplicate", facts, Command::Duplicate),
             paste_into,
         ],
         vec![
             Row::command("Restore", facts, Command::Restore),
             Row::command("Restore to…", facts, Command::RestoreTo),
-            Row::command("Rename", facts, Command::Rename),
+            Row::command(
+                if facts.selected > 1 {
+                    "Rename…"
+                } else {
+                    "Rename"
+                },
+                facts,
+                Command::Rename,
+            ),
             Row::command("Move to Trash", facts, Command::Trash),
             // In the Trash it is the only delete there is, so no Shift is
             // needed and the plain Delete key does it.
@@ -219,7 +233,11 @@ fn compress_as(facts: &Facts) -> Option<Row> {
     use bingux_files::ops::Format;
     let rows: Vec<Row> = [
         Row::command("Quick .zip", facts, Command::CompressQuick(Format::Zip)),
-        Row::command("Quick .tar.gz", facts, Command::CompressQuick(Format::TarGz)),
+        Row::command(
+            "Quick .tar.gz",
+            facts,
+            Command::CompressQuick(Format::TarGz),
+        ),
     ]
     .into_iter()
     .flatten()
@@ -282,8 +300,16 @@ fn size_rows(looks: Looks) -> Vec<Row> {
 /// changed. List or Grid, the icon size and the sort sit above the one switch.
 fn view_rows(looks: Looks) -> Vec<Row> {
     vec![
-        Row::choice("List", looks.kind == ViewKind::List, Act::Show(ViewKind::List)),
-        Row::choice("Grid", looks.kind == ViewKind::Grid, Act::Show(ViewKind::Grid)),
+        Row::choice(
+            "List",
+            looks.kind == ViewKind::List,
+            Act::Show(ViewKind::List),
+        ),
+        Row::choice(
+            "Grid",
+            looks.kind == ViewKind::Grid,
+            Act::Show(ViewKind::Grid),
+        ),
         Row::Separator,
         Row::Sub("Icon size".to_owned(), size_rows(looks)),
         Row::Sub("Sort by".to_owned(), sort_rows(looks.sort)),
@@ -366,9 +392,18 @@ fn new_file_row(facts: &Facts, templates: &[Template]) -> Option<Row> {
 /// cannot apply here (nothing to select in an empty folder, Create in Recent,
 /// Undo with nothing done) is left out rather than greyed; Paste stays in a
 /// folder, greyed until something is copied.
-fn empty_plan(facts: &Facts, looks: Looks, templates: &[Template], compress: Option<Row>) -> Vec<Row> {
+fn empty_plan(
+    facts: &Facts,
+    looks: Looks,
+    templates: &[Template],
+    compress: Option<Row>,
+) -> Vec<Row> {
     // In the Trash a paste moves what was copied to the Trash.
-    let paste_label = if facts.trash == TrashView::Root { "Paste into Trash" } else { "Paste" };
+    let paste_label = if facts.trash == TrashView::Root {
+        "Paste into Trash"
+    } else {
+        "Paste"
+    };
     let paste = facts
         .in_folder
         .then(|| Row::command_greyed(paste_label, facts, Command::Paste))
@@ -448,9 +483,11 @@ fn realise(target: &Target, rows: Vec<Row>) -> Vec<MenuItem> {
                 // An application row is built from an AppChoice, so it
                 // always carries its icon.
                 let mut entry = match app {
-                    Some(icon) => app_menu_item(&AppChoice::new(label.clone(), label, icon), move |_| {
-                        perform(&target, &act)
-                    }),
+                    Some(icon) => {
+                        app_menu_item(&AppChoice::new(label.clone(), label, icon), move |_| {
+                            perform(&target, &act)
+                        })
+                    }
                     None => menu_item(label, move |_| perform(&target, &act)),
                 };
                 if let Some(shortcut) = shortcut {
@@ -558,8 +595,8 @@ pub(super) fn menu_for_header(env: &Env) -> Vec<MenuItem> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::actions::{Capabilities, TrashView};
+    use super::*;
 
     fn facts(caps: Capabilities, selected: usize, folders: usize) -> Facts {
         Facts {
@@ -609,12 +646,31 @@ mod tests {
 
     #[test]
     fn one_file_in_the_files_app() {
-        let rows = ordinary(&facts(Capabilities::FILES_APP, 1, 0), None, &[app("Viewer")]);
+        let rows = ordinary(
+            &facts(Capabilities::FILES_APP, 1, 0),
+            None,
+            &[app("Viewer")],
+        );
         assert_eq!(
             labels(&rows),
             [
-                "Open", "Open with", "Preview", "---", "Cut", "Copy", "---", "Rename", "Move to Trash",
-                "---", "Compress…", "Compress as", "Copy path", "Copy location as URI", "---", "Properties",
+                "Open",
+                "Open with",
+                "Preview",
+                "---",
+                "Cut",
+                "Copy",
+                "Duplicate",
+                "---",
+                "Rename",
+                "Move to Trash",
+                "---",
+                "Compress…",
+                "Compress as",
+                "Copy path",
+                "Copy location as URI",
+                "---",
+                "Properties",
             ]
         );
         let Row::Sub(_, apps) = &rows[1] else {
@@ -642,7 +698,10 @@ mod tests {
             .collect();
         assert_eq!(
             icons,
-            [Some("Viewer-icon".to_owned()), Some("Player-icon".to_owned())]
+            [
+                Some("Viewer-icon".to_owned()),
+                Some("Player-icon".to_owned())
+            ]
         );
     }
 
@@ -681,9 +740,18 @@ mod tests {
     fn several_items_get_the_applicable_subset() {
         let rows = ordinary(&facts(Capabilities::FILES_APP, 3, 1), None, &[]);
         let labels = labels(&rows);
+        // Several are renamed together in the Rename sheet.
         assert!(!labels.iter().any(|label| label == "Rename"));
+        assert!(labels.iter().any(|label| label == "Rename…"));
         assert!(!labels.iter().any(|label| label == "Add to bookmarks"));
-        for wanted in ["Cut", "Copy", "Move to Trash", "Compress…", "Properties"] {
+        for wanted in [
+            "Cut",
+            "Copy",
+            "Duplicate",
+            "Move to Trash",
+            "Compress…",
+            "Properties",
+        ] {
             assert!(labels.iter().any(|label| label == wanted), "{wanted}");
         }
     }
@@ -709,7 +777,14 @@ mod tests {
             shifted(&facts(caps, 1, 0)),
         ] {
             let labels = labels(&rows);
-            for gone in ["Cut", "Rename", "Move to Trash", "Delete permanently", "Compress…"] {
+            for gone in [
+                "Cut",
+                "Duplicate",
+                "Rename",
+                "Move to Trash",
+                "Delete permanently",
+                "Compress…",
+            ] {
                 assert!(!labels.iter().any(|label| label == gone), "{gone}");
             }
             assert!(labels.iter().any(|label| label == "Copy"));
@@ -737,7 +812,10 @@ mod tests {
     #[test]
     fn delete_permanently_appears_with_shift_and_is_the_destructive_one() {
         let rows = shifted(&facts(Capabilities::FILES_APP, 1, 0));
-        assert!(offers(&rows, "Move to Trash"), "Trash stays the first choice");
+        assert!(
+            offers(&rows, "Move to Trash"),
+            "Trash stays the first choice"
+        );
         let destructive: Vec<String> = rows
             .iter()
             .filter_map(|row| match row {
@@ -748,7 +826,11 @@ mod tests {
         assert_eq!(destructive, ["Delete permanently"]);
         let labels = labels(&rows);
         let trash = labels.iter().position(|l| l == "Move to Trash").unwrap();
-        assert_eq!(labels[trash + 1], "Delete permanently", "next to Trash, after it");
+        assert_eq!(
+            labels[trash + 1],
+            "Delete permanently",
+            "next to Trash, after it"
+        );
     }
 
     #[test]
@@ -776,21 +858,33 @@ mod tests {
             .collect();
         assert_eq!(destructive, ["Empty Trash"]);
         let enabled = |rows: &[Row]| {
-            rows.iter().any(|row| matches!(row, Row::Item(item) if item.label == "Empty Trash" && item.enabled))
+            rows.iter().any(
+                |row| matches!(row, Row::Item(item) if item.label == "Empty Trash" && item.enabled),
+            )
         };
         assert!(enabled(&rows), "something to empty");
         in_trash.shown = 0;
-        assert!(offers(&plan(&in_trash), "Empty Trash") && !enabled(&plan(&in_trash)), "greyed when empty");
+        assert!(
+            offers(&plan(&in_trash), "Empty Trash") && !enabled(&plan(&in_trash)),
+            "greyed when empty"
+        );
         // Nothing is made in the Trash; a paste there moves to the Trash.
         for gone in ["New folder", "Paste", "New file", "Empty file"] {
             assert!(!offers(&plan(&in_trash), gone), "{gone}");
         }
         let greyed = |rows: &[Row], wanted: &str| {
-            rows.iter().any(|row| matches!(row, Row::Item(item) if item.label == wanted && !item.enabled))
+            rows.iter()
+                .any(|row| matches!(row, Row::Item(item) if item.label == wanted && !item.enabled))
         };
-        assert!(offers(&plan(&in_trash), "Paste into Trash") && !greyed(&plan(&in_trash), "Paste into Trash"));
+        assert!(
+            offers(&plan(&in_trash), "Paste into Trash")
+                && !greyed(&plan(&in_trash), "Paste into Trash")
+        );
         in_trash.can_paste = false;
-        assert!(greyed(&plan(&in_trash), "Paste into Trash"), "nothing to paste");
+        assert!(
+            greyed(&plan(&in_trash), "Paste into Trash"),
+            "nothing to paste"
+        );
     }
 
     #[test]
@@ -799,11 +893,32 @@ mod tests {
         one.trash = TrashView::Root;
         let rows = ordinary(&one, None, &[app("Viewer")]);
         let labels = labels(&rows);
-        for gone in ["Move to Trash", "Rename", "Compress…", "Cut", "Paste", "New folder", "Add to bookmarks"] {
-            assert!(!labels.iter().any(|label| label == gone), "{gone} is not offered in the Trash: {labels:?}");
+        for gone in [
+            "Move to Trash",
+            "Rename",
+            "Duplicate",
+            "Compress…",
+            "Cut",
+            "Paste",
+            "New folder",
+            "Add to bookmarks",
+        ] {
+            assert!(
+                !labels.iter().any(|label| label == gone),
+                "{gone} is not offered in the Trash: {labels:?}"
+            );
         }
-        for wanted in ["Restore", "Restore to…", "Delete permanently", "Copy", "Properties"] {
-            assert!(labels.iter().any(|label| label == wanted), "{wanted}: {labels:?}");
+        for wanted in [
+            "Restore",
+            "Restore to…",
+            "Delete permanently",
+            "Copy",
+            "Properties",
+        ] {
+            assert!(
+                labels.iter().any(|label| label == wanted),
+                "{wanted}: {labels:?}"
+            );
         }
         // Delete permanently needs no Shift here, is the one destructive row,
         // and shows the plain Delete key.
@@ -825,12 +940,24 @@ mod tests {
         let mut inside = facts(Capabilities::FILES_APP, 1, 0);
         inside.trash = TrashView::Inside;
         let inside_labels = labels_of(&ordinary(&inside, None, &[]));
-        assert!(!inside_labels.iter().any(|label| label == "Restore" || label == "Restore to…"));
-        assert!(inside_labels.iter().any(|label| label == "Delete permanently"));
+        assert!(
+            !inside_labels
+                .iter()
+                .any(|label| label == "Restore" || label == "Restore to…")
+        );
+        assert!(
+            inside_labels
+                .iter()
+                .any(|label| label == "Delete permanently")
+        );
         assert!(inside_labels.iter().any(|label| label == "Copy"));
         // Outside the Trash none of this shows.
         let plain = labels_of(&ordinary(&facts(Capabilities::FILES_APP, 1, 0), None, &[]));
-        assert!(!plain.iter().any(|label| label == "Restore" || label == "Delete permanently"));
+        assert!(
+            !plain
+                .iter()
+                .any(|label| label == "Restore" || label == "Delete permanently")
+        );
     }
 
     fn labels_of(rows: &[Row]) -> Vec<String> {
@@ -891,8 +1018,18 @@ mod tests {
         assert_eq!(
             labels(&rows),
             [
-                "New folder", "New file", "---", "Paste", "---", "Select all", "Invert selection",
-                "---", "View", "---", "Refresh", "Properties",
+                "New folder",
+                "New file",
+                "---",
+                "Paste",
+                "---",
+                "Select all",
+                "Invert selection",
+                "---",
+                "View",
+                "---",
+                "Refresh",
+                "Properties",
             ]
         );
     }
@@ -933,7 +1070,14 @@ mod tests {
         recent.in_folder = false;
         assert_eq!(
             labels(&plan(&recent)),
-            ["Select all", "Invert selection", "---", "View", "---", "Refresh"]
+            [
+                "Select all",
+                "Invert selection",
+                "---",
+                "View",
+                "---",
+                "Refresh"
+            ]
         );
     }
 
@@ -955,7 +1099,15 @@ mod tests {
         };
         assert_eq!(
             labels(&plan(&facts(caps, 0, 0))),
-            ["Select all", "Invert selection", "---", "View", "---", "Refresh", "Properties"]
+            [
+                "Select all",
+                "Invert selection",
+                "---",
+                "View",
+                "---",
+                "Refresh",
+                "Properties"
+            ]
         );
     }
 
@@ -973,8 +1125,16 @@ mod tests {
                 path: PathBuf::from("/t/Notes.md"),
             },
         ];
-        let rows = empty_plan(&facts(Capabilities::FILES_APP, 0, 0), looks(), &templates, None);
-        assert_eq!(labels(&rows)[..2], ["New folder".to_owned(), "New file".to_owned()]);
+        let rows = empty_plan(
+            &facts(Capabilities::FILES_APP, 0, 0),
+            looks(),
+            &templates,
+            None,
+        );
+        assert_eq!(
+            labels(&rows)[..2],
+            ["New folder".to_owned(), "New file".to_owned()]
+        );
         let new_file = submenu_of(&rows, "New file");
         assert_eq!(labels(new_file), ["Empty file", "---", "Letter", "Notes"]);
         let acts: Vec<&Act> = new_file
@@ -1027,7 +1187,15 @@ mod tests {
         let view = submenu_of(&rows, "View");
         assert_eq!(
             labels(view),
-            ["List", "Grid", "---", "Icon size", "Sort by", "---", "Show hidden files"]
+            [
+                "List",
+                "Grid",
+                "---",
+                "Icon size",
+                "Sort by",
+                "---",
+                "Show hidden files"
+            ]
         );
         assert_eq!(
             ticks(view),
@@ -1054,17 +1222,27 @@ mod tests {
             });
             ticks(&rows)
         };
-        let list: Vec<(String, Option<bool>)> = [("16 px", true), ("20 px", false), ("24 px", false), ("32 px", false)]
-            .map(|(label, on)| (label.to_owned(), Some(on)))
-            .to_vec();
+        let list: Vec<(String, Option<bool>)> = [
+            ("16 px", true),
+            ("20 px", false),
+            ("24 px", false),
+            ("32 px", false),
+        ]
+        .map(|(label, on)| (label.to_owned(), Some(on)))
+        .to_vec();
         assert_eq!(sizes(ViewKind::List, 16), list);
         let grid = sizes(ViewKind::Grid, 128);
         assert_eq!(
-            grid.iter().map(|(label, _)| label.as_str()).collect::<Vec<_>>(),
+            grid.iter()
+                .map(|(label, _)| label.as_str())
+                .collect::<Vec<_>>(),
             ["48 px", "64 px", "96 px", "128 px", "192 px"]
         );
         assert_eq!(
-            grid.iter().filter(|(_, on)| *on == Some(true)).map(|(label, _)| label.as_str()).collect::<Vec<_>>(),
+            grid.iter()
+                .filter(|(_, on)| *on == Some(true))
+                .map(|(label, _)| label.as_str())
+                .collect::<Vec<_>>(),
             ["128 px"]
         );
     }
@@ -1079,7 +1257,14 @@ mod tests {
         assert_eq!(
             labels(&rows),
             [
-                "Name", "Size", "Type", "Modified", "---", "Ascending", "Descending", "---",
+                "Name",
+                "Size",
+                "Type",
+                "Modified",
+                "---",
+                "Ascending",
+                "Descending",
+                "---",
                 "Folders first",
             ]
         );
@@ -1100,7 +1285,10 @@ mod tests {
     #[test]
     fn choosing_sort_items_changes_the_sort() {
         let sort = Sort::default();
-        assert_eq!(sorted(sort, &Act::SortKey(SortKey::Size)).key, SortKey::Size);
+        assert_eq!(
+            sorted(sort, &Act::SortKey(SortKey::Size)).key,
+            SortKey::Size
+        );
         assert!(sorted(sort, &Act::Descending(true)).descending);
         assert!(!sorted(sort, &Act::FoldersFirst).folders_first);
         // A new key starts ascending.

@@ -185,6 +185,9 @@ impl Component for Crumbs {
                             icon: (index == 0).then_some(stop.icon),
                             current,
                             menu,
+                            // Files dragged from the list drop into any folder of
+                            // the trail but the one they are already in.
+                            drop: stop.path.clone().filter(|_| !current),
                             on_press: EventHandler::new(move |_: ()| press.call(target.clone())),
                         }
                         .into(),
@@ -360,6 +363,9 @@ struct CrumbButton {
     /// The last crumb is where you are: normal ink, the others muted.
     current: bool,
     menu: Vec<MenuItem>,
+    /// The folder files dragged from the list are dropped into, as on a
+    /// sidebar place.
+    drop: Option<PathBuf>,
     on_press: EventHandler<()>,
 }
 
@@ -367,6 +373,11 @@ impl Component for CrumbButton {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let face = Interaction::use_interaction();
+        let session = use_hook(super::drag::file_drag);
+        let drop_here = match (&session, &self.drop) {
+            (Some(session), Some(folder)) => session.is_over(folder),
+            _ => false,
+        };
         let ink = if self.current { Ink::Text } else { Ink::Muted };
         let cut = self.shown != self.label;
         // The stop is the box and carries the ring; the face inside it is lit
@@ -381,6 +392,22 @@ impl Component for CrumbButton {
         let content = rect()
             .component("AddressCrumb")
             .tw(&tokens, &[h(Dim::Dense)])
+            .on_pointer_enter({
+                let (session, folder) = (session, self.drop.clone());
+                move |_| {
+                    if let (Some(session), Some(folder)) = (session, &folder) {
+                        session.hover(folder);
+                    }
+                }
+            })
+            .on_pointer_leave({
+                let (session, folder) = (session, self.drop.clone());
+                move |_| {
+                    if let (Some(session), Some(folder)) = (session, &folder) {
+                        session.leave(folder);
+                    }
+                }
+            })
             .child(
                 face.attach(rect().tw(
                     &tokens,
@@ -391,7 +418,16 @@ impl Component for CrumbButton {
                         if lead.is_some() { pr(S2) } else { px(S2) },
                         gap(if lead.is_some() { S2 } else { S1 }),
                         rounded(Radius::Inner),
-                        surface(Paint::Transparent, face.hovering(), face.pressing(), false),
+                        surface(
+                            if drop_here {
+                                Paint::AccentSoft
+                            } else {
+                                Paint::Transparent
+                            },
+                            face.hovering(),
+                            face.pressing(),
+                            false,
+                        ),
                     ],
                 ))
                 .maybe_child(lead)

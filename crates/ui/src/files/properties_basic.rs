@@ -7,8 +7,10 @@
 //! "…" and one that does not exist shows "—", so nothing moves when the
 //! answers come.
 
+use bingux_files::Category;
 use bingux_files::ops::Volume;
-use bingux_files::{Category, display};
+
+use super::display;
 use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 
@@ -16,7 +18,8 @@ use super::actions::{apps_for, launch};
 use super::file_icon::{FileIcon, FileKind, file_icon_view};
 use super::properties::Page;
 use super::properties_words::{
-    NONE, PENDING, common_parent, contents, home_relative, size_with_bytes, time, total_size, types_line,
+    NONE, PENDING, common_parent, contents, home_relative, size_with_bytes, time, total_size,
+    types_line,
 };
 use crate::controls::{path_label, usage_bar};
 use crate::group::Group;
@@ -33,9 +36,18 @@ pub(super) fn basic(page: &Page) -> Vec<Element> {
     if page.single() {
         groups.push(
             Group::titled("Times")
-                .row(property_row("Created", page.fact(|facts| time(facts.props.created))))
-                .row(property_row("Modified", page.fact(|facts| time(facts.props.modified))))
-                .row(property_row("Accessed", page.fact(|facts| time(facts.props.accessed))))
+                .row(property_row(
+                    "Created",
+                    page.fact(|facts| time(facts.props.created)),
+                ))
+                .row(property_row(
+                    "Modified",
+                    page.fact(|facts| time(facts.props.modified)),
+                ))
+                .row(property_row(
+                    "Accessed",
+                    page.fact(|facts| time(facts.props.accessed)),
+                ))
                 .into(),
         );
     }
@@ -104,10 +116,21 @@ fn head(page: &Page) -> Element {
         .unwrap_or_default();
 
     rect()
-        .tw(&tokens, &[flex_col(), items(Align::Center), w_full(), gap(S2), py(S2)])
+        .tw(
+            &tokens,
+            &[flex_col(), items(Align::Center), w_full(), gap(S2), py(S2)],
+        )
         .child(
             rect()
-                .tw(&tokens, &[w(Dim::Box24), h(Dim::Box24), rounded(Radius::Control), clip()])
+                .tw(
+                    &tokens,
+                    &[
+                        w(Dim::Box24),
+                        h(Dim::Box24),
+                        rounded(Radius::Control),
+                        clip(),
+                    ],
+                )
                 .child(picture),
         )
         .child(
@@ -129,9 +152,13 @@ fn head(page: &Page) -> Element {
         // The line is always there, so an error appearing moves nothing; a
         // long message wraps.
         .child(
-            crate::controls::select_text(if status.is_empty() { " ".to_owned() } else { status })
-                .style(CAPTION.in_ink(Ink::Danger))
-                .align(TextAlign::Center),
+            crate::controls::select_text(if status.is_empty() {
+                " ".to_owned()
+            } else {
+                status
+            })
+            .style(CAPTION.in_ink(Ink::Danger))
+            .align(TextAlign::Center),
         )
         .into()
 }
@@ -198,31 +225,25 @@ fn general(page: &Page) -> Group {
     // An item of the Trash says where it was and when it was deleted, from its
     // info file.
     if single && let Some(trash) = first.trash.as_ref() {
-        general = general.row(
-            row("Original location").path_value(
-                trash
-                    .original
-                    .as_deref()
-                    .map_or_else(|| "Unknown".to_owned(), |original| home_relative(original, page.home)),
+        general = general.row(row("Original location").path_value(
+            trash.original.as_deref().map_or_else(
+                || "Unknown".to_owned(),
+                |original| home_relative(original, page.home),
             ),
-        );
+        ));
         general = general.row(property_row(
             "Deleted",
             super::properties_words::time(trash.deleted).unwrap_or_else(|| "Unknown".to_owned()),
         ));
     }
     if single && first.symlink {
-        general = general.row(
-            row("Link target").path_value(
-                page.fact(|facts| {
-                    facts
-                        .props
-                        .link_target
-                        .as_ref()
-                        .map(|target| target.to_string_lossy().into_owned())
-                }),
-            ),
-        );
+        general = general.row(row("Link target").path_value(page.fact(|facts| {
+            facts
+                .props
+                .link_target
+                .as_ref()
+                .map(|target| target.to_string_lossy().into_owned())
+        })));
     }
     general
 }
@@ -243,12 +264,14 @@ fn open_with(page: &Page) -> Option<Group> {
     for app in apps.into_iter().take(APP_ROWS) {
         let path = first.path.clone();
         let name = app.name.clone();
-        open = open.row(row(name.clone()).leading_app(app.icon.clone()).on_press(EventHandler::new(move |()| {
-            overlays.dismiss_dialog();
-            if let Err(error) = launch(&app, &path) {
-                overlays.toast(format!("Could not start {name}: {error}."));
-            }
-        })));
+        open = open.row(row(name.clone()).leading_app(app.icon.clone()).on_press(
+            EventHandler::new(move |()| {
+                overlays.dismiss_dialog();
+                if let Err(error) = launch(&app, &path) {
+                    overlays.toast(format!("Could not start {name}: {error}."));
+                }
+            }),
+        ));
     }
     Some(open)
 }
@@ -257,7 +280,11 @@ fn open_with(page: &Page) -> Option<Group> {
 /// a plain file.
 fn shared_icon(page: &Page) -> FileIcon {
     let first = FileIcon::for_entry(&page.entries[0]);
-    if page.entries.iter().all(|entry| FileIcon::for_entry(entry).kind == first.kind) {
+    if page
+        .entries
+        .iter()
+        .all(|entry| FileIcon::for_entry(entry).kind == first.kind)
+    {
         FileIcon::for_kind(first.kind)
     } else {
         FileIcon::for_kind(FileKind::Unknown)
@@ -310,6 +337,11 @@ impl Component for VolumeSpace {
         rect()
             .tw(&tokens, &[flex_col(), w_full(), gap(S2)])
             .child(usage_bar(self.fraction))
-            .child(CAPTION.in_ink(Ink::Muted).label(&tokens, self.space.clone()).max_lines(1))
+            .child(
+                CAPTION
+                    .in_ink(Ink::Muted)
+                    .label(&tokens, self.space.clone())
+                    .max_lines(1),
+            )
     }
 }

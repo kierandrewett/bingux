@@ -60,7 +60,13 @@ pub(super) fn ink_of(token: Token) -> Ink {
 /// The rows of `text`: tabs become four spaces, a line break ends a line, and
 /// with `cols` a line longer than that many characters goes on over more rows.
 /// `first_line` numbers the first line.
-pub(super) fn rows(text: &str, language: Language, cols: Option<usize>, first_line: usize, lexer: &mut Lexer) -> Vec<Row> {
+pub(super) fn rows(
+    text: &str,
+    language: Language,
+    cols: Option<usize>,
+    first_line: usize,
+    lexer: &mut Lexer,
+) -> Vec<Row> {
     let mut rows = Vec::new();
     let _ = language;
     // A text that ends with a line break has no last, empty line.
@@ -75,13 +81,20 @@ pub(super) fn rows(text: &str, language: Language, cols: Option<usize>, first_li
         let Some(cols) = cols.filter(|cols| *cols > 0) else {
             rows.push(Row {
                 number: Some(number),
-                spans: spans.into_iter().map(|span| (span.range, span.token)).collect(),
+                spans: spans
+                    .into_iter()
+                    .map(|span| (span.range, span.token))
+                    .collect(),
                 text: line,
             });
             continue;
         };
         // Cut at character boundaries, `cols` characters a row.
-        let mut starts: Vec<usize> = line.char_indices().step_by(cols).map(|(at, _)| at).collect();
+        let mut starts: Vec<usize> = line
+            .char_indices()
+            .step_by(cols)
+            .map(|(at, _)| at)
+            .collect();
         if starts.is_empty() {
             starts.push(0);
         }
@@ -93,7 +106,12 @@ pub(super) fn rows(text: &str, language: Language, cols: Option<usize>, first_li
                 spans: spans
                     .iter()
                     .filter(|span| span.range.start < end && span.range.end > *start)
-                    .map(|span| (span.range.start.max(*start) - start..span.range.end.min(end) - start, span.token))
+                    .map(|span| {
+                        (
+                            span.range.start.max(*start) - start..span.range.end.min(end) - start,
+                            span.token,
+                        )
+                    })
                     .collect(),
             });
         }
@@ -103,7 +121,11 @@ pub(super) fn rows(text: &str, language: Language, cols: Option<usize>, first_li
 
 /// How many lines `text` has.
 pub(super) fn line_count(text: &str) -> usize {
-    if text.is_empty() { 0 } else { text.strip_suffix('\n').unwrap_or(text).split('\n').count() }
+    if text.is_empty() {
+        0
+    } else {
+        text.strip_suffix('\n').unwrap_or(text).split('\n').count()
+    }
 }
 
 /// The runs of a row for a paragraph: coloured pieces and the plain text
@@ -116,7 +138,10 @@ pub(super) fn runs(row: &Row) -> Vec<(Ink, String)> {
             runs.push((Ink::Text, row.text[at..range.start].to_owned()));
         }
         if range.end > range.start.max(at) {
-            runs.push((ink_of(*token), row.text[range.start.max(at)..range.end].to_owned()));
+            runs.push((
+                ink_of(*token),
+                row.text[range.start.max(at)..range.end].to_owned(),
+            ));
         }
         at = at.max(range.end);
     }
@@ -147,7 +172,9 @@ struct ListData {
 
 impl PartialEq for ListData {
     fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.rows, &other.rows) && self.gutter == other.gutter && self.width == other.width
+        Arc::ptr_eq(&self.rows, &other.rows)
+            && self.gutter == other.gutter
+            && self.width == other.width
     }
 }
 
@@ -163,13 +190,22 @@ impl Component for RowView {
         let row = &self.data.rows[self.index];
         let number = row
             .number
-            .map(|number| CODE.in_ink(Ink::Muted).label(&tokens, number.to_string()).max_lines(1).text_align(TextAlign::Right))
+            .map(|number| {
+                CODE.in_ink(Ink::Muted)
+                    .label(&tokens, number.to_string())
+                    .max_lines(1)
+                    .text_align(TextAlign::Right)
+            })
             .map(Element::from);
         rect()
             .width(Size::px(self.data.width))
             .tw(&tokens, &[flex_row(), items(Align::Start), gap(S3), px(S3)])
             .child(rect().width(Size::px(self.data.gutter)).maybe_child(number))
-            .child(rect().tw(&tokens, &[w_flex()]).child(CODE.runs(&tokens, runs(row)).max_lines(1)))
+            .child(
+                rect()
+                    .tw(&tokens, &[w_flex()])
+                    .child(CODE.runs(&tokens, runs(row)).max_lines(1)),
+            )
     }
 }
 
@@ -177,7 +213,8 @@ impl Component for TextView {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let Loaded::Text(first) = &self.resolved.loaded else {
-            return super::Card::of(&self.resolved, &crate::preview::PreviewNav::new(|_| {})).into_element();
+            return super::Card::of(&self.resolved, &crate::preview::PreviewNav::new(|_| {}))
+                .into_element();
         };
         let mut wrap = use_state(|| true);
         let mut more = use_state(Vec::<Arc<TextWindow>>::new);
@@ -186,9 +223,12 @@ impl Component for TextView {
 
         // Plain monospace: a preview is for reading what a file is, not for highlighting it.
         let language = Language::Plain;
-        let char_width = (crate::controls::path_label::measure_text("0000000000", CODE) / 10.0).max(1.0);
+        let char_width =
+            (crate::controls::path_label::measure_text("0000000000", CODE) / 10.0).max(1.0);
         let extra: Vec<Arc<TextWindow>> = more.read().clone();
-        let all: Vec<&TextWindow> = std::iter::once(first).chain(extra.iter().map(|window| &**window)).collect();
+        let all: Vec<&TextWindow> = std::iter::once(first)
+            .chain(extra.iter().map(|window| &**window))
+            .collect();
         let last = all.last().copied().unwrap_or(first).clone();
 
         // The rows of every window read so far, numbered on from one another.
@@ -243,11 +283,13 @@ impl Component for TextView {
         };
 
         let total_note = match (last.total, capped, has_more) {
-            (_, true, _) => Some("The preview stops here. Open the file to read the rest.".to_owned()),
+            (_, true, _) => {
+                Some("The preview stops here. Open the file to read the rest.".to_owned())
+            }
             (Some(total), _, true) => Some(format!(
                 "Showing {} of {}.",
-                bingux_files::display::size(last.end),
-                bingux_files::display::size(total)
+                crate::files::display::size(last.end),
+                crate::files::display::size(total)
             )),
             _ => None,
         };
@@ -256,7 +298,9 @@ impl Component for TextView {
         let on_key = move |event: Event<KeyboardEventData>| {
             if let Key::Character(text) = &event.key
                 && text.eq_ignore_ascii_case("w")
-                && !event.modifiers.intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::META)
+                && !event
+                    .modifiers
+                    .intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::META)
             {
                 event.stop_propagation();
                 let next = !*wrap.peek();
@@ -293,17 +337,38 @@ impl Component for TextView {
             .maybe_child(notice.then(|| {
                 Element::from(
                     rect()
-                        .tw(&tokens, &[w_full(), px(S4), py(S2), flex_row(), items(Align::Center), gap(S3), bg(Paint::Control)])
-                        .child(rect().tw(&tokens, &[w_flex()]).child(
-                            CAPTION
-                                .in_ink(Ink::Muted)
-                                .label(&tokens, note)
-                                .max_lines(1)
-                                .text_overflow(TextOverflow::Ellipsis),
-                        ))
-                        .maybe_child(
-                            (has_more).then(|| Element::from(action_button(if *reading.read() { "Reading…" } else { "Show more" }, read_more.clone())).clone()),
-                        ),
+                        .tw(
+                            &tokens,
+                            &[
+                                w_full(),
+                                px(S4),
+                                py(S2),
+                                flex_row(),
+                                items(Align::Center),
+                                gap(S3),
+                                bg(Paint::Control),
+                            ],
+                        )
+                        .child(
+                            rect().tw(&tokens, &[w_flex()]).child(
+                                CAPTION
+                                    .in_ink(Ink::Muted)
+                                    .label(&tokens, note)
+                                    .max_lines(1)
+                                    .text_overflow(TextOverflow::Ellipsis),
+                            ),
+                        )
+                        .maybe_child((has_more).then(|| {
+                            Element::from(action_button(
+                                if *reading.read() {
+                                    "Reading…"
+                                } else {
+                                    "Show more"
+                                },
+                                read_more.clone(),
+                            ))
+                            .clone()
+                        })),
                 )
             }))
             .into_element()
@@ -315,16 +380,32 @@ mod tests {
     use super::*;
 
     fn plain(text: &str, cols: Option<usize>) -> Vec<(Option<usize>, String)> {
-        rows(text, Language::Plain, cols, 1, &mut Lexer::new(Language::Plain))
-            .into_iter()
-            .map(|row| (row.number, row.text))
-            .collect()
+        rows(
+            text,
+            Language::Plain,
+            cols,
+            1,
+            &mut Lexer::new(Language::Plain),
+        )
+        .into_iter()
+        .map(|row| (row.number, row.text))
+        .collect()
     }
 
     #[test]
     fn lines_are_numbered_and_the_last_break_makes_no_empty_line() {
-        assert_eq!(plain("a\nb\n", None), [(Some(1), "a".into()), (Some(2), "b".into())]);
-        assert_eq!(plain("a\n\nb", None), [(Some(1), "a".into()), (Some(2), String::new()), (Some(3), "b".into())]);
+        assert_eq!(
+            plain("a\nb\n", None),
+            [(Some(1), "a".into()), (Some(2), "b".into())]
+        );
+        assert_eq!(
+            plain("a\n\nb", None),
+            [
+                (Some(1), "a".into()),
+                (Some(2), String::new()),
+                (Some(3), "b".into())
+            ]
+        );
     }
 
     #[test]
@@ -347,7 +428,10 @@ mod tests {
 
     #[test]
     fn wrapping_never_cuts_a_character() {
-        assert_eq!(plain("éééé", Some(3)), [(Some(1), "ééé".into()), (None, "é".into())]);
+        assert_eq!(
+            plain("éééé", Some(3)),
+            [(Some(1), "ééé".into()), (None, "é".into())]
+        );
     }
 
     #[test]
@@ -367,7 +451,13 @@ mod tests {
             text: "let x".into(),
             spans: vec![(0..3, Token::Keyword)],
         };
-        assert_eq!(runs(&row), [(Ink::Accent, "let".to_owned()), (Ink::Text, " x".to_owned())]);
+        assert_eq!(
+            runs(&row),
+            [
+                (Ink::Accent, "let".to_owned()),
+                (Ink::Text, " x".to_owned())
+            ]
+        );
     }
 
     #[test]
@@ -376,5 +466,4 @@ mod tests {
         assert_eq!(gutter_digits(1000), 4);
         assert_eq!(gutter_digits(0), 1);
     }
-
 }

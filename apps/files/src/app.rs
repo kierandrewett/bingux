@@ -17,13 +17,13 @@
 //! running closes, and the menu.
 
 use bingux_ui::app::use_window_seed;
-use bingux_ui::files::launch::destination;
+use bingux_ui::files::launch::{self, destination};
 use bingux_ui::files::{self, Browse, FileTab, Where};
 use bingux_ui::prelude::*;
-use bingux_ui::shell::MenuItem;
-use bingux_ui::tabs::{Birth, CloseWarning, Tab, TabSet, Tabs, tab_items, use_tab_window};
+use bingux_ui::tabs::{Birth, CloseWarning, Moved, Tab, TabSet, Tabs, tab_items, use_tab_window};
 use freya::prelude::*;
 
+use crate::session;
 use crate::window_size::remember_size;
 
 /// The titles of all the tabs: each folder's name, with the nearest parent
@@ -105,12 +105,29 @@ impl Component for Content {
         let overlays = use_overlays();
         let maximized = freya::borderless::use_maximized();
         let location = use_location();
-        // A window opened for tabs torn off another is born with them.
+        // A window opened for tabs torn off another is born with them. Files
+        // started with no folder named opens the tabs of the window that was
+        // closed last.
         let birth = use_window_seed::<Birth<FileTab>>();
         let set = use_state({
             let location = location.clone();
             move || {
-                birth.and_then(|birth| birth.into_set()).unwrap_or_else(|| {
+                if let Some(set) = birth.and_then(|birth| birth.into_set()) {
+                    return set;
+                }
+                let restored = (!launch::names_a_place(&location))
+                    .then(session::remembered)
+                    .flatten()
+                    .and_then(|(places, on_show)| {
+                        let tabs = places
+                            .into_iter()
+                            .map(|at| Moved {
+                                content: FileTab::new(at),
+                            })
+                            .collect();
+                        TabSet::adopt(tabs, on_show)
+                    });
+                restored.unwrap_or_else(|| {
                     let (at, select) = destination(&location);
                     TabSet::new(FileTab::new(at).selecting(select))
                 })
@@ -138,6 +155,19 @@ impl Component for Content {
             let set = set.read();
             (set.tabs().to_vec(), set.current().cloned())
         };
+        // The window's tabs are written down as they change, so the window is
+        // kept as it was when it closed, however it was closed.
+        let places: Vec<Where> = shown.iter().map(|tab| tab.content.at.clone()).collect();
+        let on_show = tab
+            .as_ref()
+            .and_then(|tab| shown.iter().position(|shown| shown.id == tab.id))
+            .unwrap_or(0);
+        use_side_effect_with_deps(
+            &(places, on_show),
+            |(places, on_show): &(Vec<Where>, usize)| {
+                session::remember(&session::Session::of(places, *on_show));
+            },
+        );
         let title = tab
             .as_ref()
             .map(|tab| title_of(&tab.content.at))
@@ -251,57 +281,24 @@ fn here(tabs: Tabs<FileTab>) -> Where {
         .map_or_else(home, |tab| tab.content.at.clone())
 }
 
-/// The window's commands: the tab commands, and the keys the file view
-/// answers itself, for the main menu, the palette and the shortcuts sheet
-/// (Ctrl+?).
+/// The window's commands: New window and the tab commands, for the main
+/// menu, the palette and the shortcuts sheet (Ctrl+?). The browser's (Back,
+/// Edit the path, Show hidden files) and the file view's (Rename, Duplicate,
+/// Copy) are their own scopes' (`bingux_ui::files`), so the sheet lists
+/// every key the window answers without a list kept here.
 fn window_commands(tabs: Tabs<FileTab>) -> Vec<Command> {
-    let mut commands = tabs.commands(move |_: ()| {
+    // Ctrl+N is a new window at the folder on show, as in Finder and GNOME
+    // Files.
+    let mut commands = vec![
+        Command::new("files.new-window", "New window", move |_| {
+            tabs.open_window(FileTab::new(here(tabs)));
+        })
+        .shortcut("Ctrl+N")
+        .group(CommandGroup::File)
+        .section("tabs"),
+    ];
+    commands.extend(tabs.commands(move |_: ()| {
         tabs.open(FileTab::new(here(tabs)));
-    });
-    for (id, title, keys, group) in [
-        (
-            "files.back",
-            "Back, forward, parent folder",
-            "Alt+Left, Alt+Right, Alt+Up",
-            CommandGroup::Go,
-        ),
-        ("files.path", "Edit the path", "Ctrl+L", CommandGroup::Go),
-        ("files.search", "Search", "Ctrl+F", CommandGroup::Edit),
-        (
-            "files.hidden",
-            "Show hidden files",
-            "Ctrl+H",
-            CommandGroup::View,
-        ),
-        (
-            "files.new-folder",
-            "New folder",
-            "Ctrl+Shift+N",
-            CommandGroup::File,
-        ),
-        ("files.rename", "Rename", "F2", CommandGroup::File),
-        ("files.trash", "Move to Trash", "Delete", CommandGroup::File),
-        (
-            "files.delete",
-            "Delete permanently",
-            "Shift+Delete",
-            CommandGroup::File,
-        ),
-        (
-            "files.clipboard",
-            "Copy, cut, paste",
-            "Ctrl+C, Ctrl+X, Ctrl+V",
-            CommandGroup::Edit,
-        ),
-        ("files.preview", "Preview", "Space", CommandGroup::View),
-        (
-            "files.properties",
-            "Properties",
-            "Alt+Enter",
-            CommandGroup::File,
-        ),
-    ] {
-        commands.push(Command::key_hint(id, title, keys).group(group));
-    }
+    }));
     commands
 }

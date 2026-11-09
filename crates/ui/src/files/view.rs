@@ -30,8 +30,8 @@
 //! | --- | ---- |
 //! | arrows, Home, End, Page Up and Down | move the cursor; Shift extends |
 //! | Enter | open the cursor row |
-//! | letters | search the folder in the address bar when the owner offers a search ([`FileView::on_search`]); else jump to a name that starts with them |
-//! | Ctrl+F | start that search |
+//! | letters | jump to the first name that starts with them (one letter again: the next name with it) |
+//! | Ctrl+F | search the folder in the address bar when the owner offers a search ([`FileView::on_search`]) |
 //! | Space | Quick Look: preview the selected file (see `preview.rs`) |
 //! | Ctrl+A, Ctrl+Space | select all, toggle the cursor row |
 //! | F2, Delete, Shift+Delete | rename, move to the Trash, delete permanently (asks first, and cannot be undone) |
@@ -227,8 +227,7 @@ pub(super) struct Ctx {
     pub thumbnails: bool,
     /// The Recent place: dates read as how long ago, and a Location column.
     pub recent: bool,
-    /// A letter typed on the list, or Ctrl+F, starts a search; see
-    /// [`FileView::on_search`].
+    /// Ctrl+F starts a search; see [`FileView::on_search`].
     pub on_search: Option<EventHandler<String>>,
     pub home: PathBuf,
     pub wants: Wants,
@@ -649,12 +648,9 @@ impl Ctx {
             && text != "/"
             && text != "~"
         {
-            // Typing a name searches the folder when the owner offers a
-            // search; otherwise it jumps to a name that starts with it.
-            if let Some(start) = &self.on_search {
-                start.call(text.to_string());
-                return true;
-            }
+            // Typing a name jumps to the first one that starts with it, as
+            // in Finder and Nautilus: one letter again moves on to the next
+            // name with it. Ctrl+F is the search.
             let prefix = typed
                 .borrow_mut()
                 .push(text.chars().next().unwrap_or(' '), Instant::now())
@@ -1224,9 +1220,8 @@ impl FileView {
         self
     }
 
-    /// Typing a name on the list, or Ctrl+F, calls this with the typed
-    /// letter (empty for Ctrl+F) so the owner can start a search, instead of
-    /// jumping to a name that starts with the letter.
+    /// Ctrl+F calls this (with an empty text) so the owner can start a
+    /// search in its address bar. Letters typed on the list jump to a name.
     pub fn on_search(mut self, handler: impl Into<EventHandler<String>>) -> Self {
         self.on_search = Some(handler.into());
         self
@@ -1727,6 +1722,33 @@ impl Component for FileView {
             }
         }
 
+        // Files from another program dropped on a sidebar place: this view
+        // moves or copies them, as it does a drop on one of its folders.
+        let outside_seen = use_hook(|| {
+            Rc::new(Cell::new(
+                gestures.session.map_or(0, |drag| drag.outside_seen()),
+            ))
+        });
+        if let Some(dropped) = gestures.session.and_then(|drag| drag.outside())
+            && outside_seen.get() != dropped.id
+        {
+            outside_seen.set(dropped.id);
+            let shared = shared.clone();
+            spawn(async move {
+                let ctx = shared.get();
+                let selected = ctx.selected_owned();
+                actions::run(
+                    &ctx.env,
+                    &selected,
+                    Command::MoveInto {
+                        paths: dropped.paths,
+                        dest: dropped.dest,
+                        copy: dropped.copy,
+                    },
+                );
+            });
+        }
+
         let focus_seen =
             use_hook(|| Rc::new(Cell::new(self.focus.map_or(0, |trigger| *trigger.peek()))));
         if let Some(trigger) = self.focus {
@@ -1946,6 +1968,10 @@ impl Component for FileView {
             // drawn inside it: outside, the window would cut it off. It takes
             // the view's own painted corners.
             .focusable_inside(focus());
+        // What the view does, for the main menu, the palette and the
+        // shortcuts sheet while it has the focus. Its own key handler above
+        // answers the keys.
+        let commands = view_commands(&shared);
         // The list and, at its right edge, the docked preview pane. The pane
         // is always mounted so its slide has a state to start from.
         rect()
@@ -1954,9 +1980,193 @@ impl Component for FileView {
                 let mut pane_row = pane_row;
                 pane_row.set_if_modified(event.area);
             })
-            .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(view))
+            .child(
+                rect()
+                    .tw(&tokens, &[w_flex(), h_full()])
+                    .child(crate::commands::command_scope("File list", commands, view).fill()),
+            )
             .child(super::preview::dock(&shared, *pane_row.read()))
     }
+}
+
+/// The file view's commands as the selection stands: what its keys do, by
+/// menu. A command the view cannot do here (the chooser changes no files) is
+/// left out; one that needs a selection is dimmed without one. Whether there
+/// is something to paste or a tool to pack with is asked when the command
+/// runs, as the context menu asks when it opens.
+fn view_commands(shared: &Shared) -> Vec<crate::commands::Command> {
+    use crate::commands::{Command as Cmd, CommandGroup};
+    let ctx = shared.get();
+    let env = &ctx.env;
+    let facts = {
+        let selected = ctx.selected_refs();
+        actions::Facts {
+            caps: env.caps,
+            in_folder: env.folder.is_some(),
+            selected: selected.len(),
+            folders: selected.iter().filter(|entry| entry.is_dir()).count(),
+            can_paste: true,
+            bookmarked: false,
+            extractable: selected.len() == 1,
+            can_compress: true,
+            shown: env.order.len(),
+            undo: None,
+            trash: actions::TrashView::of(env.folder.as_deref()),
+        }
+    };
+    let item = |id: &str, title: &str, command: Command, group: CommandGroup, section: &str| {
+        if command.changes_files() && !env.caps.modify {
+            return None;
+        }
+        let enabled = actions::availability(&facts, &command).is_enabled();
+        let keys = actions::shortcut(&command);
+        let shared = shared.clone();
+        let mut made = Cmd::new(id, title, move |_| {
+            let ctx = shared.get();
+            let selected = ctx.selected_owned();
+            match actions::available(&ctx.env, &selected, &command) {
+                actions::Availability::Enabled => {
+                    actions::run(&ctx.env, &selected, command.clone())
+                }
+                actions::Availability::Disabled(why) => actions::notify(ctx.env.ui, why, false),
+                actions::Availability::Hidden => {}
+            }
+        })
+        .enabled(enabled)
+        .group(group)
+        .section(section)
+        .keys_handled_by_view();
+        if let Some(keys) = keys {
+            made = made.shortcut(keys);
+        }
+        Some(made)
+    };
+    let view = |id: &str, title: &str, keys: &str, kind: ViewKind| {
+        let zoom = ctx.zoom;
+        Cmd::new(id, title, move |_| zoom.show(kind))
+            .shortcut(keys)
+            .checked(zoom.kind() == kind)
+            .group(CommandGroup::View)
+            .section("kind")
+            .keys_handled_by_view()
+    };
+    use CommandGroup::{Edit, File, View};
+    let mut commands: Vec<Cmd> = [
+        item(
+            "files.new-folder",
+            "New folder",
+            Command::NewFolder,
+            File,
+            "new",
+        ),
+        item(
+            "files.duplicate",
+            "Duplicate",
+            Command::Duplicate,
+            File,
+            "change",
+        ),
+        item("files.rename", "Rename…", Command::Rename, File, "change"),
+        item(
+            "files.compress",
+            "Compress…",
+            Command::Compress,
+            File,
+            "archive",
+        ),
+        item(
+            "files.extract-to",
+            "Extract to…",
+            Command::ExtractTo,
+            File,
+            "archive",
+        ),
+        item(
+            "files.trash",
+            "Move to Trash",
+            Command::Trash,
+            File,
+            "delete",
+        ),
+        item(
+            "files.delete",
+            "Delete permanently…",
+            Command::DeletePermanently,
+            File,
+            "delete",
+        )
+        .map(Cmd::destructive),
+        item(
+            "files.properties",
+            "Properties",
+            Command::Properties,
+            File,
+            "info",
+        ),
+        item("files.cut", "Cut", Command::Cut, Edit, "clipboard"),
+        item("files.copy", "Copy", Command::Copy, Edit, "clipboard"),
+        item("files.paste", "Paste", Command::Paste, Edit, "clipboard"),
+        item(
+            "files.copy-path",
+            "Copy path",
+            Command::CopyPath,
+            Edit,
+            "clipboard",
+        ),
+        item(
+            "files.select-all",
+            "Select all",
+            Command::SelectAll,
+            Edit,
+            "select",
+        ),
+        item(
+            "files.invert",
+            "Invert selection",
+            Command::InvertSelection,
+            Edit,
+            "select",
+        ),
+        item(
+            "files.preview",
+            "Preview",
+            Command::Preview,
+            View,
+            "preview",
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    commands.extend([
+        Cmd::key_hint(
+            "files.type-select",
+            "Select an item by its name",
+            "Type a name",
+        )
+        .group(Edit)
+        .section("select"),
+        view("files.as-list", "Show as list", "Ctrl+1", ViewKind::List),
+        view("files.as-grid", "Show as grid", "Ctrl+2", ViewKind::Grid),
+        Cmd::key_hint(
+            "files.zoom",
+            "Larger, smaller, actual size",
+            "Ctrl+Plus, Ctrl+Minus, Ctrl+0",
+        )
+        .group(View)
+        .section("zoom"),
+        Cmd::key_hint(
+            "files.sort",
+            "Sort by name, size, type, date",
+            "Ctrl+Alt+1 to 4",
+        )
+        .group(View)
+        .section("sort"),
+        Cmd::key_hint("files.sort-reverse", "Reverse the order", "Ctrl+Alt+R")
+            .group(View)
+            .section("sort"),
+    ]);
+    commands
 }
 
 /// The Trash's own columns when `folder` is the Trash itself (the `files`
