@@ -397,11 +397,17 @@ impl Component for FilmStage {
         // A phone-width stage keeps the mute button and drops the slider, so
         // the slider cannot collide with the transport. Volume keys still work.
         let narrow = stage_width > 0.0 && stage_width < NARROW_STAGE;
+        // The footer's measured area: the transport's tips open above the whole
+        // bar, clear of the timeline, not just above their own button.
+        let mut controls_area = use_state(|| None::<Area>);
         let controls = card(
             rect()
                 .width(Size::fill())
                 .tw(&tokens, &[flex_col(), gap(S1)]),
         )
+        .on_sized(move |event: Event<SizedEventData>| {
+            controls_area.set_if_modified(Some(event.area))
+        })
         .child(seek_bar)
         .child(
             rect()
@@ -412,6 +418,7 @@ impl Component for FilmStage {
                 )
                 .child(
                     transport(playing, action)
+                        .tooltips_over(controls_area)
                         .skips()
                         .can_next(live.queue.read().upcoming().len() > 0)
                         .compact_if(mini),
