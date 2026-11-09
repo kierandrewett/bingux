@@ -56,6 +56,8 @@ pub struct Transport {
     enabled: bool,
     floating: bool,
     compact: bool,
+    /// The area the tips are placed against, see [`Transport::tooltips_over`].
+    tooltip_region: Option<State<Option<Area>>>,
 }
 
 /// The row for a player that is `playing` (or paused).
@@ -71,6 +73,7 @@ pub fn transport(playing: bool, on_action: impl Into<EventHandler<TransportActio
         enabled: true,
         floating: false,
         compact: false,
+        tooltip_region: None,
     }
 }
 
@@ -122,6 +125,13 @@ impl Transport {
         self.compact = true;
         self
     }
+
+    /// Places the tips above `region` (a bar's measured area) rather than
+    /// above each button, so they clear the bar's timeline.
+    pub fn tooltips_over(mut self, region: State<Option<Area>>) -> Self {
+        self.tooltip_region = Some(region);
+        self
+    }
 }
 
 impl Component for Transport {
@@ -140,6 +150,7 @@ impl Component for Transport {
             icon_button(glyph, action(which))
                 .ink(ink)
                 .tooltip_side(TipSide::Above)
+                .tooltip_region(self.tooltip_region)
                 .tooltip(tip)
                 .enabled(self.enabled && enabled)
                 .into()
@@ -156,6 +167,7 @@ impl Component for Transport {
             .filled()
             .ink(ink)
             .tooltip_side(TipSide::Above)
+            .tooltip_region(self.tooltip_region)
             .tooltip(&play_tip)
             .enabled(self.enabled);
 
@@ -187,6 +199,7 @@ impl Component for Transport {
                     .ink(ink)
                     .active(on)
                     .tooltip_side(TipSide::Above)
+                    .tooltip_region(self.tooltip_region)
                     .tooltip(&if on {
                         crate::tr!("ui-media-shuffle-on")
                     } else {
@@ -238,6 +251,7 @@ impl Component for Transport {
                     .ink(ink)
                     .active(mode != RepeatMode::Off)
                     .tooltip_side(TipSide::Above)
+                    .tooltip_region(self.tooltip_region)
                     .tooltip(&tip)
                     .enabled(self.enabled),
             );

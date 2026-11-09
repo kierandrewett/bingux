@@ -107,6 +107,7 @@ pub fn hover_tip(child: impl IntoElement, text: impl Into<String>) -> Element {
         text: text.into(),
         size: None,
         prefer: None,
+        region: None,
     })
 }
 
@@ -127,6 +128,18 @@ pub fn hover_tip_preferring(
     text: impl Into<String>,
     prefer: TipSide,
 ) -> Element {
+    hover_tip_in(child, text, prefer, None)
+}
+
+/// [`hover_tip_preferring`] that places the tip against `region` (the area a
+/// footer measured, say) rather than against `child` alone. Until `region` is
+/// measured the tip is placed against the child.
+pub(crate) fn hover_tip_in(
+    child: impl IntoElement,
+    text: impl Into<String>,
+    prefer: TipSide,
+    region: Option<State<Option<Area>>>,
+) -> Element {
     Element::from(HoverTip {
         child: child.into_element(),
         text: text.into(),
@@ -137,6 +150,7 @@ pub fn hover_tip_preferring(
             TipSide::Right => Side::Right,
             TipSide::Left => Side::Left,
         }),
+        region,
     })
 }
 
@@ -155,6 +169,7 @@ pub fn hover_tip_sized(
         text: text.into(),
         size: Some((width, height)),
         prefer: None,
+        region: None,
     })
 }
 
@@ -405,6 +420,10 @@ struct HoverTip {
     size: Option<(Size, Size)>,
     /// The side the tip opens on when it fits, before the usual order.
     prefer: Option<Side>,
+    /// The area the tip is placed against, in place of the child's own area,
+    /// when the owner has measured one: a footer's whole bar, so a tip on a
+    /// button opens above the bar and not over the control beside it.
+    region: Option<State<Option<Area>>>,
 }
 
 /// The box around a tip and its child, with the size the child asked for.
@@ -622,8 +641,10 @@ impl Component for HoverTip {
         let Some((area, shown)) = shown else {
             return shell().child(wrapper).child(probe).into_element();
         };
+        // Placed against the owner's region once measured, else the child.
+        let target = self.region.and_then(|region| region()).unwrap_or(area);
         let placed = decide(
-            PanelRect::from_area(&area),
+            PanelRect::from_area(&target),
             shown.size,
             (window.width, window.height),
             side.get().or(self.prefer),

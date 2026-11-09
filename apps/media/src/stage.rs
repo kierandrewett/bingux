@@ -108,6 +108,9 @@ pub fn set_mini(ui: Ui, on: bool) {
     let (width, height) = if on { (360.0, 400.0) } else { (1100.0, 760.0) };
     Platform::get().with_window(Platform::window_id(), move |window| {
         let _ = window.request_inner_size(freya::winit::dpi::LogicalSize::new(width, height));
+        // Winit applies the new size at once but sends no resize event for it, so the
+        // redraw is what lays the mini layout out at the new size.
+        window.request_redraw();
     });
 }
 
@@ -398,11 +401,17 @@ impl Component for FilmStage {
         // A phone-width stage keeps the mute button and drops the slider, so
         // the slider cannot collide with the transport. Volume keys still work.
         let narrow = stage_width > 0.0 && stage_width < NARROW_STAGE;
+        // The footer's measured area: the transport's tips open above the whole
+        // bar, clear of the timeline, not just above their own button.
+        let mut controls_area = use_state(|| None::<Area>);
         let controls = card(
             rect()
                 .width(Size::fill())
                 .tw(&tokens, &[flex_col(), gap(S1)]),
         )
+        .on_sized(move |event: Event<SizedEventData>| {
+            controls_area.set_if_modified(Some(event.area))
+        })
         .child(seek_bar)
         .child(
             rect()
@@ -413,6 +422,7 @@ impl Component for FilmStage {
                 )
                 .child(
                     transport(playing, action)
+                        .tooltips_over(controls_area)
                         .skips()
                         .can_next(live.queue.read().upcoming().len() > 0)
                         .compact_if(mini),

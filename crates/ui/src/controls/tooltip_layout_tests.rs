@@ -20,7 +20,7 @@ use std::time::Duration;
 use freya::engine::prelude::{SkData, SkImage, raster_n32_premul};
 use freya::prelude::*;
 
-use super::{bubble, hover_tip};
+use super::{TipSide, bubble, hover_tip};
 use crate::component::ComponentName;
 use crate::controls::icon_button;
 use crate::controls::tabs::{TabItem, tab_strip};
@@ -548,4 +548,59 @@ fn the_check_passes_every_control_of_the_cases() {
         );
         assert!(report.findings.is_empty(), "{place:?}: {report:?}");
     }
+}
+
+/// A footer bar as the media player has one: a 320 x 100 box whose top is the
+/// seek bar, with a 44 px button in its lower half. Its tip is placed against
+/// the bar's measured area, not the button, so it opens above the whole bar.
+#[derive(PartialEq, Clone)]
+struct FooterBar;
+
+impl Component for FooterBar {
+    fn render(&self) -> impl IntoElement {
+        let mut bar = use_state(|| None::<Area>);
+        rect()
+            .position(Position::new_absolute().left(160.0).top(300.0))
+            .width(Size::px(320.0))
+            .height(Size::px(100.0))
+            .on_sized(move |event: Event<SizedEventData>| bar.set_if_modified(Some(event.area)))
+            .child(
+                rect()
+                    .position(Position::new_absolute().left(40.0).top(40.0))
+                    .child(
+                        icon_button(Icon::MediaPlaybackStart, |_: ()| {})
+                            .size(Dim::Control)
+                            .tooltip("Pause (Space)")
+                            .tooltip_side(TipSide::Above)
+                            .tooltip_region(Some(bar)),
+                    ),
+            )
+    }
+}
+
+#[derive(PartialEq, Clone)]
+struct FooterRoot;
+
+impl Component for FooterRoot {
+    fn render(&self) -> impl IntoElement {
+        let _tokens = provide_tokens();
+        WindowHost::new(OverlayHost::new(FooterBar))
+    }
+}
+
+#[test]
+fn a_tip_placed_against_a_footer_region_opens_above_the_whole_bar() {
+    let mut shot = Snapshot::new(|| FooterRoot.into_element(), WINDOW);
+    shot.settle(Duration::from_millis(300));
+    // The button's centre: (222, 362).
+    shot.runner().move_cursor((222.0, 362.0));
+    let found = wait_for(&mut shot, "Pause (Space)");
+    assert!(
+        found.bubble.max_y() <= 300.0,
+        "the tip clears the bar's top edge (300): {found:?}"
+    );
+    assert!(
+        found.bubble.min_y() < 300.0,
+        "the tip is above the bar, not below it: {found:?}"
+    );
 }

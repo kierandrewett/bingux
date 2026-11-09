@@ -1006,6 +1006,23 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                 }
                 WindowEvent::RedrawRequested => {
                     let scale_factor = app.effective_scale_factor();
+                    // Winit applies a size the app requested at once and sends no `Resized`
+                    // when the compositor's configure matches it, so the surface and layout that
+                    // no longer fit the window are redone here instead of waiting for an event.
+                    let inner = app.window.inner_size();
+                    let laid_out = *app.platform.root_size.peek();
+                    if (inner.width as f32, inner.height as f32) != (laid_out.width, laid_out.height)
+                    {
+                        if let Err(error) = app.driver.resize(inner) {
+                            tracing::warn!(
+                                "Graphics driver lost while resizing ({error:?}), rebuilding on the same window"
+                            );
+                            needs_recovery = true;
+                        }
+                        app.tree.layout.clear_dirty();
+                        app.tree.layout.invalidate(NodeId::ROOT);
+                        app.process_layout_on_next_render = true;
+                    }
                     hotpath::measure_block!("RedrawRequested", {
                         if app.process_layout_on_next_render {
                             self.plugins.send(
