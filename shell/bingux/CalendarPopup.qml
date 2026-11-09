@@ -632,7 +632,7 @@ ShellPopup {
                 Layout.minimumHeight: root.inlineMode ? implicitHeight : Math.max(Theme.controlHeight * 2, emptyAgenda.visible ? emptyAgenda.implicitHeight + Theme.gap * 2 : 0)
                 // The sidebar already scrolls the whole calendar. Let its agenda
                 // grow with the events instead of nesting a small scrolling list.
-                implicitHeight: root.inlineMode ? Math.max(Theme.calendarAgendaHeight, Math.ceil(agenda.contentHeight) + Theme.gap * 2) : Theme.calendarAgendaHeight
+                implicitHeight: root.inlineMode ? Math.max(Theme.calendarAgendaHeight, Math.ceil(agenda.contentHeight) + Theme.gap * 2, emptyAgenda.visible ? emptyAgenda.implicitHeight + Theme.gap * 2 : 0) : Theme.calendarAgendaHeight
                 radius: Theme.menuWidgetRadius
                 color: Theme.elevated
                 clip: true
@@ -728,31 +728,22 @@ ShellPopup {
                         }
                     }
                 }
-                ColumnLayout {
+                StateMessage {
                     id: emptyAgenda
-                    anchors.centerIn: parent
-                    width: parent.width - Theme.padding * 2
+                    objectName: "calendarEmpty"
+                    anchors.fill: parent
+                    fill: true
+                    // Roomy in the sidebar; the popup agenda is a fixed 144 px card.
+                    compact: !root.inlineMode
                     visible: root.presentedEvents.length === 0
                     opacity: root.agendaProgress
-                    spacing: Theme.spaceSmall
-                    Text {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        text: eventSource.loading ? "Loading events…" : eventSource.error ? "Events unavailable" : "No events"
-                        color: Theme.text
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSize
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.WordWrap
-                        text: eventSource.error || (eventSource.available ? "Nothing scheduled for this day" : "Connect a calendar in Online Accounts")
-                        visible: !eventSource.loading
-                        color: Theme.muted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSmall
-                    }
+                    loading: eventSource.loading
+                    tone: !eventSource.loading && eventSource.error ? "danger" : "neutral"
+                    iconName: eventSource.error ? "" : "x-office-calendar-symbolic"
+                    title: eventSource.loading ? "Loading events…" : eventSource.error ? "Could not load events" : eventSource.available ? "No events" : "No calendar connected"
+                    detail: eventSource.loading ? "" : eventSource.error ? "Open Calendar to check your accounts." : eventSource.available ? "Nothing is scheduled for this day." : "Add an account or a calendar in your calendar app."
+                    actionText: root.inlineMode && !eventSource.loading && (eventSource.error || !eventSource.available) ? "Open Calendar" : ""
+                    onActionTriggered: root.launchCalendar(root.openCommand(), [])
                 }
             }
         }

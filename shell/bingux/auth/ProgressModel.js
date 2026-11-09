@@ -10,8 +10,8 @@
 var STAGES = [
     {id: "auth_accepted", weight: 5, counted: false, label: "Authenticating", failure: "The sign-in was not accepted"},
     {id: "pam_session", weight: 10, counted: false, label: "Opening your session", failure: "Your session could not be opened"},
-    {id: "host_connected", weight: 5, counted: false, label: "Starting Gnoblin", failure: "Gnoblin could not be started"},
-    {id: "gnoblin_ready", weight: 20, counted: false, label: "Starting Gnoblin", failure: "Gnoblin did not become ready"},
+    {id: "host_connected", weight: 5, counted: false, label: "Starting the desktop", failure: "The desktop could not be started"},
+    {id: "gnoblin_ready", weight: 20, counted: false, label: "Starting the desktop", failure: "The desktop did not start in time"},
     {id: "outputs_configured", weight: 10, counted: true, label: "Preparing displays", failure: "The displays could not be prepared"},
     {id: "bingux_launched", weight: 10, counted: false, label: "Starting Bingux", failure: "Bingux could not be started"},
     {id: "surfaces_mapped", weight: 20, counted: true, label: "Waiting for Bingux surfaces", failure: "The desktop surfaces did not appear"},

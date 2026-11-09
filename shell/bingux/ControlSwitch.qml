@@ -13,11 +13,12 @@ Switch {
         height: 20
         radius: 10
         // A defined track and a light thumb make this read as a switch rather
-        // than another rounded button in the grid.
-        color: root.checked ? Theme.accent : Theme.elevated
+        // than another rounded button in the grid. The off track is opaque and
+        // its edge reaches 3:1 against the popup (Theme.controlOffOutline).
+        color: root.checked ? Theme.accent : Theme.controlOffTrack
         opacity: root.enabled ? 1 : 0.45
         border.width: root.visualFocus || !root.checked ? 1 : 0
-        border.color: root.visualFocus ? Theme.text : Theme.outline
+        border.color: root.visualFocus ? Theme.text : Theme.controlOffOutline
         Rectangle {
             anchors.fill: parent
             radius: parent.radius

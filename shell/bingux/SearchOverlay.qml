@@ -129,12 +129,12 @@ PanelWindow {
     readonly property bool serviceReady: searchSocket.connectionState === "ready"
     readonly property bool loading: activeRequestId !== "" && !queryComplete
     readonly property bool hasQuery: searchInput.text.trim() !== ""
+    // Transient progress only: one muted word at the end of the field. Every
+    // lasting state (offline, no results, a failure) has a body message below
+    // the field instead (bodyState), and an activation failure sits on its row.
     readonly property string inlineStatusText: {
-        if (queryError !== "")
-            return queryError;
-
-        if (!serviceReady)
-            return "Offline";
+        if (!serviceReady || queryError !== "")
+            return "";
 
         if (chatPending)
             return streamingChatText ? "Answering" : "Connecting";
@@ -145,11 +145,31 @@ PanelWindow {
         if (loading && displayedResults.length === 0)
             return "Searching";
 
-        if (queryComplete && results.length === 0 && hasQuery)
-            return "No results";
+        return "";
+    }
+    // "offline": the search service is not connected. "error": the query or an
+    // activation failed with nothing to list. "partial": results are shown but
+    // some sources failed. "empty": a finished query with no results.
+    readonly property string bodyState: {
+        if (!serviceReady)
+            return "offline";
+
+        if (queryError !== "" && displayedResults.length === 0)
+            return "error";
+
+        if (queryError !== "" && failedResultId === "")
+            return "partial";
+
+        if (queryError === "" && queryComplete && results.length === 0 && hasQuery && !chatMode && !chatPending && !activationPending)
+            return "empty";
 
         return "";
     }
+    // The result whose activation failed, so its row can say why. Cleared with
+    // every new query and activation.
+    property string failedResultId: ""
+    property string activatedResultId: ""
+    readonly property string failedRowId: queryError !== "" ? failedResultId : ""
     property string activeRequestId: ""
     property string activeActivationRequestId: ""
     property string activatedWebTitle: ""
@@ -195,6 +215,7 @@ PanelWindow {
             root.activationPending = false;
             root.endDockLaunch();
             root.endLaunchFeedback();
+            root.failedResultId = root.activatedResultId;
             root.queryError = "Opening timed out. Try again.";
             if (requestId !== "")
                 searchSocket.cancel(requestId);
@@ -450,6 +471,7 @@ PanelWindow {
 
     function submitQuery() {
         appMenu.visible = false;
+        failedResultId = "";
         const query = queryForSearch();
         cancelPendingRequests();
         activeRequestId = "";
@@ -627,6 +649,8 @@ PanelWindow {
         animateActivation(result, position);
         endDockLaunch();
         endLaunchFeedback();
+        activatedResultId = result.resultId;
+        failedResultId = "";
         activatedWebTitle = result.providerId === "web" || result.providerId === "web-suggestions" ? result.title : "";
         activatedCommandTitle = result.kind === "command" ? String(result.title || "") : "";
         activationPending = true;
@@ -640,6 +664,7 @@ PanelWindow {
                 root.activationPending = false;
                 root.endDockLaunch();
                 root.endLaunchFeedback();
+                root.failedResultId = result.resultId;
                 root.queryError = "Search unavailable.";
                 return;
             }
@@ -795,6 +820,7 @@ PanelWindow {
                         message: (root.streamingChatText ? root.streamingChatText + "\n\n" : "") + "The AI request failed. Check your CLI login and model, then try again."
                     } : entry);
                 root.pendingChatPrompt = "";
+                root.failedResultId = failedChat ? "" : root.activatedResultId;
                 root.queryError = failedChat ? "AI unavailable" : failedCommand !== "" ? "Could not run " + failedCommand + "." : root.errorMessage(code);
                 return;
             }
@@ -1130,7 +1156,7 @@ PanelWindow {
                             text: root.inlineStatusText
                             textFormat: Text.PlainText
                             elide: Text.ElideRight
-                            color: root.queryError !== "" || !root.serviceReady ? "#edb778" : Theme.muted
+                            color: Theme.muted
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
                             Accessible.name: root.inlineStatusText
@@ -1173,6 +1199,25 @@ PanelWindow {
                                 visible: clearQueryMouse.containsMouse
                                 text: "Clear search · Ctrl+L selects the query"
                             }
+                        }
+                    }
+
+                    // Offline, no results and failures: one body message, the
+                    // same treatment every shell popup uses (StateMessage).
+                    StateMessage {
+                        id: bodyMessage
+                        objectName: "searchState"
+                        Layout.fillWidth: true
+                        compact: true
+                        visible: root.bodyState !== "" && !root.closing
+                        tone: root.bodyState === "offline" || root.bodyState === "partial" ? "warning" : root.bodyState === "error" ? "danger" : "neutral"
+                        iconName: root.bodyState === "empty" ? "system-search-symbolic" : root.bodyState === "offline" ? "network-offline-symbolic" : ""
+                        title: root.bodyState === "offline" ? "Search is not available" : root.bodyState === "empty" ? "No results" : root.queryError.replace(/\.$/, "")
+                        detail: root.bodyState === "offline" ? "Search keeps trying to reconnect." : root.bodyState === "empty" ? "Try a different word, or fewer words." : ""
+                        actionText: root.bodyState === "error" && searchInput.text.trim() !== "" ? "Try again" : ""
+                        onActionTriggered: {
+                            root.submitQuery();
+                            root.focusSearchInput();
                         }
                     }
 
@@ -1370,7 +1415,9 @@ PanelWindow {
                             readonly property string groupKey: SearchGroups.key(modelData)
                             readonly property bool firstInGroup: index === 0 || SearchGroups.key(root.displayedResults[index - 1]) !== groupKey
                             width: resultsList.width
-                            height: resultLoader.height + (firstInGroup ? 24 : 0)
+                            readonly property bool failed: root.failedRowId !== "" && root.failedRowId === modelData.resultId
+                            readonly property int failureHeight: 28
+                            height: resultLoader.height + (firstInGroup ? 24 : 0) + (failed ? failureHeight : 0)
 
                             Text {
                                 visible: groupedRow.firstInGroup
@@ -1426,6 +1473,32 @@ PanelWindow {
                                         query: searchInput.text
                                         selected: root.selectedIndex === resultLoader.index
                                     }
+                                }
+                            }
+                            // An activation that failed says why on its own row.
+                            Row {
+                                objectName: "searchRowFailure"
+                                visible: groupedRow.failed
+                                x: 14
+                                y: resultLoader.y + resultLoader.height
+                                width: resultsList.width - 28
+                                height: groupedRow.failureHeight
+                                spacing: Theme.gap
+                                SymbolicIcon {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    implicitSize: 14
+                                    source: BinguxIcons.source("dialog-error-symbolic")
+                                    color: Theme.danger
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    width: parent.width - 14 - Theme.gap
+                                    text: root.queryError
+                                    textFormat: Text.PlainText
+                                    elide: Text.ElideRight
+                                    color: Theme.text
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: Theme.fontSmall
                                 }
                             }
                         }

@@ -15,6 +15,9 @@ AbstractButton {
     readonly property bool showLabel: presentation?.showText ?? true
     readonly property bool showIcon: presentation?.showIcon ?? (iconName.length > 0)
     property bool selected: false
+    // An action that ends or interrupts something (Shut Down, Delete): the
+    // glyph and title take the danger colour and the row a faint danger tint.
+    property bool destructive: false
     property bool navigation: false
     property real navigationRotation: 0
     property bool rowInteractive: true
@@ -69,7 +72,7 @@ AbstractButton {
             // its existing checkmark, while quick-control tiles use icon/switch
             // colour rather than a full blue card.
             selected: root.selected && !root.tileSurface
-            baseColor: root.tileSurface ? Theme.elevated : "transparent"
+            baseColor: root.tileSurface ? Theme.elevated : root.destructive ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.14) : "transparent"
             outlined: false
             radius: root.tileSurface ? 12 : root.leadingBadge ? 10 : 8
         }
@@ -99,7 +102,7 @@ AbstractButton {
                 anchors.centerIn: parent
                 implicitSize: 18
                 source: root.displayedIcon ? BinguxIcons.source(root.displayedIcon) : ""
-                color: root.selected ? Theme.accent : Theme.muted
+                color: root.destructive ? Theme.danger : root.selected ? Theme.accent : Theme.muted
             }
         }
         ColumnLayout {
@@ -116,7 +119,7 @@ AbstractButton {
                 text: root.displayedTitle
                 textFormat: Text.PlainText
                 active: root.visible && (rowHover.hovered || root.visualFocus)
-                color: root.enabled ? Theme.text : Theme.muted
+                color: !root.enabled ? Theme.muted : root.destructive ? Theme.danger : Theme.text
                 fontWeight: root.leadingBadge || root.tileLayout ? Font.Medium : Font.Normal
             }
             MarqueeText {

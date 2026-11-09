@@ -75,17 +75,17 @@ InstallerPage {
 
     function shrinkProblem(part) {
         if (part.shrinkable !== true)
-            return "cannot be shrunk";
+            return "Cannot be shrunk.";
         if (part.size_bytes === null || part.min_bytes === null)
-            return "size unknown";
+            return "Size unknown.";
         if (part.size_bytes - minFreeForBingux < part.min_bytes)
-            return "not enough room to free " + Schema.formatBytes(minFreeForBingux);
+            return "Not enough room to free " + Schema.formatBytes(minFreeForBingux) + ".";
         return "";
     }
 
     // Why a mode that needs the partition table is off; "" when it is available.
     function gptProblem() {
-        return gpt ? "" : "needs a GPT partition table";
+        return gpt ? "" : "Needs a GPT partition table.";
     }
 
     function chooseDisk(path) {
@@ -134,7 +134,7 @@ InstallerPage {
         if (disk === null)
             return "Choose a disk first.";
         if (!freeSpaceOffered)
-            return "Not in this installer build yet.";
+            return "Not available on this computer.";
         if (!gpt)
             return "Needs a GPT partition table.";
         if (!freeSpaceUsable)
@@ -146,7 +146,7 @@ InstallerPage {
         if (disk === null)
             return "Choose a disk first.";
         if (!alongsideOffered)
-            return "Not in this installer build yet.";
+            return "Not available on this computer.";
         if (!gpt)
             return "Needs a GPT partition table.";
         if (!partitions.some(p => shrinkProblem(p) === ""))
@@ -158,7 +158,7 @@ InstallerPage {
         if (disk === null)
             return "Choose a disk first.";
         if (!manualOffered)
-            return "Not in this installer build yet.";
+            return "Not available on this computer.";
         if (!gpt)
             return "Needs a GPT partition table.";
         return "";
@@ -406,7 +406,7 @@ InstallerPage {
                     enabled: page.disk !== null && page.freeSpaceOffered && page.gpt && page.freeSpaceUsable
                     opacity: enabled ? 1 : 0.5
                     text: "Use free space"
-                    detail: page.freeSpaceReason() !== "" ? "Unavailable: " + page.freeSpaceReason()
+                    detail: page.freeSpaceReason() !== "" ? page.freeSpaceReason()
                         : "Installs into unallocated space. Existing partitions stay."
                     selected: page.mode === "free_space"
                     ticked: selected
@@ -417,10 +417,12 @@ InstallerPage {
                     enabled: page.disk !== null && page.alongsideOffered && page.gpt && page.partitions.some(p => page.shrinkProblem(p) === "")
                     opacity: enabled ? 1 : 0.5
                     text: "Install alongside another system"
-                    detail: page.alongsideReason() !== "" ? "Unavailable: " + page.alongsideReason()
+                    detail: page.alongsideReason() !== "" ? page.alongsideReason()
                         : "Shrinks a partition to make room. Keeps the other system."
-                    selected: page.mode === "alongside"
-                    ticked: selected
+                    // The group row opens the partition list; the partition
+                    // chosen below is the selected leaf and carries the tick.
+                    selected: false
+                    ticked: false
                     onClicked: {
                         const first = page.partitions.find(p => page.shrinkProblem(p) === "");
                         if (first)
@@ -443,7 +445,7 @@ InstallerPage {
                             enabled: problem === "" && page.gpt
                             opacity: enabled ? 1 : 0.5
                             text: "Shrink " + modelData.path
-                            detail: problem !== "" ? "Unavailable: " + problem
+                            detail: problem !== "" ? problem
                                 : (modelData.fstype || "no filesystem") + ", " + Schema.formatBytes(modelData.size_bytes)
                             selected: page.mode === "alongside" && InstallerState.shrinkPartition === modelData.path
                             ticked: selected
@@ -451,7 +453,10 @@ InstallerPage {
                         }
                     }
                 }
-                InstallerSlider {
+                SessionSlider {
+                    width: parent.width
+                    unit: InstallerState.uiScale
+                    fillColor: Theme.accent
                     visible: page.mode === "alongside" && page.shrinkPart !== null
                     enabled: page.shrinkPart !== null
                     from: page.shrinkPart ? page.shrinkPart.min_bytes : 0
@@ -468,7 +473,7 @@ InstallerPage {
                     enabled: page.disk !== null && page.manualOffered && page.gpt
                     opacity: enabled ? 1 : 0.5
                     text: "Partition by hand"
-                    detail: page.manualReason() !== "" ? "Unavailable: " + page.manualReason()
+                    detail: page.manualReason() !== "" ? page.manualReason()
                         : "Choose the partitions, sizes and what is formatted."
                     selected: page.mode === "manual"
                     ticked: selected

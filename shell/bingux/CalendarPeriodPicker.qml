@@ -29,7 +29,12 @@ GridLayout {
             required property int index
             readonly property int cellYear: root.level === 1 ? root.year : root.rangeStart + (index - 1) * (root.level === 2 ? 1 : 10)
             readonly property bool current: root.level === 1 ? root.selectedDate.getFullYear() === cellYear && root.selectedDate.getMonth() === index : root.level === 2 ? root.selectedDate.getFullYear() === cellYear : root.selectedDate.getFullYear() >= cellYear && root.selectedDate.getFullYear() <= cellYear + 9
+            // The grid has twelve cells: ten for the range in the title, one
+            // either side from the neighbouring range. Those two stay usable
+            // but recede, so the title and the bright cells agree.
+            readonly property bool outsideRange: root.level > 1 && (index === 0 || index === 11)
             objectName: "calendarPeriod-" + index
+            opacity: outsideRange ? 0.5 : 1
             Layout.fillWidth: true
             Layout.fillHeight: true
             Layout.preferredWidth: 0

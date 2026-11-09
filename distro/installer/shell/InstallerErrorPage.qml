@@ -2,17 +2,22 @@ import QtQuick
 import Quickshell.Io
 import "InstallerSchema.js" as Schema
 
-// The install failed. Retry starts the install again with the same plan. The
-// notice says whether the disk was touched; View log and Save log are large
-// buttons in the body.
+// The install failed. The primary action depends on why: a failure that
+// trying again can fix starts the install again with the same plan; one that
+// the plan caused (a disk too small, a disk that holds the installer) leads
+// back to the choice that must change. The notice says whether the disk was
+// touched; View log and Save log are large buttons in the body.
 InstallerPage {
     id: page
 
     title: Schema.errorTitle(InstallerState.errorCode)
-    lead: "The installation stopped. Read the notice, then retry or keep the log."
+    lead: beforeCommit.indexOf(InstallerState.errorCode) >= 0
+        ? "The installation did not start. Read the notice, then keep the log if you need it."
+        : "The installation stopped. Read the notice, then try again or keep the log."
     fullBody: true
     allowBack: true
-    primaryText: "Retry"
+    primaryText: action === "disk" ? "Choose another disk" : action === "settings" ? "Review settings" : "Try again"
+    primaryVisible: action !== "none"
     bodyHeight: 600
     secondaryVisible: false
 
@@ -29,6 +34,20 @@ InstallerPage {
     // Codes that happen after the commit point, or can happen after it.
     readonly property var afterCommit: ["storage_failed", "config_failed", "bootloader_failed", "payload_failed"]
 
+    // What the primary button does: "retry" runs the same plan again, "disk"
+    // and "settings" go back to the choice the failure points at, and "none"
+    // offers nothing because trying again cannot change the result.
+    readonly property string action: {
+        const code = InstallerState.errorCode;
+        if (["disk_too_small", "disk_not_found", "disk_is_live_medium", "other_os_present"].indexOf(code) >= 0)
+            return "disk";
+        if (["invalid_plan", "unsupported"].indexOf(code) >= 0)
+            return "settings";
+        if (code === "missing_tool")
+            return "none";
+        return "retry";
+    }
+
     readonly property string hint: {
         const code = InstallerState.errorCode;
         if (beforeCommit.indexOf(code) >= 0)
@@ -43,8 +62,14 @@ InstallerPage {
     primaryEnabled: InstallerState.installState !== "running"
 
     function primary() {
-        page.wizard.replace("progress");
-        page.client.install(InstallerState.planObject());
+        if (page.action === "disk") {
+            page.wizard.go("disk");
+        } else if (page.action === "settings") {
+            page.wizard.go("summary");
+        } else if (page.action === "retry") {
+            page.wizard.replace("progress");
+            page.client.install(InstallerState.planObject());
+        }
     }
 
     function saveLog() {

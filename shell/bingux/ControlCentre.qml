@@ -167,13 +167,14 @@ ShellPopup {
         opacity: 1
         width: parent.width
         height: root.controlsHeight
-        Text {
-            anchors.centerIn: parent
+        StateMessage {
+            objectName: "controlsEmpty"
+            anchors.fill: parent
+            fill: true
             visible: !root.detailOpen && controls.implicitHeight === 0
-            text: "No controls here"
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: Theme.fontSize
+            iconName: "preferences-system-symbolic"
+            title: "No controls here"
+            detail: "Choose which controls appear in Customise."
         }
         Flickable {
             id: overview

@@ -476,7 +476,9 @@ Item {
                     }
                     EmptyMessage {
                         visible: root.networkSections.nearby.length === 0
-                        text: wifiQuery.running ? "Looking for networks…" : "No other networks nearby"
+                        loading: wifiQuery.running
+                        iconName: "network-wireless-symbolic"
+                        title: wifiQuery.running ? "Looking for networks…" : "No other networks nearby"
                     }
                 }
                 DetailSection {
@@ -492,15 +494,18 @@ Item {
                 }
                 EmptyMessage {
                     visible: root.page === "network" && networkQuery.running && root.connections.length === 0
-                    text: "Loading connections…"
+                    loading: true
+                    title: "Loading connections…"
                 }
                 EmptyMessage {
                     visible: root.page === "network" && !networkQuery.running && root.networkSections.current.length === 0
-                    text: "No active network connection"
+                    iconName: "network-offline-symbolic"
+                    title: "No active network connection"
                 }
                 EmptyMessage {
                     visible: root.page === "bluetooth" && (!root.bluetoothAdapter || !root.bluetoothAdapter.enabled)
-                    text: root.bluetoothAdapter ? "Bluetooth is off" : "Bluetooth is unavailable"
+                    iconName: "bluetooth-disabled-symbolic"
+                    title: root.bluetoothAdapter ? "Bluetooth is off" : "Bluetooth is unavailable"
                 }
                 DetailSection {
                     visible: root.page === "bluetooth" && !!root.bluetoothAdapter && root.bluetoothAdapter.enabled
@@ -523,7 +528,7 @@ Item {
                     }
                     EmptyMessage {
                         visible: root.bluetoothDevices.length === 0
-                        text: "No paired devices"
+                        title: "No paired devices"
                     }
                 }
                 DetailSection {
@@ -550,7 +555,8 @@ Item {
                     }
                     EmptyMessage {
                         visible: root.nearbyDevices.length === 0
-                        text: root.discoveryRunning ? "Searching for devices…" : "No nearby devices found"
+                        loading: root.discoveryRunning
+                        title: root.discoveryRunning ? "Searching for devices…" : "No nearby devices found"
                     }
                 }
                 DetailSection {
@@ -571,16 +577,18 @@ Item {
                     }
                     EmptyMessage {
                         visible: (root.audioTab === "output" ? root.audioOutputs : root.audioInputs).length === 0
-                        text: root.audioTab === "output" ? "No output devices" : "No microphones"
+                        iconName: root.audioTab === "output" ? "audio-speakers-symbolic" : "audio-input-microphone-symbolic"
+                        title: root.audioTab === "output" ? "No output devices" : "No microphones"
                     }
                 }
                 EmptyMessage {
                     visible: root.page === "display"
-                    text: "Adjust brightness, resolution and connected screens in Display settings."
+                    title: "Adjust brightness, resolution and connected screens in Display settings."
                 }
                 EmptyMessage {
                     visible: root.errorText.length > 0
-                    text: root.errorText
+                    tone: "danger"
+                    title: root.errorText
                 }
             }
         }
@@ -598,13 +606,9 @@ Item {
             onClicked: root.settingsRequested(root.page === "audio" ? "sound" : root.page)
         }
     }
-    component EmptyMessage: Text {
-        Layout.fillWidth: true
-        Layout.margins: 10
-        wrapMode: Text.Wrap
-        color: Theme.muted
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall
+    // The shared empty, loading and error treatment, set for a message inside a list.
+    component EmptyMessage: StateMessage {
+        compact: true
     }
     component DetailSection: ColumnLayout {
         id: section

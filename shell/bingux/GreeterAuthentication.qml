@@ -28,7 +28,8 @@ QtObject {
 
     function start() {
         if (!available) {
-            status = "The greeter is not connected to greetd";
+            console.warn("greeter: not connected to greetd");
+            status = "Sign-in is not available. Restart the computer and try again.";
             statusIsError = true;
             return;
         }
@@ -196,7 +197,8 @@ QtObject {
         }
         function onError(message) {
             root.responseRequired = false;
-            root.status = message || "greetd reported an error";
+            console.warn("greeter: greetd reported an error: " + message);
+            root.status = "Could not sign in. Try again.";
             root.statusIsError = true;
             root.launchFailed(root.status);
         }
