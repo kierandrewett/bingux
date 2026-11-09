@@ -43,10 +43,19 @@ ShellRoot {
                 radius: 16
                 color: Theme.popupSurface
                 ServicesPanel {
+                    id: actionPanel
                     anchors.fill: parent
                     anchors.margins: 8
                     actionError: "Could not restart ssh.service"
                     actionDetail: "The service manager refused the request."
+                    // The VM has no user bus, so the list read fails and sets
+                    // readFailed, hiding this banner. Clear it so the action error shows.
+                    Timer {
+                        interval: 100
+                        repeat: true
+                        running: true
+                        onTriggered: actionPanel.readFailed = false
+                    }
                 }
             }
         }
