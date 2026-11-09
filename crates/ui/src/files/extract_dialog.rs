@@ -51,7 +51,9 @@ impl PartialEq for Shared {
 }
 
 fn name_of(path: &Path) -> String {
-    path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 /// Open the dialog for `archive`.
@@ -65,15 +67,17 @@ pub(super) fn show_extract(env: &Env, archive: PathBuf) {
     let focus = env.focus;
     let closed = EventHandler::new(move |()| match after.pending.borrow_mut().take() {
         Some(options) => {
-            let whole = format!("“{}”", name_of(&after.archive));
+            let whole = crate::tr!("ui-extract-quoted-name", name = name_of(&after.archive));
             run_unpack(&after.env, after.archive.clone(), options, whole);
         }
         None => focus.request_focus(),
     });
     open_form(
         env.overlays,
-        format!("Extract “{}”", name_of(&archive)),
-        Element::from(ExtractDialog { launch: Shared(launch) }),
+        crate::tr!("ui-extract-title", name = name_of(&archive)),
+        Element::from(ExtractDialog {
+            launch: Shared(launch),
+        }),
         Some(closed),
     );
 }
@@ -94,7 +98,11 @@ impl Component for ExtractDialog {
         let in_context = use_try_consume::<Window>();
         let window = self.launch.0.env.window.or(in_context);
         let launch = self.launch.0.clone();
-        let parent = launch.archive.parent().map(Path::to_path_buf).unwrap_or_default();
+        let parent = launch
+            .archive
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
         let mut destination = use_state({
             let parent = parent.clone();
             move || parent
@@ -106,14 +114,22 @@ impl Component for ExtractDialog {
         let mut checking = use_state(|| false);
 
         let inspection = use_resource(launch.archive.clone(), read_archive);
-        let (found, failed) = inspection.with(|found| (found.value().cloned(), found.error().map(str::to_owned)));
+        let (found, failed) =
+            inspection.with(|found| (found.value().cloned(), found.error().map(str::to_owned)));
         let locked = found.as_ref().is_some_and(|found| found.locked);
         let needs_seven = locked && tool::seven_zip().is_none();
         let blocked = failed
             .clone()
-            .or_else(|| needs_seven.then(|| "Opening a locked archive needs 7-Zip, which is not installed.".to_string()))
-            .or_else(|| (locked && password.read().is_empty()).then(|| "Enter the password.".to_string()))
-            .or_else(|| found.is_none().then(|| "Reading the archive…".to_string()));
+            .or_else(|| needs_seven.then(|| crate::tr!("ui-extract-needs-seven-zip")))
+            .or_else(|| {
+                (locked && password.read().is_empty())
+                    .then(|| crate::tr!("ui-extract-enter-password"))
+            })
+            .or_else(|| {
+                found
+                    .is_none()
+                    .then(|| crate::tr!("ui-extract-reading-archive"))
+            });
 
         let go = {
             let launch = launch.clone();
@@ -150,7 +166,7 @@ impl Component for ExtractDialog {
                             *launch.pending.borrow_mut() = Some(options);
                             overlays.dismiss_dialog();
                         }
-                        Ok(false) => wrong.set(Some("That password is not right.".to_string())),
+                        Ok(false) => wrong.set(Some(crate::tr!("ui-extract-wrong-password"))),
                         Err(error) => wrong.set(Some(error.to_string())),
                     }
                 });
@@ -164,11 +180,13 @@ impl Component for ExtractDialog {
                 choose(
                     window,
                     ChooserRequest::select_folder()
-                        .title("Extract to")
-                        .accept_label("Choose")
+                        .title(crate::tr!("ui-extract-to"))
+                        .accept_label(crate::tr!("ui-extract-choose"))
                         .current_folder(start.clone()),
                     move |chosen| {
-                        if let Some(folder) = chosen.and_then(|chosen| chosen.paths.into_iter().next()) {
+                        if let Some(folder) =
+                            chosen.and_then(|chosen| chosen.paths.into_iter().next())
+                        {
                             destination.set(folder);
                         }
                     },
@@ -179,35 +197,54 @@ impl Component for ExtractDialog {
 
         let contents = match (&found, &failed) {
             (_, Some(error)) => error.clone(),
-            (Some(found), None) if found.names_hidden => "Locked: the names are hidden too".to_string(),
-            (Some(found), None) if found.locked => format!("{} items, locked", found.entries),
-            (Some(found), None) => format!("{} item{}", found.entries, if found.entries == 1 { "" } else { "s" }),
-            (None, None) => "Reading…".to_string(),
+            (Some(found), None) if found.names_hidden => crate::tr!("ui-extract-names-hidden"),
+            (Some(found), None) if found.locked => {
+                crate::tr!("ui-extract-items-locked", count = found.entries)
+            }
+            (Some(found), None) => crate::tr!("ui-extract-items", count = found.entries),
+            (None, None) => crate::tr!("ui-extract-reading"),
         };
         let folder_name = found
             .as_ref()
-            .map(|found| found.single_folder.clone().unwrap_or_else(|| found.stem.clone()))
+            .map(|found| {
+                found
+                    .single_folder
+                    .clone()
+                    .unwrap_or_else(|| found.stem.clone())
+            })
             .unwrap_or_default();
-        let archive_group = Group::titled("Archive")
-            .row(property_row("Name", name_of(&launch.archive)))
-            .row(property_row("Contents", contents));
-        let target_group = Group::titled("Extract to")
-            .row(place)
-            .row(
-                switch_row("Put the files in a new folder", *make_folder.read(), move |on: bool| make_folder.set(on))
-                    .subtitle(if *make_folder.read() {
-                        if folder_name.is_empty() { "A folder named after the archive.".to_string() } else { format!("“{folder_name}”.") }
-                    } else {
-                        "The files land loose in the folder.".to_string()
-                    }),
-            );
-        let policy = Group::titled("If a name is taken").row(form_row(
-            "Then",
+        let archive_group = Group::titled(&crate::tr!("ui-extract-group-archive"))
+            .row(property_row(
+                crate::tr!("ui-extract-row-name"),
+                name_of(&launch.archive),
+            ))
+            .row(property_row(
+                crate::tr!("ui-extract-row-contents"),
+                contents,
+            ));
+        let target_group = Group::titled(&crate::tr!("ui-extract-to")).row(place).row(
+            switch_row(
+                crate::tr!("ui-extract-new-folder"),
+                *make_folder.read(),
+                move |on: bool| make_folder.set(on),
+            )
+            .subtitle(if *make_folder.read() {
+                if folder_name.is_empty() {
+                    crate::tr!("ui-extract-folder-after-archive")
+                } else {
+                    crate::tr!("ui-extract-quoted-name", name = folder_name.as_str())
+                }
+            } else {
+                crate::tr!("ui-extract-files-loose")
+            }),
+        );
+        let policy = Group::titled(&crate::tr!("ui-extract-if-taken")).row(form_row(
+            crate::tr!("ui-extract-then"),
             dropdown(
                 vec![
-                    ("keep".to_string(), "Keep both".to_string()),
-                    ("replace".to_string(), "Replace (the old one goes to the Trash)".to_string()),
-                    ("skip".to_string(), "Skip it".to_string()),
+                    ("keep".to_string(), crate::tr!("ui-extract-keep-both")),
+                    ("replace".to_string(), crate::tr!("ui-extract-replace")),
+                    ("skip".to_string(), crate::tr!("ui-extract-skip")),
                 ],
                 match *overwrite.read() {
                     Overwrite::KeepBoth => "keep",
@@ -222,10 +259,10 @@ impl Component for ExtractDialog {
                     });
                 },
             )
-            .title("If a name is taken"),
+            .title(crate::tr!("ui-extract-if-taken")),
         ));
-        let lock = Group::titled("Password").row(
-            form_field("Password", password)
+        let lock = Group::titled(&crate::tr!("ui-extract-password")).row(
+            form_field(crate::tr!("ui-extract-password-label"), password)
                 .password()
                 .error(wrong.read().clone())
                 .on_submit(go.clone())
@@ -237,9 +274,18 @@ impl Component for ExtractDialog {
             .child(reveal_block(locked, S4, Element::from(lock)).lazy())
             .child(Element::from(target_group))
             .child(Element::from(policy));
-        form_dialog(format!("Extract “{}”", name_of(&launch.archive)), body, "Extract", go)
-            .blocked(blocked)
-            .busy(checking.read().then(|| "Checking the password…".to_string()))
-            .stays_open()
+        form_dialog(
+            crate::tr!("ui-extract-title", name = name_of(&launch.archive)),
+            body,
+            crate::tr!("ui-extract-action"),
+            go,
+        )
+        .blocked(blocked)
+        .busy(
+            checking
+                .read()
+                .then(|| crate::tr!("ui-extract-checking-password")),
+        )
+        .stays_open()
     }
 }

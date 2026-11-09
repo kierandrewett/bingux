@@ -510,3 +510,239 @@ ui-info-style = Style
 ui-info-version = Version
 ui-info-designer = Designer
 ui-info-glyphs = Glyphs
+
+## Files: actions and menus
+
+# The menus of the Files app: the entry, empty-space and header menus.
+ui-files-menu-open-with = Open with
+ui-files-menu-paste-into-folder = Paste into folder
+ui-files-menu-open = Open
+ui-files-menu-open-in-new-tab = Open in new tab
+ui-files-menu-preview = Preview
+ui-files-menu-cut = Cut
+ui-files-menu-copy = Copy
+ui-files-menu-duplicate = Duplicate
+ui-files-menu-restore = Restore
+ui-files-menu-restore-to = Restore to…
+ui-files-menu-rename = Rename
+ui-files-menu-rename-many = Rename…
+ui-files-menu-move-to-trash = Move to Trash
+ui-files-menu-delete-permanently = Delete permanently
+ui-files-menu-compress = Compress…
+ui-files-menu-extract-here = Extract Here
+ui-files-menu-extract-to = Extract to…
+ui-files-menu-copy-path = Copy path
+ui-files-menu-copy-uri = Copy location as URI
+ui-files-menu-add-bookmark = Add to bookmarks
+ui-files-menu-remove-bookmark = Remove from bookmarks
+ui-files-menu-properties = Properties
+ui-files-menu-compress-as = Compress as
+ui-files-menu-quick-zip = Quick .zip
+ui-files-menu-quick-targz = Quick .tar.gz
+ui-files-menu-compress-selection = Compress selection…
+ui-files-menu-sort-by = Sort by
+ui-files-menu-list = List
+ui-files-menu-grid = Grid
+ui-files-menu-icon-size = Icon size
+ui-files-menu-show-hidden = Show hidden files
+ui-files-menu-new-file = New file
+ui-files-menu-empty-file = Empty file
+ui-files-menu-paste-into-trash = Paste into Trash
+ui-files-menu-paste = Paste
+ui-files-menu-new-folder = New folder
+ui-files-menu-select-all = Select all
+ui-files-menu-invert-selection = Invert selection
+ui-files-menu-view = View
+ui-files-menu-empty-trash = Empty Trash
+ui-files-menu-refresh = Refresh
+
+# The sort choices of the Sort by menu.
+ui-files-sort-name = Name
+ui-files-sort-size = Size
+ui-files-sort-type = Type
+ui-files-sort-modified = Modified
+ui-files-sort-ascending = Ascending
+ui-files-sort-descending = Descending
+ui-files-sort-folders-first = Folders first
+
+# The places sidebar menu: the rows for a bookmark, drive, computer, trash or folder.
+ui-files-place-mount = Mount
+ui-files-place-open = Open
+ui-files-place-open-new-tab = Open in new tab
+ui-files-place-rename = Rename…
+ui-files-place-eject = Eject
+ui-files-place-unmount = Unmount
+ui-files-place-empty-trash = Empty Trash
+ui-files-place-copy-path = Copy path
+ui-files-place-remove-bookmark = Remove from bookmarks
+ui-files-place-add-bookmark = Add to bookmarks
+ui-files-place-properties = Properties
+
+# The Extract dialog: the archive, where its files go, and what happens to a clash.
+# $name (String) - the archive or folder name, shown in curly quotes
+ui-extract-quoted-name = “{ $name }”
+# $name (String) - the archive name
+ui-extract-title = Extract “{ $name }”
+ui-extract-needs-seven-zip = Opening a locked archive needs 7-Zip, which is not installed.
+ui-extract-enter-password = Enter the password.
+ui-extract-reading-archive = Reading the archive…
+ui-extract-wrong-password = That password is not right.
+ui-extract-to = Extract to
+ui-extract-choose = Choose
+ui-extract-names-hidden = Locked: the names are hidden too
+# $count (Number) - how many items the archive holds
+ui-extract-items-locked = { $count ->
+    [one] { $count } item, locked
+   *[other] { $count } items, locked
+}
+# $count (Number) - how many items the archive holds
+ui-extract-items = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+ui-extract-reading = Reading…
+ui-extract-group-archive = Archive
+ui-extract-row-name = Name
+ui-extract-row-contents = Contents
+ui-extract-new-folder = Put the files in a new folder
+ui-extract-folder-after-archive = A folder named after the archive.
+ui-extract-files-loose = The files land loose in the folder.
+ui-extract-if-taken = If a name is taken
+ui-extract-then = Then
+ui-extract-keep-both = Keep both
+ui-extract-replace = Replace (the old one goes to the Trash)
+ui-extract-skip = Skip it
+ui-extract-password = Password
+ui-extract-password-label = Password
+ui-extract-action = Extract
+ui-extract-checking-password = Checking the password…
+
+# Shown under a name field when the name cannot be used.
+ui-files-name-empty = Enter a name.
+ui-files-name-reserved = A name cannot be . or ..
+ui-files-name-slash = A name cannot contain a slash.
+ui-files-name-too-long = The name is longer than 255 bytes.
+ui-files-name-invalid = The name contains a character that is not allowed.
+ui-files-name-exists = A file or folder with this name already exists.
+
+# Batch rename dialog: title, form fields and preview rows.
+# $count (Number) - how many items are being renamed
+ui-batch-rename-title = { $count ->
+    [one] Rename { $count } item
+   *[other] Rename { $count } items
+}
+ui-batch-rename-action = Rename
+ui-batch-rename-find-replace = Find and replace
+ui-batch-rename-find = Find
+ui-batch-rename-replace-with = Replace with
+ui-batch-rename-match-case = Match case
+ui-batch-rename-case = Case
+ui-batch-rename-change-to = Change to
+ui-batch-rename-keep-case = Keep as it is
+ui-batch-rename-lowercase = lowercase
+ui-batch-rename-uppercase = UPPERCASE
+ui-batch-rename-title-case = Title Case
+ui-batch-rename-number = Number
+ui-batch-rename-add-number = Add a number
+ui-batch-rename-no-number = No number
+ui-batch-rename-after-name = After the name
+ui-batch-rename-before-name = Before the name
+ui-batch-rename-start-at = Start at
+ui-batch-rename-new-names = New names
+# $count (Number) - how many preview rows are hidden
+ui-batch-rename-more = { $count ->
+    [one] { $count } more item is not shown.
+   *[other] { $count } more items are not shown.
+}
+# Row subtitles explaining why a new name cannot be used.
+ui-batch-rename-problem-empty = A name cannot be empty.
+ui-batch-rename-problem-slash = A name cannot contain “/”.
+ui-batch-rename-problem-dots = A name cannot be “.” or “..”.
+ui-batch-rename-problem-twice = Two items would have this name.
+ui-batch-rename-problem-taken = Another item in the folder has this name.
+ui-batch-rename-nothing-changes = Nothing would change.
+
+# Compressing, reducing and extracting: the busy line, its toasts and the
+# one-click archive names. $whole is a quoted name ("Photos") or a count.
+ui-run-compress-busy = Compressing { $whole }
+ui-run-reduce-busy = Reducing { $whole }
+ui-run-extract-busy = Extracting { $whole }
+ui-run-compress-counting = Compressing { $whole }: counting
+ui-run-reduce-counting = Reducing { $whole }: counting
+ui-run-extract-counting = Extracting { $whole }: counting
+ui-run-compress-items = Compressing { $whole }, { $done } of { $total }
+ui-run-reduce-items = Reducing { $whole }, { $done } of { $total }
+ui-run-extract-items = Extracting { $whole }, { $done } of { $total }
+# $index (Number) - the file being worked on; $total (Number) - how many files
+ui-run-compress-file = Compressing { $index } of { $total }: { $name }
+ui-run-reduce-file = Reducing { $index } of { $total }: { $name }
+ui-run-extract-file = Extracting { $index } of { $total }: { $name }
+# $percent (Number) - how far the file is, in whole per cent
+ui-run-compress-file-percent = Compressing { $index } of { $total }: { $name }, { $percent }%
+ui-run-reduce-file-percent = Reducing { $index } of { $total }: { $name }, { $percent }%
+ui-run-extract-file-percent = Extracting { $index } of { $total }: { $name }, { $percent }%
+# $drive (String) - the drive the archive is being written to
+ui-run-finishing = Finishing, writing to { $drive }
+
+ui-run-busy-wait = Wait for the current operation to finish.
+ui-run-undone = Undone.
+# $error (String) - the program's own message for the failed undo
+ui-run-undo-failed = Could not undo that: { $error }
+ui-run-show = Show
+ui-run-undo = Undo
+ui-run-compress-stopped = Compression stopped.
+ui-run-reduce-stopped = Reducing stopped.
+ui-run-extract-stopped = Extracting stopped.
+# $error (String) - the program's own message
+ui-run-compress-failed = Could not compress: { $error }
+ui-run-reduce-failed = Could not reduce: { $error }
+ui-run-extract-failed = Could not extract: { $error }
+
+# $name (String) - the archive's file name, such as "Photos.zip"
+ui-run-created = Created “{ $name }”
+# $text (String) - the sentence before it; $count (Number) - the volumes made
+ui-run-volumes = { $text } in { $count ->
+    [one] 1 volume
+   *[other] { $count } volumes
+}
+# $text (String) - the sentence before it; $problem (String) - the Trash error
+ui-run-trash-failed = { $text }. The originals were not moved to the Trash: { $problem }
+ui-run-trashed = { $text }. The originals are in the Trash
+# $text (String) and $detail (String) - two sentences joined with a full stop
+ui-run-with-detail = { $text }. { $detail }
+
+# $name (String) - the extracted item's name
+ui-run-extracted-to = Extracted to “{ $name }”
+# $count (Number) - how many items were extracted
+ui-run-extracted-items = { $count ->
+    [one] Extracted 1 item
+   *[other] Extracted { $count } items
+}
+# $count (Number) - how many were extracted; $skipped (Number) - how many were skipped
+ui-run-extracted-items-skipped = { $count ->
+    [one] Extracted 1 item, { $skipped } skipped because the name was taken
+   *[other] Extracted { $count } items, { $skipped } skipped because the name was taken
+}
+ui-run-extract-nothing-taken = Nothing was extracted: every name was taken
+
+# $name (String) - the one item's name, already quoted in the toast
+ui-run-whole-name = “{ $name }”
+# $count (Number) - how many items were selected
+ui-run-whole-items = { $count ->
+    [one] 1 item
+   *[other] { $count } items
+}
+
+# How a finished reduction reads in a toast. $from and $to are sizes ("4.2 MB").
+ui-reduce-one = Reduced from { $from } to { $to }
+ui-reduce-many = { $count ->
+    [one] Reduced 1 file from { $from } to { $to }
+   *[other] Reduced { $count } files from { $from } to { $to }
+}
+ui-reduce-kept-one = Already small: kept original
+ui-reduce-kept-many = { $count } already small: kept
+ui-reduce-failed = { $count ->
+    [one] 1 could not be reduced
+   *[other] { $count } could not be reduced
+}
+ui-reduce-nothing = Nothing was reduced

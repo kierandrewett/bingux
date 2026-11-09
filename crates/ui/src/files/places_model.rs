@@ -278,10 +278,10 @@ pub(crate) enum Release {
 }
 
 impl Release {
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Release::Eject => "Eject",
-            Release::Unmount => "Unmount",
+            Release::Eject => crate::tr!("ui-files-place-eject"),
+            Release::Unmount => crate::tr!("ui-files-place-unmount"),
         }
     }
 }
