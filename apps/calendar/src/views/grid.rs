@@ -243,9 +243,10 @@ fn moved(model: Model, window: Window, overlays: Overlays, edit: &BlockEdit, day
     }
     editor::ask_scope(
         overlays,
-        "Change this event?",
-        "This event repeats.",
-        "Change",
+        &tr!("calendar-change-this-title"),
+        &tr!("calendar-repeats-note"),
+        &tr!("calendar-change"),
+        false,
         move |scope| {
             let _ = window;
             model.edit(&item, reference.key, scope, event.clone(), None);

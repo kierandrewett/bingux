@@ -32,50 +32,64 @@ pub fn title_of(model: &Model) -> String {
                     format!(" {}", end.year)
                 };
                 return if start.month == end.month {
-                    format!(
-                        "{} to {} {}{year}",
-                        start.day,
-                        end.day,
-                        month_short(end.month)
+                    tr!(
+                        "calendar-week-range-same-month",
+                        start = start.day,
+                        end = end.day,
+                        month = format!("{}{year}", month_short(end.month))
                     )
                 } else {
-                    format!(
-                        "{} {} to {} {}{year}",
-                        start.day,
-                        month_short(start.month),
-                        end.day,
-                        month_short(end.month)
+                    tr!(
+                        "calendar-week-range-across-months",
+                        start = start.day,
+                        start_month = month_short(start.month).to_string(),
+                        end = end.day,
+                        end_month = month_short(end.month).to_string(),
+                        year = year
                     )
                 };
             }
             if start.month == end.month {
-                format!("{} to {} {}", start.day, end.day, anchor_month(end))
+                tr!(
+                    "calendar-week-range-same-month",
+                    start = start.day,
+                    end = end.day,
+                    month = anchor_month(end)
+                )
             } else if start.year == end.year {
-                format!(
-                    "{} {} to {} {} {}",
-                    start.day,
-                    month_short(start.month),
-                    end.day,
-                    month_short(end.month),
-                    end.year
+                tr!(
+                    "calendar-week-range-across-months",
+                    start = start.day,
+                    start_month = month_short(start.month).to_string(),
+                    end = end.day,
+                    end_month = month_short(end.month).to_string(),
+                    year = format!(" {}", end.year)
                 )
             } else {
-                format!(
-                    "{} {} {} to {} {} {}",
-                    start.day,
-                    month_short(start.month),
-                    start.year,
-                    end.day,
-                    month_short(end.month),
-                    end.year
+                tr!(
+                    "calendar-week-range-across-years",
+                    start = start.day,
+                    start_month = month_short(start.month).to_string(),
+                    start_year = start.year.to_string(),
+                    end = end.day,
+                    end_month = month_short(end.month).to_string(),
+                    end_year = end.year.to_string()
                 )
             }
         }
-        ViewKind::Month if compact => format!("{} {}", month_short(anchor.month), anchor.year),
+        ViewKind::Month if compact => tr!(
+            "calendar-header-month-compact",
+            month = month_short(anchor.month).to_string(),
+            year = anchor.year.to_string()
+        ),
         ViewKind::Month => anchor.month_year(),
         ViewKind::Year => anchor.year.to_string(),
-        ViewKind::Agenda if compact => format!("From {} {}", anchor.day, month_short(anchor.month)),
-        ViewKind::Agenda => format!("From {}", anchor.long()),
+        ViewKind::Agenda if compact => tr!(
+            "calendar-header-agenda-compact",
+            day = anchor.day,
+            month = month_short(anchor.month).to_string()
+        ),
+        ViewKind::Agenda => tr!("calendar-header-agenda", date = anchor.long()),
     }
 }
 
@@ -85,11 +99,11 @@ fn anchor_month(date: Date) -> String {
 
 /// The label of each view, in the order of the bar.
 pub const VIEWS: [(&str, &str, ViewKind); 5] = [
-    ("day", "Day", ViewKind::Day),
-    ("week", "Week", ViewKind::Week),
-    ("month", "Month", ViewKind::Month),
-    ("year", "Year", ViewKind::Year),
-    ("agenda", "Agenda", ViewKind::Agenda),
+    ("day", i18n_id!("calendar-view-day"), ViewKind::Day),
+    ("week", i18n_id!("calendar-view-week"), ViewKind::Week),
+    ("month", i18n_id!("calendar-view-month"), ViewKind::Month),
+    ("year", i18n_id!("calendar-view-year"), ViewKind::Year),
+    ("agenda", i18n_id!("calendar-view-agenda"), ViewKind::Agenda),
 ];
 
 fn view_key(kind: ViewKind) -> &'static str {
@@ -117,13 +131,17 @@ impl Component for Header {
 
         let previous =
             move || icon_button(Icon::GoPrevious, move |_| model.step(-1)).tooltip("Previous");
-        let next = move || icon_button(Icon::GoNext, move |_| model.step(1)).tooltip("Next");
-        let today = move || action_button("Today", move |_| model.today());
+        let next = move || {
+            icon_button(Icon::GoNext, move |_| model.step(1)).tooltip(&tr!("calendar-next"))
+        };
+        let today = move || action_button(tr!("calendar-today"), move |_| model.today());
         let views = move || {
             segmented(
                 VIEWS
                     .iter()
-                    .map(|(key, label, _)| (key.to_string(), label.to_string()))
+                    .map(|(key, label, _)| {
+                        (key.to_string(), bingux_ui::i18n::text(label).to_string())
+                    })
                     .collect(),
                 view_key(view),
                 move |key: String| {
@@ -143,7 +161,7 @@ impl Component for Header {
                     icon_button(Icon::SidebarShow, move |_| {
                         window.open(
                             popup(
-                                "Calendars",
+                                tr!("calendar-calendars"),
                                 Sidebar {
                                     model,
                                     embedded: true,
@@ -152,7 +170,7 @@ impl Component for Header {
                             .width(Dim::PopupNarrow),
                         );
                     })
-                    .tooltip("Calendars"),
+                    .tooltip(&tr!("calendar-calendars")),
                 )
                 .trailing(
                     icon_button(Icon::Search, move |_| {
@@ -160,7 +178,7 @@ impl Component for Header {
                         let next = !*open.peek();
                         open.set(next);
                     })
-                    .tooltip("Search"),
+                    .tooltip(&tr!("calendar-search")),
                 );
         } else {
             bar = bar
@@ -168,7 +186,7 @@ impl Component for Header {
                 .trailing(views())
                 .trailing(
                     search_field(model.query, move |_: String| {})
-                        .placeholder("Search")
+                        .placeholder(tr!("calendar-search"))
                         .width(Dim::FieldMin)
                         .a11y_id(self.search_id),
                 );
@@ -176,12 +194,15 @@ impl Component for Header {
         bar = bar
             .trailing(
                 icon_button(Icon::ListAdd, move |_| quick::open(model, window, overlays))
-                    .tooltip("New event")
+                    .tooltip(&tr!("calendar-new-event"))
                     .filled(),
             )
             .trailing(
-                menu_button("Main menu", main_menu(model, window, overlays, tokens))
-                    .icon(Icon::OpenMenu),
+                menu_button(
+                    tr!("calendar-main-menu"),
+                    main_menu(model, window, overlays, tokens),
+                )
+                .icon(Icon::OpenMenu),
             )
             .trailing(WindowControls);
 
@@ -217,12 +238,14 @@ impl Component for Header {
 /// The menu: what to do, how it looks, and About.
 fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -> Vec<MenuItem> {
     let prefs = model.prefs.read().clone();
-    let first = prefs.first_day();
+    let first = prefs.first_day(crate::convert::chrono_weekday(
+        bingux_ui::locale::Locale::current().first_weekday(),
+    ));
     let weekday_items: Vec<MenuItem> = [
-        (None, "From the language"),
-        (Some(0u8), "Monday"),
-        (Some(5u8), "Saturday"),
-        (Some(6u8), "Sunday"),
+        (None, tr!("calendar-from-language")),
+        (Some(0u8), tr!("calendar-monday")),
+        (Some(5u8), tr!("calendar-saturday")),
+        (Some(6u8), tr!("calendar-sunday")),
     ]
     .into_iter()
     .map(|(choice, label)| {
@@ -234,9 +257,9 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
     .collect();
     let _ = first;
     let hour_items: Vec<MenuItem> = [
-        (HourFormat::Auto, "From the language"),
-        (HourFormat::H12, "12-hour"),
-        (HourFormat::H24, "24-hour"),
+        (HourFormat::Auto, tr!("calendar-from-language")),
+        (HourFormat::H12, tr!("calendar-hour-12")),
+        (HourFormat::H24, tr!("calendar-hour-24")),
     ]
     .into_iter()
     .map(|(choice, label)| {
@@ -262,14 +285,14 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
         })
         .collect();
     let reminder_items: Vec<MenuItem> = [
-        (None, "None"),
-        (Some(0i64), "At the time of the event"),
-        (Some(5), "5 minutes before"),
-        (Some(10), "10 minutes before"),
-        (Some(15), "15 minutes before"),
-        (Some(30), "30 minutes before"),
-        (Some(60), "1 hour before"),
-        (Some(1440), "1 day before"),
+        (None, tr!("calendar-none")),
+        (Some(0i64), tr!("calendar-reminder-at-time")),
+        (Some(5), tr!("calendar-reminder-minutes", count = 5)),
+        (Some(10), tr!("calendar-reminder-minutes", count = 10)),
+        (Some(15), tr!("calendar-reminder-minutes", count = 15)),
+        (Some(30), tr!("calendar-reminder-minutes", count = 30)),
+        (Some(60), tr!("calendar-reminder-hours", count = 1)),
+        (Some(1440), tr!("calendar-reminder-days", count = 1)),
     ]
     .into_iter()
     .map(|(choice, label)| {
@@ -281,7 +304,10 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
     .collect();
 
     let mut items = vec![
-        menu_item("New event", move |_| quick::open(model, window, overlays)).shortcut("N"),
+        menu_item(tr!("calendar-new-event"), move |_| {
+            quick::open(model, window, overlays)
+        })
+        .shortcut("N"),
         menu_item("New calendar\u{2026}", move |_| {
             calendars::add(model, overlays, &tokens)
         }),
@@ -289,17 +315,19 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
             calendars::import(model, window, overlays)
         }),
         menu_separator(),
-        menu_item("Week numbers", move |_| {
+        menu_item(tr!("calendar-week-numbers"), move |_| {
             model.set_prefs(|prefs| prefs.week_numbers = !prefs.week_numbers)
         })
         .checked(prefs.week_numbers),
-        submenu("First day of the week", weekday_items),
-        submenu("Time format", hour_items),
-        submenu("New events go in", calendar_items),
-        submenu("New events remind", reminder_items),
+        submenu(tr!("calendar-first-day"), weekday_items),
+        submenu(tr!("calendar-time-format"), hour_items),
+        submenu(tr!("calendar-new-events-go-in"), calendar_items),
+        submenu(tr!("calendar-new-events-remind"), reminder_items),
         menu_separator(),
-        menu_item("Keyboard shortcuts", move |_| {
-            overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
+        menu_item(tr!("calendar-keyboard-shortcuts"), move |_| {
+            overlays.show_dialog(
+                dialog(tr!("calendar-keyboard-shortcuts"), SHORTCUTS).cancel(tr!("calendar-close")),
+            );
         }),
     ];
     items.extend(bingux_ui::about::app_menu_items(overlays));
