@@ -160,12 +160,33 @@ missing program when you ask the assistant a question.
 
 ### `[appearance]`
 
-| Key           | Type   | Default | Accepted values                                                                                                            |
-| ------------- | ------ | ------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `font_family` | string | `""`    | Installed font family name, for example `"Cantarell"`. Empty uses Adwaita Sans, or the system sans-serif if it is missing. |
+| Key              | Type   | Default | Accepted values                                                                                                               |
+| ---------------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `font_family`    | string | `""`    | Installed font family name, for example `"Cantarell"`. Empty uses Adwaita Sans, or the system sans-serif if it is missing.    |
+| `color_scheme`   | string | unset   | `"dark"`, `"light"`, `"default"` or `"auto"`. The colour scheme of Bingux applications when the desktop's portal states none. |
+| `accent`         | string | unset   | `blue`, `teal`, `green`, `yellow`, `orange`, `red`, `pink`, `purple` or `slate`. Used when the portal states no accent.       |
+| `high_contrast`  | bool   | unset   | Use the higher contrast palette when the portal does not ask for it.                                                          |
+| `reduced_motion` | bool   | unset   | Stop animations when the portal does not ask for it.                                                                          |
+| `text_scale`     | number | unset   | 0.5 to 3. Text size; 1 is the system's own size.                                                                              |
+| `icon_theme`     | string | unset   | Installed icon theme name, for example `"Papirus"`.                                                                           |
 
-The shell and Bingux Settings both read it. The shell follows a change at once;
-Bingux Settings reads it when it starts.
+The shell and Bingux Settings both read `font_family`. The shell follows a
+change at once; Bingux Settings reads it when it starts.
+
+The other keys are read by Bingux applications (`bingux-ui`), which decide each
+appearance value from the first source that states it: a `BINGUX_*` variable, the
+desktop's Settings portal, this file, GTK's `settings.ini`, then `gsettings`
+where it is installed. A key that is not set here asks the next source, so on a
+Gnoblin session the portal decides and this file fills in only what it leaves
+out; on a desktop with no portal this file decides. Applications follow a change
+to the file or to the portal while they run. See "Platform" in
+`docs/bingux-ui.md`.
+
+```toml
+[appearance]
+color_scheme = "light"
+accent = "purple"
+```
 
 ## Where the shell reads it
 
