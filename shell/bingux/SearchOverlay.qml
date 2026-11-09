@@ -556,8 +556,10 @@ PanelWindow {
         displayedResults = SearchGroups.ordered(updated);
         const retainedIndex = keyboardSelection ? displayedResults.findIndex(result => result.resultId === selectedResultId) : -1;
         selectedIndex = retainedIndex >= 0 ? retainedIndex : displayedResults.length > 0 ? 0 : -1;
-        if (!keyboardSelection)
-            resultsList.positionViewAtBeginning();
+        if (!keyboardSelection) {
+            resultsList.cancelFlick();
+            resultsList.contentY = resultsList.originY;
+        }
     }
 
     function moveSelection(delta) {
@@ -1329,21 +1331,32 @@ PanelWindow {
                         }
                     }
 
-                    ListView {
+                    Flickable {
                         id: resultsList
                         objectName: "searchResultsList"
-                        // Keep this bounded (20-result) model laid out so navigation can
-                        // use real provider row bounds without repositioning the list.
-                        cacheBuffer: Math.max(0, contentHeight)
+                        // Rows are a plain Column, not a ListView. Delegates have variable
+                        // heights (group headers, failure rows, 50 and 74px providers) and a
+                        // ListView estimates the offset of rows it has not built yet, so a
+                        // keyboard step to such a row scrolled to the wrong place.
+                        function itemAtIndex(index) {
+                            return rowRepeater.itemAt(index);
+                        }
+                        function indexAt(x, y) {
+                            if (x < 0 || x >= width || y < 0)
+                                return -1;
+                            for (let i = 0; i < rowRepeater.count; i++) {
+                                const row = rowRepeater.itemAt(i);
+                                if (row && y >= row.y && y < row.y + row.height)
+                                    return i;
+                            }
+                            return -1;
+                        }
                         function revealSelection() {
                             keyboardScroll.stop();
                             cancelFlick();
-                            forceLayout();
                             const row = itemAtIndex(root.selectedIndex);
-                            if (!row) {
-                                positionViewAtIndex(root.selectedIndex, ListView.Contain);
+                            if (!row)
                                 return;
-                            }
                             let destination = contentY;
                             if (row.y < contentY)
                                 destination = row.y;
@@ -1367,20 +1380,21 @@ PanelWindow {
                             easing.type: Easing.OutCubic
                         }
                         onMovementStarted: keyboardScroll.stop()
-                        onModelChanged: keyboardScroll.stop()
+                        Connections {
+                            target: root
+                            function onDisplayedResultsChanged() {
+                                keyboardScroll.stop();
+                            }
+                        }
 
                         Layout.fillWidth: true
                         Layout.preferredHeight: visible ? Math.min(contentHeight, 420, Math.max(0, root.searchListHeight - (chatTranscriptList.visible ? chatTranscriptList.height : 0))) : 0
                         visible: root.displayedResults.length > 0
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
-                        // Selection belongs to the overlay; ListView's implicit current
-                        // item tracking would jump before our scroll animation starts.
-                        currentIndex: -1
-                        highlightFollowsCurrentItem: false
+                        contentWidth: width
+                        contentHeight: rowColumn.height
                         interactive: !root.pointerBlocked && root.pointerResultIndex >= 0 && contentHeight > height
-                        model: root.displayedResults
-                        spacing: 2
                         HoverHandler {
                             id: resultPointer
                             // Track the fixed window, so moving the popup beneath a
@@ -1407,98 +1421,107 @@ PanelWindow {
                             }
                         }
 
-                        delegate: Item {
-                            id: groupedRow
-                            readonly property var resultItem: resultLoader.item
-                            required property int index
-                            required property var modelData
-                            readonly property string groupKey: SearchGroups.key(modelData)
-                            readonly property bool firstInGroup: index === 0 || SearchGroups.key(root.displayedResults[index - 1]) !== groupKey
+                        Column {
+                            id: rowColumn
                             width: resultsList.width
-                            readonly property bool failed: root.failedRowId !== "" && root.failedRowId === modelData.resultId
-                            readonly property int failureHeight: 28
-                            height: resultLoader.height + (firstInGroup ? 24 : 0) + (failed ? failureHeight : 0)
+                            spacing: 2
+                            Repeater {
+                                id: rowRepeater
+                                model: root.displayedResults
+                                delegate: Item {
+                                    id: groupedRow
+                                    readonly property var resultItem: resultLoader.item
+                                    required property int index
+                                    required property var modelData
+                                    readonly property string groupKey: SearchGroups.key(modelData)
+                                    readonly property bool firstInGroup: index === 0 || SearchGroups.key(root.displayedResults[index - 1]) !== groupKey
+                                    width: resultsList.width
+                                    readonly property bool failed: root.failedRowId !== "" && root.failedRowId === modelData.resultId
+                                    readonly property int failureHeight: 28
+                                    height: resultLoader.height + (firstInGroup ? 24 : 0) + (failed ? failureHeight : 0)
 
-                            Text {
-                                visible: groupedRow.firstInGroup
-                                x: 14
-                                y: 3
-                                text: SearchGroups.label(groupedRow.groupKey)
-                                textFormat: Text.PlainText
-                                color: Theme.muted
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 12
-                                font.weight: Font.DemiBold
-                            }
-                            Loader {
-                                id: resultLoader
-                                enabled: !root.pointerBlocked && root.pointerResultIndex === index
-                                property int index: groupedRow.index
-                                property var modelData: groupedRow.modelData
-                                y: groupedRow.firstInGroup ? 24 : 0
-                                width: resultsList.width
-                                height: item ? item.implicitHeight : Theme.searchResultHeight
-                                sourceComponent: root.providerDelegates[modelData.providerId] || defaultResult
-                                Accessible.name: modelData.title + (modelData.subtitle ? ", " + modelData.subtitle : "")
-                                Accessible.role: Accessible.Button
-                                Accessible.onPressAction: root.activateResult(modelData)
-                                onLoaded: {
-                                    item.result = Qt.binding(() => resultLoader.modelData);
-                                    item.query = Qt.binding(() => searchInput.text);
-                                    item.selected = Qt.binding(() => root.selectedIndex === resultLoader.index);
-                                    item.activationEnabled = Qt.binding(() => !root.activationPending && !root.awaitingResults && !root.closing);
-                                }
-                                Connections {
-                                    target: resultLoader.item
-                                    ignoreUnknownSignals: true
-                                    function onActivated(position) {
-                                        const origin = position ? resultLoader.item.mapToItem(root.contentItem, position.x, position.y) : null;
-                                        root.activateResult(resultLoader.modelData, origin);
+                                    Text {
+                                        visible: groupedRow.firstInGroup
+                                        x: 14
+                                        y: 3
+                                        text: SearchGroups.label(groupedRow.groupKey)
+                                        textFormat: Text.PlainText
+                                        color: Theme.muted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: 12
+                                        font.weight: Font.DemiBold
                                     }
-                                    function onContextMenuRequested(position) {
-                                        root.openAppMenu(resultLoader.modelData, resultLoader.item.mapToItem(root.contentItem, position.x, position.y));
+                                    Loader {
+                                        id: resultLoader
+                                        enabled: !root.pointerBlocked && root.pointerResultIndex === index
+                                        property int index: groupedRow.index
+                                        property var modelData: groupedRow.modelData
+                                        y: groupedRow.firstInGroup ? 24 : 0
+                                        width: resultsList.width
+                                        height: item ? item.implicitHeight : Theme.searchResultHeight
+                                        sourceComponent: root.providerDelegates[modelData.providerId] || defaultResult
+                                        Accessible.name: modelData.title + (modelData.subtitle ? ", " + modelData.subtitle : "")
+                                        Accessible.role: Accessible.Button
+                                        Accessible.onPressAction: root.activateResult(modelData)
+                                        onLoaded: {
+                                            item.result = Qt.binding(() => resultLoader.modelData);
+                                            item.query = Qt.binding(() => searchInput.text);
+                                            item.selected = Qt.binding(() => root.selectedIndex === resultLoader.index);
+                                            item.activationEnabled = Qt.binding(() => !root.activationPending && !root.awaitingResults && !root.closing);
+                                        }
+                                        Connections {
+                                            target: resultLoader.item
+                                            ignoreUnknownSignals: true
+                                            function onActivated(position) {
+                                                const origin = position ? resultLoader.item.mapToItem(root.contentItem, position.x, position.y) : null;
+                                                root.activateResult(resultLoader.modelData, origin);
+                                            }
+                                            function onContextMenuRequested(position) {
+                                                root.openAppMenu(resultLoader.modelData, resultLoader.item.mapToItem(root.contentItem, position.x, position.y));
+                                            }
+                                            function onPreviewToggled() {
+                                                root.previewOpen = !root.previewOpen;
+                                                root.focusSearchInput();
+                                            }
+                                        }
+                                        Component {
+                                            id: defaultResult
+                                            SearchResult {
+                                                previewOpen: root.previewOpen
+                                                previewAvailable: root.previewResult !== null && root.selectedIndex === resultLoader.index
+                                                claimChevronAnimation: () => root.claimChevronAnimation(resultLoader.index)
+                                                result: resultLoader.modelData
+                                                query: searchInput.text
+                                                selected: root.selectedIndex === resultLoader.index
+                                            }
+                                        }
                                     }
-                                    function onPreviewToggled() {
-                                        root.previewOpen = !root.previewOpen;
-                                        root.focusSearchInput();
+                                    // An activation that failed says why on its own row.
+                                    Row {
+                                        objectName: "searchRowFailure"
+                                        visible: groupedRow.failed
+                                        x: 14
+                                        y: resultLoader.y + resultLoader.height
+                                        width: resultsList.width - 28
+                                        height: groupedRow.failureHeight
+                                        spacing: Theme.gap
+                                        SymbolicIcon {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            implicitSize: 14
+                                            source: BinguxIcons.source("dialog-error-symbolic")
+                                            color: Theme.danger
+                                        }
+                                        Text {
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width - 14 - Theme.gap
+                                            text: root.queryError
+                                            textFormat: Text.PlainText
+                                            elide: Text.ElideRight
+                                            color: Theme.text
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: Theme.fontSmall
+                                        }
                                     }
-                                }
-                                Component {
-                                    id: defaultResult
-                                    SearchResult {
-                                        previewOpen: root.previewOpen
-                                        previewAvailable: root.previewResult !== null && root.selectedIndex === resultLoader.index
-                                        claimChevronAnimation: () => root.claimChevronAnimation(resultLoader.index)
-                                        result: resultLoader.modelData
-                                        query: searchInput.text
-                                        selected: root.selectedIndex === resultLoader.index
-                                    }
-                                }
-                            }
-                            // An activation that failed says why on its own row.
-                            Row {
-                                objectName: "searchRowFailure"
-                                visible: groupedRow.failed
-                                x: 14
-                                y: resultLoader.y + resultLoader.height
-                                width: resultsList.width - 28
-                                height: groupedRow.failureHeight
-                                spacing: Theme.gap
-                                SymbolicIcon {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    implicitSize: 14
-                                    source: BinguxIcons.source("dialog-error-symbolic")
-                                    color: Theme.danger
-                                }
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    width: parent.width - 14 - Theme.gap
-                                    text: root.queryError
-                                    textFormat: Text.PlainText
-                                    elide: Text.ElideRight
-                                    color: Theme.text
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: Theme.fontSmall
                                 }
                             }
                         }
