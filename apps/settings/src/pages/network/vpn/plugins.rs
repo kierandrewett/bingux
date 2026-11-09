@@ -179,6 +179,8 @@ pub enum Kind {
     /// `vpn.data` key that holds how NetworkManager treats it.
     Secret {
         flags: &'static str,
+        /// The choice label that remembers this secret.
+        remember: &'static str,
     },
     /// One of `(value, label)` pairs; the first is the default.
     Choice(&'static [(&'static str, &'static str)]),
@@ -351,6 +353,7 @@ const OPENVPN: &[Field] = &[
         Store::Data("password"),
         Kind::Secret {
             flags: "password-flags",
+            remember: i18n_id!("network-vpn-remember-password"),
         },
     )
     .when("connection-type", &["password", "password-tls"]),
@@ -380,6 +383,7 @@ const OPENVPN: &[Field] = &[
         Store::Data("cert-pass"),
         Kind::Secret {
             flags: "cert-pass-flags",
+            remember: i18n_id!("network-vpn-remember-key-password"),
         },
     )
     .when("connection-type", &["tls", "password-tls"]),
@@ -452,6 +456,7 @@ const VPNC: &[Field] = &[
         Store::Data("IPSec secret"),
         Kind::Secret {
             flags: "IPSec secret-flags",
+            remember: i18n_id!("network-vpn-remember-group-password"),
         },
     ),
     Field::new(
@@ -464,6 +469,7 @@ const VPNC: &[Field] = &[
         Store::Data("Xauth password"),
         Kind::Secret {
             flags: "Xauth password-flags",
+            remember: i18n_id!("network-vpn-remember-xauth-password"),
         },
     ),
     Field::new(
@@ -512,6 +518,7 @@ const SSH: &[Field] = &[
         Store::Data("password"),
         Kind::Secret {
             flags: "password-flags",
+            remember: i18n_id!("network-vpn-remember-ssh-password"),
         },
     )
     .when("auth-type", &["password"]),
@@ -561,7 +568,7 @@ pub fn choice_default(field: &Field) -> &'static str {
 /// including the flags key of a secret.
 pub fn is_covered(short: &str, key: &str) -> bool {
     fields(short).iter().any(|field| {
-        field.key() == Some(key) || matches!(field.kind, Kind::Secret { flags } if flags == key)
+        field.key() == Some(key) || matches!(field.kind, Kind::Secret { flags, .. } if flags == key)
     })
 }
 

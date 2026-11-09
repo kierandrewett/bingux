@@ -750,8 +750,8 @@ network-vpn-delete = Delete
 network-vpn-field-needed = { $label } is needed.
 # Choice for a remembered setting that is not needed.
 network-vpn-not-needed = Not needed
-# Choice label for remembering a plugin field; $label is the field's name in lowercase.
-network-vpn-remember = Remember { $label }
+# Choice label for remembering the VPN password.
+network-vpn-remember-password = Remember password
 # Group title for a plugin's extra settings.
 network-vpn-group-advanced = Advanced
 # Field label for a new plugin setting's name.
@@ -1103,6 +1103,14 @@ network-vpn-unreadable = Could not read the VPN settings. Try again in a moment.
 network-vpn-peers-missing = Could not read the VPN peers. Restart the computer and try again.
 network-vpn-connection-not-found = Could not find this connection. Try again.
 network-vpn-connection-unreadable = Could not read this connection. Try again.
+# Choice label for remembering the VPN key password.
+network-vpn-remember-key-password = Remember key password
+# Choice label for remembering the VPN group password.
+network-vpn-remember-group-password = Remember group password
+# Choice label for remembering the VPN Xauth password.
+network-vpn-remember-xauth-password = Remember password
+# Choice label for remembering the SSH password.
+network-vpn-remember-ssh-password = Remember password
 
 # Plugin field labels, shown on the VPN form.
 network-vpn-field-server = Server

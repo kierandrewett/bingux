@@ -818,7 +818,7 @@ fn initial_value(field: &Field, profile: &PluginProfile) -> String {
 /// How a secret field's stored value is treated, as a flags number.
 fn initial_flags(field: &Field, profile: &PluginProfile) -> String {
     match field.kind {
-        Kind::Secret { flags } => data::get(&profile.data, flags).unwrap_or("0").to_string(),
+        Kind::Secret { flags, .. } => data::get(&profile.data, flags).unwrap_or("0").to_string(),
         _ => "0".to_string(),
     }
 }
@@ -845,7 +845,12 @@ pub(super) fn compose(
         let value = values[index].trim();
         match (field.store, field.kind) {
             (Store::UserName, _) => composed.user_name = value.to_string(),
-            (Store::Data(key), Kind::Secret { flags: flags_key }) => {
+            (
+                Store::Data(key),
+                Kind::Secret {
+                    flags: flags_key, ..
+                },
+            ) => {
                 let asked = flags[index] == "2";
                 data::set(
                     &mut composed.secrets,
@@ -1017,7 +1022,7 @@ pub(super) fn field_rows(
                     },
                 ));
             }
-            Kind::Secret { .. } => {
+            Kind::Secret { remember, .. } => {
                 let flag_state = states.flags[index];
                 let mut options: Vec<(String, String)> = SECRET_FLAGS
                     .iter()
@@ -1028,10 +1033,7 @@ pub(super) fn field_rows(
                     options.push((current.clone(), tr!("network-vpn-not-needed")));
                 }
                 group = group.row(choice_row(
-                    tr!(
-                        "network-vpn-remember",
-                        label = bingux_ui::i18n::text(field.label).to_lowercase()
-                    ),
+                    bingux_ui::i18n::text(remember),
                     options,
                     &current,
                     move |key: String| {
