@@ -236,6 +236,44 @@ impl Locale {
     pub(crate) fn icu(&self) -> &IcuLocale {
         &self.0
     }
+
+    /// The day a week starts on in this locale (CLDR week data), with the
+    /// region's usual first day. `Monday` when the data has none.
+    pub fn first_weekday(&self) -> crate::calendar::Weekday {
+        use crate::calendar::Weekday;
+        use icu::calendar::types::Weekday as IcuWeekday;
+        let first = icu::calendar::week::WeekInformation::try_new(self.0.as_ref().clone().into())
+            .map(|week| week.first_weekday)
+            .unwrap_or(IcuWeekday::Monday);
+        match first {
+            IcuWeekday::Monday => Weekday::Mon,
+            IcuWeekday::Tuesday => Weekday::Tue,
+            IcuWeekday::Wednesday => Weekday::Wed,
+            IcuWeekday::Thursday => Weekday::Thu,
+            IcuWeekday::Friday => Weekday::Fri,
+            IcuWeekday::Saturday => Weekday::Sat,
+            IcuWeekday::Sunday => Weekday::Sun,
+        }
+    }
+
+    /// Whether the locale writes times on a 12-hour clock (`2:05 PM`).
+    pub fn uses_12_hour(&self) -> bool {
+        let text = crate::format::Time::of_day(13, 5, 0)
+            .hour_cycle(crate::format::HourCycle::Locale)
+            .locale(self)
+            .format();
+        !text.contains("13")
+    }
+
+    /// Whether a short numeric date reads month first (`3/4/26`, the fourth
+    /// of March) rather than day first (`04/03/2026`).
+    pub fn month_first(&self) -> bool {
+        let text = crate::format::Date::civil(2026, 3, 4)
+            .short()
+            .locale(self)
+            .format();
+        text.trim_start().starts_with('3')
+    }
 }
 
 impl std::fmt::Display for Locale {

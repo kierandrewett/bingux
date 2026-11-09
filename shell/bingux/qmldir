@@ -58,6 +58,10 @@ MarqueeText 1.0 MarqueeText.qml
 SearchSocket 1.0 SearchSocket.qml
 PopupScroll 1.0 PopupScroll.qml
 ShellPopup 1.0 ShellPopup.qml
+ShellDialog 1.0 ShellDialog.qml
+ShellDialogCard 1.0 ShellDialogCard.qml
+ShellNotice 1.0 ShellNotice.qml
+StateMessage 1.0 StateMessage.qml
 SymbolicIcon 1.0 SymbolicIcon.qml
 SystemIndicators 1.0 SystemIndicators.qml
 StatusIndicator 1.0 StatusIndicator.qml

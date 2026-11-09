@@ -11,6 +11,7 @@
 //! | [`GoToLineBar`] | Go to a line and column |
 //! | [`markdown_view`] / [`MarkdownView`] | Markdown drawn with the type ramp, for a preview |
 //! | [`keymap`] | The keys and the commands they run |
+//! | [`editor_commands`] | The same as [`crate::commands::Command`]s, for menus, the palette and the shortcuts sheet |
 //! | [`SyntaxPalette`] | The colours of highlighted code for the current tokens |
 //!
 //! The view draws only the rows on screen and lays a line out only when it
@@ -24,6 +25,7 @@
 //! text_editor(doc.clone()).line_numbers(true).wrap(false)
 //! ```
 
+mod commands;
 mod find;
 pub mod keymap;
 mod markdown;
@@ -37,6 +39,7 @@ use freya::prelude::*;
 
 use bingux_text::{Editor, Highlighter, Selection};
 
+pub use commands::{TEXT_GROUP, editor_commands};
 pub use find::{
     FindBar, FindState, GoToLineBar, find_bar, go_to_line_bar, parse_line_target, use_find,
 };
@@ -172,3 +175,6 @@ pub fn use_editor(init: impl FnOnce() -> Editor) -> EditorHandle {
     let signal = use_state(|| 0u64);
     use_hook(move || EditorHandle::new(init(), signal))
 }
+
+#[cfg(test)]
+mod drag_tests;

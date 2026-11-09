@@ -29,11 +29,16 @@ pub(super) fn grouped(number: u64) -> String {
 
 /// `2.5 MB (2,500,000 bytes)`, or `512 bytes` when the unit is bytes.
 pub(super) fn size_with_bytes(bytes: u64) -> String {
-    let size = display::size(bytes);
+    // Isolated (`format::isolate`): in a right-to-left interface the size
+    // does not read "MB (2,500,000 bytes) 2.5".
+    let size = crate::format::isolate(display::size(bytes));
     if bytes < 1000 {
         size
     } else {
-        format!("{size} ({} bytes)", grouped(bytes))
+        format!(
+            "{size} ({})",
+            crate::format::isolate(format!("{} bytes", grouped(bytes)))
+        )
     }
 }
 

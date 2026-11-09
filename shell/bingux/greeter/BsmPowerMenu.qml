@@ -25,13 +25,15 @@ Item {
             id: "reboot",
             title: "Restart",
             icon: "system-reboot-symbolic",
-            confirm: true
+            confirm: true,
+            destructive: true
         },
         {
             id: "poweroff",
             title: "Shut Down",
             icon: "system-shutdown-symbolic",
-            confirm: true
+            confirm: true,
+            destructive: true
         }
     ]
     readonly property var selected: actions.find(action => action.id === pending)
@@ -144,6 +146,7 @@ Item {
                 visible: root.pending !== ""
                 text: root.selected ? root.selected.title : ""
                 iconName: root.selected ? root.selected.icon : ""
+                destructive: !!root.selected && root.selected.destructive === true
                 onClicked: root.requested(root.pending)
             }
             SessionRow {
@@ -154,7 +157,7 @@ Item {
                 Layout.fillWidth: true
                 visible: root.pending !== ""
                 text: "Cancel"
-                iconName: "go-previous-symbolic"
+                iconName: "window-close-symbolic"
                 onClicked: root.pending = ""
             }
         }

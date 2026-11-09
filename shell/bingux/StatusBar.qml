@@ -190,7 +190,9 @@ Item {
         SystemMetrics {
             systemMetrics: root.metrics
             presentation: root.appearance("metrics", "System monitors", "computer-symbolic", true, true)
-            visible: root.metricsEnabled && root.allowed("metrics")
+            // Without a metrics feed (lock screen, greeter, installer) there is
+            // nothing to read: the slot is absent instead of printing "CPU —".
+            visible: root.metricsEnabled && root.allowed("metrics") && available
             onConfigureRequested: root.metricsConfigureRequested()
             onPerformanceRequested: root.metricsPerformanceRequested()
         }

@@ -392,50 +392,58 @@ impl Component for CrumbButton {
         let content = rect()
             .component("AddressCrumb")
             .tw(&tokens, &[h(Dim::Dense)])
-            .on_pointer_enter({
-                let (session, folder) = (session, self.drop.clone());
-                move |_| {
-                    if let (Some(session), Some(folder)) = (session, &folder) {
-                        session.hover(folder);
-                    }
-                }
-            })
-            .on_pointer_leave({
-                let (session, folder) = (session, self.drop.clone());
-                move |_| {
-                    if let (Some(session), Some(folder)) = (session, &folder) {
-                        session.leave(folder);
-                    }
-                }
-            })
             .child(
-                face.attach(rect().tw(
-                    &tokens,
-                    &[
-                        flex_row(),
-                        items(Align::Center),
-                        h_full(),
-                        if lead.is_some() { pr(S2) } else { px(S2) },
-                        gap(if lead.is_some() { S2 } else { S1 }),
-                        rounded(Radius::Inner),
-                        surface(
-                            if drop_here {
-                                Paint::AccentSoft
-                            } else {
-                                Paint::Transparent
-                            },
-                            face.hovering(),
-                            face.pressing(),
-                            false,
-                        ),
-                    ],
-                ))
-                .maybe_child(lead)
-                .child(
-                    BODY.in_ink(ink)
-                        .label(&tokens, self.shown.clone())
-                        .max_lines(1),
-                ),
+                // The face is the element the pointer enters: enter does not
+                // bubble to the box around it, so the drop hover lives here,
+                // merged with the face's own hover and press handlers.
+                {
+                    let (mut hovering, mut pressing) = (face.hovering, face.pressing);
+                    let (session_in, folder_in) = (session, self.drop.clone());
+                    let (session_out, folder_out) = (session, self.drop.clone());
+                    rect()
+                        .tw(
+                            &tokens,
+                            &[
+                                flex_row(),
+                                items(Align::Center),
+                                h_full(),
+                                if lead.is_some() { pr(S2) } else { px(S2) },
+                                gap(if lead.is_some() { S2 } else { S1 }),
+                                rounded(Radius::Inner),
+                                surface(
+                                    if drop_here {
+                                        Paint::AccentSoft
+                                    } else {
+                                        Paint::Transparent
+                                    },
+                                    face.hovering(),
+                                    face.pressing(),
+                                    false,
+                                ),
+                            ],
+                        )
+                        .on_pointer_enter(move |_| {
+                            hovering.set(true);
+                            if let (Some(session), Some(folder)) = (session_in, &folder_in) {
+                                session.hover(folder);
+                            }
+                        })
+                        .on_pointer_leave(move |_| {
+                            hovering.set(false);
+                            pressing.set_if_modified(false);
+                            if let (Some(session), Some(folder)) = (session_out, &folder_out) {
+                                session.leave(folder);
+                            }
+                        })
+                        .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
+                        .on_global_pointer_up(move |_| pressing.set_if_modified(false))
+                        .maybe_child(lead)
+                        .child(
+                            BODY.in_ink(ink)
+                                .label(&tokens, self.shown.clone())
+                                .max_lines(1),
+                        )
+                },
             );
         let stop = focus_stop_pressed(
             use_a11y(),

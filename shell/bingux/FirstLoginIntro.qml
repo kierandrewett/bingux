@@ -1,9 +1,7 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 
 // First-login introduction: the shortcuts and gestures this desktop configures, and a way to open
 // Bingux Settings. Completion is stored in Bingux-owned state at statePath("first-login")/intro.json.
@@ -146,113 +144,47 @@ Scope {
         }
     }
 
-    PanelWindow {
+    ShellDialog {
         id: dialog
-        visible: root.open
-        color: "transparent"
-        implicitWidth: 480
-        implicitHeight: content.implicitHeight + Theme.padding * 4
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "bingux-introduction"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
-
-        onVisibleChanged: {
-            if (visible)
-                Qt.callLater(() => gotIt.forceActiveFocus());
+        namespace: "bingux-introduction"
+        dialogWidth: 480
+        open: root.open
+        title: "Welcome to Bingux"
+        body: "These shortcuts are set up for this desktop. You can open this again from Bingux Settings."
+        secondaryText: "Open Settings"
+        primaryText: "Got it"
+        onSecondaryTriggered: {
+            Quickshell.execDetached([Python.python, Python.applicationSpawn, "--", Python.settings]);
+            root.dismiss();
         }
+        onPrimaryTriggered: root.dismiss()
+        onDismissed: root.dismiss()
 
-        FocusScope {
-            id: card
-            anchors.fill: parent
-            focus: true
-            opacity: root.open ? 1 : 0
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Theme.popupOpenMotion
-                }
-            }
-
-            Keys.onEscapePressed: root.dismiss()
-
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: Theme.padding
-                radius: Theme.shellRadius
-                color: Theme.shellSurface
-                border.width: 1
-                border.color: Theme.outline
-            }
-
-            ColumnLayout {
-                id: content
-                anchors.fill: parent
-                anchors.margins: Theme.padding * 2
-                spacing: Theme.gap
-
+        Repeater {
+            model: root.entries
+            delegate: RowLayout {
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: Theme.gap * 2
                 Text {
-                    Layout.fillWidth: true
-                    text: "Welcome to Bingux"
+                    Layout.preferredWidth: 160
+                    Layout.alignment: Qt.AlignTop
+                    text: modelData.keys
+                    textFormat: Text.PlainText
                     color: Theme.text
                     font.family: Theme.fontFamily
-                    font.pixelSize: Theme.fontSize + 4
-                    font.bold: true
+                    font.pixelSize: Theme.fontSize
+                    font.weight: Font.DemiBold
+                    wrapMode: Text.WordWrap
                 }
                 Text {
                     Layout.fillWidth: true
-                    text: "These shortcuts are set up for this desktop. You can open this again from Bingux Settings."
+                    text: modelData.text
+                    textFormat: Text.PlainText
                     color: Theme.muted
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.fontSize
                     wrapMode: Text.WordWrap
-                }
-                Repeater {
-                    model: root.entries
-                    delegate: RowLayout {
-                        required property var modelData
-                        Layout.fillWidth: true
-                        spacing: Theme.gap * 2
-                        Text {
-                            Layout.preferredWidth: 160
-                            Layout.alignment: Qt.AlignTop
-                            text: modelData.keys
-                            textFormat: Text.PlainText
-                            color: Theme.text
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize
-                            font.bold: true
-                            wrapMode: Text.WordWrap
-                        }
-                        Text {
-                            Layout.fillWidth: true
-                            text: modelData.text
-                            textFormat: Text.PlainText
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSize
-                            wrapMode: Text.WordWrap
-                        }
-                    }
-                }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.gap
-                    spacing: Theme.gap
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                    ActionButton {
-                        text: "Open Settings"
-                        onClicked: {
-                            Quickshell.execDetached([Python.python, Python.applicationSpawn, "--", Python.settings]);
-                            root.dismiss();
-                        }
-                    }
-                    ActionButton {
-                        id: gotIt
-                        text: "Got it"
-                        onClicked: root.dismiss()
-                    }
                 }
             }
         }

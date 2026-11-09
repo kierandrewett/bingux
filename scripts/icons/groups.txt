@@ -34,7 +34,7 @@ media-playback-pause media-playback-stop preferences-system emblem-system folder
 [status]
 dialog-error dialog-information dialog-warning help-browser dialog-password changes-prevent
 power-profile-power-saver power-profile-balanced power-profile-performance display-brightness
-night-light weather-clear-night action-unavailable
+night-light weather-clear-night action-unavailable folder-missing
 
 [devices]
 audio-headphones audio-speakers audio-card audio-input-microphone input-keyboard input-mouse input-tablet

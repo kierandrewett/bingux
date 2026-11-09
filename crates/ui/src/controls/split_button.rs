@@ -282,8 +282,8 @@ impl Component for SplitButton {
                             if !primary_press.tap(&event) {
                                 return;
                             }
-                            on_press.call(());
                             press_focus(&core, primary_id);
+                            on_press.call(());
                         })
                         .on_key_down(move |event: Event<KeyboardEventData>| {
                             match route_key(Segment::Primary, &event.key, has_menu) {

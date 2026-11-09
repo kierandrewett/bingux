@@ -4,12 +4,13 @@ Item {
     id: root
     property bool loading: false
     property color colour: Theme.muted
+    property string accessibleName: "Loading preview"
     implicitWidth: 28
     implicitHeight: 28
     opacity: loading ? 1 : 0
     visible: opacity > 0
     Accessible.role: Accessible.Indicator
-    Accessible.name: "Loading preview"
+    Accessible.name: accessibleName
     Behavior on opacity {
         NumberAnimation {
             duration: Theme.reducedMotion ? 0 : (Theme.previewMotion)

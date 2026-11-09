@@ -3,7 +3,10 @@ import QtQuick.Controls
 import "auth"
 
 // One row in a SessionPopover list: an avatar or icon, a label and an
-// optional tick. The selected row carries a stronger translucent fill.
+// optional tick. States, weakest to strongest fill: rest, hover, selected,
+// selected and hovered, pressed. The selected row also carries an accent bar
+// at its leading edge, so it reads without the tick. Keyboard focus draws a
+// ring; it never borrows the hover fill.
 AbstractButton {
     id: root
 
@@ -11,6 +14,9 @@ AbstractButton {
     property string avatarName: ""
     property string iconName: ""
     property bool selected: false
+    // An action that ends the session (Restart, Shut Down): danger ink and a
+    // faint danger tint at rest.
+    property bool destructive: false
     // Shows a tick on the right; used by single-choice lists. (`checked` is
     // AbstractButton state and would change the button semantics.)
     property bool ticked: false
@@ -29,11 +35,23 @@ AbstractButton {
 
     background: Rectangle {
         radius: 9
-        color: root.down ? Qt.rgba(1, 1, 1, 0.26) : root.hovered || root.visualFocus ? Qt.rgba(1, 1, 1, 0.16) : root.selected ? Qt.rgba(1, 1, 1, 0.1) : "transparent"
+        color: root.down ? Qt.rgba(1, 1, 1, 0.30) : root.selected ? Qt.rgba(1, 1, 1, root.hovered ? 0.26 : 0.20) : root.hovered ? Qt.rgba(1, 1, 1, 0.12) : root.destructive ? Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, 0.1) : "transparent"
+        border.width: root.visualFocus ? 2 : 0
+        border.color: "#ffffff"
         Behavior on color {
             ColorAnimation {
                 duration: Theme.motion
             }
+        }
+        Rectangle {
+            objectName: "sessionRowMarker"
+            visible: root.selected
+            x: 3
+            anchors.verticalCenter: parent.verticalCenter
+            width: 3
+            height: parent.height * 0.5
+            radius: 1.5
+            color: Theme.accent
         }
     }
     contentItem: Item {
@@ -60,7 +78,7 @@ AbstractButton {
                     anchors.centerIn: parent
                     implicitSize: 12
                     source: root.iconName !== "" ? BinguxIcons.source(root.iconName) : ""
-                    color: "#ffffff"
+                    color: root.destructive ? Theme.danger : "#ffffff"
                 }
             }
             Column {
@@ -68,7 +86,7 @@ AbstractButton {
                 Text {
                     textFormat: Text.PlainText
                     text: root.text
-                    color: "#ffffff"
+                    color: root.destructive ? Theme.danger : "#ffffff"
                     font.family: Theme.fontFamily
                     font.pixelSize: root.labelPixelSize
                     font.weight: root.selected ? Font.DemiBold : Font.Normal

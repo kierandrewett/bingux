@@ -95,5 +95,36 @@ pub enum Width {
     Narrow,
 }
 
+/// First strong isolate and pop directional isolate (UAX #9).
+const FSI: char = '\u{2068}';
+const PDI: char = '\u{2069}';
+
+/// `text` as one unit that the sentence around it does not reorder, in an
+/// interface that reads right to left ([`Direction::system`]); as it is in
+/// one that reads left to right. Every formatter here returns its text
+/// through it, so "1.2 MB", "2 minutes ago" or "21°C" keep their order in a
+/// right-to-left paragraph instead of reading "MB 1.2". A count or size
+/// that an app writes into a sentence by hand ("3 of 8 selected") goes
+/// through it too. The isolate takes the direction of its first strong
+/// letter, so a value written in Arabic still reads right to left.
+///
+/// [`Direction::system`]: crate::controls::direction::Direction::system
+pub fn isolate(text: String) -> String {
+    isolate_in(text, crate::controls::direction::Direction::system())
+}
+
+/// [`isolate`] for an interface that reads in `direction`: a test, or a
+/// window shown in another script's order.
+pub fn isolate_in(text: String, direction: crate::controls::direction::Direction) -> String {
+    if direction != crate::controls::direction::Direction::Rtl || text.is_empty() {
+        return text;
+    }
+    let mut out = String::with_capacity(text.len() + 6);
+    out.push(FSI);
+    out.push_str(&text);
+    out.push(PDI);
+    out
+}
+
 #[cfg(test)]
 mod tests;

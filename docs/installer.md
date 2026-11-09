@@ -77,8 +77,8 @@ Under **How to use the disk** there are three choices:
 - **Erase the whole disk** wipes the disk and creates the Bingux layout. The
   page warns that everything on the disk will be erased.
 - **Use free space** and **Install alongside another system** keep the existing
-  partitions. The page marks both as *not in this installer build yet*, so they
-  cannot be selected. See [dual boot](#dual-boot).
+  partitions. When the installer on this computer does not offer them, the row says
+  *Not available on this computer* and cannot be selected. See [dual boot](#dual-boot).
 - **Partition by hand** lists the disk's partitions and sets what happens to
   each one. It needs a GPT disk. See [Partitions](#partitions).
 
@@ -158,7 +158,13 @@ The summary lists the disk, layout, file system, swap, encryption, account and
 hostname. In manual mode it lists each partition change: created, formatted or
 kept. The button reads **Erase and install** for an erase, **Format and install**
 when the list formats a partition, and **Install** otherwise. The install does
-not start until the confirm toggle on this page is on.
+not start until the confirm toggle on this page is on. The toggle is pinned under
+the list, so it stays on screen however far the list is scrolled; **Install**
+is off until the toggle is on, and the toggle says so.
+
+Every page that is longer than its card scrolls. A scroll bar sits at the right
+edge and the bottom edge fades into the card while more content is below, so a
+row is never cut off with nothing to say there is more.
 
 ### Progress
 
@@ -181,7 +187,12 @@ unmount the target and close the encryption mapping before the error appears.
 - **Save log** writes the log to `/tmp/bingux-installer-<timestamp>.log` and shows
   the path on the page. Attach it to a bug report. Passwords and the passphrase
   are not written to it.
-- **Retry** runs the install again from the summary.
+- The main button depends on why the install stopped. **Try again** runs the same
+  plan again after a failure that trying again can fix. **Choose another disk**
+  returns to the Disk page when the disk was the problem (too small, not found, it
+  holds the installer or another system). **Review settings** returns to the
+  summary when the installer refused the plan. When a required tool is missing,
+  trying again cannot help, so the page offers only the log.
 
 ### Finished
 

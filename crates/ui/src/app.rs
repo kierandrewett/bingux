@@ -606,14 +606,17 @@ fn close_requested(id: freya::winit::window::WindowId) -> freya_winit::config::C
 }
 
 /// The one place a bingux-ui process starts its event loop. It builds the
-/// launch configuration, with the interface font and the inspector plugin, so
-/// every window of every app has the inspector (Ctrl+Alt+Shift+I) without any
-/// code of its own. [`Application::run`] is the only caller, and
-/// `scripts/ui-lint.py` fails on `LaunchConfig::new()` or `freya::launch`
+/// launch configuration, with the interface font and, when the inspector is
+/// enabled (see [`crate::inspector::enabled`]), the inspector plugin. It is
+/// the only place a window starts. [`Application::run`] is the only caller,
+/// and `scripts/ui-lint.py` fails on `LaunchConfig::new()` or `freya::launch`
 /// anywhere else.
 fn launch_application(window: WindowConfig, borderless: bool) {
     crate::warm::enable();
-    let mut config = theme::with_font(LaunchConfig::new()).with_plugin(crate::inspector::plugin());
+    let mut config = theme::with_font(LaunchConfig::new());
+    if crate::inspector::enabled() {
+        config = config.with_plugin(crate::inspector::plugin());
+    }
     if borderless {
         config = config.with_plugin(freya::borderless::BorderlessPlugin::new());
     }

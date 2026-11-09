@@ -1188,6 +1188,7 @@ fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
                 },
             )
             .max(200.0)
+            .origin(100.0)
             .mark(100.0)
             .value_text(side_text(shape.balance, "Left", "Right"))
             .into(),
@@ -1200,6 +1201,7 @@ fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
                 update_mix(ctx, move |shape| shape.fade = fade);
             })
             .max(100.0)
+            .origin(50.0)
             .mark(50.0)
             .value_text(side_text(shape.fade, "Rear", "Front"))
             .into(),
@@ -1765,11 +1767,12 @@ fn channel_group(
         .map(|test_mix| {
             action_button("Test…", move |_| open_test(ctx, test_mix.clone())).compact()
         });
-    let meter = level.as_ref().map(|level| LevelMeter {
-        node: level.id,
+    // Both groups carry a meter: without a level to follow it is an idle track.
+    let meter = Some(LevelMeter {
+        node: level.as_ref().map_or(0, |level| level.id),
         source: kind.source(),
         compact: true,
-        live: true,
+        live: level.is_some(),
     });
     let group = if meter.is_some() || test.is_some() {
         group.trailing(

@@ -50,7 +50,7 @@
 use freya::prelude::*;
 
 use crate::controls::button::{ActionButton, action_button, primary_button};
-use crate::focus::trap_inline;
+use crate::focus::{ScopeClosing, trap_inline};
 use crate::icons::{self, Icon};
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::Panel;
@@ -478,6 +478,10 @@ impl Component for DialogLayer {
         let tokens = use_tokens();
         let overlays = self.overlays;
         let a11y_id = use_a11y();
+        // The card's focus scope reads this: a dialog's close moves focus
+        // (back to the opener), and an app's result callback may move it too.
+        let closing = overlays.dialog_closing_state();
+        use_provide_context(move || ScopeClosing(closing));
         let plan = self.dialog.plan();
         // The card is one modal focus scope (see `focus::trap_inline`): Tab
         // cycles inside it, the page behind is inert, and focus returns to the

@@ -44,6 +44,11 @@ pub fn weekday_of(day: chrono::Weekday) -> Weekday {
     Weekday::from_index(i64::from(day.num_days_from_monday()))
 }
 
+/// The calendar-core weekday for a UI weekday.
+pub fn chrono_weekday(day: Weekday) -> chrono::Weekday {
+    chrono::Weekday::try_from(day.index()).unwrap_or(chrono::Weekday::Mon)
+}
+
 /// The colour a calendar draws its events in. `index` is its place in the
 /// list, which picks an accent for a calendar that has no colour.
 pub fn colour_of(calendar: Option<&Calendar>, index: usize, tokens: &Tokens) -> Color {

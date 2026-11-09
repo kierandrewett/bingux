@@ -205,7 +205,7 @@ pub fn load(name: &str) -> Result<WgProfile, String> {
         dns4,
         dns6,
     ] = <[String; 10]>::try_from(values)
-        .map_err(|_| "NetworkManager returned an unexpected answer.".to_string())?;
+        .map_err(|_| "Could not read this VPN. Try again.".to_string())?;
     let path = bus::connection_path(&uuid)?;
     let peers = peers_from(
         &bus::get_settings(&path)?,
@@ -580,7 +580,13 @@ pub fn import_text(text: &str, display: &str) -> Result<String, String> {
                 "Could not import the VPN. Check the free space and try again.".to_string()
             })?;
         let file = file.to_string_lossy().into_owned();
-        let added = nm::run(&["connection", "import", "type", "wireguard", "file", &file])?;
+        let added = nm::run(&["connection", "import", "type", "wireguard", "file", &file])
+            .map_err(|raw| {
+                super::super::plain(
+                    &raw,
+                    "Could not import the VPN. Check the file and try again.",
+                )
+            })?;
         let (_, uuid) = nm::added(&added)
             .ok_or_else(|| "Could not find the new VPN. Try again.".to_string())?;
         // A new VPN does not connect by itself until the person says so.

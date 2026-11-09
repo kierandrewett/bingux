@@ -16,8 +16,9 @@ use crate::system::{
 use crate::theme::Tokens;
 use crate::ui::{
     Group, Overlays, PageHead, PopupAction, PopupActions, Status, Window, action_button, avatar,
-    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_rows,
-    skeleton_shape, status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
+    caption, form_field, form_row, heading, menu_item, page_column, popup, popup_column, row,
+    skeleton_rows, skeleton_shape, status, text_field, use_overlays, use_popup_actions, use_tokens,
+    use_window,
 };
 use bingux_ui::motion::reveal_block_if;
 use bingux_ui::prelude::{Router, Target, use_router};
@@ -64,7 +65,15 @@ fn refresh() -> Result<Vec<Account>, CommandError> {
 }
 
 /// Every cached account, the current user first. Runs on a background thread.
+/// A failure becomes one plain message; the tool's own text goes to the log.
 fn load() -> Result<Vec<Account>, CommandError> {
+    read_accounts().map_err(|error| {
+        eprintln!("settings: could not read accounts: {}", error.0);
+        unexpected()
+    })
+}
+
+fn read_accounts() -> Result<Vec<Account>, CommandError> {
     let current = system::run("id", &["-un"], READ_TIMEOUT)?;
     let listed = busctl_json(
         &["call", ACCOUNTS, ACCOUNTS_PATH, ACCOUNTS, "ListCachedUsers"],
@@ -135,7 +144,7 @@ fn bool_property(path: &str, name: &str) -> Result<bool, CommandError> {
 }
 
 fn unexpected() -> CommandError {
-    CommandError("Account details could not be read.".into())
+    CommandError("Could not read the accounts. Restart Settings and try again.".into())
 }
 
 /// Set the full name of the account at `path` through polkit.
@@ -239,7 +248,7 @@ impl Component for UsersPage {
 
         let group = Group::titled("Accounts");
         let group = if accounts.is_empty() {
-            group.row(status(Status::Empty("No accounts found.".into())))
+            group.row(status(Status::Empty("No accounts".into())))
         } else {
             group.rows(accounts.iter().map(|account| {
                 let route =
@@ -357,9 +366,9 @@ impl Component for AccountDetails {
                         "Standard"
                     }))
                     .row(row("Automatic login").value(if account.automatic_login {
-                        "Enabled"
+                        "On"
                     } else {
-                        "Disabled"
+                        "Off"
                     }))
                     .row(row("Language").value(if account.language.is_empty() {
                         "Not set".to_string()
@@ -472,7 +481,7 @@ impl PasswordSheet {
                     Ok(()) => {
                         self.clear();
                         window.close();
-                        self.overlays.toast("Password changed.".to_string());
+                        self.overlays.toast("Password changed".to_string());
                     }
                     Err(message) => {
                         let mut error = self.error;
@@ -509,14 +518,17 @@ impl Component for PasswordBody {
         let window = use_window();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Change".into(),
+                label: "Change password".into(),
                 enabled: true,
                 on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
             }),
         });
-        let current = text_field(sheet.current, move |_: String| sheet.submit(window)).password();
-        let new = text_field(sheet.new, move |_: String| sheet.submit(window)).password();
-        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit(window)).password();
+        let current = form_field("Current password", sheet.current)
+            .password()
+            .on_submit(move |_: ()| sheet.submit(window));
+        let new = form_field("New password", sheet.new)
+            .password()
+            .on_submit(move |_: ()| sheet.submit(window));
         let error = sheet.error.read().clone();
         let busy = *sheet.busy.read();
         let mismatch = {
@@ -524,14 +536,15 @@ impl Component for PasswordBody {
             let confirm_text = sheet.confirm.read();
             !confirm_text.is_empty() && *confirm_text != *new_text
         };
-        let mut group = Group::new(None::<String>)
+        let confirm = form_field("Confirm password", sheet.confirm)
+            .password()
+            .error(mismatch.then(|| "The new passwords do not match.".to_string()))
+            .on_submit(move |_: ()| sheet.submit(window));
+        let group = Group::new(None::<String>)
             .description("Enter your current password, then the new one twice.")
-            .row(form_row("Current", current))
-            .row(form_row("New", new))
-            .row(form_row("Retype", confirm));
-        if mismatch {
-            group = group.footer("The new passwords do not match.");
-        }
+            .row(current)
+            .row(new)
+            .row(confirm);
         popup_column()
             .child(group)
             .child(reveal_block_if(
@@ -632,7 +645,7 @@ impl Component for NameBody {
         let on_press_path = path.clone();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Change".into(),
+                label: "Save".into(),
                 enabled: true,
                 on_press: EventHandler::new(move |_: ()| {
                     sheet.submit(on_press_path.clone(), window)

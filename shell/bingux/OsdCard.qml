@@ -27,12 +27,15 @@ Rectangle {
     // Retain the content until the close fade has finished.
     property var presentedRequest: null
     readonly property bool hasLevel: presentedRequest !== null && presentedRequest.maxLevel >= 0 && presentedRequest.level >= 0
-    readonly property bool iconOnly: presentedRequest !== null && (presentedRequest.icon === "action-unavailable-symbolic" || (!hasLevel && !presentedRequest.label && labelFor(presentedRequest) === "System control"))
+    readonly property bool unavailable: presentedRequest !== null && presentedRequest.icon === "action-unavailable-symbolic"
     readonly property real maximum: presentedRequest && presentedRequest.maxLevel > 0 ? presentedRequest.maxLevel : 1
     readonly property real levelFraction: hasLevel ? Math.min(1, presentedRequest.level / maximum) : 0
     readonly property string percentLabel: hasLevel ? Math.round(Math.max(0, presentedRequest.level) * 100) + "%" : ""
 
     function labelFor(request) {
+        // An action the hardware cannot do says which one, in words.
+        if (request.icon === "action-unavailable-symbolic")
+            return request.label ? request.label + " unavailable" : "Action unavailable";
         if (request.icon.startsWith("microphone-") || request.icon.startsWith("audio-input-"))
             return "Microphone";
         if (request.icon.startsWith("audio-"))
@@ -45,6 +48,8 @@ Rectangle {
     }
 
     function detailFor(request) {
+        if (request.icon === "action-unavailable-symbolic")
+            return "";
         if (request.icon.includes("muted"))
             return "Muted";
         return request.label !== labelFor(request) ? request.label : "";
@@ -63,8 +68,10 @@ Rectangle {
         }
     }
 
-    width: Math.max(0, Math.min(iconOnly ? Theme.osdIconTileSize + Theme.osdPadding * 2 : Theme.osdWidth, availableWidth - Theme.osdPadding * 2))
-    height: content.implicitHeight + Theme.osdPadding * 2
+    width: Math.max(0, Math.min(Theme.osdWidth, availableWidth - Theme.osdPadding * 2))
+    // One height for every OSD, with or without a detail line or a level bar,
+    // so the card does not jump between a volume change and a status message.
+    height: Theme.osdHeight
     radius: Theme.shellRadius
     color: Theme.popupSurface
     border.width: 1
@@ -85,7 +92,7 @@ Rectangle {
         easing.type: Easing.OutCubic
     }
     Accessible.role: Accessible.Indicator
-    Accessible.name: iconOnly ? "Action unavailable" : (presentedRequest ? labelFor(presentedRequest) : "") + " " + percentLabel
+    Accessible.name: (presentedRequest ? labelFor(presentedRequest) : "") + (percentLabel !== "" ? " " + percentLabel : "")
 
     Loader {
         active: card.panelOutline
@@ -96,8 +103,11 @@ Rectangle {
 
     ColumnLayout {
         id: content
-        anchors.fill: parent
-        anchors.margins: Theme.osdPadding
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        anchors.leftMargin: Theme.osdPadding
+        anchors.rightMargin: Theme.osdPadding
         spacing: Theme.padding
 
         RowLayout {
@@ -108,16 +118,15 @@ Rectangle {
                 implicitWidth: Theme.osdIconTileSize
                 implicitHeight: implicitWidth
                 radius: Theme.insetRadius(card.radius, Theme.osdPadding)
-                color: card.iconOnly ? "transparent" : card.tileColor
+                color: card.tileColor
                 SymbolicIcon {
                     anchors.centerIn: parent
                     implicitSize: Theme.osdIconSize
-                    color: card.presentedRequest?.icon.includes("muted") ? card.inkMuted : card.accent
+                    color: card.unavailable || card.presentedRequest?.icon.includes("muted") ? card.inkMuted : card.accent
                     source: BinguxIcons.source(card.presentedRequest ? card.presentedRequest.icon : "dialog-information-symbolic", "dialog-information-symbolic")
                 }
             }
             ColumnLayout {
-                visible: !card.iconOnly
                 Layout.fillWidth: true
                 spacing: Theme.spaceSmall
                 Text {
@@ -155,13 +164,13 @@ Rectangle {
                 font.features: ({
                         "tnum": 1
                     })
-                visible: card.hasLevel && !card.iconOnly
+                visible: card.hasLevel
             }
         }
         Rectangle {
             objectName: "osdTrack"
             Layout.fillWidth: true
-            visible: card.hasLevel && !card.iconOnly
+            visible: card.hasLevel
             implicitHeight: Theme.sliderActiveTrackHeight
             radius: height / 2
             color: card.trackColor

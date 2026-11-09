@@ -16,7 +16,7 @@ mod session;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 const USAGE: &str = "Usage: bingux-text-editor [--] [FILE | URI]...\n\
 \n\
@@ -28,6 +28,7 @@ last session, or the running window is raised. An option other than --help\n\
 is an error; `--` ends the options, for a file whose name starts with `-`.\n";
 
 fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("text-editor"));
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
         let dir = std::env::args()
@@ -49,7 +50,7 @@ fn main() {
     let (width, height) = app::window_size();
     Application::new("bingux-text-editor")
         .routes(launch::table())
-        .title("Text Editor")
+        .title(Message::new(i18n_id!("text-editor-title")))
         .size(width, height)
         .min_size(360.0, 320.0)
         .borderless()
@@ -58,9 +59,20 @@ fn main() {
         .transparent()
         .normalise(launch::normalise)
         .about(bingux_ui::app_info!(
-            description = "Edit text files and code",
+            description = tr!("text-editor-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
         .run(|| app::App);
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "text-editor")
+            .assert_clean();
+    }
 }

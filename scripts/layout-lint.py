@@ -121,7 +121,7 @@ POPUPS = [
     ("wifi-enterprise", "network/wifi", "click-text Campus"),
     ("wifi-hidden", "network/wifi", "click-text Connect to hidden network…"),
     ("datetime-set", "datetime", "click-text Set date and time"),
-    ("keyboard-add-input", "keyboard", "click-text Add an input source"),
+    ("keyboard-add-input", "keyboard", "click-text Add input source…"),
     ("about-rename", "about", "click-text Rename"),
     ("users-password", "users", "click-text Change password"),
     ("sound-test", "sound", "click-text Test speakers"),

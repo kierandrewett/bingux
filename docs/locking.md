@@ -71,7 +71,8 @@ and others), which the bsm greeter draws with too (see
 - the user's wallpaper, resolved by `bingux-session wallpaper` from the Bingux
   configuration (`desktop.wallpaper`, then the GNOME background setting). With
   no wallpaper the backdrop is a deep tint of the system accent colour;
-- the date and clock at the top, in the locale's 12- or 24-hour format;
+- the date and clock at the top, in the locale's 12- or 24-hour format (the 12-hour clock
+  shows AM or PM beside the time);
 - the account picture (or a monogram), display name, a hint or status line,
   and a frosted password field at the bottom;
 - the session bar at the top (next section).

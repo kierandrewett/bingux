@@ -1045,3 +1045,22 @@ fn the_default_locale_can_be_set_and_changes_the_revision() {
     Locale::set_current(None);
     assert!(Locale::revision() > before + 1);
 }
+
+/// A formatted value reads in one piece in a right-to-left sentence: it is
+/// wrapped in a first-strong isolate there ("1.2 MB", not "MB 1.2"), and
+/// left as it is in a left-to-right interface.
+#[test]
+fn values_are_isolated_in_a_right_to_left_interface() {
+    use crate::controls::direction::Direction;
+    let size = Bytes::new(1_204_331).locale(&loc("en-GB")).compose();
+    assert_eq!(isolate_in(size.clone(), Direction::Ltr), size);
+    let isolated = isolate_in(size.clone(), Direction::Rtl);
+    assert_eq!(isolated, format!("\u{2068}{size}\u{2069}"));
+    // Nothing else changes: the isolate marks are invisible and the value
+    // inside keeps its text.
+    assert_eq!(
+        isolated.trim_matches(['\u{2068}', '\u{2069}']),
+        "1.2\u{a0}MB"
+    );
+    assert_eq!(isolate_in(String::new(), Direction::Rtl), "");
+}

@@ -846,7 +846,8 @@ mod tests {
         assert_eq!(nearest_angle(1, 0.0), 90.0);
         // A turn right from 270 (three quarters) to four quarters is 360, not 0.
         assert_eq!(nearest_angle(0, 270.0), 360.0);
-        assert_eq!(nearest_angle(3, 450.0), 450.0);
+        // 450 is a tie between 270 and 630; 480 is nearer 630.
+        assert_eq!(nearest_angle(3, 480.0), 630.0);
         assert_eq!(nearest_angle(0, -90.0), 0.0);
         assert_eq!(nearest_angle(3, -90.0), -90.0);
     }

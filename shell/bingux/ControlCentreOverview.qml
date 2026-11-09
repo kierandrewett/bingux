@@ -518,13 +518,13 @@ GridLayout {
         }
         onClicked: root.customiseRequested()
     }
-    Text {
+    StateMessage {
+        objectName: "controlsError"
         Layout.row: ControlLayout.items(root.groupedLayout, "control-centre").length
         Layout.fillWidth: true
+        compact: true
         visible: root.services.error !== ""
-        text: root.services.error
-        wrapMode: Text.Wrap
-        color: Theme.muted
-        font.pixelSize: Theme.fontSmall
+        tone: "danger"
+        title: root.services.error
     }
 }

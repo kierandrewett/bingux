@@ -117,6 +117,7 @@ Rectangle {
                 visible: root.primaryVisible
                 enabled: root.primaryEnabled
                 text: root.primaryText
+                tone: "primary"
                 Layout.minimumWidth: 110
                 onClicked: root.primaryRequested()
             }
@@ -198,12 +199,7 @@ Rectangle {
             enabled: root.primaryEnabled
             text: root.primaryText
             height: root.footerHeight
-            background: Rectangle {
-                radius: widePrimary.cornerRadius
-                color: !widePrimary.enabled ? Theme.elevated : widePrimary.down ? Qt.darker(Theme.accent, 1.6) : widePrimary.hovered ? Qt.darker(Theme.accent, 1.3) : Qt.darker(Theme.accent, 1.4)
-                border.width: widePrimary.activeFocus ? 2 : 0
-                border.color: Theme.text
-            }
+            tone: "primary"
             implicitWidth: Math.round(150 * root.uiScale)
             anchors.right: parent.right
             anchors.bottom: parent.bottom

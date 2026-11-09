@@ -311,18 +311,25 @@ impl Component for MobilePage {
             .unwrap_or_default();
 
         let head = PageHead::new().subtitle(if loading {
-            "—".to_string()
+            "Loading…".to_string()
         } else {
             status_line(Some(&modem), &link)
         });
         let mut page = page_column().child(head);
 
         if link.airplane {
-            page = page.child(Group::new(None::<String>).row(Element::from(status(Status::Info(
-                "Mobile network is off in airplane mode. Turn airplane mode off on the Network \
-                 page to use it."
-                    .into(),
-            )))));
+            page = page.child(
+                Group::new(None::<String>).row(Element::from(
+                    status(Status::Info(
+                        "Mobile network is off in airplane mode.".into(),
+                    ))
+                    .action("Turn off airplane mode", move |_| {
+                        model::toggle_link(ctx, "airplane".to_string(), false, || {
+                            model::set_airplane_mode(false)
+                        })
+                    }),
+                )),
+            );
         }
 
         if modem.locked() {

@@ -118,6 +118,7 @@ use super::tab_close::{self, Act, Offers, RapidClose, Row};
 use super::tab_geometry::Geometry;
 use super::tab_scroll;
 use super::tab_tear::{self, Detach, Pull, StripLayout, StripProbe, TearGate};
+use crate::a11y::SemanticsExt;
 use crate::component::ComponentName;
 use crate::drag::{Frames, PointerDrag, use_frames, use_pointer_drag};
 use crate::icons::{self, Icon};
@@ -158,6 +159,9 @@ pub struct TabItem {
     pub id: u64,
     pub title: String,
     pub icon: Option<Icon>,
+    /// The document in the tab has changes that are not in its file: a dot
+    /// before the title. Pass `Document::is_unsaved()`.
+    pub edited: bool,
 }
 
 impl TabItem {
@@ -166,12 +170,20 @@ impl TabItem {
             id,
             title: title.into(),
             icon: None,
+            edited: false,
         }
     }
 
     /// An icon before the title.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// The unsaved dot before the title, for a document with changes that are
+    /// not in its file. The title itself stays plain.
+    pub fn edited(mut self, edited: bool) -> Self {
+        self.edited = edited;
         self
     }
 }
@@ -1974,6 +1986,22 @@ impl Component for Tab {
         if let Some(icon) = self.item.icon {
             parts.push(icons::icon(icon, IconSize::Control, ink.color(&tokens)).into_element());
         }
+        if self.item.edited {
+            parts.push(
+                rect()
+                    .a11y_hidden()
+                    .tw(
+                        &tokens,
+                        &[
+                            w(Dim::Dot),
+                            h(Dim::Dot),
+                            rounded(Radius::Pill),
+                            bg(Paint::Accent),
+                        ],
+                    )
+                    .into_element(),
+            );
+        }
         parts.push(Element::from(
             fade_text(self.item.title.clone())
                 .style(CAPTION.in_ink(ink))
@@ -1995,7 +2023,11 @@ impl Component for Tab {
             .a11y_id(a11y_id)
             .a11y_focusable(self.selected)
             .a11y_role(AccessibilityRole::Tab)
-            .a11y_alt(self.item.title.clone())
+            .a11y_alt(if self.item.edited {
+                format!("{}, unsaved changes", self.item.title)
+            } else {
+                self.item.title.clone()
+            })
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .tw(
                 &tokens,
@@ -2022,10 +2054,11 @@ impl Component for Tab {
                 }
                 // A mouse selects as it goes down, so the tab can be dragged
                 // at once; a finger selects when it lifts, unless it scrolls
-                // the strip or holds for the menu.
+                // the strip or holds for the menu. A pointer leaves the
+                // keyboard where it was, with the page: only keyboard
+                // navigation moves the focus onto a tab.
                 if !matches!(event.data(), PointerEventData::Touch(_)) {
                     on_select.call(id);
-                    a11y_id.request_focus();
                     if let Some(on_arm) = &on_arm {
                         let at = event.global_location();
                         on_arm.call((id, (at.x as f32, at.y as f32)));
@@ -2047,7 +2080,6 @@ impl Component for Tab {
                         return;
                     }
                     on_select.call(id);
-                    a11y_id.request_focus();
                 }
             })
             .maybe_child(pill.map(|(paint, strength)| {

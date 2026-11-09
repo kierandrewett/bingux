@@ -406,8 +406,9 @@ fn main() {
   navigation contract), never forwarded.
 - **The inspector comes with it.** `Application::run` is the only way to start
   a bingux-ui window: it builds the one launch configuration (interface font,
-  the inspector plugin, the borderless plugin) in a private function, so every
-  app, example and tool has the inspector and its Ctrl+Alt+Shift+I shortcut
+  the inspector plugin when `inspector::enabled()` says so, the borderless
+  plugin) in a private function, so every app, example and tool in a debug build
+  (or with `BINGUX_INSPECTOR=1`) has the inspector and its Ctrl+Alt+Shift+I shortcut
   with no code of its own, in the main window and in any other window the
   process opens. Do not call `freya::launch` or build a `LaunchConfig`: the
   inspector would be missing, and `scripts/ui-lint.py` fails on both anywhere
@@ -757,12 +758,12 @@ dialogs (top first). It reads `Router::snapshot()` each time the pane renders.
 
 | Family           | Components                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`width`; a list of applications is `app_dropdown(Vec<AppChoice>, ..)`, which icons it), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner`                                                                                                                                                                                                                                                                                                                                                                                                      |
+| Controls         | `switch`, `checkbox` (tri-state), `slider` (`step`, `show_value`, `fill`, `gradient(stops)`: the track is a colour ramp instead of the accent fill; the night light's colour temperature uses it, and a hue or brightness ramp is the same call), `segmented` (`fill` for equal segments; only the selected segment is raised, a hovered one brightens its text), `dropdown` (`width`; a list of applications is `app_dropdown(Vec<AppChoice>, ..)`, which icons it), `stepper`, `usage_meter` (a figure, its total and a thin bar), `qr_code` (`ecc`, `label`, `size`: a pure-Rust QR encoder, versions 1 to 15, drawn black on a white tile with the quiet zone in every theme; `QrMatrix::encode` gives the modules; too-long data draws an empty tile), `action_strip` of `strip_action` (two to four icon-over-label actions in one rounded bar; `enabled(bool)`, and `destructive()` draws the icon and label in the danger colour for Forget or Delete), `text_field` (`password`, `invalid`, `clearable`), `search_field`, `progress_bar`, `spinner`                                                                                                                                                                                                                                                                                             |
 | Navigation       | `segmented(options, selected, on_select).tabs()` (the tab bar: each tab a real button with the segmented look, only the selected one raised, Left, Right, Home and End move the selection and focus; `scroll()` for a narrow container; an app's view tabs and the inspector's tabs use it too), `breadcrumb(crumbs, on_select)` (crumbs separated by chevrons, each a Tab stop, the last in normal ink; `code` for a code-face trail; a file manager path uses it too)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Buttons          | `action_button` (`suggested`, `destructive`, `flat`, `loading`, `icon`), `primary_button`, `row_button`, `icon_button` (`tooltip`, `danger`, `busy` (a spinner in place of the icon, the size unchanged), `radius`: `Control` like every button by default), `split_button(icon)` or `SplitButton::new(icon)` (a primary action and a menu in one control: `on_press`, `tooltip` or `label` (the primary segment's name), `menu(items)` or `on_menu(handler)` for the chevron, `menu_label` (the chevron's name), `enabled`; see Split buttons)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| Rows             | `row` (`subtitle`, `value`, `mono_value` and `path_value` (a read-only value: selectable, never cut: it sits beside the title, wraps, or goes under it; see Info rows below), `badge`, `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row` (`subtitle`, `leading`, `value`, `expanded`; see Expander rows below), `Row::disclosure` (a row that opens its `nested` rows), `property_row` |
+| Rows             | `row` (`subtitle`, `value`, `mono_value` and `path_value` (a read-only value: selectable, never cut: it sits beside the title, wraps, or goes under it; see Info rows below), `badge`, `title_middle` (the title stays on one line and is cut in the middle to fit, for file names), `leading`, `leading_tone` (draws the leading icon in the accent, warning or danger colour, for a row that reports a state), `leading_space` (a blank icon column so text lines up), `leading_app`, `navigates`, `selected`, `destructive`, `context_menu`, `on_press` (makes the row activatable)), `radio_row(title, selected, on_select)` (a radio on the leading edge; the whole row selects; `subtitle`, `value`, `leading_app` as for `row`), `radio_rows(title, rows)` (a group of radio rows: Up and Down move the selection, and only the selected row is in the Tab order), `switch_row` (`nested` for sub-rows shown while on), `slider_row` (a `level_row` for a setting), `level_row` (title on the left and a slider filling the rest of the line; `control` such as a mute button sits between them, `footer` under the track, `mark` and `mark_label` for a tick such as 100%, `danger_from`, `value_text`, `max`, `leading`, `context_menu`), `choice_row`, `text_row`, `entry_row`, `expander_row` (`subtitle`, `leading`, `value`, `expanded`; see Expander rows below), `Row::disclosure` (a row that opens its `nested` rows), `property_row` |
 | Icons            | `icon` (bundled symbolic glyphs), `app_icon` (full-colour application icons from the icon theme)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Groups and text  | `Group` (`description`, `content` for a chart or other free content), `section_label`, `group_head(title, trailing)` (a group's title and toolbar with no card, for a page that lists several cards under one name), `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Groups and text  | `Group` (`description`, `content` for a chart or other free content), `section_label`, `group_head(title, trailing)` (a group's title and toolbar with no card, for a page that lists several cards under one name), `caption`, `centered_caption`, `action_row`, `heading`, `status` (loading, empty, error, info blocks, each with a leading glyph or spinner)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Path text        | `path_label(path)` (one line that shortens a long path by what matters least, so the full way stays readable: `/home/kieran/…/design/final-report-2026.pdf`, `/h/k/…/design/…`, `final-rep…2026.pdf`; `style`, `ink`, `name` for a file name, `middle` for other text, `selectable`, `copyable`; see Path text below). `elide_path`, `elide_name`, `elide_middle` (module `elide`) are the same cuts as pure functions of a width and a `Measure`; `distinguish` labels paths that share a name                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Selectable text  | `select_text(text)` (text that can be selected with the pointer and copied: `style`, `align`, `fill`, `tab_stop`, `breaks_anywhere`, `copy_label`; see Selectable text below). `Row::value`, `mono_value` and `path_value`, `property_row`, the licence blocks of About and the Properties values use it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Layout           | `hstack(Space)`, `vstack(Space)`, `spacer`, `divider`, `card`, `clamp(Dim, child)`, `page_column`, `tile_rows(tokens, tiles, height)` (two tiles a row on a phone, four on a desktop)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
@@ -881,6 +882,18 @@ When the trailing content of a row is a button (`action_button(..).compact()`, `
 
 A trailing `switch` sits `SWITCH_INSET` from the trailing edge (the row height less the switch height, halved: 18 px, 16 px at compact density), the distance it has above and below. Text, a `value`, a status icon, a checkbox and a `stepper` keep the `GUTTER`; a stepper is its own pill with an equal `S1` inset around its buttons. The taxonomy shows all of them under Button, "Compact, inside a row", and Row, "Trailing controls fill the row".
 
+### Technical values, pinned choices and loading
+
+A value that identifies something to a machine (an address, a key, a UUID) is set in the monospace face; a name or a sentence is not. `row(..).technical_value(text)` decides with one helper, `rows::is_technical_value`, so a page does not choose per row: a MAC, an IPv4 or IPv6 address with an optional prefix, a UUID or a key is monospace, and anything with a space in it is ordinary text. Network's address, key and BSSID rows use it. `row(..).mono_value(text)` still forces the face.
+
+`choice_row(..).dropdown()` pins a choice row to a dropdown even when its options would fit a segmented control. Settings' Default engine uses it so the control does not change shape with the number of engines.
+
+`row(..).provisional_value()` puts a muted skeleton bar in the trailing slot for a value that has not arrived yet, in the same place and the same height the value will take, so the row does not move when the text lands. It is the primitive; a page that reads a value later uses it while the read is pending.
+
+A Settings page that is loading shows a spinner centred over the veil only after 300 ms (`SPINNER_DELAY`). A page that loads sooner never flashes one.
+
+`StripAction::destructive()` sets an action strip item to the danger tone, as a destructive `Button` does. Bluetooth's Forget uses it, and the taxonomy's Action strip entry shows Forget in that tone.
+
 ### Banners and toasts: one notice
 
 A banner and a toast are the same component. `Banner` is the base: a pill with an optional leading icon, an optional title, a message that wraps, any number of quiet action buttons and an optional dismiss cross. `Toast` is a `Banner` that floats: `Toast::new(text)` builds a `Banner::new(text)` (neutral kind) and only adds what makes it float, so the pill, its colours and its buttons are drawn by one code path.
@@ -911,7 +924,7 @@ overlays.show_toast(Toast::new("Could not reach the network.")
 
 **Inline.** A banner opens and closes by height through `reveal` (`.visible(bool)`; no motion under reduced motion), and a closed one is unmounted. `.gap(space)` names the column's spacing so a closed banner takes none and the page does not jump.
 
-**Floating.** The toast shell adds only the part that floats: a layer above the dialog and menus, the `Elevation::Raised` shadow, bottom-centre placement (`S6` above the bottom edge plus `Dim::SafeBottom` on a phone), a 140 ms slide-and-fade, a queue (toasts show one at a time, in the order they were queued) and a timer: four seconds, six with an action, set with `Toast::timeout`. The timer is a pure state machine, `shell::hide_clock::HideClock` (tested with a fake clock), held by three things: the pointer anywhere over the toast's own box (padding, gaps, text and buttons: the shell listens to `pointer_over` and `pointer_out`, which a button inside it does not steal), a finger down on it, and keyboard focus on one of its buttons. While held the clock does not run and the toast never closes; when the last hold lets go the **whole** delay starts again from zero (not from where it paused), and entering again pauses again. A toast that arrives while one is held waits behind it. On a touch screen a sideways drag of 72 px or more dismisses it; a shorter one springs back. Pressing an action also dismisses the toast.
+**Floating.** The toast shell adds only the part that floats: a layer above the dialog and menus, the `Elevation::Raised` shadow, bottom-centre placement (`S6` above the bottom edge plus `Dim::SafeBottom` on a phone; centred on the page, not the window, when a split view shows a docked sidebar: the sidebar reports where it is to `Overlays`, at either edge in right-to-left), a 140 ms slide-and-fade, a queue (toasts show one at a time, in the order they were queued) and a timer: four seconds, six with an action, set with `Toast::timeout`. The timer is a pure state machine, `shell::hide_clock::HideClock` (tested with a fake clock), held by three things: the pointer anywhere over the toast's own box (padding, gaps, text and buttons: the shell listens to `pointer_over` and `pointer_out`, which a button inside it does not steal), a finger down on it, and keyboard focus on one of its buttons. While held the clock does not run and the toast never closes; when the last hold lets go the **whole** delay starts again from zero (not from where it paused), and entering again pauses again. A toast that arrives while one is held waits behind it. On a touch screen a sideways drag of 72 px or more dismisses it; a shorter one springs back. Pressing an action also dismisses the toast.
 
 ### Progress bars and spinners
 
@@ -930,6 +943,7 @@ Every loop reads its position from `motion::use_cycle(ms)`: a phase from 0 to 1 
 ### Tab strip
 
 `tab_strip(tabs, selected)` is the tab strip of a window that holds several views of one kind: the folders of Files, the documents of an editor. A tab is a rounded rectangle of `Radius::Control`, the corner of a button and of a sidebar row; the selected tab has the fill of a selected sidebar row (`Paint::Selection`), the pointer's fill is `Paint::Hover` and a press is `Paint::Pressed`. The tabs are separate from the content under them, as the segmented control is from the page it switches: nothing joins them. The design thesis, what it replaced and the numbers are in `design/tabs.md`. The host owns the list and the selected id; the strip holds no state. `.on_detach(f)` lets a tab be torn off (dragged a strip height past the strip, released there, or, for a lone tab, dragged at all; `f` gets `Detach { id, pointer, press, grab, released }` and the strip puts the tab back and ends its drag, the host takes it out of its list); `.insertion(Some(i))` draws the accent marker of where a tab brought from another window would land; `.probe(&StripProbe)` publishes the tab bodies' places (`StripLayout::index_at`, `boundary`) so a host can work out that place. The thresholds and hysteresis (`TearGate`) are in `controls/tab_tear.rs`; what the compositors allow is in `design/tab-tearoff.md`. `bingux_ui::app::open_window(seed, location, size)` opens another window of the application and `use_window_seed::<T>()` hands the seed to its root; `Application::transparent()` gives windows an alpha channel so one can be drawn faded. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed and have no content of their own to attach to (the inspector's tabs, the Properties dialog).
+A tab whose document has changes not yet in its file takes `.edited(document.is_unsaved())`: a small accent dot sits before the title, and the title stays plain. The accessible name reads "unsaved changes" after the title.
 
 The strip is the title of a `HeaderBar`: `.tab_slot(strip)` holds it from the start of the room between the bar's controls, and the header bar _is_ the strip (`Dim::TabBar` tall, 40 px, so the window has no second row above its tabs; the window controls share the row; its icon buttons are `Dim::TabButton`, the height of a tab; the band above and below the tabs still drags the window). The bar keeps its default fill, `Paint::Surface`, which is the page's colour (`Paint::Bg`), so the bar and the page under it are one colour and nothing is drawn between them: no darker strip, no card, no hairline, no flare. The page runs from the bar's bottom edge to the window's left, right and bottom edges, square, as the Settings page does; the window's rounding is the compositor's. A tab is `FIELD_INSET` from the bar's top and bottom, so there is a gap between a tab and the page. A strip outside a header bar draws the same tabs on whatever is behind it, which should be `Paint::Surface`: the fades at its overflowing edges dissolve into that. Use `segmented(..).tabs()` instead for a few fixed pages that cannot be closed and have no content of their own to attach to (the inspector's tabs, the Properties dialog).
 
@@ -1339,7 +1353,9 @@ The shield is the only input shield; there is no second copy of the shield or gr
 
 ### Sliders, the colour picker and every drag that makes a value
 
-A slider row (`slider_row`, `level_row`) gives its track and readout 55 % of the row on a desktop and the title the rest, so the sliders of one card start at one x and a title is cut only when the rest of the row cannot hold it. The readout (`value_text`) is beside the track in a slot `Dim::SliderValue` wide, so a value that gains a digit moves nothing.
+A slider row (`slider_row`, `level_row`) gives its track and readout 55 % of the row on a desktop and the title the rest, so the sliders of one card start at one x and a title is cut only when the rest of the row cannot hold it. The readout (`value_text`) is beside the track in a slot at least `Dim::SliderValue` wide and as wide as its text, so a value that gains a digit moves nothing and words such as "Faster than normal" are never cut or wrapped. Every level row of one `Group` takes the widest slot of the group, so the tracks of a card end at one x. A row whose readout changes length as it moves ("Slower", "Normal", "Faster than normal") names its longest text with `widest_value(text)`, so the slot holds it from the first frame and the track does not shrink under the pointer.
+
+A value that runs either way from a centre (balance, fade, a pitch or tint offset) fills from that centre: `slider(..).origin(percent)` or `level_row(..).origin(percent)` draws the fill between the origin and the thumb, so it shows which way and how far the value has moved. Add `.mark(percent)` at the same point for a tick. Settings' Balance is `max(200.0).origin(100.0).mark(100.0)` and Fade `origin(50.0).mark(50.0)`.
 
 A control that turns a pointer drag into a value (the slider, and the colour picker's saturation square, hue strip and alpha strip) uses one primitive, `controls::capture` (crate-private): `use_capture(handler)` in the component, `capture.bind(rect)` on the element that starts the drag (`capture.handlers(rect)` plus `capture.sized(&event)` from its own `on_sized` when it already has one). Do not write an `on_pointer_down` and `on_capture_global_pointer_move` pair by hand; the primitive fixes what that pair gets wrong:
 
@@ -1998,7 +2014,7 @@ for the scroll position.
 | They do                                | What happens                                                                                                                                                                |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Open (`open_dialog`, a recent, a path) | The Bingux file chooser, or the path. The file is read on a worker; the document shows `Phase::Loading` until then. A file already open is shown, not opened twice.         |
-| Edit                                   | `UNSAVED_MARK` (a bullet) goes before the name in the tab (`display_title`) and the window title (`use_document_title`).                                                    |
+| Edit                                   | The tab shows an accent dot (`TabItem::edited`); the window title gets `UNSAVED_MARK` before the name (`use_document_title`).                                               |
 | Save                                   | Atomic: a hidden file in the same folder, flushed, renamed over the old one, which keeps its mode; a link is written through. A document with no file asks where (Save as). |
 | Save as                                | The chooser, then the save; only then does the document belong to the new file (the old one is untouched when the save fails).                                              |
 | Close a document                       | A document with unsaved changes asks: **Save** (default), **Discard**, **Cancel**.                                                                                          |
@@ -2737,6 +2753,30 @@ candidate list opens at the caret instead of the editor's corner; the text
 being composed is drawn underlined at the caret. This is a workaround until
 Freya takes a caret rectangle from the focused element.
 
+**Commands.** `editor_commands(&handle, read_only)` is every key above as a
+[command](#commands): Undo, Redo, Cut, Copy, Paste, Select all, Select line,
+the occurrence and caret commands, Go to matching bracket, and in the Text
+menu (`TEXT_GROUP`) Comment or uncomment, Duplicate, Delete, Move and Join
+lines, Sort lines, Remove trailing spaces and the case changes. Wrap the view
+in `command_scope("Editor", editor_commands(&handle, false), view).fill()`:
+the main menu, the palette and the shortcuts sheet then list them with their
+keys. The view answers the keys itself, so the commands are
+`keys_handled_by_view` and the router never runs one twice. Edit > Undo and
+Redo are named after the edit ("Undo typing", "Redo duplicate line"), from the
+engine's own per-document history: a step is named by the command that made
+it (`Editor::label_edit(label, f)` names the step `f` makes, and a step with no
+name takes its kind, typing or delete). Menu items for the editor's own
+commands in a context menu come from `commands.context_menu_of(&list, &[&[ids]])`.
+The view tells its scope it holds the keyboard focus with
+`use_scope_notifier()`, because it stops the keys and presses it uses.
+
+**Drag and drop.** Press on selected text and drag: the text is dragged, and
+a plain click there places the caret. Other programs take it as text, and a
+drop on the same document moves it as one undo step ("Undo move text"; Ctrl
+copies). Text dragged in from another program lands where it is let go, with a
+caret marking the place while it is over the view. A file dragged over the
+editor is not text: the window takes it (`Format::Uris`).
+
 ### Held modifier keys
 
 A wheel, pointer or touch event carries no modifier keys. `input::held_modifiers()`
@@ -3242,8 +3282,10 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
 - **An action row** (`action_row`) is a form's last row: a small muted
   note at the left and a compact button at the right, on the row height and
   the gutter. Put it inside a group, or under the last group on a page.
-- **A message** (loading, empty, error) is a `status` row inside a group; only
-  an error is tinted. A page that has no data yet shows `skeleton()`, or `skeleton_shape(&[rows per section])` when its loaded shape is known, so the final sections are in place before the data arrives.
+- **A message** (loading, empty, error, info) is a `status` row inside a group; only
+  an error is tinted. Every kind but loading leads with a glyph so it is never
+  read as a data row: an error with the danger glyph, information with the
+  accent "i", empty with a muted "i"; loading has its spinner. A page that has no data yet shows `skeleton()`, or `skeleton_shape(&[rows per section])` when its loaded shape is known, so the final sections are in place before the data arrives.
 - **Chrome.** The header bar carries the window buttons, Back and the busy
   spinner. On a desktop window the sidebar and the page are flush, split by a
   hairline, and the page header sits on the content colour. A page starts with
@@ -3719,6 +3761,18 @@ white. Use the on-colour token of the fill:
 `scripts/ui-lint.py` fails a plain `Text` or `Muted` ink drawn near
 `bg(Paint::Accent | Danger | Success | Warning | Floating)`.
 
+**A destructive button never looks like the primary one.** With a red or
+orange accent the accent fill and the danger fill are within
+25 degrees of OKLCH hue of each other, so
+Save and Delete would be the same red. `Tokens::danger_near_accent` is then
+true and `action_button(..).destructive()` is drawn tinted: `Ink::Danger` on
+`Paint::DangerSoft`, with the same hover and press layers. Every other accent
+keeps the solid danger fill. Nothing changes for the caller. The contrast
+matrix holds the tinted label at AA under every state, and
+`primary_and_destructive_buttons_differ_for_every_accent` fails when an
+accent and the destructive button come too close. The taxonomy shows it on
+Buttons, "Destructive beside a red accent".
+
 `bingux_ui::contrast::on_colour(bg)` (re-exported as `theme::on_colour`)
 derives the ink. It converts the surface to OKLCH, keeps the hue and about half
 the chroma, and binary-searches lightness for the lightest shade that reaches
@@ -3822,6 +3876,16 @@ the full width. `choose_filled_line` is that rule as a pure function, next to
 `choose_line`, and the `Row` tells the field to fill through the same
 `LineFit` a form line uses (`use_line_fill()`). On a desktop the field keeps
 `Dim::Field`. Geometry tests at 390 and 320 px are in `rows::phone_fields`.
+
+**Other trailing content on a phone** (`row(title).trailing(..)` with
+something that is not a control: status glyphs and words such as a battery
+level and "Not connected", or a set of icon buttons) follows the same rule.
+The row measures the content; when beside it the title would get less than
+its floor (its natural width or 40 % of the line, never less than its longest
+word), the content goes under the title and subtitle, from the start edge at
+its own width, and a chevron or check still ends the row. So "Xbox Wireless
+Controller" is never set a word to a line. The taxonomy shows it on Rows,
+"Long title beside status (phone stacks it)".
 
 **The checks.** The inspector's Layout tab lists them (they are pure
 functions over the measured tree, `inspector/layout_checks.rs`, each with
@@ -4101,6 +4165,7 @@ controls still work.
 `step_focus(back)` moves focus to the next or previous stop as Tab does, with no
 host needed. A list answers its Up and Down keys with it, so the arrows walk its
 rows (the inspector's Accessibility list does).
+`focus::text_entry_focused()` is true while the focused node is a text input, so app key handlers (calendar's single-letter shortcuts) can leave typed characters to the field.
 
 ## Taxonomy app
 
@@ -4291,7 +4356,10 @@ matrix under "Gaps".
 ## Inspector
 
 Every bingux-ui app includes a devtools window, modelled on the Chrome and
-WebKit inspectors. Press Ctrl+Alt+Shift+I to open or close it. It opens as a
+WebKit inspectors. Press Ctrl+Alt+Shift+I to open or close it. It is in
+debug builds (`cfg!(debug_assertions)`) and in any build started with
+`BINGUX_INSPECTOR=1`. A release build without the variable installs no
+inspector: no plugin, no shortcut, no cost. It opens as a
 separate native window, and the app needs no code for it: the inspector is a
 plugin that `Application::run` installs in the one launch function, so no
 window can start without it (see Application loop; `scripts/ui-lint.py`
@@ -4321,12 +4389,13 @@ preview all act on that window and no other, and its window is titled with it:
   key event the plugin sees (`[inspector-key] window … key=… code=… mods=…`) to
   stderr. A new inspector window asks for keyboard focus when it opens and when
   the pointer enters it.
-- Inspect mode (the button, or Ctrl+Shift+C) in an inspector picks in its own
+- Inspect mode (the button, or Ctrl+Shift+I) in an inspector picks in its own
   target: the second inspector's picks and hover boxes land in the first
-  inspector's window. Ctrl+Shift+C pressed in an inspector's window is that
+  inspector's window. Ctrl+Shift+I pressed in an inspector's window is that
   inspector's own inspect button; in any other window it turns on inspect mode
   of the inspector over it, opening one if there is none. Escape cancels in
-  either window.
+  either window. Ctrl+Shift+C is not the inspector's: applications use it to
+  copy, so one press never copies and opens the inspector at once.
 - An inspector never watches itself: it takes snapshots of its target only, and
   a window is a target only once an inspector has been opened over it.
 - A target that redraws every frame is copied at most ten times a second, and
@@ -4342,7 +4411,7 @@ preview all act on that window and no other, and its window is titled with it:
   throttle, the title) is `inspector/target.rs`, tested without a window
   system.
 
-The header is the shell's header bar: the inspect button (Ctrl+Shift+C) and
+The header is the shell's header bar: the inspect button (Ctrl+Shift+I) and
 the phone preview toggle at the left, the Elements, Performance and
 Accessibility tabs as a segmented rail in the middle (Ctrl+[ and Ctrl+] step
 between them, Ctrl+1 to Ctrl+3 jump), and pause, refresh (F5) and the window
@@ -5122,12 +5191,25 @@ app's own command with one of these ids replaces it.
 
 `use_commands()` returns the window's registry: `run(id)`, `get(id)`,
 `all()`, `recent()`, `main_menu_items()`, `context_menu(..)`,
+`context_menu_of(&list, ..)` (the same for the commands of a list you hold,
+which a view's own context menu uses: a right click does not move the
+keyboard focus the window's menus go by),
 `show_palette()` and `show_shortcuts()`. The registry and the router live in
 the window's `OverlayHost` (and `Application::run` provides the registry, so
 the app's root component may declare commands above its host). A host inside
 another leaves routing to the outer one, so a key never runs a command twice.
 `MenuButton::items_on_open(f)` builds items when the menu opens, which is how
 `app_menu` reads titles such as "Undo rename" that change without a redraw.
+
+`Command::submenu(id, title, items)` is a submenu of the main menu, in its
+group and section ("Open recent"), with the items you built; it has no
+shortcut or palette entry.
+
+A view that stops the keys and presses it uses (a text editor, a file list)
+never lets them bubble through its scope, so the scope would not learn it
+holds the focus. Such a view calls `use_scope_notifier()` and, from its key
+and press handlers, `.focused()`: the scopes around it then list their commands
+in the menus, the palette and the sheet.
 
 ### The command palette
 

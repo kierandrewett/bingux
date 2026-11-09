@@ -6,7 +6,10 @@ import Quickshell.Wayland
 
 ColumnLayout {
     id: root
+    // The action waiting for confirmation, and the one already asked for. They
+    // differ when Cancel closes the confirm step while the request still runs.
     property string pending: ""
+    property string inFlight: ""
     property string error: ""
     property bool transitioning: false
     property real blackout: 0
@@ -30,17 +33,20 @@ ColumnLayout {
         {
             id: "logout",
             title: "Log Out",
-            icon: "system-log-out-symbolic"
+            icon: "system-log-out-symbolic",
+            destructive: true
         },
         {
             id: "reboot",
             title: "Restart",
-            icon: "system-reboot-symbolic"
+            icon: "system-reboot-symbolic",
+            destructive: true
         },
         {
             id: "poweroff",
             title: "Shut Down",
-            icon: "system-shutdown-symbolic"
+            icon: "system-shutdown-symbolic",
+            destructive: true
         }
     ]
     readonly property var selected: actions.find(action => action.id === pending)
@@ -53,11 +59,14 @@ ColumnLayout {
         if (!selected || busy || !SessionServices.allows("power"))
             return;
         error = "";
+        inFlight = pending;
         if (integrated) {
             // No gnoblinctl and no local fade: bsm runs the transition. The
             // request is only followed here; success is whatever bsm reports.
-            if (!BsmSession.request(pending))
-                error = "The session manager is not available.";
+            if (!BsmSession.request(pending)) {
+                inFlight = "";
+                error = "Power options are not available. Try again in a moment.";
+            }
             return;
         }
         request.command = ["gnoblinctl", "session", pending];
@@ -68,6 +77,18 @@ ColumnLayout {
     function restore() {
         recovery.stop();
         fadeIn.start();
+    }
+    // Closes the confirm step. Cancel stays available while a request runs, so
+    // nothing here is ever a dead end; before the request has started the fade
+    // out is undone, after that the request is left to finish.
+    function cancel() {
+        if (!integrated && transitioning && !request.running && fadeOut.running) {
+            fadeOut.stop();
+            inFlight = "";
+            restore();
+        }
+        pending = "";
+        error = "";
     }
     SequentialAnimation {
         id: fadeOut
@@ -139,21 +160,24 @@ ColumnLayout {
     Process {
         id: request
         stderr: StdioCollector {
-            onStreamFinished: root.error = text.trim()
+            onStreamFinished: if (text.trim())
+                console.warn("session: gnoblinctl said: " + text.trim())
         }
         onExited: code => {
             if (code !== 0 && !root.error)
-                root.error = "The session could not complete this request.";
+                root.error = "Could not complete this request. Try again.";
             if (code !== 0)
                 root.restore();
             // systemctl can return before sleep begins. Keep black briefly;
             // the timer also releases the overlay when the machine wakes.
-            if (code === 0 && root.pending === "suspend") {
+            if (code === 0 && root.inFlight === "suspend") {
                 recovery.interval = 1500;
                 recovery.restart();
             }
-            if (code === 0)
+            if (code === 0) {
                 root.pending = "";
+                root.inFlight = "";
+            }
         }
     }
     // Integrated mode: the end of the operation this view asked for. Only
@@ -162,10 +186,11 @@ ColumnLayout {
         target: BsmSession
         enabled: root.integrated
         function onFinished(operation) {
-            if (operation.action !== root.pending)
+            if (operation.action !== root.inFlight)
                 return;
             root.error = operation.status === "completed" ? "" : BsmSession.failureText;
             root.pending = "";
+            root.inFlight = "";
             BsmSession.dismiss();
         }
     }
@@ -204,37 +229,37 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         visible: root.integrated && root.busy
-        text: BsmSession.phaseLabel + "..."
+        text: BsmSession.phaseLabel + "…"
         color: Theme.muted
         font.family: Theme.fontFamily
         font.pixelSize: Theme.fontSmall
     }
+    // The confirm step: the action, toned as destructive when it ends the
+    // session, and Cancel with a close glyph. Only the action waits for a
+    // request in progress; Cancel never greys out.
     ControlRow {
+        objectName: "powerConfirm"
         Layout.fillWidth: true
         visible: root.pending !== ""
         title: root.selected ? root.selected.title : ""
         iconName: root.selected ? root.selected.icon : ""
+        destructive: !!root.selected && root.selected.destructive === true
         enabled: !root.busy
         onClicked: root.execute()
     }
     ControlRow {
+        objectName: "powerCancel"
         Layout.fillWidth: true
         visible: root.pending !== ""
         title: "Cancel"
-        iconName: "go-previous-symbolic"
-        enabled: !root.busy
-        onClicked: {
-            root.pending = "";
-            root.error = "";
-        }
+        iconName: "window-close-symbolic"
+        onClicked: root.cancel()
     }
-    Text {
-        Layout.fillWidth: true
+    StateMessage {
+        objectName: "powerError"
+        compact: true
         visible: root.error !== ""
-        text: root.error
-        wrapMode: Text.Wrap
-        color: Theme.muted
-        font.family: Theme.fontFamily
-        font.pixelSize: Theme.fontSmall
+        tone: "danger"
+        title: root.error
     }
 }

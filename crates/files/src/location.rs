@@ -126,7 +126,7 @@ pub fn host_name() -> String {
 
 /// The crumbs of `path`, outermost first. A path inside `home` starts at the
 /// home folder, labelled "Home", as GNOME Files does; any other path starts
-/// at the root, labelled with the computer's host name.
+/// at the root, labelled "Computer" as the sidebar labels it.
 pub fn crumbs(path: &Path, home: &Path) -> Vec<Crumb> {
     let (mut walked, rest, first) = match path.strip_prefix(home) {
         Ok(rest) if home.has_root() && home != Path::new("/") => (
@@ -141,7 +141,7 @@ pub fn crumbs(path: &Path, home: &Path) -> Vec<Crumb> {
             PathBuf::from("/"),
             path.strip_prefix("/").unwrap_or(path).to_path_buf(),
             Crumb {
-                label: host_name(),
+                label: "Computer".into(),
                 path: PathBuf::from("/"),
             },
         ),
@@ -694,7 +694,7 @@ mod tests {
             .collect();
         assert_eq!(inside, ["Home", "Pictures", "x"]);
         let outside = crumbs(Path::new("/etc/ssh"), home);
-        assert_eq!(outside[0].label, host_name());
+        assert_eq!(outside[0].label, "Computer");
         assert_eq!(outside[2].path, Path::new("/etc/ssh"));
     }
 

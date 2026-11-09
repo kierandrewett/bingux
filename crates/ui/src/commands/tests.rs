@@ -221,7 +221,11 @@ fn the_palette_field_names_the_highlighted_row_and_rows_carry_their_shortcut() {
         .iter()
         .find(|(_, label, _)| label.as_deref() == Some("Save"))
         .expect("a Save row");
-    assert_eq!(save.2.as_deref(), Some("Ctrl+S"), "the shortcut is not part of the name");
+    assert_eq!(
+        save.2.as_deref(),
+        Some("Ctrl+S"),
+        "the shortcut is not part of the name"
+    );
 }
 
 #[test]
@@ -234,4 +238,129 @@ fn undo_from_the_keyboard_says_what_it_undid() {
             .then(|| node.label().unwrap_or_default().to_owned())
     });
     assert!(said.iter().any(|text| text == "Undid rename"), "{said:?}");
+}
+
+// A view that stops its own keys and presses (a text editor) tells its scope
+// it holds the focus, so the menus list its commands. Failure modes: the
+// scope never learning it has the focus because the view stopped the press;
+// an outer scope dropped from the chain; a submenu command lost from the
+// main menu; a view's context menu built from the window's commands.
+
+#[derive(PartialEq)]
+struct Stopping;
+
+impl Component for Stopping {
+    fn render(&self) -> impl IntoElement {
+        let notifier = use_scope_notifier();
+        let press = notifier.clone();
+        rect()
+            .on_pointer_down(move |event: Event<PointerEventData>| {
+                press.focused();
+                event.stop_propagation();
+            })
+            .on_key_down(move |event: Event<KeyboardEventData>| {
+                notifier.focused();
+                event.stop_propagation();
+            })
+            .child(label().text("Press me"))
+    }
+}
+
+#[derive(PartialEq)]
+struct StoppingScene;
+
+impl Component for StoppingScene {
+    fn render(&self) -> impl IntoElement {
+        let commands = use_commands();
+        use_window_commands(vec![
+            Command::new("win.run", "Window run", |_| {}).group(CommandGroup::File),
+            Command::submenu(
+                "file.recent",
+                "Open recent",
+                vec![crate::shell::menu::menu_item("a.txt", |_| {})],
+            )
+            .group(CommandGroup::File),
+        ]);
+        let inner = vec![
+            Command::new("inner.go", "Inner go", |_| {})
+                .shortcut("Ctrl+G")
+                .keys_handled_by_view()
+                .group(CommandGroup::Edit),
+        ];
+        let outer = vec![Command::new("outer.go", "Outer go", |_| {}).group(CommandGroup::Edit)];
+        let report = {
+            let inner = inner.clone();
+            move |_: ()| {
+                let ids: Vec<String> = commands.all().iter().map(|c| c.id().to_owned()).collect();
+                note(&format!("ids {}", ids.join(",")));
+                let file: Vec<String> = commands
+                    .main_menu_items()
+                    .into_iter()
+                    .find(|item| item.label == "File")
+                    .and_then(|item| item.submenu)
+                    .map(|items| items.into_iter().map(|item| item.label).collect())
+                    .unwrap_or_default();
+                note(&format!("file {}", file.join(",")));
+                let context: Vec<String> = commands
+                    .context_menu_of(&inner, &[&["inner.go", "missing"]])
+                    .into_iter()
+                    .map(|item| item.label)
+                    .collect();
+                note(&format!("context {}", context.join(",")));
+            }
+        };
+        rect()
+            .expanded()
+            .child(command_scope(
+                "Outer",
+                outer,
+                command_scope("Inner", inner, Stopping),
+            ))
+            .child(action_button("Report", report))
+    }
+}
+
+#[derive(PartialEq)]
+struct StoppingRoot;
+
+impl Component for StoppingRoot {
+    fn render(&self) -> impl IntoElement {
+        let _tokens = provide_tokens();
+        WindowHost::new(OverlayHost::new(StoppingScene))
+    }
+}
+
+#[test]
+fn a_view_that_stops_its_input_still_gives_its_scopes_the_focus() {
+    take_log();
+    let mut shot = Snapshot::new(|| StoppingRoot.into_element(), (800.0, 600.0));
+    shot.settle(Duration::from_millis(300));
+    assert!(shot.click_text("Report"));
+    shot.settle(Duration::from_millis(200));
+    let before = take_log();
+    assert!(
+        before[0].starts_with("ids win.run") && !before[0].contains("inner.go"),
+        "no view has the focus yet: {before:?}"
+    );
+    assert!(shot.click_text("Press me"));
+    shot.settle(Duration::from_millis(200));
+    assert!(shot.click_text("Report"));
+    shot.settle(Duration::from_millis(200));
+    let after = take_log();
+    assert!(
+        after[0].contains("inner.go") && after[0].contains("outer.go"),
+        "the inner scope and the one around it hold the focus: {after:?}"
+    );
+    assert!(
+        after[0].find("inner.go") < after[0].find("outer.go"),
+        "innermost first: {after:?}"
+    );
+    assert!(
+        after[1].contains("Open recent"),
+        "a submenu command is in the main menu: {after:?}"
+    );
+    assert_eq!(
+        after[2], "context Inner go",
+        "the view's own commands, a missing id left out"
+    );
 }

@@ -24,7 +24,7 @@ mod views;
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, i18n_id};
 
 const USAGE: &str = "Usage: bingux-calendar [--reminders] [FILE.ics | YYYY-MM-DD | today]...\n\
 \n\
@@ -73,15 +73,27 @@ fn main() {
         snapshot_mode::run(&dir, std::env::args().nth(3).as_deref());
         return;
     }
+    bingux_ui::i18n::register(bingux_ui::catalogue!("calendar"));
     Application::new("bingux-calendar")
-        .title("Calendar")
+        .title(bingux_ui::prelude::Message::new(i18n_id!("calendar-title")))
         .size(1100.0, 760.0)
         .borderless()
         .normalise(normalise)
         .about(bingux_ui::app_info!(
-            description = "Keep track of events and reminders",
+            description = bingux_ui::prelude::tr!("calendar-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
         .run(|| app::App);
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "calendar")
+            .assert_clean();
+    }
 }

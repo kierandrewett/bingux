@@ -849,7 +849,7 @@ Scope {
                                     visible: terminalLoader.status === Loader.Error || (root.terminalReady && !terminalLoader.item?.shellRunning)
                                     Layout.fillWidth: true
                                     wrapMode: Text.WordWrap
-                                    text: terminalLoader.status === Loader.Error ? "Terminal component unavailable. Install QMLTermWidget for Qt 6, then retry." : "Shell exited. Start a new shell to continue."
+                                    text: terminalLoader.status === Loader.Error ? "The terminal is not available on this system." : "Shell exited. Start a new shell to continue."
                                     color: Theme.muted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: Theme.fontSize
@@ -1085,7 +1085,7 @@ Scope {
                     options: ["left", "top", "right"]
                     currentValue: root.edge
                     implicitHeight: 40
-                    accessiblePrefix: ""
+                    accessiblePrefix: "Sidebar on the "
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.spaceSmall
                     Layout.rightMargin: Theme.spaceSmall
