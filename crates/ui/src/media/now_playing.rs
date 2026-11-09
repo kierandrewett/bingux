@@ -181,9 +181,10 @@ impl Component for NowPlayingBar {
             rect()
                 .component("NowPlayingItem")
                 .a11y_role(AccessibilityRole::Button)
-                .a11y_alt(format!(
-                    "{}, {}. Open the player",
-                    self.title, self.subtitle
+                .a11y_alt(crate::tr!(
+                    "ui-media-item-a11y",
+                    title = self.title.clone(),
+                    subtitle = self.subtitle.clone()
                 ))
                 .tw(
                     &tokens,

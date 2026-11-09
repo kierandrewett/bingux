@@ -124,7 +124,7 @@ impl Component for VolumeControl {
                 open.set(next);
             })
             .ink(ink)
-            .tooltip("Volume")
+            .tooltip(&crate::tr!("ui-media-volume"))
         } else {
             let on_change = on_change.clone();
             icon_button(volume_icon(level, muted), move |_| {
@@ -132,7 +132,11 @@ impl Component for VolumeControl {
             })
             .ink(ink)
             .tooltip_side(TipSide::Above)
-            .tooltip(if muted { "Unmute (M)" } else { "Mute (M)" })
+            .tooltip(&if muted {
+                crate::tr!("ui-media-unmute-tooltip")
+            } else {
+                crate::tr!("ui-media-mute-tooltip")
+            })
         }
         .enabled(self.enabled);
         let face = rect()
@@ -160,7 +164,7 @@ impl Component for VolumeControl {
                         let on_change = on_change.clone();
                         move |value: f64| on_change.call(VolumeChange::Level(value))
                     })
-                    .label("Volume")
+                    .label(&crate::tr!("ui-media-volume"))
                     .width(Dim::Box24)
                     .enabled(self.enabled),
                 );
@@ -194,7 +198,7 @@ impl Component for VolumeControl {
                     let on_change = on_change.clone();
                     move |value: f64| on_change.call(VolumeChange::Level(value))
                 })
-                .label("Volume")
+                .label(&crate::tr!("ui-media-volume"))
                 .width(Dim::Box24)
                 .enabled(self.enabled)
             }))
