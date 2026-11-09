@@ -70,7 +70,9 @@ use target::{InstanceId, Registry, Throttle, Toggle};
 /// build started with `BINGUX_INSPECTOR=1`. A release build without the
 /// variable has no inspector, no shortcut and no cost.
 pub(crate) fn enabled() -> bool {
-    cfg!(debug_assertions) || std::env::var_os("BINGUX_INSPECTOR").is_some_and(|value| value == "1")
+    // `bingux_debug` comes from build.rs (cargo PROFILE), not `debug_assertions`,
+    // which apps turn off for this package in their dev profile.
+    cfg!(bingux_debug) || std::env::var_os("BINGUX_INSPECTOR").is_some_and(|value| value == "1")
 }
 
 /// The plugin that carries the inspector in every application. Only
