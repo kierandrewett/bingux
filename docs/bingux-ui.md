@@ -3020,10 +3020,41 @@ The contrast matrix measures every pair under both contrasts
 (`light+`, `dark+` in its table). The taxonomy's header has a Contrast menu
 beside Text size, and Foundations > Accessibility shows these APIs.
 
+**Keyboard patterns** (WAI-ARIA APG). A menu is a `Menu` that keeps the
+focus and names the highlighted row as its active descendant; rows are named
+by their label, carry their shortcut as the keyboard shortcut (Orca reads
+"Copy, Ctrl+C"), a checkable row is a check item, and a submenu row says it has
+a popup and whether it is open. A menu button and a split button's arrow say
+they open a menu. A dropdown is a combo box that keeps the focus while the
+arrows move through its list; its options are list options with the chosen one
+selected and the reached one the active descendant. Sliders, steppers and
+faders take the arrows, Page Up and Page Down, Home and End; a pane divider
+(`Splitter`) takes the arrows and Home and End, and says its position as a
+value. Dialogs trap the focus and give it back (Keyboard focus, above).
+
+**Notices stay.** A toast does not go while the pointer is over it, a finger
+is on it or one of its buttons has the focus, and while a screen reader runs it
+stays at least 20 seconds after it is left alone (WCAG 2.2.1).
+
+**Text size reaches the boxes.** A row, control, button, menu item, sidebar
+item, row button and header grow with the text (`Dim::holds_text`,
+`access::grow`: the designed height plus one body line per 100 % of extra
+text), so 200 % text is not clipped. A banner whose action would leave its
+message less than its floor puts the action under the message, as a form
+line does (`controls::adaptive`).
+
 **Checking it.** `scripts/a11y-run.sh --app NAME --out FILE -- CMD` runs an app
 with the accessibility bus on and writes what a screen reader sees
 (`scripts/atspi-tree.py`: role, name, description, states, value, relations,
-actions), ending with findings such as an unnamed control. It needs
+actions), ending with findings such as an unnamed control;
+`BINGUX_A11Y_MIN_TARGET=24` (44 at phone width) also lists focusable controls
+smaller than that.
+
+Keys in a headless sway: `wtype` makes a virtual keyboard for each call and
+drops it when it exits, and the window then loses its keyboard focus, so a
+focus ring blurs out before a screenshot. Keep one keyboard alive for the run
+and give each call time for its keymap:
+`(wtype -s 60000 -k Shift_L &); sleep 1; wtype -s 300 -k Tab`. It needs
 `at-spi2-core`, `python3-gi` and `gir1.2-atspi-2.0`. `src/a11y_tests.rs` holds
 the names and roles above with real tree updates.
 

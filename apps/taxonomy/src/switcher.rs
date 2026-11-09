@@ -30,7 +30,8 @@ impl Component for Switcher {
     fn render(&self) -> impl IntoElement {
         let window = use_window();
         let width = bingux_ui::surface::window_size().width;
-        if is_compact() || width < DENSE_FROM {
+        // The dropdowns' labels grow with the text size, and the room they need with them.
+        if is_compact() || width < DENSE_FROM * bingux_ui::access::text_scale().max(1.0) {
             icon_button(Icon::Appearance, move |_| {
                 window.open(popup("Display", SwitcherSheet).width(Dim::PopupNarrow));
             })

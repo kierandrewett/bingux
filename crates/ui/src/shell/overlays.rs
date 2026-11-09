@@ -540,8 +540,11 @@ impl Component for ToastLayer {
                     let elapsed = now.saturating_duration_since(last);
                     last = now;
                     let focus_held = ids.contains(&*focused.peek());
+                    let reading = try_consume_root_context::<ScreenReader>()
+                        .is_some_and(|reader| reader.is_on());
                     let mut clock = clock.borrow_mut();
                     clock.set_focus(focus_held);
+                    clock.set_screen_reader(reading);
                     if clock.tick(elapsed) {
                         break;
                     }

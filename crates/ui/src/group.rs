@@ -580,24 +580,84 @@ impl Component for StatusBlock {
         // centres against the content, not a minimum height, so the short
         // case needs the fixed row height).
         let short = text.chars().count() <= 70;
-        rect()
+        let mut block_width = use_state(|| 0.0_f32);
+        let mut action_width = use_state(|| 0.0_f32);
+        // An action that would leave the message less than its floor goes
+        // under it (the rule of `controls::adaptive`): at 200 % text on a
+        // phone the message wrapped a letter to a line beside "Try again".
+        let glyph_room = if glyph.is_some() || matches!(self.status, Status::Loading(_)) {
+            IconSize::Row.px() + S3.px()
+        } else {
+            0.0
+        };
+        let stacked = self.action.is_some()
+            && crate::controls::adaptive::choose_line(
+                block_width() - 2.0 * GUTTER.px() - glyph_room,
+                S3.px(),
+                crate::controls::adaptive::LabelFacts::measure(&text, BODY),
+                crate::controls::adaptive::ControlFacts {
+                    natural: action_width(),
+                    least: None,
+                },
+            ) == crate::controls::adaptive::LineMode::Stacked;
+        let action = self.action.as_ref().map(|(label, on_press)| {
+            let on_press = on_press.clone();
+            rect()
+                .on_sized(move |event: Event<SizedEventData>| {
+                    action_width.set_if_modified(event.area.width());
+                })
+                .child(action_button(label.clone(), move |_| on_press.call(())))
+        });
+        let error = matches!(self.status, Status::Error(_));
+        let message = BODY
+            .in_ink(ink)
+            .paragraph(&tokens, text.clone())
+            .width(Size::flex(1.0));
+        let stacked_layout = [flex_col(), w_full(), px(GUTTER), py(S3), gap(S3)];
+        let layout: &[Util] = if stacked {
+            &stacked_layout
+        } else if short {
+            ROW
+        } else {
+            ROW_TALL
+        };
+        let block = rect()
             .component("StatusBlock")
+            // An error is read out when it appears, any other status politely.
+            .a11y_role(if error { AccessibilityRole::Alert } else { AccessibilityRole::Status })
+            .a11y_builder(move |node| {
+                node.set_live(if error {
+                    accesskit::Live::Assertive
+                } else {
+                    accesskit::Live::Polite
+                })
+            })
             .tw(&tokens, BOX)
-            .tw(&tokens, if short { ROW } else { ROW_TALL })
+            .tw(&tokens, layout)
             .tw(&tokens, &[bg(paint)])
-            .maybe_child(
+            .on_sized(move |event: Event<SizedEventData>| {
+                block_width.set_if_modified(event.area.width());
+            });
+        let lead = |row: Rect| {
+            row.maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
             .maybe_child(glyph.map(|glyph| icons::icon(glyph, IconSize::Row, color)))
-            .child(
-                BODY.in_ink(ink)
-                    .paragraph(&tokens, text)
-                    .width(Size::flex(1.0)),
-            )
-            .maybe_child(self.action.as_ref().map(|(label, on_press)| {
-                let on_press = on_press.clone();
-                action_button(label.clone(), move |_| on_press.call(()))
-            }))
+        };
+        if stacked {
+            block
+                .child(
+                    lead(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), w_full()]))
+                        .child(message),
+                )
+                .child(
+                    rect()
+                        .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
+                        .maybe_child(action),
+                )
+        } else {
+            lead(block).child(message).maybe_child(action)
+        }
     }
 }
 
