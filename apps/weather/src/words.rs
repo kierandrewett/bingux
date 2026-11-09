@@ -8,7 +8,7 @@ use bingux_weather::notices::{Kind, Span};
 use bingux_weather::text::{
     AqiBand, DewComfort, Point, PressureTrend, UvLevel, Visibility, WindForce,
 };
-use bingux_weather::time::day_of;
+use bingux_weather::time::{Clock, day_of, hour_of, minute_of};
 use bingux_weather::{Forecast, Place, Units, text};
 
 /// The sky's condition in words: `Light rain`. Sentence case.
@@ -476,4 +476,112 @@ fn when_text(units: &Units, local: i64, span: Span) -> String {
             to = clock.time(to)
         )
     }
+}
+
+/// The weekday, `index` 0 for Monday to 6 for Sunday, in full.
+pub fn weekday_name(index: usize) -> String {
+    match index {
+        0 => tr!("weather-weekday-monday"),
+        1 => tr!("weather-weekday-tuesday"),
+        2 => tr!("weather-weekday-wednesday"),
+        3 => tr!("weather-weekday-thursday"),
+        4 => tr!("weather-weekday-friday"),
+        5 => tr!("weather-weekday-saturday"),
+        _ => tr!("weather-weekday-sunday"),
+    }
+}
+
+/// The weekday's first three letters, `index` as for [`weekday_name`].
+pub fn weekday_short(index: usize) -> String {
+    match index {
+        0 => tr!("weather-weekday-short-monday"),
+        1 => tr!("weather-weekday-short-tuesday"),
+        2 => tr!("weather-weekday-short-wednesday"),
+        3 => tr!("weather-weekday-short-thursday"),
+        4 => tr!("weather-weekday-short-friday"),
+        5 => tr!("weather-weekday-short-saturday"),
+        _ => tr!("weather-weekday-short-sunday"),
+    }
+}
+
+/// The month, `index` 0 for January to 11 for December, in full.
+pub fn month_name(index: usize) -> String {
+    match index {
+        0 => tr!("weather-month-january"),
+        1 => tr!("weather-month-february"),
+        2 => tr!("weather-month-march"),
+        3 => tr!("weather-month-april"),
+        4 => tr!("weather-month-may"),
+        5 => tr!("weather-month-june"),
+        6 => tr!("weather-month-july"),
+        7 => tr!("weather-month-august"),
+        8 => tr!("weather-month-september"),
+        9 => tr!("weather-month-october"),
+        10 => tr!("weather-month-november"),
+        _ => tr!("weather-month-december"),
+    }
+}
+
+/// A date as a day and month, `9 November`, for a sentence.
+pub fn day_month(wall: i64) -> String {
+    let (month, day) = bingux_weather::time::month_day(wall);
+    tr!(
+        "weather-day-month",
+        day = i64::from(day),
+        month = month_name(month)
+    )
+}
+
+/// Clock wording for a forecast's wall-clock time: `14:05` or `2:05 PM`, and
+/// the hour alone for a strip of hours: `14` or `2 PM`.
+pub trait ClockText {
+    fn time(self, wall: i64) -> String;
+    fn hour(self, wall: i64) -> String;
+}
+
+impl ClockText for Clock {
+    fn time(self, wall: i64) -> String {
+        let (hour, minute) = (hour_of(wall), minute_of(wall));
+        match self {
+            Clock::TwentyFour => format!("{hour:02}:{minute:02}"),
+            Clock::Twelve => {
+                let (shown, period) = twelve(hour);
+                tr!(
+                    "weather-clock-time-12h",
+                    hour = i64::from(shown),
+                    minute = format!("{minute:02}"),
+                    period = period
+                )
+            }
+        }
+    }
+
+    fn hour(self, wall: i64) -> String {
+        let hour = hour_of(wall);
+        match self {
+            Clock::TwentyFour => format!("{hour:02}"),
+            Clock::Twelve => {
+                let (shown, period) = twelve(hour);
+                tr!(
+                    "weather-clock-hour-12h",
+                    hour = i64::from(shown),
+                    period = period
+                )
+            }
+        }
+    }
+}
+
+/// The 12-hour figure and its period for a 24-hour `hour`.
+fn twelve(hour: u32) -> (u32, String) {
+    let shown = match hour % 12 {
+        0 => 12,
+        other => other,
+    };
+    let period = if hour < 12 {
+        tr!("weather-period-am")
+    } else {
+        tr!("weather-period-pm")
+    };
+    (shown, period)
 }

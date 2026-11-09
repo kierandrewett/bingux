@@ -2,12 +2,13 @@
 //! starts and stops, what a day is called, and how long a stretch of minutes
 //! reads.
 
-use bingux_weather::time::{day_of, weekday_name, weekday_short};
+use bingux_weather::time::{day_of, weekday};
 use bingux_weather::{Forecast, Units};
 
 use bingux_ui::prelude::tr;
 
 use crate::sky::Light;
+use crate::words;
 
 /// How near the sun's rising or setting is still twilight, in seconds.
 const TWILIGHT: i64 = 40 * 60;
@@ -93,7 +94,7 @@ pub fn day_short(day: i64, now: i64) -> String {
     if day_of(day) == day_of(now) {
         tr!("weather-today")
     } else {
-        weekday_short(day).to_string()
+        words::weekday_short(weekday(day))
     }
 }
 
@@ -102,7 +103,7 @@ pub fn day_long(day: i64, now: i64) -> String {
     match day_of(day) - day_of(now) {
         0 => tr!("weather-today"),
         1 => tr!("weather-tomorrow"),
-        _ => weekday_name(day).to_string(),
+        _ => words::weekday_name(weekday(day)),
     }
 }
 

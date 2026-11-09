@@ -10,7 +10,7 @@ use bingux_ui::charts::{SeriesColour, bar_chart, line_chart, sparkline};
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use bingux_weather::astro::{self, Moon};
-use bingux_weather::time::{HOUR, day_month, unix_now};
+use bingux_weather::time::{HOUR, unix_now};
 use bingux_weather::{AirQuality, Forecast, Hour, Units, text};
 use freya::prelude::*;
 
@@ -18,7 +18,7 @@ use crate::format;
 use crate::glyph;
 use crate::hourly::HOURS;
 use crate::sky;
-use crate::words;
+use crate::words::{self, ClockText};
 
 /// How many hours before now the temperature chart starts. The forecast keeps
 /// that many (`bingux-weather`'s `PAST_HOURS` in the request).
@@ -254,10 +254,11 @@ impl Details {
                     .into(),
                 note(
                     tokens,
-                    format!(
-                        "{}% lit. {word} on {}.",
-                        (moon.illumination * 100.0).round() as i64,
-                        day_month(at)
+                    tr!(
+                        "weather-moon-note",
+                        percent = (moon.illumination * 100.0).round() as i64,
+                        phase = word,
+                        date = words::day_month(at)
                     ),
                 ),
             ],

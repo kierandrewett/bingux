@@ -11,31 +11,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub const DAY: i64 = 86_400;
 pub const HOUR: i64 = 3_600;
 
-pub const WEEKDAYS: [&str; 7] = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-    "Sunday",
-];
-
-pub const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-
 /// Seconds since the Unix epoch, now.
 pub fn unix_now() -> i64 {
     SystemTime::now()
@@ -122,23 +97,10 @@ pub fn weekday(wall: i64) -> usize {
     (day_of(wall) + 3).rem_euclid(7) as usize
 }
 
-pub fn weekday_name(wall: i64) -> &'static str {
-    WEEKDAYS[weekday(wall)]
-}
-
-/// The first three letters of the weekday: `Mon`.
-pub fn weekday_short(wall: i64) -> &'static str {
-    &weekday_name(wall)[..3]
-}
-
-pub fn month_name(wall: i64) -> &'static str {
-    MONTHS[(civil_from_days(day_of(wall)).1 - 1) as usize]
-}
-
-/// `9 November`.
-pub fn day_month(wall: i64) -> String {
+/// The month, 0 for January to 11 for December, and the day of the month.
+pub fn month_day(wall: i64) -> (usize, u32) {
     let (_, month, day) = civil_from_days(day_of(wall));
-    format!("{day} {}", MONTHS[(month - 1) as usize])
+    ((month - 1) as usize, day)
 }
 
 /// Whether times are written on a 12-hour clock.
@@ -147,39 +109,6 @@ pub enum Clock {
     #[default]
     TwentyFour,
     Twelve,
-}
-
-impl Clock {
-    /// `14:05`, or `2:05 PM`.
-    pub fn time(self, wall: i64) -> String {
-        let (hour, minute) = (hour_of(wall), minute_of(wall));
-        match self {
-            Clock::TwentyFour => format!("{hour:02}:{minute:02}"),
-            Clock::Twelve => {
-                let shown = match hour % 12 {
-                    0 => 12,
-                    other => other,
-                };
-                let suffix = if hour < 12 { "AM" } else { "PM" };
-                format!("{shown}:{minute:02} {suffix}")
-            }
-        }
-    }
-
-    /// The hour on its own, for a strip of hours: `14`, or `2 PM`.
-    pub fn hour(self, wall: i64) -> String {
-        let hour = hour_of(wall);
-        match self {
-            Clock::TwentyFour => format!("{hour:02}"),
-            Clock::Twelve => {
-                let shown = match hour % 12 {
-                    0 => 12,
-                    other => other,
-                };
-                format!("{shown} {}", if hour < 12 { "AM" } else { "PM" })
-            }
-        }
-    }
 }
 
 /// How long ago `then` was, for a "Updated" line: `just now`, `5 min ago`,
@@ -220,19 +149,10 @@ mod tests {
         let t = parse_local("2026-11-09T14:45").unwrap();
         assert_eq!(hour_of(t), 14);
         assert_eq!(minute_of(t), 45);
-        assert_eq!(weekday_name(t), "Monday");
-        assert_eq!(day_month(t), "9 November");
+        assert_eq!(weekday(t), 0);
+        assert_eq!(month_day(t), (10, 9));
         assert_eq!(parse_local("2026-11-09").unwrap(), t - 14 * HOUR - 45 * 60);
         assert!(parse_local("not a time").is_none());
-    }
-
-    #[test]
-    fn clocks() {
-        let t = parse_local("2026-11-09T00:05").unwrap();
-        assert_eq!(Clock::TwentyFour.time(t), "00:05");
-        assert_eq!(Clock::Twelve.time(t), "12:05 AM");
-        let t = parse_local("2026-11-09T15:00").unwrap();
-        assert_eq!(Clock::Twelve.hour(t), "3 PM");
     }
 
     #[test]

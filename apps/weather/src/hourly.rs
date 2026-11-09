@@ -16,7 +16,7 @@ use freya::prelude::*;
 
 use crate::format;
 use crate::glyph;
-use crate::words;
+use crate::words::{self, ClockText};
 
 /// How many hours the strip shows, the current one included.
 pub const HOURS: usize = 25;

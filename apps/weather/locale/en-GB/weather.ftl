@@ -417,3 +417,44 @@ weather-when-between = From { $from } to { $to }.
 weather-when-from-tomorrow-to = From { $from } tomorrow to { $to }.
 # $from: a clock time. $to: a clock time, on the next day.
 weather-when-between-tomorrow = From { $from } to { $to } tomorrow.
+
+## Calendar words: weekdays, months, the day-of-month and the clock period
+# Weekday names, Monday first.
+weather-weekday-monday = Monday
+weather-weekday-tuesday = Tuesday
+weather-weekday-wednesday = Wednesday
+weather-weekday-thursday = Thursday
+weather-weekday-friday = Friday
+weather-weekday-saturday = Saturday
+weather-weekday-sunday = Sunday
+# Weekday names shortened to three letters, Monday first.
+weather-weekday-short-monday = Mon
+weather-weekday-short-tuesday = Tue
+weather-weekday-short-wednesday = Wed
+weather-weekday-short-thursday = Thu
+weather-weekday-short-friday = Fri
+weather-weekday-short-saturday = Sat
+weather-weekday-short-sunday = Sun
+# Month names, January first.
+weather-month-january = January
+weather-month-february = February
+weather-month-march = March
+weather-month-april = April
+weather-month-may = May
+weather-month-june = June
+weather-month-july = July
+weather-month-august = August
+weather-month-september = September
+weather-month-october = October
+weather-month-november = November
+weather-month-december = December
+# $day: the day of the month. $month: the month name.
+weather-day-month = { $day } { $month }
+# $percent: the moon's lit share, a whole number. $phase: the next phase, such as Full moon. $date: a day and month.
+weather-moon-note = { $percent }% lit. { $phase } on { $date }.
+# $hour: the hour, 1 to 12. $period: AM or PM.
+weather-clock-hour-12h = { $hour } { $period }
+# $hour: the hour, 1 to 12. $minute: two digits. $period: AM or PM.
+weather-clock-time-12h = { $hour }:{ $minute } { $period }
+weather-period-am = AM
+weather-period-pm = PM
