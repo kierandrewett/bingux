@@ -9,6 +9,7 @@
 //! in a tab, and exits.
 
 mod app;
+mod content;
 mod document;
 mod launch;
 mod prefs;
