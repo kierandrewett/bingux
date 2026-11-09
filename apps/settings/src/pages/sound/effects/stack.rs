@@ -57,9 +57,7 @@ impl Component for StackView {
 
         let body: Element = if plugins.is_empty() {
             Group::new(None::<String>)
-                .row(status(Status::Empty(
-                    "No effects yet. Add one to start.".to_string(),
-                )))
+                .row(status(Status::Empty("No effects added".to_string())))
                 .into()
         } else {
             let rows: Vec<Element> = plugins
@@ -79,7 +77,7 @@ impl Component for StackView {
                         }))
                         .child(
                             icon_button(Icon::Delete, move |_| remove(fx, &delete_id))
-                                .tooltip("Remove")
+                                .tooltip("Remove effect")
                                 .danger(),
                         );
                     let mut item = row(name)

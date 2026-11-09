@@ -103,8 +103,7 @@ impl Component for ApplicationsPage {
 
         let list = held.read().clone();
         let group = if list.is_empty() {
-            Group::new(None::<String>)
-                .row(row("Nothing is playing or recording.").leading(Icon::Sound))
+            Group::new(None::<String>).row(row("Nothing playing or recording").leading(Icon::Sound))
         } else {
             Group::new(None::<String>).rows(
                 list.iter()

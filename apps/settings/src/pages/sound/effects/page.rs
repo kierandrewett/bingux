@@ -124,7 +124,7 @@ impl Component for PageView {
             return rect()
                 .tw(&tokens, &[w_full(), p(S4)])
                 .child(Group::new(None::<String>).row(status(Status::Empty(
-                    "This effect is not one Bingux offers.".to_string(),
+                    "This effect is not available.".to_string(),
                 ))));
         };
         let catalog = fx.catalog.read().clone();
@@ -150,7 +150,7 @@ impl Component for PageView {
             None if catalog.is_none() => {
                 column = column.child(
                     Group::new(None::<String>)
-                        .row(status(Status::Loading("Reading the plugin.".to_string()))),
+                        .row(status(Status::Loading("Reading the effect…".to_string()))),
                 );
             }
             None => {
