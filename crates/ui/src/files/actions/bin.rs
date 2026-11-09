@@ -42,6 +42,30 @@ fn what(paths: &[PathBuf]) -> String {
     describe(paths)
 }
 
+/// The sentence for one reason the Trash refused: `plural` when it is about
+/// several items. The reasons are data in `bingux_files`; the words are here.
+fn refusal_text(refusal: &TrashRefusal, plural: bool) -> String {
+    let count = if plural { 2 } else { 1 };
+    match refusal {
+        TrashRefusal::NotAbsolute => crate::tr!("ui-files-bin-refusal-not-absolute"),
+        TrashRefusal::Root => crate::tr!("ui-files-bin-refusal-root"),
+        TrashRefusal::TrashItself => crate::tr!("ui-files-bin-refusal-trash-itself"),
+        TrashRefusal::InTrash => crate::tr!("ui-files-bin-refusal-in-trash", count = count),
+        TrashRefusal::Home => crate::tr!("ui-files-bin-refusal-home"),
+        TrashRefusal::HoldsHome => crate::tr!("ui-files-bin-refusal-holds-home", count = count),
+        TrashRefusal::HoldsTrash => crate::tr!("ui-files-bin-refusal-holds-trash", count = count),
+        TrashRefusal::UserFolder(name) => {
+            crate::tr!(
+                "ui-files-bin-refusal-user-folder",
+                count = count,
+                name = *name
+            )
+        }
+        TrashRefusal::ReadOnly => crate::tr!("ui-files-bin-refusal-read-only", count = count),
+        TrashRefusal::NoBin => crate::tr!("ui-files-bin-refusal-no-bin", count = count),
+    }
+}
+
 /// The toast after a move to the Trash: `Moved “a.txt” to Trash`, `Moved 3
 /// items to Trash`.
 pub(super) fn moved_text(paths: &[PathBuf]) -> String {
@@ -144,7 +168,7 @@ fn sort_refusals(refused: Vec<(PathBuf, TrashRefusal)>) -> Refusals {
     let plural_delete = out.delete.len() > 1;
     out.delete_reason = match delete_reasons.as_slice() {
         [] => None,
-        [one] => Some(one.reason(plural_delete)),
+        [one] => Some(refusal_text(one, plural_delete)),
         _ => Some(crate::tr!(
             "ui-files-bin-refusal-several",
             count = out.delete.len()
@@ -156,7 +180,7 @@ fn sort_refusals(refused: Vec<(PathBuf, TrashRefusal)>) -> Refusals {
         [one] => Some(crate::tr!(
             "ui-files-bin-refused-with-reason",
             target = what(&out.refused),
-            reason = one.reason(plural_refused)
+            reason = refusal_text(one, plural_refused)
         )),
         _ => Some(crate::tr!(
             "ui-files-bin-refused-all",

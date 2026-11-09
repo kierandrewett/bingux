@@ -645,7 +645,35 @@ ui-files-bin-refusal-several = { $count ->
 # $target (String) - what was refused; $reason (String) - the sentence saying why
 ui-files-bin-refused-with-reason = { $target }: { $reason }
 ui-files-bin-refused-all = { $target } cannot be moved to the Trash.
-
+# One reason the Trash refused an item. $count (Number) - 1 for one item, 2 for several; $name (String) - a user folder's name.
+ui-files-bin-refusal-not-absolute = The path must be absolute.
+ui-files-bin-refusal-root = The root folder cannot be moved to the Trash.
+ui-files-bin-refusal-trash-itself = The Trash itself cannot be moved to the Trash.
+ui-files-bin-refusal-in-trash = { $count ->
+    [one] It is in the Trash already.
+   *[other] They are in the Trash already.
+}
+ui-files-bin-refusal-home = Your home folder cannot be moved to the Trash.
+ui-files-bin-refusal-holds-home = { $count ->
+    [one] It holds your home folder, so it cannot be moved to the Trash.
+   *[other] They hold your home folder, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-holds-trash = { $count ->
+    [one] It holds the Trash, so it cannot be moved to the Trash.
+   *[other] They hold the Trash, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-user-folder = { $count ->
+    [one] It is your { $name } folder, so it cannot be moved to the Trash.
+   *[other] They are your { $name } folder, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-read-only = { $count ->
+    [one] It is on a read-only drive, so it cannot be moved to the Trash.
+   *[other] They are on a read-only drive, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-no-bin = { $count ->
+    [one] Its drive has no Trash and one cannot be made there, so it cannot be moved to the Trash.
+   *[other] Their drive has no Trash and one cannot be made there, so they cannot be moved to the Trash.
+}
 # The Extract dialog: the archive, where its files go, and what happens to a clash.
 # $name (String) - the archive or folder name, shown in curly quotes
 ui-extract-quoted-name = “{ $name }”
