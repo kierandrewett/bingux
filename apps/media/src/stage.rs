@@ -78,6 +78,18 @@ pub fn run_volume(change: VolumeChange) {
     });
 }
 
+/// Flips full screen. The read of the current value ends before the write.
+pub fn toggle_fullscreen(ui: Ui) {
+    let on = !*ui.fullscreen.peek();
+    set_fullscreen(ui, on);
+}
+
+/// Flips the mini player. The read of the current value ends before the write.
+pub fn toggle_mini(ui: Ui) {
+    let on = !*ui.mini.peek();
+    set_mini(ui, on);
+}
+
 /// Turns full screen on or off.
 pub fn set_fullscreen(ui: Ui, on: bool) {
     let mut fullscreen = ui.fullscreen;
@@ -272,7 +284,7 @@ impl Component for FilmStage {
         let picture = video_surface(engine().frames.clone())
             .label(title.clone())
             .on_press(|_| engine().player.toggle())
-            .on_double_press(move |_| set_fullscreen(ui, !*ui.fullscreen.peek()));
+            .on_double_press(move |_| toggle_fullscreen(ui));
 
         let path = status.item.as_ref().map(|item| item.path.clone());
         let preview = (*previewing.read()).then(|| {
@@ -344,7 +356,7 @@ impl Component for FilmStage {
         }
         tools = tools
             .child(
-                icon_button(Icon::ViewPip, move |_| set_mini(ui, !*ui.mini.peek()))
+                icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
                     .active(mini)
                     .tooltip_side(TipSide::Above)
                     .tooltip(if mini {
@@ -354,16 +366,14 @@ impl Component for FilmStage {
                     }),
             )
             .child(
-                icon_button(Icon::ViewFullscreen, move |_| {
-                    set_fullscreen(ui, !*ui.fullscreen.peek())
-                })
-                .morph(Icon::ViewRestore, fullscreen)
-                .tooltip_side(TipSide::Above)
-                .tooltip(if fullscreen {
-                    text::LEAVE_FULL_SCREEN
-                } else {
-                    text::FULL_SCREEN
-                }),
+                icon_button(Icon::ViewFullscreen, move |_| toggle_fullscreen(ui))
+                    .morph(Icon::ViewRestore, fullscreen)
+                    .tooltip_side(TipSide::Above)
+                    .tooltip(if fullscreen {
+                        text::LEAVE_FULL_SCREEN
+                    } else {
+                        text::FULL_SCREEN
+                    }),
             );
         let card = |content: Rect| {
             content.tw(
@@ -557,7 +567,7 @@ impl Component for SongStage {
                         .tooltip(text::QUEUE)
                     }))
                     .child(
-                        icon_button(Icon::ViewPip, move |_| set_mini(ui, !*ui.mini.peek()))
+                        icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
                             .active(mini)
                             .tooltip(if mini {
                                 text::LEAVE_MINI_PLAYER
