@@ -70,17 +70,17 @@ pub fn title_of(model: &Model) -> String {
                     "calendar-week-range-across-years",
                     start = start.day,
                     start_month = month_short(start.month).to_string(),
-                    start_year = start.year,
+                    start_year = start.year.to_string(),
                     end = end.day,
                     end_month = month_short(end.month).to_string(),
-                    end_year = end.year
+                    end_year = end.year.to_string()
                 )
             }
         }
         ViewKind::Month if compact => tr!(
             "calendar-header-month-compact",
             month = month_short(anchor.month).to_string(),
-            year = anchor.year
+            year = anchor.year.to_string()
         ),
         ViewKind::Month => anchor.month_year(),
         ViewKind::Year => anchor.year.to_string(),
