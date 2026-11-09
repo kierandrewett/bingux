@@ -8,9 +8,9 @@
 
 use std::path::PathBuf;
 
+use bingux_ui::component::ComponentName;
 use bingux_ui::crop::{CropBar, CropOverlay, use_crop};
 use bingux_ui::prelude::*;
-use bingux_ui::component::ComponentName;
 use bingux_ui::surface::use_tokens;
 use bingux_ui::zoom_view::{ZoomView, turned, use_zoom_handle};
 use freya::prelude::*;
@@ -79,7 +79,7 @@ impl Component for CropEditor {
                 rect().tw(&tokens, &[w_full(), h_flex()]).child(
                     CropOverlay::new(crop)
                         .content(picture.into_element())
-                        .label(copy::CROP_AREA)
+                        .label(copy::crop_area())
                         .on_commit(save.clone())
                         .on_cancel(cancel.clone()),
                 ),
@@ -88,12 +88,18 @@ impl Component for CropEditor {
                 rect()
                     .tw(
                         &tokens,
-                        &[w_full(), flex_row(), justify(Align::Center), p(S2), bg(Paint::Bg)],
+                        &[
+                            w_full(),
+                            flex_row(),
+                            justify(Align::Center),
+                            p(S2),
+                            bg(Paint::Bg),
+                        ],
                     )
                     .child(
                         CropBar::new(crop)
-                            .commit_label(copy::CROP_SAVE)
-                            .cancel_label(copy::CANCEL)
+                            .commit_label(copy::crop_save())
+                            .cancel_label(copy::cancel())
                             .on_commit(save)
                             .on_cancel(cancel),
                     ),

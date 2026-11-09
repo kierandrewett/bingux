@@ -177,7 +177,11 @@ impl Playlist {
     /// A new file made from the current one (a cropped copy): put it right
     /// after the current file and show it.
     pub fn put_after_current(&mut self, file: PathBuf) {
-        let at = if self.files.is_empty() { 0 } else { self.index + 1 };
+        let at = if self.files.is_empty() {
+            0
+        } else {
+            self.index + 1
+        };
         self.files.insert(at, file);
         self.index = at;
     }
@@ -370,8 +374,16 @@ mod tests {
         assert_eq!(names(&list), ["a.png", "b.png", "b edited.png", "c.png"]);
         assert_eq!(list.current(), Some(copy.as_path()), "the copy is shown");
         assert_eq!(list.take_out(&copy), Some(2));
-        assert_eq!(list.current(), Some(dir.join("b.png").as_path()), "back on the original");
-        assert_eq!(list.take_out(&copy), None, "a file that is not there changes nothing");
+        assert_eq!(
+            list.current(),
+            Some(dir.join("b.png").as_path()),
+            "back on the original"
+        );
+        assert_eq!(
+            list.take_out(&copy),
+            None,
+            "a file that is not there changes nothing"
+        );
         // Taking out a file before the one on show keeps the one on show.
         list.last();
         assert_eq!(list.take_out(&dir.join("a.png")), Some(0));

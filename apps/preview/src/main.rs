@@ -22,7 +22,7 @@ mod prefs;
 mod snapshot_mode;
 
 use bingux_ui::nav::{Mode, RouteTable};
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 const USAGE: &str = "Usage: bingux-preview [--] [FILE | FOLDER | URI]...\n\
 \n\
@@ -36,6 +36,7 @@ option other than --help is an error; `--` ends the options, for a file whose\n\
 name starts with `-`.\n";
 
 fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("preview"));
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
         let dir = std::env::args()
@@ -52,14 +53,25 @@ fn main() {
         .root("*path");
     Application::new("bingux-preview")
         .routes(routes)
-        .title("Preview")
+        .title(Message::new(i18n_id!("preview-title")))
         .size(width, height)
         .borderless()
         .normalise(launch::normalise)
         .about(bingux_ui::app_info!(
-            description = "View pictures and documents",
+            description = tr!("preview-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
         .run(|| app::App);
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "preview")
+            .assert_clean();
+    }
 }

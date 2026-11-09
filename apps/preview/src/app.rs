@@ -167,7 +167,8 @@ impl Component for Content {
             .as_ref()
             .and_then(|path| path.file_name())
             .map(|name| name.to_string_lossy().into_owned());
-        use_page_title(name.as_deref().unwrap_or("Preview"));
+        let fallback = tr!("preview-title");
+        use_page_title(name.as_deref().unwrap_or(&fallback));
         let picture = current.as_deref().is_some_and(is_picture);
         let document = current.as_deref().is_some_and(is_document);
         let gif = current.as_deref().is_some_and(is_gif);
@@ -183,9 +184,9 @@ impl Component for Content {
                 .and_then(Path::parent)
                 .map(Path::to_path_buf);
             let mut request = ChooserRequest::open()
-                .title(copy::OPEN_REQUEST_TITLE)
+                .title(copy::open_request_title())
                 .multiple(true)
-                .filter_spec(copy::OPEN_FILTER, OPENABLE)
+                .filter_spec(copy::open_filter(), OPENABLE)
                 .presets(true);
             if let Some(start) = start {
                 request = request.current_folder(start);
@@ -234,15 +235,15 @@ impl Component for Content {
                         playlist.write().put_back(file, at);
                         done.set(None);
                     }
-                    Err(_) => overlays.toast(copy::UNDO_FAILED),
+                    Err(_) => overlays.toast(copy::undo_failed()),
                 },
                 Done::Copied { copy: made } => match ops::trash(std::slice::from_ref(&made)) {
                     Ok(_) => {
-                        overlays.toast(copy::CROP_UNDONE);
+                        overlays.toast(copy::crop_undone());
                         playlist.write().take_out(&made);
                         done.set(None);
                     }
-                    Err(_) => overlays.toast(copy::UNDO_COPY_FAILED),
+                    Err(_) => overlays.toast(copy::undo_copy_failed()),
                 },
             }
         };
@@ -262,7 +263,7 @@ impl Component for Content {
                         done.set(Some(Done::Binned { trashed, file, at }));
                         overlays.toast_with_action(
                             copy::moved_to_trash(&label),
-                            copy::UNDO,
+                            copy::undo(),
                             move |_: ()| undo(),
                         );
                     }
@@ -291,8 +292,8 @@ impl Component for Content {
                     })
                     .await;
                     match result {
-                        Ok(()) => overlays.toast(copy::COPIED),
-                        Err(_) => overlays.toast(copy::COPY_FAILED),
+                        Ok(()) => overlays.toast(copy::copied()),
+                        Err(_) => overlays.toast(copy::copy_failed()),
                     }
                 });
             }
@@ -310,7 +311,7 @@ impl Component for Content {
                     .file_name()
                     .map(|name| name.to_string_lossy().into_owned())
                     .unwrap_or_default();
-                let mut request = ChooserRequest::save(name).title(copy::SAVE_REQUEST_TITLE);
+                let mut request = ChooserRequest::save(name).title(copy::save_request_title());
                 if let Some(folder) = file.parent() {
                     request = request.current_folder(folder.to_path_buf());
                 }
@@ -331,7 +332,7 @@ impl Component for Content {
                         .await;
                         match result {
                             Ok(()) => overlays.toast(copy::saved_copy(&shown)),
-                            Err(_) => overlays.toast(copy::SAVE_FAILED),
+                            Err(_) => overlays.toast(copy::save_failed()),
                         }
                     });
                 });
@@ -353,7 +354,7 @@ impl Component for Content {
                             orientation: (zoom.turns(), zoom.mirrored()),
                         }));
                     }
-                    None => overlays.toast(copy::CROP_FAILED),
+                    None => overlays.toast(copy::crop_failed()),
                 }
             }
         };
@@ -389,11 +390,11 @@ impl Component for Content {
                         done.set(Some(Done::Copied { copy: target }));
                         overlays.toast_with_action(
                             copy::saved_crop(&shown),
-                            copy::UNDO,
+                            copy::undo(),
                             move |_: ()| undo(),
                         );
                     }
-                    Err(_) => overlays.toast(copy::SAVE_FAILED),
+                    Err(_) => overlays.toast(copy::save_failed()),
                 }
             });
         };
@@ -496,7 +497,7 @@ impl Component for Content {
                 .maybe_child(icon.map(|icon| file_icon_view(&tokens, &icon, IconSize::Row, false)))
                 .child(
                     rect().tw(&tokens, &[w_flex()]).child(
-                        path_label(name.clone().unwrap_or_else(|| "Preview".to_owned()))
+                        path_label(name.clone().unwrap_or_else(|| tr!("preview-title")))
                             .name()
                             .style(typography::SECTION),
                     ),
@@ -513,7 +514,7 @@ impl Component for Content {
             .title_start(true)
             .title_slot(title_slot)
             .leading(
-                icon_button(Icon::DocumentOpen, move |_| open(())).tooltip(copy::OPEN_TOOLTIP),
+                icon_button(Icon::DocumentOpen, move |_| open(())).tooltip(&copy::open_tooltip()),
             );
         if document {
             let mut sidebar_state = sidebar;
@@ -523,7 +524,7 @@ impl Component for Content {
                     sidebar_state.set(!shown);
                 })
                 .active(*sidebar.read())
-                .tooltip(copy::PAGES_TOOLTIP),
+                .tooltip(&copy::pages_tooltip()),
             );
         }
         let cropping_now = cropping.read().is_some();
@@ -531,17 +532,17 @@ impl Component for Content {
             if current.as_deref().is_some_and(edit::can_copy) {
                 let begin_crop = begin_crop.clone();
                 header = header.trailing(
-                    icon_button(Icon::Crop, move |_| begin_crop()).tooltip(copy::CROP_TOOLTIP),
+                    icon_button(Icon::Crop, move |_| begin_crop()).tooltip(&copy::crop_tooltip()),
                 );
             }
             header = header
                 .trailing(
                     icon_button(Icon::ObjectRotateLeft, move |_| zoom.rotate(false))
-                        .tooltip(copy::TURN_LEFT_TOOLTIP),
+                        .tooltip(&copy::turn_left_tooltip()),
                 )
                 .trailing(
                     icon_button(Icon::ObjectRotateRight, move |_| zoom.rotate(true))
-                        .tooltip(copy::TURN_RIGHT_TOOLTIP),
+                        .tooltip(&copy::turn_right_tooltip()),
                 );
         }
         if current.is_some() && !compact && !cropping_now {
@@ -552,7 +553,7 @@ impl Component for Content {
                     info_state.set(!shown);
                 })
                 .active(*info.read())
-                .tooltip(copy::INFO_TOOLTIP),
+                .tooltip(&copy::info_tooltip()),
             );
         }
         let menu = main_menu(
@@ -564,7 +565,9 @@ impl Component for Content {
                 can_slideshow: list.is_pictures(),
                 full,
                 can_undo: done.read().is_some(),
-                can_crop: picture && current.as_deref().is_some_and(edit::can_copy) && !*slideshow.read(),
+                can_crop: picture
+                    && current.as_deref().is_some_and(edit::can_copy)
+                    && !*slideshow.read(),
             },
             MenuActions {
                 open: EventHandler::new(open),
@@ -593,7 +596,7 @@ impl Component for Content {
             overlays,
         );
         header = header
-            .trailing(menu_button(copy::MAIN_MENU, menu).icon(Icon::OpenMenu))
+            .trailing(menu_button(copy::main_menu(), menu).icon(Icon::OpenMenu))
             .trailing(WindowControls);
 
         // What the arrows and the viewer's own buttons do.
@@ -650,9 +653,9 @@ impl Component for Content {
                     .folder(false)
                     .into_element()
             }
-            (None, _) => status_page(Icon::ImageGeneric, copy::EMPTY_TITLE)
-                .description(copy::EMPTY_LINE)
-                .action(copy::EMPTY_ACTION, EventHandler::new(open))
+            (None, _) => status_page(Icon::ImageGeneric, copy::empty_title())
+                .description(copy::empty_line())
+                .action(copy::empty_action(), EventHandler::new(open))
                 .into_element(),
         };
 
@@ -672,7 +675,7 @@ impl Component for Content {
                 .child(
                     typography::HEADING
                         .in_ink(Ink::Text)
-                        .label(&tokens, copy::DROP_TITLE.to_owned()),
+                        .label(&tokens, copy::drop_title()),
                 )
         });
 
@@ -736,7 +739,7 @@ struct MenuActions {
     show_in_files: EventHandler<()>,
 }
 
-fn item(label: &str, shortcut: Option<&str>, on_press: &EventHandler<()>) -> MenuItem {
+fn item(label: impl Into<String>, shortcut: Option<&str>, on_press: &EventHandler<()>) -> MenuItem {
     let on_press = on_press.clone();
     let item = menu_item(label, move |_| on_press.call(()));
     match shortcut {
@@ -751,7 +754,7 @@ fn main_menu(
     zoom: ZoomHandle,
     overlays: Overlays,
 ) -> Vec<MenuItem> {
-    let mut items = vec![item(copy::MENU_OPEN, Some("Ctrl+O"), &actions.open)];
+    let mut items = vec![item(copy::menu_open(), Some("Ctrl+O"), &actions.open)];
     if let Some(path) = &state.current {
         let mime = bingux_files::mime::for_name(
             &path
@@ -763,22 +766,26 @@ fn main_menu(
         let apps = files::open_with_items(path, mime, move |app: String| {
             overlays.toast(copy::app_failed(&app))
         });
-        let mut with = submenu(copy::MENU_OPEN_WITH, apps.clone());
+        let mut with = submenu(copy::menu_open_with(), apps.clone());
         if apps.is_empty() {
             with = with.disabled();
         }
         items.push(with);
-        items.push(item(copy::MENU_SHOW_IN_FILES, None, &actions.show_in_files));
+        items.push(item(
+            copy::menu_show_in_files(),
+            None,
+            &actions.show_in_files,
+        ));
         items.push(menu_separator());
     }
     if state.picture {
         let mut copy_item = item(
-            copy::MENU_COPY_PICTURE,
+            copy::menu_copy_picture(),
             Some("Ctrl+C"),
             &actions.copy_picture,
         );
         let mut save_item = item(
-            copy::MENU_SAVE_COPY,
+            copy::menu_save_copy(),
             Some("Ctrl+Shift+S"),
             &actions.save_copy,
         );
@@ -788,33 +795,34 @@ fn main_menu(
         }
         items.push(copy_item);
         items.push(save_item);
-        let mut crop_item = item(copy::MENU_CROP, Some("C"), &actions.crop);
+        let mut crop_item = item(copy::menu_crop(), Some("C"), &actions.crop);
         if !state.can_crop {
             crop_item = crop_item.disabled();
         }
         items.push(crop_item);
         items.push(menu_separator());
-        items
-            .push(menu_item(copy::MENU_TURN_LEFT, move |_| zoom.rotate(false)).shortcut("Shift+R"));
-        items.push(menu_item(copy::MENU_TURN_RIGHT, move |_| zoom.rotate(true)).shortcut("R"));
         items.push(
-            menu_item(copy::MENU_FLIP_HORIZONTALLY, move |_| {
+            menu_item(copy::menu_turn_left(), move |_| zoom.rotate(false)).shortcut("Shift+R"),
+        );
+        items.push(menu_item(copy::menu_turn_right(), move |_| zoom.rotate(true)).shortcut("R"));
+        items.push(
+            menu_item(copy::menu_flip_horizontally(), move |_| {
                 zoom.flip_horizontal()
             })
             .shortcut("H"),
         );
         items.push(
-            menu_item(copy::MENU_FLIP_VERTICALLY, move |_| zoom.flip_vertical()).shortcut("V"),
+            menu_item(copy::menu_flip_vertically(), move |_| zoom.flip_vertical()).shortcut("V"),
         );
         items.push(menu_separator());
-        items.push(menu_item(copy::MENU_FIT, move |_| zoom.fit()).shortcut("0"));
-        items.push(menu_item(copy::MENU_ACTUAL_SIZE, move |_| zoom.actual_size()).shortcut("1"));
+        items.push(menu_item(copy::menu_fit(), move |_| zoom.fit()).shortcut("0"));
+        items.push(menu_item(copy::menu_actual_size(), move |_| zoom.actual_size()).shortcut("1"));
         if state.can_slideshow {
             items.push(item(
                 if state.slideshow {
-                    copy::MENU_STOP_SLIDESHOW
+                    copy::menu_stop_slideshow()
                 } else {
-                    copy::MENU_SLIDESHOW
+                    copy::menu_slideshow()
                 },
                 Some("S"),
                 &actions.slideshow,
@@ -825,15 +833,15 @@ fn main_menu(
     if state.current.is_some() {
         items.push(item(
             if state.full {
-                copy::MENU_LEAVE_FULL_SCREEN
+                copy::menu_leave_full_screen()
             } else {
-                copy::MENU_FULL_SCREEN
+                copy::menu_full_screen()
             },
             Some("F11"),
             &actions.full_screen,
         ));
         let mut trash = item(
-            copy::MENU_TRASH,
+            copy::menu_trash(),
             if state.picture { Some("Delete") } else { None },
             &actions.trash,
         )
@@ -844,11 +852,12 @@ fn main_menu(
         items.push(trash);
     }
     if state.can_undo {
-        items.push(item(copy::MENU_UNDO, Some("Ctrl+Z"), &actions.undo));
+        items.push(item(copy::menu_undo(), Some("Ctrl+Z"), &actions.undo));
     }
     items.push(menu_separator());
-    items.push(menu_item(copy::MENU_SHORTCUTS, move |_| {
-        overlays.show_dialog(dialog(copy::MENU_SHORTCUTS, copy::SHORTCUTS).cancel("Close"));
+    items.push(menu_item(copy::menu_shortcuts(), move |_| {
+        overlays
+            .show_dialog(dialog(copy::menu_shortcuts(), copy::shortcuts()).cancel(copy::close()));
     }));
     // Every application's menu ends with About.
     items.extend(bingux_ui::about::app_menu_items(overlays));

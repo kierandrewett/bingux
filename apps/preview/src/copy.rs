@@ -1,125 +1,185 @@
 //! Every word Preview shows, in one place: menu items, tooltips, the empty
-//! state, toasts and the shortcut list. Whole sentences with their
-//! placeables, never built from pieces, so each moves into a catalogue as it
-//! is.
+//! state, toasts and the shortcut list. Each one is a `tr!` over the
+//! `preview-*` messages in `locale/en-GB/preview.ftl`, so it is translated
+//! as a whole sentence with its variables.
 
-pub const OPEN_TOOLTIP: &str = "Open (Ctrl+O)";
-pub const INFO_TOOLTIP: &str = "Info (I)";
-pub const PAGES_TOOLTIP: &str = "Pages (F9)";
-pub const TURN_LEFT_TOOLTIP: &str = "Turn left (Shift+R)";
-pub const TURN_RIGHT_TOOLTIP: &str = "Turn right (R)";
-pub const CROP_TOOLTIP: &str = "Crop (C)";
-pub const MAIN_MENU: &str = "Main menu";
+use bingux_ui::prelude::tr;
 
-pub const MENU_OPEN: &str = "Open…";
-pub const MENU_OPEN_WITH: &str = "Open with";
-pub const MENU_SHOW_IN_FILES: &str = "Show in Files";
-pub const MENU_COPY_PICTURE: &str = "Copy picture";
-pub const MENU_SAVE_COPY: &str = "Save a copy…";
-pub const MENU_CROP: &str = "Crop";
-pub const MENU_TURN_LEFT: &str = "Turn left";
-pub const MENU_TURN_RIGHT: &str = "Turn right";
-pub const MENU_FLIP_HORIZONTALLY: &str = "Flip horizontally";
-pub const MENU_FLIP_VERTICALLY: &str = "Flip vertically";
-pub const MENU_FIT: &str = "Fit to window";
-pub const MENU_ACTUAL_SIZE: &str = "Actual size";
-pub const MENU_SLIDESHOW: &str = "Slideshow";
-pub const MENU_STOP_SLIDESHOW: &str = "Stop slideshow";
-pub const MENU_FULL_SCREEN: &str = "Full screen";
-pub const MENU_LEAVE_FULL_SCREEN: &str = "Leave full screen";
-pub const MENU_TRASH: &str = "Move to Trash";
-pub const MENU_UNDO: &str = "Undo";
-pub const MENU_SHORTCUTS: &str = "Keyboard shortcuts";
+pub fn open_tooltip() -> String {
+    tr!("preview-open-tooltip")
+}
+pub fn info_tooltip() -> String {
+    tr!("preview-info-tooltip")
+}
+pub fn pages_tooltip() -> String {
+    tr!("preview-pages-tooltip")
+}
+pub fn turn_left_tooltip() -> String {
+    tr!("preview-turn-left-tooltip")
+}
+pub fn turn_right_tooltip() -> String {
+    tr!("preview-turn-right-tooltip")
+}
+pub fn crop_tooltip() -> String {
+    tr!("preview-crop-tooltip")
+}
+pub fn main_menu() -> String {
+    tr!("preview-main-menu")
+}
 
-pub const EMPTY_TITLE: &str = "No file open";
-pub const EMPTY_LINE: &str = "Drop a picture or document here.";
-pub const EMPTY_ACTION: &str = "Open file";
-pub const DROP_TITLE: &str = "Drop to open";
+pub fn menu_open() -> String {
+    tr!("preview-menu-open")
+}
+pub fn menu_open_with() -> String {
+    tr!("preview-menu-open-with")
+}
+pub fn menu_show_in_files() -> String {
+    tr!("preview-menu-show-in-files")
+}
+pub fn menu_copy_picture() -> String {
+    tr!("preview-menu-copy-picture")
+}
+pub fn menu_save_copy() -> String {
+    tr!("preview-menu-save-copy")
+}
+pub fn menu_crop() -> String {
+    tr!("preview-menu-crop")
+}
+pub fn menu_turn_left() -> String {
+    tr!("preview-menu-turn-left")
+}
+pub fn menu_turn_right() -> String {
+    tr!("preview-menu-turn-right")
+}
+pub fn menu_flip_horizontally() -> String {
+    tr!("preview-menu-flip-horizontally")
+}
+pub fn menu_flip_vertically() -> String {
+    tr!("preview-menu-flip-vertically")
+}
+pub fn menu_fit() -> String {
+    tr!("preview-menu-fit")
+}
+pub fn menu_actual_size() -> String {
+    tr!("preview-menu-actual-size")
+}
+pub fn menu_slideshow() -> String {
+    tr!("preview-menu-slideshow")
+}
+pub fn menu_stop_slideshow() -> String {
+    tr!("preview-menu-stop-slideshow")
+}
+pub fn menu_full_screen() -> String {
+    tr!("preview-menu-full-screen")
+}
+pub fn menu_leave_full_screen() -> String {
+    tr!("preview-menu-leave-full-screen")
+}
+pub fn menu_trash() -> String {
+    tr!("preview-menu-trash")
+}
+pub fn menu_undo() -> String {
+    tr!("preview-menu-undo")
+}
+pub fn menu_shortcuts() -> String {
+    tr!("preview-menu-shortcuts")
+}
 
-pub const OPEN_REQUEST_TITLE: &str = "Open";
-pub const OPEN_FILTER: &str = "Pictures and documents";
-pub const SAVE_REQUEST_TITLE: &str = "Save a copy";
+pub fn empty_title() -> String {
+    tr!("preview-empty-title")
+}
+pub fn empty_line() -> String {
+    tr!("preview-empty-line")
+}
+pub fn empty_action() -> String {
+    tr!("preview-empty-action")
+}
+pub fn drop_title() -> String {
+    tr!("preview-drop-title")
+}
 
-pub const NOTHING_TO_SHOW: &str = "Nothing to show";
+pub fn open_request_title() -> String {
+    tr!("preview-open-request-title")
+}
+pub fn open_filter() -> String {
+    tr!("preview-open-filter")
+}
+pub fn save_request_title() -> String {
+    tr!("preview-save-request-title")
+}
 
-pub const COPIED: &str = "Picture copied";
-pub const COPY_FAILED: &str = "Could not copy the picture. Install wl-clipboard or xclip, then try again.";
-pub const SAVE_FAILED: &str =
-    "Could not save the copy. Check that the folder can be written to, then try again.";
-pub const CROP_AREA: &str = "Crop area";
-pub const CROP_SAVE: &str = "Save a copy";
-pub const CANCEL: &str = "Cancel";
-pub const CROP_FAILED: &str = "Could not open the picture to crop it. Try another picture.";
-pub const UNDO_COPY_FAILED: &str =
-    "Could not remove the copy. Move it to the Trash from Files.";
-pub const UNDO: &str = "Undo";
-pub const UNDO_FAILED: &str = "Could not put the file back. Open the Trash in Files to restore it.";
+pub fn copied() -> String {
+    tr!("preview-copied")
+}
+pub fn copy_failed() -> String {
+    tr!("preview-copy-failed")
+}
+pub fn save_failed() -> String {
+    tr!("preview-save-failed")
+}
+pub fn crop_area() -> String {
+    tr!("preview-crop-area")
+}
+pub fn crop_save() -> String {
+    tr!("preview-crop-save")
+}
+pub fn cancel() -> String {
+    tr!("preview-cancel")
+}
+pub fn close() -> String {
+    tr!("preview-close")
+}
+pub fn crop_failed() -> String {
+    tr!("preview-crop-failed")
+}
+pub fn crop_undone() -> String {
+    tr!("preview-crop-undone")
+}
+pub fn undo() -> String {
+    tr!("preview-undo")
+}
+pub fn undo_copy_failed() -> String {
+    tr!("preview-undo-copy-failed")
+}
+pub fn undo_failed() -> String {
+    tr!("preview-undo-failed")
+}
 
 /// "3 of 24".
 pub fn position(at: usize, of: usize) -> String {
-    format!("{at} of {of}")
-}
-
-/// A name the person's file has, in the typographic quotes the voice uses.
-pub fn quoted(name: &str) -> String {
-    format!("“{name}”")
+    tr!("preview-position", at = at, of = of)
 }
 
 pub fn moved_to_trash(name: &str) -> String {
-    format!("{} moved to the Trash", quoted(name))
+    tr!("preview-moved-to-trash", name = name)
 }
 
 pub fn trash_failed(name: &str) -> String {
-    format!(
-        "Could not move {} to the Trash. Check that you can change its folder.",
-        quoted(name)
-    )
+    tr!("preview-trash-failed", name = name)
 }
 
 pub fn saved_copy(name: &str) -> String {
-    format!("Copy saved as {}", quoted(name))
+    tr!("preview-saved-copy", name = name)
 }
 
 pub fn saved_crop(name: &str) -> String {
-    format!("Cropped copy saved as {}", quoted(name))
+    tr!("preview-saved-crop", name = name)
 }
-
-pub const CROP_UNDONE: &str = "Cropped copy moved to the Trash";
 
 pub fn app_failed(app: &str) -> String {
-    format!(
-        "Could not start {}. Check that it is still installed, then try again.",
-        quoted(app)
-    )
+    tr!("preview-app-failed", app = app)
 }
 
-pub fn show_in_files_failed() -> &'static str {
-    "Could not show the file. Open its folder in Files."
+pub fn show_in_files_failed() -> String {
+    tr!("preview-show-in-files-failed")
 }
 
 /// The picture a screen reader names for the stage.
 pub fn picture_label(name: &str) -> String {
-    format!("Picture: {name}")
+    tr!("preview-picture-label", name = name)
 }
 
 /// What the shortcuts dialog says.
-pub const SHORTCUTS: &str = "\
-Ctrl+O  Open\n\
-Left, Right  Previous and next file in the folder\n\
-Space  Play or pause an animated picture, page down in a document\n\
-+, -, 0, 1  Zoom in, zoom out, fit the window, actual size\n\
-R, Shift+R  Turn right, turn left\n\
-H, V  Flip horizontally, vertically\n\
-Ctrl and wheel  Zoom at the pointer\n\
-Shift and an arrow  Move a zoomed picture\n\
-Ctrl+C  Copy the picture, or the selected text of a document\n\
-Ctrl+Shift+S  Save a copy of a picture\n\
-C  Crop a picture and save the result as a copy\n\
-Delete  Move a picture to the Trash\n\
-Ctrl+Z  Put the last file moved to the Trash back, or remove the last cropped copy\n\
-S  Start or stop a slideshow of the folder\n\
-I  Show or hide the information\n\
-F9  Show or hide the pages of a document\n\
-Ctrl+F  Find in a document\n\
-F, F11  Full screen\n\
-Escape  Leave full screen or the slideshow";
+pub fn shortcuts() -> String {
+    tr!("preview-shortcuts")
+}

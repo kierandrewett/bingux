@@ -114,7 +114,10 @@ pub enum ControlAction {
     Toggle,
     /// The seek bar moved to this fraction. `settled` is false while a drag is
     /// on (a fast keyframe seek is enough) and true when it ends (the exact one).
-    Seek { fraction: f32, settled: bool },
+    Seek {
+        fraction: f32,
+        settled: bool,
+    },
     Volume(u32),
     Mute,
     /// A speed in thousandths.
@@ -134,7 +137,12 @@ pub struct MediaControls {
 
 impl MediaControls {
     pub fn new(state: ControlState, on_action: impl Into<EventHandler<ControlAction>>) -> Self {
-        MediaControls { state, docked: false, width: 1000.0, on_action: on_action.into() }
+        MediaControls {
+            state,
+            docked: false,
+            width: 1000.0,
+            on_action: on_action.into(),
+        }
     }
 
     /// The bar of a docked pane: the compact form whatever the width.
@@ -224,7 +232,10 @@ impl Component for TrackBar {
                     .position(Position::new_absolute().top(centre - track / 2.0).left(0.0))
                     .width(Size::px(measured))
                     .height(Size::px(track))
-                    .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::FloatingOutline)]),
+                    .tw(
+                        &tokens,
+                        &[rounded(Radius::Pill), bg(Paint::FloatingOutline)],
+                    ),
             )
             .maybe_child((self.buffered.is_some() && buffered > 0.0).then(|| {
                 rect()
@@ -243,12 +254,27 @@ impl Component for TrackBar {
             )
             .maybe_child(raised.then(|| {
                 rect()
-                    .position(Position::new_absolute().top(centre - KNOB / 2.0).left((played - KNOB / 2.0).clamp(0.0, (measured - KNOB).max(0.0))))
+                    .position(
+                        Position::new_absolute()
+                            .top(centre - KNOB / 2.0)
+                            .left((played - KNOB / 2.0).clamp(0.0, (measured - KNOB).max(0.0))),
+                    )
                     .width(Size::px(KNOB))
                     .height(Size::px(KNOB))
-                    .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Knob), shadow(Elevation::Floating)])
+                    .tw(
+                        &tokens,
+                        &[
+                            rounded(Radius::Pill),
+                            bg(Paint::Knob),
+                            shadow(Elevation::Floating),
+                        ],
+                    )
             }));
-        if self.enabled { capture.handlers(element) } else { element }
+        if self.enabled {
+            capture.handlers(element)
+        } else {
+            element
+        }
     }
 }
 
@@ -256,7 +282,7 @@ impl Component for TrackBar {
 #[derive(PartialEq)]
 struct MenuIcon {
     icon: Icon,
-    tooltip: &'static str,
+    tooltip: String,
     items: Vec<MenuItem>,
     enabled: bool,
 }
@@ -272,12 +298,17 @@ impl Component for MenuIcon {
             .child(
                 icon_button(self.icon, move |_| {
                     if let Some(overlays) = overlays {
-                        overlays.show_menu_from(Some(id), PanelTrigger::Control(PanelRect::from_area(&area.read())), items.clone(), true);
+                        overlays.show_menu_from(
+                            Some(id),
+                            PanelTrigger::Control(PanelRect::from_area(&area.read())),
+                            items.clone(),
+                            true,
+                        );
                     }
                 })
                 .ink(Ink::OnFloating)
                 .a11y_id(id)
-                .tooltip(self.tooltip)
+                .tooltip(&self.tooltip)
                 .enabled(self.enabled),
             )
     }
@@ -290,13 +321,20 @@ fn rate_items(current: u32, on_action: &EventHandler<ControlAction>) -> Vec<Menu
         .map(|rate| {
             let on_action = on_action.clone();
             let rate = *rate;
-            menu_item(rate_label(rate), move |_| on_action.call(ControlAction::Rate(rate))).checked(rate == current)
+            menu_item(rate_label(rate), move |_| {
+                on_action.call(ControlAction::Rate(rate))
+            })
+            .checked(rate == current)
         })
         .collect()
 }
 
 /// The subtitle menu's rows: Off, then a row per track.
-fn subtitle_items(tracks: &[String], current: i32, on_action: &EventHandler<ControlAction>) -> Vec<MenuItem> {
+fn subtitle_items(
+    tracks: &[String],
+    current: i32,
+    on_action: &EventHandler<ControlAction>,
+) -> Vec<MenuItem> {
     let off = {
         let on_action = on_action.clone();
         menu_item("Off", move |_| on_action.call(ControlAction::Subtitle(-1))).checked(current < 0)
@@ -304,7 +342,10 @@ fn subtitle_items(tracks: &[String], current: i32, on_action: &EventHandler<Cont
     std::iter::once(off)
         .chain(tracks.iter().enumerate().map(|(index, name)| {
             let on_action = on_action.clone();
-            menu_item(name.clone(), move |_| on_action.call(ControlAction::Subtitle(index as i32))).checked(current == index as i32)
+            menu_item(name.clone(), move |_| {
+                on_action.call(ControlAction::Subtitle(index as i32))
+            })
+            .checked(current == index as i32)
         }))
         .collect()
 }
@@ -324,7 +365,12 @@ fn time_label(tokens: &Tokens, text: String, width: f32, align: Align) -> Elemen
     rect()
         .width(Size::px(width))
         .tw(tokens, &[flex_row(), justify(align)])
-        .child(CAPTION.in_ink(Ink::OnFloating).label(tokens, text).max_lines(1))
+        .child(
+            CAPTION
+                .in_ink(Ink::OnFloating)
+                .label(tokens, text)
+                .max_lines(1),
+        )
         .into_element()
 }
 
@@ -349,7 +395,9 @@ impl Component for MediaControls {
             } else {
                 (Icon::MediaPlaybackStart, "Play (K)")
             };
-            icon_button(icon, move |_| on_action.call(ControlAction::Toggle)).ink(Ink::OnFloating).tooltip(tip)
+            icon_button(icon, move |_| on_action.call(ControlAction::Toggle))
+                .ink(Ink::OnFloating)
+                .tooltip(tip)
         };
         let position = clock(state.position_ns);
         let duration = clock(state.duration_ns);
@@ -361,15 +409,23 @@ impl Component for MediaControls {
             value_text: format!("{position} of {duration}"),
             on_change: {
                 let on_action = on_action.clone();
-                EventHandler::new(move |(fraction, settled): (f32, bool)| on_action.call(ControlAction::Seek { fraction, settled }))
+                EventHandler::new(move |(fraction, settled): (f32, bool)| {
+                    on_action.call(ControlAction::Seek { fraction, settled })
+                })
             },
         };
         let mute = {
             let on_action = on_action.clone();
-            icon_button(volume_icon(state.volume, state.muted), move |_| on_action.call(ControlAction::Mute))
-                .ink(Ink::OnFloating)
-                .tooltip(if state.muted { "Unmute (M)" } else { "Mute (M)" })
-                .enabled(state.has_audio)
+            icon_button(volume_icon(state.volume, state.muted), move |_| {
+                on_action.call(ControlAction::Mute)
+            })
+            .ink(Ink::OnFloating)
+            .tooltip(if state.muted {
+                "Unmute (M)"
+            } else {
+                "Mute (M)"
+            })
+            .enabled(state.has_audio)
         };
 
         // A player is a physical object and its bar is a tape: play, position and
@@ -377,24 +433,45 @@ impl Component for MediaControls {
         let mut bar = rect()
             .text_direction(TextDirection::Ltr)
             .component("MediaControls")
-            .tw(&tokens, &[flex_row(), grow_children(), items(Align::Center), gap(S1), p(S1), rounded(Radius::Pill), bg(Paint::Floating), shadow(Elevation::Floating)])
+            .tw(
+                &tokens,
+                &[
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    gap(S1),
+                    p(S1),
+                    rounded(Radius::Pill),
+                    bg(Paint::Floating),
+                    shadow(Elevation::Floating),
+                ],
+            )
             .width(Size::fill())
             .on_sized(move |event: Event<SizedEventData>| room.set_if_modified(event.area.width()))
             .child(toggle);
         if compact {
             // Play, position, the bar, mute: all a pane has room for.
-            bar = bar.child(time_label(&tokens, position, time_width, Align::End)).child(seek).child(mute);
+            bar = bar
+                .child(time_label(&tokens, position, time_width, Align::End))
+                .child(seek)
+                .child(mute);
             return bar.into_element();
         }
         let volume = TrackBar {
-            fraction: if state.muted { 0.0 } else { state.volume as f32 / 1000.0 },
+            fraction: if state.muted {
+                0.0
+            } else {
+                state.volume as f32 / 1000.0
+            },
             buffered: None,
             enabled: state.has_audio,
             name: "Volume",
             value_text: format!("{}%", state.volume / 10),
             on_change: {
                 let on_action = on_action.clone();
-                EventHandler::new(move |(fraction, _): (f32, bool)| on_action.call(ControlAction::Volume(volume_at(fraction, 1.0))))
+                EventHandler::new(move |(fraction, _): (f32, bool)| {
+                    on_action.call(ControlAction::Volume(volume_at(fraction, 1.0)))
+                })
             },
         };
         bar = bar
@@ -406,12 +483,17 @@ impl Component for MediaControls {
             .maybe_child((!state.subtitles.is_empty()).then(|| {
                 Element::from(MenuIcon {
                     icon: Icon::MediaViewSubtitles,
-                    tooltip: "Subtitles (C)",
+                    tooltip: crate::tr!("ui-preview-subtitles-tooltip"),
                     items: subtitle_items(&state.subtitles, state.subtitle, &on_action),
                     enabled: true,
                 })
             }))
-            .child(MenuIcon { icon: Icon::ViewMore, tooltip: "Playback speed ([ and ])", items: rate_items(state.rate, &on_action), enabled: true });
+            .child(MenuIcon {
+                icon: Icon::ViewMore,
+                tooltip: crate::tr!("ui-preview-playback-speed-tooltip"),
+                items: rate_items(state.rate, &on_action),
+                enabled: true,
+            });
         bar.into_element()
     }
 }
