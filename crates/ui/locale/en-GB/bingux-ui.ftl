@@ -939,3 +939,116 @@ ui-reduce-failed = { $count ->
    *[other] { $count } could not be reduced
 }
 ui-reduce-nothing = Nothing was reduced
+
+# The Compress dialog. $count is the number of items; $size, $kbps, $crf and $kind are shown as given.
+# $count (Number) - how many originals will be moved to the Trash after packing
+ui-compress-confirm-pack-title = Move the originals to the Trash?
+ui-compress-confirm-pack-body = { $count ->
+    [one] Once the archive is made and checked, the original will be moved to the Trash. You can bring them back from there, or with Undo.
+   *[other] Once the archive is made and checked, the { $count } originals will be moved to the Trash. You can bring them back from there, or with Undo.
+}
+ui-compress-confirm-pack-go = Move to Trash
+# $count (Number) - how many originals will be replaced by smaller copies
+ui-compress-confirm-reduce-title = Replace the originals?
+ui-compress-confirm-reduce-body = { $count ->
+    [one] Each smaller copy takes its original's place. Once it is made and checked, the original will be moved to the Trash. You can bring them back from there, or with Undo.
+   *[other] Each smaller copy takes its original's place. Once they are made and checked, the { $count } originals will be moved to the Trash. You can bring them back from there, or with Undo.
+}
+ui-compress-confirm-reduce-go = Replace
+ui-compress-save-in = Save in
+ui-compress-choose = Choose
+ui-compress-type = Type
+ui-compress-archive = Archive
+ui-compress-reduce-size = Reduce size
+ui-compress-tools-busy = Looking for the tools that shrink media…
+ui-compress-create = Create
+ui-compress-name = Name
+ui-compress-name-placeholder = Archive
+ui-compress-conflict = Already exists
+# $taken (String) - the name already in use here; $shown (String) - the name the new file will get
+ui-compress-conflict-keep-body = “{ $taken }” is taken here, so this one will be “{ $shown }”.
+# $shown (String) - the name of the file that will be replaced
+ui-compress-conflict-replace-body = “{ $shown }” will be replaced. The old file goes to the Trash.
+ui-compress-conflict-keep = Keep both
+ui-compress-conflict-replace = Replace
+ui-compress-format = Format
+ui-compress-song-format = Song format
+ui-compress-film-format = Film format
+ui-compress-compression = Compression
+ui-compress-level = Level
+ui-compress-password = Password
+ui-compress-lock = Ask for a password
+ui-compress-lock-zip-only = Only .zip and .7z can be locked.
+ui-compress-lock-aes = Encrypted with AES-256.
+ui-compress-password-choose = Choose a password
+ui-compress-password-field = Password
+ui-compress-confirm-field = Confirm
+ui-compress-hide-names = Encrypt file names
+ui-compress-hide-names-hint = Nobody can even list what is inside without the password
+ui-compress-split-one = One file
+# $size (String) - the size of each volume, such as "700 MB"
+ui-compress-split-each = { $size } each
+ui-compress-volumes = Volumes
+ui-compress-split = Split into volumes
+ui-compress-split-hint = Cut a big archive into pieces, as for a disc or an email.
+ui-compress-options = Options
+ui-compress-hidden = Include hidden files
+ui-compress-links = Keep links as links
+ui-compress-links-hint = Off stores what each link points to instead
+ui-compress-owners = Keep permissions and owners
+ui-compress-owners-hint = Who may read each file, and who owns it.
+ui-compress-owners-tar-only = Only .tar formats record who owns a file.
+ui-compress-excludes = Leave out
+ui-compress-excludes-placeholder = *.tmp, node_modules
+ui-compress-excludes-hint = Comma separated. A name matches at any depth; a / makes it a path.
+ui-compress-after = When it is done
+ui-compress-trash-originals = Move the originals to the Trash
+ui-compress-trash-originals-hint = Only after the archive is made and checked. You will be asked.
+ui-compress-fastest = Fastest
+ui-compress-balanced = Balanced
+ui-compress-smallest = Smallest
+ui-compress-custom = Custom
+ui-compress-quality = Quality
+ui-compress-crf = Constant rate factor
+# $crf (Number) - the constant rate factor, a lower number is better quality
+ui-compress-crf-value = CRF { $crf }
+ui-compress-crf-hint = Higher quality on the right: a bigger file
+ui-compress-resolution = Resolution
+ui-compress-frame-rate = Frame rate
+ui-compress-remove-sound = Remove sound
+# $kbps (Number) - audio bitrate in kbit/s
+ui-compress-kbps = { $kbps } kbit/s
+ui-compress-sound = Sound
+ui-compress-films = Films
+ui-compress-remove-tags = Remove location and other tags
+ui-compress-remove-tags-film-hint = Takes out the title, the place and the other tags
+ui-compress-bitrate = Bitrate
+ui-compress-flac-hint = FLAC keeps every sample; only the packing changes.
+ui-compress-lossy-hint = Opus sounds fine at 96; MP3 wants 128 or more.
+ui-compress-songs = Songs
+ui-compress-remove-song-tags = Remove tags and cover
+ui-compress-remove-song-tags-hint = Takes out the artist, the title and the picture
+ui-compress-lossless = Lossless
+ui-compress-png-hint = PNG keeps every pixel; only the packing changes.
+ui-compress-lower-hint = Lower is smaller.
+ui-compress-other = Other…
+ui-compress-longest-side = Longest side
+ui-compress-pixels = Pixels
+ui-compress-pictures = Pictures
+ui-compress-remove-location = Remove location and camera data
+ui-compress-exif-hint = Takes out the EXIF, including where and with what it was taken. The colours stay.
+ui-compress-checking = Checking
+# $kind (String) - the kind of media, such as "Pictures"
+ui-compress-media-cannot = { $kind } cannot be made smaller
+# $size (String) - the total size now, such as "4.2 MB"; $error (String) - why no estimate could be made
+ui-compress-no-estimate = Original { $size }, no estimate: { $error }
+ui-compress-result = Result
+ui-compress-size = Size
+# $count (Number) - how many more files are not listed
+ui-compress-and-more = and { $count } more
+ui-compress-kept = kept as it is
+# $size (String) - the estimated size, such as "2.1 MB"
+ui-compress-about = about { $size }
+ui-compress-replace-originals = Replace the originals
+ui-compress-originals-trash-hint = The originals go to the Trash once the smaller files are made and checked. You will be asked.
+ui-compress-replace-needs-beside = Replacing needs the result to sit beside the original.
