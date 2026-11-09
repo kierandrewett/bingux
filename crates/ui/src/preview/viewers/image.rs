@@ -2,9 +2,9 @@
 //! they have one and by the preview helper where they do not.
 //!
 //! Freya's `ImageViewer` (or `GifViewer`, or `SvgViewer`) decodes and caches off
-//! the UI thread and draws PNG, JPEG, WebP, GIF, BMP, ICO and SVG. A photograph
-//! whose file says it is stored on its side is turned upright by its EXIF
-//! orientation, because those decoders do not. HEIF, AVIF, TIFF, Radiance HDR,
+//! the UI thread and draws PNG, JPEG, WebP, GIF, BMP, ICO and SVG. Skia turns a
+//! photograph stored on its side upright by its EXIF orientation as it decodes,
+//! so the size the view fits is the size as it is shown. HEIF, AVIF, TIFF, Radiance HDR,
 //! OpenEXR and camera RAW files are decoded in the helper process
 //! ([`super::image_helper`]), so a codec bug in any of them cannot take the
 //! window. How the view moves, zooms and turns is [`crate::zoom_view`].
@@ -46,21 +46,6 @@ const BUCKETS: [f32; 4] = [1024.0, 2048.0, 4096.0, 8192.0];
 /// animation is decoded into memory.
 const GIF_LIMIT: u64 = 24 * 1024 * 1024;
 
-/// The turn and mirror that put a picture upright, from its EXIF orientation
-/// (1 to 8): quarter turns clockwise after mirroring left to right.
-pub(super) fn orientation_of(exif: Option<u16>) -> (u8, bool) {
-    match exif {
-        Some(2) => (0, true),
-        Some(3) => (2, false),
-        Some(4) => (2, true),
-        Some(5) => (3, true),
-        Some(6) => (1, false),
-        Some(7) => (1, true),
-        Some(8) => (3, false),
-        _ => (0, false),
-    }
-}
-
 /// How a picture is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Route {
@@ -95,15 +80,14 @@ pub(super) fn route_of(resolved: &Resolved) -> Route {
     Route::Own
 }
 
-/// The size of the picture's pixels as it is stored, when the header said it.
-/// The header's size is as it is shown, turned when the EXIF orientation says
-/// the picture is on its side, so it is turned back.
-fn stored_size(resolved: &Resolved) -> Option<(f32, f32)> {
+/// The size of the picture as it is shown. The header already turns the size of
+/// a photograph stored on its side, and Skia turns the pixels the same way as it
+/// decodes, so what the view fits and what it draws are the same shape. Fitting
+/// the stored size instead (and turning the view to match) fits a box of the
+/// wrong shape and then turns the upright picture a second time.
+fn shown_size(resolved: &Resolved) -> Option<(f32, f32)> {
     match &resolved.loaded {
-        Loaded::Image(Some(info)) => {
-            let (width, height) = (info.width as f32, info.height as f32);
-            Some(if info.exif.is_sideways() { (height, width) } else { (width, height) })
-        }
+        Loaded::Image(Some(info)) => Some((info.width as f32, info.height as f32)),
         _ => None,
     }
 }
@@ -138,11 +122,7 @@ impl Component for ImageView {
             }
             .into_element();
         }
-        let natural = stored_size(&self.resolved);
-        let (turns, mirrored) = match &self.resolved.loaded {
-            Loaded::Image(Some(info)) => orientation_of(info.exif.orientation),
-            _ => (0, false),
-        };
+        let natural = shown_size(&self.resolved);
         let source = self.resolved.source.clone();
         let is_gif = self.resolved.sniffed.mime.mime == "image/gif" && self.resolved.facts.size.is_some_and(|size| size <= GIF_LIMIT);
         let pause = use_hook(GifPause::new);
@@ -158,7 +138,6 @@ impl Component for ImageView {
         let draw = move |width: f32, height: f32| picture(&source, is_gif, &pause, width, height, display, &sharpest);
         let mut view = ZoomView::new(natural, draw)
             .start(start)
-            .orientation(turns, mirrored)
             .label(format!("Picture: {}", self.resolved.source.name()))
             .keys_when(move || keyboard.held());
         if let Some(handle) = self.nav.zoom {
@@ -230,27 +209,23 @@ fn picture(source: &PreviewSource, gif: bool, pause: &GifPause, width: f32, heig
 mod tests {
     use super::*;
 
-    #[test]
-    fn exif_orientations_put_a_picture_upright() {
-        assert_eq!(orientation_of(None), (0, false));
-        assert_eq!(orientation_of(Some(1)), (0, false));
-        assert_eq!(orientation_of(Some(6)), (1, false), "a phone held upright: turn it a quarter right");
-        assert_eq!(orientation_of(Some(8)), (3, false));
-        assert_eq!(orientation_of(Some(3)), (2, false));
-        assert_eq!(orientation_of(Some(2)), (0, true));
-        assert_eq!(orientation_of(Some(4)), (2, true));
-        // Transpose and transverse are a mirror and a quarter turn.
-        assert_eq!(orientation_of(Some(5)), (3, true));
-        assert_eq!(orientation_of(Some(7)), (1, true));
-        assert_eq!(orientation_of(Some(99)), (0, false));
-    }
-
     fn resolved(name: &str, mime: &'static str) -> Resolved {
         use bingux_preview_core::{Content, FileFacts, Sniffed, ViewerId};
         let source = PreviewSource::bytes(name, vec![0u8; 4]);
         let mut sniffed = Sniffed { mime: bingux_files::mime::for_name(name), content: Content::Image };
         sniffed.mime.mime = mime;
         Resolved { facts: FileFacts::of(&source, &sniffed), source, sniffed, viewer: ViewerId::Image, loaded: Loaded::Image(None), notes: Vec::new() }
+    }
+
+    #[test]
+    fn a_photo_stored_on_its_side_is_fitted_as_it_is_shown() {
+        use bingux_preview_core::media::{Exif, ImageInfo};
+        let mut photo = resolved("IMG_0009.jpg", "image/jpeg");
+        // Stored 1200 by 1600, EXIF 6: the header says 1600 by 1200, which is what Skia draws.
+        let exif = Exif { orientation: Some(6), ..Exif::default() };
+        photo.loaded = Loaded::Image(Some(ImageInfo { width: 1600, height: 1200, exif }));
+        assert_eq!(shown_size(&photo), Some((1600.0, 1200.0)));
+        assert_eq!(shown_size(&resolved("a.png", "image/png")), None);
     }
 
     #[test]

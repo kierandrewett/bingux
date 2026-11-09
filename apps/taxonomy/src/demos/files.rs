@@ -1075,22 +1075,24 @@ pub const DOCUMENT_CONTROLS: &[Spec] = &[
 /// and the pill on.
 fn zoom_demo() -> Element {
     use bingux_ui::zoom_view::{ZoomView, use_zoom_handle};
+    let tokens = use_tokens();
     let handle = use_zoom_handle();
     rect()
-        .width(Size::fill())
-        .height(Size::px(360.0))
+        .tw(&tokens, &[w_full(), h_full()])
         .child(
-            ZoomView::new(Some((800.0, 500.0)), |width, height| {
+            ZoomView::new(Some((800.0, 500.0)), move |width, height| {
+                let (sun_left, sun_top) = (width * 0.1, height * 0.2);
+                let (sun_width, sun_height) = (width * 0.3, height * 0.4);
                 rect()
                     .width(Size::px(width))
                     .height(Size::px(height))
-                    .background((40, 110, 220))
+                    .tw(&tokens, &[bg(Paint::Accent)])
                     .child(
                         rect()
-                            .position(Position::new_absolute().left(width * 0.1).top(height * 0.2))
-                            .width(Size::px(width * 0.3))
-                            .height(Size::px(height * 0.4))
-                            .background((250, 200, 60)),
+                            .position(Position::new_absolute().left(sun_left).top(sun_top))
+                            .width(Size::px(sun_width))
+                            .height(Size::px(sun_height))
+                            .tw(&tokens, &[bg(Paint::Warning)]),
                     )
                     .into()
             })
