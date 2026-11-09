@@ -39,6 +39,7 @@ mod motion_stress;
 mod mount_tests;
 pub mod nav;
 pub(crate) mod popup_windows;
+pub mod platform;
 pub mod preview;
 pub mod reorder;
 pub mod resilience;

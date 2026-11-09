@@ -649,6 +649,30 @@ pub fn normalise_accent(raw: &str) -> &'static str {
         .unwrap_or(DEFAULT_ACCENT)
 }
 
+/// The accent a name or a gsettings value (`'teal'`) means, `None` for a name
+/// that is not one of [`accent_names`]. [`normalise_accent`] with no default,
+/// for a source that has no opinion when it names nothing.
+pub fn accent_named(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim().trim_matches('\'').trim_matches('"');
+    ACCENTS
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(trimmed))
+        .map(|(name, _)| *name)
+}
+
+/// The accent whose colour is nearest to an sRGB colour (channels 0..1), for a
+/// desktop that publishes its accent as a colour (the Settings portal does).
+pub fn nearest_accent(red: f32, green: f32, blue: f32) -> &'static str {
+    let distance = |rgb: &[f32; 3]| {
+        (rgb[0] - red).powi(2) + (rgb[1] - green).powi(2) + (rgb[2] - blue).powi(2)
+    };
+    ACCENTS
+        .iter()
+        .min_by(|(_, a), (_, b)| distance(a).total_cmp(&distance(b)))
+        .map(|(name, _)| *name)
+        .unwrap_or(DEFAULT_ACCENT)
+}
+
 /// Reads one GNOME interface key with `gsettings`, returning its raw text.
 /// Returns `None` when gsettings is missing or the key cannot be read.
 pub fn read_gsettings(key: &str) -> Option<String> {
@@ -662,38 +686,33 @@ pub fn read_gsettings(key: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
-/// Reads the accent and colour scheme from GNOME settings and builds tokens.
+/// Settles the appearance from every source, strongest first (the environment,
+/// the portal, `bingux.toml`, GTK's settings files, gsettings: see
+/// `crate::platform::appearance`) and builds tokens. Blocks: call it off the UI
+/// thread.
 pub fn load_tokens() -> Tokens {
-    let accent = read_gsettings("accent-color")
-        .map(|raw| normalise_accent(&raw))
-        .unwrap_or(DEFAULT_ACCENT);
-    let scheme = pinned_scheme()
-        .or_else(|| read_gsettings("color-scheme").map(|raw| Scheme::from_gsettings(&raw)))
-        .unwrap_or(Scheme::PreferDark);
-    Tokens::new(accent, scheme, reduced_motion_from_env())
+    tokens_for(&crate::platform::appearance::current())
 }
 
-/// The scheme the snapshot harness pins with `BINGUX_SETTINGS_SNAPSHOT_SCHEME`,
-/// so both palettes can be rendered without changing the desktop setting.
-fn pinned_scheme() -> Option<Scheme> {
-    std::env::var("BINGUX_SETTINGS_SNAPSHOT_SCHEME")
-        .ok()
-        .map(|raw| Scheme::from_gsettings(&raw))
-}
-
-/// Tokens shown until the GNOME settings have been read on the task pool.
-/// The default accent and dark scheme match the shell's own defaults. A pinned
-/// scheme applies from the first frame, so a capture is not dark until the
-/// read lands and then recoloured.
-fn startup_tokens() -> Tokens {
+/// The tokens of a settled appearance: the one place an `Appearance` becomes
+/// `Tokens`.
+fn tokens_for(appearance: &crate::platform::appearance::Appearance) -> Tokens {
     Tokens::new(
-        DEFAULT_ACCENT,
-        pinned_scheme().unwrap_or(Scheme::PreferDark),
-        reduced_motion_from_env(),
+        appearance.accent,
+        appearance.scheme,
+        appearance.reduced_motion,
     )
 }
 
-/// Pool job for [`provide_tokens`]: reads the settings with `gsettings`.
+/// Tokens shown until the sources have been read on the task pool: the
+/// environment's pins and the defaults (the shell's own, dark and blue). A
+/// pinned scheme applies from the first frame, so a capture is not dark until
+/// the read lands and then recoloured.
+fn startup_tokens() -> Tokens {
+    tokens_for(&crate::platform::appearance::startup())
+}
+
+/// Pool job for [`provide_tokens`]: reads every appearance source.
 fn load_settings_tokens(_: ()) -> Result<Tokens, String> {
     Ok(load_tokens())
 }
@@ -782,142 +801,28 @@ pub fn freya_theme(tokens: &Tokens) -> Theme {
     theme
 }
 
-/// Whether a real `gsettings monitor` may be started. Test processes and the
-/// headless snapshot build never start one: a test process that exits
-/// without running destructors would leave the child, and its session bus
-/// connection, behind. `BINGUX_APPEARANCE_MONITOR=1` forces it on (for a test
-/// about the monitor itself) and `=0` forces it off.
-fn appearance_monitor_enabled() -> bool {
-    match std::env::var("BINGUX_APPEARANCE_MONITOR").as_deref() {
-        Ok("1") => true,
-        Ok("0") => false,
-        _ => !(cfg!(test) || cfg!(feature = "testing")),
-    }
-}
-
-/// Owns the `gsettings monitor` child of [`watch_appearance`]. Dropping it
-/// (the window root unmounts, the window closes) kills and reaps the child.
-/// The child also carries `PR_SET_PDEATHSIG(SIGTERM)`, so it dies with this
-/// process even when no destructor runs.
-#[derive(Clone)]
-pub struct AppearanceMonitor(std::sync::Arc<MonitorInner>);
-
-struct MonitorInner {
-    stop: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    child: std::sync::Arc<std::sync::Mutex<Option<std::process::Child>>>,
-}
-
-impl Drop for MonitorInner {
-    fn drop(&mut self) {
-        self.stop.store(true, std::sync::atomic::Ordering::SeqCst);
-        let child = self
-            .child
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
-            .take();
-        if let Some(mut child) = child {
-            let _ = child.kill();
-            // Reaping waits for the child, so it runs off the UI thread.
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
-        }
-    }
-}
-
-/// Follows `gsettings monitor org.gnome.desktop.interface` and updates the
-/// shared tokens when the accent or colour scheme changes elsewhere, for
-/// example in the shell's Control Centre.
+/// Follows the appearance sources (`crate::platform::appearance::watch`) and
+/// updates the shared tokens when the accent, scheme, motion or another
+/// appearance value changes elsewhere: in the portal's Settings, in the
+/// shell's Control Centre, in `bingux.toml`. Where there is no portal it
+/// follows `gsettings monitor` instead.
 ///
-/// The monitor runs on a background thread for as long as the returned
-/// guard lives; a missing `gsettings` leaves the tokens unchanged. Keep the
-/// guard in a hook so it drops with the window. Nothing is started when
-/// [`appearance_monitor_enabled`] says no.
-pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
-    use std::io::{BufRead, BufReader};
+/// The listeners run for as long as the returned guard lives, and each one
+/// sleeps until something changes. A source that is missing leaves the tokens
+/// unchanged. Keep the guard in a hook so it drops with the window. Nothing is
+/// started in a test or a capture (see `platform::appearance::watch`).
+pub fn watch_appearance(mut tokens: State<Tokens>) -> crate::platform::appearance::Watch {
+    use crate::task::{Feed, spawn_blocking};
+    use std::sync::Arc;
 
-    use std::process::{Command, Stdio};
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::{Arc, Mutex};
-
-    use crate::task::Feed;
-
-    let feed = Arc::new(Feed::<(String, String)>::default());
-    let stop = Arc::new(AtomicBool::new(false));
-    let slot: Arc<Mutex<Option<std::process::Child>>> = Arc::default();
-    let guard = AppearanceMonitor(Arc::new(MonitorInner {
-        stop: Arc::clone(&stop),
-        child: Arc::clone(&slot),
-    }));
-    if !appearance_monitor_enabled() {
-        feed.close();
-        return guard;
-    }
-    let sender = Arc::clone(&feed);
-    std::thread::spawn(move || {
-        let mut command = Command::new("gsettings");
-        command
-            .args(["monitor", "org.gnome.desktop.interface"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
-        // The child dies with the thread that spawned it (see the helper):
-        // that thread lives as long as the child.
-        crate::runtime::die_with_parent(&mut command);
-        let Ok(mut child) = command.spawn() else {
-            sender.close();
-            return;
-        };
-        let stdout = child.stdout.take();
-        // The guard may already be gone: then nobody will kill the child.
-        {
-            let mut held = slot.lock().unwrap_or_else(|poison| poison.into_inner());
-            if stop.load(Ordering::SeqCst) {
-                let _ = child.kill();
-                let _ = child.wait();
-                sender.close();
-                return;
-            }
-            *held = Some(child);
-        }
-        if let Some(stdout) = stdout {
-            for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-                if stop.load(Ordering::SeqCst) {
-                    break;
-                }
-                if let Some((key, value)) = line.split_once(':') {
-                    sender.push((key.trim().to_string(), value.trim().to_string()));
-                }
-            }
-        }
-        let child = slot
-            .lock()
-            .unwrap_or_else(|poison| poison.into_inner())
-            .take();
-        if let Some(mut child) = child {
-            let _ = child.kill();
-            let _ = child.wait();
-        }
-        sender.close();
-    });
-    // The task sleeps until the monitor says something: no timer runs while
-    // the appearance does not change.
+    let feed = Arc::new(Feed::<()>::default());
+    let notify = Arc::clone(&feed);
+    let guard = crate::platform::appearance::watch(move || notify.push(()));
+    // The task sleeps until a listener says something: no timer runs while the
+    // appearance does not change.
     spawn(async move {
-        while let Some((key, value)) = feed.next().await {
-            let current = *tokens.read();
-            let next = match key.as_str() {
-                "accent-color" => Tokens::new(
-                    normalise_accent(&value),
-                    current.scheme,
-                    current.reduced_motion,
-                ),
-                "color-scheme" => Tokens::new(
-                    current.accent_name,
-                    Scheme::from_gsettings(&value),
-                    current.reduced_motion,
-                ),
-                _ => continue,
-            };
+        while feed.next().await.is_some() {
+            let next = spawn_blocking(load_tokens).await;
             tokens.set_if_modified(next);
         }
     });
@@ -931,14 +836,7 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> AppearanceMonitor {
 pub fn font_family() -> &'static str {
     static FAMILY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     FAMILY.get_or_init(|| {
-        let configured = crate::runtime::run(
-            &crate::runtime::bingux_config(),
-            &["get", "appearance.font_family"],
-            std::time::Duration::from_secs(2),
-        )
-        .ok()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty());
+        let configured = crate::platform::appearance::configured_font_family();
         configured.unwrap_or_else(|| {
             if !font_files(DEFAULT_FONT_FAMILY, 1).is_empty() {
                 return DEFAULT_FONT_FAMILY.to_string();

@@ -423,7 +423,7 @@ system's: a location is a URI, and `use_location()` reads it.
 Every application has an About window, made by `Application::run`. It is a
 card over the window (the same card on a phone) with the application icon,
 name, version, a one-line description, the website and "Report an issue" as
-links (opened with `xdg-open`), Licence, Credits and Legal pages, the app id and
+links (opened through `platform::open`), Licence, Credits and Legal pages, the app id and
 build, and **Copy details**, which puts a plain-text block for a bug report on
 the clipboard: name and version, app id, commit and build date, licence, the
 Rust, Freya and bingux-ui versions, OS, kernel and session, display scale, the
@@ -1768,7 +1768,7 @@ thumbnail only when its row scrolls in. The views are ordinary components:
 
 ### The file view in a window
 
-`files::browse(Browse::new(memory))` is the dialog's body, unchanged, in an application window: the same toolbar, sidebar, address bar, list or grid, search, previews and operations. The dialog and the window are one component, `ChooserBody`, with a host: a dialog answers a request; a window has none to answer. In a window there is no Cancel or accept button, no file type filter, no name field and no choices, and what opening a file means changes: it opens in the application `xdg-open` names for its type, where a dialog answers with it. `Capabilities::FILES_APP` turns on **Open with**, **Open in new tab** and a middle click on a folder.
+`files::browse(Browse::new(memory))` is the dialog's body, unchanged, in an application window: the same toolbar, sidebar, address bar, list or grid, search, previews and operations. The dialog and the window are one component, `ChooserBody`, with a host: a dialog answers a request; a window has none to answer. In a window there is no Cancel or accept button, no file type filter, no name field and no choices, and what opening a file means changes: it opens in the application the desktop names for its type (`platform::open`: the portal, else the default desktop entry, else `xdg-open`), where a dialog answers with it. `Capabilities::FILES_APP` turns on **Open with**, **Open in new tab** and a middle click on a folder.
 
 ```rust
 let memory = TabMemory::new(Where::Folder(home));    // one per tab
@@ -2489,6 +2489,195 @@ compact)`.
 The class is one `State` created once per thread, so it survives every
 re-render. The root writes it before any child renders, so a frame that
 changes the class is consistent: no child sees a mix of densities.
+
+## Platform
+
+`bingux_ui::platform` is what an application asks of the desktop it runs on:
+how windows should look, opening a link or a file, a notification, keeping the
+screen awake. bingux-ui makes no assumption about the session. It runs under
+Gnoblin's compositor, sway or GNOME's Mutter, with or without
+xdg-desktop-portal, `gsettings`, GVfs or a notification daemon. Every call asks
+the standard freedesktop interface first, falls back to files and programs the
+XDG specifications describe, and fails with a reason the caller can show when
+nothing answers, in a few seconds at most and usually at once. An application
+never waits on a service that is not there.
+
+| Module       | Asks                                                       | Falls back to                                |
+| ------------ | ---------------------------------------------------------- | -------------------------------------------- |
+| `appearance` | the Settings portal                                        | `bingux.toml`, GTK settings files, gsettings |
+| `open`       | the OpenURI portal                                         | the default desktop entry, then `xdg-open`   |
+| `notify`     | `org.freedesktop.Notifications`                            | an error: no daemon, no notification         |
+| `inhibit`    | the Inhibit portal                                         | `org.freedesktop.ScreenSaver`, then logind   |
+| `apps`       | desktop entries and `mimeapps.list` in the XDG directories | nothing: it reads files                      |
+| `services()` | the session and system buses                               | every field `false` without a bus            |
+
+Calls that can wait are blocking and report `[ui-blocking]` when made on the
+UI thread, like `runtime`. Call them inside `runtime::background_then`, or use
+the `_then` form each comes with, which runs the call on the worker pool and
+hands the result to a closure on the UI thread. That is the form for an event
+handler.
+
+### Appearance
+
+`platform::appearance::current()` settles six values (colour scheme, accent,
+higher contrast, reduced motion, text size, icon theme). Each value is decided
+on its own by the first source that has an opinion on it:
+
+| #   | Source        | Where it reads                                                                                                                    |
+| --- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `Environment` | `BINGUX_COLOR_SCHEME`, `BINGUX_ACCENT`, `BINGUX_REDUCED_MOTION`, `BINGUX_HIGH_CONTRAST`, `BINGUX_TEXT_SCALE`, `BINGUX_ICON_THEME` |
+| 2   | `Portal`      | `org.freedesktop.portal.Settings` `ReadAll` on the session bus                                                                    |
+| 3   | `Config`      | `[appearance]` in `bingux.toml`                                                                                                   |
+| 4   | `GtkSettings` | `gtk-4.0/settings.ini`, then `gtk-3.0/settings.ini`                                                                               |
+| 5   | `Gsettings`   | `gsettings` for `org.gnome.desktop.interface` and `org.gnome.desktop.a11y.interface`, when installed                              |
+| 6   | `Default`     | dark, blue, normal contrast, motion on, text at 100 %                                                                             |
+
+The portal answers in the vocabulary every toolkit reads, which Gnoblin's
+portal backend publishes from its configuration:
+
+| Portal key                                          | Becomes                                                                |
+| --------------------------------------------------- | ---------------------------------------------------------------------- |
+| `org.freedesktop.appearance` `color-scheme`         | scheme: 1 dark, 2 light                                                |
+| `org.freedesktop.appearance` `accent-color`         | the nearest of the nine accents (a component outside 0..1 means unset) |
+| `org.freedesktop.appearance` `contrast`             | higher contrast: 1                                                     |
+| `org.freedesktop.appearance` `reduced-motion`       | reduced motion: 1                                                      |
+| `org.gnome.desktop.interface` `enable-animations`   | reduced motion when `false`                                            |
+| `org.gnome.desktop.interface` `text-scaling-factor` | text size                                                              |
+| `org.gnome.desktop.interface` `icon-theme`          | icon theme                                                             |
+
+"No preference" (0) is not an opinion: the next source is asked. A source that
+knows the scheme but not the accent leaves the accent to the next one, so a
+portal that publishes only a colour scheme still lets `bingux.toml` choose the
+accent. A text size outside 50 % to 300 % is taken for a mistake and ignored.
+
+The config source reads these keys, leniently: a key it does not understand
+costs that value and not the file. `bingux-config set appearance.accent purple`
+writes them.
+
+```toml
+[appearance]
+color_scheme  = "light"      # "dark", "light", "default", or "auto" to ask the next source
+accent        = "purple"     # one of: blue teal green yellow orange red pink purple slate
+high_contrast = false
+reduced_motion = false
+text_scale    = 1.0          # 0.5 to 3.0
+icon_theme    = "Papirus"
+font_family   = "Cantarell"  # read once at start
+```
+
+`provide_tokens()` does all of this for a window: the first frame is drawn with
+`appearance::startup()` (the environment and the defaults, no I/O, so a pinned
+scheme is right from frame one), the sources are read on the worker pool and
+the tokens change when the answer arrives, and `watch_appearance` follows
+changes afterwards. `load_tokens()` is `current()` turned into `Tokens`.
+`appearance::watch(on_change)` is what listens: the portal's `SettingChanged`
+signal; `gsettings monitor` only when there is no portal to ask; and the folder
+of `bingux.toml`. Each sleeps until something changes, and dropping the
+returned `Watch` stops all of them.
+
+`BINGUX_APPEARANCE_SOURCES=config,gsettings` restricts which sources are read
+(the environment always is), to try one layer on a machine that has all of
+them. `BINGUX_APPEARANCE_MONITOR=0` starts no listener. A process that has
+called `runtime::isolate_system_settings` (a capture, a sweep) never asks the
+portal or `gsettings`, so its tokens do not depend on the person's desktop.
+
+### Opening links and files
+
+```rust
+// off the UI thread
+platform::open::open_uri("https://bingux.org")?;
+platform::open::open_file(Path::new("/home/a/report.pdf"))?;
+
+// from an event handler
+platform::open::open_uri_then(url, move |result| {
+    if result.is_err() {
+        overlays.toast("The link could not be opened.");
+    }
+});
+```
+
+Three ways, in order; the first that works ends the search and a failure
+never opens two windows. The OpenURI portal (`OpenFile` for a file, which
+passes a descriptor) is asked first. Then the desktop entry that
+`mimeapps.list` names for the type (a link by `x-scheme-handler/<scheme>`, a
+file by its MIME type, a folder by `inode/directory`) is started directly,
+with its `Exec` field codes expanded: no GIO, no `xdg-open`. Then `xdg-open`,
+if it is installed. A `file:` URI opens as the file it names. The error is
+`OpenError::{Invalid, NoApplication, Failed}` and its text is a sentence to
+show. About's links and the file view's double click use this.
+
+`platform::apps` is the reading of the specifications underneath, for an
+application that needs it: `default_for(&Dirs::from_env(), "image/png")`,
+`find_entry`, `scan`, `expand_exec` and `spawn`. It follows the MIME
+Applications specification: desktop-specific lists first, `[Default
+Applications]` before `[Added Associations]`, removals respected, ids whose
+`TryExec` program is missing skipped, then `mimeinfo.cache`, then the entries'
+own `MimeType`.
+
+### Notifications
+
+```rust
+let sent = platform::notify::send(
+    &Notification::new("Download finished")
+        .body("report.pdf is in Downloads.")
+        .icon("folder-download")
+        .desktop_entry("bingux-files")
+        .action("open", "Open Folder"),
+)?;
+platform::notify::send_then(note, move |result| { /* ... */ });
+```
+
+`Notification` is a builder over `org.freedesktop.Notifications.Notify`:
+urgency, expiry, replacing an earlier `Sent` in place, a category, `transient`.
+With no daemon `send` fails at once with the bus's reason; a notification is
+never the only place a result is shown. `capabilities()` asks what the daemon
+can do.
+
+### Keeping the screen awake
+
+```rust
+let hold = platform::inhibit::inhibit("Media", "Playing a video", What::IDLE)?;
+// the screen stays on while `hold` lives
+drop(hold);
+```
+
+The hold lasts as long as the `Inhibitor`, and a process that crashes loses it
+with its bus connection. The portal is asked first (idle and suspend), then
+`org.freedesktop.ScreenSaver` (idle only), then logind on the system bus (idle
+and suspend, the hold is a file descriptor). A service that takes part of what
+was asked is kept and the rest is asked of the next. `Inhibitor::covers()` says
+what the hold really does, and `via()` which services hold it.
+
+### Services and the session bus
+
+`platform::services()` says which of the portal, the notification daemon, the
+screensaver and logind are there, for a page that shows the state or a feature
+that hides its button. No call needs it first: each degrades by itself.
+`BINGUX_PORTAL=0` keeps a process off the session bus and `BINGUX_PORTAL=1`
+forces it on (a test process is off by default). Every call is made on its own
+thread with its own time limit, so a service that never answers costs the
+caller its limit and nothing more.
+
+### Icons and compositors
+
+`app_icon` finds an icon by the Icon Theme Specification from the theme files
+(no GTK, no GIO), in the theme `appearance::icon_theme()` names, the themes it
+inherits, `hicolor` and `/usr/share/pixmaps`.
+
+A tab torn off a window is carried with the standard `xdg_toplevel.move`. Where
+the compositor can be asked where windows are (sway's IPC, Gnoblin 0.1's
+control socket), the tab can be dropped on another window's strip; Gnoblin 0.2
+(the Rust compositor) serves its windows over its binary IPC 0.2.0, which this
+layer does not speak yet, so there, as under GNOME Shell and KDE, the tab is
+carried and a release leaves the window where it is.
+
+### Testing platform code
+
+`platform/testing.rs` starts a private `dbus-daemon` for a test, puts a fake
+portal, notification daemon, screensaver or logind on it and calls the real
+code over the wire. The tests skip, saying so, on a machine with no
+`dbus-daemon`. The order of the appearance sources is a pure function,
+`appearance::resolve`, tested without a bus.
 
 ## Rules
 

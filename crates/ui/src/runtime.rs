@@ -138,7 +138,8 @@ static SLOW_SOURCES: std::sync::LazyLock<Option<Duration>> = std::sync::LazyLock
 
 /// Whether this process is a test, a capture or a sweep: its commands must not change the
 /// person's desktop settings.
-static SYSTEM_SETTINGS_ISOLATED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static SYSTEM_SETTINGS_ISOLATED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// From now on every command [`run`] starts gets `GSETTINGS_BACKEND=memory`, so `gsettings set`
 /// changes nothing outside the command. The headless harness (`Snapshot`) calls it: Settings
@@ -146,6 +147,13 @@ static SYSTEM_SETTINGS_ISOLATED: std::sync::atomic::AtomicBool = std::sync::atom
 /// change the real dconf. The scripts do the same for the whole process (`scripts/app_env.py`).
 pub fn isolate_system_settings() {
     SYSTEM_SETTINGS_ISOLATED.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether [`isolate_system_settings`] has been called: this process is a test,
+/// a capture or a sweep, and nothing it reads may come from the person's
+/// desktop.
+pub(crate) fn system_settings_isolated() -> bool {
+    SYSTEM_SETTINGS_ISOLATED.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Like [`run`] with data written to the command's stdin.
