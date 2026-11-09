@@ -13,6 +13,7 @@ use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::system;
+use bingux_ui::prelude::tr;
 
 /// One installed application.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -323,16 +324,14 @@ fn launch_blocking(file: &Path, name: &str) -> Result<(), String> {
         .spawn()
         .map_err(|error| {
             eprintln!("[launch] {name}: {error}");
-            format!("Could not open “{name}”. Check that it is still installed, then try again.")
+            tr!("apps-launch-failed", name = name)
         })?;
     let started = Instant::now();
     while started.elapsed() < LAUNCH_WATCH {
         match child.try_wait() {
             Ok(Some(status)) if status.success() => return Ok(()),
             Ok(Some(_)) => {
-                return Err(format!(
-                    "Could not open “{name}”. Check that it is still installed, then try again."
-                ));
+                return Err(tr!("apps-launch-failed", name = name));
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(50)),
             Err(_) => return Ok(()),
@@ -382,7 +381,7 @@ pub enum Removal {
     /// Delete these files.
     Files(Vec<PathBuf>),
     /// Not removed here. The text says what to do instead.
-    Unavailable(&'static str),
+    Unavailable(String),
 }
 
 /// Where an application came from and what it takes up. The package tools
@@ -610,7 +609,7 @@ fn classify(
             "",
             None,
             desktop_text,
-            Removal::Unavailable("Remove it from the store you installed it from."),
+            Removal::Unavailable(tr!("apps-remove-store")),
         );
     }
     if desktop.starts_with("/var/lib/snapd/") {
@@ -637,7 +636,7 @@ fn classify(
             "",
             None,
             if exec.is_empty() { desktop_text } else { exec },
-            Removal::Unavailable("Remove it from your Nix profile or configuration."),
+            Removal::Unavailable(tr!("apps-remove-nix")),
         );
     }
     if exec.to_ascii_lowercase().ends_with(".appimage") {
@@ -649,7 +648,7 @@ fn classify(
         let removal = if in_home(Path::new(&exec), home) {
             Removal::Files(files)
         } else {
-            Removal::Unavailable("Ask an administrator to remove it.")
+            Removal::Unavailable(tr!("apps-remove-admin"))
         };
         return details(
             Source::AppImage,
@@ -692,7 +691,7 @@ fn classify(
         "",
         None,
         desktop_text,
-        Removal::Unavailable("The system installed it. Ask an administrator to remove it."),
+        Removal::Unavailable(tr!("apps-remove-system")),
     )
 }
 
@@ -748,6 +747,6 @@ pub fn uninstall(app: &AppEntry) -> Result<(), String> {
         Removal::Files(files) => files.iter().try_for_each(|file| {
             std::fs::remove_file(file).map_err(|error| format!("{}: {error}", file.display()))
         }),
-        Removal::Unavailable(reason) => Err(reason.to_string()),
+        Removal::Unavailable(reason) => Err(reason.clone()),
     }
 }

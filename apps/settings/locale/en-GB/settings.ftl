@@ -63,3 +63,12 @@ routes-tunnel = Tunnel
 # $number (Number) - the peer's position, counting from 1.
 routes-peer = Peer { $number }
 routes-network = Network
+
+## Applications (launch and removal messages in apps.rs)
+
+# $name (String) - the application's display name.
+apps-launch-failed = Could not open “{ $name }”. Check that it is still installed, then try again.
+apps-remove-store = Remove it from the store you installed it from.
+apps-remove-nix = Remove it from your Nix profile or configuration.
+apps-remove-admin = Ask an administrator to remove it.
+apps-remove-system = The system installed it. Ask an administrator to remove it.
