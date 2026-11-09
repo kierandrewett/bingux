@@ -675,3 +675,9 @@ ui-files-cmd-show-as-grid = Show as grid
 ui-files-cmd-zoom = Larger, smaller, actual size
 ui-files-cmd-sort-by = Sort by name, size, type, date
 ui-files-cmd-reverse-order = Reverse the order
+
+## Files: drives, mounts and ejecting.
+# Toast after a drive is safe to remove. $label is the drive's name.
+ui-files-drive-safe-to-remove = { $label } is safe to remove.
+# Toast when a drive is busy. $label is the drive's name.
+ui-files-drive-busy = { $label } is busy. Close the files on it and try again.
