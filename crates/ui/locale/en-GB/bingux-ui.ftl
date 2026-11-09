@@ -564,3 +564,44 @@ ui-files-props-changed-failed = Changed { $count ->
     [one] { $count } item
    *[other] { $count } items
 }; { $failed } could not be changed
+# $reason (String) - why the file would not open
+ui-files-chooser-open-failed = Could not open the file. { $reason }
+# $count (Number) - files that would be replaced
+ui-files-chooser-replace-title = { $count ->
+    [one] Replace file?
+   *[other] Replace files?
+}
+# $name (String) - the existing file's name
+ui-files-chooser-replace-body-one = A file called “{ $name }” already exists in this folder. Replacing it overwrites its contents.
+# $count (Number) - files that would be replaced
+ui-files-chooser-replace-body = { $count } files with these names already exist in this folder. Replacing them overwrites their contents.
+ui-files-chooser-cancel = Cancel
+ui-files-chooser-replace = Replace
+ui-files-chooser-back = Back
+ui-files-chooser-forward = Forward
+ui-files-chooser-parent = Parent folder
+ui-files-chooser-home = Home
+ui-files-chooser-go-to-location = Go to location…
+ui-files-chooser-search = Search
+ui-files-chooser-search-tooltip = Search (Ctrl+F)
+ui-files-chooser-hidden = Show hidden files
+ui-files-chooser-show-preview = Show preview pane
+ui-files-chooser-preview-tooltip = Preview pane (Alt+P)
+ui-files-chooser-reload = Reload
+ui-files-chooser-partial = Loading stopped before every item was read. Reload to see them all.
+ui-files-chooser-no-new-trash = Nothing can be made in the Trash
+ui-files-chooser-new-folder = New folder
+ui-files-chooser-empty-trash = Empty Trash
+ui-files-chooser-show-list = Show a list
+ui-files-chooser-show-grid = Show a grid
+ui-files-chooser-view-options = View options
+ui-files-chooser-show-as-list = Show as list
+ui-files-chooser-show-as-grid = Show as grid
+ui-files-chooser-main-menu = Main menu
+ui-files-chooser-sort-name = Sort by name
+ui-files-chooser-sort-size = Sort by size
+ui-files-chooser-sort-type = Sort by type
+ui-files-chooser-sort-modified = Sort by modified
+ui-files-chooser-reverse-order = Reverse order
+ui-files-chooser-file-name = File name
+ui-files-chooser-file-type = File type
