@@ -1,25 +1,105 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs>
-        <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#99c1f1"/>
-            <stop offset="1" stop-color="#62a0ea"/>
-        </linearGradient>
-        <linearGradient id="paper" x1="0" x2="0" y1="0" y2="1">
+        <linearGradient id="pv-paper" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stop-color="#ffffff"/>
             <stop offset="1" stop-color="#ebeae8"/>
         </linearGradient>
+        <linearGradient id="pv-sky" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#62a0ea"/>
+            <stop offset="1" stop-color="#99c1f1"/>
+        </linearGradient>
+        <linearGradient id="pv-dusk" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffbe6f"/>
+            <stop offset="1" stop-color="#f66151"/>
+        </linearGradient>
+        <linearGradient id="pv-hill-far" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#8ff0a4"/>
+            <stop offset="1" stop-color="#57e389"/>
+        </linearGradient>
+        <linearGradient id="pv-hill" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#33d17a"/>
+            <stop offset="1" stop-color="#26a269"/>
+        </linearGradient>
+        <radialGradient id="pv-sun" cx="0.4" cy="0.35" r="0.65">
+            <stop offset="0" stop-color="#f9f06b"/>
+            <stop offset="1" stop-color="#f6d32d"/>
+        </radialGradient>
+        <linearGradient id="pv-rim" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#c0bfbc"/>
+            <stop offset="1" stop-color="#9a9996"/>
+        </linearGradient>
+        <filter height="1.4" id="pv-soft" width="1.4" x="-0.2" y="-0.2">
+            <feGaussianBlur stdDeviation="1.5"/>
+        </filter>
+        <clipPath id="pv-window">
+            <rect height="64" width="84" x="18" y="47"/>
+        </clipPath>
+        <clipPath id="pv-lens">
+            <circle cx="82" cy="77" r="18"/>
+        </clipPath>
+        <!-- The landscape on the top print, in the print's own frame. -->
+        <g id="pv-scene">
+            <g clip-path="url(#pv-window)">
+                <rect fill="url(#pv-sky)" height="64" width="84" x="18" y="47"/>
+                <circle cx="87" cy="71" fill="url(#pv-sun)" r="7"/>
+                <path d="M29 66a4.5 4.5 0 0 1 4.5-6 7 7 0 0 1 13-1.5 4.5 4.5 0 0 1 4 7.5z" fill="#ffffff" opacity="0.92"/>
+                <path d="M18 83c8-8 18-11 28-7s16 6 26 4 18 2 30 7v24H18z" fill="url(#pv-hill-far)"/>
+                <path d="M18 111V97c10-5 22-6 32-1s22 2 30-2 12-3 22 0v17z" fill="url(#pv-hill)"/>
+            </g>
+        </g>
     </defs>
-    <!-- A sheet standing behind: the document. -->
-    <rect fill="#9a9996" height="92" rx="8" width="72" x="40" y="14"/>
-    <rect fill="url(#paper)" height="92" rx="8" width="72" x="40" y="11"/>
-    <g fill="#c0bfbc">
-        <rect height="5" rx="2.5" width="44" x="54" y="26"/>
-        <rect height="5" rx="2.5" width="32" x="54" y="38"/>
+    <!-- One soft shadow under the whole stack. -->
+    <g fill="#000000" filter="url(#pv-soft)" opacity="0.26">
+        <rect height="84" rx="3" transform="translate(0 3) rotate(-9 52 55)" width="66" x="19" y="13"/>
+        <rect height="66" rx="3" transform="translate(0 3) rotate(8 72 68)" width="86" x="29" y="35"/>
+        <rect height="74" rx="3" transform="translate(0 3) rotate(-5 60 79)" width="94" x="13" y="42"/>
     </g>
-    <!-- A picture in front: the sky, a sun and two hills. -->
-    <rect fill="#1a5fb4" height="76" rx="10" width="92" x="12" y="40"/>
-    <rect fill="url(#sky)" height="70" rx="7" width="86" x="15" y="43"/>
-    <circle cx="82" cy="66" fill="#f9f06b" r="9"/>
-    <path d="M15 113V92l22-18 24 22 14-12 26 20v9a7 7 0 0 1-7 7H22a7 7 0 0 1-7-7z" fill="#26a269"/>
+    <!-- At the back: a document page, since Preview opens any file. -->
+    <rect fill="#c0bfbc" height="84" rx="3" transform="translate(0 1.5) rotate(-9 52 55)" width="66" x="19" y="13"/>
+    <g transform="rotate(-9 52 55)">
+        <rect fill="url(#pv-paper)" height="84" rx="3" width="66" x="19" y="13"/>
+        <rect fill="#ffffff" height="1" rx="0.5" width="58" x="23" y="13.5"/>
+        <rect fill="#1c71d8" height="5" rx="2.5" width="30" x="28" y="21"/>
+        <g fill="#c0bfbc">
+            <rect height="3" rx="1.5" width="48" x="28" y="31"/>
+            <rect height="3" rx="1.5" width="40" x="28" y="38"/>
+            <rect height="3" rx="1.5" width="46" x="28" y="45"/>
+        </g>
+    </g>
+    <!-- In the middle: a print of a dusk sky. -->
+    <rect fill="#c0bfbc" height="66" rx="3" transform="translate(0 1.5) rotate(8 72 68)" width="86" x="29" y="35"/>
+    <g transform="rotate(8 72 68)">
+        <rect fill="url(#pv-paper)" height="66" rx="3" width="86" x="29" y="35"/>
+        <rect fill="#ffffff" height="1" rx="0.5" width="78" x="33" y="35.5"/>
+        <rect fill="url(#pv-dusk)" height="56" width="76" x="34" y="40"/>
+    </g>
+    <!-- On top: a landscape print with a white border. -->
+    <rect fill="#9a9996" height="74" rx="3" transform="translate(0 1.5) rotate(-5 60 79)" width="94" x="13" y="42"/>
+    <g transform="rotate(-5 60 79)">
+        <rect fill="url(#pv-paper)" height="74" rx="3" width="94" x="13" y="42"/>
+        <rect fill="#ffffff" height="1.2" rx="0.6" width="86" x="17" y="42.5"/>
+        <use href="#pv-scene"/>
+        <rect fill="none" height="64" opacity="0.18" stroke="#241f31" stroke-width="0.6" width="84" x="18" y="47"/>
+    </g>
+    <!-- The loupe's shadow on the print. -->
+    <g fill="#000000" filter="url(#pv-soft)" opacity="0.32">
+        <circle cx="85" cy="82" r="22.5"/>
+        <rect height="11" rx="5.5" transform="rotate(45 85 82)" width="30" x="107" y="76.5"/>
+    </g>
+    <!-- The handle, then the lens with the scene enlarged under it. -->
+    <g transform="translate(82 77) rotate(45)">
+        <rect fill="#3d3846" height="11" rx="5.5" width="30" x="22" y="-5.5"/>
+        <rect fill="#ffffff" height="2" opacity="0.2" rx="1" width="20" x="28" y="-3.5"/>
+        <rect fill="#9a9996" height="9" rx="1.5" width="5" x="20" y="-4.5"/>
+    </g>
+    <g clip-path="url(#pv-lens)">
+        <g transform="translate(82 77) scale(1.6) translate(-82 -77)">
+            <rect fill="url(#pv-paper)" height="74" rx="3" transform="rotate(-5 60 79)" width="94" x="13" y="42"/>
+            <use href="#pv-scene" transform="rotate(-5 60 79)"/>
+        </g>
+        <path d="M68 80a14.5 14.5 0 0 1 12-17" fill="none" opacity="0.5" stroke="#ffffff" stroke-linecap="round" stroke-width="3"/>
+    </g>
+    <circle cx="82" cy="77" fill="none" r="20" stroke="url(#pv-rim)" stroke-width="5"/>
+    <circle cx="82" cy="77" fill="none" opacity="0.4" r="22.5" stroke="#5e5c64" stroke-width="0.8"/>
 </svg>

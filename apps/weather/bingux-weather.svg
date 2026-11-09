@@ -1,44 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs>
-        <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#62a0ea"/>
-            <stop offset="1" stop-color="#3584e4"/>
+        <linearGradient id="wx-sky" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#5ab8f8"/>
+            <stop offset="1" stop-color="#2a7ee6"/>
         </linearGradient>
-        <radialGradient id="sun" cx="0.4" cy="0.35" r="0.75">
-            <stop offset="0" stop-color="#fff0a0"/>
-            <stop offset="1" stop-color="#ffab2e"/>
-        </radialGradient>
-        <linearGradient id="cloud" x1="0" x2="0" y1="0" y2="1">
+        <linearGradient id="wx-sun" x1="0" x2="0" y1="24" y2="60" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ffe55c"/>
+            <stop offset="1" stop-color="#ffbe1a"/>
+        </linearGradient>
+        <!-- White almost to the base; a very light cool tint only on the underside. -->
+        <linearGradient id="wx-cloud" x1="0" x2="0" y1="46" y2="94" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="1" stop-color="#d6e0ee"/>
+            <stop offset="0.62" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#e2ebf7"/>
         </linearGradient>
-        <clipPath id="panel">
+        <clipPath id="wx-panel">
             <rect height="104" rx="16" width="104" x="12" y="8"/>
         </clipPath>
     </defs>
-    <!-- The lower edge of the panel, as the Adwaita app icons draw depth. -->
-    <rect fill="#1a5fb4" height="104" rx="16" width="104" x="12" y="16"/>
-    <rect fill="url(#sky)" height="104" rx="16" width="104" x="12" y="8"/>
-    <rect fill="#ffffff" height="1.5" opacity="0.7" rx="0.75" width="88" x="20" y="8.5"/>
-    <g clip-path="url(#panel)">
-        <!-- The sun, with its rays, behind the cloud. -->
-        <g stroke="#ffbf33" stroke-linecap="round" stroke-width="5">
-            <path d="M84 20v-4M84 52v4M52 36h4M112 36h-4M61.4 13.4l2.8 2.8M106.6 58.6l-2.8-2.8M106.6 13.4l-2.8 2.8M61.4 58.6l2.8-2.8"/>
+    <!-- The lower edge of the panel at the set's depth, in a lighter blue so it stays airy. -->
+    <rect fill="#1c5fc0" height="104" rx="16" width="104" x="12" y="16"/>
+    <rect fill="url(#wx-sky)" height="104" rx="16" width="104" x="12" y="8"/>
+    <g clip-path="url(#wx-panel)">
+        <rect fill="#ffffff" height="1.5" opacity="0.5" rx="0.75" width="80" x="24" y="9"/>
+        <!-- The sun, with a crisp halo, behind the cloud. -->
+        <circle cx="82" cy="42" r="29" fill="#fff6c4" opacity="0.12"/>
+        <circle cx="82" cy="42" r="23" fill="#fff6c4" opacity="0.24"/>
+        <circle cx="82" cy="42" r="18" fill="url(#wx-sun)"/>
+        <!-- A crisp offset shadow lifts the cloud off the sky. -->
+        <g fill="#0b4fae" opacity="0.14">
+            <rect height="18" width="36" x="44" y="80"/>
+            <circle cx="44" cy="80" r="18"/>
+            <circle cx="58" cy="72" r="22"/>
+            <circle cx="80" cy="84" r="14"/>
         </g>
-        <circle cx="84" cy="36" r="17" fill="url(#sun)"/>
-        <!-- The cloud's shadow, then the cloud. -->
-        <g fill="#1a5fb4" opacity="0.25" transform="translate(0 3)">
-            <circle cx="46" cy="82" r="16"/>
-            <circle cx="66" cy="72" r="22"/>
-            <circle cx="88" cy="84" r="15"/>
-            <rect height="22" rx="11" width="76" x="28" y="80"/>
-        </g>
-        <g fill="url(#cloud)">
-            <circle cx="46" cy="82" r="16"/>
-            <circle cx="66" cy="72" r="22"/>
-            <circle cx="88" cy="84" r="15"/>
-            <rect height="22" rx="11" width="76" x="28" y="80"/>
+        <!-- The cloud: overlapping circles on a flat, round-ended base. -->
+        <g fill="url(#wx-cloud)">
+            <rect height="18" width="36" x="44" y="76"/>
+            <circle cx="44" cy="76" r="18"/>
+            <circle cx="58" cy="68" r="22"/>
+            <circle cx="80" cy="80" r="14"/>
         </g>
     </g>
 </svg>
