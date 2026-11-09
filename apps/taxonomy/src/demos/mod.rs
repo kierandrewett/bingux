@@ -5,6 +5,7 @@ pub mod buttons;
 pub mod common;
 pub mod containers;
 pub mod data;
+pub mod documents;
 pub mod feedback;
 pub mod files;
 pub mod formats;

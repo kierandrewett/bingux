@@ -1891,6 +1891,175 @@ must not key the body by tab. The contract:
 - Tests: `files::tab_tests` (pass-by-pass) and `scripts/files-shift.py` (real
   window, every frame).
 
+## Documents
+
+`bingux_ui::document` is what an app that opens, edits and saves files shares:
+open, save and save as, the unsaved mark, closing with unsaved work, drafts
+and recovery after a crash, a file that another program changes, the recent
+documents, and the scene the app comes back to. The app holds the content (a
+rope, a picture, a table); the document holds the file. The taxonomy shows it
+under Files > Documents, with every dialog live.
+
+### Make the manager
+
+Call `use_documents` once in the window root, inside the `OverlayHost`. Say how
+to make the content of a document, and how to keep tabs in step with the list:
+
+```rust
+let documents = use_documents(
+    DocumentsConfig::new("bingux-text-editor", "Text Editor")
+        .mime("text/plain")
+        .filter(Filter::new("Text files").mime("text/*")),
+    |init| Rc::new(EditorContent::new(init)),   // init.title, .path, .app_value, .origin
+    move |event| match event {
+        DocumentEvent::Opened(document) => open_tab(document.id()),
+        DocumentEvent::Reveal(document) => select_tab(document.id()),
+        DocumentEvent::Closed(id) => close_tab(id),
+    },
+);
+use_document_title(documents, "Text Editor");     // "• notes.txt – Text Editor"
+```
+
+`Documents` and `Document` are `Copy`: put them in closures. `documents.list()`
+is the open documents in order and a read of it redraws when it changes, so a
+tab strip can be drawn from it. Tell it which one is showing with
+`documents.set_current(Some(document))`: the window title and the scene follow.
+
+The app's side of one document is `DocumentContent`:
+
+```rust
+impl DocumentContent for EditorContent {
+    // UI thread: copy, and put the encoding in the closure, which runs on a worker.
+    fn snapshot(&self) -> DocumentSnapshot {
+        let text = self.rope.borrow().clone();
+        DocumentSnapshot::encode(move || encode(&text).map_err(|e| e.advice()))
+    }
+    // UI thread: show the file's bytes. Not an edit: mark_edited in here is ignored.
+    fn load(&self, bytes: Vec<u8>, reason: LoadReason) { /* Open, Reload, Recover */ }
+    // The handle, once it exists: call document.mark_edited() when the content changes.
+    fn attached(&self, document: Document) { *self.document.borrow_mut() = Some(document); }
+}
+```
+
+Reads and writes are owned bytes handed to and from a worker: **nothing here
+blocks the UI thread**, and an app never reads or writes the file itself.
+`Document::mark_edited()` is cheap (it counts the edit and schedules a draft),
+so call it for every edit. `set_edited(false)` is for an undo that went back to
+the saved point. `set_app_value(&value)` stores one JSON value of the app's per
+document (a caret, a language, a zoom) that is kept in drafts and in the scene
+and comes back in `DocumentInit::app_value`. `set_scroll(x, y)` does the same
+for the scroll position.
+
+### What a person gets
+
+| They do                                | What happens                                                                                                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open (`open_dialog`, a recent, a path) | The Bingux file chooser, or the path. The file is read on a worker; the document shows `Phase::Loading` until then. A file already open is shown, not opened twice.         |
+| Edit                                   | `UNSAVED_MARK` (a bullet) goes before the name in the tab (`display_title`) and the window title (`use_document_title`).                                                    |
+| Save                                   | Atomic: a hidden file in the same folder, flushed, renamed over the old one, which keeps its mode; a link is written through. A document with no file asks where (Save as). |
+| Save as                                | The chooser, then the save; only then does the document belong to the new file (the old one is untouched when the save fails).                                              |
+| Close a document                       | A document with unsaved changes asks: **Save** (default), **Discard**, **Cancel**.                                                                                          |
+| Close the window                       | The same question for all unsaved documents ("Save changes to 3 documents?"), whichever way the window closes (below).                                                      |
+| Start the app after a crash            | "Recover unsaved work?": **Recover** (default), **Discard**, **Not now** (Escape; deletes nothing).                                                                         |
+| Another program changes the file       | Unedited: read again, with a toast. Edited: "changed on disk": **Keep my version** (default) or **Reload**.                                                                 |
+| The file is deleted or moved           | The document stays open and becomes unsaved, so closing it asks; saving writes the file again.                                                                              |
+
+A save that fails says why and offers what can work: the drive is full (Try
+again, Save as), no permission, the folder gone or the drive read-only (Save
+as). A save that finds the file changed since it was read (a program wrote
+between the watch and the save) asks before replacing it. Saves that follow
+each other never share a temporary file, and an edit made while the bytes are
+being written leaves the document unsaved (the document compares the revision
+it saved with the revision it has).
+
+### The dialogs
+
+They are in `document::dialogs`, each a function that builds a `Dialog` and
+tells one callback which response was chosen, so an app with a flow of its own
+can show the same dialogs. The rules they keep: a dialog that can lose work
+defaults to the answer that keeps it; Escape is the answer that changes
+nothing; a response that loses work is destructive and never focused; the
+buttons say what happens (never Yes, No, OK). `Documents` shows them one at a
+time (a dialog that finds another open waits for it), and one about a document
+that closed meanwhile is not asked.
+
+### Drafts
+
+A document with unsaved changes writes a draft three seconds after the last
+edit (`autosave_after`): the content (`<id>.draft`) and a record
+(`<id>.json`: title, path, the file's stamp, the app's value, the scroll), both
+written atomically, in `$XDG_STATE_HOME/<app-id>/drafts/`. Saving, discarding
+and reloading delete it, and a draft that is being written when that happens
+gives up. A record names the process that wrote it (its id and start time, so a
+reused id is not taken for it), so a second window or copy never offers the
+draft its sibling is using. A draft with no record or a record with no content
+is a torn write and is removed; so are those older than 30 days. Recovering
+brings the document back **unsaved**, with the app's value, and compares the
+file with the stamp it had: if it changed meanwhile, the "changed on disk"
+question follows.
+
+### Files that change under a document
+
+`FileWatch` watches the **folder** (inotify through `notify`), because most
+programs save by renaming a new file over the old one. A burst of events is
+waited out (120 ms of quiet), then the file's `Stamp` (modification time to the
+nanosecond, size, inode) is compared with what the document knows, so an event
+that changed nothing reports nothing, and the document's own saves are
+acknowledged and not reported. Where inotify cannot be used (the watch limit,
+a network share) the document compares stamps when the window is focused
+again (`documents.check_changes()`, which an app may call itself).
+
+### Recent documents
+
+Every open and save is added to `recently-used.xbel`, the list Files, the
+Bingux file chooser and GTK and Qt programs share. The file is read, one
+bookmark changed and the whole replaced atomically, so other programs'
+bookmarks, their application entries and the time a file was first added are
+kept. A list cut off in the middle of a bookmark keeps its whole bookmarks; a
+stray byte does not cost the list; a list that cannot be read is not written
+over. `documents.recent_menu()` is the "Open Recent" menu: the documents **this
+app** registered, newest first, that still exist (a file that was opened and is
+gone is forgotten). `document::recents` has the functions for an app that wants
+the list itself.
+
+### The scene
+
+`use_scene_state()` (which `use_documents` calls) keeps what an app comes back
+to in `$XDG_STATE_HOME/<app-id>/scene.json` (`BINGUX_SCENE_FILE` names another
+file): the window's size, the documents that were open (path, the one that was
+showing, scroll, the app's value, the draft if it had unsaved work) and values
+of the app's own by name (`scene.set_value("zoom", &1.25)`). It is read by
+`Application::run` before the window exists, and written by a worker half a
+second after the last change and once more when the window closes. Only the
+first window of the process keeps it. `Application::remember_window()` opens
+the window at its old size. After a crash the plan merges the scene and the
+drafts: each scene document that had a draft comes back from the draft, the
+others from their files, in order, and drafts the scene did not mention follow.
+A file that was open and is gone is left out without a dialog.
+
+### The close guard
+
+Every way a window closes goes through one question first: the compositor's
+close button and Alt+F4 (winit's close request), the window's Close button and
+Ctrl+W (`MainWindow::close`). `use_documents` registers a guard for its window
+(`document::guard`); the window stays open while the person answers, and the
+guard closes it itself afterwards. A Cancel forgets the request: the next close
+asks again. An app's File > Quit calls `documents.request_close()`.
+
+### Tests and captures
+
+`DocumentsConfig::sandboxed(dir)` keeps drafts and recents under `dir`, so a
+test or a documentation capture touches nothing of the person's. The scene is
+per thread, and `BINGUX_DRAFTS_DIR`, `BINGUX_SCENE_FILE` name other files for a
+whole process. `document::documents_tests` drives the manager in the headless
+runner (open, edit, save, an edit that races a save, close and each answer,
+another program changing, deleting or replacing a file, recovery of each
+kind, the scene, the close guard); the building blocks have tests of the
+failures: a drive that fills half way, a permission error, a folder that
+vanishes between the write and the rename, a file replaced during a save,
+eight saves of one file at once, a recents list that is cut off, has garbage
+around it or a byte that is not text, and torn or corrupt drafts.
+
 ## Search
 
 `bingux_ui::search` is the search every Bingux app shares. An app describes

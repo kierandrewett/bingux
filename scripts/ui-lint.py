@@ -346,6 +346,14 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/preview/render_tests.rs": "test fixtures: generated media files and the ffmpeg that makes them, written before the headless window mounts",
     "crates/ui/src/nav/slide_users_tests.rs": "test: reads the source tree to list the slide users, no window",
     "crates/ui/src/preview/host_link.rs": "the supervisor thread spawns and reaps the helper process and polls it there; the UI reads a Feed, never these calls",
+    "crates/ui/src/document/io.rs": "opens, reads and saves a document's file; called only on a worker (spawn_blocking) by the document manager",
+    "crates/ui/src/document/write.rs": "the atomic save: temporary file, flush, rename; called only on a worker",
+    "crates/ui/src/document/stamp.rs": "reads a file's metadata; called only on a worker",
+    "crates/ui/src/document/watch.rs": "the file watch: inotify through notify and a thread of its own that waits out a burst of events; the UI reads a Feed",
+    "crates/ui/src/document/drafts.rs": "the drafts folder; every call is on a worker (spawn_blocking or spawn_detached) by the document manager",
+    "crates/ui/src/document/recents.rs": "recently-used.xbel; every call is on a worker (spawn_blocking or spawn_detached) by the document manager",
+    "crates/ui/src/document/scene.rs": "the scene file: read once in Application::run before the window exists, written by a worker half a second after the last change",
+    "crates/ui/src/document/documents_tests.rs": "test fixtures: files, drafts a crash left and the changes another program makes, made before or beside the headless window and never in render",
 }
 
 

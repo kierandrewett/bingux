@@ -58,6 +58,7 @@ pub struct Application {
     usage: String,
     normalise: Option<fn(&std::ffi::OsStr) -> String>,
     about: Option<crate::about::AppInfo>,
+    remember_window: bool,
 }
 
 impl Application {
@@ -78,6 +79,7 @@ impl Application {
             transparent: false,
             normalise: None,
             about: None,
+            remember_window: false,
         }
     }
 
@@ -139,6 +141,15 @@ impl Application {
         self
     }
 
+    /// Open the window at the size it was closed with, as the document scene
+    /// ([`crate::document::SceneState`]) kept it. The first run uses
+    /// [`Application::size`]. A size that no longer fits is left to the
+    /// compositor to clamp.
+    pub fn remember_window(mut self) -> Self {
+        self.remember_window = true;
+        self
+    }
+
     /// Turn the command line's argument into the text of an address before
     /// anything reads it, in this copy and in the copy it is handed to. An
     /// application whose addresses name files makes a relative path absolute
@@ -170,6 +181,8 @@ impl Application {
         );
         let scheme = table.scheme().to_string();
         let _ = IDENTITY.set((self.app_id.clone(), self.title));
+        // What the window comes back to is read before the window exists.
+        crate::document::preload_scene(&self.app_id);
         tune_allocator();
         // Panics are never fatal: the panic hook, the failure log and the
         // relaunch plan exist before the first window and the first thread.
@@ -295,7 +308,10 @@ impl Application {
         );
         crate::about::read_facts();
 
-        let (width, height) = self.size;
+        let (width, height) = match crate::document::loaded_window_size() {
+            Some(size) if self.remember_window => size,
+            _ => self.size,
+        };
         let (min_width, min_height) = self.min_size;
         let title = self.title;
         let app_id = self.app_id.clone();
@@ -370,7 +386,8 @@ impl Blueprint {
         .with_title(self.title)
         .with_app_id(self.app_id.clone())
         .with_size(f64::from(size.0), f64::from(size.1))
-        .with_min_size(f64::from(self.min_size.0), f64::from(self.min_size.1));
+        .with_min_size(f64::from(self.min_size.0), f64::from(self.min_size.1))
+        .with_on_close(|_, id| close_requested(id));
         // An alpha channel is not enough: freya clears the canvas to the window's background
         // (white by default) before it draws, so a root drawn at 0.4 opacity would be mixed with
         // white, not with the windows under it. The clear must be transparent too.
@@ -445,12 +462,7 @@ async fn open_window_under<T: 'static>(
     let cell = SeedCell(Rc::new(RefCell::new(Some(
         Box::new(seed) as Box<dyn std::any::Any>
     ))));
-    let mut window = blueprint
-        .window(initial, size, Some(cell))
-        .with_on_close(|_, id| {
-            crate::layers::with_stack(|stack| stack.close(u64::from(id)));
-            freya_winit::config::CloseDecision::Close
-        });
+    let mut window = blueprint.window(initial, size, Some(cell));
     if let Some(parent) = parent {
         window = window.with_parent(parent);
     }
@@ -488,6 +500,18 @@ pub fn use_window_seed<T: Clone + 'static>() -> Option<T> {
             .and_then(|seed| seed.downcast::<T>().ok())
             .map(|seed| *seed)
     })
+}
+
+/// What a window's close request (the compositor's close button, Alt+F4) does:
+/// a window whose documents hold unsaved work asks first and closes itself
+/// when it has been answered; any other window goes, and leaves the window
+/// stack.
+fn close_requested(id: freya::winit::window::WindowId) -> freya_winit::config::CloseDecision {
+    if crate::document::guard::must_wait(u64::from(id)) {
+        return freya_winit::config::CloseDecision::KeepOpen;
+    }
+    crate::layers::with_stack(|stack| stack.close(u64::from(id)));
+    freya_winit::config::CloseDecision::Close
 }
 
 /// The one place a bingux-ui process starts its event loop. It builds the
