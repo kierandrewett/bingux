@@ -49,6 +49,7 @@ use crate::controls::capture::{CaptureEvent, Phase, use_capture};
 use crate::controls::progress::{SpinnerSize, spinner};
 use crate::controls::{icon_button, search_field, segmented, text_field};
 use crate::icons::Icon;
+use crate::shell::panel::{Panel, PanelKind, PanelTrigger};
 use crate::shell::{MenuItem, menu_button, menu_item};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -927,7 +928,6 @@ impl Component for Reading {
             let thumbs = thumb_layout(sizes);
             let shown = thumbs.visible(-(<(i32, i32)>::from(side_scroll).1 as f32), side_viewport.read().1);
             let thumb_key = THUMB_KEY | ((THUMB_WIDTH * display as f32).round() as u32);
-            let jump_to = jump_to.clone();
             let rows: Vec<Element> = (0..thumbs.len())
                 .map(|page| {
                     let height = thumbs.heights[page];
@@ -938,6 +938,7 @@ impl Component for Reading {
                     let handle = caches.borrow_mut().renders.best(page, thumb_key).map(|(handle, _)| handle);
                     let on_current = page == current;
                     let jump_to = jump_to.clone();
+                    let mut close_sheet = sidebar;
                     let picture = {
                         let paper = rect()
                             .width(Size::px(THUMB_WIDTH))
@@ -950,7 +951,12 @@ impl Component for Reading {
                     };
                     Element::from(
                         row.tw(&tokens, &[flex_col(), items(Align::Center), gap(S1)])
-                            .on_press(move |_| jump_to(page))
+                            .on_press(move |_| {
+                                jump_to(page);
+                                if compact {
+                                    close_sheet.set(false);
+                                }
+                            })
                             .child(rect().tw(&tokens, &[rounded(Radius::Inner), if on_current { bg(Paint::Selection) } else { bg(Paint::Transparent) }, p(S1)]).child(picture))
                             .child(CAPTION.in_ink(if on_current { Ink::Text } else { Ink::Muted }).label(&tokens, (page + 1).to_string()).max_lines(1)),
                     )
@@ -969,6 +975,7 @@ impl Component for Reading {
                             let page = entry.page;
                             let here = page != u32::MAX && page as usize == current;
                             let jump_to = jump_to.clone();
+                            let mut close_sheet = sidebar;
                             let title = if entry.title.is_empty() { "Untitled".to_owned() } else { entry.title.clone() };
                             Element::from(
                                 rect()
@@ -981,6 +988,9 @@ impl Component for Reading {
                                     .on_press(move |_| {
                                         if page != u32::MAX {
                                             jump_to(page as usize);
+                                            if compact {
+                                                close_sheet.set(false);
+                                            }
                                         }
                                     })
                                     .child(rect().width(Size::flex(1.0)).child(BODY.in_ink(if page == u32::MAX { Ink::Muted } else { Ink::Text }).label(&tokens, title).max_lines(2))),
@@ -1008,7 +1018,6 @@ impl Component for Reading {
                 rect()
                     .width(if compact { Size::fill() } else { Size::px(width) })
                     .height(Size::fill())
-                    .maybe(compact, |sheet| sheet.position(Position::new_absolute().left(0.0).top(0.0)))
                     .tw(&tokens, &[bg(Paint::Sidebar), flex_row()])
                     .on_sized(move |event: Event<SizedEventData>| {
                         let mut side_viewport = side_viewport;
@@ -1018,8 +1027,18 @@ impl Component for Reading {
                     .child(rect().tw(&tokens, &[w(Dim::Hairline), h_full(), bg(Paint::Separator)])),
             )
         });
-        // A phone has no room for a docked column: the pages sheet floats over the stage.
-        let (docked, sheet) = if compact { (None, thumbs) } else { (thumbs, None) };
+        // A phone has no room for a docked column: the pages list is a choice sheet
+        // over the stage (the shell's Panel), and a tap on a page closes it.
+        let (docked, sheet) = match thumbs {
+            Some(list) if compact => {
+                let mut close = sidebar;
+                let panel = Panel::new(PanelKind::Choice, true, PanelTrigger::Pointer((0.0, 0.0)), vec![list])
+                    .title("Pages")
+                    .on_dismiss(EventHandler::new(move |_: ()| close.set(false)));
+                (None, Some(Element::from(panel)))
+            }
+            other => (other, None),
+        };
         let body: Element = match &now.load {
             Load::Failed { code, message } => {
                 let retry = matches!(code, ErrorCode::Internal | ErrorCode::NotFound).then(|| self.on_retry.clone());
