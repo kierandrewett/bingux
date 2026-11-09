@@ -295,7 +295,7 @@ fn ignore_error(text: &str) -> Option<String> {
     split_ignore(text)
         .iter()
         .any(|entry| entry.chars().any(char::is_whitespace))
-        .then(|| "Separate hosts with commas. A host has no spaces.".to_string())
+        .then(|| "Separate hosts with commas. Hosts cannot contain spaces.".to_string())
 }
 
 fn pac_error(text: &str) -> Option<String> {
@@ -494,10 +494,14 @@ impl Component for ProxyPage {
         match loaded {
             None => page_column()
                 .child(PageHead::new())
-                .child(status(Status::Loading("Reading proxy settings.".into()))),
-            Some(Err(error)) => page_column()
-                .child(PageHead::new())
-                .child(status(Status::Error(error.0)).action("Try again", move |_| reload(model))),
+                .child(status(Status::Loading("Reading proxy settings…".into()))),
+            Some(Err(error)) => page_column().child(PageHead::new()).child(
+                status(Status::Error(super::plain(
+                    &error.0,
+                    "Could not read the proxy settings. Try again.",
+                )))
+                .action("Try again", move |_| reload(model)),
+            ),
             Some(Ok(config)) => page_column().child(ProxyForm { initial: config }),
         }
     }
@@ -555,7 +559,10 @@ impl Component for ProxyForm {
                         if let Err((error, before)) = result {
                             let mut shown = model;
                             shown.set(Some(Ok(before)));
-                            overlays.toast(error.0);
+                            overlays.toast(super::plain(
+                                &error.0,
+                                "Could not save the proxy settings. Try again.",
+                            ));
                         }
                     },
                 );
@@ -662,7 +669,7 @@ impl Component for ProxyForm {
                         form_field("Hosts", ignore)
                             .hint(
                                 "Addresses that skip the proxy. Separate them with commas. \
-                                 Networks can be written like 192.168.0.0/16.",
+                                 Write a network as 192.168.0.0/16.",
                             )
                             .monospace()
                             .multiline(3)

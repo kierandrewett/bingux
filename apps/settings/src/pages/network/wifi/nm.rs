@@ -528,21 +528,20 @@ pub fn rescan() {
     }
 }
 
-/// The sentence for a failed join: what probably went wrong, then what
-/// `nmcli` said, verbatim.
+/// The sentence for a failed join: what probably went wrong and what to do.
+/// What `nmcli` said goes to the log.
 pub fn join_error(error: &CommandError) -> String {
     let said = error.0.trim();
     let lower = said.to_lowercase();
-    let reason = if lower.contains("secrets were required") || lower.contains("(7)") {
-        "The password was not accepted."
+    if lower.contains("secrets were required") || lower.contains("(7)") {
+        "The password was not accepted. Check it and try again.".to_string()
     } else if lower.contains("timeout expired") {
-        "The network did not answer in time."
+        "The network did not answer in time. Move closer and try again.".to_string()
     } else if lower.contains("no network with ssid") || lower.contains("could not be found") {
-        "The network is out of range."
+        "The network is out of range. Move closer and try again.".to_string()
     } else {
-        return said.to_string();
-    };
-    format!("{reason} ({said})")
+        super::super::plain(said, "Could not join the network. Try again.")
+    }
 }
 
 /// The UUIDs of every Wi-Fi profile, to tell the one a failed join created.
@@ -915,15 +914,17 @@ connection.metered:unknown
             "Connection activation failed: (7) Secrets were required, but not provided.".into(),
         );
         let text = join_error(&wrong);
-        assert!(text.starts_with("The password was not accepted."));
-        assert!(text.contains("Secrets were required"));
+        assert_eq!(
+            text,
+            "The password was not accepted. Check it and try again."
+        );
         assert!(
             join_error(&CommandError("Timeout expired (90 seconds)".into()))
                 .starts_with("The network did not answer in time.")
         );
         assert_eq!(
             join_error(&CommandError("Something else broke.".into())),
-            "Something else broke."
+            "Could not join the network. Try again."
         );
     }
     /// Deletes the throwaway profile even when an assertion fails.

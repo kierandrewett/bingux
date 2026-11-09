@@ -286,6 +286,16 @@ pub fn set_airplane_mode(on: bool) -> Result<(), CommandError> {
         QUICK,
     )
     .map(|_| ())
+    .map_err(|error| {
+        CommandError(super::plain(
+            &error.0,
+            if on {
+                "Could not turn on airplane mode. Try again."
+            } else {
+                "Could not turn off airplane mode. Try again."
+            },
+        ))
+    })
 }
 
 /// Turn the Wi-Fi radio on or off.
@@ -294,7 +304,18 @@ pub fn set_wifi_radio(on: bool) -> Result<(), CommandError> {
     if fake_scenario().is_some() || std::env::var_os("BINGUX_SETTINGS_FAKE_WIFI").is_some() {
         return Ok(());
     }
-    nmcli(&["radio", "wifi", if on { "on" } else { "off" }], QUICK).map(|_| ())
+    nmcli(&["radio", "wifi", if on { "on" } else { "off" }], QUICK)
+        .map(|_| ())
+        .map_err(|error| {
+            CommandError(super::plain(
+                &error.0,
+                if on {
+                    "Could not turn on Wi-Fi. Try again."
+                } else {
+                    "Could not turn off Wi-Fi. Try again."
+                },
+            ))
+        })
 }
 
 /// Parse `nmcli -t -f <fields> device show` output. Each device's block

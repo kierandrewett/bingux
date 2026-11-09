@@ -47,10 +47,10 @@ impl PinTask {
 
     fn done(self) -> &'static str {
         match self {
-            Self::Unlock | Self::Puk => "SIM unlocked.",
-            Self::Enable => "SIM lock is on.",
-            Self::Disable => "SIM lock is off.",
-            Self::Change => "PIN changed.",
+            Self::Unlock | Self::Puk => "SIM unlocked",
+            Self::Enable => "SIM lock turned on",
+            Self::Disable => "SIM lock turned off",
+            Self::Change => "PIN changed",
         }
     }
 
@@ -232,9 +232,9 @@ impl Component for PinBody {
 pub fn attempts_text(task: PinTask, left: u32) -> String {
     let what = if task == PinTask::Puk { "PUK" } else { "PIN" };
     match left {
-        0 => format!("No {what} attempts are left."),
-        1 => format!("1 {what} attempt left."),
-        many => format!("{many} {what} attempts left."),
+        0 => format!("No {what} attempts left"),
+        1 => format!("1 {what} attempt left"),
+        many => format!("{many} {what} attempts left"),
     }
 }
 
@@ -244,13 +244,10 @@ mod tests {
 
     #[test]
     fn attempts_are_counted_in_words() {
-        assert_eq!(attempts_text(PinTask::Unlock, 3), "3 PIN attempts left.");
-        assert_eq!(attempts_text(PinTask::Unlock, 1), "1 PIN attempt left.");
-        assert_eq!(attempts_text(PinTask::Puk, 10), "10 PUK attempts left.");
-        assert_eq!(
-            attempts_text(PinTask::Unlock, 0),
-            "No PIN attempts are left."
-        );
+        assert_eq!(attempts_text(PinTask::Unlock, 3), "3 PIN attempts left");
+        assert_eq!(attempts_text(PinTask::Unlock, 1), "1 PIN attempt left");
+        assert_eq!(attempts_text(PinTask::Puk, 10), "10 PUK attempts left");
+        assert_eq!(attempts_text(PinTask::Unlock, 0), "No PIN attempts left");
     }
 
     #[test]

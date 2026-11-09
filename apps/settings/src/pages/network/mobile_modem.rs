@@ -45,7 +45,7 @@ fn friendly(message: String) -> String {
     } else if lower.contains("simpin") && lower.contains("required") {
         "The SIM needs its PIN first.".to_string()
     } else {
-        message
+        super::super::plain(&message, "The modem did not respond. Try again.")
     }
 }
 
@@ -516,7 +516,7 @@ fn technology_of(names: &[String]) -> Option<&'static str> {
 
 fn parse_json(output: &str) -> Result<Value, CommandError> {
     serde_json::from_str(output)
-        .map_err(|_| CommandError("ModemManager gave an answer that cannot be read.".into()))
+        .map_err(|_| CommandError("Could not read the modem. Try again.".into()))
 }
 
 /// The ids of the modems in `mmcli -J -L` output.
@@ -551,7 +551,7 @@ pub fn parse_modem(output: &str) -> Result<Modem, CommandError> {
     let value = parse_json(output)?;
     let modem = value
         .get("modem")
-        .ok_or_else(|| CommandError("ModemManager did not describe a modem.".into()))?;
+        .ok_or_else(|| CommandError("Could not read the modem. Try again.".into()))?;
     let generic = |key: &str| text(modem, &["generic", key]);
     let id = object_id(&text(modem, &["dbus-path"])).unwrap_or_default();
 
@@ -619,7 +619,7 @@ pub fn parse_sim(output: &str) -> Result<Sim, CommandError> {
     let value = parse_json(output)?;
     let sim = value
         .get("sim")
-        .ok_or_else(|| CommandError("ModemManager did not describe a SIM.".into()))?;
+        .ok_or_else(|| CommandError("Could not read the SIM. Try again.".into()))?;
     Ok(Sim {
         id: object_id(&text(sim, &["dbus-path"])).unwrap_or_default(),
         operator: text(sim, &["properties", "operator-name"]),
@@ -804,7 +804,7 @@ pub fn puk_error(text: &str) -> Result<(), String> {
     if text.len() == 8 && text.bytes().all(|byte| byte.is_ascii_digit()) {
         Ok(())
     } else {
-        Err("The PUK has 8 digits.".to_string())
+        Err("Enter the 8-digit PUK.".to_string())
     }
 }
 
@@ -842,7 +842,9 @@ pub mod fake {
 
     pub fn scan(scenario: &str) -> Result<Vec<Carrier>, CommandError> {
         if scenario == "none" {
-            return Err(CommandError("No modems were found".into()));
+            return Err(CommandError(
+                "No mobile modem found. Check that it is connected.".into(),
+            ));
         }
         // A real scan takes a minute or more; a few seconds is enough to
         // see the searching state.
@@ -1382,7 +1384,10 @@ mod tests {
             friendly("Couldn't send PIN to the SIM: 'GDBus.Error:org.freedesktop.ModemManager1.Error.MobileEquipment.IncorrectPassword: Incorrect password'".into()),
             "That PIN is not right."
         );
-        assert_eq!(friendly("Something else".into()), "Something else");
+        assert_eq!(
+            friendly("Something else".into()),
+            "The modem did not respond. Try again."
+        );
     }
 
     #[test]

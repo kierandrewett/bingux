@@ -18,6 +18,9 @@ const SERVICE: &str = "org.freedesktop.NetworkManager";
 const SETTINGS_PATH: &str = "/org/freedesktop/NetworkManager/Settings";
 const CONNECTION: &str = "org.freedesktop.NetworkManager.Settings.Connection";
 
+/// What the person reads when the VPN settings cannot be understood.
+const UNREADABLE: &str = "Could not read the VPN settings. Try again in a moment.";
+
 fn busctl(args: &[&str]) -> Result<String, String> {
     let output = Command::new("busctl")
         .arg("--system")
@@ -25,11 +28,11 @@ fn busctl(args: &[&str]) -> Result<String, String> {
         .output()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => {
-                "Peers cannot be read because busctl is not installed.".to_string()
+                "Could not read the VPN peers. Restart the computer and try again.".to_string()
             }
             _ => {
                 eprintln!("bingux-settings: busctl could not start: {error}");
-                "Could not read the VPN settings. Try again in a moment.".to_string()
+                UNREADABLE.to_string()
             }
         })?;
     if output.status.success() {
@@ -37,11 +40,8 @@ fn busctl(args: &[&str]) -> Result<String, String> {
     }
     let text = String::from_utf8_lossy(&output.stderr);
     let message = text.trim().trim_start_matches("Call failed: ").trim();
-    Err(if message.is_empty() {
-        "NetworkManager did not answer.".to_string()
-    } else {
-        message.to_string()
-    })
+    eprintln!("bingux-settings: busctl failed: {message}");
+    Err(UNREADABLE.to_string())
 }
 
 /// The D-Bus object path of the connection with this UUID.
@@ -106,7 +106,10 @@ pub fn update(path: &str, settings: &Value) -> Result<(), String> {
 
 /// The first complete type in `signature` and what follows it.
 fn split_type(signature: &str) -> Result<(&str, &str), String> {
-    let bad = || format!("The D-Bus type {signature:?} is not supported.");
+    let bad = || {
+        eprintln!("bingux-settings: unsupported D-Bus type {signature:?}");
+        UNREADABLE.to_string()
+    };
     let first = signature.chars().next().ok_or_else(bad)?;
     match first {
         'a' => {
@@ -137,7 +140,10 @@ fn split_type(signature: &str) -> Result<(&str, &str), String> {
 /// `busctl --json=short` prints type `signature`: arrays and structs as
 /// arrays, dictionaries as objects, variants as `{"type": .., "data": ..}`.
 fn encode(signature: &str, value: &Value, out: &mut Vec<String>) -> Result<(), String> {
-    let mismatch = || format!("A value does not match its D-Bus type {signature:?}.");
+    let mismatch = || {
+        eprintln!("bingux-settings: a value does not match its D-Bus type {signature:?}");
+        UNREADABLE.to_string()
+    };
     match signature.chars().next().ok_or_else(mismatch)? {
         's' | 'o' | 'g' => out.push(value.as_str().ok_or_else(mismatch)?.to_string()),
         'b' => out.push(value.as_bool().ok_or_else(mismatch)?.to_string()),
@@ -159,7 +165,8 @@ fn encode(signature: &str, value: &Value, out: &mut Vec<String>) -> Result<(), S
             let body = &signature[2..signature.len() - 1];
             let (key, value_type) = split_type(body)?;
             if key != "s" {
-                return Err(format!("A dictionary keyed by {key:?} is not supported."));
+                eprintln!("bingux-settings: unsupported dictionary key {key:?}");
+                return Err(UNREADABLE.to_string());
             }
             let map = value.as_object().ok_or_else(mismatch)?;
             out.push(map.len().to_string());

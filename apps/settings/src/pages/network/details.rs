@@ -623,10 +623,16 @@ impl Component for TechnicalDetails {
         let column = rect().tw_layout(&[flex_col(), w_full(), gap(S6)]);
         match loaded.read().clone() {
             None => column.child(skeleton_rows(&["==--", "----"])),
-            Some(Err(error)) => column.child(status(Status::Error(error.0)).action("Try again", {
-                let name = self.connection.clone();
-                move |_| reload(loaded, name.clone())
-            })),
+            Some(Err(error)) => column.child(
+                status(Status::Error(super::plain(
+                    &error.0,
+                    "Could not read the connection details. Try again.",
+                )))
+                .action("Try again", {
+                    let name = self.connection.clone();
+                    move |_| reload(loaded, name.clone())
+                }),
+            ),
             Some(Ok(details)) => column.children(view(&details)),
         }
     }
@@ -665,9 +671,12 @@ impl Component for DetailsPage {
         let page = page_column().child(PageHead::new());
         match found {
             None | Some(Ok(Some(_))) => {
-                page.child(status(Status::Loading("Reading connection.".into())))
+                page.child(status(Status::Loading("Reading connection…".into())))
             }
-            Some(Err(error)) => page.child(status(Status::Error(error.0))),
+            Some(Err(error)) => page.child(status(Status::Error(super::plain(
+                &error.0,
+                "Could not read the connection. Try again.",
+            )))),
             Some(Ok(None)) => page.child(TechnicalDetails {
                 connection: self.connection.clone(),
             }),
