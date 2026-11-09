@@ -598,26 +598,39 @@ impl Actions {
             let selection =
                 selected.map(|text| bingux_text::stats::count(&bingux_text::Rope::from_str(&text)));
             let mut lines = vec![
-                format!("Words: {}", group(stats.words)),
-                format!("Characters: {}", group(stats.characters)),
-                format!(
-                    "Characters without spaces: {}",
-                    group(stats.characters_no_spaces)
+                tr!("text-editor-stats-words", count = group(stats.words)),
+                tr!(
+                    "text-editor-stats-characters",
+                    count = group(stats.characters)
                 ),
-                format!("Lines: {}", group(stats.lines)),
-                format!("Paragraphs: {}", group(stats.paragraphs)),
-                format!("Reading time: {}", minutes(stats.reading_minutes())),
-                format!("Size: {}", size(stats.bytes)),
+                tr!(
+                    "text-editor-stats-characters-no-spaces",
+                    count = group(stats.characters_no_spaces)
+                ),
+                tr!("text-editor-stats-lines", count = group(stats.lines)),
+                tr!(
+                    "text-editor-stats-paragraphs",
+                    count = group(stats.paragraphs)
+                ),
+                tr!(
+                    "text-editor-stats-reading-time",
+                    time = minutes(stats.reading_minutes())
+                ),
+                tr!("text-editor-stats-size", size = size(stats.bytes)),
             ];
             if let Some(selection) = selection {
-                lines.push(format!(
-                    "Selected: {} words, {} characters",
-                    group(selection.words),
-                    group(selection.characters)
+                lines.push(tr!(
+                    "text-editor-stats-selected",
+                    words = group(selection.words),
+                    characters = group(selection.characters)
                 ));
             }
             overlays.show_dialog(
-                dialog(format!("Statistics of “{title}”"), lines.join("\n")).cancel("OK"),
+                dialog(
+                    tr!("text-editor-stats-title", title = title),
+                    lines.join("\n"),
+                )
+                .cancel(tr!("text-editor-ok")),
             );
         });
     }
@@ -637,17 +650,22 @@ fn group(value: usize) -> String {
 
 fn minutes(count: usize) -> String {
     match count {
-        0 => "None".into(),
-        1 => "1 minute".into(),
-        count => format!("{count} minutes"),
+        0 => tr!("text-editor-none"),
+        count => tr!("text-editor-minutes", count = count),
     }
 }
 
 fn size(bytes: usize) -> String {
     match bytes {
-        bytes if bytes < 1000 => format!("{bytes} bytes"),
-        bytes if bytes < 1_000_000 => format!("{:.1} kB", bytes as f64 / 1000.0),
-        bytes => format!("{:.1} MB", bytes as f64 / 1_000_000.0),
+        bytes if bytes < 1000 => tr!("text-editor-size-bytes", count = bytes),
+        bytes if bytes < 1_000_000 => tr!(
+            "text-editor-size-kilobytes",
+            size = format!("{:.1}", bytes as f64 / 1000.0)
+        ),
+        bytes => tr!(
+            "text-editor-size-megabytes",
+            size = format!("{:.1}", bytes as f64 / 1_000_000.0)
+        ),
     }
 }
 
@@ -927,9 +945,13 @@ impl Component for Content {
                     .map(document::display_name)
                     .unwrap_or_default();
                 let text = if *len > 8 << 20 {
-                    format!("Opening “{what}” ({})…", size(*len as usize))
+                    tr!(
+                        "text-editor-opening-size",
+                        name = what,
+                        size = size(*len as usize)
+                    )
                 } else {
-                    format!("Opening “{what}”…")
+                    tr!("text-editor-opening", name = what)
                 };
                 rect()
                     .tw(
@@ -942,9 +964,9 @@ impl Component for Content {
             }
             Phase::Failed(message) => {
                 let retry_path = path.clone();
-                status_page(Icon::DialogWarning, "Could not open this file")
+                status_page(Icon::DialogWarning, tr!("text-editor-open-failed-title"))
                     .description(message.clone())
-                    .action("Try again", move |_| {
+                    .action(tr!("text-editor-try-again"), move |_| {
                         if let Some(path) = retry_path.clone() {
                             load(doc_id, path, None, false, None, None);
                         }
@@ -953,9 +975,9 @@ impl Component for Content {
             }
             Phase::Ready if notices.contains(&Notice::Binary) => {
                 let retry_path = path.clone();
-                status_page(Icon::ApplicationXGeneric, "This file is not text")
-                    .description("It holds data that is not text. Saving it here can damage it.")
-                    .action("Open anyway", move |_| {
+                status_page(Icon::ApplicationXGeneric, tr!("text-editor-binary-title"))
+                    .description(tr!("text-editor-binary-description"))
+                    .action(tr!("text-editor-open-anyway"), move |_| {
                         if let Some(path) = retry_path.clone() {
                             document::update(doc_id, |doc| doc.notices.clear());
                             load(doc_id, path, None, true, None, None);
@@ -1254,15 +1276,21 @@ fn ask_to_close(actions: Actions, tab_id: u64) {
     let save_close: Rc<dyn Fn()> = Rc::new(close.clone());
     actions.overlays.show_dialog(
         dialog(
-            format!("Save changes to “{name}”?"),
-            "If you do not save, your changes are lost.",
+            tr!("text-editor-close-title", name = name),
+            tr!("text-editor-close-description"),
         )
         .icon(DialogIcon::Warning)
-        .response("Discard", ResponseKind::Destructive, move |_: ()| close())
-        .cancel("Cancel")
-        .response("Save", ResponseKind::Suggested, move |_: ()| {
-            actions.save(doc_id, Some(save_close.clone()))
-        })
+        .response(
+            tr!("text-editor-discard"),
+            ResponseKind::Destructive,
+            move |_: ()| close(),
+        )
+        .cancel(tr!("text-editor-cancel"))
+        .response(
+            tr!("text-editor-save"),
+            ResponseKind::Suggested,
+            move |_: ()| actions.save(doc_id, Some(save_close.clone())),
+        )
         .default_action("save"),
     );
 }
@@ -1274,7 +1302,7 @@ fn open_link(url: &str, overlays: Overlays) {
         .iter()
         .any(|scheme| url.starts_with(scheme))
     {
-        overlays.toast("Only web and mail links open from the preview");
+        overlays.toast(tr!("text-editor-link-not-web"));
         return;
     }
     let url = url.to_owned();
@@ -1303,9 +1331,9 @@ fn notice_banner(
         }
     };
     let banner_: Banner = match notice {
-        Notice::Reloaded => banner(format!("“{name}” changed on disk and was read again."))
+        Notice::Reloaded => banner(tr!("text-editor-reloaded", name = name))
             .kind(BannerKind::Info)
-            .action("Undo", move |_| {
+            .action(tr!("text-editor-undo"), move |_| {
                 if let Some(handle) = document::handle(id) {
                     handle.update(|editor| editor.undo());
                 }
@@ -1314,40 +1342,38 @@ fn notice_banner(
                 });
             })
             .dismissible(dismiss(Notice::Reloaded)),
-        Notice::ChangedOnDisk => banner(format!(
-            "“{name}” changed on disk. Your changes are not saved."
-        ))
-        .kind(BannerKind::Warning)
-        .action("Read again", move |_| {
-            document::update(id, |doc| {
-                doc.notices
-                    .retain(|notice| *notice != Notice::ChangedOnDisk)
-            });
-            actions.reload(id, None);
-        })
-        .action("Keep mine", dismiss(Notice::ChangedOnDisk)),
-        Notice::Deleted => banner(format!("“{name}” was moved or deleted."))
+        Notice::ChangedOnDisk => banner(tr!("text-editor-changed-on-disk", name = name))
             .kind(BannerKind::Warning)
-            .action("Save", move |_| actions.save(id, None))
+            .action(tr!("text-editor-read-again"), move |_| {
+                document::update(id, |doc| {
+                    doc.notices
+                        .retain(|notice| *notice != Notice::ChangedOnDisk)
+                });
+                actions.reload(id, None);
+            })
+            .action(tr!("text-editor-keep-mine"), dismiss(Notice::ChangedOnDisk)),
+        Notice::Deleted => banner(tr!("text-editor-deleted", name = name))
+            .kind(BannerKind::Warning)
+            .action(tr!("text-editor-save"), move |_| actions.save(id, None))
             .dismissible(dismiss(Notice::Deleted)),
-        Notice::ReadOnly => banner("You can read this file but cannot save changes to it.")
+        Notice::ReadOnly => banner(tr!("text-editor-read-only"))
             .kind(BannerKind::Info)
-            .action("Save as…", move |_| actions.save_as(id, None))
+            .action(tr!("text-editor-save-as"), move |_| {
+                actions.save_as(id, None)
+            })
             .dismissible(dismiss(Notice::ReadOnly)),
-        Notice::Mixed(legacy) => banner(format!(
-            "This file mixes UTF-8 with {} text. Saving writes it all as UTF-8.",
-            encoding::encoding_label(legacy)
+        Notice::Mixed(legacy) => banner(tr!(
+            "text-editor-mixed-encoding",
+            encoding = encoding::encoding_label(legacy)
         ))
         .kind(BannerKind::Info)
         .dismissible(dismiss(notice.clone())),
-        Notice::Lossy => {
-            banner("Some characters do not fit this encoding and show as �. Saving replaces them.")
-                .kind(BannerKind::Warning)
-                .dismissible(dismiss(Notice::Lossy))
-        }
+        Notice::Lossy => banner(tr!("text-editor-lossy"))
+            .kind(BannerKind::Warning)
+            .dismissible(dismiss(Notice::Lossy)),
         Notice::MixedLineEndings => {
             if !modified {
-                banner("This file mixes line endings. Saving writes one kind.")
+                banner(tr!("text-editor-mixed-endings"))
                     .kind(BannerKind::Info)
                     .dismissible(dismiss(Notice::MixedLineEndings))
             } else {
@@ -1384,7 +1410,7 @@ fn tip(commands: bingux_ui::commands::Commands, id: &str, name: &str) -> String 
 fn recent_items(actions: Actions) -> Vec<MenuItem> {
     let recent = session::recent();
     if recent.is_empty() {
-        return vec![menu_item("No recent files", |_| {}).disabled()];
+        return vec![menu_item(tr!("text-editor-no-recent"), |_| {}).disabled()];
     }
     let mut items: Vec<MenuItem> = recent
         .iter()
@@ -1397,7 +1423,9 @@ fn recent_items(actions: Actions) -> Vec<MenuItem> {
         })
         .collect();
     items.push(menu_separator());
-    items.push(menu_item("Clear recent files", |_| session::clear_recent()));
+    items.push(menu_item(tr!("text-editor-clear-recent"), |_| {
+        session::clear_recent()
+    }));
     items
 }
 
