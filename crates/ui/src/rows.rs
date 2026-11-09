@@ -123,6 +123,8 @@ pub struct Row {
     /// Set by [`Row::disclosure`]: whether the content under this row is
     /// open, and what Left and Right ask for.
     disclosure: Option<(bool, EventHandler<bool>)>,
+    /// The options of a choice row, set by [`choice_row`], so [`Row::dropdown`] can rebuild it.
+    choice: Option<Choice>,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -159,7 +161,95 @@ pub fn row(title: impl Into<String>) -> Row {
         title_marks: None,
         subtitle_marks: None,
         disclosure: None,
+        choice: None,
     }
+}
+
+/// The options of a choice row, kept so [`Row::dropdown`] can rebuild its control.
+#[derive(Clone, PartialEq)]
+struct Choice {
+    options: Vec<(String, String)>,
+    selected: String,
+    on_select: EventHandler<String>,
+}
+
+impl Choice {
+    /// The control for these options: a segmented control for up to three short
+    /// options, otherwise a dropdown. `pinned` forces the dropdown.
+    fn control(&self, pinned: bool) -> Element {
+        let short = !pinned
+            && self.options.len() <= 3
+            && self
+                .options
+                .iter()
+                .all(|(_, label)| label.chars().count() <= 12);
+        if short {
+            segmented(self.options.clone(), &self.selected, self.on_select.clone()).into()
+        } else {
+            dropdown(
+                self.options.clone(),
+                self.selected.clone(),
+                self.on_select.clone(),
+            )
+            .min_width(Dim::Field)
+            .into()
+        }
+    }
+}
+
+/// Whether a value is a technical identifier that reads best in the monospace
+/// face: a MAC or BSSID, an IP address (optionally with a `/prefix`), a UUID or
+/// a base64 key such as a WireGuard key. Names, numbers with units and prose
+/// are not, so they stay in the proportional face. This is the one rule every
+/// read-only technical value uses.
+pub fn is_technical_value(value: &str) -> bool {
+    let value = value.trim();
+    if value.is_empty() || value.contains(char::is_whitespace) {
+        return false;
+    }
+    let address = value.split('/').next().unwrap_or(value);
+    is_mac(value) || is_ipv4(address) || is_ipv6(address) || is_uuid(value) || is_key(value)
+}
+
+fn is_mac(value: &str) -> bool {
+    let parts: Vec<&str> = value.split([':', '-']).collect();
+    parts.len() == 6
+        && parts
+            .iter()
+            .all(|part| part.len() == 2 && part.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn is_ipv4(value: &str) -> bool {
+    let parts: Vec<&str> = value.split('.').collect();
+    parts.len() == 4
+        && parts.iter().all(|part| {
+            !part.is_empty() && part.len() <= 3 && part.bytes().all(|b| b.is_ascii_digit())
+        })
+}
+
+fn is_ipv6(value: &str) -> bool {
+    value.matches(':').count() >= 2
+        && value
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == ':' || c == '.')
+}
+
+fn is_uuid(value: &str) -> bool {
+    let parts: Vec<&str> = value.split('-').collect();
+    let lengths = [8, 4, 4, 4, 12];
+    parts.len() == 5
+        && parts
+            .iter()
+            .zip(lengths)
+            .all(|(part, len)| part.len() == len && part.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn is_key(value: &str) -> bool {
+    value.len() >= 40
+        && value.ends_with('=')
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '/' || c == '=')
 }
 
 impl Row {
@@ -406,6 +496,33 @@ impl Row {
     /// line breaks wherever the line ends.
     pub fn mono_value(self, value: impl Into<String>) -> Self {
         self.with_value(value.into(), ValueKind::Mono)
+    }
+
+    /// Like [`Row::value`], but in the monospace face when the value is technical
+    /// (see [`is_technical_value`]). Use it where the kind of value is only known
+    /// at runtime, so every row of the same kind looks the same.
+    pub fn technical_value(self, value: impl Into<String>) -> Self {
+        let value = value.into();
+        if is_technical_value(&value) {
+            self.mono_value(value)
+        } else {
+            self.value(value)
+        }
+    }
+
+    /// A muted bar in place of a value that has not loaded yet, so the row
+    /// keeps its shape and the value arrives where the bar is.
+    pub fn provisional_value(self) -> Self {
+        self.trailing(crate::group::skeleton_value())
+    }
+
+    /// Pins a [`choice_row`] to a dropdown, even when its options would fit a
+    /// segmented control. Other rows are unchanged.
+    pub fn dropdown(self) -> Self {
+        let Some(choice) = self.choice.clone() else {
+            return self;
+        };
+        self.trailing(choice.control(true))
     }
 
     /// Like [`Row::value`] for a path, a URL or an identifier: a word too
@@ -1793,11 +1910,16 @@ pub fn choice_row(
     if let [(_, only)] = options.as_slice() {
         return row(title).value(only.clone());
     }
-    let short = options.len() <= 3 && options.iter().all(|(_, label)| label.chars().count() <= 12);
-    if short {
-        return row(title).trailing(segmented(options, selected, on_select));
+    let choice = Choice {
+        options,
+        selected: selected.to_string(),
+        on_select,
+    };
+    let line = row(title).trailing(choice.control(false));
+    Row {
+        choice: Some(choice),
+        ..line
     }
-    row(title).trailing(dropdown(options, selected, on_select).min_width(Dim::Field))
 }
 
 /// The selected state of one option in a radio group, set by [`radio_row`].

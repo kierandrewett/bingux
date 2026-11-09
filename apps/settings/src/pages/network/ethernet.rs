@@ -505,8 +505,8 @@ fn loading_page(tokens: crate::ui::Tokens, wired: &Wired) -> Element {
             ))
             .child(
                 Group::new(None::<String>)
-                    .row(row("IP address").mono_value("—"))
-                    .row(row("Speed").value("—")),
+                    .row(row("IP address").provisional_value())
+                    .row(row("Speed").provisional_value()),
             ),
         true,
     )
@@ -586,7 +586,7 @@ fn facts_group(ctx: NetCtx, device: &Device, owner: Owner) -> Group {
     if device.connected() && !unplugged(device) {
         let address = device.address4();
         if !address.is_empty() {
-            group = group.row(row("IP address").mono_value(address));
+            group = group.row(row("IP address").technical_value(address));
         }
         if let Some(speed) = device.speed {
             group = group.row(row("Speed").value(speed_text(speed)));
@@ -721,7 +721,7 @@ fn unconfigured_page(ctx: NetCtx, tokens: crate::ui::Tokens, wired: &Wired) -> E
     if device.connected() {
         let address = device.address4();
         if !address.is_empty() {
-            facts = facts.row(row("IP address").mono_value(address));
+            facts = facts.row(row("IP address").technical_value(address));
         }
         if let Some(speed) = device.speed {
             facts = facts.row(row("Speed").value(speed_text(speed)));

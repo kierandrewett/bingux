@@ -183,7 +183,7 @@ pub const SPLIT_BUTTON: &[Spec] = &[
 
 pub const ACTION_STRIP: &[Spec] = &[Spec::live("Three actions, one disabled", || {
     action_strip(vec![
-        strip_action(Icon::Delete, "Forget", |_| {}),
+        strip_action(Icon::Delete, "Forget", |_| {}).destructive(),
         strip_action(Icon::WindowClose, "Disconnect", |_| {}),
         strip_action(Icon::EmblemSystem, "Settings", |_| {}).enabled(false),
     ])

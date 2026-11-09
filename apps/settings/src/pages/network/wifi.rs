@@ -1035,9 +1035,12 @@ impl Component for WifiNetworkPage {
         }
         if let Some(saved) = profile {
             let forget = saved.clone();
-            actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
-                ui.confirm_forget(&forget, true)
-            }));
+            actions.push(
+                strip_action(Icon::UserTrash, "Forget", move |_| {
+                    ui.confirm_forget(&forget, true)
+                })
+                .destructive(),
+            );
         }
 
         let mut blocks = vec![hero];
@@ -1066,7 +1069,7 @@ impl Component for WifiNetworkPage {
             && let Some(device) = data.ov.wifi_device()
             && !device.address4().is_empty()
         {
-            info = info.row(row("IP address").mono_value(device.address4()));
+            info = info.row(row("IP address").technical_value(device.address4()));
         }
         if let Some(network) = network {
             info = info.row(row("Signal strength").value(format!(
@@ -1081,7 +1084,7 @@ impl Component for WifiNetworkPage {
                 info = info
                     .row(row("Security").value(network.security.label()))
                     .row(row("Frequency").value(or_dash(&network.band)))
-                    .row(row("Access point").mono_value(or_dash(&network.bssid)));
+                    .row(row("Access point").technical_value(or_dash(&network.bssid)));
             }
         }
         let owner = profile.map(|saved| Owner::Wifi {

@@ -886,6 +886,34 @@ impl Component for SkeletonRow {
     }
 }
 
+/// A muted bar standing in for a row's value while it loads (a count, an
+/// address, a name): the row keeps its width and height, and the value arrives
+/// in the same place.
+pub fn skeleton_value() -> Element {
+    SkeletonValue.into()
+}
+
+#[derive(PartialEq)]
+struct SkeletonValue;
+
+impl Component for SkeletonValue {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        crate::stage::use_provisional(true);
+        rect()
+            .tw(&tokens, &[w(Dim::SkeletonValue), h_full(), center()])
+            .child(rect().tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h(Dim::SkeletonLine),
+                    rounded(Radius::Mark),
+                    bg(Paint::Control),
+                ],
+            ))
+    }
+}
+
 /// A bar standing in for a caption line (a count, a hint under a list), in a
 /// box as tall as the real caption, so what follows it keeps its place.
 pub fn skeleton_caption() -> Element {

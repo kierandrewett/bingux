@@ -508,27 +508,22 @@ fn reload(loaded: Loaded, name: String) {
 }
 
 /// One row of a fact.
-fn fact(title: impl Into<String>, value: &str, mono: bool) -> Option<Element> {
+fn fact(title: impl Into<String>, value: &str) -> Option<Element> {
     if value.is_empty() {
         return None;
     }
-    let line = row(title);
-    Some(if mono {
-        line.mono_value(value).into()
-    } else {
-        line.value(value).into()
-    })
+    Some(row(title).technical_value(value).into())
 }
 
 /// A row for each item of a list, numbered when there are several.
-fn list_facts(rows: &mut Vec<Element>, title: &str, items: &[String], mono: bool) {
+fn list_facts(rows: &mut Vec<Element>, title: &str, items: &[String]) {
     for (index, item) in items.iter().enumerate() {
         let label = if items.len() > 1 {
             format!("{title} {}", index + 1)
         } else {
             title.to_string()
         };
-        rows.extend(fact(label, item, mono));
+        rows.extend(fact(label, item));
     }
 }
 
@@ -539,17 +534,17 @@ fn family_group(title: &str, family: &Family, with_addresses: bool) -> Option<El
         return None;
     }
     let mut rows: Vec<Element> = Vec::new();
-    rows.extend(fact("Method", &family.method, false));
+    rows.extend(fact("Method", &family.method));
     if with_addresses {
-        list_facts(&mut rows, "Address", &family.addresses, true);
+        list_facts(&mut rows, "Address", &family.addresses);
     }
-    rows.extend(fact("Gateway", &family.gateway, true));
-    list_facts(&mut rows, "DNS server", &family.dns, true);
-    list_facts(&mut rows, "Search domain", &family.domains, false);
+    rows.extend(fact("Gateway", &family.gateway));
+    list_facts(&mut rows, "DNS server", &family.dns);
+    list_facts(&mut rows, "Search domain", &family.domains);
     for route in &family.routes {
         // The destination is the row's title, how it is reached its value.
         let (destination, how) = route.split_once(' ').unwrap_or((route, ""));
-        rows.extend(fact(format!("Route to {destination}"), how, true));
+        rows.extend(fact(format!("Route to {destination}"), how));
     }
     if rows.is_empty() {
         return None;
@@ -572,16 +567,16 @@ fn view(details: &Details) -> Vec<Element> {
     }
 
     let mut general: Vec<Element> = Vec::new();
-    general.extend(fact("Device", &details.device, false));
-    general.extend(fact("Type", &details.kind_label, false));
-    general.extend(fact("UUID", &details.uuid, true));
-    general.extend(fact("MAC address", &details.mac, true));
-    general.extend(fact("MTU", &details.mtu, false));
+    general.extend(fact("Device", &details.device));
+    general.extend(fact("Type", &details.kind_label));
+    general.extend(fact("UUID", &details.uuid));
+    general.extend(fact("MAC address", &details.mac));
+    general.extend(fact("MTU", &details.mtu));
     if let Some(wifi) = &details.wifi {
-        general.extend(fact("Access point", &wifi.bssid, true));
-        general.extend(fact("Band", &wifi.band, false));
-        general.extend(fact("Channel", &wifi.channel, false));
-        general.extend(fact("Security", &wifi.security, false));
+        general.extend(fact("Access point", &wifi.bssid));
+        general.extend(fact("Band", &wifi.band));
+        general.extend(fact("Channel", &wifi.channel));
+        general.extend(fact("Security", &wifi.security));
     }
     blocks.push(Group::titled("Technical details").rows(general).into());
 

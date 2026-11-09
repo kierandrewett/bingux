@@ -17,6 +17,7 @@ use crate::typography::{BODY, Ink};
 #[derive(PartialEq, Clone)]
 pub struct StripAction {
     icon: Icon,
+    destructive: bool,
     label: String,
     on_press: EventHandler<()>,
     enabled: bool,
@@ -33,12 +34,19 @@ pub fn strip_action(
         label: label.into(),
         on_press: on_press.into(),
         enabled: true,
+        destructive: false,
     }
 }
 
 impl StripAction {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// Marks the action as destructive: its icon and label take the danger ink.
+    pub fn destructive(mut self) -> Self {
+        self.destructive = true;
         self
     }
 }
@@ -92,7 +100,11 @@ impl Component for StripCell {
         let focus = use_focus(a11y_id);
         let action = &self.0;
         let enabled = action.enabled;
-        let ink = if enabled { Ink::Text } else { Ink::Muted };
+        let ink = match (enabled, action.destructive) {
+            (false, _) => Ink::Muted,
+            (true, true) => Ink::Danger,
+            (true, false) => Ink::Text,
+        };
         let on_press = action.on_press.clone();
         let on_key = on_press.clone();
         rect()

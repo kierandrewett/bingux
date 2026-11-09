@@ -189,6 +189,44 @@ pub const ROW: &[Spec] = &[
                 .into_element(),
         ])
     }),
+    Spec::forced("Technical values in monospace", || {
+        rows(vec![
+            row("Access point")
+                .technical_value("3C:22:FB:9A:10:4E")
+                .into_element(),
+            row("IP address")
+                .technical_value("192.168.1.20/24")
+                .into_element(),
+            row("Public key")
+                .technical_value("kQ2Vx7sGm1Lw0bR9tYc3NfHjUe8dZpAo4iIrWqCyTgE=")
+                .into_element(),
+            row("Network name")
+                .technical_value("Home network")
+                .into_element(),
+            row("Device").technical_value("wlan0").into_element(),
+        ])
+    }),
+    Spec::live("Choice pinned to a dropdown", || {
+        rows(vec![
+            choice_row(
+                "Default engine",
+                vec![
+                    ("ddg".into(), "DuckDuckGo".into()),
+                    ("web".into(), "Web".into()),
+                ],
+                "ddg",
+                |_| {},
+            )
+            .dropdown()
+            .into_element(),
+        ])
+    }),
+    Spec::forced("Provisional value while it loads", || {
+        rows(vec![
+            row("Address").provisional_value().into_element(),
+            row("Signal").provisional_value().into_element(),
+        ])
+    }),
     Spec::forced("Long text and wide script", || {
         rows(vec![
             row(LONG).subtitle(LONG).value("Value").into_element(),

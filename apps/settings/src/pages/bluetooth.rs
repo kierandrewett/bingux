@@ -763,9 +763,12 @@ fn device_strip(device: &Device, ctx: Ctx) -> Element {
     })];
     if device.paired {
         let forget = device.clone();
-        actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
-            confirm_forget(ctx, &forget)
-        }));
+        actions.push(
+            strip_action(Icon::UserTrash, "Forget", move |_| {
+                confirm_forget(ctx, &forget)
+            })
+            .destructive(),
+        );
     }
     action_strip(actions).into()
 }

@@ -1224,7 +1224,7 @@ pub static ENTRIES: &[Entry] = &[
         page: "Rows",
         api: "row(title).subtitle(text).second_line(text).selection_fill_only().value(text).badge(text).leading(Icon).leading_tone(Tone).leading_signal(level, secured).leading_avatar(user).leading_app(name).navigates().selected(bool).destructive().enabled(bool).trailing(element).trailing_control().context_menu(items); a switch, checkbox, dropdown or button as trailing(..) with navigates() draws a divider and a chevron target of its own",
         doc: "components",
-        covers: &["Row", "row"],
+        covers: &["Row", "row", "is_technical_value", "skeleton_value"],
         body: Body::States(containers::ROW),
     },
     Entry {

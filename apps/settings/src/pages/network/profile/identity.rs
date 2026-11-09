@@ -217,7 +217,7 @@ impl Component for IdentityBody {
             identity = identity.row(row("Name").value(page.saved.get("connection.id")));
             let bssid = page.saved.get("802-11-wireless.bssid");
             if !bssid.is_empty() {
-                identity = identity.row(row("BSSID").mono_value(bssid));
+                identity = identity.row(row("BSSID").technical_value(bssid));
             }
         }
 

@@ -881,6 +881,18 @@ When the trailing content of a row is a button (`action_button(..).compact()`, `
 
 A trailing `switch` sits `SWITCH_INSET` from the trailing edge (the row height less the switch height, halved: 18 px, 16 px at compact density), the distance it has above and below. Text, a `value`, a status icon, a checkbox and a `stepper` keep the `GUTTER`; a stepper is its own pill with an equal `S1` inset around its buttons. The taxonomy shows all of them under Button, "Compact, inside a row", and Row, "Trailing controls fill the row".
 
+### Technical values, pinned choices and loading
+
+A value that identifies something to a machine (an address, a key, a UUID) is set in the monospace face; a name or a sentence is not. `row(..).technical_value(text)` decides with one helper, `rows::is_technical_value`, so a page does not choose per row: a MAC, an IPv4 or IPv6 address with an optional prefix, a UUID or a key is monospace, and anything with a space in it is ordinary text. Network's address, key and BSSID rows use it. `row(..).mono_value(text)` still forces the face.
+
+`choice_row(..).dropdown()` pins a choice row to a dropdown even when its options would fit a segmented control. Settings' Default engine uses it so the control does not change shape with the number of engines.
+
+`row(..).provisional_value()` puts a muted skeleton bar in the trailing slot for a value that has not arrived yet, in the same place and the same height the value will take, so the row does not move when the text lands. It is the primitive; a page that reads a value later uses it while the read is pending.
+
+A Settings page that is loading shows a spinner centred over the veil only after 300 ms (`SPINNER_DELAY`). A page that loads sooner never flashes one.
+
+`StripAction::destructive()` sets an action strip item to the danger tone, as a destructive `Button` does. Bluetooth's Forget uses it, and the taxonomy's Action strip entry shows Forget in that tone.
+
 ### Banners and toasts: one notice
 
 A banner and a toast are the same component. `Banner` is the base: a pill with an optional leading icon, an optional title, a message that wraps, any number of quiet action buttons and an optional dismiss cross. `Toast` is a `Banner` that floats: `Toast::new(text)` builds a `Banner::new(text)` (neutral kind) and only adds what makes it float, so the pill, its colours and its buttons are drawn by one code path.

@@ -437,13 +437,13 @@ impl Component for VpnPage {
                     .and_then(|loaded| loaded.as_ref().ok())
                     .map(gateway_of)
                     .unwrap_or_default();
-                info = info.row(row("Server").mono_value(dash(server)));
+                info = info.row(row("Server").technical_value(dash(server)));
             }
         }
         if let Link::Connected(address) = &link
             && !address.is_empty()
         {
-            info = info.row(row("IP address").mono_value(address.clone()));
+            info = info.row(row("IP address").technical_value(address.clone()));
         }
         let owner = Owner::Vpn { name: name.clone() };
         info = info.row(usage::connection_usage_row(

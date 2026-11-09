@@ -272,7 +272,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 191] = [
+    pub const ALL: [Icon; 192] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
