@@ -25,17 +25,15 @@ pub(crate) fn spoken_time(seconds: f64) -> String {
         0
     };
     let (hours, minutes, secs) = (whole / 3600, whole / 60 % 60, whole % 60);
-    let part =
-        |id: &'static str, count: u64| crate::i18n::Message::new(id).arg("count", count).format();
     let mut parts = Vec::new();
     if hours > 0 {
-        parts.push(part("ui-media-spoken-hours", hours));
+        parts.push(crate::tr!("ui-media-spoken-hours", count = hours));
     }
     if minutes > 0 {
-        parts.push(part("ui-media-spoken-minutes", minutes));
+        parts.push(crate::tr!("ui-media-spoken-minutes", count = minutes));
     }
     if secs > 0 || parts.is_empty() {
-        parts.push(part("ui-media-spoken-seconds", secs));
+        parts.push(crate::tr!("ui-media-spoken-seconds", count = secs));
     }
     parts
         .into_iter()
