@@ -2758,7 +2758,7 @@ mod phone_fields {
     fn buttons_line(title: &'static str, size: (f32, f32)) -> (Area, Area, Area) {
         let mut shot = Snapshot::new(move || Buttons(title).into(), size);
         shot.settle(Duration::from_millis(500));
-        let found = |text: &'static str| {
+        let mut found = |text: &'static str| {
             shot.runner()
                 .find_many(|node, element| {
                     let shown: String = match Label::try_downcast(element) {
