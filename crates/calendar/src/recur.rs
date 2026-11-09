@@ -8,6 +8,30 @@
 //! the parts the crate leaves to the caller: the start always being the first
 //! occurrence, `UNTIL` read on the right clock, additions, exclusions and
 //! changed occurrences.
+//!
+//! # Failure modes
+//!
+//! Each row is a way recurrence goes wrong in a calendar, and the test in
+//! `recurrence_tests.rs` (or below) that holds it.
+//!
+//! | Failure | Test |
+//! | ------- | ---- |
+//! | Monthly on the 31st lands on a short month | `monthly_on_the_31st_skips_short_months` |
+//! | "Last Friday", "fourth Thursday", BYSETPOS | `monthly_on_the_last_friday`, `the_last_weekday_of_the_month_by_set_position`, `thanksgiving_is_the_fourth_thursday_of_november` |
+//! | A 29 February event in a common year | `yearly_on_the_29th_of_february_only_in_leap_years` |
+//! | WKST changes which weeks a fortnightly rule hits | `the_week_start_changes_a_fortnightly_rule` |
+//! | A start that does not match its own rule | `a_start_that_does_not_match_its_rule_is_still_the_first_occurrence` |
+//! | Clocks change: wall clock kept, a missing hour, a repeated hour, length in hours | `a_daily_event_keeps_its_wall_clock_across_the_change`, `an_occurrence_in_the_hour_that_does_not_exist_is_kept`, `an_occurrence_in_the_repeated_hour_is_shown_once`, `an_hour_long_event_is_an_hour_across_the_change`, `a_daily_event_in_the_new_york_gap_is_shifted_not_dropped` |
+//! | UNTIL in UTC on a zoned event; an all-day UNTIL; UNTIL before the start | `until_in_utc_is_read_on_the_events_clock`, `an_all_day_until_date_is_included`, `an_until_before_the_start_leaves_the_start` |
+//! | EXDATE and RDATE in UTC, as a bare date, or on the event's clock | `removed_and_added_occurrences`, `an_exdate_in_utc_removes_a_zoned_occurrence`, `an_exdate_with_only_a_date_removes_that_days_timed_occurrence` |
+//! | A changed occurrence is drawn where it moved to, not where it was | `a_changed_occurrence_is_where_it_moved_and_not_where_it_was` |
+//! | THISANDFUTURE shifts later occurrences | `this_and_future_changes_shift_every_later_occurrence` |
+//! | Another zone puts an event on another day | `a_zoned_event_is_on_another_day_in_another_zone`, `a_floating_event_is_the_same_wall_clock_in_every_zone` |
+//! | A multi-day event, seen from a window that starts inside it; a window that ends as it starts | `a_multi_day_event_shows_in_a_window_that_starts_inside_it`, `a_window_that_ends_when_an_event_starts_does_not_include_it` |
+//! | A rule from years ago, expanded in a far window; a runaway minutely rule; a rule that cannot be read | `a_rule_started_long_ago_expands_in_a_far_window`, `a_busy_minutely_rule_is_cut_short_not_endless`, `a_rule_that_cannot_be_read_leaves_one_event` |
+//! | Delete: this, this and following (counted, unbounded, the first), all | the `deleting_*` tests |
+//! | Edit: this (twice), all (moved, to another weekday, keeping changed ones), following (split, keeping exceptions, last of a counted series), stopping the repeat, a one-off | the `editing_*` tests and `an_edit_that_stops_a_series_from_repeating` |
+//! | A timed event over two days is a banner, an overnight one is not | `a_two_day_timed_event_is_a_banner_and_an_overnight_one_is_not` |
 
 use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc, Weekday};
 use rrule::{RRuleSet, Tz as RTz};

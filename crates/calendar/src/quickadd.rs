@@ -4,6 +4,23 @@
 //! that no phrase takes becomes the title. Nothing is guessed that the text
 //! does not say: with no date and no time there is no `start`, and the editor
 //! opens on the day being looked at.
+//!
+//! # Failure modes
+//!
+//! | Input | Result | Test |
+//! | ----- | ------ | ---- |
+//! | Nothing, or only spaces | No title, no start | `nothing_typed_is_nothing` |
+//! | "at" before a place and before a time | The place is the words after the first "at" that is not a time | `a_place_after_at`, `a_place_and_a_time_both_after_at` |
+//! | 12am and 12pm; 24-hour times | Midnight, noon; the time as written | `midnight_noon_and_the_twenty_four_hour_clock` |
+//! | A time already past today | Tomorrow | `a_time_with_no_date_is_today_or_tomorrow` |
+//! | A date already past this year | Next year | `a_past_date_is_next_year` |
+//! | Day first or month first numbers | By the setting | `numeric_dates_follow_the_order` |
+//! | A date and no time | All day | `a_date_alone_is_all_day` |
+//! | A range, a length | The end is set | `a_range_and_a_weekday`, `a_length` |
+//! | Repeats ("every weekday", "every other week") | An RRULE | `repeats` |
+//! | "next friday" said on a Friday | A week on | `next_friday_on_a_friday_is_a_week_on` |
+//! | Text with no phrase in it | The whole text is the title | `plain_text_has_no_time` |
+//! | A typographic apostrophe | Kept in the title | `a_typographic_apostrophe_stays_in_the_title` |
 
 use chrono::{Datelike, Duration, NaiveDate, NaiveDateTime, NaiveTime, Weekday};
 
@@ -1048,6 +1065,60 @@ mod tests {
         let q = parse("Buy milk", now(), false);
         assert_eq!(q.summary, "Buy milk");
         assert_eq!(q.start, None);
+    }
+
+    #[test]
+    fn nothing_typed_is_nothing() {
+        for text in ["", "   ", "\t"] {
+            let q = parse(text, now(), false);
+            assert_eq!(q.summary, "");
+            assert_eq!(q.start, None);
+            assert!(q.phrases.is_empty());
+        }
+    }
+
+    #[test]
+    fn a_place_and_a_time_both_after_at() {
+        let q = parse("Meet Jo at the pub at 5pm", now(), false);
+        assert_eq!(q.summary, "Meet Jo");
+        assert_eq!(q.location, "the pub");
+        assert_eq!(q.start, at(3, 12, 17, 0));
+    }
+
+    #[test]
+    fn midnight_noon_and_the_twenty_four_hour_clock() {
+        assert_eq!(
+            parse("Lunch 12pm tomorrow", now(), false).start,
+            at(3, 13, 12, 0)
+        );
+        assert_eq!(
+            parse("Run 12am tomorrow", now(), false).start,
+            at(3, 13, 0, 0)
+        );
+        assert_eq!(
+            parse("Gym 17:30 tomorrow", now(), false).start,
+            at(3, 13, 17, 30)
+        );
+    }
+
+    #[test]
+    fn next_friday_on_a_friday_is_a_week_on() {
+        let friday = NaiveDate::from_ymd_opt(2025, 3, 14)
+            .unwrap()
+            .and_hms_opt(10, 0, 0)
+            .unwrap();
+        let q = parse("Review next friday", friday, false);
+        assert_eq!(
+            q.start.unwrap().date(),
+            NaiveDate::from_ymd_opt(2025, 3, 21).unwrap()
+        );
+    }
+
+    #[test]
+    fn a_typographic_apostrophe_stays_in_the_title() {
+        let q = parse("Mum\u{2019}s birthday 3 april", now(), false);
+        assert_eq!(q.summary, "Mum\u{2019}s birthday");
+        assert!(q.all_day);
     }
 
     #[test]

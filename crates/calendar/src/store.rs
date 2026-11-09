@@ -5,6 +5,26 @@
 //! plain files `displayname` and `color` beside them. Another program can
 //! add, change or remove a file and the app follows (see [`Store::fingerprint`]).
 //!
+//! # Failure modes
+//!
+//! What can go wrong with a folder of files that other programs also write,
+//! what the store does, and the test that holds it.
+//!
+//! | Failure | What happens | Test |
+//! | ------- | ------------ | ---- |
+//! | First run: no folder at all | "Personal" is made | `a_first_run_makes_personal` |
+//! | A file that is not iCalendar | It is skipped with a warning; the other files load | `a_file_that_is_not_a_calendar_does_not_hide_the_others` |
+//! | The same UID in two files (a sync conflict, a copied file) | The first file read wins, the other is named in a warning, so a view never shows it twice | `a_uid_in_two_files_is_one_event` |
+//! | An event moved to another calendar | One copy is left | `moving_between_calendars_leaves_one_copy` |
+//! | No `displayname`, or a colour that is not a colour | The folder's name; no colour | `a_calendar_without_a_name_or_colour_still_loads` |
+//! | Files that are not events: a text file, a hidden folder, an `.etag` | Ignored | `other_files_and_hidden_folders_are_ignored` |
+//! | A `readonly` marker | The calendar is read-only for the app | `a_readonly_marker_makes_a_read_only_calendar` |
+//! | A crash while writing | A reader sees the old file or the new one, never half; no temporary file is left | `a_write_leaves_no_temporary_file` |
+//! | Another program changes a file | The fingerprint changes and the window reads again | `the_fingerprint_moves_when_a_file_does` |
+//! | A UID that is a path (`../x`) | The file name is made safe, so nothing is written outside the folder | `file_names_are_safe` |
+//! | Deleting an event whose file is already gone | Nothing happens, and no error | `deleting_what_is_not_there_is_fine` |
+//! | Importing a file twice | Events are replaced by UID, and counted as updated | `import_replaces_by_uid_and_counts` |
+//!
 //! ```text
 //! ~/.local/share/bingux-calendar/calendars/
 //!     personal/
@@ -246,6 +266,8 @@ impl Store {
             }
         }
         ids.sort();
+        // The file each UID was first read from.
+        let mut seen: std::collections::HashMap<String, String> = std::collections::HashMap::new();
         for id in ids {
             let folder = dir.join(&id);
             let name = read_trimmed(&folder.join("displayname")).unwrap_or_else(|| id.clone());
@@ -273,6 +295,10 @@ impl Store {
             };
             files.sort();
             for file in files {
+                let file_label = file
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default();
                 let name = file
                     .file_name()
                     .map(|n| n.to_string_lossy().into_owned())
@@ -290,6 +316,18 @@ impl Store {
                             .warnings
                             .extend(parsed.warnings.into_iter().map(|w| format!("{name}: {w}")));
                         for mut item in parsed.items {
+                            if let Some(first) = seen.get(&item.uid) {
+                                // A second file for an event already read: a
+                                // view must not draw it twice, and an edit
+                                // finds events by UID.
+                                if *first != file_label {
+                                    loaded.warnings.push(format!(
+                                        "{file_label} repeats an event that {first} already has, so it is left out."
+                                    ));
+                                }
+                                continue;
+                            }
+                            seen.insert(item.uid.clone(), file_label.clone());
                             // Keep the server's tag with the item.
                             item.etag = read_trimmed(&file.with_extension("etag"));
                             loaded.snapshot.items.push(Arc::new(item));
@@ -717,5 +755,102 @@ mod tests {
     #[test]
     fn file_names_are_safe() {
         assert_eq!(file_name("../evil/uid"), "_evil_uid.ics");
+    }
+
+    fn event_text(uid: &str, summary: &str) -> String {
+        format!(
+            "BEGIN:VCALENDAR\nVERSION:2.0\nBEGIN:VEVENT\nUID:{uid}\nSUMMARY:{summary}\nDTSTART:20250303T090000Z\nEND:VEVENT\nEND:VCALENDAR\n"
+        )
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_calendar_does_not_hide_the_others() {
+        let root = temp("garbage");
+        let store = Store::at(root.clone());
+        let _ = store.load();
+        let folder = store.calendar_dir(DEFAULT_CALENDAR);
+        fs::write(folder.join("good.ics"), event_text("good@test", "Good")).unwrap();
+        fs::write(folder.join("bad.ics"), "this is not a calendar").unwrap();
+        let loaded = store.load();
+        assert_eq!(loaded.snapshot.items.len(), 1);
+        assert_eq!(loaded.snapshot.items[0].event.summary, "Good");
+        assert!(loaded.warnings.iter().any(|w| w.starts_with("bad.ics")));
+    }
+
+    #[test]
+    fn a_uid_in_two_files_is_one_event() {
+        let store = Store::at(temp("twice"));
+        let _ = store.load();
+        let folder = store.calendar_dir(DEFAULT_CALENDAR);
+        fs::write(folder.join("a.ics"), event_text("same@test", "First")).unwrap();
+        fs::write(folder.join("b.ics"), event_text("same@test", "Second")).unwrap();
+        let loaded = store.load();
+        assert_eq!(loaded.snapshot.items.len(), 1);
+        assert_eq!(loaded.snapshot.items[0].event.summary, "First");
+        assert!(loaded.warnings.iter().any(|w| w.starts_with("b.ics")));
+    }
+
+    #[test]
+    fn a_calendar_without_a_name_or_colour_still_loads() {
+        let store = Store::at(temp("bare"));
+        let folder = store.calendar_dir("holidays");
+        fs::create_dir_all(&folder).unwrap();
+        fs::write(folder.join("color"), "not a colour").unwrap();
+        let calendars = store.load().snapshot.calendars;
+        assert_eq!(calendars.len(), 1);
+        assert_eq!(calendars[0].name, "holidays");
+        assert_eq!(calendars[0].colour, None);
+    }
+
+    #[test]
+    fn other_files_and_hidden_folders_are_ignored() {
+        let store = Store::at(temp("other"));
+        let _ = store.load();
+        let folder = store.calendar_dir(DEFAULT_CALENDAR);
+        fs::write(folder.join("notes.txt"), "not an event").unwrap();
+        fs::write(folder.join("x.etag"), "\"tag\"").unwrap();
+        fs::create_dir_all(store.calendars_dir().join(".trash")).unwrap();
+        let loaded = store.load();
+        assert_eq!(loaded.snapshot.calendars.len(), 1);
+        assert!(loaded.snapshot.items.is_empty());
+        assert!(loaded.warnings.is_empty());
+    }
+
+    #[test]
+    fn a_readonly_marker_makes_a_read_only_calendar() {
+        let store = Store::at(temp("readonly"));
+        let _ = store.load();
+        fs::write(store.calendar_dir(DEFAULT_CALENDAR).join("readonly"), "").unwrap();
+        assert!(store.load().snapshot.calendars[0].read_only);
+    }
+
+    #[test]
+    fn a_write_leaves_no_temporary_file() {
+        let store = Store::at(temp("atomic"));
+        let _ = store.load();
+        store
+            .write(&[Change::Save(Item::new(
+                "w@test",
+                DEFAULT_CALENDAR,
+                Event::new("x", day(3), Zone::Utc),
+            ))])
+            .unwrap();
+        let names: Vec<String> = fs::read_dir(store.calendar_dir(DEFAULT_CALENDAR))
+            .unwrap()
+            .filter_map(|entry| entry.ok())
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(names.iter().all(|name| !name.contains(".tmp")), "{names:?}");
+    }
+
+    #[test]
+    fn deleting_what_is_not_there_is_fine() {
+        let store = Store::at(temp("gone"));
+        let _ = store.load();
+        assert!(
+            store
+                .write(&[Change::Delete("nothing@test".into())])
+                .is_ok()
+        );
     }
 }

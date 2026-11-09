@@ -1,5 +1,5 @@
 //! The Bingux Calendar model: events, iCalendar files, recurrence, the local
-//! store, quick add, reminders and CalDAV. No UI; the app is `apps/calendar`.
+//! store, quick add and reminders. No UI; the app is `apps/calendar`.
 //!
 //! The pieces, from the file up:
 //!
