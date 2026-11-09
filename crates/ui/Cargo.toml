@@ -15,6 +15,10 @@ default = []
 testing = ["dep:freya-testing", "dep:freya-components"]
 # Every icon of the chat icon fork as `Icon::Chat(..)` (3 MB of outlines): for choosing glyphs.
 chat-icons = []
+# `bingux_ui::location`: where the computer is, from the desktop's location
+# portal or the network address. It carries an HTTPS client and a D-Bus client,
+# so an application that does not ask where it is leaves it off.
+location = ["dep:ureq", "dep:zbus"]
 
 [dependencies]
 # `gif`: the picture viewer plays animated GIFs.
@@ -39,6 +43,11 @@ bingux-preview-core = { path = "../preview-core" }
 # The search engine behind bingux_ui::search (documents, index, OpenSearch-shaped
 # responses; no UI of its own).
 bingux-search = { path = "../search" }
+
+# `location` only: the portal over D-Bus (blocking, on a thread of its own) and
+# the keyless lookups over HTTPS.
+zbus = { version = "5.13", default-features = false, features = ["async-io", "blocking-api"], optional = true }
+ureq = { version = "3", optional = true }
 
 [dev-dependencies]
 # A test's clipboard is memory (`controls::select_text::test_clipboard`): the
