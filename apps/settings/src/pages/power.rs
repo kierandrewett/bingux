@@ -321,7 +321,7 @@ fn gsettings_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
     raw.trim()
         .strip_prefix("uint32 ")
         .and_then(|number| number.parse().ok())
-        .ok_or_else(|| CommandError("This setting could not be read.".into()))
+        .ok_or_else(|| CommandError("Could not read this setting. Try again in a moment.".into()))
 }
 
 /// Automatic suspend for `source` (`ac` or `battery`). Missing keys hide the
