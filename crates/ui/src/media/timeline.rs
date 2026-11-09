@@ -499,11 +499,10 @@ impl Component for Timeline {
         rect()
             .component("Timeline")
             .text_direction(TextDirection::Ltr)
+            .horizontal()
+            .content(Content::flex())
             .width(Size::fill())
-            .tw(
-                &tokens,
-                &[flex_row(), grow_children(), items(Align::Center), gap(S2)],
-            )
+            .tw(&tokens, &[items(Align::Center), gap(S2)])
             .child(
                 rect()
                     .tw(&tokens, &[w(label_width), flex_row(), justify(Align::End)])
