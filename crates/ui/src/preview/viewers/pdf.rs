@@ -42,7 +42,8 @@ use super::super::mode::Mode;
 use super::super::subject::Resolved;
 use super::card::Card;
 use super::pdf_layout::{
-    CACHE_LIMIT, GAP, Layout, MARGIN, PageSize, RenderCache, THUMB_WIDTH, WordRef, Zoom, find_status, key_scale, layout, next_hit, render_key, selected_runs, text_of, word_at,
+    CACHE_LIMIT, GAP, Layout, MARGIN, PageSize, RenderCache, THUMB_WIDTH, WordRef, Zoom,
+    find_status, key_scale, layout, next_hit, render_key, selected_runs, text_of, word_at,
 };
 use crate::component::ComponentName;
 use crate::controls::capture::{CaptureEvent, Phase, use_capture};
@@ -130,8 +131,16 @@ pub struct DocumentControls {
 impl DocumentControls {
     /// `page_text` is the page field's text: it follows the page the person
     /// scrolls to, and a typed number goes to that page on Enter.
-    pub fn new(state: DocumentState, page_text: State<String>, on_action: impl Into<EventHandler<DocumentAction>>) -> Self {
-        DocumentControls { state, page_text, on_action: on_action.into() }
+    pub fn new(
+        state: DocumentState,
+        page_text: State<String>,
+        on_action: impl Into<EventHandler<DocumentAction>>,
+    ) -> Self {
+        DocumentControls {
+            state,
+            page_text,
+            on_action: on_action.into(),
+        }
     }
 }
 
@@ -140,8 +149,14 @@ impl DocumentControls {
 const ZOOM_SLOT: f32 = 108.0;
 
 fn zoom_items(current: &str, on_action: &EventHandler<DocumentAction>) -> Vec<MenuItem> {
-    let mut choices: Vec<(String, ZoomChoice)> = vec![("Fit width".to_owned(), ZoomChoice::FitWidth), ("Fit page".to_owned(), ZoomChoice::FitPage)];
-    choices.extend([50, 75, 100, 125, 150, 200, 300, 400].map(|percent| (format!("{percent}%"), ZoomChoice::Percent(percent))));
+    let mut choices: Vec<(String, ZoomChoice)> = vec![
+        ("Fit width".to_owned(), ZoomChoice::FitWidth),
+        ("Fit page".to_owned(), ZoomChoice::FitPage),
+    ];
+    choices.extend(
+        [50, 75, 100, 125, 150, 200, 300, 400]
+            .map(|percent| (format!("{percent}%"), ZoomChoice::Percent(percent))),
+    );
     choices
         .into_iter()
         .map(|(label, choice)| {
@@ -170,24 +185,50 @@ impl Component for DocumentControls {
         };
         let zoom_out = {
             let on_action = on_action.clone();
-            icon_button(Icon::ZoomOut, move |_| on_action.call(DocumentAction::ZoomOut)).tooltip("Zoom out (-)")
+            icon_button(Icon::ZoomOut, move |_| {
+                on_action.call(DocumentAction::ZoomOut)
+            })
+            .tooltip("Zoom out (-)")
         };
         let zoom_in = {
             let on_action = on_action.clone();
-            icon_button(Icon::ZoomIn, move |_| on_action.call(DocumentAction::ZoomIn)).tooltip("Zoom in (+)")
+            icon_button(Icon::ZoomIn, move |_| {
+                on_action.call(DocumentAction::ZoomIn)
+            })
+            .tooltip("Zoom in (+)")
         };
         let find = {
             let on_action = on_action.clone();
-            icon_button(Icon::Search, move |_| on_action.call(DocumentAction::Find)).active(state.find).tooltip("Find (Ctrl+F)")
+            icon_button(Icon::Search, move |_| on_action.call(DocumentAction::Find))
+                .active(state.find)
+                .tooltip("Find (Ctrl+F)")
         };
-        let of_pages = CAPTION.in_ink(Ink::Muted).label(&tokens, format!("of {}", state.pages)).max_lines(1);
+        let of_pages = CAPTION
+            .in_ink(Ink::Muted)
+            .label(&tokens, format!("of {}", state.pages))
+            .max_lines(1);
         let zoom_menu = rect()
             .width(Size::px(ZOOM_SLOT))
             .tw(&tokens, &[flex_row(), justify(Align::Center)])
-            .child(menu_button(state.zoom.clone(), zoom_items(&state.zoom, &on_action)));
+            .child(menu_button(
+                state.zoom.clone(),
+                zoom_items(&state.zoom, &on_action),
+            ));
         rect()
             .component("DocumentControls")
-            .tw(&tokens, &[w_full(), flex_row(), grow_children(), items(Align::Center), gap(S1), px(S2), py(S1), bg(Paint::Surface)])
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    gap(S1),
+                    px(S2),
+                    py(S1),
+                    bg(Paint::Surface),
+                ],
+            )
             .child(page_field)
             .child(of_pages)
             .child(rect().width(Size::flex(1.0)))
@@ -237,7 +278,13 @@ struct Caches {
 
 impl Caches {
     fn new() -> Self {
-        Caches { renders: RenderCache::new(KEPT), pending: HashMap::new(), words: HashMap::new(), words_asked: HashSet::new(), next_request: 10 }
+        Caches {
+            renders: RenderCache::new(KEPT),
+            pending: HashMap::new(),
+            words: HashMap::new(),
+            words_asked: HashSet::new(),
+            next_request: 10,
+        }
     }
 
     fn request(&mut self) -> u32 {
@@ -293,9 +340,14 @@ fn page_box(
     let to_px = |value: i32| value as f32 / 1000.0 * scale;
     let highlight = |rect: &Rect, paint: Paint, opacity: f32| {
         Element::from(
-            rect_at(to_px(rect.x0), to_px(rect.y0), to_px(rect.x1 - rect.x0), to_px(rect.y1 - rect.y0))
-                .opacity(opacity)
-                .tw(tokens, &[bg(paint)]),
+            rect_at(
+                to_px(rect.x0),
+                to_px(rect.y0),
+                to_px(rect.x1 - rect.x0),
+                to_px(rect.y1 - rect.y0),
+            )
+            .opacity(opacity)
+            .tw(tokens, &[bg(paint)]),
         )
     };
     let paper = rect()
@@ -304,19 +356,38 @@ fn page_box(
         // The paper of a PDF page is white in both schemes, like a slider's knob.
         .tw(tokens, &[bg(Paint::Knob), shadow(Elevation::Knob), clip()]);
     let paper = match image_for {
-        Some(handle) => paper.child(image(handle).width(Size::fill()).height(Size::fill()).aspect_ratio(AspectRatio::None).sampling_mode(SamplingMode::Trilinear)),
+        Some(handle) => paper.child(
+            image(handle)
+                .width(Size::fill())
+                .height(Size::fill())
+                .aspect_ratio(AspectRatio::None)
+                .sampling_mode(SamplingMode::Trilinear),
+        ),
         None => paper,
     };
     paper
-        .children(selected.iter().map(|rect| highlight(rect, Paint::Accent, 0.3)))
-        .children(hits.iter().map(|(rect, active)| if *active { highlight(rect, Paint::Warning, 0.55) } else { highlight(rect, Paint::AccentSoft, 1.0) }))
+        .children(
+            selected
+                .iter()
+                .map(|rect| highlight(rect, Paint::Accent, 0.3)),
+        )
+        .children(hits.iter().map(|(rect, active)| {
+            if *active {
+                highlight(rect, Paint::Warning, 0.55)
+            } else {
+                highlight(rect, Paint::AccentSoft, 1.0)
+            }
+        }))
         .into()
 }
 
 /// An absolutely placed box inside a page.
 fn rect_at(x: f32, y: f32, width: f32, height: f32) -> Rect_ {
     // ui-lint: allow(page boxes take the renderer's measured pixel size)
-    rect().position(Position::new_absolute().left(x).top(y)).width(Size::px(width.max(1.0))).height(Size::px(height.max(1.0)))
+    rect()
+        .position(Position::new_absolute().left(x).top(y))
+        .width(Size::px(width.max(1.0)))
+        .height(Size::px(height.max(1.0)))
 }
 
 /// Freya's `rect()` builder under the name this file can use as a type.
@@ -346,7 +417,11 @@ impl Component for Reading {
             }
         });
         let caches = use_hook(|| Rc::new(RefCell::new(Caches::new())));
-        let mut doc = use_state(|| Doc { load: Load::Opening, sizes: Vec::new(), pages: 0 });
+        let mut doc = use_state(|| Doc {
+            load: Load::Opening,
+            sizes: Vec::new(),
+            pages: 0,
+        });
         let mut find = use_state(Find::default);
         let picked = use_state(|| None::<(WordRef, WordRef)>);
         let zoom = use_state(|| Zoom::FitPage);
@@ -379,23 +454,37 @@ impl Component for Reading {
                                     let mut now = doc.write();
                                     now.pages = pages as usize;
                                     now.load = Load::Ready;
-                                    link.send(Packet { request: OUTLINE_REQUEST, message: Message::Outline });
+                                    link.send(Packet {
+                                        request: OUTLINE_REQUEST,
+                                        message: Message::Outline,
+                                    });
                                 }
                                 Message::OutlineIs { entries, .. } => {
                                     outline.write().extend(entries);
                                 }
                                 Message::PageSizes { sizes, .. } => {
                                     let mut now = doc.write();
-                                    now.sizes.extend(sizes.into_iter().map(|(w, h)| (w as f32 / 1000.0, h as f32 / 1000.0)));
+                                    now.sizes.extend(
+                                        sizes
+                                            .into_iter()
+                                            .map(|(w, h)| (w as f32 / 1000.0, h as f32 / 1000.0)),
+                                    );
                                 }
                                 Message::PageTextIs { page, words, .. } => {
-                                    caches.borrow_mut().words.entry(page as usize).or_default().extend(words);
+                                    caches
+                                        .borrow_mut()
+                                        .words
+                                        .entry(page as usize)
+                                        .or_default()
+                                        .extend(words);
                                     *version.write() += 1;
                                 }
                                 Message::SearchHit { page, rects } => {
                                     let mut now = find.write();
                                     if request == now.request {
-                                        now.hits.extend(rects.into_iter().map(|rect| (page as usize, rect)));
+                                        now.hits.extend(
+                                            rects.into_iter().map(|rect| (page as usize, rect)),
+                                        );
                                     }
                                 }
                                 Message::SearchDone { .. } => {
@@ -405,7 +494,8 @@ impl Component for Reading {
                                     }
                                 }
                                 Message::Error { code, message } => {
-                                    let rendering = caches.borrow_mut().pending.remove(&request).is_some();
+                                    let rendering =
+                                        caches.borrow_mut().pending.remove(&request).is_some();
                                     if !rendering && doc.peek().load != Load::Ready {
                                         doc.write().load = Load::Failed { code, message };
                                     }
@@ -414,14 +504,25 @@ impl Component for Reading {
                             },
                             LinkEvent::Page(page) => {
                                 let entry = caches.borrow_mut().pending.remove(&page.request);
-                                if let (Some((index, key)), Some(handle)) = (entry, ImageHandle::from_rgba(page.width, page.height, page.pixels, AlphaType::Opaque)) {
+                                if let (Some((index, key)), Some(handle)) = (
+                                    entry,
+                                    ImageHandle::from_rgba(
+                                        page.width,
+                                        page.height,
+                                        page.pixels,
+                                        AlphaType::Opaque,
+                                    ),
+                                ) {
                                     caches.borrow_mut().renders.insert(index, key, handle);
                                     *version.write() += 1;
                                 }
                             }
                             LinkEvent::Frame => {}
                             LinkEvent::Died(failure) => {
-                                doc.write().load = Load::Failed { code: failure.code, message: failure.message };
+                                doc.write().load = Load::Failed {
+                                    code: failure.code,
+                                    message: failure.message,
+                                };
                             }
                         }
                     }
@@ -448,8 +549,16 @@ impl Component for Reading {
         let lay = layout(sizes, first_scale);
         let current = lay.current(scroll_y, vh);
         let scale = zoom.read().scale(sizes, current, (vw, vh));
-        let lay = if (scale - first_scale).abs() > f32::EPSILON { layout(sizes, scale) } else { lay };
-        let current = if lay.len() == 0 { 0 } else { lay.current(scroll_y, vh).min(lay.len() - 1) };
+        let lay = if (scale - first_scale).abs() > f32::EPSILON {
+            layout(sizes, scale)
+        } else {
+            lay
+        };
+        let current = if lay.len() == 0 {
+            0
+        } else {
+            lay.current(scroll_y, vh).min(lay.len() - 1)
+        };
         // A stack shorter than the viewport (a page that fits) sits in the middle of it.
         let centre = ((vh - lay.height) / 2.0).floor().max(0.0);
         let key = render_key(scale, display);
@@ -467,16 +576,27 @@ impl Component for Reading {
             let mut wanted: Vec<(usize, u32)> = visible.clone().map(|page| (page, key)).collect();
             if *sidebar.read() {
                 let thumbs = thumb_layout(sizes);
-                let shown = thumbs.visible(-(<(i32, i32)>::from(side_scroll).1 as f32), side_viewport.read().1);
+                let shown = thumbs.visible(
+                    -(<(i32, i32)>::from(side_scroll).1 as f32),
+                    side_viewport.read().1,
+                );
                 let thumb_key = THUMB_KEY | ((THUMB_WIDTH * display as f32).round() as u32);
                 wanted.extend(shown.map(|page| (page, thumb_key)));
             }
             // The current page first: it is the one being read.
             wanted.sort_by_key(|(page, key)| (*key & THUMB_KEY != 0, page.abs_diff(current)));
-            let stale: Vec<u32> = state.pending.iter().filter(|(_, entry)| !wanted.contains(entry)).map(|(request, _)| *request).collect();
+            let stale: Vec<u32> = state
+                .pending
+                .iter()
+                .filter(|(_, entry)| !wanted.contains(entry))
+                .map(|(request, _)| *request)
+                .collect();
             for request in stale {
                 state.pending.remove(&request);
-                link.send(Packet { request: 0, message: Message::Cancel { target: request } });
+                link.send(Packet {
+                    request: 0,
+                    message: Message::Cancel { target: request },
+                });
             }
             for (page, wanted_key) in wanted {
                 if state.renders.has(page, wanted_key) || state.is_pending(page, wanted_key) {
@@ -485,9 +605,19 @@ impl Component for Reading {
                 let request = state.request();
                 state.pending.insert(request, (page, wanted_key));
                 let message = if wanted_key & THUMB_KEY != 0 {
-                    Message::RenderPage { page: page as u32, scale_milli: 4000, max_w: wanted_key & !THUMB_KEY, max_h: 0 }
+                    Message::RenderPage {
+                        page: page as u32,
+                        scale_milli: 4000,
+                        max_w: wanted_key & !THUMB_KEY,
+                        max_h: 0,
+                    }
                 } else {
-                    Message::RenderPage { page: page as u32, scale_milli: (key_scale(wanted_key) * 1000.0).round() as u32, max_w: 0, max_h: 0 }
+                    Message::RenderPage {
+                        page: page as u32,
+                        scale_milli: (key_scale(wanted_key) * 1000.0).round() as u32,
+                        max_w: 0,
+                        max_h: 0,
+                    }
                 };
                 link.send(Packet { request, message });
             }
@@ -495,7 +625,10 @@ impl Component for Reading {
             for page in visible.clone().filter(|page| page.abs_diff(current) <= 1) {
                 if state.words_asked.insert(page) {
                     let request = state.request();
-                    link.send(Packet { request, message: Message::PageText { page: page as u32 } });
+                    link.send(Packet {
+                        request,
+                        message: Message::PageText { page: page as u32 },
+                    });
                 }
             }
         }
@@ -514,7 +647,11 @@ impl Component for Reading {
             let lay = lay.clone();
             move |page: usize| {
                 let mut scroll = scroll;
-                scroll.scroll_to_y(-(lay.scroll_to_page(page.min(lay.len().saturating_sub(1)), vh).round() as i32));
+                scroll.scroll_to_y(
+                    -(lay
+                        .scroll_to_page(page.min(lay.len().saturating_sub(1)), vh)
+                        .round() as i32),
+                );
             }
         };
         // A zoom keeps the middle of the viewport where it is, once the new
@@ -553,7 +690,8 @@ impl Component for Reading {
             move |direction: i32| {
                 let (vw, vh) = *viewport.peek();
                 let at = -(<(i32, i32)>::from(scroll).1 as f32);
-                let current = layout(&sizes, zoom.peek().scale(&sizes, 0, (vw, vh))).current(at, vh);
+                let current =
+                    layout(&sizes, zoom.peek().scale(&sizes, 0, (vw, vh))).current(at, vh);
                 let scale = zoom.peek().scale(&sizes, current, (vw, vh));
                 set_zoom(Zoom::step(scale, direction));
             }
@@ -566,12 +704,23 @@ impl Component for Reading {
                 let request = caches.borrow_mut().request();
                 let previous = find.peek().request;
                 if previous != 0 {
-                    link.send(Packet { request: 0, message: Message::Cancel { target: previous } });
+                    link.send(Packet {
+                        request: 0,
+                        message: Message::Cancel { target: previous },
+                    });
                 }
                 let searching = !text.trim().is_empty();
-                find.set(Find { open: true, request, searching, ..Find::default() });
+                find.set(Find {
+                    open: true,
+                    request,
+                    searching,
+                    ..Find::default()
+                });
                 if searching {
-                    link.send(Packet { request, message: Message::Search { query: text } });
+                    link.send(Packet {
+                        request,
+                        message: Message::Search { query: text },
+                    });
                 }
             }
         };
@@ -583,7 +732,9 @@ impl Component for Reading {
                     let now = find.peek();
                     (now.hits.len(), now.active)
                 };
-                let Some(next) = next_hit(active, count, direction) else { return };
+                let Some(next) = next_hit(active, count, direction) else {
+                    return;
+                };
                 find.write().active = Some(next);
                 let (page, rect) = find.peek().hits[next];
                 let (_, vh) = *viewport.peek();
@@ -597,8 +748,14 @@ impl Component for Reading {
         // The first hit at or after the current page becomes the active one.
         {
             let hits = find.read().hits.clone();
-            if find.read().active.is_none() && !hits.is_empty() && (hits.last().is_some_and(|(page, _)| *page >= current) || !find.read().searching) {
-                let first = hits.iter().position(|(page, _)| *page >= current).unwrap_or(0);
+            if find.read().active.is_none()
+                && !hits.is_empty()
+                && (hits.last().is_some_and(|(page, _)| *page >= current) || !find.read().searching)
+            {
+                let first = hits
+                    .iter()
+                    .position(|(page, _)| *page >= current)
+                    .unwrap_or(0);
                 let mut find = find;
                 find.write().active = Some(first);
                 let (page, rect) = hits[first];
@@ -615,7 +772,17 @@ impl Component for Reading {
                 let Some((a, b)) = *picked.peek() else { return };
                 let state = caches.borrow();
                 let runs = selected_runs(a, b, |page| state.words.get(&page).map_or(0, Vec::len));
-                let words: Vec<&Word> = runs.iter().flat_map(|(page, first, last)| state.words.get(page).map(|words| words[*first..=*last].iter()).into_iter().flatten()).collect();
+                let words: Vec<&Word> = runs
+                    .iter()
+                    .flat_map(|(page, first, last)| {
+                        state
+                            .words
+                            .get(page)
+                            .map(|words| words[*first..=*last].iter())
+                            .into_iter()
+                            .flatten()
+                    })
+                    .collect();
                 if !words.is_empty() {
                     let _ = freya::clipboard::Clipboard::set(text_of(&words));
                 }
@@ -647,7 +814,12 @@ impl Component for Reading {
                         true
                     }
                     // Typing in the find field: the field has these.
-                    _ if claim.get() && !ctrl && !matches!(event.key, Key::Named(NamedKey::F3 | NamedKey::F9)) => false,
+                    _ if claim.get()
+                        && !ctrl
+                        && !matches!(event.key, Key::Named(NamedKey::F3 | NamedKey::F9)) =>
+                    {
+                        false
+                    }
                     // No arrows here: they choose the file (the preview host steps it).
                     Key::Named(NamedKey::PageDown) => {
                         scroll_by(page, max_scroll);
@@ -666,7 +838,12 @@ impl Component for Reading {
                         true
                     }
                     // Space closes a popup; in a pane that has the keyboard it pages.
-                    Key::Character(text) if text.as_str() == " " && (keyboard.is_pane() || in_window) && !ctrl && !alt => {
+                    Key::Character(text)
+                        if text.as_str() == " "
+                            && (keyboard.is_pane() || in_window)
+                            && !ctrl
+                            && !alt =>
+                    {
                         scroll_by(if shift { -page } else { page }, max_scroll);
                         true
                     }
@@ -754,7 +931,8 @@ impl Component for Reading {
                     let (vw, _) = *viewport.peek();
                     let room = (lay_width + 2.0 * MARGIN - vw).max(0.0);
                     let mut pan_x = pan_x;
-                    let next = (*pan_x.peek() - (event.delta_y as f32).clamp(-120.0, 120.0)).clamp(0.0, room);
+                    let next = (*pan_x.peek() - (event.delta_y as f32).clamp(-120.0, 120.0))
+                        .clamp(0.0, room);
                     pan_x.set_if_modified(next);
                 } else if event.delta_x != 0.0 {
                     let (vw, _) = *viewport.peek();
@@ -777,11 +955,22 @@ impl Component for Reading {
                 let pan = *pan_x.peek();
                 let local_y = event.local.1 - centre;
                 let page = lay.page_at(local_y);
-                let Some(&width) = lay.widths.get(page) else { return };
-                let left = if width + 2.0 * MARGIN > vw { MARGIN - pan } else { (vw - width) / 2.0 };
+                let Some(&width) = lay.widths.get(page) else {
+                    return;
+                };
+                let left = if width + 2.0 * MARGIN > vw {
+                    MARGIN - pan
+                } else {
+                    (vw - width) / 2.0
+                };
                 let x = (event.local.0 - left) / scale;
                 let y = (local_y - lay.tops[page]) / scale;
-                let at = caches.borrow().words.get(&page).and_then(|words| word_at(words, x, y)).map(|index| WordRef { page, index });
+                let at = caches
+                    .borrow()
+                    .words
+                    .get(&page)
+                    .and_then(|words| word_at(words, x, y))
+                    .map(|index| WordRef { page, index });
                 match event.phase {
                     Phase::Start => {
                         moved.set(false);
@@ -835,19 +1024,34 @@ impl Component for Reading {
         let find_bar = find.read().open.then(|| {
             let state = find.read().clone();
             let search = search.clone();
-            let status = find_status(state.active, state.hits.len(), state.searching, &query.read());
+            let status = find_status(
+                state.active,
+                state.hits.len(),
+                state.searching,
+                &query.read(),
+            );
             let on_enter = EventHandler::new({
                 let step_hit = step_hit.clone();
-                move |modifiers: Modifiers| step_hit(if modifiers.contains(Modifiers::SHIFT) { -1 } else { 1 })
+                move |modifiers: Modifiers| {
+                    step_hit(if modifiers.contains(Modifiers::SHIFT) {
+                        -1
+                    } else {
+                        1
+                    })
+                }
             });
             let prev = icon_button(Icon::GoPrevious, {
                 let step_hit = step_hit.clone();
                 move |_| step_hit(-1)
-            }).tooltip("Previous match (Shift+Enter)").enabled(!state.hits.is_empty());
+            })
+            .tooltip("Previous match (Shift+Enter)")
+            .enabled(!state.hits.is_empty());
             let next = icon_button(Icon::GoNext, {
                 let step_hit = step_hit.clone();
                 move |_| step_hit(1)
-            }).tooltip("Next match (Enter)").enabled(!state.hits.is_empty());
+            })
+            .tooltip("Next match (Enter)")
+            .enabled(!state.hits.is_empty());
             let close = icon_button(Icon::WindowClose, move |_| {
                 let mut find = find;
                 find.write().open = false;
@@ -855,7 +1059,19 @@ impl Component for Reading {
             .tooltip("Close find (Escape)");
             Element::from(
                 rect()
-                    .tw(&tokens, &[w_full(), flex_row(), grow_children(), items(Align::Center), gap(S2), px(S2), py(S1), bg(Paint::Surface)])
+                    .tw(
+                        &tokens,
+                        &[
+                            w_full(),
+                            flex_row(),
+                            grow_children(),
+                            items(Align::Center),
+                            gap(S2),
+                            px(S2),
+                            py(S1),
+                            bg(Paint::Surface),
+                        ],
+                    )
                     .child(
                         rect().width(Size::flex(1.0)).child(
                             search_field(query, move |text: String| search(text))
@@ -870,7 +1086,12 @@ impl Component for Reading {
                                 }),
                         ),
                     )
-                    .child(CAPTION.in_ink(Ink::Muted).label(&tokens, status).max_lines(1))
+                    .child(
+                        CAPTION
+                            .in_ink(Ink::Muted)
+                            .label(&tokens, status)
+                            .max_lines(1),
+                    )
                     .child(prev)
                     .child(next)
                     .child(close),
@@ -889,20 +1110,61 @@ impl Component for Reading {
         let rows: Vec<Element> = (0..lay.len())
             .map(|page| {
                 let (width, height) = (lay.widths[page], lay.heights[page]);
-                let row = rect().width(Size::fill()).height(Size::px(height)).key(page);
+                let row = rect()
+                    .width(Size::fill())
+                    .height(Size::px(height))
+                    .key(page);
                 if !visible.contains(&page) {
                     return Element::from(row);
                 }
-                let handle = caches.borrow_mut().renders.best(page, key).map(|(handle, _)| handle);
-                let hits: Vec<(Rect, bool)> = hits_now.iter().enumerate().filter(|(_, (hit_page, _))| *hit_page == page).map(|(index, (_, rect))| (*rect, Some(index) == active_hit)).collect();
+                let handle = caches
+                    .borrow_mut()
+                    .renders
+                    .best(page, key)
+                    .map(|(handle, _)| handle);
+                let hits: Vec<(Rect, bool)> = hits_now
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, (hit_page, _))| *hit_page == page)
+                    .map(|(index, (_, rect))| (*rect, Some(index) == active_hit))
+                    .collect();
                 let selected: Vec<Rect> = selection_runs
                     .iter()
                     .filter(|(run_page, _, _)| *run_page == page)
-                    .flat_map(|(_, first, last)| caches.borrow().words.get(&page).map(|words| words[*first..=*last].iter().map(|word| word.rect).collect::<Vec<_>>()).unwrap_or_default())
+                    .flat_map(|(_, first, last)| {
+                        caches
+                            .borrow()
+                            .words
+                            .get(&page)
+                            .map(|words| {
+                                words[*first..=*last]
+                                    .iter()
+                                    .map(|word| word.rect)
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default()
+                    })
                     .collect();
-                let left = if width + 2.0 * MARGIN > vw { MARGIN - *pan_x.read() } else { (vw - width) / 2.0 };
+                let left = if width + 2.0 * MARGIN > vw {
+                    MARGIN - *pan_x.read()
+                } else {
+                    (vw - width) / 2.0
+                };
                 // ui-lint: allow(a page's left offset is computed from the viewport width and pan)
-                Element::from(row.child(rect().margin(Gaps::new(0.0, 0.0, 0.0, left)).child(page_box(&tokens, (width, height), scale, handle, &hits, &selected))))
+                Element::from(
+                    row.child(
+                        rect()
+                            .margin(Gaps::new(0.0, 0.0, 0.0, left))
+                            .child(page_box(
+                                &tokens,
+                                (width, height),
+                                scale,
+                                handle,
+                                &hits,
+                                &selected,
+                            )),
+                    ),
+                )
             })
             .collect();
         let column = capture.handlers(
@@ -922,20 +1184,34 @@ impl Component for Reading {
                 .children(rows),
         );
         // ui-lint: allow(the page gap is the document layout's measured geometry)
-        let pages_view = ScrollView::new_controlled(scroll).width(Size::fill()).height(Size::fill()).spacing(GAP).child(column);
+        let pages_view = ScrollView::new_controlled(scroll)
+            .width(Size::fill())
+            .height(Size::fill())
+            .spacing(GAP)
+            .child(column);
 
         let thumbs = (*sidebar.read() && matches!(now.load, Load::Ready)).then(|| {
             let thumbs = thumb_layout(sizes);
-            let shown = thumbs.visible(-(<(i32, i32)>::from(side_scroll).1 as f32), side_viewport.read().1);
+            let shown = thumbs.visible(
+                -(<(i32, i32)>::from(side_scroll).1 as f32),
+                side_viewport.read().1,
+            );
             let thumb_key = THUMB_KEY | ((THUMB_WIDTH * display as f32).round() as u32);
             let rows: Vec<Element> = (0..thumbs.len())
                 .map(|page| {
                     let height = thumbs.heights[page];
-                    let row = rect().width(Size::fill()).height(Size::px(height)).key(page);
+                    let row = rect()
+                        .width(Size::fill())
+                        .height(Size::px(height))
+                        .key(page);
                     if !shown.contains(&page) {
                         return Element::from(row);
                     }
-                    let handle = caches.borrow_mut().renders.best(page, thumb_key).map(|(handle, _)| handle);
+                    let handle = caches
+                        .borrow_mut()
+                        .renders
+                        .best(page, thumb_key)
+                        .map(|(handle, _)| handle);
                     let on_current = page == current;
                     let jump_to = jump_to.clone();
                     let mut close_sheet = sidebar;
@@ -945,7 +1221,12 @@ impl Component for Reading {
                             .height(Size::px(height - THUMB_LABEL))
                             .tw(&tokens, &[bg(Paint::Knob), shadow(Elevation::Knob), clip()]);
                         match handle {
-                            Some(handle) => paper.child(image(handle).width(Size::fill()).height(Size::fill()).aspect_ratio(AspectRatio::None)),
+                            Some(handle) => paper.child(
+                                image(handle)
+                                    .width(Size::fill())
+                                    .height(Size::fill())
+                                    .aspect_ratio(AspectRatio::None),
+                            ),
                             None => paper,
                         }
                     };
@@ -957,16 +1238,51 @@ impl Component for Reading {
                                     close_sheet.set(false);
                                 }
                             })
-                            .child(rect().tw(&tokens, &[rounded(Radius::Inner), if on_current { bg(Paint::Selection) } else { bg(Paint::Transparent) }, p(S1)]).child(picture))
-                            .child(CAPTION.in_ink(if on_current { Ink::Text } else { Ink::Muted }).label(&tokens, (page + 1).to_string()).max_lines(1)),
+                            .child(
+                                rect()
+                                    .tw(
+                                        &tokens,
+                                        &[
+                                            rounded(Radius::Inner),
+                                            if on_current {
+                                                bg(Paint::Selection)
+                                            } else {
+                                                bg(Paint::Transparent)
+                                            },
+                                            p(S1),
+                                        ],
+                                    )
+                                    .child(picture),
+                            )
+                            .child(
+                                CAPTION
+                                    .in_ink(if on_current { Ink::Text } else { Ink::Muted })
+                                    .label(&tokens, (page + 1).to_string())
+                                    .max_lines(1),
+                            ),
                     )
                 })
                 .collect();
             let entries = outline.read().clone();
-            let tab = if entries.is_empty() { SideTab::Pages } else { *side_tab.read() };
+            let tab = if entries.is_empty() {
+                SideTab::Pages
+            } else {
+                *side_tab.read()
+            };
             let list: Element = match tab {
                 // ui-lint: allow(ScrollView takes a plain spacing and has no tw; the insets are the thumb layout's measured geometry)
-                SideTab::Pages => ScrollView::new_controlled(side_scroll).key("pages").width(Size::fill()).height(Size::fill()).spacing(8.0).child(rect().width(Size::fill()).padding(Gaps::new(S4_PX, 0.0, S4_PX, 0.0)).children(rows)).into(),
+                SideTab::Pages => ScrollView::new_controlled(side_scroll)
+                    .key("pages")
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .spacing(8.0)
+                    .child(
+                        rect()
+                            .width(Size::fill())
+                            .padding(Gaps::new(S4_PX, 0.0, S4_PX, 0.0))
+                            .children(rows),
+                    )
+                    .into(),
                 SideTab::Outline => {
                     let rows_of_titles: Vec<Element> = entries
                         .iter()
@@ -976,15 +1292,38 @@ impl Component for Reading {
                             let here = page != u32::MAX && page as usize == current;
                             let jump_to = jump_to.clone();
                             let mut close_sheet = sidebar;
-                            let title = if entry.title.is_empty() { "Untitled".to_owned() } else { entry.title.clone() };
+                            let title = if entry.title.is_empty() {
+                                "Untitled".to_owned()
+                            } else {
+                                entry.title.clone()
+                            };
                             Element::from(
                                 rect()
                                     .key(index)
                                     .a11y_role(AccessibilityRole::Button)
                                     .a11y_alt(title.clone())
-                                    .tw(&tokens, &[w_full(), flex_row(), items(Align::Center), gap(S2), rounded(Radius::Inner), if here { bg(Paint::Selection) } else { bg(Paint::Transparent) }])
+                                    .tw(
+                                        &tokens,
+                                        &[
+                                            w_full(),
+                                            flex_row(),
+                                            items(Align::Center),
+                                            gap(S2),
+                                            rounded(Radius::Inner),
+                                            if here {
+                                                bg(Paint::Selection)
+                                            } else {
+                                                bg(Paint::Transparent)
+                                            },
+                                        ],
+                                    )
                                     // ui-lint: allow(an outline entry is indented by its depth)
-                                    .padding(Gaps::new(S2.px(), S2.px(), S2.px(), S2.px() + f32::from(entry.depth) * S4.px()))
+                                    .padding(Gaps::new(
+                                        S2.px(),
+                                        S2.px(),
+                                        S2.px(),
+                                        S2.px() + f32::from(entry.depth) * S4.px(),
+                                    ))
                                     .on_press(move |_| {
                                         if page != u32::MAX {
                                             jump_to(page as usize);
@@ -993,37 +1332,91 @@ impl Component for Reading {
                                             }
                                         }
                                     })
-                                    .child(rect().width(Size::flex(1.0)).child(BODY.in_ink(if page == u32::MAX { Ink::Muted } else { Ink::Text }).label(&tokens, title).max_lines(2))),
+                                    .child(
+                                        rect().width(Size::flex(1.0)).child(
+                                            BODY.in_ink(if page == u32::MAX {
+                                                Ink::Muted
+                                            } else {
+                                                Ink::Text
+                                            })
+                                            .label(&tokens, title)
+                                            .max_lines(2),
+                                        ),
+                                    ),
                             )
                         })
                         .collect();
-                    ScrollView::new().key("outline").width(Size::fill()).height(Size::fill()).child(rect().tw(&tokens, &[w_full(), flex_col(), p(S2), gap(S1)]).children(rows_of_titles)).into()
+                    ScrollView::new()
+                        .key("outline")
+                        .width(Size::fill())
+                        .height(Size::fill())
+                        .child(
+                            rect()
+                                .tw(&tokens, &[w_full(), flex_col(), p(S2), gap(S1)])
+                                .children(rows_of_titles),
+                        )
+                        .into()
                 }
             };
             let tabs = (!entries.is_empty()).then(|| {
-                let current_tab = if tab == SideTab::Pages { "pages" } else { "outline" };
+                let current_tab = if tab == SideTab::Pages {
+                    "pages"
+                } else {
+                    "outline"
+                };
                 let mut side_tab = side_tab;
                 Element::from(
                     rect().tw(&tokens, &[w_full(), p(S2)]).child(
-                        segmented(vec![("pages".to_owned(), "Pages".to_owned()), ("outline".to_owned(), "Outline".to_owned())], current_tab, move |key: String| {
-                            side_tab.set(if key == "outline" { SideTab::Outline } else { SideTab::Pages });
-                        })
+                        segmented(
+                            vec![
+                                ("pages".to_owned(), "Pages".to_owned()),
+                                ("outline".to_owned(), "Outline".to_owned()),
+                            ],
+                            current_tab,
+                            move |key: String| {
+                                side_tab.set(if key == "outline" {
+                                    SideTab::Outline
+                                } else {
+                                    SideTab::Pages
+                                });
+                            },
+                        )
                         .fill()
                         .tabs(),
                     ),
                 )
             });
-            let width = if tab == SideTab::Outline { OUTLINE_WIDTH } else { SIDEBAR_WIDTH };
+            let width = if tab == SideTab::Outline {
+                OUTLINE_WIDTH
+            } else {
+                SIDEBAR_WIDTH
+            };
             Element::from(
                 rect()
-                    .width(if compact { Size::fill() } else { Size::px(width) })
+                    .width(if compact {
+                        Size::fill()
+                    } else {
+                        Size::px(width)
+                    })
                     .height(Size::fill())
                     .tw(&tokens, &[bg(Paint::Sidebar), flex_row()])
                     .on_sized(move |event: Event<SizedEventData>| {
                         let mut side_viewport = side_viewport;
                         side_viewport.set_if_modified((event.area.width(), event.area.height()));
                     })
-                    .child(rect().width(Size::flex(1.0)).height(Size::fill()).tw(&tokens, &[flex_col()]).maybe_child(tabs).child(rect().width(Size::fill()).height(Size::flex(1.0)).child(list)))
+                    .child(
+                        rect()
+                            .width(Size::flex(1.0))
+                            .height(Size::fill())
+                            .tw(&tokens, &[flex_col()])
+                            .maybe_child(tabs)
+                            .child(
+                                rect()
+                                    .width(Size::fill())
+                                    .height(Size::flex(1.0))
+                                    .child(list),
+                            ),
+                    )
                     .child(rect().tw(&tokens, &[w(Dim::Hairline), h_full(), bg(Paint::Separator)])),
             )
         });
@@ -1032,28 +1425,50 @@ impl Component for Reading {
         let (docked, sheet) = match thumbs {
             Some(list) if compact => {
                 let mut close = sidebar;
-                let panel = Panel::new(PanelKind::Choice, true, PanelTrigger::Pointer((0.0, 0.0)), vec![list])
-                    .title("Pages")
-                    .on_dismiss(EventHandler::new(move |_: ()| close.set(false)));
+                let panel = Panel::new(
+                    PanelKind::Choice,
+                    true,
+                    PanelTrigger::Pointer((0.0, 0.0)),
+                    vec![list],
+                )
+                .title("Pages")
+                .on_dismiss(EventHandler::new(move |_: ()| close.set(false)));
                 (None, Some(Element::from(panel)))
             }
             other => (other, None),
         };
         let body: Element = match &now.load {
             Load::Failed { code, message } => {
-                let retry = matches!(code, ErrorCode::Internal | ErrorCode::NotFound).then(|| self.on_retry.clone());
+                let retry = matches!(code, ErrorCode::Internal | ErrorCode::NotFound)
+                    .then(|| self.on_retry.clone());
                 // The retry is a button of the card: the card is as tall as the stage, so a button under it was cut off.
                 rect()
                     .tw(&tokens, &[w_full(), h_full(), bg(Paint::Card)])
-                    .child(Card::of(&self.resolved, &self.nav).noted(message.clone()).retrying(retry))
+                    .child(
+                        Card::of(&self.resolved, &self.nav)
+                            .noted(message.clone())
+                            .retrying(retry),
+                    )
                     .into()
             }
             Load::Opening => rect()
-                .tw(&tokens, &[w_full(), h_full(), flex_col(), center(), bg(Paint::Recess)])
+                .tw(
+                    &tokens,
+                    &[w_full(), h_full(), flex_col(), center(), bg(Paint::Recess)],
+                )
                 .child(spinner(SpinnerSize::Medium))
                 .into(),
             Load::Ready => rect()
-                .tw(&tokens, &[w_full(), h_full(), flex_row(), grow_children(), bg(Paint::Recess)])
+                .tw(
+                    &tokens,
+                    &[
+                        w_full(),
+                        h_full(),
+                        flex_row(),
+                        grow_children(),
+                        bg(Paint::Recess),
+                    ],
+                )
                 .maybe_child(docked)
                 .child(
                     rect()
@@ -1070,17 +1485,29 @@ impl Component for Reading {
 
         rect()
             .component("PreviewDocument")
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children(), clip()])
+            .tw(
+                &tokens,
+                &[w_full(), h_full(), flex_col(), grow_children(), clip()],
+            )
             .on_global_key_down(on_key)
             .maybe_child(matches!(now.load, Load::Ready).then(|| Element::from(toolbar)))
             .maybe_child(find_bar)
-            .child(rect().width(Size::fill()).height(Size::flex(1.0)).child(body).maybe_child(sheet))
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .height(Size::flex(1.0))
+                    .child(body)
+                    .maybe_child(sheet),
+            )
     }
 }
 
 /// Thumbnail sizes of the pages, as a layout: each is the sidebar's width wide
 /// and as tall as its page, plus a line for the number.
 fn thumb_layout(sizes: &[PageSize]) -> Layout {
-    let scaled: Vec<PageSize> = sizes.iter().map(|(w, h)| (THUMB_WIDTH, THUMB_WIDTH * h / w.max(1.0) + THUMB_LABEL)).collect();
+    let scaled: Vec<PageSize> = sizes
+        .iter()
+        .map(|(w, h)| (THUMB_WIDTH, THUMB_WIDTH * h / w.max(1.0) + THUMB_LABEL))
+        .collect();
     layout(&scaled, 1.0)
 }
