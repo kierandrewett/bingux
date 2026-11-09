@@ -48,18 +48,10 @@ pub fn read(
         let value: Value =
             serde_json::from_str(text).map_err(|e| ImportError(format!("Not valid JSON: {e}")))?;
         if value.get("format").and_then(Value::as_str) == Some(crate::preset::FORMAT) {
-            let (preset, notes) = if crate::legacy::is_legacy(text) {
-                let migrated = crate::legacy::migrate(text).map_err(|e| ImportError(e.0))?;
-                (migrated.preset, migrated.notes)
-            } else {
-                (
-                    Preset::parse(text).map_err(|e| ImportError(e.0))?,
-                    Vec::new(),
-                )
-            };
+            let preset = Preset::parse(text).map_err(|e| ImportError(e.0))?;
             return Ok(vec![Imported {
                 mapped: vec![format!("{} effects", preset.plugins.len())],
-                unmapped: notes,
+                unmapped: Vec::new(),
                 preset,
             }]);
         }

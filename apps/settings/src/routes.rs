@@ -250,7 +250,6 @@ const SECTIONS: [(&str, Section); 9] = [
 /// page it makes. See the module docs.
 pub fn table() -> RouteTable {
     let mut table = RouteTable::new(SCHEME)
-        .rewrite(legacy)
         .group_titles(|group| match group {
             "connections" => tr!("settings-group-connections"),
             "devices" => tr!("settings-group-devices"),
@@ -574,172 +573,12 @@ fn section_page(owner: Owner, section: Section) -> Element {
     }
 }
 
-// ---- links that used to open a screen -------------------------------------------
-
-/// `location` with an old-style link rewritten to where it lives now, so every
-/// link that ever opened a Settings screen still does.
-///
-/// Network: first segments `wifi`, `wifi/saved`, `wifi/network/<ssid>`,
-/// `wired/<device>`, `wired/vpn/<name>`, `ethernet/<device>`, `vpn/<name>`,
-/// `mobile`, `wwan`, `cellular`, `proxy` and `usage` are below `network/`.
-/// Then `network/wifi/hotspot` is `network/hotspot`, the mobile carrier and
-/// access point pages are below `network/mobile/advanced`, and a connection's
-/// `ipv4`, `ipv6`, `dns`, `security`, `identity` and `proxy` pages are below
-/// its `advanced` page. Other pages: the names GNOME Settings used
-/// (`appearance`, `displays`, `user-accounts`...) become the panel names.
-pub fn legacy(location: &Location) -> Location {
-    let segments: Vec<&str> = location.segments().iter().map(String::as_str).collect();
-    let under_network: Option<Vec<&str>> = match segments.as_slice() {
-        ["network", ..] => Some(segments.clone()),
-        ["wifi" | "wi-fi", rest @ ..] => Some(
-            ["network", "wifi"]
-                .into_iter()
-                .chain(rest.iter().copied())
-                .collect(),
-        ),
-        ["wired" | "ethernet" | "vpn", "vpn", name] => Some(vec!["network", "vpn", name]),
-        ["wired" | "ethernet", device] => Some(vec!["network", "ethernet", device]),
-        ["vpn", name] => Some(vec!["network", "vpn", name]),
-        ["wired" | "ethernet" | "vpn"] => Some(vec!["network"]),
-        ["mobile" | "wwan" | "cellular", rest @ ..] => Some(
-            ["network", "mobile"]
-                .into_iter()
-                .chain(rest.iter().copied())
-                .collect(),
-        ),
-        ["proxy"] => Some(vec!["network", "proxy"]),
-        ["usage" | "data-usage", rest @ ..] => Some(
-            ["network", "usage"]
-                .into_iter()
-                .chain(rest.iter().copied())
-                .collect(),
-        ),
-        _ => None,
-    };
-    let mapped: Vec<&str> = match under_network {
-        Some(path) => upgrade_network_path(path),
-        None => match segments.split_first() {
-            Some((first, rest)) => match PageId::from_panel(first) {
-                Some(page) if page.panel_name() != *first => std::iter::once(page.panel_name())
-                    .chain(rest.iter().copied())
-                    .collect(),
-                _ => segments.clone(),
-            },
-            None => segments.clone(),
-        },
-    };
-    if mapped == segments {
-        return location.clone();
-    }
-    let mut moved = Location::new(location.scheme());
-    for segment in mapped {
-        moved = moved.join(segment);
-    }
-    for (key, value) in location.query_pairs() {
-        moved = moved.with_query(key.clone(), value.clone());
-    }
-    match location.fragment() {
-        Some(fragment) => moved.with_fragment(fragment),
-        None => moved,
-    }
-}
-
-/// The editors that were pages of their own below a connection before
-/// Advanced held them.
-const EDITORS: [&str; 6] = ["ipv4", "ipv6", "dns", "security", "identity", "proxy"];
-
-/// Moves a path below `network/` to where its page is now.
-fn upgrade_network_path(segments: Vec<&str>) -> Vec<&str> {
-    let at = |index: usize| index.min(segments.len());
-    match segments.as_slice() {
-        ["network", "wifi", "hotspot"] => vec!["network", "hotspot"],
-        ["network", "mobile", "network" | "apn" | "apn-add", ..] => {
-            let mut mapped = segments[..at(2)].to_vec();
-            mapped.push("advanced");
-            mapped.extend_from_slice(&segments[at(2)..]);
-            mapped
-        }
-        ["network", "wifi", "network" | "saved", _, editor]
-        | ["network", "ethernet", _, "profile", _, editor]
-        | ["network", "vpn", _, editor]
-            if EDITORS.contains(editor) =>
-        {
-            let mut mapped = segments[..segments.len() - 1].to_vec();
-            mapped.push("advanced");
-            mapped.push(editor);
-            mapped
-        }
-        _ => segments,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn location(text: &str) -> Location {
         Location::parse(&format!("{SCHEME}://{text}")).unwrap()
-    }
-
-    fn canonical(text: &str) -> String {
-        legacy(&location(text)).segments().join("/")
-    }
-
-    #[test]
-    fn old_editor_addresses_move_below_advanced() {
-        assert_eq!(
-            canonical("network/ethernet/enp42s0/profile/Office/ipv4"),
-            "network/ethernet/enp42s0/profile/Office/advanced/ipv4"
-        );
-        assert_eq!(
-            canonical("network/wifi/network/Home/security"),
-            "network/wifi/network/Home/advanced/security"
-        );
-        assert_eq!(
-            canonical("network/vpn/Work/dns"),
-            "network/vpn/Work/advanced/dns"
-        );
-        assert_eq!(
-            canonical("wifi/network/Home/proxy"),
-            "network/wifi/network/Home/advanced/proxy"
-        );
-        // Not an editor of a connection: unchanged.
-        assert_eq!(
-            canonical("network/vpn/Work/tunnel"),
-            "network/vpn/Work/tunnel"
-        );
-        assert_eq!(
-            canonical("network/wifi/network/Home/advanced"),
-            "network/wifi/network/Home/advanced"
-        );
-    }
-
-    #[test]
-    fn old_pages_move_to_where_they_are_now() {
-        assert_eq!(canonical("network/wifi/hotspot"), "network/hotspot");
-        assert_eq!(canonical("wifi/hotspot"), "network/hotspot");
-        assert_eq!(
-            canonical("mobile/apn/Vodafone"),
-            "network/mobile/advanced/apn/Vodafone"
-        );
-        assert_eq!(
-            canonical("cellular/network"),
-            "network/mobile/advanced/network"
-        );
-        assert_eq!(canonical("network/mobile"), "network/mobile");
-        assert_eq!(canonical("wired/enp42s0"), "network/ethernet/enp42s0");
-    }
-
-    #[test]
-    fn the_names_gnome_settings_used_become_the_panel_names() {
-        assert_eq!(canonical("appearance"), "background");
-        assert_eq!(canonical("displays/1"), "display/1");
-        assert_eq!(canonical("user-accounts"), "users");
-        assert_eq!(canonical("apps/default"), "applications/default");
-        assert_eq!(
-            legacy(&location("appearance?x=1#frag")).to_string(),
-            format!("{SCHEME}://background?x=1#frag")
-        );
     }
 
     /// Every page a person can reach has a route, and every route's page opens
@@ -827,7 +666,7 @@ mod tests {
         assert_eq!(title("network/add-vpn"), "Add VPN");
         assert_eq!(title("sound/applications"), "Application volumes");
         assert_eq!(title("display/1"), "Display 2");
-        assert_eq!(title("wifi/network/Home/proxy"), "Proxy");
+        assert_eq!(title("network/wifi/network/Home/advanced/proxy"), "Proxy");
     }
 
     #[test]
@@ -873,12 +712,6 @@ mod tests {
         assert_eq!(
             up("network/mobile/advanced/apn/Vodafone"),
             "network/mobile/advanced/apn"
-        );
-        // An old link goes up to where its new form does.
-        assert_eq!(up("network/wifi/hotspot"), "network");
-        assert_eq!(
-            up("wifi/network/Home/ipv4"),
-            "network/wifi/network/Home/advanced"
         );
     }
 

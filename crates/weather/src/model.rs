@@ -7,32 +7,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::time::{DAY, HOUR};
 
-/// Reads the detail as parts, or as the one joined string of older saves.
-fn detail_parts<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Saved {
-        Joined(String),
-        Parts(Vec<String>),
-    }
-    Ok(match Saved::deserialize(deserializer)? {
-        Saved::Joined(text) if text.is_empty() => Vec::new(),
-        Saved::Joined(text) => vec![text],
-        Saved::Parts(parts) => parts,
-    })
-}
-
 /// A place to ask about.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Place {
     pub name: String,
     /// The region and country, for telling two cities of one name apart.
-    /// Parts, not a joined line: the app joins them in its own language. A
-    /// place saved before this was a single string still loads.
-    #[serde(default, deserialize_with = "detail_parts")]
+    /// Parts, not a joined line: the app joins them in its own language.
+    #[serde(default)]
     pub detail: Vec<String>,
     pub latitude: f64,
     pub longitude: f64,

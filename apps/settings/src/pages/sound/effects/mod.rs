@@ -74,7 +74,7 @@ fn cached(direction: Direction) -> Loaded {
 }
 
 /// Read the store for `direction`: a few small files, and the factory presets
-/// (and the migration of old ones) are done when they are missing. Runs on a worker.
+/// are done when they are missing. Runs on a worker.
 fn load(direction: Direction) -> Loaded {
     let store = Store::default();
     let _ = store.ensure_factory();

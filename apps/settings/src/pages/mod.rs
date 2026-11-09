@@ -220,31 +220,12 @@ impl PageId {
         }
     }
 
-    /// The panel name the shell passes on the command line.
-    ///
-    /// `background` and `display` are the names GNOME Settings used, which
-    /// the shell's launch sites already pass.
+    /// The page for a canonical panel name, as `panel_name` writes it.
     pub fn from_panel(name: &str) -> Option<Self> {
-        Some(match name {
-            "network" | "wifi" | "wi-fi" | "wired" | "ethernet" | "vpn" | "mobile" | "wwan"
-            | "cellular" | "proxy" | "usage" | "data-usage" => Self::Network,
-            "bluetooth" => Self::Bluetooth,
-            "background" | "appearance" => Self::Appearance,
-            "accessibility" | "a11y" => Self::Accessibility,
-            "desktop" => Self::Desktop,
-            "privacy" => Self::Privacy,
-            "search" => Self::Search,
-            "display" | "displays" => Self::Displays,
-            "sound" => Self::Sound,
-            "power" => Self::Power,
-            "keyboard" => Self::Keyboard,
-            "mouse" => Self::Mouse,
-            "datetime" => Self::DateTime,
-            "users" | "user-accounts" => Self::Users,
-            "applications" | "apps" | "default-apps" => Self::Applications,
-            "about" | "info-overview" => Self::About,
-            _ => return None,
-        })
+        Self::ALL
+            .iter()
+            .copied()
+            .find(|page| page.panel_name() == name)
     }
 
     /// The element for this page. Each page is a distinct component type so

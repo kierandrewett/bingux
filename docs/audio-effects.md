@@ -119,9 +119,7 @@ use whenever that device is chosen.
 | `enabled`  | An effect that is off is left out of the sound and keeps its settings.                                                            |
 | `path`     | Convolver only: the impulse response file.                                                                                        |
 
-Presets written for Bingux's old plugins (version 1) are migrated when the store
-starts; the original stays in `presets/legacy/` with a `.notes.txt` listing what
-could not be carried across.
+Presets in any version other than 2 are refused; the store does not migrate them.
 
 Factory presets, written once on first use and never rewritten if deleted:
 output: Flat, Voice clarity, Night (compressor and limiter), Bass boost,
@@ -179,7 +177,7 @@ as a plugin). They are not listed in Add effect and nothing stands in for them.
 
 ## Import
 
-`bingux-effects import` reads a Bingux preset (version 1 or 2), an EasyEffects
+`bingux-effects import` reads a Bingux preset (version 2), an EasyEffects
 preset (settings map through `import_table.rs`; the equalizer's bands, slopes and
 mute carry over) and Equalizer APO / AutoEq text. Whatever has no equivalent is
 listed after the import.

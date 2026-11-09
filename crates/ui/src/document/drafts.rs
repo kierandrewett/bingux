@@ -162,16 +162,6 @@ impl Drafts {
         self.write(id, meta, content, Moment::now(), std::process::id())
     }
 
-    /// Adds a draft that another program or an older version of the app left
-    /// in a format of its own, as one no process owns, so that the next
-    /// recovery offers it (`saved_at` is when its content was last written).
-    /// Returns the new draft's id.
-    pub fn import(&self, meta: &DraftMeta, content: &[u8], saved_at: Moment) -> io::Result<String> {
-        let id = Drafts::new_id();
-        self.write(&id, meta, content, saved_at, 0)?;
-        Ok(id)
-    }
-
     pub(crate) fn write(
         &self,
         id: &str,
@@ -350,20 +340,6 @@ mod tests {
         let pid = child.id();
         child.wait().unwrap();
         pid
-    }
-
-    #[test]
-    fn an_imported_draft_is_offered_as_work_nobody_is_using() {
-        let drafts = scratch("import");
-        let id = drafts
-            .import(&meta("old.txt"), b"unsaved", Moment::from_unix(500))
-            .unwrap();
-        let found = drafts.recoverable();
-        assert_eq!(found.len(), 1);
-        assert_eq!(found[0].id, id);
-        assert_eq!(found[0].meta, meta("old.txt"));
-        assert_eq!(drafts.bytes(&id).unwrap(), b"unsaved");
-        let _ = std::fs::remove_dir_all(drafts.dir());
     }
 
     #[test]

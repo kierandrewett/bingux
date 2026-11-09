@@ -14,7 +14,7 @@ Actions=Network;Bluetooth;Displays;Sound;Appearance;Power;
 
 [Desktop Action Network]
 Name=Network
-Exec=bingux-settings bingux-settings://wifi
+Exec=bingux-settings bingux-settings://network
 
 [Desktop Action Bluetooth]
 Name=Bluetooth
