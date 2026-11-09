@@ -7,6 +7,6 @@ Icon=bingux-preview
 Terminal=false
 Categories=Graphics;Viewer;
 Keywords=Picture;Image;Photo;PDF;Document;Slideshow;Viewer;
-MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/avif;image/heif;image/heic;image/svg+xml;image/vnd.microsoft.icon;image/x-icon;application/pdf;
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/avif;image/heif;image/heic;image/svg+xml;image/vnd.microsoft.icon;image/x-icon;application/pdf;x-scheme-handler/bingux-preview;
 StartupWMClass=bingux-preview
 StartupNotify=true

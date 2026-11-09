@@ -31,11 +31,12 @@ FORMATS = ["rpm", "deb", "archlinux", "tar"]
 # `python3 scripts/cargo-licenses.py --summary` computes them and `--check` compares them with this table
 # (make package-check).
 LICENSES = {
-    "bingux": "Apache-2.0 AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND LGPL-3.0-or-later AND MIT AND Unicode-3.0 AND Zlib",
+    "bingux": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND LGPL-3.0-or-later AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-files": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-calculator": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-weather": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-text-editor": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
+    "bingux-preview": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-settings": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-taxonomy": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-media": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
@@ -49,6 +50,7 @@ APPS = {
     "bingux-calculator": {"id": "dev.drewett.bingux.Calculator", "extra": []},
     "bingux-weather": {"id": "dev.drewett.bingux.Weather", "extra": []},
     "bingux-text-editor": {"id": "dev.drewett.bingux.TextEditor", "extra": []},
+    "bingux-preview": {"id": "dev.drewett.bingux.Preview", "extra": []},
     "bingux-taxonomy": {"id": "dev.drewett.bingux.Taxonomy", "extra": []},
     "bingux-media": {"id": "dev.drewett.bingux.Media", "extra": []},
 }

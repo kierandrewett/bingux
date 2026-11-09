@@ -1,4 +1,4 @@
-# The application packages of Bingux: Settings, Files, Media, Weather and Taxonomy. Each is its own package, holds the files
+# The application packages of Bingux: Settings, Files, Preview, Media, Weather and Taxonomy. Each is its own package, holds the files
 # listed for it in common.star (APPS) and depends on `bingux`, which has the core services the apps talk to:
 # the configuration command, the sound effects engine, the preview helper and the search daemon.
 #
@@ -26,6 +26,10 @@ UV index, wind, sunrise and sunset, the moon, humidity, pressure, visibility and
     "bingux-text-editor": """Text and code editor for the Bingux desktop
 Text Editor edits plain text and code in tabs, with colours for about 200 languages, find and replace, any encoding
 and line ending, a Markdown preview and drafts that keep unsaved text across restarts.""",
+    "bingux-preview": """Picture and document viewer for the Bingux desktop
+Preview shows pictures and PDF documents, with the other files of the folder one arrow key away. It zooms, turns and
+crops pictures, plays animated GIFs, runs a slideshow and shows a document's pages and outline. HEIF, AVIF, TIFF,
+HDR, OpenEXR and camera pictures and PDFs are read by the preview helper in the bingux package.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
@@ -57,6 +61,11 @@ DEPENDS = {
     },
     "bingux-weather": {"rpm": ["xdg-utils"], "deb": ["xdg-utils"], "archlinux": ["xdg-utils"]},
     "bingux-text-editor": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
+    },
+    "bingux-preview": {
         "rpm": ["shared-mime-info", "xdg-utils"],
         "deb": ["shared-mime-info", "xdg-utils"],
         "archlinux": ["shared-mime-info", "xdg-utils"],
@@ -132,6 +141,11 @@ RECOMMENDS = {
         "deb": [],
         "archlinux": ["adwaita-fonts: the Adwaita Sans and Mono fonts"],
     },
+    "bingux-preview": {
+        "rpm": ["adwaita-sans-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
@@ -151,6 +165,7 @@ SUGGESTS = {
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
     "bingux-weather": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-text-editor": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
+    "bingux-preview": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-media": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
 }

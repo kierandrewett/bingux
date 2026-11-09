@@ -15,6 +15,7 @@ CRATE_DIRS = {
     "bingux-weather-app": "apps/weather",
     "bingux-text-editor": "apps/text-editor",
     "bingux-text": "crates/text",
+    "bingux-preview": "apps/preview",
     "bingux-taxonomy": "apps/taxonomy",
     "bingux-ui": "crates/ui",
     "bingux-files": "crates/files",

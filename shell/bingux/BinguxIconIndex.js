@@ -55,6 +55,7 @@ var names = {
     "changes-prevent-symbolic": true,
     "checkbox-checked-symbolic": true,
     "computer-symbolic": true,
+    "crop-symbolic": true,
     "default-app-documents-symbolic": true,
     "default-app-text-symbolic": true,
     "dialog-error-symbolic": true,
