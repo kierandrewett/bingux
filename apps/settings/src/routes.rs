@@ -814,6 +814,7 @@ mod tests {
 
     #[test]
     fn a_subpage_titles_itself_from_its_route() {
+        crate::register_catalogue_for_tests();
         let table = table();
         let title = |text: &str| table.title_of(&table.canonical(&location(text)));
         assert_eq!(title("network/wifi/saved"), "Saved networks");

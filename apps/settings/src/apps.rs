@@ -359,16 +359,17 @@ pub enum Source {
 }
 
 impl Source {
-    /// The name shown in lists and on the page.
-    pub fn label(self) -> &'static str {
+    /// The name shown in lists and on the page. Flatpak, Snap, AppImage and
+    /// Nix are product names, so they stay as written in every language.
+    pub fn label(self) -> String {
         match self {
-            Source::Flatpak => "Flatpak",
-            Source::Snap => "Snap",
-            Source::AppImage => "AppImage",
-            Source::Rpm => "RPM package",
-            Source::Nix => "Nix",
-            Source::Local => "Local desktop entry",
-            Source::System => "System",
+            Source::Flatpak => "Flatpak".to_string(),
+            Source::Snap => "Snap".to_string(),
+            Source::AppImage => "AppImage".to_string(),
+            Source::Nix => "Nix".to_string(),
+            Source::Rpm => tr!("settings-source-rpm"),
+            Source::Local => tr!("settings-source-local"),
+            Source::System => tr!("settings-source-system"),
         }
     }
 }

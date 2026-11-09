@@ -61,6 +61,14 @@ fn main() {
         .run(|| app::App);
 }
 
+/// Loads the English catalogue for tests, which read titles through it. Once
+/// per test binary, as `main` does at start.
+#[cfg(test)]
+pub(crate) fn register_catalogue_for_tests() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| bingux_ui::i18n::register(bingux_ui::catalogue!("settings")));
+}
+
 /// `bingux-settings --search-provider`: no window. Registers the search
 /// indexes and serves them on the app search socket until killed, so Spotlight
 /// (or `socat`) can search Settings without it being open. An activation prints
