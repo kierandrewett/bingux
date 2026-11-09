@@ -136,3 +136,63 @@ weather-outlook-for-next = { $word } for the next { $duration }
 weather-outlook-starts = { $word } starts in { $duration }
 weather-today = Today
 weather-tomorrow = Tomorrow
+
+## Sky conditions, one per WMO code
+
+weather-sky-clear = Clear
+weather-sky-mostly-clear = Mostly clear
+weather-sky-partly-cloudy = Partly cloudy
+weather-sky-overcast = Overcast
+weather-sky-fog = Fog
+weather-sky-freezing-fog = Freezing fog
+weather-sky-light-drizzle = Light drizzle
+weather-sky-drizzle = Drizzle
+weather-sky-heavy-drizzle = Heavy drizzle
+weather-sky-light-freezing-drizzle = Light freezing drizzle
+weather-sky-freezing-drizzle = Freezing drizzle
+weather-sky-light-rain = Light rain
+weather-sky-rain = Rain
+weather-sky-heavy-rain = Heavy rain
+weather-sky-light-freezing-rain = Light freezing rain
+weather-sky-freezing-rain = Freezing rain
+weather-sky-light-snow = Light snow
+weather-sky-snow = Snow
+weather-sky-heavy-snow = Heavy snow
+weather-sky-snow-grains = Snow grains
+weather-sky-light-showers = Light showers
+weather-sky-showers = Showers
+weather-sky-heavy-showers = Heavy showers
+weather-sky-light-snow-showers = Light snow showers
+weather-sky-snow-showers = Snow showers
+weather-sky-thunderstorm = Thunderstorm
+weather-sky-thunderstorm-hail = Thunderstorm with hail
+weather-sky-severe-thunderstorm-hail = Severe thunderstorm with hail
+weather-sky-cloudy = Cloudy
+
+## Moon phases
+
+weather-moon-new = New moon
+weather-moon-waxing-crescent = Waxing crescent
+weather-moon-first-quarter = First quarter
+weather-moon-waxing-gibbous = Waxing gibbous
+weather-moon-full = Full moon
+weather-moon-waning-gibbous = Waning gibbous
+weather-moon-last-quarter = Last quarter
+weather-moon-waning-crescent = Waning crescent
+
+## The conditions as a line of text, to copy or to read aloud
+
+# $place is the place's name; $temperature, $sky and the others are formatted already.
+weather-conditions-both = { $place }: { $temperature }, { $sky }.
+weather-conditions-temperature = { $place }: { $temperature }.
+weather-conditions-sky = { $place }, { $sky }.
+weather-conditions-place = { $place }.
+weather-conditions-feels = feels like { $temperature }
+weather-conditions-high = high { $temperature }
+weather-conditions-low = low { $temperature }
+weather-conditions-wind = wind { $speed }
+# $direction is the compass point spelled out, such as "north-east".
+weather-conditions-wind-from = wind { $speed } from the { $direction }
+weather-conditions-humidity = humidity { $percent }%
+# $parts are the fragments of one sentence, joined with commas.
+weather-conditions-sentence = { $parts }.

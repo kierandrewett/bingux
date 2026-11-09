@@ -9,13 +9,14 @@
 use bingux_ui::component::ComponentName;
 use bingux_ui::controls::focus_stop;
 use bingux_ui::prelude::*;
-use bingux_weather::codes::{self, Sky};
+use bingux_weather::codes::{Condition, Sky};
 use bingux_weather::{Day, Forecast, Units};
 use freya::prelude::*;
 
 use crate::format;
 use crate::glyph;
 use crate::sky;
+use crate::words;
 
 const ICON: f32 = 28.0;
 /// The chance of rain below which a day says nothing about it.
@@ -33,7 +34,7 @@ impl Week {
     fn detail(&self, day: &Day) -> String {
         let mut parts = vec![format::day_long(day.time, self.local)];
         if let Some(code) = day.code {
-            parts.push(codes::describe(code).to_string());
+            parts.push(words::condition(Condition::of(code)));
         }
         if let Some(chance) = day.precip_chance.filter(|c| *c >= CHANCE_SHOWN) {
             parts.push(format!("{} chance of rain", format::percent(chance)));

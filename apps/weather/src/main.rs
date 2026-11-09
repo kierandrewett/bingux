@@ -22,6 +22,7 @@ mod sky;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod week;
+mod words;
 
 use bingux_ui::prelude::Application;
 

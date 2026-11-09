@@ -9,13 +9,14 @@
 use bingux_ui::component::ComponentName;
 use bingux_ui::controls::focus_stop;
 use bingux_ui::prelude::*;
-use bingux_weather::codes::{self, Sky};
+use bingux_weather::codes::{Condition, Sky};
 use bingux_weather::time::HOUR;
 use bingux_weather::{Forecast, Hour, Units, text};
 use freya::prelude::*;
 
 use crate::format;
 use crate::glyph;
+use crate::words;
 
 /// How many hours the strip shows, the current one included.
 pub const HOURS: usize = 25;
@@ -80,7 +81,7 @@ impl HourStrip {
                 let hour = &hours[index];
                 let mut parts = vec![clock.time(hour.time)];
                 if let Some(code) = hour.code {
-                    parts.push(codes::describe(code).to_string());
+                    parts.push(words::condition(Condition::of(code)));
                 }
                 if let Some(temperature) = hour.temperature {
                     parts.push(self.units.temperature(temperature));

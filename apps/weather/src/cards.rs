@@ -18,6 +18,7 @@ use crate::format;
 use crate::glyph;
 use crate::hourly::HOURS;
 use crate::sky;
+use crate::words;
 
 /// How many hours before now the temperature chart starts. The forecast keeps
 /// that many (`bingux-weather`'s `PAST_HOURS` in the request).
@@ -250,7 +251,7 @@ impl Details {
                     .child(glyph::moon_view(moon.phase, MOON_SIZE))
                     .into(),
                 typography::HEADING
-                    .label(tokens, moon.name())
+                    .label(tokens, words::moon_phase(moon.kind()))
                     .max_lines(1)
                     .into(),
                 note(

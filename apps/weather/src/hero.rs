@@ -12,14 +12,15 @@
 use bingux_ui::component::ComponentName;
 use bingux_ui::motion::use_ambient_cycle;
 use bingux_ui::prelude::*;
-use bingux_weather::codes::{self, Sky};
-use bingux_weather::{Forecast, Units, text};
+use bingux_weather::codes::{Condition, Sky};
+use bingux_weather::{Forecast, Units};
 use bytes::Bytes;
 use freya::prelude::*;
 
 use crate::format::{self, light_of, rain_outlook};
 use crate::glyph;
 use crate::sky;
+use crate::words;
 
 /// How tall the temperature is set, as a multiple of the hero style's size.
 const TEMPERATURE_SCALE: f32 = 2.5;
@@ -43,7 +44,7 @@ impl Hero {
     /// What a screen reader says for the whole card.
     fn spoken(&self) -> String {
         let place = bingux_weather::Place::new(self.name.clone(), 0.0, 0.0);
-        text::conditions(&place, &self.forecast, &self.units)
+        words::conditions(&place, &self.forecast, &self.units)
     }
 }
 
@@ -230,7 +231,10 @@ impl Component for Hero {
                 hstack(S2)
                     .key("condition")
                     .child(glyph::view(sky, current.is_day, CONDITION_ICON))
-                    .child(on_sky(typography::HEADING).label(&tokens, codes::describe(code))),
+                    .child(
+                        on_sky(typography::HEADING)
+                            .label(&tokens, words::condition(Condition::of(code))),
+                    ),
             )
             .child(
                 on_sky(typography::BODY)

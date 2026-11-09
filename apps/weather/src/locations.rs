@@ -11,7 +11,7 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::tr;
 use bingux_ui::prelude::*;
 use bingux_ui::task::{Resource, use_polled_resource};
-use bingux_weather::codes::{self, Sky};
+use bingux_weather::codes::{Condition, Sky};
 use bingux_weather::store::HERE;
 use bingux_weather::{Here, Place, Units};
 use freya::prelude::*;
@@ -20,6 +20,7 @@ use crate::format;
 use crate::glyph;
 use crate::hub::Hub;
 use crate::load::{self, ForecastKey};
+use crate::words;
 
 const ICON: f32 = 24.0;
 /// How often a row looks for a newer forecast: the cache decides whether that
@@ -113,7 +114,7 @@ impl Component for PlaceRow {
             let forecast = &loaded.forecast;
             let current = &forecast.current;
             let code = current.code.unwrap_or(3);
-            lines.push(codes::describe(code).to_string());
+            lines.push(words::condition(Condition::of(code)));
             let temperature = typography::HEADING
                 .label(
                     &tokens,

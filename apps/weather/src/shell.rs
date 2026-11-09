@@ -14,7 +14,7 @@ use bingux_ui::location::Source;
 use bingux_ui::prelude::*;
 use bingux_ui::task::{Resource, use_polled_resource, use_resource};
 use bingux_weather::store::HERE;
-use bingux_weather::{Here, Place, Settings, Speed, Temperature, Units, text};
+use bingux_weather::{Here, Place, Settings, Speed, Temperature, Units};
 use freya::prelude::*;
 
 use crate::hub::Hub;
@@ -22,6 +22,7 @@ use crate::load::{self, Boot, ForecastKey, LocateKey};
 use crate::locations::{HereView, Locations};
 use crate::page::{Load, Page};
 use crate::search;
+use crate::words;
 
 /// How often the page looks for a newer forecast; the cache decides whether
 /// that is a request.
@@ -195,7 +196,7 @@ impl Component for Shell {
         let retry: EventHandler<()> = (move |_: ()| hub.refresh_all()).into();
         let conditions: Option<String> = match (&load, &place) {
             (Load::Ready(loaded), Some(place)) => {
-                Some(text::conditions(place, &loaded.forecast, &units))
+                Some(words::conditions(place, &loaded.forecast, &units))
             }
             _ => None,
         };
