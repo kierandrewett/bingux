@@ -10,6 +10,7 @@ use std::net::Ipv6Addr;
 use std::str::FromStr;
 
 use bingux_ui::controls::form::validate;
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 use serde_json::{Value, json};
 
@@ -204,8 +205,7 @@ pub fn load(name: &str) -> Result<WgProfile, String> {
         addresses6,
         dns4,
         dns6,
-    ] = <[String; 10]>::try_from(values)
-        .map_err(|_| "Could not read this VPN. Try again.".to_string())?;
+    ] = <[String; 10]>::try_from(values).map_err(|_| tr!("network-vpn-read-failed"))?;
     let path = bus::connection_path(&uuid)?;
     let peers = peers_from(
         &bus::get_settings(&path)?,
@@ -323,16 +323,11 @@ pub mod check {
     pub fn cidr_list(text: &str) -> Check {
         let items = parse_list(text);
         if items.is_empty() {
-            return Err(
-                "Enter at least one address with its prefix length, such as 10.8.0.2/32."
-                    .to_string(),
-            );
+            return Err(tr!("network-vpn-error-cidr-required"));
         }
         for item in items {
             if validate::ipv4_cidr(&item).is_err() && validate::ipv6_cidr(&item).is_err() {
-                return Err(format!(
-                    "\u{201c}{item}\u{201d} needs a prefix length, such as 10.8.0.2/32."
-                ));
+                return Err(tr!("network-vpn-error-cidr-item", item = item.as_str()));
             }
         }
         Ok(())
@@ -342,11 +337,11 @@ pub mod check {
     pub fn dns_list(text: &str) -> Check {
         let items = parse_list(text);
         if items.is_empty() {
-            return Err("Enter at least one IP address, one per line.".to_string());
+            return Err(tr!("network-vpn-error-dns-required"));
         }
         for item in items {
             if validate::ip(&item).is_err() {
-                return Err(format!("\u{201c}{item}\u{201d} is not an IP address."));
+                return Err(tr!("network-vpn-error-not-ip", item = item.as_str()));
             }
         }
         Ok(())
@@ -354,8 +349,7 @@ pub mod check {
 
     /// `host:port`, or `[IPv6 address]:port`.
     pub fn endpoint(text: &str) -> Check {
-        let message =
-            "Enter the server as host:port, such as vpn.example.com:51820 or [2001:db8::1]:51820.";
+        let message = tr!("network-vpn-error-endpoint");
         let parsed = match text.strip_prefix('[') {
             Some(rest) => rest
                 .split_once("]:")
@@ -371,8 +365,7 @@ pub mod check {
     }
 
     pub fn mtu(text: &str) -> Check {
-        validate::integer_in(68..=65535)(text)
-            .map_err(|_| "Enter a size from 68 to 65535, or leave it blank.".to_string())
+        validate::integer_in(68..=65535)(text).map_err(|_| tr!("network-vpn-error-mtu"))
     }
 
     /// A firewall mark: a number, in decimal or as `0x` and hexadecimal digits.
@@ -384,14 +377,12 @@ pub mod check {
         if valid {
             Ok(())
         } else {
-            Err("Enter a number such as 51820, or leave it empty.".to_string())
+            Err(tr!("network-vpn-error-fwmark"))
         }
     }
 
     pub fn keepalive(text: &str) -> Check {
-        validate::integer_in(0..=65535)(text).map_err(|_| {
-            "Enter a number of seconds from 0 to 65535, or leave it blank.".to_string()
-        })
+        validate::integer_in(0..=65535)(text).map_err(|_| tr!("network-vpn-error-keepalive"))
     }
 
     pub fn key(text: &str) -> Check {
@@ -435,10 +426,10 @@ pub fn use_has_wg() -> bool {
 pub fn generate_private_key() -> Result<String, String> {
     let output = Command::new("wg").arg("genkey").output().map_err(|error| {
         eprintln!("bingux-settings: wg genkey could not start: {error}");
-        "Could not generate a key. Try again.".to_string()
+        tr!("network-vpn-key-generate-failed")
     })?;
     if !output.status.success() {
-        return Err("Could not generate a key. Try again.".to_string());
+        return Err(tr!("network-vpn-key-generate-failed"));
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
@@ -565,7 +556,7 @@ pub fn import_text(text: &str, display: &str) -> Result<String, String> {
         .create(&directory)
         .map_err(|error| {
             eprintln!("bingux-settings: import folder could not be made: {error}");
-            "Could not import the VPN. Check the free space and try again.".to_string()
+            tr!("network-vpn-import-space")
         })?;
     let result = (|| {
         let file = directory.join(format!("{}.conf", interface_name(&name)));
@@ -577,18 +568,12 @@ pub fn import_text(text: &str, display: &str) -> Result<String, String> {
             .and_then(|mut handle| handle.write_all(text.as_bytes()))
             .map_err(|error| {
                 eprintln!("bingux-settings: import file could not be written: {error}");
-                "Could not import the VPN. Check the free space and try again.".to_string()
+                tr!("network-vpn-import-space")
             })?;
         let file = file.to_string_lossy().into_owned();
         let added = nm::run(&["connection", "import", "type", "wireguard", "file", &file])
-            .map_err(|raw| {
-                super::super::plain(
-                    &raw,
-                    "Could not import the VPN. Check the file and try again.",
-                )
-            })?;
-        let (_, uuid) = nm::added(&added)
-            .ok_or_else(|| "Could not find the new VPN. Try again.".to_string())?;
+            .map_err(|raw| super::super::plain(&raw, &tr!("network-vpn-import-check-file")))?;
+        let (_, uuid) = nm::added(&added).ok_or_else(|| tr!("network-vpn-new-vpn-missing"))?;
         // A new VPN does not connect by itself until the person says so.
         nm::run(&[
             "connection",

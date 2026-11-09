@@ -8,6 +8,7 @@
 //! backslash or the end of the value). Keys may contain spaces (`IPSec ID`).
 
 use super::nm;
+use bingux_ui::prelude::tr;
 
 /// Ordered `(key, value)` pairs.
 pub type Entries = Vec<(String, String)>;
@@ -112,8 +113,8 @@ pub fn load(name: &str) -> Result<PluginProfile, String> {
             "vpn.secrets",
         ],
     )?;
-    let [uuid, service, user_name, data, secrets] = <[String; 5]>::try_from(values)
-        .map_err(|_| "Could not read this VPN. Try again.".to_string())?;
+    let [uuid, service, user_name, data, secrets] =
+        <[String; 5]>::try_from(values).map_err(|_| tr!("network-vpn-read-failed"))?;
     Ok(PluginProfile {
         uuid,
         service,

@@ -1730,8 +1730,8 @@ network-vpn-delete = Delete
 network-vpn-field-needed = { $label } is needed.
 # Choice for a remembered setting that is not needed.
 network-vpn-not-needed = Not needed
-# Choice label for remembering a plugin field; $label is the field's name in lowercase.
-network-vpn-remember = Remember { $label }
+# Choice label for remembering the VPN password.
+network-vpn-remember-password = Remember password
 # Group title for a plugin's extra settings.
 network-vpn-group-advanced = Advanced
 # Field label for a new plugin setting's name.
@@ -2520,3 +2520,154 @@ network-wifi-signal-paren = { $words } ({ $percent }%)
 # Share QR code label for accessibility.
 # { $ssid } is the network name.
 network-wifi-qr-label = QR code to join { $ssid }
+
+## VPN
+# VPN connection state, shown on the row.
+network-vpn-state-connected = Connected
+# VPN connection state, shown on the row. Variable: address, the VPN's address.
+network-vpn-state-connected-at = Connected · { $address }
+network-vpn-state-connecting = Connecting…
+# VPN connection state, shown on the row. Variable: reason, why it failed.
+network-vpn-state-failed = Failed: { $reason }
+network-vpn-state-off = Not connected
+# Dialog title. Variable: name, the VPN's name.
+network-vpn-delete-title = Delete “{ $name }”?
+network-vpn-delete-body = This removes the VPN and the keys and passwords saved in it.
+network-vpn-needs-connection = Needs a connection
+network-vpn-status-error = Could not read the network status. Try again in a moment.
+network-vpn-add-title = Add VPN
+network-vpn-import-title = Import VPN
+# Page title for a VPN type. Variable: name, the VPN type's name.
+network-vpn-add-kind-title = Add { $name }
+network-vpn-add-name-taken = Use a name that no other connection has.
+network-vpn-add-type = Type
+network-vpn-add-from-file = From a file
+network-vpn-add-import-from-file = Import from file…
+network-vpn-add-name-required = Give the VPN a name.
+network-vpn-add-group-interface = Interface
+network-vpn-add-private-key = Private key
+network-vpn-add-key-local = Stays on this computer. Generate one, or paste your own.
+network-vpn-add-key-provider = Paste the key from your VPN provider.
+network-vpn-add-generate-key = Generate key
+network-vpn-add-addresses = Addresses
+network-vpn-add-addresses-hint = This computer's addresses inside the tunnel, one per line, with the prefix length.
+network-vpn-add-dns = DNS servers
+network-vpn-add-dns-hint = Used while the tunnel is up, one per line.
+network-vpn-add-group-peer = Peer
+network-vpn-add-public-key = Public key
+network-vpn-add-public-key-hint = The other side's public key.
+network-vpn-add-endpoint = Endpoint
+network-vpn-add-endpoint-hint = Where to reach it, as host:port.
+network-vpn-add-preshared = Preshared key
+network-vpn-add-preshared-hint = An extra secret both sides share, if they use one.
+network-vpn-add-keepalive = Keepalive
+# Suffix after the keepalive field.
+network-vpn-add-seconds = seconds
+network-vpn-add-keepalive-hint = Keeps the connection open through a router. 25 is usual.
+network-vpn-add-group-traffic = Traffic
+network-vpn-add-route-all = Route all traffic
+network-vpn-add-allowed = Allowed addresses
+network-vpn-add-allowed-hint = Networks that go through this peer, one per line.
+network-vpn-add-name = Name
+network-vpn-add-name-hint = How this VPN is listed.
+network-vpn-add-submit = Add VPN
+network-vpn-add-no-connect = It does not connect until you turn it on.
+network-vpn-add-server = Server
+network-vpn-add-settings-needed = Add the settings this VPN needs, one name = value per line.
+network-vpn-add-settings = Settings
+network-vpn-add-settings-hint = One name = value per line.
+# Error. Variable: error, the reason the file could not be read.
+network-vpn-add-read-failed = The file could not be read: { $error }.
+network-vpn-add-unknown-kind = This file does not say what kind of VPN it is. Choose the type above.
+# Error. Variable: name, the VPN type's name.
+network-vpn-add-not-installed = { $name } is not installed. Install its plugin to add this VPN.
+network-vpn-add-new-missing = The new VPN could not be found. Try again.
+network-vpn-add-filter-vpn = VPN configuration
+network-vpn-add-choose-file = Choose a VPN file
+network-vpn-add-filter-all = All files
+network-vpn-add-path-required = Enter the full path of the file, starting with /.
+network-vpn-add-detect = Detect from the file
+# Hint listing the file types a plugin reads. Variable: list, the file extensions.
+network-vpn-add-reads = Reads { $list }.
+network-vpn-add-file = File
+network-vpn-add-browse-hint = Or choose the file from your folders.
+network-vpn-add-browse = Browse…
+network-vpn-add-import = Import
+network-vpn-add-import-note = The VPN opens when it is imported. It does not connect until you turn it on.
+network-vpn-add-failed = Could not add the VPN. Check the details and try again.
+network-vpn-error-host-port = Enter the server as a host name or address, such as vpn.example.com or vpn.example.com:1194.
+network-vpn-error-absolute-path = Enter the full path of the file, starting with /.
+network-vpn-field-your-private-key = Your private key
+network-vpn-read-failed = Could not read this VPN. Try again.
+network-vpn-error-cidr-required = Enter at least one address with its prefix length, such as 10.8.0.2/32.
+# Error. Variable: item, the address that is missing its prefix length.
+network-vpn-error-cidr-item = “{ $item }” needs a prefix length, such as 10.8.0.2/32.
+network-vpn-error-dns-required = Enter at least one IP address, one per line.
+# Error. Variable: item, the entry that is not an IP address.
+network-vpn-error-not-ip = “{ $item }” is not an IP address.
+network-vpn-error-endpoint = Enter the server as host:port, such as vpn.example.com:51820 or [2001:db8::1]:51820.
+network-vpn-error-mtu = Enter a size from 68 to 65535, or leave it blank.
+network-vpn-error-fwmark = Enter a number such as 51820, or leave it empty.
+network-vpn-error-keepalive = Enter a number of seconds from 0 to 65535, or leave it blank.
+network-vpn-key-generate-failed = Could not generate a key. Try again.
+network-vpn-import-space = Could not import the VPN. Check the free space and try again.
+network-vpn-import-check-file = Could not import the VPN. Check the file and try again.
+network-vpn-new-vpn-missing = Could not find the new VPN. Try again.
+network-vpn-nmcli-missing = Network settings are not available. Restart the computer and try again.
+network-vpn-nmcli-failed = Could not open the network settings. Try again.
+network-vpn-reason-needs-secret = The VPN needs a password or key that is not saved. Add it in the VPN's settings.
+network-vpn-reason-refused = The server refused the user name or password.
+network-vpn-reason-timeout = The server did not answer in time. Check its address and your connection.
+network-vpn-reason-program-failed = The VPN program failed to start. Check its settings, and that its plugin is installed.
+network-vpn-reason-no-settings = The server sent no usable network settings. Try again later.
+network-vpn-reason-no-device = There is no network connection to carry the VPN. Connect to a network first.
+network-vpn-reason-gone = This VPN no longer exists.
+network-vpn-reason-disconnected = The VPN was disconnected.
+network-vpn-reason-not-allowed = You are not allowed to change this connection.
+network-vpn-reason-no-reason = The VPN did not connect. Try again.
+network-vpn-reason-fallback = Could not change the VPN. Try again.
+network-vpn-unreadable = Could not read the VPN settings. Try again in a moment.
+network-vpn-peers-missing = Could not read the VPN peers. Restart the computer and try again.
+network-vpn-connection-not-found = Could not find this connection. Try again.
+network-vpn-connection-unreadable = Could not read this connection. Try again.
+# Choice label for remembering the VPN key password.
+network-vpn-remember-key-password = Remember key password
+# Choice label for remembering the VPN group password.
+network-vpn-remember-group-password = Remember group password
+# Choice label for remembering the VPN Xauth password.
+network-vpn-remember-xauth-password = Remember password
+# Choice label for remembering the SSH password.
+network-vpn-remember-ssh-password = Remember password
+
+# Plugin field labels, shown on the VPN form.
+network-vpn-field-server = Server
+network-vpn-field-user-name = User name
+network-vpn-field-password = Password
+network-vpn-field-ca = Server certificate (CA)
+network-vpn-field-certificate = Your certificate
+network-vpn-field-key-password = Key password
+network-vpn-field-static-key-file = Static key file
+network-vpn-field-gateway = Gateway
+network-vpn-field-protocol = Protocol
+network-vpn-field-group-name = Group name
+network-vpn-field-group-password = Group password
+network-vpn-field-domain = Domain
+network-vpn-field-port = Port
+network-vpn-field-sign-in-with = Sign in with
+network-vpn-field-key-file = Key file
+
+# Plugin choice labels, shown in the VPN form's menus.
+network-vpn-choice-certificates = Certificates
+network-vpn-choice-password-certificates = Password and certificates
+network-vpn-choice-static-key = Static key
+network-vpn-choice-ssh-agent = SSH agent
+
+# Save-scope choices for a VPN's secrets.
+network-vpn-flags-all-users = Save for all users
+network-vpn-flags-this-user = Save for this user only
+network-vpn-flags-ask = Ask every time
+
+# Plugin field hints, shown under the VPN form's fields.
+network-vpn-hint-server-port = Host name or address, with a port if it is not the default.
+network-vpn-hint-gateway = Host name or address of the VPN server.
+network-vpn-hint-ssh-server = Host name or address of the SSH server.

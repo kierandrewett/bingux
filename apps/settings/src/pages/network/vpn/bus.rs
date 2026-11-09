@@ -12,6 +12,7 @@
 
 use std::process::Command;
 
+use bingux_ui::prelude::tr;
 use serde_json::Value;
 
 const SERVICE: &str = "org.freedesktop.NetworkManager";
@@ -19,7 +20,9 @@ const SETTINGS_PATH: &str = "/org/freedesktop/NetworkManager/Settings";
 const CONNECTION: &str = "org.freedesktop.NetworkManager.Settings.Connection";
 
 /// What the person reads when the VPN settings cannot be understood.
-const UNREADABLE: &str = "Could not read the VPN settings. Try again in a moment.";
+fn unreadable() -> String {
+    tr!("network-vpn-unreadable")
+}
 
 fn busctl(args: &[&str]) -> Result<String, String> {
     let output = Command::new("busctl")
@@ -28,11 +31,11 @@ fn busctl(args: &[&str]) -> Result<String, String> {
         .output()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => {
-                "Could not read the VPN peers. Restart the computer and try again.".to_string()
+                tr!("network-vpn-peers-missing")
             }
             _ => {
                 eprintln!("bingux-settings: busctl could not start: {error}");
-                UNREADABLE.to_string()
+                unreadable()
             }
         })?;
     if output.status.success() {
@@ -41,7 +44,7 @@ fn busctl(args: &[&str]) -> Result<String, String> {
     let text = String::from_utf8_lossy(&output.stderr);
     let message = text.trim().trim_start_matches("Call failed: ").trim();
     eprintln!("bingux-settings: busctl failed: {message}");
-    Err(UNREADABLE.to_string())
+    Err(unreadable())
 }
 
 /// The D-Bus object path of the connection with this UUID.
@@ -59,7 +62,7 @@ pub fn connection_path(uuid: &str) -> Result<String, String> {
     text.split('"')
         .nth(1)
         .map(str::to_string)
-        .ok_or_else(|| "Could not find this connection. Try again.".to_string())
+        .ok_or_else(|| tr!("network-vpn-connection-not-found"))
 }
 
 /// A call whose one result is `a{sa{sv}}`, as the dictionary inside.
@@ -75,13 +78,13 @@ fn settings_call(path: &str, method: &str, argument: Option<&str>) -> Result<Val
 
 /// The dictionary in a `busctl --json=short` reply of one `a{sa{sv}}`.
 fn parse_reply(text: &str) -> Result<Value, String> {
-    let reply: Value = serde_json::from_str(text)
-        .map_err(|_| "Could not read this connection. Try again.".to_string())?;
+    let reply: Value =
+        serde_json::from_str(text).map_err(|_| tr!("network-vpn-connection-unreadable"))?;
     reply
         .get("data")
         .and_then(|data| data.get(0))
         .cloned()
-        .ok_or_else(|| "Could not read this connection. Try again.".to_string())
+        .ok_or_else(|| tr!("network-vpn-connection-unreadable"))
 }
 
 /// All settings of the connection at `path`, without secrets.
@@ -108,7 +111,7 @@ pub fn update(path: &str, settings: &Value) -> Result<(), String> {
 fn split_type(signature: &str) -> Result<(&str, &str), String> {
     let bad = || {
         eprintln!("bingux-settings: unsupported D-Bus type {signature:?}");
-        UNREADABLE.to_string()
+        unreadable()
     };
     let first = signature.chars().next().ok_or_else(bad)?;
     match first {
@@ -142,7 +145,7 @@ fn split_type(signature: &str) -> Result<(&str, &str), String> {
 fn encode(signature: &str, value: &Value, out: &mut Vec<String>) -> Result<(), String> {
     let mismatch = || {
         eprintln!("bingux-settings: a value does not match its D-Bus type {signature:?}");
-        UNREADABLE.to_string()
+        unreadable()
     };
     match signature.chars().next().ok_or_else(mismatch)? {
         's' | 'o' | 'g' => out.push(value.as_str().ok_or_else(mismatch)?.to_string()),
@@ -166,7 +169,7 @@ fn encode(signature: &str, value: &Value, out: &mut Vec<String>) -> Result<(), S
             let (key, value_type) = split_type(body)?;
             if key != "s" {
                 eprintln!("bingux-settings: unsupported dictionary key {key:?}");
-                return Err(UNREADABLE.to_string());
+                return Err(unreadable());
             }
             let map = value.as_object().ok_or_else(mismatch)?;
             out.push(map.len().to_string());

@@ -818,7 +818,7 @@ fn initial_value(field: &Field, profile: &PluginProfile) -> String {
 /// How a secret field's stored value is treated, as a flags number.
 fn initial_flags(field: &Field, profile: &PluginProfile) -> String {
     match field.kind {
-        Kind::Secret { flags } => data::get(&profile.data, flags).unwrap_or("0").to_string(),
+        Kind::Secret { flags, .. } => data::get(&profile.data, flags).unwrap_or("0").to_string(),
         _ => "0".to_string(),
     }
 }
@@ -845,7 +845,12 @@ pub(super) fn compose(
         let value = values[index].trim();
         match (field.store, field.kind) {
             (Store::UserName, _) => composed.user_name = value.to_string(),
-            (Store::Data(key), Kind::Secret { flags: flags_key }) => {
+            (
+                Store::Data(key),
+                Kind::Secret {
+                    flags: flags_key, ..
+                },
+            ) => {
                 let asked = flags[index] == "2";
                 data::set(
                     &mut composed.secrets,
@@ -901,7 +906,7 @@ pub(super) fn field_error(
             if field.required {
                 return Some(tr!(
                     "network-vpn-field-needed",
-                    label = field.label.to_string()
+                    label = bingux_ui::i18n::text(field.label)
                 ));
             }
             continue;
@@ -1008,7 +1013,7 @@ pub(super) fn field_rows(
                     .collect();
                 let selected = texts.value_of(fields, field.key().unwrap_or_default());
                 group = group.row(choice_row(
-                    field.label,
+                    bingux_ui::i18n::text(field.label),
                     options,
                     &selected,
                     move |key: String| {
@@ -1017,7 +1022,7 @@ pub(super) fn field_rows(
                     },
                 ));
             }
-            Kind::Secret { .. } => {
+            Kind::Secret { remember, .. } => {
                 let flag_state = states.flags[index];
                 let mut options: Vec<(String, String)> = SECRET_FLAGS
                     .iter()
@@ -1028,7 +1033,7 @@ pub(super) fn field_rows(
                     options.push((current.clone(), tr!("network-vpn-not-needed")));
                 }
                 group = group.row(choice_row(
-                    tr!("network-vpn-remember", label = field.label.to_lowercase()),
+                    bingux_ui::i18n::text(remember),
                     options,
                     &current,
                     move |key: String| {
@@ -1208,7 +1213,7 @@ fn new_key_error(key: &str, taken: &[String]) -> Option<String> {
 
 /// A text or path field of a plugin.
 fn text_field_row(field: &Field, state: State<String>) -> Element {
-    let mut input = form_field(field.label, state);
+    let mut input = form_field(bingux_ui::i18n::text(field.label), state);
     if !field.hint.is_empty() {
         input = input.hint(field.hint);
     }
@@ -1229,7 +1234,10 @@ fn text_field_row(field: &Field, state: State<String>) -> Element {
 
 /// A secret field of a plugin.
 fn secret_field(field: &Field, state: State<String>) -> Element {
-    form_field(field.label, state).password().optional().into()
+    form_field(bingux_ui::i18n::text(field.label), state)
+        .password()
+        .optional()
+        .into()
 }
 
 /// One setting of the Advanced list: its name, an editable value and a
@@ -1349,8 +1357,8 @@ mod tests {
         let (mut values, mut flags) = state_of(&profile);
         let fields = fields("openvpn");
         let at = |label: &str| fields.iter().position(|f| f.label == label).unwrap();
-        values[at("Server")] = "other.example.net".into();
-        flags[at("Password")] = "2".into();
+        values[at("network-vpn-field-server")] = "other.example.net".into();
+        flags[at("network-vpn-field-password")] = "2".into();
         let extras = extras_of("openvpn", &profile);
         let composed = compose("openvpn", &profile, fields, &values, &flags, &extras);
         assert_eq!(
@@ -1367,7 +1375,10 @@ mod tests {
         let profile = openvpn_profile();
         let (values, mut flags) = state_of(&profile);
         let fields = fields("openvpn");
-        let at = fields.iter().position(|f| f.label == "Password").unwrap();
+        let at = fields
+            .iter()
+            .position(|f| f.label == "network-vpn-field-password")
+            .unwrap();
         flags[at] = "0".into();
         let mut extras = extras_of("openvpn", &profile);
         extras.push(Extra {
@@ -1414,13 +1425,14 @@ mod tests {
         assert_eq!(field_error(fields, &values, &always), None);
         let at = fields
             .iter()
-            .position(|f| f.label == "Server certificate (CA)")
+            .position(|f| f.label == "network-vpn-field-ca")
             .unwrap();
         values[at] = "relative/ca.pem".into();
         assert!(field_error(fields, &values, &always).is_some());
         // A hidden field is not checked.
         assert_eq!(
-            field_error(fields, &values, &|f: &Field| f.label == "Server"),
+            field_error(fields, &values, &|f: &Field| f.label
+                == "network-vpn-field-server"),
             None
         );
     }

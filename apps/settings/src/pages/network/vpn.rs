@@ -28,6 +28,7 @@ use crate::ui::{
     CANCEL_ID, Group, ResponseKind, SpinnerSize, Status, action_strip, dialog, page_column, row,
     spinner, status, strip_action, switch, use_tokens,
 };
+use bingux_ui::prelude::tr;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
 
@@ -108,11 +109,13 @@ impl Link {
     /// The state line of a row or screen.
     pub fn line(&self) -> String {
         match self {
-            Self::Connected(address) if address.is_empty() => "Connected".to_string(),
-            Self::Connected(address) => format!("Connected · {address}"),
-            Self::Connecting => "Connecting…".to_string(),
-            Self::Failed(reason) => format!("Failed: {reason}"),
-            Self::Off => "Not connected".to_string(),
+            Self::Connected(address) if address.is_empty() => tr!("network-vpn-state-connected"),
+            Self::Connected(address) => {
+                tr!("network-vpn-state-connected-at", address = address.clone())
+            }
+            Self::Connecting => tr!("network-vpn-state-connecting"),
+            Self::Failed(reason) => tr!("network-vpn-state-failed", reason = reason.clone()),
+            Self::Off => tr!("network-vpn-state-off"),
         }
     }
 
@@ -185,23 +188,27 @@ fn set_link(ctx: NetCtx, name: String, up: bool) {
 fn confirm_delete(ctx: NetCtx, name: String) {
     ctx.overlays.show_dialog(
         dialog(
-            format!("Delete “{name}”?"),
-            "This removes the VPN and the keys and passwords saved in it.",
+            tr!("network-vpn-delete-title", name = name.clone()),
+            tr!("network-vpn-delete-body"),
         )
-        .cancel("Cancel")
+        .cancel(tr!("network-vpn-cancel"))
         .default_action(CANCEL_ID)
-        .response("Delete", ResponseKind::Destructive, move |_| {
-            let target = name.clone();
-            system::background_then(
-                move || nm::run(&["connection", "delete", "id", &target]),
-                move |result| {
-                    if let Err(message) = result {
-                        ctx.overlays.toast(message);
-                    }
-                    ctx.reload();
-                },
-            );
-        }),
+        .response(
+            tr!("network-vpn-delete"),
+            ResponseKind::Destructive,
+            move |_| {
+                let target = name.clone();
+                system::background_then(
+                    move || nm::run(&["connection", "delete", "id", &target]),
+                    move |result| {
+                        if let Err(message) = result {
+                            ctx.overlays.toast(message);
+                        }
+                        ctx.reload();
+                    },
+                );
+            },
+        ),
     );
 }
 
@@ -249,7 +256,7 @@ fn vpn_row(ctx: NetCtx, ov: &Overview, vpn: &Vpn) -> Element {
     let mut item = row(vpn.name.clone())
         .leading(Icon::NetworkVpn)
         .subtitle(if needs_connection {
-            "Needs a connection".to_string()
+            tr!("network-vpn-needs-connection")
         } else {
             link.line()
         })
@@ -388,9 +395,9 @@ impl Component for VpnPage {
                 return page_column().child(
                     status(Status::Error(super::plain(
                         &failure.0,
-                        "Could not read the network status. Try again in a moment.",
+                        &tr!("network-vpn-status-error"),
                     )))
-                    .action("Try again", move |_| ctx.reload()),
+                    .action(&tr!("network-vpn-try-again"), move |_| ctx.reload()),
                 );
             }
             None => {
@@ -433,11 +440,14 @@ impl Component for VpnPage {
             Some(Err(message)) => {
                 let retry = name.clone();
                 info = info.row(Element::from(
-                    status(Status::Error(message.clone())).action("Try again", move |_| {
-                        let mut shown = profile;
-                        shown.set(None);
-                        fetch(retry.clone(), profile)
-                    }),
+                    status(Status::Error(message.clone())).action(
+                        &tr!("network-vpn-try-again"),
+                        move |_| {
+                            let mut shown = profile;
+                            shown.set(None);
+                            fetch(retry.clone(), profile)
+                        },
+                    ),
                 ));
             }
             other => {

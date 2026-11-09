@@ -9,6 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use bingux_ui::controls::form::validate;
+use bingux_ui::prelude::{i18n_id, tr};
 
 /// The directories NetworkManager reads plugin `.name` files from.
 pub const NAME_DIRS: [&str; 2] = ["/usr/lib/NetworkManager/VPN", "/etc/NetworkManager/VPN"];
@@ -178,6 +179,8 @@ pub enum Kind {
     /// `vpn.data` key that holds how NetworkManager treats it.
     Secret {
         flags: &'static str,
+        /// The choice label that remembers this secret.
+        remember: &'static str,
     },
     /// One of `(value, label)` pairs; the first is the default.
     Choice(&'static [(&'static str, &'static str)]),
@@ -257,7 +260,7 @@ impl Field {
 
 /// A server address, with an optional port: `vpn.example.com`, `10.0.0.1:1194`.
 fn host_with_port(text: &str) -> Result<(), String> {
-    let message = "Enter the server as a host name or address, such as vpn.example.com or vpn.example.com:1194.";
+    let message = tr!("network-vpn-error-host-port");
     let (host, port) = match text.rsplit_once(':') {
         // `fe80::1` has colons but is no host:port; only one colon splits.
         Some((host, port)) if !host.contains(':') => (host, Some(port)),
@@ -282,7 +285,7 @@ fn absolute_path(text: &str) -> Result<(), String> {
     if text.starts_with('/') {
         Ok(())
     } else {
-        Err("Enter the full path of the file, starting with /.".to_string())
+        Err(tr!("network-vpn-error-absolute-path"))
     }
 }
 
@@ -293,16 +296,19 @@ fn port_number(text: &str) -> Result<(), String> {
 
 /// How NetworkManager treats a stored secret, as the `*-flags` values.
 pub const SECRET_FLAGS: &[(&str, &str)] = &[
-    ("0", "Save for all users"),
-    ("1", "Save for this user only"),
-    ("2", "Ask every time"),
+    ("0", i18n_id!("network-vpn-flags-all-users")),
+    ("1", i18n_id!("network-vpn-flags-this-user")),
+    ("2", i18n_id!("network-vpn-flags-ask")),
 ];
 
 const OPENVPN_TYPE: &[(&str, &str)] = &[
-    ("password", "Password"),
-    ("tls", "Certificates"),
-    ("password-tls", "Password and certificates"),
-    ("static-key", "Static key"),
+    ("password", i18n_id!("network-vpn-field-password")),
+    ("tls", i18n_id!("network-vpn-choice-certificates")),
+    (
+        "password-tls",
+        i18n_id!("network-vpn-choice-password-certificates"),
+    ),
+    ("static-key", i18n_id!("network-vpn-choice-static-key")),
 ];
 
 const OPENCONNECT_PROTOCOL: &[(&str, &str)] = &[
@@ -316,118 +322,203 @@ const OPENCONNECT_PROTOCOL: &[(&str, &str)] = &[
 ];
 
 const SSH_AUTH: &[(&str, &str)] = &[
-    ("password", "Password"),
-    ("key", "Key file"),
-    ("ssh-agent", "SSH agent"),
+    ("password", i18n_id!("network-vpn-field-password")),
+    ("key", i18n_id!("network-vpn-field-key-file")),
+    ("ssh-agent", i18n_id!("network-vpn-choice-ssh-agent")),
 ];
 
 const OPENVPN: &[Field] = &[
-    Field::new("Server", Store::Data("remote"), Kind::Text)
-        .hint("Host name or address, with a port if it is not the default.")
-        .placeholder("vpn.example.com:1194")
-        .required()
-        .check(host_with_port),
     Field::new(
-        "Sign in with",
+        i18n_id!("network-vpn-field-server"),
+        Store::Data("remote"),
+        Kind::Text,
+    )
+    .hint(i18n_id!("network-vpn-hint-server-port"))
+    .placeholder("vpn.example.com:1194")
+    .required()
+    .check(host_with_port),
+    Field::new(
+        i18n_id!("network-vpn-field-sign-in-with"),
         Store::Data("connection-type"),
         Kind::Choice(OPENVPN_TYPE),
     ),
-    Field::new("User name", Store::Data("username"), Kind::Text)
-        .when("connection-type", &["password", "password-tls"]),
     Field::new(
-        "Password",
+        i18n_id!("network-vpn-field-user-name"),
+        Store::Data("username"),
+        Kind::Text,
+    )
+    .when("connection-type", &["password", "password-tls"]),
+    Field::new(
+        i18n_id!("network-vpn-field-password"),
         Store::Data("password"),
         Kind::Secret {
             flags: "password-flags",
+            remember: i18n_id!("network-vpn-remember-password"),
         },
     )
     .when("connection-type", &["password", "password-tls"]),
-    Field::new("Server certificate (CA)", Store::Data("ca"), Kind::Path)
-        .when("connection-type", &["password", "tls", "password-tls"])
-        .check(absolute_path),
-    Field::new("Your certificate", Store::Data("cert"), Kind::Path)
-        .when("connection-type", &["tls", "password-tls"])
-        .check(absolute_path),
-    Field::new("Your private key", Store::Data("key"), Kind::Path)
-        .when("connection-type", &["tls", "password-tls"])
-        .check(absolute_path),
     Field::new(
-        "Key password",
+        i18n_id!("network-vpn-field-ca"),
+        Store::Data("ca"),
+        Kind::Path,
+    )
+    .when("connection-type", &["password", "tls", "password-tls"])
+    .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-certificate"),
+        Store::Data("cert"),
+        Kind::Path,
+    )
+    .when("connection-type", &["tls", "password-tls"])
+    .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-your-private-key"),
+        Store::Data("key"),
+        Kind::Path,
+    )
+    .when("connection-type", &["tls", "password-tls"])
+    .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-key-password"),
         Store::Data("cert-pass"),
         Kind::Secret {
             flags: "cert-pass-flags",
+            remember: i18n_id!("network-vpn-remember-key-password"),
         },
     )
     .when("connection-type", &["tls", "password-tls"]),
-    Field::new("Static key file", Store::Data("static-key"), Kind::Path)
-        .when("connection-type", &["static-key"])
-        .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-static-key-file"),
+        Store::Data("static-key"),
+        Kind::Path,
+    )
+    .when("connection-type", &["static-key"])
+    .check(absolute_path),
 ];
 
 const OPENCONNECT: &[Field] = &[
-    Field::new("Gateway", Store::Data("gateway"), Kind::Text)
-        .hint("Host name or address of the VPN server.")
-        .placeholder("vpn.example.com")
-        .required()
-        .check(host_with_port),
     Field::new(
-        "Protocol",
+        i18n_id!("network-vpn-field-gateway"),
+        Store::Data("gateway"),
+        Kind::Text,
+    )
+    .hint(i18n_id!("network-vpn-hint-gateway"))
+    .placeholder("vpn.example.com")
+    .required()
+    .check(host_with_port),
+    Field::new(
+        i18n_id!("network-vpn-field-protocol"),
         Store::Data("protocol"),
         Kind::Choice(OPENCONNECT_PROTOCOL),
     ),
-    Field::new("User name", Store::UserName, Kind::Text),
-    Field::new("Server certificate (CA)", Store::Data("cacert"), Kind::Path).check(absolute_path),
-    Field::new("Your certificate", Store::Data("usercert"), Kind::Path).check(absolute_path),
-    Field::new("Your private key", Store::Data("userkey"), Kind::Path).check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-user-name"),
+        Store::UserName,
+        Kind::Text,
+    ),
+    Field::new(
+        i18n_id!("network-vpn-field-ca"),
+        Store::Data("cacert"),
+        Kind::Path,
+    )
+    .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-certificate"),
+        Store::Data("usercert"),
+        Kind::Path,
+    )
+    .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-your-private-key"),
+        Store::Data("userkey"),
+        Kind::Path,
+    )
+    .check(absolute_path),
 ];
 
 const VPNC: &[Field] = &[
-    Field::new("Gateway", Store::Data("IPSec gateway"), Kind::Text)
-        .placeholder("vpn.example.com")
-        .required()
-        .check(host_only),
-    Field::new("Group name", Store::Data("IPSec ID"), Kind::Text).required(),
     Field::new(
-        "Group password",
+        i18n_id!("network-vpn-field-gateway"),
+        Store::Data("IPSec gateway"),
+        Kind::Text,
+    )
+    .placeholder("vpn.example.com")
+    .required()
+    .check(host_only),
+    Field::new(
+        i18n_id!("network-vpn-field-group-name"),
+        Store::Data("IPSec ID"),
+        Kind::Text,
+    )
+    .required(),
+    Field::new(
+        i18n_id!("network-vpn-field-group-password"),
         Store::Data("IPSec secret"),
         Kind::Secret {
             flags: "IPSec secret-flags",
+            remember: i18n_id!("network-vpn-remember-group-password"),
         },
     ),
-    Field::new("User name", Store::Data("Xauth username"), Kind::Text),
     Field::new(
-        "Password",
+        i18n_id!("network-vpn-field-user-name"),
+        Store::Data("Xauth username"),
+        Kind::Text,
+    ),
+    Field::new(
+        i18n_id!("network-vpn-field-password"),
         Store::Data("Xauth password"),
         Kind::Secret {
             flags: "Xauth password-flags",
+            remember: i18n_id!("network-vpn-remember-xauth-password"),
         },
     ),
-    Field::new("Domain", Store::Data("Domain"), Kind::Text),
+    Field::new(
+        i18n_id!("network-vpn-field-domain"),
+        Store::Data("Domain"),
+        Kind::Text,
+    ),
 ];
 
 const SSH: &[Field] = &[
-    Field::new("Server", Store::Data("remote"), Kind::Text)
-        .hint("Host name or address of the SSH server.")
-        .placeholder("ssh.example.com")
-        .required()
-        .check(host_only),
-    Field::new("Port", Store::Data("port"), Kind::Text)
-        .placeholder("22")
-        .check(port_number),
-    Field::new("User name", Store::Data("remote-username"), Kind::Text),
     Field::new(
-        "Sign in with",
+        i18n_id!("network-vpn-field-server"),
+        Store::Data("remote"),
+        Kind::Text,
+    )
+    .hint(i18n_id!("network-vpn-hint-ssh-server"))
+    .placeholder("ssh.example.com")
+    .required()
+    .check(host_only),
+    Field::new(
+        i18n_id!("network-vpn-field-port"),
+        Store::Data("port"),
+        Kind::Text,
+    )
+    .placeholder("22")
+    .check(port_number),
+    Field::new(
+        i18n_id!("network-vpn-field-user-name"),
+        Store::Data("remote-username"),
+        Kind::Text,
+    ),
+    Field::new(
+        i18n_id!("network-vpn-field-sign-in-with"),
         Store::Data("auth-type"),
         Kind::Choice(SSH_AUTH),
     ),
-    Field::new("Key file", Store::Data("key-file"), Kind::Path)
-        .when("auth-type", &["key"])
-        .check(absolute_path),
     Field::new(
-        "Password",
+        i18n_id!("network-vpn-field-key-file"),
+        Store::Data("key-file"),
+        Kind::Path,
+    )
+    .when("auth-type", &["key"])
+    .check(absolute_path),
+    Field::new(
+        i18n_id!("network-vpn-field-password"),
         Store::Data("password"),
         Kind::Secret {
             flags: "password-flags",
+            remember: i18n_id!("network-vpn-remember-ssh-password"),
         },
     )
     .when("auth-type", &["password"]),
@@ -477,7 +568,7 @@ pub fn choice_default(field: &Field) -> &'static str {
 /// including the flags key of a secret.
 pub fn is_covered(short: &str, key: &str) -> bool {
     fields(short).iter().any(|field| {
-        field.key() == Some(key) || matches!(field.kind, Kind::Secret { flags } if flags == key)
+        field.key() == Some(key) || matches!(field.kind, Kind::Secret { flags, .. } if flags == key)
     })
 }
 
@@ -577,7 +668,10 @@ mod tests {
     #[test]
     fn fields_track_their_conditions_and_flags() {
         let openvpn = fields("openvpn");
-        let password = openvpn.iter().find(|f| f.label == "Password").unwrap();
+        let password = openvpn
+            .iter()
+            .find(|f| f.label == "network-vpn-field-password")
+            .unwrap();
         assert!(visible(password, |_| "password".to_string()));
         assert!(!visible(password, |_| "tls".to_string()));
         assert!(is_covered("openvpn", "password-flags"));
