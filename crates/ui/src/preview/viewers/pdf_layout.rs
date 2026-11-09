@@ -89,8 +89,8 @@ impl Zoom {
     /// What the zoom reads as: "Fit width", "Fit page" or "125%".
     pub fn label(self, scale: f32) -> String {
         match self {
-            Zoom::FitWidth => "Fit width".to_owned(),
-            Zoom::FitPage => "Fit page".to_owned(),
+            Zoom::FitWidth => crate::tr!("ui-preview-zoom-fit-width"),
+            Zoom::FitPage => crate::tr!("ui-preview-zoom-fit-page"),
             Zoom::Percent(_) => format!("{}%", (scale / PX_PER_POINT * 100.0).round() as u32),
         }
     }

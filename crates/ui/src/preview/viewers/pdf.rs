@@ -151,8 +151,11 @@ const ZOOM_SLOT: f32 = 108.0;
 
 fn zoom_items(current: &str, on_action: &EventHandler<DocumentAction>) -> Vec<MenuItem> {
     let mut choices: Vec<(String, ZoomChoice)> = vec![
-        ("Fit width".to_owned(), ZoomChoice::FitWidth),
-        ("Fit page".to_owned(), ZoomChoice::FitPage),
+        (
+            crate::tr!("ui-preview-zoom-fit-width"),
+            ZoomChoice::FitWidth,
+        ),
+        (crate::tr!("ui-preview-zoom-fit-page"), ZoomChoice::FitPage),
     ];
     choices.extend(
         [50, 75, 100, 125, 150, 200, 300, 400]
@@ -189,24 +192,27 @@ impl Component for DocumentControls {
             icon_button(Icon::ZoomOut, move |_| {
                 on_action.call(DocumentAction::ZoomOut)
             })
-            .tooltip("Zoom out (-)")
+            .tooltip(&crate::tr!("ui-preview-zoom-out-tooltip"))
         };
         let zoom_in = {
             let on_action = on_action.clone();
             icon_button(Icon::ZoomIn, move |_| {
                 on_action.call(DocumentAction::ZoomIn)
             })
-            .tooltip("Zoom in (+)")
+            .tooltip(&crate::tr!("ui-preview-zoom-in-tooltip"))
         };
         let find = {
             let on_action = on_action.clone();
             icon_button(Icon::Search, move |_| on_action.call(DocumentAction::Find))
                 .active(state.find)
-                .tooltip("Find (Ctrl+F)")
+                .tooltip(&crate::tr!("ui-preview-find-tooltip"))
         };
         let of_pages = CAPTION
             .in_ink(Ink::Muted)
-            .label(&tokens, format!("of {}", state.pages))
+            .label(
+                &tokens,
+                crate::tr!("ui-preview-page-count", pages = state.pages),
+            )
             .max_lines(1);
         let zoom_menu = rect()
             .width(Size::px(ZOOM_SLOT))
@@ -1045,19 +1051,19 @@ impl Component for Reading {
                 let step_hit = step_hit.clone();
                 move |_| step_hit(-1)
             })
-            .tooltip("Previous match (Shift+Enter)")
+            .tooltip(&crate::tr!("ui-preview-previous-match-tooltip"))
             .enabled(!state.hits.is_empty());
             let next = icon_button(Icon::GoNext, {
                 let step_hit = step_hit.clone();
                 move |_| step_hit(1)
             })
-            .tooltip("Next match (Enter)")
+            .tooltip(&crate::tr!("ui-preview-next-match-tooltip"))
             .enabled(!state.hits.is_empty());
             let close = icon_button(Icon::WindowClose, move |_| {
                 let mut find = find;
                 find.write().open = false;
             })
-            .tooltip("Close find (Escape)");
+            .tooltip(&crate::tr!("ui-preview-close-find-tooltip"));
             Element::from(
                 rect()
                     .tw(
@@ -1076,7 +1082,7 @@ impl Component for Reading {
                     .child(
                         rect().width(Size::flex(1.0)).child(
                             search_field(query, move |text: String| search(text))
-                                .placeholder("Find in document")
+                                .placeholder(crate::tr!("ui-preview-find-placeholder"))
                                 .dense()
                                 .autofocus()
                                 .fill_width()
@@ -1294,7 +1300,7 @@ impl Component for Reading {
                             let jump_to = jump_to.clone();
                             let mut close_sheet = sidebar;
                             let title = if entry.title.is_empty() {
-                                "Untitled".to_owned()
+                                crate::tr!("ui-preview-untitled")
                             } else {
                                 entry.title.clone()
                             };
@@ -1370,8 +1376,8 @@ impl Component for Reading {
                     rect().tw(&tokens, &[w_full(), p(S2)]).child(
                         segmented(
                             vec![
-                                ("pages".to_owned(), "Pages".to_owned()),
-                                ("outline".to_owned(), "Outline".to_owned()),
+                                ("pages".to_owned(), crate::tr!("ui-sidebar-pages")),
+                                ("outline".to_owned(), crate::tr!("ui-preview-outline-tab")),
                             ],
                             current_tab,
                             move |key: String| {
@@ -1437,7 +1443,7 @@ impl Component for Reading {
                     PanelTrigger::Pointer((0.0, 0.0)),
                     vec![list],
                 )
-                .title("Pages")
+                .title(crate::tr!("ui-sidebar-pages"))
                 .size(SIDEBAR_WIDTH, content)
                 .on_dismiss(EventHandler::new(move |_: ()| close.set(false)));
                 (None, Some(Element::from(panel)))

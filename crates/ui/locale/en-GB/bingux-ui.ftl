@@ -490,6 +490,19 @@ ui-preview-page-invalid = The preview helper sent a page that does not fit.
 ui-preview-version-mismatch = The preview helper speaks another version.
 ui-preview-open-button = Open
 ui-preview-try-again-button = Try again
+ui-preview-zoom-fit-width = Fit width
+ui-preview-zoom-fit-page = Fit page
+ui-preview-zoom-out-tooltip = Zoom out (-)
+ui-preview-zoom-in-tooltip = Zoom in (+)
+ui-preview-find-tooltip = Find (Ctrl+F)
+# $pages (Number) - the document's page count, shown after the page number field
+ui-preview-page-count = of { $pages }
+ui-preview-previous-match-tooltip = Previous match (Shift+Enter)
+ui-preview-next-match-tooltip = Next match (Enter)
+ui-preview-close-find-tooltip = Close find (Escape)
+ui-preview-find-placeholder = Find in document
+ui-preview-untitled = Untitled
+ui-preview-outline-tab = Outline
 ui-preview-subtitles-tooltip = Subtitles (C)
 ui-preview-playback-speed-tooltip = Playback speed ([ and ])
 # The names in the Info panel of a preview.
