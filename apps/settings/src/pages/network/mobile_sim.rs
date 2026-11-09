@@ -8,6 +8,7 @@ use super::modem::{self, pin_error, puk_error};
 use crate::pages::network::model::NetCtx;
 use crate::system::{CommandError, background_then};
 use crate::ui::{Group, Status, form_field, status};
+use bingux_ui::prelude::tr;
 use bingux_ui::shell::{form_dialog, open_form};
 use bingux_ui::style::*;
 
@@ -24,39 +25,39 @@ pub enum PinTask {
 }
 
 impl PinTask {
-    fn title(self) -> &'static str {
+    fn title(self) -> String {
         match self {
-            Self::Unlock | Self::Puk => "Unlock SIM",
-            Self::Enable => "Lock SIM with PIN",
-            Self::Disable => "Turn off SIM lock",
-            Self::Change => "Change PIN",
+            Self::Unlock | Self::Puk => tr!("network-mobile-sim-unlock-title"),
+            Self::Enable => tr!("network-mobile-sim-enable-title"),
+            Self::Disable => tr!("network-mobile-sim-disable-title"),
+            Self::Change => tr!("network-mobile-sim-change-title"),
         }
     }
 
-    fn action(self) -> &'static str {
+    fn action(self) -> String {
         match self {
-            Self::Unlock | Self::Puk => "Unlock",
-            Self::Enable => "Lock SIM",
-            Self::Disable => "Turn off",
-            Self::Change => "Change",
+            Self::Unlock | Self::Puk => tr!("network-mobile-sim-unlock-action"),
+            Self::Enable => tr!("network-mobile-sim-enable-action"),
+            Self::Disable => tr!("network-mobile-sim-disable-action"),
+            Self::Change => tr!("network-mobile-sim-change-action"),
         }
     }
 
-    fn done(self) -> &'static str {
+    fn done(self) -> String {
         match self {
-            Self::Unlock | Self::Puk => "SIM unlocked",
-            Self::Enable => "SIM lock turned on",
-            Self::Disable => "SIM lock turned off",
-            Self::Change => "PIN changed",
+            Self::Unlock | Self::Puk => tr!("network-mobile-sim-unlocked-toast"),
+            Self::Enable => tr!("network-mobile-sim-enabled-toast"),
+            Self::Disable => tr!("network-mobile-sim-disabled-toast"),
+            Self::Change => tr!("network-mobile-sim-changed-toast"),
         }
     }
 
     /// The first field: the PIN, or the PUK for a blocked SIM.
-    fn first_label(self) -> &'static str {
+    fn first_label(self) -> String {
         match self {
-            Self::Puk => "PUK",
-            Self::Change => "Current PIN",
-            _ => "PIN",
+            Self::Puk => tr!("network-mobile-sim-puk-label"),
+            Self::Change => tr!("network-mobile-sim-current-pin-label"),
+            _ => tr!("network-mobile-sim-pin-label"),
         }
     }
 
@@ -65,18 +66,13 @@ impl PinTask {
         matches!(self, Self::Puk | Self::Change)
     }
 
-    fn hint(self) -> &'static str {
+    fn hint(self) -> String {
         match self {
-            Self::Unlock => "Enter the PIN of your SIM.",
-            Self::Puk => {
-                "The SIM is blocked after too many wrong PINs. Enter the 8-digit PUK from your \
-                 carrier, then choose a new PIN."
-            }
-            Self::Enable => {
-                "With the SIM lock on, the PIN is asked for each time the phone starts."
-            }
-            Self::Disable => "Enter the PIN to stop asking for it when the phone starts.",
-            Self::Change => "Choose a PIN of 4 to 8 digits.",
+            Self::Unlock => tr!("network-mobile-sim-unlock-hint"),
+            Self::Puk => tr!("network-mobile-sim-puk-hint"),
+            Self::Enable => tr!("network-mobile-sim-enable-hint"),
+            Self::Disable => tr!("network-mobile-sim-disable-hint"),
+            Self::Change => tr!("network-mobile-sim-change-hint"),
         }
     }
 }
@@ -130,7 +126,7 @@ impl Component for PinBody {
             pin_error
         };
         let mismatch = (!repeat.read().is_empty() && *repeat.read() != *new_pin.read())
-            .then(|| "The two PINs are not the same.".to_string());
+            .then(|| tr!("network-mobile-sim-pin-mismatch-error"));
         let valid = first_check(&first.read()).is_ok()
             && (!task.new_pin()
                 || (pin_error(&new_pin.read()).is_ok() && *repeat.read() == *new_pin.read()));
@@ -174,10 +170,10 @@ impl Component for PinBody {
                 if task.new_pin() {
                     pin_error(&new_pin.read())
                         .err()
-                        .map(|text| format!("New PIN: {text}"))
+                        .map(|text| tr!("network-mobile-sim-new-pin-error", error = text))
                         .or_else(|| {
                             (*repeat.read() != *new_pin.read())
-                                .then(|| "The two PINs are not the same.".to_string())
+                                .then(|| tr!("network-mobile-sim-pin-mismatch-error"))
                         })
                 } else {
                     None
@@ -203,12 +199,12 @@ impl Component for PinBody {
             let key = submit.clone();
             fields = fields
                 .row(
-                    form_field("New PIN", new_pin)
+                    form_field(tr!("network-mobile-sim-new-pin-label"), new_pin)
                         .password()
                         .validate(pin_error),
                 )
                 .row(
-                    form_field("Repeat new PIN", repeat)
+                    form_field(tr!("network-mobile-sim-repeat-pin-label"), repeat)
                         .password()
                         .error(mismatch)
                         .on_submit(move |_| key()),
@@ -242,12 +238,16 @@ impl Component for PinBody {
 
 /// How many tries are left, in a sentence.
 pub fn attempts_text(task: PinTask, left: u32) -> String {
-    let what = if task == PinTask::Puk { "PUK" } else { "PIN" };
-    match left {
-        0 => format!("No {what} attempts left"),
-        1 => format!("1 {what} attempt left"),
-        many => format!("{many} {what} attempts left"),
-    }
+    let what = if task == PinTask::Puk {
+        tr!("network-mobile-sim-puk-word")
+    } else {
+        tr!("network-mobile-sim-pin-word")
+    };
+    tr!(
+        "network-mobile-sim-attempts-left",
+        count = left,
+        what = what
+    )
 }
 
 #[cfg(test)]
@@ -256,6 +256,7 @@ mod tests {
 
     #[test]
     fn attempts_are_counted_in_words() {
+        crate::register_catalogue_for_tests();
         assert_eq!(attempts_text(PinTask::Unlock, 3), "3 PIN attempts left");
         assert_eq!(attempts_text(PinTask::Unlock, 1), "1 PIN attempt left");
         assert_eq!(attempts_text(PinTask::Puk, 10), "10 PUK attempts left");

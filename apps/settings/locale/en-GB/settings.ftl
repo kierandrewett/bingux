@@ -242,3 +242,73 @@ network-profile-advanced-priority = Priority { $priority }
 network-profile-advanced-only-for-you = Only for you
 network-profile-advanced-empty = Addresses, DNS, security and technical details
 network-profile-identity-default = Default
+
+## Mobile network
+
+# SIM dialog titles, buttons and confirmations.
+# Title of the dialog that unlocks a SIM with its PIN or PUK.
+network-mobile-sim-unlock-title = Unlock SIM
+# Title of the dialog that turns on the SIM lock.
+network-mobile-sim-enable-title = Lock SIM with PIN
+# Title of the dialog that turns off the SIM lock.
+network-mobile-sim-disable-title = Turn off SIM lock
+# Title of the dialog that changes the PIN.
+network-mobile-sim-change-title = Change PIN
+# Button that submits the unlock dialog.
+network-mobile-sim-unlock-action = Unlock
+# Button that submits the enable-lock dialog.
+network-mobile-sim-enable-action = Lock SIM
+# Button that submits the disable-lock dialog.
+network-mobile-sim-disable-action = Turn off
+# Button that submits the change-PIN dialog.
+network-mobile-sim-change-action = Change
+# Toast shown after the SIM is unlocked.
+network-mobile-sim-unlocked-toast = SIM unlocked
+# Toast shown after the SIM lock is turned on.
+network-mobile-sim-enabled-toast = SIM lock turned on
+# Toast shown after the SIM lock is turned off.
+network-mobile-sim-disabled-toast = SIM lock turned off
+# Toast shown after the PIN is changed.
+network-mobile-sim-changed-toast = PIN changed
+
+# Field labels.
+# Label of the PIN field.
+network-mobile-sim-pin-label = PIN
+# Label of the PUK field, shown when the SIM is blocked.
+network-mobile-sim-puk-label = PUK
+# Label of the current-PIN field in the change-PIN dialog.
+network-mobile-sim-current-pin-label = Current PIN
+# Label of the new-PIN field.
+network-mobile-sim-new-pin-label = New PIN
+# Label of the field that repeats the new PIN.
+network-mobile-sim-repeat-pin-label = Repeat new PIN
+
+# Hints shown under the title of each dialog.
+# Hint of the unlock dialog.
+network-mobile-sim-unlock-hint = Enter the PIN of your SIM.
+# Hint of the PUK dialog, shown when the SIM is blocked.
+network-mobile-sim-puk-hint = The SIM is blocked after too many wrong PINs. Enter the 8-digit PUK from your carrier, then choose a new PIN.
+# Hint of the dialog that turns on the SIM lock.
+network-mobile-sim-enable-hint = With the SIM lock on, the PIN is asked for each time the phone starts.
+# Hint of the dialog that turns off the SIM lock.
+network-mobile-sim-disable-hint = Enter the PIN to stop asking for it when the phone starts.
+# Hint of the change-PIN dialog.
+network-mobile-sim-change-hint = Choose a PIN of 4 to 8 digits.
+
+# Validation messages.
+# Shown when the new PIN and its repeat differ.
+network-mobile-sim-pin-mismatch-error = The two PINs are not the same.
+# Shown when the new PIN is invalid. $error is the reason.
+# $error (String) - why the new PIN is not valid.
+network-mobile-sim-new-pin-error = New PIN: { $error }
+
+# Attempts left, shown under the PIN or PUK field.
+# Words used for the thing being counted in the attempts note.
+network-mobile-sim-pin-word = PIN
+network-mobile-sim-puk-word = PUK
+# $count (Number) - attempts left. $what (String) - PIN or PUK.
+network-mobile-sim-attempts-left = { $count ->
+    [0] No { $what } attempts left
+    [one] 1 { $what } attempt left
+   *[other] { $count } { $what } attempts left
+}
