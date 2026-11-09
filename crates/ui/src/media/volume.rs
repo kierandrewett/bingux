@@ -13,6 +13,7 @@ use crate::controls::button::icon_button;
 use crate::controls::slider::slider;
 use crate::controls::tooltip::TipSide;
 use crate::icons::Icon;
+use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::typography::Ink;
@@ -110,17 +111,70 @@ impl Component for VolumeControl {
         } else {
             Ink::Text
         };
+        let mut open = use_state(|| false);
+        let mut area = use_state(Area::default);
         let on_change = self.on_change.clone();
         let (level, muted) = (self.level, self.muted);
         let shown = if muted { 0.0 } else { level };
-        let mute = icon_button(volume_icon(level, muted), {
+        // Compact (touch): the button opens a popover holding the mute toggle
+        // and the slider. Desktop: the button is a plain mute toggle.
+        let mute = if self.compact {
+            icon_button(volume_icon(level, muted), move |_| {
+                let next = !*open.peek();
+                open.set(next);
+            })
+            .ink(ink)
+            .tooltip("Volume")
+        } else {
             let on_change = on_change.clone();
-            move |_| on_change.call(VolumeChange::Mute(!muted))
-        })
-        .ink(ink)
-        .tooltip_side(TipSide::Above)
-        .tooltip(if muted { "Unmute (M)" } else { "Mute (M)" })
+            icon_button(volume_icon(level, muted), move |_| {
+                on_change.call(VolumeChange::Mute(!muted))
+            })
+            .ink(ink)
+            .tooltip_side(TipSide::Above)
+            .tooltip(if muted { "Unmute (M)" } else { "Mute (M)" })
+        }
         .enabled(self.enabled);
+        let face = rect()
+            .on_sized(move |event: Event<SizedEventData>| {
+                area.set_if_modified(event.area);
+            })
+            .child(mute);
+        let popover = self.compact.then(|| {
+            let content = rect()
+                .component("VolumePopover")
+                .tw(
+                    &tokens,
+                    &[w_full(), flex_row(), items(Align::Center), gap(S2)],
+                )
+                .child(
+                    icon_button(volume_icon(level, muted), {
+                        let on_change = on_change.clone();
+                        move |_| on_change.call(VolumeChange::Mute(!muted))
+                    })
+                    .ink(ink)
+                    .enabled(self.enabled),
+                )
+                .child(
+                    slider(shown, {
+                        let on_change = on_change.clone();
+                        move |value: f64| on_change.call(VolumeChange::Level(value))
+                    })
+                    .label("Volume")
+                    .width(Dim::Box24)
+                    .enabled(self.enabled),
+                );
+            let width = Dim::Box24.px() + Dim::Control.px() + 4.0 * S2.px();
+            let height = Dim::Control.px() + 2.0 * S2.px();
+            Panel::new(
+                PanelKind::Choice,
+                open() && self.enabled,
+                PanelTrigger::Control(PanelRect::from_area(&area.read())),
+                vec![Element::from(content)],
+            )
+            .size(width, height)
+            .on_dismiss(EventHandler::new(move |_: ()| open.set(false)))
+        });
         let wheel = {
             let on_change = on_change.clone();
             move |event: Event<WheelEventData>| {
@@ -133,7 +187,8 @@ impl Component for VolumeControl {
             .component("VolumeControl")
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
             .maybe(self.enabled, |row| row.on_wheel(wheel))
-            .child(mute)
+            .child(face)
+            .maybe_child(popover.map(Element::from))
             .maybe_child((!self.compact).then(|| {
                 slider(shown, {
                     let on_change = on_change.clone();
