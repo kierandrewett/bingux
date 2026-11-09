@@ -717,7 +717,10 @@ impl Component for TextEditorView {
             event.stop_propagation();
             event.prevent_default();
         };
-        layers.push(focus_target.on_key_down(on_key_down).into());
+        // First among the children, so the layers before it (bands that come
+        // and go with brackets, hits and selections) never shift it: a node
+        // that moves among its siblings is made again and loses the focus.
+        let focus_node = focus_target.on_key_down(on_key_down);
 
         let wheel_handle = handle.clone();
         let wheel_zoom = self.on_zoom.clone();
@@ -966,6 +969,7 @@ impl Component for TextEditorView {
             .on_pointer_down(on_pointer_down)
             .on_global_pointer_move(on_global_pointer_move)
             .on_global_pointer_up(on_global_pointer_up)
+            .child(focus_node)
             .child(measure)
             .children(layers)
     }
