@@ -80,6 +80,7 @@ var names = {
     "folder-desktop-symbolic": true,
     "folder-documents-symbolic": true,
     "folder-download-symbolic": true,
+    "folder-missing-symbolic": true,
     "folder-music-symbolic": true,
     "folder-new-symbolic": true,
     "folder-pictures-symbolic": true,
