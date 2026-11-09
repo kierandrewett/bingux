@@ -452,7 +452,7 @@ impl Component for Shell {
                             .child(primary_button("Use approximate location", move |_| {
                                 hub.set_network(true)
                             }))
-                            .child(action_button("Search for a city", move |_| {
+                            .child(action_button("Search by city", move |_| {
                                 hub.change(|settings| settings.network_lookup = Some(false));
                                 search::open(overlays, hub);
                             })),
