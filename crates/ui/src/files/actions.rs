@@ -234,6 +234,8 @@ pub(super) enum Command {
     OpenInNewTab,
     Cut,
     Copy,
+    /// A copy of each selected item beside it, named as Keep both names one.
+    Duplicate,
     /// Into the folder on show.
     Paste,
     /// Into this folder, from a folder's own menu.
@@ -286,6 +288,7 @@ impl Command {
         matches!(
             self,
             Command::Cut
+                | Command::Duplicate
                 | Command::Paste
                 | Command::PasteInto(_)
                 | Command::Rename
@@ -427,6 +430,7 @@ fn in_trash(facts: &Facts, command: &Command) -> Option<Availability> {
         }
         Command::Paste => Disabled("Nothing can be put inside a folder in the Trash."),
         Command::Cut
+        | Command::Duplicate
         | Command::PasteInto(_)
         | Command::Rename
         | Command::Trash
@@ -498,6 +502,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             }
         }
         Command::Cut
+        | Command::Duplicate
         | Command::Trash
         | Command::DeletePermanently
         | Command::Copy
@@ -525,8 +530,9 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
                 Disabled("There is nothing to paste.")
             }
         }
+        // One item is renamed in place; several in the Rename sheet.
         Command::Rename => {
-            if one {
+            if some {
                 Enabled
             } else {
                 Hidden
@@ -651,6 +657,11 @@ pub(super) fn can_paste() -> bool {
 }
 
 /// Show `text` in the status line for a few seconds.
+/// Rename each `(path, new name)` at once, as one Undo (the Rename sheet).
+pub(super) fn rename_many(env: &Env, pairs: Vec<(PathBuf, String)>) {
+    transfer::rename_many(env, pairs);
+}
+
 pub(super) fn notify(ui: Ui, text: impl Into<String>, error: bool) {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let id = NEXT.fetch_add(1, Ordering::Relaxed);
@@ -717,23 +728,24 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
         }
         Command::Cut => clipboard::put(paths_of(selected), true),
         Command::Copy => clipboard::put(paths_of(selected), false),
+        Command::Duplicate => transfer::duplicate(env, paths_of(selected)),
         Command::Paste => {
             if let Some(folder) = env.folder.clone() {
                 transfer::paste(env, folder);
             }
         }
         Command::PasteInto(folder) => transfer::paste(env, folder),
-        Command::Rename => {
-            if let [entry] = selected {
-                set(
-                    env.ui.rename,
-                    Some(Rename {
-                        path: entry.path.clone(),
-                        created: false,
-                    }),
-                );
-            }
-        }
+        Command::Rename => match selected {
+            [entry] => set(
+                env.ui.rename,
+                Some(Rename {
+                    path: entry.path.clone(),
+                    created: false,
+                }),
+            ),
+            [] => {}
+            several => super::batch_rename::show_batch_rename(env, several),
+        },
         Command::NewFolder => create(env, true),
         Command::NewFile => create(env, false),
         Command::NewFromTemplate(template) => create_from_template(env, template),
@@ -1060,6 +1072,7 @@ pub(super) fn handle_key(env: &Env, selected: &[Entry], event: &Event<KeyboardEv
         Key::Character(text) if ctrl && !alt => match text.to_ascii_lowercase().as_str() {
             "c" if shift => Command::CopyPath,
             "c" => Command::Copy,
+            "d" if !shift => Command::Duplicate,
             "x" if !shift => Command::Cut,
             "v" if !shift => Command::Paste,
             "z" if !shift => Command::Undo,
@@ -1087,6 +1100,7 @@ pub(super) fn shortcut(command: &Command) -> Option<&'static str> {
         Command::Preview => "Space",
         Command::Cut => "Ctrl+X",
         Command::Copy => "Ctrl+C",
+        Command::Duplicate => "Ctrl+D",
         Command::Paste | Command::PasteInto(_) => "Ctrl+V",
         Command::Rename => "F2",
         Command::NewFolder => "Ctrl+Shift+N",
@@ -1133,6 +1147,7 @@ mod tests {
         let empty = facts(Capabilities::FILES_APP, 0, 0);
         assert_eq!(state(&empty, Command::Open), Availability::Hidden);
         assert_eq!(state(&empty, Command::Copy), Availability::Hidden);
+        assert_eq!(state(&empty, Command::Duplicate), Availability::Hidden);
         assert_eq!(state(&empty, Command::Rename), Availability::Hidden);
         assert_eq!(state(&empty, Command::Trash), Availability::Hidden);
         assert!(state(&empty, Command::NewFolder).is_enabled());
@@ -1178,9 +1193,11 @@ mod tests {
     #[test]
     fn several_items() {
         let many = facts(Capabilities::FILES_APP, 3, 1);
-        assert_eq!(state(&many, Command::Rename), Availability::Hidden);
+        // Several are renamed together, in the Rename sheet.
+        assert!(state(&many, Command::Rename).is_enabled());
         assert!(state(&many, Command::Trash).is_enabled());
         assert!(state(&many, Command::Copy).is_enabled());
+        assert!(state(&many, Command::Duplicate).is_enabled());
         assert!(matches!(
             state(&many, Command::OpenInNewTab),
             Availability::Disabled(_)
@@ -1213,6 +1230,7 @@ mod tests {
         let file = facts(caps, 1, 0);
         for command in [
             Command::Cut,
+            Command::Duplicate,
             Command::Rename,
             Command::Trash,
             Command::DeletePermanently,

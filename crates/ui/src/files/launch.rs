@@ -210,15 +210,21 @@ fn address_of(path: &Path, launch: &str) -> String {
         .to_string()
 }
 
+/// Whether a location names a place at all: false for the location of a
+/// launch with no argument, which opens the home folder (or, in Files, the
+/// tabs of the last session).
+pub fn names_a_place(location: &Location) -> bool {
+    matches!(location.scheme(), RECENT | TRASH)
+        || !location.segments().is_empty()
+        || location.query(LAUNCH).is_some()
+}
+
 /// What a location asks the window to show: a folder or the recent files,
 /// and the file to select in it when the location names a file (a file
 /// argument opens its folder with the file selected). A location with no
 /// folder named opens the home folder; the root folder is `/` with a launch.
 pub fn destination(location: &Location) -> (Where, Option<PathBuf>) {
-    if !matches!(location.scheme(), RECENT | TRASH)
-        && location.segments().is_empty()
-        && location.query(LAUNCH).is_none()
-    {
+    if !names_a_place(location) {
         return (Where::Folder(home_folder()), None);
     }
     match place_of(location) {

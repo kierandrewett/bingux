@@ -23,7 +23,7 @@ address opens the folder that holds it.
 
 | Argument                             | Opens                                                                  |
 | ------------------------------------ | ---------------------------------------------------------------------- |
-| none                                 | the home folder on first launch; raises the window if it runs          |
+| none                                 | the tabs of the window closed last (else home); raises a running one   |
 | `/srv/data`, `~/Music`, `Documents`  | that folder (a relative path is relative to where you ran the command) |
 | `file:///home/me/My%20Files`         | that folder                                                            |
 | `recent:///`                         | the recent files                                                       |
@@ -31,6 +31,13 @@ address opens the folder that holds it.
 | `bingux-files://home/me`             | that folder                                                            |
 
 Only the first argument is used; Files opens one folder per launch.
+
+With no argument Files opens the window as it was when it was last closed:
+the same tabs, at the same folders, with the same tab on show. A folder that
+has gone since is left out; with none left it opens the home folder. The tabs
+are kept in the state file beside the per-folder views
+(`$XDG_STATE_HOME/bingux/files/view.json`, key `files-session`), written as
+they change, so closing the window any way at all keeps them.
 
 A folder's name is bytes, not text. A name that is not valid UTF-8 (`café` saved
 as Latin-1, `caf\xe9`) is a valid argument and opens that exact folder: the
@@ -552,6 +559,7 @@ entry in a history. The same rules hold for Settings and every other
 
 | Keys                                    | Action                                                                                                                       |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Ctrl+N                                  | New window at the folder on show                                                                                             |
 | Alt+Left, Alt+Right, Alt+Up, Alt+Home   | Back, Forward, parent folder, home                                                                                           |
 | Backspace                               | Parent folder                                                                                                                |
 | Ctrl+L, or type `/` or `~`              | Edit the path                                                                                                                |
@@ -563,9 +571,10 @@ entry in a history. The same rules hold for Settings and every other
 | Ctrl+Shift+N                            | New folder                                                                                                                   |
 | F2                                      | Rename                                                                                                                       |
 | Ctrl+C, Ctrl+X, Ctrl+V                  | Copy, cut, paste                                                                                                             |
+| Ctrl+D                                  | Duplicate: a copy beside each selected item, named as Keep both names one (`Report (copy).pdf`)                              |
 | Delete                                  | Move to the Trash (inside the Trash: delete permanently, after a question)                                                   |
 | Shift+Delete                            | Delete permanently, after a question that names the files                                                                    |
-| Ctrl+Z                                  | Undo the last move, rename, trash, restore or create                                                                         |
+| Ctrl+Z                                  | Undo the last move, rename, trash, restore, create or duplicate (the copies go to the Trash)                                 |
 | Ctrl+A                                  | Select all                                                                                                                   |
 | Space                                   | Preview the file (Quick Look)                                                                                                |
 | Enter                                   | Open the folder, or open the file in its default application                                                                 |
@@ -645,8 +654,9 @@ accept the file's type. A file that cannot be opened says why under the list.
 
 ## Moving and copying by dragging
 
-Drag files onto a folder in the list, a place in the sidebar or a tab: they
-move there. Hold Ctrl to copy. The target under the pointer is highlighted.
+Drag files onto a folder in the list, a place in the sidebar, a folder of the
+path in the address bar (any but the one on show) or a tab: they move there.
+Hold Ctrl to copy. The target under the pointer is highlighted.
 Dragging uses the same operations as cut and paste, so a move between drives
 copies, checks and then removes the source, and nothing is half-written.
 

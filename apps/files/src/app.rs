@@ -17,13 +17,14 @@
 //! running closes, and the menu.
 
 use bingux_ui::app::use_window_seed;
-use bingux_ui::files::launch::destination;
+use bingux_ui::files::launch::{self, destination};
 use bingux_ui::files::{self, Browse, FileTab, Where};
 use bingux_ui::prelude::*;
 use bingux_ui::shell::MenuItem;
-use bingux_ui::tabs::{Birth, CloseWarning, Tab, TabSet, Tabs, tab_items, use_tab_window};
+use bingux_ui::tabs::{Birth, CloseWarning, Moved, Tab, TabSet, Tabs, tab_items, use_tab_window};
 use freya::prelude::*;
 
+use crate::session;
 use crate::window_size::remember_size;
 
 /// The titles of all the tabs: each folder's name, with the nearest parent
@@ -105,12 +106,29 @@ impl Component for Content {
         let overlays = use_overlays();
         let maximized = freya::borderless::use_maximized();
         let location = use_location();
-        // A window opened for tabs torn off another is born with them.
+        // A window opened for tabs torn off another is born with them. Files
+        // started with no folder named opens the tabs of the window that was
+        // closed last.
         let birth = use_window_seed::<Birth<FileTab>>();
         let set = use_state({
             let location = location.clone();
             move || {
-                birth.and_then(|birth| birth.into_set()).unwrap_or_else(|| {
+                if let Some(set) = birth.and_then(|birth| birth.into_set()) {
+                    return set;
+                }
+                let restored = (!launch::names_a_place(&location))
+                    .then(session::remembered)
+                    .flatten()
+                    .and_then(|(places, on_show)| {
+                        let tabs = places
+                            .into_iter()
+                            .map(|at| Moved {
+                                content: FileTab::new(at),
+                            })
+                            .collect();
+                        TabSet::adopt(tabs, on_show)
+                    });
+                restored.unwrap_or_else(|| {
                     let (at, select) = destination(&location);
                     TabSet::new(FileTab::new(at).selecting(select))
                 })
@@ -138,6 +156,19 @@ impl Component for Content {
             let set = set.read();
             (set.tabs().to_vec(), set.current().cloned())
         };
+        // The window's tabs are written down as they change, so the window is
+        // kept as it was when it closed, however it was closed.
+        let places: Vec<Where> = shown.iter().map(|tab| tab.content.at.clone()).collect();
+        let on_show = tab
+            .as_ref()
+            .and_then(|tab| shown.iter().position(|shown| shown.id == tab.id))
+            .unwrap_or(0);
+        use_side_effect_with_deps(
+            &(places, on_show),
+            |(places, on_show): &(Vec<Where>, usize)| {
+                session::remember(&session::Session::of(places, *on_show));
+            },
+        );
         let title = tab
             .as_ref()
             .map(|tab| title_of(&tab.content.at))
@@ -207,9 +238,24 @@ impl Component for Content {
                 .tab_bar(strip),
         );
 
-        let shortcuts = tabs.shortcuts(move |_: ()| {
+        let tab_keys = tabs.shortcuts(move |_: ()| {
             tabs.open(FileTab::new(here(tabs)));
         });
+        // Ctrl+N is a new window at the folder on show, as in Finder and
+        // GNOME Files; the rest are the tab keys.
+        let shortcuts = move |event: Event<KeyboardEventData>| {
+            let modifiers = event.modifiers;
+            if let Key::Character(text) = &event.key
+                && modifiers.contains(Modifiers::CONTROL)
+                && !modifiers.intersects(Modifiers::SHIFT | Modifiers::ALT | Modifiers::META)
+                && text.eq_ignore_ascii_case("n")
+            {
+                event.stop_propagation();
+                tabs.open_window(FileTab::new(here(tabs)));
+                return;
+            }
+            tab_keys(event);
+        };
 
         tab_window
             .root(rect())
@@ -247,6 +293,7 @@ fn here(tabs: Tabs<FileTab>) -> Where {
 
 /// What the shortcuts dialog says. The file view's keys are the chooser's.
 const SHORTCUTS: &str = "\
+Ctrl+N  New window\n\
 Ctrl+T  New tab\n\
 Ctrl+W  Close tab (a middle click on a tab too)\n\
 Ctrl+Shift+T  Reopen the tab closed last\n\
@@ -255,12 +302,14 @@ Alt+1 to 9  Go to a tab\n\
 Alt+Left, Alt+Right, Alt+Up  Back, Forward, parent folder\n\
 Ctrl+L  Edit the path\n\
 Ctrl+F  Search\n\
+Type a name  Select the first item that starts with it\n\
 Ctrl+H  Show hidden files\n\
 Ctrl+Shift+N  New folder\n\
 F2  Rename\n\
 Delete  Move to the Trash\n\
 Shift+Delete  Delete permanently\n\
 Ctrl+C, Ctrl+X, Ctrl+V  Copy, cut, paste\n\
+Ctrl+D  Duplicate\n\
 Ctrl+Z  Undo\n\
 Space  Preview\n\
 Alt+Enter  Properties\n\
@@ -270,6 +319,13 @@ fn main_menu(tabs: Tabs<FileTab>, overlays: Overlays) -> Vec<MenuItem> {
     let mut items = tabs.menu_items(move |_: ()| {
         tabs.open(FileTab::new(here(tabs)));
     });
+    items.insert(
+        0,
+        menu_item("New window", move |_: ()| {
+            tabs.open_window(FileTab::new(here(tabs)));
+        })
+        .shortcut("Ctrl+N"),
+    );
     items.push(menu_separator());
     items.push(menu_item("Keyboard shortcuts", move |_: ()| {
         overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));

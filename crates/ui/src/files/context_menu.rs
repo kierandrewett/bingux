@@ -179,12 +179,21 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
         vec![
             Row::command("Cut", facts, Command::Cut),
             Row::command("Copy", facts, Command::Copy),
+            Row::command("Duplicate", facts, Command::Duplicate),
             paste_into,
         ],
         vec![
             Row::command("Restore", facts, Command::Restore),
             Row::command("Restore to…", facts, Command::RestoreTo),
-            Row::command("Rename", facts, Command::Rename),
+            Row::command(
+                if facts.selected > 1 {
+                    "Rename…"
+                } else {
+                    "Rename"
+                },
+                facts,
+                Command::Rename,
+            ),
             Row::command("Move to Trash", facts, Command::Trash),
             // In the Trash it is the only delete there is, so no Shift is
             // needed and the plain Delete key does it.
@@ -612,8 +621,23 @@ mod tests {
         assert_eq!(
             labels(&rows),
             [
-                "Open", "Open with", "Preview", "---", "Cut", "Copy", "---", "Rename", "Move to Trash",
-                "---", "Compress…", "Compress as", "Copy path", "Copy location as URI", "---", "Properties",
+                "Open",
+                "Open with",
+                "Preview",
+                "---",
+                "Cut",
+                "Copy",
+                "Duplicate",
+                "---",
+                "Rename",
+                "Move to Trash",
+                "---",
+                "Compress…",
+                "Compress as",
+                "Copy path",
+                "Copy location as URI",
+                "---",
+                "Properties",
             ]
         );
         let Row::Sub(_, apps) = &rows[1] else {
@@ -680,9 +704,18 @@ mod tests {
     fn several_items_get_the_applicable_subset() {
         let rows = ordinary(&facts(Capabilities::FILES_APP, 3, 1), None, &[]);
         let labels = labels(&rows);
+        // Several are renamed together in the Rename sheet.
         assert!(!labels.iter().any(|label| label == "Rename"));
+        assert!(labels.iter().any(|label| label == "Rename…"));
         assert!(!labels.iter().any(|label| label == "Add to bookmarks"));
-        for wanted in ["Cut", "Copy", "Move to Trash", "Compress…", "Properties"] {
+        for wanted in [
+            "Cut",
+            "Copy",
+            "Duplicate",
+            "Move to Trash",
+            "Compress…",
+            "Properties",
+        ] {
             assert!(labels.iter().any(|label| label == wanted), "{wanted}");
         }
     }
@@ -708,7 +741,14 @@ mod tests {
             shifted(&facts(caps, 1, 0)),
         ] {
             let labels = labels(&rows);
-            for gone in ["Cut", "Rename", "Move to Trash", "Delete permanently", "Compress…"] {
+            for gone in [
+                "Cut",
+                "Duplicate",
+                "Rename",
+                "Move to Trash",
+                "Delete permanently",
+                "Compress…",
+            ] {
                 assert!(!labels.iter().any(|label| label == gone), "{gone}");
             }
             assert!(labels.iter().any(|label| label == "Copy"));
@@ -798,8 +838,20 @@ mod tests {
         one.trash = TrashView::Root;
         let rows = ordinary(&one, None, &[app("Viewer")]);
         let labels = labels(&rows);
-        for gone in ["Move to Trash", "Rename", "Compress…", "Cut", "Paste", "New folder", "Add to bookmarks"] {
-            assert!(!labels.iter().any(|label| label == gone), "{gone} is not offered in the Trash: {labels:?}");
+        for gone in [
+            "Move to Trash",
+            "Rename",
+            "Duplicate",
+            "Compress…",
+            "Cut",
+            "Paste",
+            "New folder",
+            "Add to bookmarks",
+        ] {
+            assert!(
+                !labels.iter().any(|label| label == gone),
+                "{gone} is not offered in the Trash: {labels:?}"
+            );
         }
         for wanted in ["Restore", "Restore to…", "Delete permanently", "Copy", "Properties"] {
             assert!(labels.iter().any(|label| label == wanted), "{wanted}: {labels:?}");

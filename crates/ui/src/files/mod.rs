@@ -63,6 +63,8 @@ mod address_target;
 #[cfg(all(test, feature = "testing"))]
 mod address_tests;
 mod address_trail;
+mod batch_rename;
+mod batch_rename_model;
 mod browser;
 mod chooser;
 mod colour;

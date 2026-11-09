@@ -227,12 +227,39 @@ fn report_refusals(env: &Env, refusals: Refusals) {
     }
 }
 
+/// The row the selection moves to when `removed` leave the list: the first
+/// row after the last of them, or the one before the first when they were
+/// at the end. A Delete then a Delete again walks down the list, as in
+/// Finder and GNOME Files, instead of leaving nothing selected.
+pub(super) fn next_after(env: &Env, removed: &[PathBuf]) -> Option<PathBuf> {
+    let rows: Vec<&PathBuf> = env
+        .order
+        .iter()
+        .filter_map(|index| env.listing.entries.get(*index))
+        .map(|entry| &entry.path)
+        .collect();
+    next_row(&rows, removed)
+}
+
+/// [`next_after`] over the rows on show, in order.
+fn next_row(rows: &[&PathBuf], removed: &[PathBuf]) -> Option<PathBuf> {
+    let gone = |path: &PathBuf| removed.contains(path);
+    let last = rows.iter().rposition(|path| gone(path))?;
+    let first = rows.iter().position(|path| gone(path))?;
+    rows[last + 1..]
+        .iter()
+        .find(|path| !gone(path))
+        .or_else(|| rows[..first].iter().rev().find(|path| !gone(path)))
+        .map(|path| (*path).clone())
+}
+
 /// Bin `paths`, then tell about the items the Trash refused.
 fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
     if !begin(env, format!("Moving {} to Trash", what(&paths)), None) {
         return;
     }
     let env = env.clone();
+    let next = next_after(&env, &paths);
     spawn_in_window(async move {
         let attempted = paths.clone();
         let outcome = spawn_blocking(move || backend::trash(&paths)).await;
@@ -240,6 +267,11 @@ fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
         match outcome {
             Ok(trashed) => {
                 let moved: Vec<PathBuf> = trashed.iter().map(|item| item.original.clone()).collect();
+                if moved.len() == attempted.len()
+                    && let Some(next) = &next
+                {
+                    select_paths(&env, std::slice::from_ref(next));
+                }
                 undo::push(Step::Trash(trashed));
                 let again = env.clone();
                 env.overlays.toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
@@ -887,5 +919,18 @@ mod tests {
         // Ordinary drops stay ordinary.
         assert_eq!(route(&paths(&["/home/a/x"]), Path::new("/home/a/Docs"), false, place), Route::Plain);
         assert_eq!(route(&[], Path::new("/home/a/Docs"), false, place), Route::Plain);
+    }
+
+    #[test]
+    fn after_a_delete_the_next_row_is_selected_or_the_one_before_at_the_end() {
+        let rows: Vec<PathBuf> = ["/a", "/b", "/c", "/d"].iter().map(PathBuf::from).collect();
+        let rows: Vec<&PathBuf> = rows.iter().collect();
+        let gone = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
+        assert_eq!(next_row(&rows, &gone(&["/b"])), Some(PathBuf::from("/c")));
+        assert_eq!(next_row(&rows, &gone(&["/b", "/c"])), Some(PathBuf::from("/d")));
+        assert_eq!(next_row(&rows, &gone(&["/a", "/c"])), Some(PathBuf::from("/d")));
+        assert_eq!(next_row(&rows, &gone(&["/c", "/d"])), Some(PathBuf::from("/b")));
+        assert_eq!(next_row(&rows, &gone(&["/a", "/b", "/c", "/d"])), None);
+        assert_eq!(next_row(&rows, &gone(&["/elsewhere"])), None);
     }
 }

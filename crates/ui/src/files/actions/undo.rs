@@ -26,6 +26,10 @@ pub(super) enum Step {
     Create { path: PathBuf, folder: bool },
     /// Each item was `(original, now)`: moved out of its folder.
     Move(Vec<(PathBuf, PathBuf)>),
+    /// Copies made beside their originals (Duplicate).
+    Duplicate(Vec<PathBuf>),
+    /// Several items renamed at once, each `(old, now)`.
+    Renames(Vec<(PathBuf, PathBuf)>),
 }
 
 impl Step {
@@ -38,6 +42,8 @@ impl Step {
             Step::Create { folder: true, .. } => "Undo new folder",
             Step::Create { folder: false, .. } => "Undo new file",
             Step::Move(_) => "Undo move",
+            Step::Duplicate(_) => "Undo duplicate",
+            Step::Renames(_) => "Undo rename",
         }
     }
 }
