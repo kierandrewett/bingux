@@ -26,11 +26,11 @@ use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 const USAGE: &str = "Usage: bingux-preview [--] [FILE | FOLDER | URI]...\n\
 \n\
-Opens a picture or a document in the Preview window, starting it if it is not\n\
-running. One FILE is shown with the files of its folder that are of its kind,\n\
-so Left and Right go through them. Several files are the list the arrows go\n\
-through; a FOLDER is its pictures and documents. FILE may be a path, ~ or a\n\
-file:// URI. With no argument an empty window opens, or the running window is\n\
+Opens a file in the Preview window, starting it if it is not running: a\n\
+picture, a PDF, text or code, an archive, a font, a song or a film. One FILE\n\
+is shown with the files of its folder that are of its kind, so Left and Right\n\
+go through them. Several files are the list the arrows go through; a FOLDER is\n\
+its files, of every kind. FILE may be a path, ~ or a file:// URI. With no argument an empty window opens, or the running window is\n\
 raised. A name that is not there is reported on stderr and opens nothing. An\n\
 option other than --help is an error; `--` ends the options, for a file whose\n\
 name starts with `-`.\n";

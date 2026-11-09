@@ -18,7 +18,33 @@ pub enum Mode {
     Window,
 }
 
+/// How much a viewer does for the person, which the frame decides.
+///
+/// A frame that is a quick look (a popup, a pane, a full-screen sheet) shows
+/// the content and little else: the file is a click or a keystroke from
+/// being gone, and a pane follows a selection. The Preview application is a
+/// dedicated window for one file at a time, so every viewer adds its own tools
+/// there: a toolbar, a second kind of reading, an action on the file.
+///
+/// A viewer asks [`Stage::depth`](super::viewers::Stage::depth) and never
+/// compares a [`Mode`] itself, so what a frame means is decided here once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Depth {
+    /// The content, and the keys that read it.
+    Glance,
+    /// The content and the viewer's own tools.
+    Dedicated,
+}
+
 impl Mode {
+    /// How much a viewer does in this frame.
+    pub fn depth(self) -> Depth {
+        match self {
+            Mode::Window => Depth::Dedicated,
+            Mode::Popup | Mode::Pane | Mode::Fullscreen => Depth::Glance,
+        }
+    }
+
     /// The modes a window can offer. A compact window (a phone) has no room
     /// for a pane beside a list, so it only opens a full-window sheet, which
     /// is the popup at the window's size.
@@ -66,6 +92,14 @@ mod tests {
         assert_eq!(Mode::Pane.available(true), Mode::Popup);
         assert_eq!(Mode::Pane.available(false), Mode::Pane);
         assert_eq!(Mode::Fullscreen.available(true), Mode::Fullscreen);
+    }
+
+    #[test]
+    fn only_an_applications_own_window_is_dedicated() {
+        assert_eq!(Mode::Window.depth(), Depth::Dedicated);
+        for mode in [Mode::Popup, Mode::Pane, Mode::Fullscreen] {
+            assert_eq!(mode.depth(), Depth::Glance, "{mode:?}");
+        }
     }
 
     #[test]

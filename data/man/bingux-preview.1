@@ -1,17 +1,20 @@
 .TH BINGUX-PREVIEW 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
 .SH NAME
-bingux-preview \- picture and document viewer for the Bingux desktop
+bingux-preview \- file viewer for the Bingux desktop
 .SH SYNOPSIS
 .B bingux-preview
 .RB [ \-\- ]
 .RI [ FILE | FOLDER | URI ]...
 .SH DESCRIPTION
 .B bingux-preview
-shows pictures and PDF documents in a window, with the other files of the same
-kind from the same folder one arrow key away.
+shows a file in a window: a picture, a PDF document, text or code, an archive,
+a font, a song or a film, or a folder.
+The other files of the same kind from the same folder are one arrow key away.
 It zooms, pans, turns and flips pictures, plays animated GIFs, runs a
 slideshow, finds text in a document and shows a document's pages and outline
 in a sidebar.
+It wraps, colours and resizes text, extracts an archive, installs a font and
+plays songs and films with a full set of controls.
 It crops a picture and saves the result as a copy; the original is never
 changed.
 .PP
@@ -27,7 +30,7 @@ and Right go through them.
 Several files are the list the arrows go through.
 .TP
 .I FOLDER
-Its pictures and documents.
+Its files, of every kind that Preview shows.
 .TP
 .I URI
 .BR file:///path ,
@@ -46,6 +49,14 @@ RAW file are decoded by
 which also renders PDF documents with poppler.
 Its HEIF decoder is libheif; HEIC needs a libheif that has an HEVC decoder.
 High dynamic range pictures are tone mapped to an ordinary display.
+Text, code, markup and data are shown with line numbers and colour.
+ZIP, tar (gzip, xz, bzip2, zstd) and 7-Zip archives are listed without being
+unpacked.
+TrueType, OpenType and collection fonts are shown as a specimen with every
+character they draw.
+Songs and films are played by
+.BR bingux\-preview\-host (1)
+through GStreamer.
 .SH KEYS
 .TP
 .B Left, Right
@@ -79,6 +90,9 @@ Copy the picture, and save a copy.
 .TP
 .B F9, Ctrl+F
 In a document, the pages sidebar and find.
+.TP
+.B W, + \-, 0
+In text, wrap lines, and make the text larger, smaller or the default size.
 .TP
 .B I, F, F11
 Information, full screen.

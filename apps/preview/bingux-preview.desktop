@@ -1,12 +1,12 @@
 [Desktop Entry]
 Type=Application
 Name=Preview
-Comment=View pictures and documents
+Comment=Look at almost any file
 Exec=bingux-preview %U
 Icon=bingux-preview
 Terminal=false
 Categories=Graphics;Viewer;
-Keywords=Picture;Image;Photo;PDF;Document;Slideshow;Viewer;
-MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/avif;image/heif;image/heic;image/svg+xml;image/vnd.microsoft.icon;image/x-icon;application/pdf;x-scheme-handler/bingux-preview;
+Keywords=Picture;Image;Photo;PDF;Document;Text;Code;Archive;Font;Video;Audio;Folder;Slideshow;Viewer;Quick Look;
+MimeType=image/png;image/jpeg;image/gif;image/webp;image/bmp;image/tiff;image/avif;image/heif;image/heic;image/svg+xml;image/svg+xml-compressed;image/vnd.microsoft.icon;image/x-icon;image/vnd.radiance;image/x-exr;image/x-canon-cr2;image/x-canon-cr3;image/x-canon-crw;image/x-nikon-nef;image/x-nikon-nrw;image/x-sony-arw;image/x-adobe-dng;image/x-olympus-orf;image/x-panasonic-rw2;image/x-fuji-raf;image/x-pentax-pef;image/x-samsung-srw;application/pdf;text/plain;text/markdown;text/csv;text/x-log;text/html;text/css;application/json;application/xml;text/xml;application/yaml;application/x-yaml;application/toml;text/rust;text/x-python;text/javascript;application/javascript;text/x-typescript;text/x-csrc;text/x-chdr;text/x-c++src;text/x-java;text/x-go;text/x-qml;text/x-nix;application/x-ruby;application/x-php;text/x-lua;application/x-shellscript;application/sql;text/x-makefile;text/x-dockerfile;application/x-desktop;application/zip;application/x-tar;application/gzip;application/x-compressed-tar;application/x-xz;application/x-xz-compressed-tar;application/x-bzip2;application/x-bzip-compressed-tar;application/zstd;application/x-zstd-compressed-tar;application/x-7z-compressed;audio/mpeg;audio/ogg;audio/flac;audio/x-flac;audio/x-wav;audio/mp4;audio/aac;audio/opus;audio/x-opus+ogg;audio/x-vorbis+ogg;audio/midi;audio/webm;video/mp4;video/x-matroska;video/webm;video/x-msvideo;video/quicktime;video/ogg;video/mpeg;font/ttf;font/otf;font/collection;application/x-font-ttf;application/x-font-otf;inode/directory;x-scheme-handler/bingux-preview;
 StartupWMClass=bingux-preview
 StartupNotify=true

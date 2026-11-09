@@ -5,7 +5,7 @@
 # The app's name, in the window title, the header and the About window.
 preview-title = Preview
 # One line in the About window.
-preview-description = View pictures and documents
+preview-description = Look at almost any file
 
 ## Tooltips of the header buttons
 
@@ -42,7 +42,7 @@ preview-menu-shortcuts = Keyboard shortcuts
 ## The empty window
 
 preview-empty-title = No file open
-preview-empty-line = Drop a picture or document here.
+preview-empty-line = Drop a file here to look at it.
 preview-empty-action = Open file
 preview-drop-title = Drop to open
 
@@ -96,8 +96,8 @@ preview-picture-label = Picture: { $name }
 
 preview-shortcuts =
     Ctrl+O  Open
-    Left, Right  Previous and next file in the folder
-    Space  Play or pause an animated picture, page down in a document
+    Left, Right  Previous and next file of the same kind in the folder
+    Space  Play or pause an animated picture, a song or a film, page down in a document
     +, -, 0, 1  Zoom in, zoom out, fit the window, actual size
     R, Shift+R  Turn right, turn left
     H, V  Flip horizontally, vertically
@@ -112,5 +112,7 @@ preview-shortcuts =
     I  Show or hide the information
     F9  Show or hide the pages of a document
     Ctrl+F  Find in a document
+    W  Wrap or unwrap lines of text
+    +, -, 0  Larger, smaller, default size of text
     F, F11  Full screen
     Escape  Leave full screen or the slideshow

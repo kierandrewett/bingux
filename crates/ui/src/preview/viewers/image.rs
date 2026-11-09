@@ -34,6 +34,7 @@ use freya::torin::prelude::Size2D;
 
 use super::super::chrome::PreviewNav;
 use super::super::subject::Resolved;
+use super::Stage;
 use crate::zoom_view::{FitMode, ZoomView};
 
 /// How long a decoded picture stays in the cache once nothing shows it.
@@ -108,39 +109,39 @@ pub(super) fn memory_of(nav: &PreviewNav, resolved: &Resolved) -> (FitMode, Opti
 
 #[derive(PartialEq)]
 pub(super) struct ImageView {
-    pub resolved: Arc<Resolved>,
-    pub nav: PreviewNav,
+    pub stage: Stage,
 }
 
 impl Component for ImageView {
     fn render(&self) -> impl IntoElement {
-        if let Route::Helper { raw } = route_of(&self.resolved) {
+        let Stage { resolved, nav, .. } = &self.stage;
+        if let Route::Helper { raw } = route_of(&resolved) {
             return super::image_helper::HelperPicture {
-                resolved: self.resolved.clone(),
-                nav: self.nav.clone(),
+                resolved: resolved.clone(),
+                nav: nav.clone(),
                 raw,
             }
             .into_element();
         }
-        let natural = shown_size(&self.resolved);
-        let source = self.resolved.source.clone();
-        let is_gif = self.resolved.sniffed.mime.mime == "image/gif" && self.resolved.facts.size.is_some_and(|size| size <= GIF_LIMIT);
+        let natural = shown_size(&resolved);
+        let source = resolved.source.clone();
+        let is_gif = resolved.sniffed.mime.mime == "image/gif" && resolved.facts.size.is_some_and(|size| size <= GIF_LIMIT);
         let pause = use_hook(GifPause::new);
-        if let Some(playing) = self.nav.playing {
+        if let Some(playing) = nav.playing {
             pause.set(!*playing.read());
         }
         let display = *Platform::get().current_window().scale_factor.read() as f32;
         // The sharp decode only ever gets larger while the picture is on show.
         let sharpest = use_hook(|| Rc::new(Cell::new(0.0f32)));
-        let (start, on_mode) = memory_of(&self.nav, &self.resolved);
+        let (start, on_mode) = memory_of(&nav, &resolved);
 
-        let keyboard = self.nav.keyboard;
+        let keyboard = nav.keyboard;
         let draw = move |width: f32, height: f32| picture(&source, is_gif, &pause, width, height, display, &sharpest);
         let mut view = ZoomView::new(natural, draw)
             .start(start)
-            .label(format!("Picture: {}", self.resolved.source.name()))
+            .label(format!("Picture: {}", resolved.source.name()))
             .keys_when(move || keyboard.held());
-        if let Some(handle) = self.nav.zoom {
+        if let Some(handle) = nav.zoom {
             view = view.handle(handle);
         }
         if let Some(on_mode) = on_mode {

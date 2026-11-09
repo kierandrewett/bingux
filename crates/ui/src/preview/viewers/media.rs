@@ -37,6 +37,7 @@ use super::super::host_link::{HostLink, LinkEvent};
 use super::super::keys::Keyboard;
 use super::super::mode::Mode;
 use super::super::subject::Resolved;
+use super::Stage;
 use super::card::Card;
 use super::media_controls::{ControlAction, ControlState, MediaControls};
 use super::media_logic::{BarInputs, HIDE_AFTER_MS, MediaKey, bar_visible, next_subtitle, route};
@@ -86,18 +87,16 @@ pub(super) fn retry_helps(code: ErrorCode) -> bool {
 
 #[derive(PartialEq)]
 pub(super) struct MediaView {
-    pub resolved: Arc<Resolved>,
-    pub nav: PreviewNav,
-    pub mode: Mode,
+    pub stage: Stage,
 }
 
 impl Component for MediaView {
     fn render(&self) -> impl IntoElement {
         let mut attempt = use_state(|| 0u32);
         Playback {
-            resolved: self.resolved.clone(),
-            nav: self.nav.clone(),
-            mode: self.mode,
+            resolved: self.stage.resolved.clone(),
+            nav: self.stage.nav.clone(),
+            mode: self.stage.mode,
             attempt: *attempt.read(),
             on_retry: EventHandler::new(move |_: ()| *attempt.write() += 1),
         }

@@ -4,13 +4,14 @@
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>GPL-3.0-or-later</project_license>
   <name>Preview</name>
-  <summary>View pictures and documents</summary>
+  <summary>Look at almost any file</summary>
   <developer id="dev.drewett">
     <name>Kieran Drewett</name>
   </developer>
   <description>
     <p>
-      Preview shows pictures and PDF documents. The other files of the same
+      Preview shows a file in its own window: a picture, a PDF document, text
+      or code, an archive, a font, a song or a film. The other files of the same
       kind in the folder are one arrow key away.
     </p>
     <ul>
@@ -18,6 +19,9 @@
       <li>Zoom, pan, turn and flip, with pinch and double click; animated GIFs play and pause</li>
       <li>Crop to a shape and save the result as a copy; the original is never changed</li>
       <li>Documents with page thumbnails, an outline, find and text selection</li>
+      <li>Text and code with line numbers, colour, wrapping and text size; archives you can list and extract</li>
+      <li>Fonts as a specimen at several sizes with every character, and an Install button</li>
+      <li>Songs and films with the full set of controls</li>
       <li>A slideshow of the folder, full screen, and Move to Trash with Undo</li>
     </ul>
   </description>
@@ -39,6 +43,13 @@
     <mediatype>image/heic</mediatype>
     <mediatype>image/svg+xml</mediatype>
     <mediatype>application/pdf</mediatype>
+    <mediatype>text/plain</mediatype>
+    <mediatype>application/zip</mediatype>
+    <mediatype>font/ttf</mediatype>
+    <mediatype>font/otf</mediatype>
+    <mediatype>audio/mpeg</mediatype>
+    <mediatype>video/mp4</mediatype>
+    <mediatype>inode/directory</mediatype>
   </provides>
   <supports>
     <control>pointing</control>
