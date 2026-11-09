@@ -18,7 +18,7 @@ use crate::ui::{
     skeleton, skeleton_rows, status, switch_row, typography, use_overlays, use_tokens,
 };
 use bingux_ui::controls::slider;
-use bingux_ui::prelude::{Router, use_router};
+use bingux_ui::prelude::{Router, tr, use_router};
 use bingux_ui::runtime::optimistic;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::style::*;
@@ -444,41 +444,41 @@ fn default_scale(mode: &Mode) -> f64 {
         .unwrap_or(1.0)
 }
 
-fn transform_label(transform: u32) -> &'static str {
+fn transform_label(transform: u32) -> String {
     match transform {
-        0 => "Normal",
-        1 => "90°",
-        2 => "180°",
-        3 => "270°",
-        4 => "Flipped",
-        5 => "Flipped 90°",
-        6 => "Flipped 180°",
-        7 => "Flipped 270°",
-        _ => "Unknown",
+        0 => tr!("displays-orientation-normal"),
+        1 => tr!("displays-orientation-90"),
+        2 => tr!("displays-orientation-180"),
+        3 => tr!("displays-orientation-270"),
+        4 => tr!("displays-orientation-flipped"),
+        5 => tr!("displays-orientation-flipped-90"),
+        6 => tr!("displays-orientation-flipped-180"),
+        7 => tr!("displays-orientation-flipped-270"),
+        _ => tr!("displays-unknown"),
     }
 }
 
-fn orientation_name(value: &str) -> &'static str {
+fn orientation_name(value: &str) -> String {
     match value {
-        "normal" => "Normal",
-        "90" => "90°",
-        "180" => "180°",
-        "270" => "270°",
-        "flipped" => "Flipped",
-        "flipped-90" => "Flipped 90°",
-        "flipped-180" => "Flipped 180°",
-        "flipped-270" => "Flipped 270°",
-        _ => "Unknown",
+        "normal" => tr!("displays-orientation-normal"),
+        "90" => tr!("displays-orientation-90"),
+        "180" => tr!("displays-orientation-180"),
+        "270" => tr!("displays-orientation-270"),
+        "flipped" => tr!("displays-orientation-flipped"),
+        "flipped-90" => tr!("displays-orientation-flipped-90"),
+        "flipped-180" => tr!("displays-orientation-flipped-180"),
+        "flipped-270" => tr!("displays-orientation-flipped-270"),
+        _ => tr!("displays-unknown"),
     }
 }
 
 /// A short word for a colour temperature, for the night light slider.
-fn temperature_word(kelvin: u32) -> &'static str {
+fn temperature_word(kelvin: u32) -> String {
     match kelvin {
-        k if k < 2500 => "Very warm",
-        k if k < 3500 => "Warm",
-        k if k < 4200 => "Neutral",
-        _ => "Cool",
+        k if k < 2500 => tr!("displays-temperature-very-warm"),
+        k if k < 3500 => tr!("displays-temperature-warm"),
+        k if k < 4200 => tr!("displays-temperature-neutral"),
+        _ => tr!("displays-temperature-cool"),
     }
 }
 
@@ -654,14 +654,10 @@ fn load_displays() -> Result<Displays, CommandError> {
     // The editable layout is not available here, so show the read-only list.
     match load_gnoblin() {
         Ok(records) => Ok(Displays::ReadOnly {
-            reason:
-                "Display settings are read-only right now. The list shows the connected displays."
-                    .to_string(),
+            reason: tr!("displays-read-only-reason"),
             records,
         }),
-        Err(_) => Err(CommandError(
-            "Could not read the display settings. Try again in a moment.".into(),
-        )),
+        Err(_) => Err(CommandError(tr!("displays-read-error"))),
     }
 }
 
@@ -862,48 +858,47 @@ fn parse_record(record: &Json) -> Result<Record, String> {
                 trim_number(refresh)
             ))
         })
-        .unwrap_or_else(|| "Off".to_string());
+        .unwrap_or_else(|| tr!("displays-off"));
     let position = match (
         record.get("x").and_then(Json::number),
         record.get("y").and_then(Json::number),
     ) {
         (Some(x), Some(y)) => format!("{}, {}", x as i64, y as i64),
-        _ => "Unknown".to_string(),
+        _ => tr!("displays-unknown"),
     };
     let scale = record
         .get("scale")
         .and_then(Json::number)
-        .map_or("Unknown".to_string(), |scale| {
+        .map_or(tr!("displays-unknown"), |scale| {
             format!("{}%", (scale * 100.0).round() as u32)
         });
     let orientation =
         orientation_name(record.get("transform").and_then(Json::text).unwrap_or("")).to_string();
     let rows = [
-        ("Port", name.to_string()),
+        (tr!("displays-port"), name.to_string()),
         (
-            "In use",
+            tr!("displays-in-use"),
             yes_no(record.get("enabled").and_then(Json::boolean)),
         ),
         (
-            "Primary",
+            tr!("displays-primary"),
             yes_no(record.get("primary").and_then(Json::boolean)),
         ),
-        ("Mode", mode),
-        ("Position", position),
-        ("Scale", scale),
-        ("Orientation", orientation),
+        (tr!("displays-mode"), mode),
+        (tr!("displays-position"), position),
+        (tr!("displays-scale"), scale),
+        (tr!("displays-orientation"), orientation),
     ]
     .into_iter()
-    .map(|(label, value)| (label.to_string(), value))
     .collect();
     Ok(Record { title, rows })
 }
 
 fn yes_no(flag: Option<bool>) -> String {
     match flag {
-        Some(true) => "Yes".to_string(),
-        Some(false) => "No".to_string(),
-        None => "Unknown".to_string(),
+        Some(true) => tr!("displays-yes"),
+        Some(false) => tr!("displays-no"),
+        None => tr!("displays-unknown"),
     }
 }
 
@@ -917,9 +912,7 @@ fn load_night() -> Result<Night, CommandError> {
         .split_whitespace()
         .last()
         .and_then(|value| value.parse::<u32>().ok())
-        .ok_or_else(|| {
-            CommandError("Could not read the night light settings. Try again in a moment.".into())
-        })?;
+        .ok_or_else(|| CommandError(tr!("displays-night-read-error")))?;
     Ok(Night {
         enabled: enabled.trim() == "true",
         kelvin,
@@ -931,9 +924,9 @@ fn load_night() -> Result<Night, CommandError> {
 
 /// Reads a schedule hour such as `18.0`.
 fn hours(text: &str) -> Result<f64, CommandError> {
-    text.trim().parse::<f64>().map_err(|_| {
-        CommandError("Could not read the night light settings. Try again in a moment.".into())
-    })
+    text.trim()
+        .parse::<f64>()
+        .map_err(|_| CommandError(tr!("displays-night-read-error")))
 }
 
 /// Maps 1700..4700 K onto the slider's 0..100.
@@ -1015,7 +1008,7 @@ fn set_enabled(monitors: &mut [Monitor], index: usize, on: bool) -> Result<(), S
         return Ok(());
     }
     if monitors.iter().filter(|monitor| monitor.enabled).count() <= 1 {
-        return Err("Keep at least one display on.".to_string());
+        return Err(tr!("displays-keep-one-on"));
     }
     let was_primary = monitors[index].primary;
     monitors[index].enabled = false;
@@ -1030,7 +1023,7 @@ fn set_enabled(monitors: &mut [Monitor], index: usize, on: bool) -> Result<(), S
 
 fn set_primary(monitors: &mut [Monitor], index: usize) -> Result<(), String> {
     if !monitors[index].enabled {
-        return Err("Turn on this display to make it the primary display.".to_string());
+        return Err(tr!("displays-turn-on-to-make-primary"));
     }
     for (position, monitor) in monitors.iter_mut().enumerate() {
         monitor.primary = position == index && monitor.enabled;
@@ -1049,7 +1042,7 @@ fn set_resolution(monitors: &mut [Monitor], index: usize, key: &str) -> Result<(
         .collect();
     let best = monitor
         .best_mode(&candidates)
-        .ok_or("No mode has that resolution.")?;
+        .ok_or_else(|| tr!("displays-no-mode-for-resolution"))?;
     monitor.select_mode(best);
     place(monitors, index);
     Ok(())
@@ -1061,7 +1054,7 @@ fn set_refresh(monitors: &mut [Monitor], index: usize, id: &str) -> Result<(), S
         .modes
         .iter()
         .position(|mode| mode.id == id)
-        .ok_or("Unknown refresh rate.")?;
+        .ok_or_else(|| tr!("displays-unknown-refresh-rate"))?;
     monitor.select_mode(best);
     place(monitors, index);
     Ok(())
@@ -1069,12 +1062,12 @@ fn set_refresh(monitors: &mut [Monitor], index: usize, id: &str) -> Result<(), S
 
 fn set_scale(monitors: &mut [Monitor], index: usize, key: &str) -> Result<(), String> {
     let monitor = &mut monitors[index];
-    let position: usize = key.parse().map_err(|_| "Unknown scale.".to_string())?;
+    let position: usize = key.parse().map_err(|_| tr!("displays-unknown-scale"))?;
     let scale = *monitor
         .selected()
         .scales
         .get(position)
-        .ok_or("Unknown scale.")?;
+        .ok_or_else(|| tr!("displays-unknown-scale"))?;
     monitor.scale = scale;
     place(monitors, index);
     Ok(())
@@ -1083,7 +1076,7 @@ fn set_scale(monitors: &mut [Monitor], index: usize, key: &str) -> Result<(), St
 fn set_transform(monitors: &mut [Monitor], index: usize, key: &str) -> Result<(), String> {
     let transform: u32 = key
         .parse()
-        .map_err(|_| "Unknown orientation.".to_string())?;
+        .map_err(|_| tr!("displays-unknown-orientation"))?;
     monitors[index].transform = transform;
     place(monitors, index);
     Ok(())
@@ -1104,11 +1097,12 @@ fn next_orientation(transform: u32) -> u32 {
 fn arrangement_hint(ctx: Ctx, monitors: &[Monitor]) -> String {
     let enabled = monitors.iter().filter(|monitor| monitor.enabled).count();
     match *ctx.drag.read() {
-        Some(drag) => format!(
-            "Position {}, {}",
-            monitors[drag.index].x, monitors[drag.index].y
+        Some(drag) => tr!(
+            "displays-position-value",
+            x = monitors[drag.index].x,
+            y = monitors[drag.index].y
         ),
-        None if enabled >= 2 => "Drag displays to arrange them.".to_string(),
+        None if enabled >= 2 => tr!("displays-drag-to-arrange"),
         None => String::new(),
     }
 }
@@ -1144,7 +1138,9 @@ fn arrangement_footer(ctx: Ctx, monitors: &[Monitor], changed: bool) -> Element 
                 .tw_layout(&[w_flex()])
                 .child(caption(arrangement_hint(ctx, monitors))),
         )
-        .maybe_child(changed.then(|| primary_button("Apply", move |_| apply(ctx)).compact()))
+        .maybe_child(
+            changed.then(|| primary_button(&tr!("displays-apply"), move |_| apply(ctx)).compact()),
+        )
         .into()
 }
 
@@ -1288,14 +1284,14 @@ fn settled_point(monitors: &[Monitor], index: usize, x: i32, y: i32) -> Option<(
 
 fn validate(monitors: &[Monitor]) -> Result<(), String> {
     if !monitors.iter().any(|monitor| monitor.enabled) {
-        return Err("Turn on at least one display.".to_string());
+        return Err(tr!("displays-turn-on-one"));
     }
     let primaries = monitors
         .iter()
         .filter(|monitor| monitor.enabled && monitor.primary)
         .count();
     if primaries != 1 {
-        return Err("Choose one primary display.".to_string());
+        return Err(tr!("displays-choose-primary"));
     }
     Ok(())
 }
@@ -1344,10 +1340,7 @@ fn apply(ctx: Ctx) {
     };
     let mut error = ctx.error;
     if fake_layout().is_some() {
-        error.set(Some(
-            "Could not apply the preview layout. Restart Settings without the test layout."
-                .to_string(),
-        ));
+        error.set(Some(tr!("displays-preview-apply-failed")));
         return;
     }
     if let Err(message) = validate(&monitors) {
@@ -1370,16 +1363,12 @@ fn apply(ctx: Ctx) {
             // busctl reports Mutter's stale-serial rejection as "Access denied".
             // The layout changed under the draft, so reload and ask the user to redo it.
             Err(failure) if failure.0.contains("Access denied") => {
-                error.set(Some(
-                    "The display layout changed. Make your changes again.".to_string(),
-                ));
+                error.set(Some(tr!("displays-layout-changed")));
                 reload(ctx.model);
             }
             Err(failure) => {
                 eprintln!("displays: applying the layout failed: {}", failure.0);
-                error.set(Some(
-                    "Could not apply the display layout. Try again.".to_string(),
-                ));
+                error.set(Some(tr!("displays-apply-failed")));
             }
         },
     );
@@ -1395,23 +1384,20 @@ fn start_keep_prompt(ctx: Ctx, draft: Vec<Monitor>, before: Vec<Monitor>) {
     remaining.set(KEEP_SECONDS);
     let on_timeout = before.clone();
     ctx.overlays.show_dialog(
-        dialog(
-            "Keep these display settings?",
-            "The new layout is active for now.",
-        )
-        .content(Countdown { remaining })
-        .response("Revert", ResponseKind::Default, move |_| {
-            close_prompt(ctx);
-            revert_layout(ctx, before.clone());
-        })
-        .response("Keep", ResponseKind::Suggested, move |_| {
-            close_prompt(ctx);
-            keep_layout(ctx, draft.clone());
-        })
-        // A stray Enter or Escape reverts, as the countdown does: only a
-        // press on Keep keeps a layout the person may not be able to see.
-        .default_action("revert")
-        .cancel_action("revert"),
+        dialog(&tr!("displays-keep-title"), &tr!("displays-keep-body"))
+            .content(Countdown { remaining })
+            .response(&tr!("displays-revert"), ResponseKind::Default, move |_| {
+                close_prompt(ctx);
+                revert_layout(ctx, before.clone());
+            })
+            .response(&tr!("displays-keep"), ResponseKind::Suggested, move |_| {
+                close_prompt(ctx);
+                keep_layout(ctx, draft.clone());
+            })
+            // A stray Enter or Escape reverts, as the countdown does: only a
+            // press on Keep keeps a layout the person may not be able to see.
+            .default_action("revert")
+            .cancel_action("revert"),
     );
     spawn(async move {
         loop {
@@ -1456,9 +1442,7 @@ fn keep_layout(ctx: Ctx, draft: Vec<Monitor>) {
             }
             Err(failure) => {
                 eprintln!("displays: saving the layout failed: {}", failure.0);
-                error.set(Some(
-                    "Could not save the display layout. Try again.".to_string(),
-                ));
+                error.set(Some(tr!("displays-save-failed")));
                 reload(model);
             }
         },
@@ -1480,9 +1464,7 @@ fn revert_layout(ctx: Ctx, before: Vec<Monitor>) {
             Ok(_) => reload(model),
             Err(failure) => {
                 eprintln!("displays: restoring the layout failed: {}", failure.0);
-                error.set(Some(
-                    "Could not restore the previous layout. Try again.".to_string(),
-                ));
+                error.set(Some(tr!("displays-restore-failed")));
                 reload(model);
             }
         },
@@ -1513,7 +1495,7 @@ fn write_night(
             Ok(_) => error.set(None),
             Err(failure) => {
                 eprintln!("displays: writing night light failed: {}", failure.0);
-                error.set(Some("Could not change night light. Try again.".to_string()));
+                error.set(Some(tr!("displays-night-write-error")));
                 reload(model);
             }
         },
@@ -1629,11 +1611,7 @@ struct Countdown {
 impl Component for Countdown {
     fn render(&self) -> impl IntoElement {
         let seconds = *self.remaining.read();
-        if seconds == 1 {
-            caption("Reverting in 1 second…")
-        } else {
-            caption(format!("Reverting in {seconds} seconds…"))
-        }
+        caption(tr!("displays-reverting-countdown", seconds = seconds))
     }
 }
 
@@ -1669,7 +1647,7 @@ impl Component for Arrangement {
                 Dim::ArrangementHeight.px() - arrangement_footer_height(),
             ),
         ) else {
-            return caption("No displays are on.").into_element();
+            return caption(tr!("displays-no-displays-on")).into_element();
         };
         let frame = active.map_or(current, |drag| drag.frame);
 
@@ -1710,7 +1688,7 @@ impl Component for Arrangement {
                         None => {
                             monitors[drag.index].x = drag.origin.0;
                             monitors[drag.index].y = drag.origin.1;
-                            Err("Could not move the display. Drop it next to another display and try again.".to_string())
+                            Err(tr!("displays-move-failed"))
                         }
                     }
                 });
@@ -1870,7 +1848,7 @@ impl Component for Tile {
 /// The right-click menu for a display box. Each action stages a change in the
 /// draft, the same as the controls below it, so it waits for Apply.
 fn monitor_menu(ctx: Ctx, router: Router, index: usize, monitor: &Monitor) -> Vec<MenuItem> {
-    let mut make_main = menu_item("Make primary", move |_| {
+    let mut make_main = menu_item(&tr!("displays-make-primary"), move |_| {
         edit(ctx.model, ctx.error, move |monitors| {
             set_primary(monitors, index)
         });
@@ -1881,19 +1859,19 @@ fn monitor_menu(ctx: Ctx, router: Router, index: usize, monitor: &Monitor) -> Ve
     let label = monitor_label(index, monitor);
     vec![
         make_main,
-        menu_item("Rotate", move |_| {
+        menu_item(&tr!("displays-rotate"), move |_| {
             edit(ctx.model, ctx.error, move |monitors| {
                 let next = next_orientation(monitors[index].transform);
                 set_transform(monitors, index, &next.to_string())
             });
         }),
-        menu_item("Turn off", move |_| {
+        menu_item(&tr!("displays-turn-off"), move |_| {
             edit(ctx.model, ctx.error, move |monitors| {
                 set_enabled(monitors, index, false)
             });
         }),
         menu_separator(),
-        menu_item("Settings…", move |_| {
+        menu_item(&tr!("displays-settings-ellipsis"), move |_| {
             router.open(routes::display(index, &label))
         }),
     ]
@@ -1906,7 +1884,7 @@ fn arrangement_group(
     changed: bool,
     tokens: Tokens,
 ) -> Group {
-    Group::titled("Arrangement").row(
+    Group::titled(&tr!("displays-arrangement")).row(
         Arrangement {
             ctx,
             monitors: monitors.to_vec(),
@@ -1929,19 +1907,27 @@ fn monitor_group(
     // The subpage header already names the display, so its group is untitled.
     Group::new(None::<String>)
         // The Primary switch below says the rest; only "Off" adds something.
-        .description(if enabled { "" } else { "Off" })
-        .row(row("Port").mono_value(monitor.connector.clone()))
+        .description(if enabled {
+            String::new()
+        } else {
+            tr!("displays-off")
+        })
+        .row(row(tr!("displays-port")).mono_value(monitor.connector.clone()))
         .row(
-            switch_row("Use this display", enabled, move |on: bool| {
-                edit(model, error, move |monitors| {
-                    set_enabled(monitors, index, on)
-                });
-            })
+            switch_row(
+                &tr!("displays-use-this-display"),
+                enabled,
+                move |on: bool| {
+                    edit(model, error, move |monitors| {
+                        set_enabled(monitors, index, on)
+                    });
+                },
+            )
             .nested(
                 enabled,
                 vec![
                     choice_row(
-                        "Resolution",
+                        &tr!("displays-resolution"),
                         monitor.resolutions(),
                         &mode.resolution(),
                         move |key: String| {
@@ -1952,7 +1938,7 @@ fn monitor_group(
                     )
                     .into(),
                     choice_row(
-                        "Refresh rate",
+                        &tr!("displays-refresh-rate"),
                         monitor.refresh_options(),
                         &mode.id,
                         move |id: String| {
@@ -1963,7 +1949,7 @@ fn monitor_group(
                     )
                     .into(),
                     choice_row(
-                        "Scale",
+                        &tr!("displays-scale"),
                         monitor.scale_options(),
                         &monitor.scale_key(),
                         move |key: String| {
@@ -1974,7 +1960,7 @@ fn monitor_group(
                     )
                     .into(),
                     choice_row(
-                        "Orientation",
+                        &tr!("displays-orientation"),
                         monitor.orientation_options(),
                         &monitor.transform.to_string(),
                         move |key: String| {
@@ -1984,13 +1970,17 @@ fn monitor_group(
                         },
                     )
                     .into(),
-                    switch_row("Primary", monitor.primary, move |on: bool| {
-                        // Turning the primary display off would leave none; the only
-                        // way to change it is to make another display primary.
-                        if on {
-                            edit(model, error, move |monitors| set_primary(monitors, index));
-                        }
-                    })
+                    switch_row(
+                        &tr!("displays-primary"),
+                        monitor.primary,
+                        move |on: bool| {
+                            // Turning the primary display off would leave none; the only
+                            // way to change it is to make another display primary.
+                            if on {
+                                edit(model, error, move |monitors| set_primary(monitors, index));
+                            }
+                        },
+                    )
                     .into(),
                 ],
             ),
@@ -2079,37 +2069,39 @@ fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> E
 
 fn night_group(ctx: Ctx, night: &Night) -> Group {
     let model = ctx.model;
-    Group::titled("Night light")
+    Group::titled(&tr!("displays-night-light"))
         .row(switch_row(
-            "Use night light",
+            &tr!("displays-use-night-light"),
             night.enabled,
             move |on: bool| {
                 set_night_enabled(ctx, on);
             },
         ))
         .row(
-            row("Colour temperature")
+            row(tr!("displays-colour-temperature"))
                 .subtitle(temperature_word(night.kelvin))
                 .trailing(temperature_control(night.kelvin, move |level: f64| {
                     set_night_level(model, ctx.error, ctx.night_ticket, level)
                 })),
         )
         .row(
-            switch_row("On a schedule", night.automatic, move |on: bool| {
-                set_night_schedule(ctx, on)
-            })
+            switch_row(
+                &tr!("displays-on-a-schedule"),
+                night.automatic,
+                move |on: bool| set_night_schedule(ctx, on),
+            )
             .nested(
                 night.automatic,
                 vec![
                     choice_row(
-                        "From",
+                        &tr!("displays-from"),
                         hour_options(),
                         &hour_key(night.from),
                         move |key: String| set_night_hour(ctx, true, &key),
                     )
                     .into(),
                     choice_row(
-                        "Until",
+                        &tr!("displays-until"),
                         hour_options(),
                         &hour_key(night.to),
                         move |key: String| set_night_hour(ctx, false, &key),
@@ -2122,13 +2114,13 @@ fn night_group(ctx: Ctx, night: &Night) -> Group {
 
 /// The line under a monitor's name: whether it is on, and whether it is the
 /// primary display.
-fn monitor_state(monitor: &Monitor) -> &'static str {
+fn monitor_state(monitor: &Monitor) -> String {
     if !monitor.enabled {
-        "Off"
+        tr!("displays-state-off")
     } else if monitor.primary {
-        "Primary display"
+        tr!("displays-state-primary")
     } else {
-        "Secondary display"
+        tr!("displays-state-secondary")
     }
 }
 
@@ -2136,8 +2128,8 @@ fn monitor_state(monitor: &Monitor) -> &'static str {
 /// last row of a display's page, and it only appears once the layout changed.
 fn apply_row(ctx: Ctx) -> Element {
     action_row(
-        Some("After you apply, choose whether to keep the new layout."),
-        primary_button("Apply", move |_| apply(ctx)).compact(),
+        Some(&tr!("displays-apply-hint")),
+        primary_button(&tr!("displays-apply"), move |_| apply(ctx)).compact(),
     )
 }
 
@@ -2172,7 +2164,7 @@ fn use_page_ctx(model: State<Option<Page>>) -> Ctx {
 /// With several displays, the main page lists them. Each row opens that
 /// display's own page, so the arrangement stays the only shared control.
 fn monitor_list_group(ctx: Ctx, monitors: &[Monitor], router: Router) -> Group {
-    let mut group = Group::titled("Displays");
+    let mut group = Group::titled(&tr!("displays-group"));
     if monitors.len() > 1 {
         group = group.trailing(identify_button(ctx.overlays, monitors));
     }
@@ -2199,7 +2191,9 @@ fn identify_button(overlays: Overlays, monitors: &[Monitor]) -> impl Into<Elemen
         .iter()
         .map(|monitor| monitor.connector.clone())
         .collect::<Vec<_>>();
-    row_button("Identify", move |_| identify(overlays, connectors.clone()))
+    row_button(&tr!("displays-identify"), move |_| {
+        identify(overlays, connectors.clone())
+    })
 }
 
 /// The `binguxctl` arguments that label every display, in the order the page
@@ -2244,15 +2238,16 @@ impl Component for DisplaysPage {
 
         page = match loaded.displays {
             Err(failure) => page.child(
-                status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+                status(Status::Error(failure.0))
+                    .action(&tr!("displays-try-again"), move |_| reload(model)),
             ),
             Ok(Displays::ReadOnly { reason, records }) => {
                 let mut page = page.child(status(Status::Info(reason)));
-                let mut group = Group::titled("Displays");
+                let mut group = Group::titled(&tr!("displays-group"));
                 for (index, record) in records.iter().enumerate() {
                     let title = record.title.clone();
                     let open = title.clone();
-                    let menu = vec![menu_item("Open display details", move |_| {
+                    let menu = vec![menu_item(&tr!("displays-open-details"), move |_| {
                         router.open(routes::display(index, &open))
                     })];
                     group = group.row(
@@ -2278,7 +2273,8 @@ impl Component for DisplaysPage {
         page = match loaded.night {
             Ok(night) => page.child(night_group(ctx, &night)),
             Err(failure) => page.child(
-                status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+                status(Status::Error(failure.0))
+                    .action(&tr!("displays-try-again"), move |_| reload(model)),
             ),
         };
         page
@@ -2303,17 +2299,14 @@ impl Component for DisplayPage {
         };
         match loaded.displays {
             Err(failure) => page.child(
-                status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+                status(Status::Error(failure.0))
+                    .action(&tr!("displays-try-again"), move |_| reload(model)),
             ),
             Ok(Displays::ReadOnly { records, .. }) => match records.get(self.index) {
                 Some(record) => page
-                    .child(status(Status::Info(
-                        "This display is read-only right now.".to_string(),
-                    )))
+                    .child(status(Status::Info(tr!("displays-read-only-now"))))
                     .child(record_group(record)),
-                None => page.child(status(Status::Info(
-                    "This display is no longer connected.".to_string(),
-                ))),
+                None => page.child(status(Status::Info(tr!("displays-no-longer-connected")))),
             },
             Ok(Displays::Editable {
                 monitors, saved, ..
@@ -2330,9 +2323,7 @@ impl Component for DisplayPage {
                         };
                         page.child(group)
                     }
-                    None => page.child(status(Status::Info(
-                        "This display is no longer connected.".to_string(),
-                    ))),
+                    None => page.child(status(Status::Info(tr!("displays-no-longer-connected")))),
                 }
             }
         }

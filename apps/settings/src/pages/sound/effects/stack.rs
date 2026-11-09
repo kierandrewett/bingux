@@ -11,7 +11,7 @@
 
 use bingux_audio_effects::effects::{self, Category};
 use bingux_audio_effects::{Direction, PluginSlot};
-use bingux_ui::prelude::{icon_button, level_meter, sortable};
+use bingux_ui::prelude::{icon_button, level_meter, sortable, tr};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
@@ -57,7 +57,7 @@ impl Component for StackView {
 
         let body: Element = if plugins.is_empty() {
             Group::new(None::<String>)
-                .row(status(Status::Empty("No effects added".to_string())))
+                .row(status(Status::Empty(tr!("sound-effects-empty"))))
                 .into()
         } else {
             let rows: Vec<Element> = plugins
@@ -77,7 +77,7 @@ impl Component for StackView {
                         }))
                         .child(
                             icon_button(Icon::Delete, move |_| remove(fx, &delete_id))
-                                .tooltip("Remove effect")
+                                .tooltip(&tr!("sound-effects-remove"))
                                 .danger(),
                         );
                     let mut item = row(name)
@@ -94,7 +94,7 @@ impl Component for StackView {
                             .subtitle(reason.clone())
                             .leading_tone(bingux_ui::prelude::Tone::Warning);
                     } else if !slot.enabled {
-                        item = item.subtitle("Off");
+                        item = item.subtitle(&tr!("sound-effects-off"));
                     }
                     if compact {
                         item = item.navigates();
@@ -122,15 +122,15 @@ impl Component for StackView {
         };
 
         let (header, end) = match direction {
-            Direction::Output => ("Output", "Output device"),
-            Direction::Input => ("Input", "Input device"),
+            Direction::Output => (tr!("sound-kind-output"), tr!("sound-kind-device-output")),
+            Direction::Input => (tr!("sound-kind-input"), tr!("sound-kind-device-input")),
         };
         let device = runtime
             .device_label
             .clone()
             .unwrap_or_else(|| match direction {
-                Direction::Output => "Speakers".to_string(),
-                Direction::Input => "Microphone".to_string(),
+                Direction::Output => tr!("sound-default-speakers"),
+                Direction::Input => tr!("sound-default-microphone"),
             });
         let live = runtime.running && runtime.virtual_node.is_some();
         let (before, after) = match direction {
@@ -143,7 +143,7 @@ impl Component for StackView {
                 (runtime.virtual_node, Source::Input),
             ),
         };
-        let meter = |label: &'static str, (node, source): (Option<u32>, Source)| -> Element {
+        let meter = |label: String, (node, source): (Option<u32>, Source)| -> Element {
             hstack(S3)
                 .tw_layout(&[w_full(), items(Align::Center)])
                 .child(rect().tw(&tokens, &[w(Dim::Box9)]).child(caption(label)))
@@ -163,21 +163,21 @@ impl Component for StackView {
                     .tw_layout(&[w_full(), items(Align::Center), justify(Align::Between)])
                     .child(caption(header))
                     .child(
-                        action_button("Add effect", move |_| picker::open(fx))
+                        action_button(&tr!("sound-effects-add-button"), move |_| picker::open(fx))
                             .icon(Icon::ListAdd)
                             .compact(),
                     ),
             )
             .child(body)
             .child(
-                Group::titled(end).row(row(device)).row(Element::from(
+                Group::titled(&end).row(row(device)).row(Element::from(
                     rect()
                         .tw(
                             &tokens,
                             &[flex_col(), gap(S2), w_full(), px(GUTTER), py(S3)],
                         )
-                        .child(meter("In", before))
-                        .child(meter("Out", after)),
+                        .child(meter(tr!("sound-meter-in"), before))
+                        .child(meter(tr!("sound-meter-out"), after)),
                 )),
             )
     }

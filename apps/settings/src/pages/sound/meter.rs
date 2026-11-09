@@ -24,6 +24,7 @@ use bingux_ui::typography::CAPTION;
 
 use crate::system;
 use crate::ui::use_tokens;
+use bingux_ui::prelude::tr;
 
 /// The least time between two readings while there is sound: 30 frames a second.
 const FRAME: Duration = Duration::from_millis(33);
@@ -306,11 +307,11 @@ impl Component for LevelMeter {
         // A compact bar is a short pill for a heading. Otherwise the bar spans
         // its row, as under an application's slider.
         let name = match source {
-            Source::Output => "Output level",
-            Source::Input => "Input level",
-            Source::Stream => "Application level",
+            Source::Output => tr!("sound-meter-output-level"),
+            Source::Input => tr!("sound-meter-input-level"),
+            Source::Stream => tr!("sound-meter-application-level"),
         };
-        let bar = bingux_ui::prelude::level_meter(fill).label(name);
+        let bar = bingux_ui::prelude::level_meter(fill).label(&name);
         if self.compact {
             bingux_ui::controls::hover_tip(rect().tw(&tokens, &[w(Dim::Button)]).child(bar), name)
         } else {

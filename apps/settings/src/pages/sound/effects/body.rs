@@ -11,6 +11,7 @@ use freya::prelude::*;
 
 use super::{cached, page, presets, stack, use_fx};
 use crate::ui::{caption, hstack, switch, use_tokens};
+use bingux_ui::prelude::tr;
 
 #[derive(PartialEq)]
 pub(super) struct EffectsBody;
@@ -21,7 +22,7 @@ impl Component for EffectsBody {
         let window = fx.window;
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Done".to_string(),
+                label: tr!("sound-effects-done"),
                 enabled: true,
                 on_press: EventHandler::new(move |()| window.close()),
             }),
@@ -34,8 +35,8 @@ impl Component for EffectsBody {
 
         let tabs = segmented(
             vec![
-                ("output".to_string(), "Output".to_string()),
-                ("input".to_string(), "Input".to_string()),
+                ("output".to_string(), tr!("sound-effects-tab-output")),
+                ("input".to_string(), tr!("sound-effects-tab-input")),
             ],
             direction.name(),
             move |name: String| {
@@ -68,7 +69,7 @@ impl Component for EffectsBody {
                 hstack(S2)
                     .tw_layout(&[items(Align::Center)])
                     .child(switch(enabled, move |on: bool| fx.set_enabled(on)))
-                    .maybe_child((!is_compact()).then(|| caption("Effects"))),
+                    .maybe_child((!is_compact()).then(|| caption(&tr!("sound-effects")))),
             )
             .child(tabs)
             .child(presets::menu(fx, &data));
@@ -96,7 +97,7 @@ impl Component for EffectsBody {
         let split = master_detail(master, detail, *fx.page_open.read(), move |()| {
             open.set(false)
         })
-        .back_label("Effects");
+        .back_label(&tr!("sound-effects"));
         let content = rect()
             .tw(&tokens, &[w_full(), h_full(), flex_col()])
             .child(bar)

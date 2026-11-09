@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::runtime::{optimistic, optimistic_then};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
@@ -109,7 +110,7 @@ fn placeholder() -> Model {
             fraction: Some(0.0),
             percentage: "—".to_string(),
             state: "—".to_string(),
-            time: Some(("Time to empty".to_string(), "—".to_string())),
+            time: Some((tr!("power-battery-time-empty"), "—".to_string())),
             history: Vec::new(),
             offset: 0,
             health: Some("—".to_string()),
@@ -175,8 +176,8 @@ fn battery() -> Result<Option<Battery>, CommandError> {
             "percentage" => percentage = Some(value.to_string()),
             "capacity" => health = parse_health(value),
             "state" => state = Some(battery_state(value)),
-            "time to empty" => time = Some(("Time to empty".to_string(), value.to_string())),
-            "time to full" => time = Some(("Time to full".to_string(), value.to_string())),
+            "time to empty" => time = Some((tr!("power-battery-time-empty"), value.to_string())),
+            "time to full" => time = Some((tr!("power-battery-time-full"), value.to_string())),
             _ => {}
         }
     }
@@ -184,8 +185,8 @@ fn battery() -> Result<Option<Battery>, CommandError> {
     let fraction = percentage.as_deref().and_then(parse_fraction);
     Ok(Some(Battery {
         fraction,
-        percentage: percentage.unwrap_or_else(|| "Unknown".to_string()),
-        state: state.unwrap_or_else(|| "Unknown".to_string()),
+        percentage: percentage.unwrap_or_else(|| tr!("power-battery-unknown")),
+        state: state.unwrap_or_else(|| tr!("power-battery-unknown")),
         time,
         history: charge_history(path).unwrap_or_default(),
         offset: utc_offset(),
@@ -291,20 +292,20 @@ fn profiles() -> Result<Profiles, CommandError> {
 
 fn profile_label(name: &str) -> String {
     match name {
-        "performance" => "Performance".to_string(),
-        "balanced" => "Balanced".to_string(),
-        "power-saver" => "Power saver".to_string(),
+        "performance" => tr!("power-profile-performance"),
+        "balanced" => tr!("power-profile-balanced"),
+        "power-saver" => tr!("power-profile-power-saver"),
         other => sentence(other),
     }
 }
 
 /// The plain sentence under each power mode.
-fn profile_meaning(name: &str) -> &'static str {
+fn profile_meaning(name: &str) -> String {
     match name {
-        "power-saver" => "Uses less power. Slower under heavy load.",
-        "balanced" => "Good for most work.",
-        "performance" => "Fastest. Uses more power and runs warmer.",
-        _ => "",
+        "power-saver" => tr!("power-profile-power-saver-meaning"),
+        "balanced" => tr!("power-profile-balanced-meaning"),
+        "performance" => tr!("power-profile-performance-meaning"),
+        _ => String::new(),
     }
 }
 
@@ -321,7 +322,7 @@ fn gsettings_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
     raw.trim()
         .strip_prefix("uint32 ")
         .and_then(|number| number.parse().ok())
-        .ok_or_else(|| CommandError("Could not read this setting. Try again in a moment.".into()))
+        .ok_or_else(|| CommandError(tr!("power-setting-read-error")))
 }
 
 /// Automatic suspend for `source` (`ac` or `battery`). Missing keys hide the
@@ -359,8 +360,8 @@ fn sentence(value: &str) -> String {
 /// `pending-discharge` when the battery is waiting for a change in the charger.
 fn battery_state(value: &str) -> String {
     match value {
-        "pending-charge" => "Waiting to charge".to_string(),
-        "pending-discharge" => "Waiting to discharge".to_string(),
+        "pending-charge" => tr!("power-battery-waiting-to-charge"),
+        "pending-discharge" => tr!("power-battery-waiting-to-discharge"),
         other => sentence(other),
     }
 }
@@ -405,7 +406,7 @@ fn header_subtitle(battery: &Result<Option<Battery>, CommandError>) -> Option<St
             battery.percentage,
             battery.state.to_lowercase()
         )),
-        Ok(None) => Some("Plugged in".to_string()),
+        Ok(None) => Some(tr!("power-plugged-in")),
         Err(_) => None,
     }
 }
@@ -485,7 +486,7 @@ fn mode_group(
             }),
         });
     }
-    Group::titled("Power mode").row(cards)
+    Group::titled(&tr!("power-mode-group")).row(cards)
 }
 
 /// One power mode card. A component of its own: its focus stop is a hook, and
@@ -509,11 +510,11 @@ impl Component for ModeCard {
         let tokens = use_tokens();
         let (name, offered, active) = (self.name, self.offered, self.active);
         let state = if !offered {
-            "Not available"
+            tr!("power-mode-unavailable")
         } else if active {
-            "In use"
+            tr!("power-mode-in-use")
         } else {
-            ""
+            String::new()
         };
         let mut card = rect()
             .tw(
@@ -557,7 +558,7 @@ impl Component for ModeCard {
 /// A failed write: the raw text goes to the log and the person gets a sentence.
 fn write_failed(raw: &str) -> String {
     eprintln!("power: {raw}");
-    "Could not change the power setting. Try again.".to_string()
+    tr!("power-write-failed")
 }
 
 /// Switches shown at once: a value here wins over the loaded one until the
@@ -593,7 +594,7 @@ fn suspend_rows(
     pending: Pending,
     picks: Picks,
     source: &'static str,
-    title: &str,
+    title: String,
     state: &Suspend,
 ) -> Group {
     let key_type = format!("sleep-inactive-{source}-type");
@@ -604,8 +605,8 @@ fn suspend_rows(
     let toggle_pending_key = pending_key.clone();
     let delay_key = format!("suspend-delay-{source}");
     let delay = choice_row(
-        "Suspend after",
-        timeout_choices(SUSPEND_DELAYS, state.delay, "Never"),
+        tr!("power-suspend-after"),
+        timeout_choices(SUSPEND_DELAYS, state.delay, &tr!("power-never")),
         &picked(picks, &delay_key, &state.delay.to_string()),
         move |key: String| {
             let key_timeout = key_timeout.clone();
@@ -619,7 +620,7 @@ fn suspend_rows(
             );
         },
     );
-    let toggle = switch_row("Suspend when inactive", on, move |on: bool| {
+    let toggle = switch_row(tr!("power-suspend-when-inactive"), on, move |on: bool| {
         let value = if on { "'suspend'" } else { "'nothing'" };
         let key = toggle_key.clone();
         set_switch(pending, overlays, &toggle_pending_key, on, move || {
@@ -627,7 +628,7 @@ fn suspend_rows(
         });
     })
     .nested(on, vec![delay.into()]);
-    Group::titled(title).row(toggle)
+    Group::titled(&title).row(toggle)
 }
 
 /// The charge as a centred ring with the state under the percentage, then the
@@ -635,24 +636,24 @@ fn suspend_rows(
 /// rather than inside a row, where it would overlap the rows around it.
 /// A battery that reports no percentage gets plain rows instead.
 fn battery_group(battery: &Battery) -> Group {
-    let group = Group::titled("Battery");
+    let group = Group::titled(&tr!("power-battery-group"));
     let group = match battery.fraction {
         Some(fraction) => group.row(
             vstack(S2)
                 .tw_layout(&[w_full(), items(Align::Center), py(S2)])
-                .child(
-                    ring(fraction)
-                        .caption(battery.state.clone())
-                        .label(format!("Charge {}, {}", battery.percentage, battery.state)),
-                ),
+                .child(ring(fraction).caption(battery.state.clone()).label(tr!(
+                    "power-battery-ring-label",
+                    percentage = battery.percentage.as_str(),
+                    state = battery.state.as_str()
+                ))),
         ),
         None => group
             .row(
-                row("Charge")
+                row(tr!("power-battery-charge"))
                     .leading(Icon::BatteryLevel0)
                     .value(battery.percentage.clone()),
             )
-            .row(row("State").value(battery.state.clone())),
+            .row(row(tr!("power-battery-state")).value(battery.state.clone())),
     };
     let group = match &battery.time {
         Some((label, value)) => group.row(row(label.clone()).value(value.clone())),
@@ -660,7 +661,7 @@ fn battery_group(battery: &Battery) -> Group {
     };
     match &battery.health {
         Some(health) => group.row(
-            row("Battery health")
+            row(tr!("power-battery-health"))
                 .leading(Icon::BatteryLevel100)
                 .value(health.clone()),
         ),
@@ -674,15 +675,18 @@ fn history_group(battery: &Battery) -> Option<Group> {
     if battery.history.is_empty() {
         return None;
     }
-    let chart = line_chart([Series::new("Charge", battery.history.clone())])
-        .y_unit(Unit::Percent)
-        .x_unit(Unit::Clock {
-            offset: battery.offset,
-        })
-        .curve(Curve::Monotone)
-        .area()
-        .label("Battery charge over the last 24 hours");
-    Some(Group::titled("Last 24 hours").content(chart))
+    let chart = line_chart([Series::new(
+        tr!("power-battery-charge"),
+        battery.history.clone(),
+    )])
+    .y_unit(Unit::Percent)
+    .x_unit(Unit::Clock {
+        offset: battery.offset,
+    })
+    .curve(Curve::Monotone)
+    .area()
+    .label(tr!("power-battery-chart-a11y"));
+    Some(Group::titled(&tr!("power-history-group")).content(chart))
 }
 
 /// Snapshot builds only: `BINGUX_SETTINGS_FAKE_BATTERY` swaps in a charging
@@ -742,7 +746,7 @@ impl Component for PowerPage {
                 if let Some(on) = model.show_percentage {
                     let on_now = shown(pending, "battery-percentage", on);
                     group = group.row(switch_row(
-                        "Show battery percentage",
+                        tr!("power-show-percentage"),
                         on_now,
                         move |on: bool| {
                             let value = if on { "true" } else { "false" };
@@ -759,34 +763,37 @@ impl Component for PowerPage {
                 }
             }
             Ok(None) => page,
-            Err(e) => page.child(
-                Group::titled("Battery").row(
-                    status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, refresh)),
-                ),
-            ),
+            Err(e) => page.child(Group::titled(&tr!("power-battery-group")).row(
+                status(Status::Error(e.0)).action(&tr!("power-try-again"), move |_| {
+                    background(loaded, refresh)
+                }),
+            )),
         };
 
         // Power mode
         page = match model.profiles.clone() {
             Ok(profiles) => page.child(mode_group(loaded, picks, overlays, &profiles, &tokens)),
-            Err(_) if !model.profiles_tool => page.child(Group::titled("Power mode").row(status(
-                Status::Info("Power modes are not available on this computer.".into()),
-            ))),
-            Err(e) => page.child(
-                Group::titled("Power mode").row(
-                    status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, refresh)),
-                ),
+            Err(_) if !model.profiles_tool => page.child(
+                Group::titled(&tr!("power-mode-group"))
+                    .row(status(Status::Info(tr!("power-modes-unavailable").into()))),
             ),
+            Err(e) => page.child(Group::titled(&tr!("power-mode-group")).row(
+                status(Status::Error(e.0)).action(&tr!("power-try-again"), move |_| {
+                    background(loaded, refresh)
+                }),
+            )),
         };
 
         // Screen: blanking, locking and dimming
-        let mut screen = Group::titled("Screen");
+        let mut screen = Group::titled(&tr!("power-screen-group"));
         screen = match model.idle_delay.clone() {
             Ok(current) => screen.row(choice_row(
-                "Blank screen after",
-                timeout_choices(&[0, 60, 120, 300, 600, 900, 1800], current, "Never"),
+                tr!("power-blank-screen-after"),
+                timeout_choices(
+                    &[0, 60, 120, 300, 600, 900, 1800],
+                    current,
+                    &tr!("power-never"),
+                ),
                 &picked(picks, "idle-delay", &current.to_string()),
                 move |key: String| {
                     choose(
@@ -801,20 +808,20 @@ impl Component for PowerPage {
                     );
                 },
             )),
-            Err(e) => screen.row(row("Blank screen after").subtitle(e.0).enabled(false)),
+            Err(e) => screen.row(
+                row(tr!("power-blank-screen-after"))
+                    .subtitle(e.0)
+                    .enabled(false),
+            ),
         };
         if let Some(dim) = model.dim {
             let on = shown(pending, "dim", dim);
-            screen = screen.row(switch_row(
-                "Dim screen when inactive",
-                on,
-                move |on: bool| {
-                    let value = if on { "true" } else { "false" };
-                    set_switch(pending, overlays, "dim", on, move || {
-                        system::gsettings_set(POWER_PLUGIN, "idle-dim", value)
-                    })
-                },
-            ));
+            screen = screen.row(switch_row(tr!("power-dim-screen"), on, move |on: bool| {
+                let value = if on { "true" } else { "false" };
+                set_switch(pending, overlays, "dim", on, move || {
+                    system::gsettings_set(POWER_PLUGIN, "idle-dim", value)
+                })
+            }));
         }
         screen = match model.lock_enabled.clone() {
             Ok(enabled) => {
@@ -823,8 +830,12 @@ impl Component for PowerPage {
                 // nested under the switch and shown only while it is on.
                 let delay = match model.lock_delay.clone() {
                     Ok(current) => choice_row(
-                        "Lock after",
-                        timeout_choices(&[0, 5, 30, 60, 300, 900], current, "Immediately"),
+                        tr!("power-lock-after"),
+                        timeout_choices(
+                            &[0, 5, 30, 60, 300, 900],
+                            current,
+                            &tr!("power-lock-immediately"),
+                        ),
                         &picked(picks, "lock-delay", &current.to_string()),
                         move |key: String| {
                             choose(
@@ -844,10 +855,13 @@ impl Component for PowerPage {
                         },
                     )
                     .into(),
-                    Err(e) => row("Lock after").subtitle(e.0).enabled(false).into(),
+                    Err(e) => row(tr!("power-lock-after"))
+                        .subtitle(e.0)
+                        .enabled(false)
+                        .into(),
                 };
                 screen.row(
-                    switch_row("Automatic screen lock", on, move |on: bool| {
+                    switch_row(tr!("power-auto-lock"), on, move |on: bool| {
                         let value = if on { "true" } else { "false" };
                         set_switch(pending, overlays, "lock", on, move || {
                             system::gsettings_set(SCREENSAVER, "lock-enabled", value)
@@ -856,7 +870,7 @@ impl Component for PowerPage {
                     .nested(on, vec![delay]),
                 )
             }
-            Err(e) => screen.row(row("Automatic screen lock").subtitle(e.0).enabled(false)),
+            Err(e) => screen.row(row(tr!("power-auto-lock")).subtitle(e.0).enabled(false)),
         };
         page = page.child(screen);
 
@@ -868,7 +882,7 @@ impl Component for PowerPage {
                 pending,
                 picks,
                 "ac",
-                "When plugged in",
+                tr!("power-when-plugged-in"),
                 state,
             ));
         }
@@ -879,7 +893,7 @@ impl Component for PowerPage {
                 pending,
                 picks,
                 "battery",
-                "On battery",
+                tr!("power-on-battery"),
                 state,
             ));
         }
@@ -887,11 +901,11 @@ impl Component for PowerPage {
         // Power button, only when the schema exists
         if let Some(current) = model.power_button.clone() {
             let mut options: Vec<(String, String)> = [
-                ("nothing", "Do nothing"),
-                ("suspend", "Suspend"),
-                ("hibernate", "Hibernate"),
-                ("interactive", "Ask what to do"),
-                ("shutdown", "Power off"),
+                ("nothing", tr!("power-button-nothing")),
+                ("suspend", tr!("power-button-suspend")),
+                ("hibernate", tr!("power-button-hibernate")),
+                ("interactive", tr!("power-button-interactive")),
+                ("shutdown", tr!("power-button-shutdown")),
             ]
             .into_iter()
             .map(|(key, label)| (key.to_string(), label.to_string()))
@@ -899,8 +913,8 @@ impl Component for PowerPage {
             if !options.iter().any(|(key, _)| *key == current) {
                 options.push((current.clone(), sentence(&current)));
             }
-            page = page.child(Group::titled("Power button").row(choice_row(
-                "When pressed",
+            page = page.child(Group::titled(&tr!("power-button-group")).row(choice_row(
+                tr!("power-when-pressed"),
                 options,
                 &picked(picks, "power-button", &current),
                 move |key: String| {

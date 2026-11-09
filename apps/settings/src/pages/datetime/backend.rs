@@ -13,6 +13,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use crate::system::{self, CommandError, CommandResult};
+use bingux_ui::prelude::tr;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -51,12 +52,10 @@ pub fn date(zone: Option<&str>, format: &str) -> CommandResult {
     }
     let output = command.arg(format).output().map_err(|error| {
         eprintln!("bingux-settings: date could not run: {error}");
-        CommandError("Could not read the time. Try again in a moment.".into())
+        CommandError(tr!("datetime-read-time-error").into())
     })?;
     if !output.status.success() {
-        return Err(CommandError(
-            "Could not read the time. Try again in a moment.".into(),
-        ));
+        return Err(CommandError(tr!("datetime-read-time-error").into()));
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
@@ -149,7 +148,7 @@ mod fake {
     }
 
     fn refuse() -> CommandResult {
-        Err(CommandError("Could not save the change. Try again.".into()))
+        Err(CommandError(tr!("datetime-save-error").into()))
     }
 
     /// The Unix time of the wall-clock `text` (`YYYY-MM-DD HH:MM:SS`) in `zone`.
@@ -162,7 +161,7 @@ mod fake {
         String::from_utf8_lossy(&output.stdout)
             .trim()
             .parse()
-            .map_err(|_| CommandError("Could not set the time. Try again.".into()))
+            .map_err(|_| CommandError(tr!("datetime-set-time-error").into()))
     }
 
     pub fn run(program: &str, args: &[&str]) -> CommandResult {
