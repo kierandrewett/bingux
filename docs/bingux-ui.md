@@ -3745,3 +3745,246 @@ Environment variables for tests and screenshots:
 ### Form dialogs
 
 `open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).
+
+## Data table
+
+`data_table(rows, columns, key)` shows any number of rows in typed columns, as a
+list view and the file list do, for any app that has rows with attributes: apps,
+devices, processes, connections, transactions. Only the rows in view are built,
+so a hundred thousand scroll as smoothly as ten.
+
+```rust
+let rows = use_hook(|| Rc::new(load_apps()));          // Rc<Vec<App>>
+let columns = use_hook(|| Rc::new(vec![
+    Column::text("name", "Name", |app: &App| app.name.clone())
+        .flex().priority(0).sort_by_text().editable(),
+    Column::text("size", "Size", |app: &App| format_size(app.bytes))
+        .width(96.0).numeric().priority(1).sort_by_key(|app| app.bytes),
+    Column::text("opened", "Last opened", |app: &App| app.opened.clone())
+        .width(130.0).priority(2).muted().sort_by_text(),
+]));
+let selection = use_state(Selection::<AppId>::new);
+
+data_table(&rows, columns, |app: &App| app.id)
+    .id("apps")                        // remember columns and sort
+    .label("Installed apps")
+    .selection(selection)
+    .sorted_by("name", SortDirection::Ascending)
+    .row_menu(|keys| vec![menu_item("Uninstall", move |()| uninstall(&keys))])
+    .on_activate(open)
+```
+
+The table fills its parent, so give the parent a height. It draws a heading row
+that stays in place and scrolls its rows beneath. Keep `rows` and `columns` in a
+hook or a state: an `Rc` that is the same allocation as last time means "same
+rows", and the visible rows are not drawn again.
+
+### Rows and columns
+
+- **`Rows<T>`** is where the rows come from, and is never copied. A `Vec<T>`,
+  `Rc<Vec<T>>` or `Rc<[T]>` converts to it; a model that pages from a database
+  implements `RowSource<T>` (`len`, `get`).
+- **`key`** is a row's identity (an id, a path), not its place. The selection and
+  the keyboard cursor follow keys, so a sort or a reload leaves them on the same
+  rows.
+- **`Column::text(id, title, f)`** is a column of one line of text. **`Column::new(id,
+  title, f)`** draws an element (an icon and a name, a bar, a switch); add
+  `.summary(f)` to say its value in words. The `id` names the column in the saved
+  layout and the sort, so it never changes.
+- `.flex()` takes what the fixed columns leave; `.width(px)` is a fixed width;
+  `.min_width(px)`; `.numeric()` aligns to the end in figures of one width;
+  `.muted()` for secondary information; `.fixed()` stops the person resizing it.
+- `.priority(n)`: when the table is too narrow for every shown column, the
+  highest number goes first and a column of 0 stays (and cannot be hidden). The
+  person can bring a dropped column back by widening the window.
+- `.sort_by(cmp)`, `.sort_by_key(f)` and `.sort_by_text()` make a column
+  sortable. The sort is stable, in both directions. `natural_cmp` compares text
+  the way a person reads it: case ignored, numbers by value.
+- `.editable()` lets F2, or a double click, edit the cell's text in place. Enter
+  calls the table's `on_edit(CellEdit { key, column, text })`, Escape or clicking
+  elsewhere drops the edit. The table never changes the rows itself.
+
+### What the person can do
+
+| With | Result |
+| --- | --- |
+| Click a heading | Sorts by it; again turns it round. An arrow shows the sort. |
+| Drag a heading's edge | Resizes the column. A double click on the edge fits it to its widest cell. |
+| Drag a heading | Moves the column; a line shows where it will land. |
+| Right-click a heading | Lists the columns to show or hide, and Reset columns. |
+| Click, Ctrl+click, Shift+click | Selects a row, toggles one, selects the range from the last click. |
+| Double click, Enter | Opens the row (`on_activate`). |
+| Right click, long press, Menu key | The row's menu (`row_menu`), acting on the whole selection when the row is in it. |
+
+With an `id` the order, widths, visibility and sort are saved in
+the app's `ui.json` under `$XDG_STATE_HOME/bingux/<app id>/` and read back at the
+next start. A column added by an update joins at its place; one that went away is
+ignored.
+
+### Keyboard
+
+The table is one Tab stop and a WAI-ARIA grid. A ring marks the cell that holds
+the keyboard.
+
+| Key | Action |
+| --- | --- |
+| Arrow keys | Move the cursor one cell; the row it reaches is selected |
+| Home, End | First and last cell of the row |
+| Ctrl+Home, Ctrl+End | First cell of the first row, last of the last |
+| Page Up, Page Down | A page of rows |
+| Shift+arrow | Extend the selection from the anchor |
+| Ctrl+arrow | Move the cursor without changing the selection |
+| Space | Toggles the row in a multiple selection (selects it in a single one) |
+| Enter | Open the row |
+| F2 | Edit the cell |
+| Ctrl+A, Escape | Select every row, clear the selection |
+| Menu, Shift+F10 | The row's menu, or the columns menu on a heading |
+| Letters | Jump to the next row whose first column starts with them |
+
+From a heading (Up from the first row): Enter or Space sorts; Shift+Left and
+Shift+Right move the column; Ctrl+Left and Ctrl+Right resize it.
+
+The table tells assistive technology it is a grid with row and column counts,
+a multi-select flag, a row index and a selected state on each row, column
+headers with a sort direction, and cells with a column index.
+
+### Selection
+
+`Selection<K>` holds the selected keys and the anchor a range grows from, and is
+a `State` the app owns: `.selection(state)`. `SelectionMode` is `None`, `Single`
+or `Multiple` (the default): `.selection_mode(mode)`. `Selection::apply` carries
+out a `Gesture` (`Replace`, `Toggle`, `Extend`, `ExtendAdd`) for a mode; the
+pointer and the keyboard both use it, so Shift+click and Shift+arrow agree. The
+list view uses the same type.
+
+`.marks()` starts each row with a selection mark and puts a select-all mark in
+the heading (not on a phone). `.batch_actions(vec![batch_action("Uninstall", f)
+.icon(icon).destructive()])` shows a bar above the table while two or more rows
+(one on a phone) are selected: "3 selected", the actions, and a button that
+clears. Each action is called with the selected keys in the order the rows are
+shown. Name actions with a verb for the result.
+
+### States, density and width
+
+- `.status(TableStatus::Loading)` shows quiet placeholder rows under the real
+  headings. `.status(TableStatus::failed("Could not load the apps").detail(next
+  step).retry(f))` shows what failed and a Try again button. With no rows, the
+  table shows `.empty_state(status_page(..))` or a plain "Nothing to show";
+  give it one short title, one line and one action.
+- `.density(RowDensity::Compact | Comfortable | Spacious)` is the row height:
+  36, 40 or 56 px on a desktop; a phone's rows are as tall as a finger needs.
+- `.striped()` puts every other row on a faint fill. `.headerless()` leaves out
+  the heading row.
+- On a phone there is no heading row. A row is two lines: its first column
+  (or that column's element), then the text of the other columns in one muted
+  line, with a chevron when it opens something. A button above the rows opens the
+  sort menu. A tap opens the row, or, while rows are selected, joins or leaves
+  the selection; a long press selects a row (when the table has batch actions) or
+  opens its menu.
+
+To replace the Files list with it later: Files' `ColumnLayout` and `Plan`
+correspond to the table's saved layout and plan, its `Rows` to a `RowSource`,
+and its cells to `Column::new` elements. Files keeps its rubber band, drag and
+thumbnails by wrapping the rows it draws; the table supplies the header, sort,
+columns, selection and keyboard.
+
+## List view
+
+`list_view(rows, row, key)` is the single-column list: contacts, saved networks, a
+queue. Rows come from a `Rows<T>` source (see "Data table") and only the rows in
+view are built. `row` turns an item into a `ListRow`: `list_row(title)` with
+`.subtitle(text)`, `.icon(icon)` or `.leading(element)`, `.value(text)` at the end,
+`.chevron()` for a row that opens something, `.enabled(false)` and `.actions(..)`.
+
+```rust
+list_view(
+    &contacts,
+    |c: &Contact| list_row(c.name.clone()).icon(Icon::Avatar).value(c.role),
+    |c| c.id,
+)
+.selection_mode(SelectionMode::Multiple)
+.selection(selected)
+.sections(|c| Some(c.initial.to_string()))
+.on_activate(open)
+```
+
+- **Selection.** A list starts with `SelectionMode::None`, where a press opens the
+  row (`on_activate`). With `Single` or `Multiple` a press selects and a double
+  press, or Enter, opens. Shift and Ctrl work as in the table, `Selection<K>` is
+  the same type, and `.marks()` draws a selection mark at the start of each row (a
+  phone shows marks by itself while rows are selected).
+- **Sections.** `.sections(|item| Some(title))` puts a header before each run of
+  rows with the same title; `None` has no header. A header is as tall as a row,
+  because a long list needs one row height to scroll without measuring.
+- **Two lines.** Every row is one height. `.two_line()` makes it tall enough for a
+  subtitle and shows the subtitle.
+- **Menu.** `.row_menu(|keys| ..)` is the right click, long press and Menu key
+  menu. A row's `actions` are added to it, so a desktop reaches them there.
+- **Swipe.** On a phone a row with actions slides open to show them as buttons
+  (76 px each) when swiped; swiping back, tapping the row or pressing Escape
+  closes it, and only one row is open.
+- **Reorder.** `.on_reorder(|from, to| ..)` gives each row a grip and the keys of
+  `sortable` (drag the grip, Alt+Up and Alt+Down). The caller owns the order; see
+  `reorder.rs` for the contract. A reorderable list builds every row, so it is for
+  a few dozen rows, and has neither sections nor selection.
+- **Keyboard.** One Tab stop. Up and Down move a cursor (headers are skipped) and
+  select as they go; Shift extends; Ctrl moves without selecting; Home, End, Page
+  Up, Page Down; Space toggles; Enter opens; Ctrl+A selects all; Escape clears;
+  letters jump to the row whose title starts with them.
+- `.empty_state(element)` is what shows with no rows.
+
+## Toolbar
+
+`toolbar()` lays items out in groups and keeps them legible at any width.
+
+```rust
+toolbar()
+    .id("main")                    // where the customisation is saved
+    .customizable()
+    .group(toolbar_group(vec![
+        toolbar_item("back", "Back", Icon::GoPrevious, back).leading(),
+        toolbar_item("forward", "Forward", Icon::GoNext, forward).leading(),
+    ]).linked())
+    .group(toolbar_group(vec![
+        toolbar_item("add", "Add", Icon::ListAdd, add).shortcut("Ctrl+N"),
+        toolbar_item("share", "Share", Icon::EditCopy, share).secondary(),
+    ]))
+    .group(toolbar_group(vec![
+        toolbar_item("open", "Open", Icon::DocumentOpen, open).prominent(),
+    ]))
+```
+
+- **Items.** `toolbar_item(id, label, icon, on_press)` is a button; `.toggled(bool)`
+  makes it a toggle. `toolbar_menu(id, label, icon, items)` opens a menu under
+  itself. `toolbar_element(id, label, element, width)` is an element of your own, a
+  search field or a path bar. The `id` never changes once shipped, because the
+  saved customisation uses it. The `label` is the tooltip, the accessible name and
+  the row in the overflow menu: a verb for an action, a noun for a toggle.
+- **Groups.** A group sets its items apart from the next with a wider gap; keep to
+  three. `.linked()` joins its buttons in one rounded bar with hairlines, as Back
+  and Forward are or the choices of a view switch; `button_group(vec![group_button(
+  icon, label, on_press).active(bool)])` is the same bar on its own.
+- **Placement.** `.leading()` puts an item before the title and keeps it longest,
+  the default puts it after the title, `.secondary()` after it and first to go.
+  `.prominent()` is one labelled accent button at the trailing end that never goes
+  into the menu; use it for what most people open the window to do.
+- **Overflow.** When the bar is narrower than its items, the rest go into a More
+  button's menu: secondary items first, then primary, then leading, the last of
+  each rank first, with a separator where the group changes, toggles as ticks and
+  menu items as submenus. An element item never goes into the menu.
+- **Every item is a menu command.** `ToolbarItem::menu_item()` and
+  `Toolbar::menu_items()` give the rows, so people who hide or customise the bar
+  still reach everything, and the app's own menu can list the same ones.
+- **Customising.** With `.customizable()` and an `.id(..)`, a right click on the
+  bar, or "Customise toolbar" in the More menu, lists every item with a tick and a
+  Reset toolbar. The hidden items are saved by id in the app's `ui.json`; an item
+  added by an update shows by default.
+- **The window's title.** `.title(text)` and `.subtitle(text)` are the window's
+  own: short (about fifteen characters), never the app's name. In a bar they sit
+  between the clusters. `.header()` draws the whole toolbar as the window's
+  `HeaderBar`: leading items, the centred title and subtitle, trailing items and
+  (`.window_controls()`) the window buttons. The items give way before the title
+  is cut.
+- **Keyboard.** The buttons are one Tab stop. Left and Right (mirrored in a
+  right-to-left window), Home and End move between them, and Tab leaves the bar.
+  Menu buttons and the prominent action keep their own stops.
