@@ -80,17 +80,11 @@ calculator-menu-group-digits = Group digits
 calculator-menu-precision = Precision
 # $count (Number) - how many significant digits results keep
 calculator-menu-digits = { $count } digits
-# The lines of the keyboard shortcuts dialog: the keys, two spaces, then
-# what they do. Use the key names printed on keyboards for the language.
-calculator-shortcut-equals = Enter  Finish the calculation
-calculator-shortcut-clear = Escape  Clear the entry, then everything
-calculator-shortcut-delete = Backspace  Delete the last character
-calculator-shortcut-copy = Ctrl+Shift+C  Copy the result
-calculator-shortcut-history = Ctrl+H  Show or hide the history
-calculator-shortcut-modes = Ctrl+1 to 4  Basic, Scientific, Programmer, Convert
-calculator-shortcut-operators = + − × ÷ ^  Operators. Type x or * to multiply
-calculator-shortcut-percent = %  Percent: 200 + 10% is 220
-calculator-shortcut-about = Ctrl+Shift+?  About Calculator
+# The commands the window registers: the palette, the shortcuts sheet and the
+# main menu show these titles. The keys come from the command itself.
+calculator-command-copy = Copy the result
+calculator-command-clear = Clear the entry, then everything
+calculator-command-history = Show or hide the history
 
 ## Convert
 
