@@ -1,4 +1,4 @@
-# The application packages of Bingux: Settings, Files and Taxonomy. Each is its own package, holds the files
+# The application packages of Bingux: Settings, Files, Media and Taxonomy. Each is its own package, holds the files
 # listed for it in common.star (APPS) and depends on `bingux`, which has the core services the apps talk to:
 # the configuration command, the sound effects engine, the preview helper and the search daemon.
 #
@@ -19,6 +19,10 @@ file operations with undo. It opens folders and bingux-files:// addresses.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
+    "bingux-media": """Music and video player for the Bingux desktop
+Media plays the music and videos in the Music and Videos folders with nothing to set up: albums, artists, songs and
+videos, a queue, subtitles, chapters, resume, a mini player and the desktop's media controls (MPRIS). Playback is
+mpv's, through libmpv.""",
 }
 
 # Freya draws with Skia on OpenGL and loads the Wayland and keyboard libraries at run time, so nothing finds them
@@ -41,6 +45,12 @@ DEPENDS = {
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2"],
     },
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
+    # libmpv plays everything; SQLite is built in.
+    "bingux-media": {
+        "rpm": ["mpv-libs", "shared-mime-info", "xdg-utils"],
+        "deb": ["libmpv2", "shared-mime-info", "xdg-utils"],
+        "archlinux": ["mpv", "shared-mime-info", "xdg-utils"],
+    },
 }
 
 # Each page of Settings reports a readable error when its backend is missing, so these are recommendations and
@@ -90,6 +100,11 @@ RECOMMENDS = {
         "deb": [],
         "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
     },
+    "bingux-media": {
+        "rpm": ["adwaita-sans-fonts", "pipewire-pulseaudio"],
+        "deb": ["pipewire-pulse"],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font", "pipewire-pulse: sound output"],
+    },
 }
 
 # The applications that name each other, as suggestions.
@@ -97,6 +112,7 @@ SUGGESTS = {
     "bingux-settings": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
+    "bingux-media": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
 }
 
 for name in APPS:
