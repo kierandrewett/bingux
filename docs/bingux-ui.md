@@ -472,20 +472,21 @@ include_str!(..)` (Bingux's apps embed the repository's `COPYING`).
   directory, for a build tree). Nothing is read until the page is opened.
 - **It cannot be forgotten.** `Application::run` registers the window whatever
   `main` says, so a bare `Application::new("id")` still has one, named after its
-  id and title with no version, and the shortcut and `about::open` work.
+  id and title with no version, and the palette's About and `about::open` work.
   `scripts/ui-lint.py` fails an app crate whose `src/main.rs` starts an
   `Application` without `.about(` and `app_info!`.
-- **The shortcut is Ctrl+Shift+?** in the main window of every application
-  (`about::is_shortcut`). It does nothing while a dialog is open: that dialog
-  holds a question. `about::open(overlays)` opens it from code, and the
-  headless runner's script command `key ctrl+shift+?` reaches it the way a
-  person does.
+- **It has no shortcut of its own**, as in GNOME: Ctrl+? is the
+  [keyboard shortcuts sheet](#the-keyboard-shortcuts-sheet). The command
+  palette (Ctrl+Shift+P) has **About <name>** (the window's `app.about`
+  command), so it is still a few keys away. `about::open(overlays)` opens it
+  from code.
 - **The main menu ends with "About <name>"** from `about::app_menu_items(overlays)`
-  (a separator and the item, with the shortcut shown). An app whose menu is a
-  list it builds appends them; an app with no menu puts `app_menu(items)` in
-  its header (`NavigationSplitView::header_trailing`). Settings, Files and
-  Taxonomy do. Settings' **System > About** page is about the computer; the
-  window the menu opens is about Settings.
+  (a separator and the item). An app whose menu is a list it builds appends
+  them; an app with no menu puts `app_menu(items)` in its header
+  (`NavigationSplitView::header_trailing`), which also lists the window's
+  [commands](#commands). Settings, Files and Taxonomy do. Settings' **System >
+  About** page is about the computer; the window the menu opens is about
+  Settings.
 - The page behind it is inert while it is open, Escape and a press on the scrim
   close it, Alt+Left goes back from a page to the main one, and the focus returns to
   where it was. The card has one size on every page.
@@ -956,7 +957,7 @@ Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compac
 When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. The rest is `bingux_ui::tabs`, the same for every application with tabs:
 
 - **`TabSet<P: TabContent>`** is the tabs as plain data (tested without a window): a new tab opens beside the one on show; `ClosedTabs<P>` is the stack behind Reopen closed tab (the last `CLOSED_TABS_KEPT`, 10, with their place and their content, and a closed group comes back left to right at its places); `duplicate` asks the content for a copy (`TabContent::duplicate`); `detach`, `detach_others`, `detach_all`, `insert_moved` and `adopt` move tabs between windows without losing or duplicating one, and tell the content it is leaving (`TabContent::depart`). What a tab shows is the application's `P`: Files' is `files::FileTab` (a place and its `TabMemory`, so Back and Forward come back with a reopened or moved tab).
-- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.menu_items(new_tab)` are the menu's New tab, Close tab and Reopen closed tab. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
+- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.commands(new_tab)` are the window commands New tab, Close tab, Reopen closed tab, Next tab and Previous tab (see [Commands](#commands)), for the main menu, the palette and the shortcuts sheet. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
 - **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip, and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
 - A second application's tabs are another `TabContent` and nothing else: no copy of the set, the window registry or the tear-off.
 
@@ -3745,3 +3746,177 @@ Environment variables for tests and screenshots:
 ### Form dialogs
 
 `open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).
+
+## Commands
+
+A command is one thing an application can do: an id, a title, an optional
+icon, its keyboard shortcuts, whether it is enabled or checked, the menu
+group and section it belongs to, and what it runs. An app declares its
+commands where their state lives, and every window gets, with no more code:
+
+| Built from the commands     | What it is                                                                                 |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| Keyboard shortcuts          | One router per window. A shortcut runs its command; a disabled command takes the key.     |
+| The main menu               | `app_menu` in the header: a submenu per group (File, Edit, View...), then General, About. |
+| Context menus               | `commands.context_menu(&[&[ids], ..])`: unavailable commands left out, no shortcuts shown. |
+| The keyboard shortcuts sheet | Ctrl+? or Ctrl+/: every shortcut the window answers, by group, with a filter.              |
+| The command palette         | Ctrl+Shift+P: fuzzy search over the enabled commands, the ones run last first.            |
+
+```rust
+use bingux_ui::prelude::*;
+
+// Commands for the whole window, available wherever the focus is. Call it on
+// every render with the commands as they are now.
+use_window_commands(vec![
+    Command::new("file.new-window", "New window", move |_| open_window())
+        .shortcut("Ctrl+N")
+        .group(CommandGroup::File),
+    Command::new("view.hidden", "Show hidden files", move |_| hidden.toggle())
+        .shortcut("Ctrl+H")
+        .checked(hidden())            // a tick in the menu
+        .group(CommandGroup::View)
+        .keywords(["dotfiles"]),      // the palette finds it by these too
+]);
+
+// Commands of a view, ahead of the window's while the focus is inside it.
+command_scope(
+    "File list",
+    vec![
+        Command::new("file.rename", "Rename…", move |_| rename())
+            .shortcut("F2")
+            .enabled(selection.len() == 1)
+            .group(CommandGroup::File)
+            .section("change"),
+    ],
+    list,
+)
+.fill()
+```
+
+| Builder                      | Effect                                                                                                   |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `.shortcut("Ctrl+Shift+P")`  | Adds a shortcut. Several are allowed; menus show the first. Text that is not a shortcut panics in debug. |
+| `.enabled(false)`            | Dimmed in menus, left out of context menus and the palette; its shortcut does nothing.                  |
+| `.checked(bool)`             | A state the command toggles: a tick in menus.                                                            |
+| `.group(CommandGroup::Edit)` | The menu it is in: `App` (top level, "General" in the sheet), `File`, `Edit`, `View`, `Go`, `Window`, `Other("Name")`, `Help`. |
+| `.section("clipboard")`      | Commands of one section sit together, with a separator between sections.                                 |
+| `.icon(Icon)`                | Shown in the palette.                                                                                    |
+| `.keywords([..])`            | Other words the palette finds it by.                                                                     |
+| `.destructive()`             | Its menu item is coloured as destructive.                                                                |
+| `.hidden_from_menu()`, `.hidden_from_palette()` | Leaves it out of one of them; it still answers its shortcut.                          |
+| `Command::key_hint(id, title, "Alt+1 to 9")` | A key a control handles itself, listed in the sheet only.                               |
+
+**Scopes, as a responder chain.** `use_window_commands` adds commands that
+are always available. `command_scope(name, commands, child)` wraps a view;
+its commands apply while the keyboard focus is inside it, and scopes nest. The
+innermost scope that holds the focus wins: its Ctrl+A shadows the window's,
+and a command id it shares with an outer scope replaces that command. The
+router learns which scopes hold the focus from the key itself, which travels
+from the focused control up through every scope it is in, so a view's
+shortcut never runs while the focus is elsewhere. Menus and the palette list
+the commands of the view that last had the focus (by keyboard or a click
+inside it), so opening the header menu with the pointer keeps them.
+
+**What the router leaves alone.** A control that handles a key stops it, and
+no command sees it: a text field keeps its own Ctrl+Z, Ctrl+C and Ctrl+A,
+and a list keeps its arrows. While a dialog or a menu is open, the router
+stands aside (the palette and the sheet are dialogs).
+
+**Shortcuts.** `Shortcut::parse` reads what people write: modifiers then the
+key, joined by `+` (`Ctrl+Shift+P`, `F2`, `Alt+Left`, `Ctrl+?`, `Ctrl+Plus`,
+`Page Down`, `Space`). Ctrl, Alt and Super must be held exactly as written,
+and Shift too for a letter, digit or named key. A symbol is the character the
+layout types, so `Ctrl+?` works whether the layout needs Shift for `?` or
+not; write the symbol, not `Ctrl+Shift+/`. A layout with no Latin letters
+reaches `Ctrl+C` by the key's position. `label()` is the text menus show
+(`Ctrl+Shift+P`, GNOME's order: Ctrl, Alt, Shift, Super), `caps()` the key
+caps, and `key_caps(&shortcut)` draws them.
+
+**Checks in a debug build.** Two commands of one scope (or of two window
+scopes) with one shortcut are reported on stderr once, as is a window command
+on a bare key (a letter with no Ctrl or Alt), which must belong to a view
+(WCAG 2.1.4, character key shortcuts).
+
+**Every window has** `app.command-palette` (Ctrl+Shift+P),
+`app.shortcuts` (Ctrl+? and Ctrl+/) and, in an `Application`, `app.about`
+(the palette's About; the main menu ends with About). A window whose
+components call `use_undo` also has `edit.undo` and `edit.redo` (below). An
+app's own command with one of these ids replaces it.
+
+`use_commands()` returns the window's registry: `run(id)`, `get(id)`,
+`all()`, `recent()`, `main_menu_items()`, `context_menu(..)`,
+`show_palette()` and `show_shortcuts()`. The registry and the router live in
+the window's `OverlayHost` (and `Application::run` provides the registry, so
+the app's root component may declare commands above its host). A host inside
+another leaves routing to the outer one, so a key never runs a command twice.
+`MenuButton::items_on_open(f)` builds items when the menu opens, which is how
+`app_menu` reads titles such as "Undo rename" that change without a redraw.
+
+### The command palette
+
+Ctrl+Shift+P, `commands.show_palette()` or `open_palette(overlays, commands)`.
+A card with a search field and the window's enabled commands: with nothing
+typed, the ones run last first and then the rest in menu order; typing
+filters by fuzzy match ("tgsb" finds "Toggle sidebar"), letters together and
+at the starts of words first, with the matched letters marked. Keywords and
+the group name find a command too, ranked below title matches. Each row shows
+the icon, title, group and shortcut, so the palette teaches the keys. Up and
+Down move the highlight, Enter or a click runs it, Escape closes. The command
+runs after the palette has closed and the focus is back, so a command that
+opens a dialog or starts a rename finds the window as it left it.
+
+### The keyboard shortcuts sheet
+
+Ctrl+? or Ctrl+/, `commands.show_shortcuts()` or
+`open_shortcuts(overlays, commands)`. A card titled "Keyboard shortcuts" with
+a filter and a group per menu (General, File, Edit...), each row the title and
+its shortcuts as key caps. It lists the focused view's commands and the
+window's; a shortcut an inner view has taken is listed once, under the command
+that has it. `Command::key_hint` rows list keys controls handle themselves.
+The filter matches titles (fuzzy) and keys (`ctrl+z`). An app no longer
+writes its own shortcuts dialog: the sheet is generated.
+
+## Undo and redo
+
+`use_undo()` returns the window's `UndoStack`, one for all of its views
+(AppKit's `NSUndoManager`). A change that can be taken back is pushed as an
+`UndoStep`: a name as people read it, what undoes it and what does it again.
+
+```rust
+let undo = use_undo();
+let old = name.peek().clone();
+name.set(new.clone());
+undo.push(UndoStep::new(
+    "Rename",
+    move || name.set(old.clone()),
+    move || name.set(new.clone()),
+));
+```
+
+| Call                                    | What it does                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `undo.push(step)`                       | Remembers a change and empties the redo stack.                                                        |
+| `UndoStep::new(name, undo, redo)`       | A step. The name is a verb and its object in sentence case ("Move to Trash").                          |
+| `UndoStep::undo_only(name, undo)`       | A step that cannot be redone. Undoing it drops the redo history behind it.                            |
+| `.coalesce(key)`                        | Steps with one key, pushed within `COALESCE` (1.5 s) of each other, are one step: a run of typing.    |
+| `undo.group(name, \|\| ..)`             | Every step pushed inside is one step called `name`. Groups nest.                                       |
+| `undo.undo()`, `undo.redo()`            | Take back or do again; return the step's name.                                                         |
+| `undo.undo_title()`, `redo_title()`     | "Undo rename" / "Redo rename", or "Undo" / "Redo" with nothing to do. Reading them in `render` redraws on change. |
+| `can_undo()`, `can_redo()`, `set_limit(n)`, `clear()` | State, the depth (`DEFAULT_LIMIT`, 100), and forgetting everything after a save that cannot be undone. |
+| `UndoStack::detached()`                 | A stack of its own: one per document in a window of several.                                           |
+
+**Edit > Undo and Redo follow the stack.** A window whose components call
+`use_undo` has the commands `edit.undo` ("Undo rename", Ctrl+Z) and
+`edit.redo` ("Redo rename", Ctrl+Shift+Z and Ctrl+Y) in its Edit menu, its
+palette (while there is something to undo) and its shortcuts sheet, disabled
+with nothing to take back. A window that never calls it shows neither.
+
+**Text fields keep their own undo.** Ctrl+Z in a text field undoes typing in
+that field, and the field stops the key, so the window's Undo runs only while
+the focus is elsewhere.
+
+**Work that takes time.** The closures run on the UI thread and return at
+once. A step that moves files starts the work on a worker and reports when it
+is done, as anything else on the UI thread does. A step pushed while the stack
+runs a step is ignored, so an undo that goes through the app's own code path
+does not record itself.

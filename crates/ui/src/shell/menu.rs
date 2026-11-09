@@ -768,6 +768,18 @@ pub struct MenuButton {
     label: String,
     icon: Option<Icon>,
     items: Vec<MenuItem>,
+    more: Option<MoreItems>,
+}
+
+/// Items a menu button adds when it opens, read then and not when the
+/// button was drawn.
+#[derive(Clone)]
+struct MoreItems(std::rc::Rc<dyn Fn() -> Vec<MenuItem>>);
+
+impl PartialEq for MoreItems {
+    fn eq(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// A button that opens a menu of `items` against itself.
@@ -776,6 +788,7 @@ pub fn menu_button(label: impl Into<String>, items: Vec<MenuItem>) -> MenuButton
         label: label.into(),
         icon: None,
         items,
+        more: None,
     }
 }
 
@@ -784,6 +797,14 @@ impl MenuButton {
     /// stays the accessible name.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// Items built when the menu opens, after the button's own: for rows
+    /// whose titles and states change without the button being drawn
+    /// again, such as the window's commands ("Undo rename").
+    pub fn items_on_open(mut self, more: impl Fn() -> Vec<MenuItem> + 'static) -> Self {
+        self.more = Some(MoreItems(std::rc::Rc::new(more)));
         self
     }
 }
@@ -798,7 +819,16 @@ impl Component for MenuButton {
         let mut pressing = use_state(|| false);
         let press = use_press();
         let mut area = use_state(Area::default);
-        let items = self.items.clone();
+        let items = {
+            let (fixed, more) = (self.items.clone(), self.more.clone());
+            move || {
+                let mut items = fixed.clone();
+                if let Some(more) = &more {
+                    items.extend((more.0)());
+                }
+                items
+            }
+        };
         let open = overlays.menu_owned_by(a11y_id);
         let size = crate::controls::button::header_size(Dim::Button);
         // The same rest state as an icon button: a bare glyph, filled only
@@ -861,7 +891,7 @@ impl Component for MenuButton {
                     overlays.show_menu_from(
                         Some(a11y_id),
                         PanelTrigger::Control(PanelRect::from_area(&area.read())),
-                        items.clone(),
+                        items(),
                         false,
                     );
                 }
@@ -877,7 +907,7 @@ impl Component for MenuButton {
                     overlays.show_menu_from(
                         Some(a11y_id),
                         PanelTrigger::Control(PanelRect::from_area(&area.read())),
-                        items.clone(),
+                        items(),
                         false,
                     );
                 }
@@ -892,7 +922,7 @@ impl Component for MenuButton {
                 overlays.show_menu_from(
                     Some(a11y_id),
                     PanelTrigger::Control(PanelRect::from_area(&area.read())),
-                    items.clone(),
+                    items(),
                     true,
                 );
             })

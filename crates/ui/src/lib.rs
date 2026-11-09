@@ -59,6 +59,10 @@ pub mod theme;
 pub mod typography;
 mod warm;
 pub mod window;
+// Commands, shortcuts, menus from commands, the shortcuts sheet, the
+// command palette, and undo (UiCommands).
+pub mod commands;
+pub mod undo;
 
 /// Everything an application window normally needs.
 pub mod prelude {
@@ -67,6 +71,9 @@ pub mod prelude {
     pub use crate::app_icon::{AppChoice, AppIcon, app_icon};
     pub use crate::charts::{
         Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
+    };
+    pub use crate::commands::{
+        Command, CommandGroup, Commands, Shortcut, command_scope, use_commands, use_window_commands,
     };
     pub use crate::controls::*;
     pub use crate::files::{self, ChooserRequest, Chosen};
@@ -108,6 +115,7 @@ pub mod prelude {
     pub use crate::surface::use_tokens;
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
     pub use crate::typography::{self, Ink, TextStyle, styled_label, styled_paragraph};
+    pub use crate::undo::{UndoStack, UndoStep, use_undo};
     pub use crate::window::{
         Popup, PopupAction, PopupActions, PopupFlags, Window, WindowHost, WindowLike, WindowParent,
         popup, use_main_window, use_popup_actions, use_window,
