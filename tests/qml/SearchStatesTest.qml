@@ -61,5 +61,9 @@ SearchOverlay {
             }
         }
     }
-    Component.onCompleted: console.warn("SEARCH_STATES_READY " + scene)
+    Timer {
+        interval: 2000
+        running: true
+        onTriggered: console.warn("SEARCH_STATES_DONE " + scene)
+    }
 }

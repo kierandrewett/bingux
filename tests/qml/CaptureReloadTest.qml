@@ -1,3 +1,4 @@
+// harness: tests/capture-reload.py
 import Quickshell
 import Quickshell.Io
 
