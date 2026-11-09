@@ -525,3 +525,256 @@ network-mobile-modem-imei = IMEI
 network-mobile-modem-phone-number = Phone number
 # Modem detail: primary port.
 network-mobile-modem-port = Port
+
+## Proxy page
+
+# Proxy mode: none.
+network-proxy-mode-none = None
+# Proxy mode: manual.
+network-proxy-mode-manual = Manual
+# Proxy mode: automatic.
+network-proxy-mode-auto = Automatic
+# Row title on the Network page.
+network-proxy-row = Proxy
+# Status while proxy settings are read.
+network-proxy-reading = Reading proxy settings…
+# Error when proxy settings cannot be read.
+network-proxy-read-failed = Could not read the proxy settings. Try again.
+# Retry button for a failed read.
+network-proxy-retry = Try again
+# Error when proxy settings cannot be saved.
+network-proxy-save-failed = Could not save the proxy settings. Try again.
+# Label for the proxy method choice.
+network-proxy-method = Method
+# Group title for automatic configuration.
+network-proxy-auto-group = Automatic configuration
+# Label for the configuration URL field.
+network-proxy-config-url-label = Configuration URL
+# Hint under the configuration URL field.
+network-proxy-config-hint = Leave empty to find the configuration automatically.
+# Group title for the HTTP proxy.
+network-proxy-http-group = HTTP proxy
+# Switch that applies the HTTP proxy to every protocol.
+network-proxy-same-protocols = Use this proxy for every protocol
+# Group title for the HTTPS proxy.
+network-proxy-https-group = HTTPS proxy
+# Group title for the FTP proxy.
+network-proxy-ftp-group = FTP proxy
+# Group title for the SOCKS host.
+network-proxy-socks-group = SOCKS host
+# Label for a proxy host field.
+network-proxy-host-label = Host
+# Label for a proxy port field.
+network-proxy-port-label = Port
+# Group title for the ignore list.
+network-proxy-ignore-group = Ignore hosts
+# Label for the ignore list field.
+network-proxy-hosts-label = Hosts
+# Hint under the ignore list.
+network-proxy-ignore-hint = Addresses that skip the proxy. Separate them with commas. Write a network as 192.168.0.0/16.
+# Error for a port outside 1 to 65535.
+network-proxy-port-range-error = Enter a port number from 1 to 65535.
+# Error when an ignore entry contains a space.
+network-proxy-spaces-error = Separate hosts with commas. Hosts cannot contain spaces.
+
+## Mobile modem
+
+# Friendly error: the PIN is wrong.
+network-mobile-friendly-wrong-pin = That PIN is not right.
+# Friendly error: the SIM needs its PUK.
+network-mobile-friendly-puk = The SIM is blocked and needs its PUK code.
+# Friendly error: the SIM needs its PIN first.
+network-mobile-friendly-pin-first = The SIM needs its PIN first.
+# Error when the modem does not answer.
+network-mobile-modem-no-response = The modem did not respond. Try again.
+# Error when the modem cannot be read.
+network-mobile-modem-unreadable = Could not read the modem. Try again.
+# Error when the SIM cannot be read.
+network-mobile-sim-unreadable = Could not read the SIM. Try again.
+# Error when no modem is found.
+network-mobile-no-modem-found = No mobile modem found. Check that it is connected.
+# Error for a PIN outside 4 to 8 digits.
+network-mobile-pin-range-error = Enter 4 to 8 digits.
+# Error for a PUK that is not 8 digits.
+network-mobile-puk-range-error = Enter the 8-digit PUK.
+# Signal strength: none.
+network-mobile-signal-none = No signal
+# Signal strength: weak.
+network-mobile-signal-weak = Weak
+# Signal strength: fair.
+network-mobile-signal-fair = Fair
+# Signal strength: good.
+network-mobile-signal-good = Good
+# Signal strength: excellent.
+network-mobile-signal-excellent = Excellent
+# Registration: home network.
+network-mobile-reg-home = Home network
+# Registration: roaming.
+network-mobile-reg-roaming = Roaming
+# Registration: searching.
+network-mobile-reg-searching = Searching
+# Registration: refused.
+network-mobile-reg-refused = Refused
+# Registration: not registered.
+network-mobile-reg-idle = Not registered
+# Registration: texts only.
+network-mobile-reg-texts-only = Texts only
+# Registration: emergency calls only.
+network-mobile-reg-emergency-only = Emergency only
+# Registration: unknown state.
+network-mobile-reg-unknown = Unknown
+# Registration: registered.
+network-mobile-reg-registered = Registered
+# Network mode: automatic.
+network-mobile-mode-automatic = Automatic
+# Network mode: one generation only. The generation is 2G, 3G, 4G or 5G.
+network-mobile-mode-only = { $generation } only
+
+## Profile proxy
+
+# Row title for the proxy method on a connection.
+network-profile-proxy-method = Proxy
+# Switch that limits the proxy to web browsers.
+network-profile-proxy-browser-only = Only for web browsers
+# Group title for the proxy on a connection.
+network-profile-proxy-group = Proxy
+# Group title for the automatic configuration.
+network-profile-proxy-auto-group = Automatic configuration
+# Label for the configuration address field.
+network-profile-proxy-address-label = Address
+# Hint under the configuration address field.
+network-profile-proxy-address-hint = Where the proxy configuration file is.
+# Label for the configuration script field.
+network-profile-proxy-script-label = Script
+# Hint under the configuration script field.
+network-profile-proxy-script-hint = The text of a proxy configuration file.
+
+## VPN tunnel
+
+# Toast after saving when a running tunnel needs reconnecting.
+network-vpn-reconnect-note = Saved. Turn the VPN off and on to apply the changes.
+# Button that retries loading a VPN profile.
+network-vpn-try-again = Try again
+# Group title for the tunnel summary while a profile loads.
+network-vpn-group-tunnel = Tunnel
+# Row label for a VPN server.
+network-vpn-row-server = Server
+# Row label for the sign-in method of a VPN.
+network-vpn-row-sign-in = Sign in with
+# Error when a DNS server has no address of the given family on the tunnel.
+network-vpn-dns-needs-ipv4 = A DNS server needs an IPv4 address for the tunnel. Add one above or remove the server.
+# Error when a DNS server has no address of the given family on the tunnel.
+network-vpn-dns-needs-ipv6 = A DNS server needs an IPv6 address for the tunnel. Add one above or remove the server.
+# Note under the button that generates a new WireGuard key.
+network-vpn-new-key-note = A new key needs the other side to be given the new public key.
+# Button that generates a new WireGuard private key.
+network-vpn-generate-key = Generate new key
+# Field label for the tunnel's own addresses.
+network-vpn-field-addresses = Addresses
+# Hint under the tunnel addresses field.
+network-vpn-hint-addresses = This computer's addresses inside the tunnel, one per line, with the prefix length.
+# Field label for the tunnel's DNS servers.
+network-vpn-field-dns = DNS servers
+# Hint under the DNS servers field.
+network-vpn-hint-dns = Used while the tunnel is up, one per line.
+# Field label for the WireGuard listen port.
+network-vpn-field-listen-port = Listen port
+# Placeholder for an optional value that is chosen automatically.
+network-vpn-placeholder-automatic = Automatic
+# Unit after an MTU or size value.
+network-vpn-unit-bytes = bytes
+# Field label for the firewall mark.
+network-vpn-field-firewall-mark = Firewall mark
+# Placeholder for an optional value that is not set.
+network-vpn-placeholder-none = None
+# Group title for the WireGuard peers.
+network-vpn-group-peers = Peers
+# Title of one WireGuard peer; $number is its position from 1.
+network-vpn-peer-title = Peer { $number }
+# Button and row that add a new WireGuard peer.
+network-vpn-add-peer = Add peer
+# Subtitle of a peer with no endpoint.
+network-vpn-no-endpoint = No endpoint
+# Subtitle of a peer that routes all traffic.
+network-vpn-all-traffic = all traffic
+# Subtitle of a peer with several allowed address ranges; $count is the number of ranges.
+network-vpn-address-ranges = { $count ->
+    [one] 1 address range
+   *[other] { $count } address ranges
+}
+# Message on a plugin VPN where peers do not apply.
+network-vpn-only-wireguard-peers = Only a WireGuard VPN has peers.
+# Group title for a single peer's settings.
+network-vpn-group-peer = Peer
+# Row label for a key.
+network-vpn-row-public-key = Public key
+# Row label for a peer endpoint.
+network-vpn-row-endpoint = Endpoint
+# Error when two peers in one tunnel share a public key.
+network-vpn-duplicate-key = Another peer of this tunnel already has this public key.
+# Group title for the traffic routing of a peer.
+network-vpn-group-traffic = Traffic
+# Switch that sends all traffic through the tunnel.
+network-vpn-route-all = Route all traffic
+# Field label for the networks a peer carries.
+network-vpn-field-allowed = Allowed addresses
+# Hint under the allowed addresses field.
+network-vpn-hint-allowed = Networks that go through this peer, one per line, such as 10.8.0.0/24.
+# Hint under the peer public key field.
+network-vpn-hint-public-key = The other side's public key.
+# Field label for the preshared key.
+network-vpn-field-preshared = Preshared key
+# Hint under the preshared key field.
+network-vpn-hint-preshared = An extra secret both sides share, if they use one.
+# Hint under the peer endpoint field.
+network-vpn-hint-endpoint = Where to reach it, as host:port. Leave empty if it connects to you.
+# Field label for the keepalive interval.
+network-vpn-field-keepalive = Keepalive
+# Placeholder for an optional value that is switched off.
+network-vpn-placeholder-off = Off
+# Unit after a keepalive value.
+network-vpn-unit-seconds = seconds
+# Hint under the keepalive field.
+network-vpn-hint-keepalive = Keeps the connection open through a router. 25 is usual.
+# Row that deletes a peer.
+network-vpn-delete-peer = Delete peer
+# Confirmation title for deleting a peer; $label is the peer's title.
+network-vpn-delete-peer-title = Delete { $label }?
+# Confirmation body for deleting a peer.
+network-vpn-delete-peer-body = The tunnel to this peer stops.
+# Button that cancels a dialog.
+network-vpn-cancel = Cancel
+# Button that confirms a destructive delete.
+network-vpn-delete = Delete
+# Error when a required plugin field is empty; $label is the field's name.
+network-vpn-field-needed = { $label } is needed.
+# Choice for a remembered setting that is not needed.
+network-vpn-not-needed = Not needed
+# Choice label for remembering a plugin field; $label is the field's name in lowercase.
+network-vpn-remember = Remember { $label }
+# Group title for a plugin's extra settings.
+network-vpn-group-advanced = Advanced
+# Field label for a new plugin setting's name.
+network-vpn-field-new-setting = New setting
+# Placeholder for a new plugin setting's name.
+network-vpn-placeholder-name = name
+# Field label for a new plugin setting's value.
+network-vpn-field-value = Value
+# Button that adds a plugin setting.
+network-vpn-add-setting = Add setting
+# Error when a plugin setting's name contains = or a comma.
+network-vpn-setting-no-equals = A setting's name cannot contain = or a comma.
+# Error when a plugin setting name is already listed.
+network-vpn-setting-taken = This setting is already in the list.
+# Tooltip on the button that removes a plugin setting.
+network-vpn-remove-setting = Remove setting
+# Field label for the tunnel's MTU.
+network-vpn-field-mtu = MTU
+# Field label for the WireGuard private key.
+network-vpn-field-private-key = Private key
+# Hint under the private key field.
+network-vpn-hint-private-key = Stays on this computer. Never share it.
+# Group title for the interface section of a VPN profile.
+network-vpn-group-interface = Interface
+# Value shown when a public key is not available yet.
+network-vpn-not-available = Not available

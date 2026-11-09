@@ -15,6 +15,7 @@
 
 use std::time::Duration;
 
+use bingux_ui::prelude::tr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -39,13 +40,13 @@ fn mmcli(args: &[&str], timeout: Duration) -> Result<String, CommandError> {
 fn friendly(message: String) -> String {
     let lower = message.to_ascii_lowercase();
     if lower.contains("incorrectpassword") || lower.contains("incorrect password") {
-        "That PIN is not right.".to_string()
+        tr!("network-mobile-friendly-wrong-pin")
     } else if lower.contains("simpuk") || lower.contains("sim puk") {
-        "The SIM is blocked and needs its PUK code.".to_string()
+        tr!("network-mobile-friendly-puk")
     } else if lower.contains("simpin") && lower.contains("required") {
-        "The SIM needs its PIN first.".to_string()
+        tr!("network-mobile-friendly-pin-first")
     } else {
-        super::super::plain(&message, "The modem did not respond. Try again.")
+        super::super::plain(&message, &tr!("network-mobile-modem-no-response"))
     }
 }
 
@@ -293,13 +294,13 @@ impl Modem {
         }
     }
 
-    pub fn signal_label(&self) -> &'static str {
+    pub fn signal_label(&self) -> String {
         match self.bars() {
-            0 => "No signal",
-            1 => "Weak",
-            2 => "Fair",
-            3 => "Good",
-            _ => "Excellent",
+            0 => tr!("network-mobile-signal-none"),
+            1 => tr!("network-mobile-signal-weak"),
+            2 => tr!("network-mobile-signal-fair"),
+            3 => tr!("network-mobile-signal-good"),
+            _ => tr!("network-mobile-signal-excellent"),
         }
     }
 
@@ -342,17 +343,17 @@ impl Modem {
     }
 
     /// The registration as a sentence.
-    pub fn registration_label(&self) -> &'static str {
+    pub fn registration_label(&self) -> String {
         match self.registration.as_str() {
-            "home" => "Home network",
-            "roaming" => "Roaming",
-            "searching" => "Searching",
-            "denied" => "Refused",
-            "idle" => "Not registered",
-            "home-sms-only" | "roaming-sms-only" => "Texts only",
-            "emergency-only" => "Emergency only",
-            "" | "unknown" => "Unknown",
-            _ => "Registered",
+            "home" => tr!("network-mobile-reg-home"),
+            "roaming" => tr!("network-mobile-reg-roaming"),
+            "searching" => tr!("network-mobile-reg-searching"),
+            "denied" => tr!("network-mobile-reg-refused"),
+            "idle" => tr!("network-mobile-reg-idle"),
+            "home-sms-only" | "roaming-sms-only" => tr!("network-mobile-reg-texts-only"),
+            "emergency-only" => tr!("network-mobile-reg-emergency-only"),
+            "" | "unknown" => tr!("network-mobile-reg-unknown"),
+            _ => tr!("network-mobile-reg-registered"),
         }
     }
 
@@ -427,9 +428,9 @@ impl Modem {
         for choice in &mut choices {
             let allowed = &choice.modes.allowed;
             choice.label = if *allowed == every && allowed.len() > 1 {
-                "Automatic".to_string()
+                tr!("network-mobile-mode-automatic")
             } else if let [only] = allowed.as_slice() {
-                format!("{} only", only.label())
+                tr!("network-mobile-mode-only", generation = only.label())
             } else {
                 generation_list(allowed)
             };
@@ -515,8 +516,7 @@ fn technology_of(names: &[String]) -> Option<&'static str> {
 // ---------------------------------------------------------------------------
 
 fn parse_json(output: &str) -> Result<Value, CommandError> {
-    serde_json::from_str(output)
-        .map_err(|_| CommandError("Could not read the modem. Try again.".into()))
+    serde_json::from_str(output).map_err(|_| CommandError(tr!("network-mobile-modem-unreadable")))
 }
 
 /// The ids of the modems in `mmcli -J -L` output.
@@ -551,7 +551,7 @@ pub fn parse_modem(output: &str) -> Result<Modem, CommandError> {
     let value = parse_json(output)?;
     let modem = value
         .get("modem")
-        .ok_or_else(|| CommandError("Could not read the modem. Try again.".into()))?;
+        .ok_or_else(|| CommandError(tr!("network-mobile-modem-unreadable")))?;
     let generic = |key: &str| text(modem, &["generic", key]);
     let id = object_id(&text(modem, &["dbus-path"])).unwrap_or_default();
 
@@ -619,7 +619,7 @@ pub fn parse_sim(output: &str) -> Result<Sim, CommandError> {
     let value = parse_json(output)?;
     let sim = value
         .get("sim")
-        .ok_or_else(|| CommandError("Could not read the SIM. Try again.".into()))?;
+        .ok_or_else(|| CommandError(tr!("network-mobile-sim-unreadable")))?;
     Ok(Sim {
         id: object_id(&text(sim, &["dbus-path"])).unwrap_or_default(),
         operator: text(sim, &["properties", "operator-name"]),
@@ -795,7 +795,7 @@ pub fn pin_error(text: &str) -> Result<(), String> {
     if (4..=8).contains(&text.len()) && text.bytes().all(|byte| byte.is_ascii_digit()) {
         Ok(())
     } else {
-        Err("Enter 4 to 8 digits.".to_string())
+        Err(tr!("network-mobile-pin-range-error"))
     }
 }
 
@@ -804,7 +804,7 @@ pub fn puk_error(text: &str) -> Result<(), String> {
     if text.len() == 8 && text.bytes().all(|byte| byte.is_ascii_digit()) {
         Ok(())
     } else {
-        Err("Enter the 8-digit PUK.".to_string())
+        Err(tr!("network-mobile-puk-range-error"))
     }
 }
 
@@ -842,9 +842,7 @@ pub mod fake {
 
     pub fn scan(scenario: &str) -> Result<Vec<Carrier>, CommandError> {
         if scenario == "none" {
-            return Err(CommandError(
-                "No mobile modem found. Check that it is connected.".into(),
-            ));
+            return Err(CommandError(tr!("network-mobile-no-modem-found")));
         }
         // A real scan takes a minute or more; a few seconds is enough to
         // see the searching state.

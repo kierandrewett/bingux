@@ -17,6 +17,7 @@ use crate::ui::{
     status, switch_row, use_overlays,
 };
 use bingux_ui::controls::form::validate;
+use bingux_ui::prelude::tr;
 
 const SCHEMA: &str = "org.gnome.system.proxy";
 const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
@@ -120,11 +121,11 @@ impl Mode {
         }
     }
 
-    fn label(self) -> &'static str {
+    fn label(self) -> String {
         match self {
-            Self::None => "None",
-            Self::Manual => "Manual",
-            Self::Auto => "Automatic",
+            Self::None => tr!("network-proxy-mode-none"),
+            Self::Manual => tr!("network-proxy-mode-manual"),
+            Self::Auto => tr!("network-proxy-mode-auto"),
         }
     }
 
@@ -260,7 +261,7 @@ fn endpoint_error(host: &str, port: &str) -> Option<String> {
             return Some(message);
         }
         if port.is_empty() {
-            return Some("Enter a port number from 1 to 65535.".to_string());
+            return Some(tr!("network-proxy-port-range-error"));
         }
     }
     if !port.is_empty() {
@@ -295,7 +296,7 @@ fn ignore_error(text: &str) -> Option<String> {
     split_ignore(text)
         .iter()
         .any(|entry| entry.chars().any(char::is_whitespace))
-        .then(|| "Separate hosts with commas. Hosts cannot contain spaces.".to_string())
+        .then(|| tr!("network-proxy-spaces-error"))
 }
 
 fn pac_error(text: &str) -> Option<String> {
@@ -470,9 +471,9 @@ impl Component for ProxyRow {
         let router = self.ctx.router;
         let value = match &*model.read() {
             Some(Ok(config)) => config.mode.label(),
-            _ => "",
+            _ => String::new(),
         };
-        row("Proxy")
+        row(tr!("network-proxy-row"))
             .value(value)
             .navigates()
             .on_press(move |_| router.open(routes::proxy()))
@@ -494,13 +495,13 @@ impl Component for ProxyPage {
         match loaded {
             None => page_column()
                 .child(PageHead::new())
-                .child(status(Status::Loading("Reading proxy settings…".into()))),
+                .child(status(Status::Loading(tr!("network-proxy-reading").into()))),
             Some(Err(error)) => page_column().child(PageHead::new()).child(
                 status(Status::Error(super::plain(
                     &error.0,
-                    "Could not read the proxy settings. Try again.",
+                    &tr!("network-proxy-read-failed"),
                 )))
-                .action("Try again", move |_| reload(model)),
+                .action(&tr!("network-proxy-retry"), move |_| reload(model)),
             ),
             Some(Ok(config)) => page_column().child(ProxyForm { initial: config }),
         }
@@ -559,10 +560,8 @@ impl Component for ProxyForm {
                         if let Err((error, before)) = result {
                             let mut shown = model;
                             shown.set(Some(Ok(before)));
-                            overlays.toast(super::plain(
-                                &error.0,
-                                "Could not save the proxy settings. Try again.",
-                            ));
+                            overlays
+                                .toast(super::plain(&error.0, &tr!("network-proxy-save-failed")));
                         }
                     },
                 );
@@ -591,7 +590,7 @@ impl Component for ProxyForm {
         let method = {
             let config = config.clone();
             choice_row(
-                "Method",
+                tr!("network-proxy-method"),
                 [Mode::None, Mode::Manual, Mode::Auto]
                     .into_iter()
                     .map(|mode| (mode.key().to_string(), mode.label().to_string()))
@@ -623,10 +622,10 @@ impl Component for ProxyForm {
             Mode::None => {}
             Mode::Auto => {
                 page = page.child(
-                    Group::titled("Automatic configuration").row(
-                        form_field("Configuration URL", pac)
+                    Group::titled(&tr!("network-proxy-auto-group")).row(
+                        form_field(tr!("network-proxy-config-url-label"), pac)
                             .placeholder("http://wpad.example.com/proxy.pac")
-                            .hint("Leave empty to find the configuration automatically.")
+                            .hint(tr!("network-proxy-config-hint"))
                             .validate(|text| validate::url(text))
                             .wide()
                             .optional(),
@@ -637,41 +636,53 @@ impl Component for ProxyForm {
                 let endpoint_group = |title: &str, host: State<String>, port: State<String>| {
                     Group::titled(title)
                         .row(
-                            form_field("Host", host)
+                            form_field(tr!("network-proxy-host-label"), host)
                                 .optional()
                                 .validate(validate::hostname_or_ip),
                         )
                         .row(
-                            form_field("Port", port).validate(validate::port).error(
-                                show_errors_now()
-                                    .then(|| endpoint_error("", &port.read()))
-                                    .flatten(),
-                            ),
+                            form_field(tr!("network-proxy-port-label"), port)
+                                .validate(validate::port)
+                                .error(
+                                    show_errors_now()
+                                        .then(|| endpoint_error("", &port.read()))
+                                        .flatten(),
+                                ),
                         )
                 };
-                let http = endpoint_group("HTTP proxy", http_host, http_port).row(switch_row(
-                    "Use this proxy for every protocol",
-                    draft.same,
-                    move |on: bool| {
-                        let mut same = same;
-                        same.set(on);
-                    },
-                ));
+                let http = endpoint_group(&tr!("network-proxy-http-group"), http_host, http_port)
+                    .row(switch_row(
+                        tr!("network-proxy-same-protocols"),
+                        draft.same,
+                        move |on: bool| {
+                            let mut same = same;
+                            same.set(on);
+                        },
+                    ));
                 page = page.child(http);
                 if !draft.same {
-                    page = page.child(endpoint_group("HTTPS proxy", https_host, https_port));
+                    page = page.child(endpoint_group(
+                        &tr!("network-proxy-https-group"),
+                        https_host,
+                        https_port,
+                    ));
                     if config.ftp.is_some() {
-                        page = page.child(endpoint_group("FTP proxy", ftp_host, ftp_port));
+                        page = page.child(endpoint_group(
+                            &tr!("network-proxy-ftp-group"),
+                            ftp_host,
+                            ftp_port,
+                        ));
                     }
-                    page = page.child(endpoint_group("SOCKS host", socks_host, socks_port));
+                    page = page.child(endpoint_group(
+                        &tr!("network-proxy-socks-group"),
+                        socks_host,
+                        socks_port,
+                    ));
                 }
                 page = page.child(
-                    Group::titled("Ignore hosts").row(
-                        form_field("Hosts", ignore)
-                            .hint(
-                                "Addresses that skip the proxy. Separate them with commas. \
-                                 Write a network as 192.168.0.0/16.",
-                            )
+                    Group::titled(&tr!("network-proxy-ignore-group")).row(
+                        form_field(tr!("network-proxy-hosts-label"), ignore)
+                            .hint(tr!("network-proxy-ignore-hint"))
                             .monospace()
                             .multiline(3)
                             .validate(|text| ignore_error(text).map_or(Ok(()), Err)),
