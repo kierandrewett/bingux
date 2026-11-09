@@ -14,6 +14,7 @@
 # uses them; the taxonomy's Files and Data pages run on them.
 file:runtime.rs   # commands, caches, optimistic writes and gsettings helpers: system backends, not UI
 file:task.rs      # the background task pool and `use_resource`: plumbing under every loader
+file:saved.rs     # what controls remember between runs: a small JSON file, no pixels of its own
 
 # The headless renderer: the taxonomy's own `--snapshot` mode is its user.
 file:snapshot.rs  # test tooling; this app's snapshot mode renders every page with it

@@ -7,10 +7,11 @@ use bingux_data_usage::{Kind, Totals, Zone, unix_now};
 use freya::prelude::*;
 
 use super::UsageScope;
+use super::breakdown::breakdown_group;
 use super::chart;
 use super::format;
 use super::limits::{self, Level, LimitsGroup};
-use super::model::{self, Breakdown, Period, Request, Snapshot};
+use super::model::{self, Period, Request, Snapshot};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes;
@@ -19,7 +20,6 @@ use crate::ui::{
 };
 use bingux_data_usage::Source;
 use bingux_ui::prelude::use_router;
-use bingux_ui::style::is_compact;
 use bingux_ui::task::use_polled_resource;
 
 /// How often a visible page reads the totals again.
@@ -33,7 +33,7 @@ pub struct UsagePage {
     pub scope: UsageScope,
 }
 
-fn kind_name(kind: Kind) -> &'static str {
+pub(super) fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::Wifi => "Wi-Fi",
         Kind::Ethernet => "Ethernet",
@@ -42,7 +42,7 @@ fn kind_name(kind: Kind) -> &'static str {
     }
 }
 
-fn kind_icon(kind: Kind) -> Icon {
+pub(super) fn kind_icon(kind: Kind) -> Icon {
     match kind {
         Kind::Wifi => Icon::NetworkWirelessSignalExcellent,
         Kind::Ethernet => Icon::NetworkWired,
@@ -267,25 +267,24 @@ impl Component for UsagePage {
 
         // Breakdowns, for the whole computer only.
         if scope == UsageScope::All {
-            let interfaces = interface_rows(&snapshot.interfaces, move |name: String| {
-                router.open(routes::usage(&UsageScope::Interface(name)))
-            });
-            page = page.child(
-                Group::titled("By interface")
-                    .description(current.phrase())
-                    .rows(or_empty(interfaces, "No interface has been recorded yet.")),
-            );
-            let connections = connection_rows(&snapshot.connections, move |name: String| {
-                router.open(routes::usage(&UsageScope::Connection(name)))
-            });
-            page = page.child(
-                Group::titled("By connection")
-                    .description(current.phrase())
-                    .rows(or_empty(
-                        connections,
-                        "No connection has been recorded yet.",
-                    )),
-            );
+            page = page.child(breakdown_group(
+                "By interface",
+                current.phrase(),
+                "usage.interfaces",
+                "Interface",
+                &snapshot.interfaces,
+                "No interface has been recorded yet.",
+                move |name: String| router.open(routes::usage(&UsageScope::Interface(name))),
+            ));
+            page = page.child(breakdown_group(
+                "By connection",
+                current.phrase(),
+                "usage.connections",
+                "Connection",
+                &snapshot.connections,
+                "No connection has been recorded yet.",
+                move |name: String| router.open(routes::usage(&UsageScope::Connection(name))),
+            ));
         }
 
         // Limit.
@@ -310,55 +309,4 @@ impl Component for UsagePage {
 
         Element::from(veiled(page, loading))
     }
-}
-
-/// Rows, or a single empty status when there are none.
-fn or_empty(rows: Vec<Element>, empty: &str) -> Vec<Element> {
-    if rows.is_empty() {
-        vec![Element::from(status(Status::Empty(empty.to_string())))]
-    } else {
-        rows
-    }
-}
-
-/// A breakdown row: `detail` and the traffic. A phone has no room for both
-/// beside the title, so there the traffic goes under it; a wider row keeps
-/// it on the right.
-fn totals_row(row: Row, detail: &str, totals: Totals) -> Row {
-    if is_compact() {
-        row.subtitle(format!("{detail} · {}", format::pair(totals)))
-    } else {
-        row.subtitle(detail).value(format::pair(totals))
-    }
-}
-
-fn interface_rows(entries: &[Breakdown], open: impl Fn(String) + Clone + 'static) -> Vec<Element> {
-    entries
-        .iter()
-        .map(|entry| {
-            let (name, open) = (entry.name.clone(), open.clone());
-            Element::from(
-                totals_row(row(kind_name(entry.kind)), &entry.name, entry.totals)
-                    .leading(kind_icon(entry.kind))
-                    .navigates()
-                    .on_press(move |_| open(name.clone())),
-            )
-        })
-        .collect()
-}
-
-fn connection_rows(entries: &[Breakdown], open: impl Fn(String) + Clone + 'static) -> Vec<Element> {
-    entries
-        .iter()
-        .map(|entry| {
-            let (name, open) = (entry.name.clone(), open.clone());
-            Element::from(
-                totals_row(row(entry.name.clone()), kind_name(entry.kind), entry.totals)
-                    .leading(kind_icon(entry.kind))
-                    .badge(if entry.metered { "Metered" } else { "" })
-                    .navigates()
-                    .on_press(move |_| open(name.clone())),
-            )
-        })
-        .collect()
 }
