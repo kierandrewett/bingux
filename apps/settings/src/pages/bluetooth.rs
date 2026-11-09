@@ -322,7 +322,7 @@ const REASONS: &[(&[&str], &str)] = &[
     ),
     (
         &["authentic", "rejected"],
-        "The device did not accept the pairing.",
+        "The device did not accept the pairing request. Try pairing again.",
     ),
     (
         &["notavailable", "not available", "doesnotexist", "not found"],
@@ -330,7 +330,7 @@ const REASONS: &[(&[&str], &str)] = &[
     ),
     (
         &["timeout", "timed out"],
-        "The device did not respond in time.",
+        "The device did not respond in time. Bring it closer and try again.",
     ),
     (
         &[
@@ -371,7 +371,7 @@ fn run_steps(steps: &[Step]) -> Result<(), String> {
 /// One job runs at a time; a second request says so instead of queuing.
 fn run_job(ctx: Ctx, job: Job) {
     if ctx.busy.read().is_some() {
-        ctx.overlays.toast("Wait for the current action to finish.");
+        ctx.overlays.toast("Another action is still running");
         return;
     }
     let Ctx {
@@ -508,7 +508,7 @@ fn remove_job(device: &Device) -> Job {
         mac: device.mac.clone(),
         busy: "Forgetting…".to_string(),
         steps: vec![step(&["remove", device.mac.as_str()], TIMEOUT)],
-        done: format!("“{}” was forgotten", device.name),
+        done: format!("Forgot “{}”", device.name),
         failed: format!("Could not forget “{}”.", device.name),
     }
 }
@@ -740,7 +740,7 @@ fn device_word(device: &Device) -> &'static str {
     } else if device.paired {
         "Not connected"
     } else {
-        "Not set up"
+        "Not paired"
     }
 }
 
@@ -945,16 +945,16 @@ impl Component for BluetoothPage {
         let Some(adapter) = data.adapter.clone() else {
             return page_column().child(head.clone()).child(
                 status_page(Icon::Bluetooth, "No Bluetooth adapter found")
-                    .description("This computer has no Bluetooth adapter that Settings can use."),
+                    .description("Plug in a Bluetooth adapter to connect devices."),
             );
         };
         if let Some(block) = data.blocked {
             let reason = match block {
                 Block::Hardware => {
-                    "A hardware switch has turned Bluetooth off. Turn it on to use Bluetooth."
+                    "A switch on this computer has turned Bluetooth off. Move it back to turn Bluetooth on."
                 }
                 Block::Software => {
-                    "A system setting has blocked Bluetooth. Turn off “Airplane Mode” or unblock Bluetooth to use it."
+                    "Airplane mode or another system setting has turned Bluetooth off. Turn off airplane mode, then try again."
                 }
             };
             return page_column()
@@ -1000,16 +1000,17 @@ impl Component for BluetoothPage {
                 group = group.trailing(spinner(SpinnerSize::Small));
             }
             page = page.child(if nearby.is_empty() {
-                group.row(status(Status::Empty("Looking for nearby devices.".into())))
+                group.row(status(Status::Empty("Looking for nearby devices…".into())))
             } else {
                 group.rows(nearby.into_iter().map(|device| {
                     Element::from(device_row(ctx, device, busy.as_ref(), tokens, router))
                 }))
             });
         } else if no_mine {
-            page = page.child(Group::new(None::<String>).row(status(Status::Empty(
-                "No devices found. Turn on the device and make it visible.".into(),
-            ))));
+            page = page.child(
+                status_page(Icon::Bluetooth, "No devices found")
+                    .description("Turn on a device and make it visible."),
+            );
         }
         revealed(page, false)
     }
