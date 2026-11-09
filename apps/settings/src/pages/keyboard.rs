@@ -107,7 +107,12 @@ fn gsettings_u32(schema: &str, key: &str) -> Result<f64, CommandError> {
     raw.trim()
         .trim_start_matches("uint32 ")
         .parse::<f64>()
-        .map_err(|_| CommandError(format!("The keyboard {key} setting could not be read.")))
+        .map_err(|_| {
+            eprintln!("settings: could not parse keyboard {schema} {key}");
+            CommandError(
+                "Could not read the keyboard settings. Restart Settings and try again.".to_string(),
+            )
+        })
 }
 
 /// Parses a GSettings string list such as `['caps:escape', 'compose:ralt']`
@@ -311,7 +316,11 @@ fn open_file(path: &str) -> CommandResult {
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .spawn()
-        .map_err(|_| CommandError("The file could not be opened.".to_string()))?;
+        .map_err(|_| {
+            CommandError(
+                "Could not open the file. Check that a text editor is installed.".to_string(),
+            )
+        })?;
     std::thread::spawn(move || {
         let _ = child.wait();
     });
@@ -373,7 +382,7 @@ impl SourceEdits {
 fn open_add_sheet(edits: SourceEdits) {
     edits
         .window
-        .open(popup("Add an input source", AddBody { edits }).flags(PopupFlags::FORM));
+        .open(popup("Add input source", AddBody { edits }).flags(PopupFlags::FORM));
 }
 
 /// The most catalogue rows the add sheet lists at once. The rest are one
@@ -418,9 +427,9 @@ impl Component for AddBody {
         let mut column = popup_column().child(search_field(query, |_| {}).fill_width());
         if total == 0 {
             let message = if needle.is_empty() {
-                "Every input source is already in the list."
+                "All input sources are in the list."
             } else {
-                "No input sources match."
+                "No matching input sources"
             };
             column = column.child(status(Status::Empty(message.into())));
         } else {
@@ -441,7 +450,9 @@ impl Component for AddBody {
             column = column.child(Group::titled("Available").rows(rows));
             if total > SOURCE_LIST_CAP {
                 let more = total - SOURCE_LIST_CAP;
-                column = column.child(caption(format!("Type to narrow {more} more.")));
+                column = column.child(caption(format!(
+                    "{more} more not shown. Type to narrow the list."
+                )));
             }
         }
         Element::from(column)
@@ -556,7 +567,9 @@ fn load_shortcuts() -> Result<ShortcutList, CommandError> {
 
 /// The actions Gnoblin lists, each with its default bindings.
 fn gnoblin_shortcuts() -> Result<ShortcutList, CommandError> {
-    let unreadable = || CommandError("The shortcuts could not be read.".to_string());
+    let unreadable = || {
+        CommandError("Could not read the shortcuts. Restart the desktop and try again.".to_string())
+    };
     let output = gnoblin::gnoblinctl(&["--json", "shortcut", "actions"])?;
     let actions = Json::parse(&output).map_err(|_| unreadable())?;
     let actions = actions.as_array().ok_or_else(unreadable)?;
@@ -912,7 +925,7 @@ impl Component for KeyboardPage {
                 let count = config.sources.len();
                 let catalog = edits.catalog.read().clone().unwrap_or_default();
                 let group = if config.sources.is_empty() {
-                    sources_group.row(status(Status::Empty("No input sources are set up.".into())))
+                    sources_group.row(status(Status::Empty("No input sources".into())))
                 } else {
                     sources_group.rows(config.sources.iter().enumerate().map(|(index, source)| {
                         source_row(index, count, source, edits, router, &catalog)
@@ -925,7 +938,7 @@ impl Component for KeyboardPage {
                         move |next: bool| edits.run(Edit::SetPerWindow(next)),
                     ))
                     .row(
-                        row("Add an input source")
+                        row("Add input source…")
                             .leading(Icon::ListAdd)
                             .enabled(!busy)
                             .on_press(move |_| open_add_sheet(edits)),
@@ -943,7 +956,7 @@ impl Component for KeyboardPage {
             Some(Ok(list)) => Some(list.shortcuts.len()),
             _ => None,
         };
-        let mut shortcuts_row = row("View and customise shortcuts")
+        let mut shortcuts_row = row("Keyboard shortcuts")
             .leading(Icon::Keyboard)
             .navigates()
             .on_press(move |_| router.open(routes::shortcuts()));
@@ -1019,7 +1032,7 @@ impl Component for ShortcutsPage {
             .child(PageHead::new())
             .child(search_field(query, |_| {}));
         if groups.is_empty() {
-            page = page.child(status(Status::Empty("No shortcuts match.".into())));
+            page = page.child(status(Status::Empty("No matching shortcuts".into())));
         }
         for (group, items) in &groups {
             page = page.child(Group::titled(&group_title(group)).rows(items.iter().map(
@@ -1030,7 +1043,7 @@ impl Component for ShortcutsPage {
         }
         if let Some(path) = list.config_path.clone() {
             page = page.child(Group::titled("Configuration").row(
-                row("Configuration file").trailing(row_button("Open file", move |_| {
+                row("Configuration file").trailing(row_button("Open", move |_| {
                     open_config(path.clone(), overlays)
                 })),
             ));

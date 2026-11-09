@@ -10,9 +10,11 @@ use std::sync::{Condvar, Mutex, PoisonError};
 use crate::pages::gnoblin;
 
 const UNSUPPORTED: &str =
-    "This page cannot change the input sources in the configuration file. Edit the file directly.";
-const UNREADABLE: &str = "The configuration file could not be read.";
-const UNWRITABLE: &str = "The configuration file could not be saved.";
+    "Could not change the input sources. Edit the configuration file instead.";
+const UNREADABLE: &str =
+    "Could not read the configuration file. Check that it exists, then try again.";
+const UNWRITABLE: &str =
+    "Could not save the configuration file. Check that you can write to it, then try again.";
 const XKB_EVDEV: &str = "/usr/share/X11/xkb/rules/evdev.xml";
 const MAX_ID: usize = 64;
 
@@ -49,7 +51,9 @@ impl SourcesConfig {
         match edit {
             Edit::Add(source) => {
                 if !valid_source(source) {
-                    return Err("That input source cannot be added.".to_string());
+                    return Err(
+                        "Could not add that input source. Choose a different one.".to_string()
+                    );
                 }
                 if next.sources.contains(source) {
                     return Err("That input source is already in the list.".to_string());
@@ -58,22 +62,27 @@ impl SourcesConfig {
             }
             Edit::Remove(index) => {
                 if *index >= count {
-                    return Err("That input source is no longer in the list.".to_string());
+                    return Err(
+                        "Could not find that input source. Reopen the page and try again."
+                            .to_string(),
+                    );
                 }
                 if count == 1 {
-                    return Err("At least one input source is needed.".to_string());
+                    return Err("Keep at least one input source.".to_string());
                 }
                 next.sources.remove(*index);
             }
             Edit::MoveUp(index) => {
                 if *index == 0 || *index >= count {
-                    return Err("That input source cannot move up.".to_string());
+                    return Err(
+                        "Could not move that input source. It is already first.".to_string()
+                    );
                 }
                 next.sources.swap(index - 1, *index);
             }
             Edit::MoveDown(index) => {
                 if *index + 1 >= count {
-                    return Err("That input source cannot move down.".to_string());
+                    return Err("Could not move that input source. It is already last.".to_string());
                 }
                 next.sources.swap(*index, index + 1);
             }
@@ -178,7 +187,11 @@ fn reload(path: &str, original: &str) -> Result<(), String> {
             if restored {
                 let _ = gnoblin::gnoblinctl(&["config", "reload"]);
             }
-            Err(format!("Gnoblin did not accept the change: {}", e.0))
+            eprintln!("settings: gnoblin rejected the change: {}", e.0);
+            Err(
+                "Gnoblin did not accept the change. Check the configuration file, then try again."
+                    .to_string(),
+            )
         }
     }
 }
