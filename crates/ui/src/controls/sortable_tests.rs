@@ -237,6 +237,19 @@ fn frames(shot: &mut Snapshot, count: u32) {
     shot.runner().poll_n(FRAME, count);
 }
 
+/// The accent drop line: a 2 px band wider than 100 px below the list's first row.
+fn drop_line(shot: &mut Snapshot, home: f32) -> Option<Area> {
+    let class = SizeClass::Regular;
+    shot.runner()
+        .find_many(|node, _| {
+            let area = node.layout().area;
+            ((area.height() - Dim::Ring.px_in(class)).abs() < 0.01 && area.width() > 100.0 && area.min_y() > home)
+                .then_some(area)
+        })
+        .into_iter()
+        .next()
+}
+
 fn start(size: (f32, f32), line: bool, count: usize) -> (Snapshot, Log) {
     let log = Log::default();
     let mut shot = app(log.clone(), line, count, size);
@@ -741,23 +754,16 @@ fn a_long_list_shows_a_line_and_leaves_the_other_rows_still() {
         shot.record_frames(dir);
     }
     let (seen, end) = pull_down(&mut shot, 2.2 * row_height, 16);
-    frames(&mut shot, 10);
+    // The line and the moves of the rows are animations: wait for the line, with a generous cap,
+    // rather than trust a fixed number of frames on a loaded machine.
+    shot.settle_until(Duration::from_secs(5), |shot| drop_line(shot, home).is_some());
     assert!(
         (label(&mut shot, "Network").min_y() - next).abs() < 0.01
             && (label(&mut shot, "Power").min_y() - third).abs() < 0.01,
         "the others stay: {seen:?}"
     );
     // An accent line, 2 px high, inset by the gutter, sits where it would land.
-    let class = SizeClass::Regular;
-    let lines: Vec<Area> = shot.runner().find_many(|node, _| {
-        let area = node.layout().area;
-        ((area.height() - Dim::Ring.px_in(class)).abs() < 0.01
-            && area.width() > 100.0
-            && area.min_y() > home)
-            .then_some(area)
-    });
-    assert!(!lines.is_empty(), "no drop line");
-    let line = lines[0];
+    let line = drop_line(&mut shot, home).expect("no drop line");
     let expected = label(&mut shot, "Power").min_y() + row_height
         - (label(&mut shot, "Power").height() - row_height).max(0.0);
     assert!(

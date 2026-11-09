@@ -18,8 +18,8 @@ use crate::controls::adaptive::{
     choose_line, choose_value_line, label_cell_width,
 };
 use crate::controls::dropdown::dropdown;
-use crate::controls::path_label::text_width;
 use crate::controls::path_label::path_label;
+use crate::controls::path_label::text_width;
 use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
 use crate::controls::segmented::segmented;
