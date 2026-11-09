@@ -7,6 +7,7 @@
 use freya::prelude::*;
 
 use crate::icons::Icon;
+use bingux_ui::prelude::tr;
 
 pub use crate::system::bingux_config;
 
@@ -92,24 +93,25 @@ impl PageId {
         PageId::About,
     ];
 
-    pub fn title(self) -> &'static str {
+    /// The page's title in the sidebar, the header and search results.
+    pub fn title(self) -> String {
         match self {
-            Self::Network => "Network",
-            Self::Bluetooth => "Bluetooth",
-            Self::Appearance => "Appearance",
-            Self::Privacy => "Privacy",
-            Self::Accessibility => "Accessibility",
-            Self::Desktop => "Desktop and dock",
-            Self::Search => "Search",
-            Self::Displays => "Displays",
-            Self::Sound => "Sound",
-            Self::Power => "Power",
-            Self::Keyboard => "Keyboard",
-            Self::Mouse => "Mouse and touchpad",
-            Self::DateTime => "Date and time",
-            Self::Users => "Users",
-            Self::Applications => "Applications",
-            Self::About => "About",
+            Self::Network => tr!("settings-page-network"),
+            Self::Bluetooth => tr!("settings-page-bluetooth"),
+            Self::Appearance => tr!("settings-page-appearance"),
+            Self::Privacy => tr!("settings-page-privacy"),
+            Self::Accessibility => tr!("settings-page-accessibility"),
+            Self::Desktop => tr!("settings-page-desktop"),
+            Self::Search => tr!("settings-page-search"),
+            Self::Displays => tr!("settings-page-displays"),
+            Self::Sound => tr!("settings-page-sound"),
+            Self::Power => tr!("settings-page-power"),
+            Self::Keyboard => tr!("settings-page-keyboard"),
+            Self::Mouse => tr!("settings-page-mouse"),
+            Self::DateTime => tr!("settings-page-datetime"),
+            Self::Users => tr!("settings-page-users"),
+            Self::Applications => tr!("settings-page-applications"),
+            Self::About => tr!("settings-page-about"),
         }
     }
 
