@@ -70,20 +70,24 @@ pub fn localisation() -> Element {
         Direction::Rtl => tr!("taxonomy-l10n-direction-rtl"),
         _ => tr!("taxonomy-l10n-direction-ltr"),
     };
-    // The check reads the source tree, so it runs only beside it.
-    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let check = if !source.join("src").is_dir() {
-        tr!("taxonomy-l10n-check-unavailable-status")
-    } else {
-        let report = i18n::check::crate_catalogue(source, "taxonomy");
-        if report.problems().is_empty() {
-            tr!("taxonomy-l10n-check-clean-status")
-        } else {
-            tr!(
-                "taxonomy-l10n-check-problems-status",
-                count = report.problems().len()
-            )
-        }
+    // The check reads the source tree, so it runs only beside it, and on the
+    // task pool: it reads files.
+    let problems = use_state(|| None::<Option<usize>>);
+    use_hook(move || {
+        bingux_ui::runtime::background(problems, || {
+            let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+            source.join("src").is_dir().then(|| {
+                i18n::check::crate_catalogue(source, "taxonomy")
+                    .problems()
+                    .len()
+            })
+        })
+    });
+    let check = match *problems.read() {
+        None => String::new(),
+        Some(None) => tr!("taxonomy-l10n-check-unavailable-status"),
+        Some(Some(0)) => tr!("taxonomy-l10n-check-clean-status"),
+        Some(Some(count)) => tr!("taxonomy-l10n-check-problems-status", count = count),
     };
     let plurals: Vec<Element> = [0usize, 1, 2, 5, 21, 1200]
         .into_iter()
