@@ -38,6 +38,21 @@ pub enum ViewerId {
     Card,
 }
 
+impl ViewerId {
+    /// Every viewer. A new variant goes here too; the test
+    /// `every_viewer_has_a_previewer` fails for one the registry lacks.
+    pub const ALL: [ViewerId; 8] = [
+        ViewerId::Image,
+        ViewerId::Media,
+        ViewerId::Document,
+        ViewerId::Text,
+        ViewerId::Archive,
+        ViewerId::Font,
+        ViewerId::Folder,
+        ViewerId::Card,
+    ];
+}
+
 /// How well a previewer handles a source: higher wins.
 pub type Priority = u8;
 
@@ -262,6 +277,28 @@ mod tests {
     fn chain(name: &str, head: &[u8]) -> Vec<ViewerId> {
         let sniffed = sniff_head(name, head);
         Registry::standard().chain(&sniffed).iter().map(|previewer| previewer.id()).collect()
+    }
+
+    #[test]
+    fn every_viewer_has_a_previewer() {
+        let registry = Registry::standard();
+        for id in ViewerId::ALL {
+            assert_eq!(registry.get(id).map(|previewer| previewer.id()), Some(id), "{id:?}");
+        }
+        // `ALL` lists each variant once: this match fails to compile for a variant it lacks.
+        for id in ViewerId::ALL {
+            let _: usize = match id {
+                ViewerId::Image
+                | ViewerId::Media
+                | ViewerId::Document
+                | ViewerId::Text
+                | ViewerId::Archive
+                | ViewerId::Font
+                | ViewerId::Folder
+                | ViewerId::Card => ViewerId::ALL.iter().filter(|other| **other == id).count(),
+            };
+            assert_eq!(ViewerId::ALL.iter().filter(|other| **other == id).count(), 1, "{id:?}");
+        }
     }
 
     #[test]

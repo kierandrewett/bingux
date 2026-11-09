@@ -1,15 +1,17 @@
 //! A folder: how much is in it, counted while the viewer is open.
+//!
+//! The Preview window adds Open in Files under the count.
 
 use std::rc::Rc;
-use std::sync::Arc;
 use std::time::Duration;
 
 use crate::files::display;
 use bingux_files::ops::{Counting, Totals};
 use freya::prelude::*;
 
-use super::super::subject::Resolved;
+use super::Stage;
 use crate::component::ComponentName;
+use crate::controls::primary_button;
 use crate::files::{FileIconSize, file_icon_view};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -65,13 +67,16 @@ fn use_folder(path: std::path::PathBuf) -> State<Totals> {
 
 #[derive(PartialEq)]
 pub(super) struct FolderView {
-    pub resolved: Arc<Resolved>,
+    pub stage: Stage,
 }
 
 impl Component for FolderView {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let path = self.resolved.facts.path.clone().unwrap_or_default();
+        let resolved = &self.stage.resolved;
+        let path = resolved.facts.path.clone().unwrap_or_default();
+        let overlays = use_try_consume::<crate::shell::Overlays>();
+        let open_in_files = self.stage.dedicated().then(|| path.clone());
         let totals = use_folder(path);
         let (items, size) = folder_lines(totals());
         let size_px = FileIconSize::Px((IconSize::Hero.px() * ICON_SCALE).round() as u16);
@@ -83,12 +88,26 @@ impl Component for FolderView {
             )
             .child(file_icon_view(
                 &tokens,
-                &super::icon(&self.resolved),
+                &super::icon(resolved),
                 size_px,
                 false,
             ))
             .child(TITLE.label(&tokens, items))
             .child(BODY.in_ink(Ink::Muted).label(&tokens, size))
+            .maybe_child(open_in_files.map(|folder| {
+                Element::from(
+                    rect().tw(&tokens, &[py(S3)]).child(primary_button(
+                        crate::tr!("ui-preview-folder-open-in-files"),
+                        move |_| {
+                            crate::files::open_in_default_application(&folder, move |_| {
+                                if let Some(overlays) = overlays {
+                                    overlays.toast(crate::tr!("ui-preview-folder-open-failed"));
+                                }
+                            })
+                        },
+                    )),
+                )
+            }))
     }
 }
 

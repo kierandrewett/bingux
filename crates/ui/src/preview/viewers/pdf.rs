@@ -40,6 +40,7 @@ use super::super::host_link::{HostLink, LinkEvent};
 use super::super::keys::{KeyClaim, Keyboard};
 use super::super::mode::Mode;
 use super::super::subject::Resolved;
+use super::Stage;
 use super::card::Card;
 use super::pdf_layout::{
     CACHE_LIMIT, GAP, Layout, MARGIN, PageSize, RenderCache, THUMB_WIDTH, WordRef, Zoom,
@@ -307,18 +308,16 @@ impl Caches {
 
 #[derive(PartialEq)]
 pub(super) struct DocumentView {
-    pub resolved: Arc<Resolved>,
-    pub nav: PreviewNav,
-    pub mode: Mode,
+    pub stage: Stage,
 }
 
 impl Component for DocumentView {
     fn render(&self) -> impl IntoElement {
         let mut attempt = use_state(|| 0u32);
         Reading {
-            resolved: self.resolved.clone(),
-            nav: self.nav.clone(),
-            mode: self.mode,
+            resolved: self.stage.resolved.clone(),
+            nav: self.stage.nav.clone(),
+            mode: self.stage.mode,
             attempt: *attempt.read(),
             on_retry: EventHandler::new(move |_: ()| *attempt.write() += 1),
         }

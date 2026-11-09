@@ -1,16 +1,18 @@
-//! The window: a title line over the picture or document on show, or the empty
-//! state when nothing is open.
+//! The window: a title line over the file on show, or the empty state when
+//! nothing is open.
 //!
-//! The picture, the document, their zoom, turn, find, thumbnails and
-//! information are `bingux_ui::preview` (`PreviewHost` in `Mode::Window`) and
-//! `bingux_ui::zoom_view`; this file is what the Preview application adds: the
-//! list of files the arrows reach, the title line and its menu, opening files
-//! (the chooser, a drop, a second launch), full screen and the slideshow, Move
-//! to Trash with Undo, Copy picture and Save a copy.
+//! What is on show (a picture, a document, text, an archive, a font, a song or
+//! film, a folder), its zoom, turn, find, thumbnails, tools and information are
+//! `bingux_ui::preview` (`PreviewHost` in `Mode::Window`, the dedicated frame)
+//! and `bingux_ui::zoom_view`; this file is what the Preview application adds:
+//! the list of files the arrows reach, the title line and its menu, opening
+//! files (the chooser, a drop, a second launch), full screen and the slideshow,
+//! Move to Trash with Undo, Copy picture and Save a copy.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use bingux_files::{Filter, Kind};
 use bingux_files::ops::{self, Trashed};
 use bingux_ui::component::ComponentName;
 use bingux_ui::files::{self, FileIcon, file_icon_view};
@@ -32,8 +34,9 @@ const SLIDE: Duration = Duration::from_secs(4);
 /// The pointer this close to the top edge brings the title line back in full screen.
 const EDGE: f32 = 6.0;
 
-/// The extensions the chooser offers first.
-const OPENABLE: &str = "png apng jpg jpeg jpe jfif gif webp bmp ico cur tif tiff heic heif hif avif hdr exr svg svgz cr2 cr3 crw nef nrw arw dng orf rw2 raf pef srw pdf";
+/// The "Pictures and documents" filter of the Open chooser. The chooser also
+/// offers All files (first, the default) and the built-in kinds.
+const PICTURES_AND_DOCUMENTS: &str = "png apng jpg jpeg jpe jfif gif webp bmp ico cur tif tiff heic heif hif avif hdr exr svg svgz cr2 cr3 crw nef nrw arw dng orf rw2 raf pef srw pdf";
 
 /// Every path named on the command line, absolute, that exists.
 fn launch_paths() -> Vec<PathBuf> {
@@ -186,7 +189,8 @@ impl Component for Content {
             let mut request = ChooserRequest::open()
                 .title(copy::open_request_title())
                 .multiple(true)
-                .filter_spec(copy::open_filter(), OPENABLE)
+                .filter(Filter::all_files())
+                .filter_spec(copy::open_filter(), PICTURES_AND_DOCUMENTS)
                 .presets(true);
             if let Some(start) = start {
                 request = request.current_folder(start);
@@ -482,7 +486,16 @@ impl Component for Content {
 
         // The title line.
         let title_slot: Element = {
-            let icon = name.as_deref().map(FileIcon::for_name);
+            let icon = current.as_deref().map(|path| {
+                FileIcon::for_path(
+                    path,
+                    if list.is_folder(path) {
+                        Kind::Directory
+                    } else {
+                        Kind::File
+                    },
+                )
+            });
             rect()
                 .tw(
                     &tokens,
@@ -564,6 +577,7 @@ impl Component for Content {
                 slideshow: *slideshow.read(),
                 can_slideshow: list.is_pictures(),
                 full,
+                can_trash: current.as_deref().is_some_and(|path| !list.is_folder(path)),
                 can_undo: done.read().is_some(),
                 can_crop: picture
                     && current.as_deref().is_some_and(edit::can_copy)
@@ -650,7 +664,7 @@ impl Component for Content {
             .into_element(),
             (Some(path), None) => {
                 PreviewHost::new(Some(PreviewSource::path(path.clone())), Mode::Window, nav)
-                    .folder(false)
+                    .folder(list.is_folder(path))
                     .into_element()
             }
             (None, _) => status_page(Icon::ImageGeneric, copy::empty_title())
@@ -722,6 +736,7 @@ struct MenuState {
     slideshow: bool,
     can_slideshow: bool,
     full: bool,
+    can_trash: bool,
     can_undo: bool,
     can_crop: bool,
 }
@@ -846,7 +861,8 @@ fn main_menu(
             &actions.trash,
         )
         .destructive();
-        if state.current.is_none() {
+        // A folder is not moved to the Trash from a viewer.
+        if !state.can_trash {
             trash = trash.disabled();
         }
         items.push(trash);

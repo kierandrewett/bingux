@@ -506,6 +506,77 @@ ui-preview-counting = Counting…
 ui-preview-outline-tab = Outline
 ui-preview-subtitles-tooltip = Subtitles (C)
 ui-preview-playback-speed-tooltip = Playback speed ([ and ])
+
+## Text in a preview
+# $count (Number) - how many lines the text has
+ui-preview-text-lines = { $count ->
+    [one] { $count } line
+   *[other] { $count } lines
+}
+ui-preview-text-capped = The preview stops here. Open the file to read the rest.
+# $shown (Text) - how much of the file is shown, such as 64 KB
+# $total (Text) - the file's size
+ui-preview-text-partial = Showing { $shown } of { $total }.
+ui-preview-text-show-more = Show more
+ui-preview-text-reading = Reading…
+# The menu of the text viewer's toolbar.
+ui-preview-view-menu = View
+ui-preview-text-wrap = Wrap lines
+ui-preview-text-colour = Colour code
+ui-preview-text-larger = Larger text
+ui-preview-text-smaller = Smaller text
+ui-preview-text-default-size = Default text size
+ui-preview-text-copied = Text copied
+ui-preview-text-copy =
+    .tooltip = Copy text
+
+## Archives in a preview
+# $count (Number) - how many files the archive holds
+ui-preview-archive-files = { $count ->
+    [one] { $count } file
+   *[other] { $count } files
+}
+# $count (Number) - how many files were counted before the listing stopped
+ui-preview-archive-files-or-more = { $count ->
+    [one] { $count } file or more
+   *[other] { $count } files or more
+}
+# $size (Text) - the size the files take when unpacked, such as 4.2 MB
+ui-preview-archive-unpacked = { $size } unpacked
+ui-preview-archive-extract-all = Extract all
+# $name (Text) - the folder the archive was extracted into
+ui-preview-archive-extracted = Extracted to “{ $name }”.
+ui-preview-archive-show-in-files = Show in Files
+ui-preview-archive-extract-failed = Could not extract the archive. Check that its folder can be written to and that the archive is not locked, then try again.
+
+## Folders in a preview
+ui-preview-folder-open-in-files = Open in Files
+ui-preview-folder-open-failed = Could not open the folder. Try opening it from Files.
+
+## Fonts in a preview
+# $count (Number) - how many glyphs the font has
+ui-preview-font-glyphs = { $count ->
+    [one] { $count } glyph
+   *[other] { $count } glyphs
+}
+# $count (Number) - how many fonts one file holds
+ui-preview-font-faces = { $count } fonts in this file
+# The sample line of a font. A sentence that uses every letter of the language, then the digits.
+ui-preview-font-pangram = The quick brown fox jumps over the lazy dog. 0123456789
+ui-preview-font-sample-placeholder = Type to try the font
+ui-preview-font-install = Install
+ui-preview-font-installed-button = Installed
+# $family (Text) - the font's family name
+ui-preview-font-installed = “{ $family }” is installed for you.
+ui-preview-font-install-failed = Could not install the font. Check that your fonts folder can be written to, then try again.
+# $count (Number) - how many characters the font draws
+ui-preview-font-characters = { $count ->
+    [one] { $count } character
+   *[other] { $count } characters
+}
+ui-preview-font-character-copied = Character copied
+ui-preview-font-copy-character =
+    .tooltip = Copy character
 # The names in the Info panel of a preview.
 ui-info-name = Name
 ui-info-type = Type

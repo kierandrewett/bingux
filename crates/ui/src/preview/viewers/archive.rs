@@ -1,6 +1,10 @@
 //! An archive: what is in it, listed without extracting anything.
+//!
+//! The Preview window adds Extract all beside the totals: the archive is
+//! unpacked into a new folder beside it (never over anything), and a toast
+//! offers Show in Files. A quick look only lists.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use bingux_files::Kind;
@@ -10,9 +14,9 @@ use bingux_preview_core::Loaded;
 use bingux_preview_core::archive::ArchiveListing;
 use freya::prelude::*;
 
-use super::super::subject::Resolved;
+use super::{Stage, tool_bar};
 use crate::component::ComponentName;
-use crate::controls::path_label;
+use crate::controls::{action_button, path_label};
 use crate::files::{FileIcon, file_icon_view};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -20,7 +24,7 @@ use crate::typography::{BODY, CAPTION, Ink};
 
 #[derive(PartialEq)]
 pub(super) struct ArchiveView {
-    pub resolved: Arc<Resolved>,
+    pub stage: Stage,
 }
 
 /// The listing a row of the list draws from.
@@ -90,27 +94,66 @@ impl Component for EntryRow {
     }
 }
 
+/// What the totals line says about an archive: its kind, how many files and
+/// how much they unpack to.
+fn summary(listing: &ArchiveListing) -> String {
+    let (files, bytes) = listing.totals();
+    let count = if listing.truncated {
+        crate::tr!("ui-preview-archive-files-or-more", count = files)
+    } else {
+        crate::tr!("ui-preview-archive-files", count = files)
+    };
+    let mut parts = vec![listing.format.name().to_owned(), count];
+    if bytes > 0 {
+        parts.push(crate::tr!(
+            "ui-preview-archive-unpacked",
+            size = display::size(bytes)
+        ));
+    }
+    parts.join(" · ")
+}
+
+/// Unpack `archive` into a new folder beside it, then say where it went.
+fn extract_all(archive: PathBuf, overlays: Option<crate::shell::Overlays>, mut busy: State<bool>) {
+    let Some(folder) = archive.parent().map(Path::to_path_buf) else {
+        return;
+    };
+    busy.set(true);
+    spawn(async move {
+        let result = crate::task::spawn_blocking(move || bingux_files::ops::extract(&archive, &folder)).await;
+        busy.set(false);
+        let Some(overlays) = overlays else {
+            return;
+        };
+        match result {
+            Ok(made) => {
+                let name = made
+                    .file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_default();
+                overlays.toast_with_action(
+                    crate::tr!("ui-preview-archive-extracted", name = name),
+                    crate::tr!("ui-preview-archive-show-in-files"),
+                    move |_: ()| {
+                        let _ = crate::files::show_in_files(&made);
+                    },
+                );
+            }
+            Err(_) => overlays.toast(crate::tr!("ui-preview-archive-extract-failed")),
+        }
+    });
+}
+
 impl Component for ArchiveView {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let Loaded::Archive(listing) = &self.resolved.loaded else {
+        let Loaded::Archive(listing) = &self.stage.resolved.loaded else {
             return Element::from(rect());
         };
         let mut width = use_state(|| 0.0f32);
+        let busy = use_state(|| false);
+        let overlays = use_try_consume::<crate::shell::Overlays>();
         let listing = Arc::new(listing.clone());
-        let (files, bytes) = listing.totals();
-        let summary = format!(
-            "{} · {} {}{}{}",
-            listing.format.name(),
-            files,
-            if files == 1 { "file" } else { "files" },
-            if listing.truncated { " or more" } else { "" },
-            if bytes > 0 {
-                format!(" · {} unpacked", display::size(bytes))
-            } else {
-                String::new()
-            }
-        );
         let data = ListData {
             listing: listing.clone(),
             width: *width.read(),
@@ -124,31 +167,33 @@ impl Component for ArchiveView {
         .length(listing.entries.len())
         .item_size(Dim::MenuItem.px())
         .on_sized(move |event: Event<SizedEventData>| width.set_if_modified(event.area.width()));
+        // Extract all needs the archive on disk and a program that opens it.
+        let extractable = self
+            .stage
+            .resolved
+            .source
+            .as_path()
+            .filter(|path| self.stage.dedicated() && bingux_files::ops::can_extract(path))
+            .map(Path::to_path_buf);
+        let tools = extractable
+            .map(|archive| {
+                let busy_now = *busy.read();
+                Element::from(
+                    action_button(crate::tr!("ui-preview-archive-extract-all"), move |_| {
+                        if !*busy.peek() {
+                            extract_all(archive.clone(), overlays, busy);
+                        }
+                    })
+                    .compact()
+                    .loading(busy_now),
+                )
+            })
+            .into_iter()
+            .collect();
         rect()
             .component("PreviewArchive")
             .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
-            .child(
-                rect()
-                    .tw(
-                        &tokens,
-                        &[
-                            w_full(),
-                            h(Dim::Control),
-                            px(S4),
-                            flex_row(),
-                            items(Align::Center),
-                            bg(Paint::Surface),
-                        ],
-                    )
-                    .child(
-                        CAPTION
-                            .in_ink(Ink::Muted)
-                            .label(&tokens, summary)
-                            .max_lines(1)
-                            .text_overflow(TextOverflow::Ellipsis),
-                    ),
-            )
-            .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
+            .child(tool_bar(&tokens, summary(&listing), tools))
             .child(
                 rect()
                     .width(Size::fill())

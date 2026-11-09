@@ -1,12 +1,23 @@
-//! The files the arrow keys reach: the picture or document that was opened and
-//! its neighbours.
+//! The files the arrow keys reach: the file that was opened and its
+//! neighbours.
 //!
 //! Opening one file shows it among the files of its folder that are of its own
-//! kind (the pictures beside a picture, the documents beside a document), in
+//! [`Family`] (the pictures beside a picture, the sources beside a source), in
 //! the order a file manager lists them, so the arrows walk a folder the way
-//! Files shows it. Opening several files, or a folder, makes those the list.
+//! Files shows it. Opening a folder makes its previewable files the list, of
+//! every family; opening several files makes exactly those the list, folders
+//! among them shown as folders.
+//!
+//! Why the family and not every file: the arrows step between files that are
+//! read the same way. A photo, a film, a font and an archive in a row would
+//! change the whole window and its toolbar on every press, a slideshow needs
+//! only pictures, and the size a person chose for text or the fit they chose
+//! for a photograph carries over to the next of its kind. A person who wants
+//! to see everything opens the folder.
+//!
 //! Nothing here touches the window: it is a list of paths and a place in it.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use bingux_files::mime::{self, Category};
@@ -16,21 +27,40 @@ use bingux_ui::preview::{Step, neighbour};
 /// The most files one list holds: a folder of a million pictures is not read whole.
 const LIMIT: usize = 20_000;
 
-/// What a file is for the purpose of choosing its neighbours.
+/// The camera RAW extensions: the preview helper shows the picture inside.
+const RAW: [&str; 12] = ["cr2", "cr3", "crw", "nef", "nrw", "arw", "dng", "orf", "rw2", "raf", "pef", "srw"];
+
+/// What a file is for the purpose of choosing its neighbours: the kind of
+/// viewer its name asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Family {
     Picture,
+    /// PDF.
     Document,
-    /// Everything else the preview can show: text, code, archives, songs and films.
-    Other(Category),
+    /// Text, markup, data and source code.
+    Text,
+    Archive,
+    /// Songs and films.
+    Media,
+    Font,
+    /// Nothing shows this by its name: it has no neighbours, and a folder
+    /// listing leaves it out.
+    Other,
 }
 
 /// The family of the file called `name`.
 pub fn family_of(name: &str) -> Family {
-    match mime::for_name(name).category {
+    let kind = mime::for_name(name);
+    let extension = name.rsplit_once('.').map(|(_, extension)| extension.to_ascii_lowercase());
+    match kind.category {
         Category::Image => Family::Picture,
-        Category::Document => Family::Document,
-        other => Family::Other(other),
+        Category::Document if kind.mime == "application/pdf" => Family::Document,
+        Category::Text | Category::Code => Family::Text,
+        Category::Archive => Family::Archive,
+        Category::Audio | Category::Video => Family::Media,
+        _ if kind.mime.starts_with("font/") => Family::Font,
+        _ if extension.is_some_and(|extension| RAW.contains(&extension.as_str())) => Family::Picture,
+        _ => Family::Other,
     }
 }
 
@@ -39,6 +69,8 @@ pub fn family_of(name: &str) -> Family {
 pub struct Playlist {
     files: Vec<PathBuf>,
     index: usize,
+    /// Which of the files are folders, known when the list was made.
+    folders: BTreeSet<PathBuf>,
 }
 
 impl Playlist {
@@ -47,52 +79,67 @@ impl Playlist {
         Self::default()
     }
 
-    /// The list for a launch: one file is shown among its neighbours; a folder
-    /// is its pictures and documents; several are themselves.
+    /// The list for a launch: one file is shown among its neighbours of its
+    /// family; one folder is its previewable files (or the folder itself when
+    /// it has none); several paths are themselves.
     pub fn of_launch(paths: &[PathBuf]) -> Self {
         match paths {
             [] => Self::empty(),
             [one] if one.is_dir() => {
-                let files = readable_in(one);
-                Playlist { files, index: 0 }
+                let files = previewable_in(one);
+                if files.is_empty() {
+                    Self::of(vec![one.clone()], BTreeSet::from([one.clone()]))
+                } else {
+                    Self::of(files, BTreeSet::new())
+                }
             }
             [one] => Self::beside(one),
             many => {
                 let mut files = Vec::new();
+                let mut folders = BTreeSet::new();
                 for path in many {
                     if path.is_dir() {
-                        files.extend(readable_in(path));
+                        folders.insert(path.clone());
+                        files.push(path.clone());
                     } else if path.is_file() {
                         files.push(path.clone());
                     }
                 }
                 files.dedup();
                 files.truncate(LIMIT);
-                Playlist { files, index: 0 }
+                Self::of(files, folders)
             }
         }
     }
 
-    /// `file`, with the files of its folder that are of its kind around it.
+    fn of(files: Vec<PathBuf>, folders: BTreeSet<PathBuf>) -> Self {
+        Playlist { files, index: 0, folders }
+    }
+
+    /// `file`, with the files of its folder that are of its family around it.
     pub fn beside(file: &Path) -> Self {
-        let family = file
-            .file_name()
-            .map(|name| family_of(&name.to_string_lossy()));
+        let family = file.file_name().map(|name| family_of(&name.to_string_lossy()));
         let mut files = match (file.parent(), family) {
+            // A file no viewer is named for has no neighbours.
+            (_, Some(Family::Other) | None) | (None, _) => vec![file.to_owned()],
             (Some(folder), Some(family)) => {
                 let mut found = list_folder(folder, |name| family_of(name) == family);
-                // A file the type database does not place is still opened, alone.
+                // A file the folder listing missed (a link, a name that sorts oddly) is still opened.
                 if !found.iter().any(|path| path == file) {
                     found.push(file.to_owned());
                     sort_like_files(&mut found);
                 }
                 found
             }
-            _ => vec![file.to_owned()],
         };
         files.truncate(LIMIT);
         let index = files.iter().position(|path| path == file).unwrap_or(0);
-        Playlist { files, index }
+        Playlist { files, index, folders: BTreeSet::new() }
+    }
+
+    /// Whether `path` is a folder this list was made with.
+    pub fn is_folder(&self, path: &Path) -> bool {
+        self.folders.contains(path)
     }
 
     pub fn current(&self) -> Option<&Path> {
@@ -244,11 +291,9 @@ fn sort_like_files(files: &mut [PathBuf]) {
     });
 }
 
-/// The pictures and documents in a folder.
-fn readable_in(folder: &Path) -> Vec<PathBuf> {
-    list_folder(folder, |name| {
-        matches!(family_of(name), Family::Picture | Family::Document)
-    })
+/// The files in a folder that a viewer is named for, of every family.
+fn previewable_in(folder: &Path) -> Vec<PathBuf> {
+    list_folder(folder, |name| family_of(name) != Family::Other)
 }
 
 #[cfg(test)]
@@ -347,10 +392,11 @@ mod tests {
 
     #[test]
     fn a_launch_with_a_folder_or_several_files_is_those_files() {
-        let dir = folder(&["a.png", "b.pdf", "c.txt"]);
+        let dir = folder(&["a.png", "b.pdf", "c.txt", "d.bin7", ".hidden.png"]);
         assert_eq!(
             names(&Playlist::of_launch(std::slice::from_ref(&dir))),
-            ["a.png", "b.pdf"]
+            ["a.png", "b.pdf", "c.txt"],
+            "every family a viewer is named for, none of the rest"
         );
         let several = Playlist::of_launch(&[
             dir.join("c.txt"),
@@ -363,6 +409,43 @@ mod tests {
             "in the order given; a missing file is left out"
         );
         assert!(Playlist::of_launch(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_folder_with_nothing_to_show_is_shown_itself() {
+        let dir = folder(&["d.bin7"]);
+        let list = Playlist::of_launch(std::slice::from_ref(&dir));
+        assert_eq!(list.current(), Some(dir.as_path()));
+        assert!(list.is_folder(&dir));
+        assert_eq!(list.position(), None);
+    }
+
+    #[test]
+    fn folders_among_several_paths_stay_folders() {
+        let dir = folder(&["a.png"]);
+        let other = folder(&["b.png"]);
+        let list = Playlist::of_launch(&[other.clone(), dir.join("a.png")]);
+        assert_eq!(list.len(), 2);
+        assert!(list.is_folder(&other));
+        assert!(!list.is_folder(&dir.join("a.png")));
+    }
+
+    #[test]
+    fn a_source_steps_through_the_sources_beside_it_and_a_font_through_fonts() {
+        let dir = folder(&["a.rs", "b.md", "c.png", "d.ttf", "e.otf", "f.zip", "g.zip", "h.mp3"]);
+        assert_eq!(names(&Playlist::beside(&dir.join("b.md"))), ["a.rs", "b.md"]);
+        assert_eq!(names(&Playlist::beside(&dir.join("e.otf"))), ["d.ttf", "e.otf"]);
+        assert_eq!(names(&Playlist::beside(&dir.join("g.zip"))), ["f.zip", "g.zip"]);
+        assert_eq!(names(&Playlist::beside(&dir.join("h.mp3"))), ["h.mp3"]);
+    }
+
+    #[test]
+    fn camera_files_are_pictures_and_other_documents_have_no_neighbours() {
+        assert_eq!(family_of("IMG_0001.CR2"), Family::Picture);
+        assert_eq!(family_of("report.pdf"), Family::Document);
+        assert_eq!(family_of("letter.docx"), Family::Other);
+        assert_eq!(family_of("Makefile"), Family::Text);
+        assert_eq!(family_of("mystery.zzzz"), Family::Other);
     }
 
     #[test]

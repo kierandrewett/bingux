@@ -26,7 +26,7 @@ publishes.
 | `bingux-settings` | The Settings app                                                                            |
 | `bingux-files`    | The Files app                                                                               |
 | `bingux-weather`  | The Weather app                                                                             |
-| `bingux-preview`  | The Preview app (pictures and PDF documents)                                                |
+| `bingux-preview`  | The Preview app (pictures, documents, text, archives, fonts, media)                         |
 | `bingux-calendar` | The Calendar app                                                                            |
 | `bingux-taxonomy` | The Taxonomy app (a reference window for the UI library, a development tool)                |
 
