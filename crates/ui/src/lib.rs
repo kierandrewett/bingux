@@ -60,6 +60,11 @@ pub mod typography;
 mod warm;
 pub mod window;
 
+// Drag and drop between windows and with other programs, and the typed
+// clipboard. Not in the prelude: `Clipboard` would clash with Freya's.
+pub mod clipboard;
+pub mod dnd;
+
 /// Everything an application window normally needs.
 pub mod prelude {
     pub use crate::about::{AppInfo, app_menu};

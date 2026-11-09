@@ -39,11 +39,21 @@ bingux-preview-core = { path = "../preview-core" }
 # The search engine behind bingux_ui::search (documents, index, OpenSearch-shaped
 # responses; no UI of its own).
 bingux-search = { path = "../search" }
-
-[dev-dependencies]
-# A test's clipboard is memory (`controls::select_text::test_clipboard`): the
-# system's belongs to the person at the desk. The version Freya's clipboard uses.
+# Drag and drop and the typed clipboard (`dnd`, `clipboard`): the task that
+# hears a window's drag events, and the channels to the Wayland thread.
+futures-channel = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# The trait of Freya's clipboard, which `clipboard` implements to route Freya's
+# text fields through the typed clipboard; a test's clipboard is memory
+# (`controls::select_text::test_clipboard`). The version Freya's clipboard uses.
 copypasta = "0.10"
+
+# wl_data_device and the primary selection beside winit, on winit's own
+# connection (`dnd::wayland`). The versions smithay-clipboard, under Freya's
+# clipboard, already brings in.
+[target.'cfg(target_os = "linux")'.dependencies]
+sctk = { package = "smithay-client-toolkit", version = "0.20", default-features = false, features = ["calloop"] }
+wayland-backend = { version = "0.3", features = ["client_system"] }
 
 # Desktop scroll feel; see ../../vendor/README.md.
 [patch.crates-io]

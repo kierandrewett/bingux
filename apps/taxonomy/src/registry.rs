@@ -6,6 +6,7 @@
 //! and `coverage-allowlist.txt` does not excuse. To add an entry, see "Add a
 //! taxonomy entry" in `docs/bingux-ui.md`.
 
+use crate::demos::transfer;
 use crate::demos::{
     buttons, containers, data, feedback, files, foundations, icon_set, inputs, inspector,
     navigation,
@@ -1630,5 +1631,54 @@ pub static ENTRIES: &[Entry] = &[
         doc: "inspector",
         covers: &[],
         body: Body::States(inspector::TOOLS),
+    },
+    // ---- Data: drag and drop and the clipboard (UiDnd) --------------------
+    Entry {
+        name: "Drag and drop",
+        category: Category::Data,
+        page: "Drag and drop",
+        api: "drop_target(view).accepts([Format::Uris, Format::Image, Format::Text]).actions(DragActions::COPY_MOVE).preferred(|DragInfo| DragAction).accept_if(|DragInfo| bool).spring_loaded(SPRING_DELAY, |DragInfo| ..).on_drop(|Dropped { data: Received, position, action }| ..).highlight(bool); use_drop_target(DropTarget::new()..) -> DropHandle (.over(), .is_targeted(), .track(rect), .set_area(area)) for a view that draws its own; drag_source(view, |_| Payload).actions(..).image(DragImage::Snapshot | Area(a) | None).on_end(|DragEnd| ..); use_drag() -> Dragger (.start(DragRequest::new(payload, pointer).area(a).actions(..).touch(bool).on_end(f)) -> bool, .moved(at), .released(at), .cancel()); DRAG_SLOP",
+        doc: "drag-and-drop",
+        covers: &[
+            "DropTarget",
+            "drop_target",
+            "DropHandle",
+            "use_drop_target",
+            "DragSource",
+            "drag_source",
+            "Dragger",
+            "use_drag",
+            "DragRequest",
+            "DragImage",
+            "DragAction",
+            "DragActions",
+            "DragInfo",
+            "Dropped",
+            "DragEnd",
+            "DRAG_SLOP",
+            "SPRING_DELAY",
+        ],
+        body: Body::States(transfer::DRAG_AND_DROP),
+    },
+    Entry {
+        name: "Payloads and the clipboard",
+        category: Category::Data,
+        page: "Drag and drop",
+        api: "Payload::new().text(t).html(h).uris(list).image(mime, bytes).bytes(mime, bytes).lazy(mime, || bytes).local(value); Payload::files(paths); Payload::copied_files(paths, cut); Received::{mime, format, bytes, text, uris, files, is_cut, image, local::<T>, is_local}; Format::{Uris, Text, Html, Image, Mime(m)}.best_mime(offered); Clipboard::general() / primary() .write(payload) .write_text(t) .read(Format) -> Result<Received, ClipboardError> .read_async(Format) .read_text() .formats() .has(&Format) .mime_types() .clear(); file_uri(path), file_path(uri), uri_list(uris); URI_LIST, GNOME_COPIED_FILES, KDE_CUT_SELECTION, TEXT_TYPES, READ_TIMEOUT",
+        doc: "the-clipboard",
+        covers: &[
+            "Payload",
+            "Received",
+            "Format",
+            "Clipboard",
+            "ClipboardError",
+            "READ_TIMEOUT",
+            "uri_list",
+            "URI_LIST",
+            "GNOME_COPIED_FILES",
+            "KDE_CUT_SELECTION",
+            "TEXT_TYPES",
+        ],
+        body: Body::States(transfer::CLIPBOARD),
     },
 ];

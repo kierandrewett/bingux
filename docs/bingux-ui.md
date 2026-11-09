@@ -3745,3 +3745,150 @@ Environment variables for tests and screenshots:
 ### Form dialogs
 
 `open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).
+
+## Drag and drop
+
+`bingux_ui::dnd` moves data by dragging: inside a window, between windows of an
+app and between apps. One set of types covers all three, so a view takes a
+file from Files, from another window of its own app or from any other Wayland
+app in the same way.
+
+| Piece                                | What it is for                                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `drop_target(view)`                  | A view that takes drops. Draws an accent ring and tint while a drag it takes is over it              |
+| `use_drop_target(DropTarget::new())` | The same for a view that draws its own highlight (a list marks the row under the pointer)            |
+| `drag_source(view, \|_\| payload)`   | A view that can be dragged. Press, move past `DRAG_SLOP` (6 px) and the drag starts                  |
+| `use_drag()` / `Dragger::here()`     | Start a drag from a view with its own gesture (Files keeps its in-window drag and hands it over)     |
+| `Payload`                            | What a drag or a copy offers, in one or more MIME types; lazy parts are made only when someone drops |
+| `Received`                           | What a drop or a paste brought, read as text, URIs, files, a picture or bytes                        |
+| `Format`                             | A kind of data: `Uris`, `Text`, `Html`, `Image`, `Mime(type)`                                        |
+
+### A drop target
+
+```rust
+use bingux_ui::dnd::{drop_target, Dropped, Format, SPRING_DELAY};
+
+drop_target(status_page(Icon::Music, "No music").description("Drop music here."))
+    // Read as the first of these the drag offers.
+    .accepts([Format::Uris])
+    // Copy and Move unless set; Ask is settled before on_drop (see below).
+    .actions(DragActions::COPY_MOVE)
+    // Optional: take only some drags, from where the pointer is.
+    .accept_if(|info: DragInfo| info.formats.contains(&Format::Uris))
+    // Optional: open after a drag rests here (a folder, a tab, a sidebar place).
+    .spring_loaded(SPRING_DELAY, move |_| open_library())
+    .on_drop(move |dropped: Dropped| add_files(dropped.data.files()))
+```
+
+- **Which target.** The pointer picks the smallest enabled target under it
+  that takes one of the formats the drag offers and whose `accept_if` agrees.
+  A list can be one target and decide per row from `DragInfo::position`
+  (from the target's top-left).
+- **Which action.** Of the actions both sides allow, the target's `preferred`
+  callback chooses; without one, Copy, Move with Shift held, Copy with Ctrl
+  held. The compositor has the last word on Wayland, and `DragInfo::action`
+  is what a drop would do now (for a badge). `Dropped::action` is Copy or
+  Move: when a source asks the target to choose (Wayland's `ask`), bingux-ui
+  takes the target's preferred action.
+- **Spring loading.** `spring_loaded(delay, open)` runs `open` once a drag has
+  rested on the target for `delay` (`SPRING_DELAY` is 700 ms, Finder's medium).
+  Moving more than 6 px starts the count again.
+- **Highlight.** `drop_target` draws `Paint::AccentSoft` with a 2 px accent
+  ring. `.highlight(false)` turns it off; `use_drop_target` returns a
+  `DropHandle` whose `over()` (reactive) is the drag over it, to draw your own.
+  Give the handle the view's box with `.track(rect)` or `.set_area(area)`.
+
+### A drag source
+
+```rust
+use bingux_ui::dnd::{drag_source, DragActions, DragEnd, Payload};
+
+drag_source(track_row(&track), move |_| Payload::files([track.path.clone()]))
+    .actions(DragActions::COPY)
+    .on_end(|end: DragEnd| if let DragEnd::Dropped(DragAction::Move) = end { /* remove ours */ })
+```
+
+- The payload closure runs when the drag starts. Parts made with
+  `Payload::lazy(mime, f)` run `f` only when a target asks for that type.
+- The picture under the pointer is the view itself as drawn (faded to 85%),
+  held where it was pressed. `.image(DragImage::None)` leaves the plain cursor.
+- `on_end` says how it went: `Dropped(Copy | Move)` or `Cancelled`. After a
+  Move of anything but files the source removes its own copy. A file manager
+  that takes a move of files moves them itself, so a source of files does
+  nothing.
+- A view with its own gesture calls `Dragger::start(DragRequest::new(payload,
+press_point).area(box))` while the button is held. It returns `true` when
+  the system has the drag: the window then gets no pointer events until the
+  drag ends. Files keeps its own drag (chip, rows, sidebar and tabs) inside
+  the window and calls `start` when the pointer leaves the window, if
+  `Dragger::reaches_other_programs()`.
+
+### Payloads
+
+| Builder                               | Types offered                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `.text(t)`                            | `text/plain;charset=utf-8`, `text/plain`, `UTF8_STRING`, `TEXT`, `STRING`                        |
+| `.html(h)`                            | `text/html` (add `.text` for apps that take only text)                                           |
+| `.uris(list)`                         | `text/uri-list`                                                                                  |
+| `Payload::files(paths)`               | `text/uri-list` and the paths as text, one a line                                                |
+| `Payload::copied_files(paths, cut)`   | As `files`, plus `x-special/gnome-copied-files` and, for a cut, `application/x-kde-cutselection` |
+| `.image(mime, bytes)`, `.bytes(m, b)` | That type                                                                                        |
+| `.lazy(mime, \|\| bytes)`             | That type, made when asked for                                                                   |
+| `.local(value)`                       | Nothing outside the app: a drop in this app gets `value` from `Received::local::<T>()`           |
+
+`Received` reads what came: `text()`, `uris()`, `files()` (local `file:` URIs,
+percent-decoded), `is_cut()` for copied files, `image()`, `bytes()`, `mime()`.
+A drop from this app is handed over in memory (`is_local()`), with its
+`local` value; it never goes through a pipe.
+
+### How it works on Wayland
+
+winit 0.30 has no `wl_data_device` on Wayland, and Freya's clipboard is plain
+text. `dnd::wayland` adds the protocol without patching either: a thread of its
+own with its own event queue on winit's `wl_display` (the way `smithay-clipboard`
+works), with a `wl_data_device`, a primary selection device and its own pointer
+and keyboard objects, which it uses only to learn the serials a drag and a
+selection must quote. `WindowHost` registers each window's `wl_surface` with it,
+so drag events go to the window they are over. Data is written and read on
+threads of their own, and a drag's data is made on the UI thread when a target
+asks, so a drop on a window of the same app cannot deadlock.
+
+With no Wayland (a test, X11) and for touch, a drag stays in its window and
+reaches that window's targets.
+
+What the compositor needs: `wl_data_device_manager` (version 3 for actions),
+`wl_shm` and `wl_compositor` for the drag picture, and
+`zwp_primary_selection_device_manager_v1` for the primary selection (optional).
+
+### The clipboard
+
+`bingux_ui::clipboard::Clipboard` is the typed clipboard. Copy a `Payload`,
+paste the `Format` you want:
+
+```rust
+use bingux_ui::clipboard::Clipboard;
+use bingux_ui::dnd::{Format, Payload};
+
+Clipboard::general().write(Payload::new().html(html).text(plain));
+Clipboard::general().write(Payload::copied_files(&paths, true)); // Cut
+let files = Clipboard::general().read(Format::Uris).map(|data| data.files());
+let picture = Clipboard::general().read_async(Format::Image).await;
+Clipboard::primary().write_text(selected); // middle-click paste
+```
+
+| Call                              | What it does                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `general()` / `primary()`         | The clipboard of Copy and Paste, or the selection a middle click pastes        |
+| `write(payload)`, `write_text(t)` | Own the clipboard with every type of the payload, made now                     |
+| `read(format)`                    | Read it in that format; waits at most `READ_TIMEOUT` (1.5 s) for the other app |
+| `read_async(format)`              | The same on a worker thread, for a picture or anything large                   |
+| `read_text()`                     | Plain text or `None`                                                           |
+| `formats()`, `has(&format)`       | What is on it now: enable Paste from this                                      |
+| `clear()`                         | Give it up                                                                     |
+
+Once the Wayland connection is up, Freya's own clipboard calls (the text
+field's Copy, Cut and Paste, `freya::clipboard::Clipboard`) go through this
+clipboard too, so there is one clipboard per app. What the app copied is read
+back from memory. With no Wayland the general clipboard's text goes through
+Freya's clipboard (a test's memory clipboard included) and the other types,
+and the primary selection, stay in the app.

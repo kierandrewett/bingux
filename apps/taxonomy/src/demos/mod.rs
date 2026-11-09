@@ -12,3 +12,4 @@ pub mod icon_set;
 pub mod inputs;
 pub mod inspector;
 pub mod navigation;
+pub mod transfer;
