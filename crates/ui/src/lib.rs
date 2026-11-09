@@ -31,6 +31,7 @@ pub mod files;
 pub mod focus;
 pub mod format;
 pub mod group;
+pub mod i18n;
 pub mod icons;
 pub(crate) mod inspector;
 pub mod layers;

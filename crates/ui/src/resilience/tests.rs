@@ -238,12 +238,12 @@ fn assert_render_fault_is_recoverable(fault: Fault, marker: &'static str, retry_
 
     press(&mut shot, "Arm");
     // The window keeps rendering; the boundary shows its card in place of the part.
-    assert!(shows(&mut shot, "Demo ran into a problem"), "the boundary shows its card");
+    assert!(shows(&mut shot, "Could not show Demo"), "the boundary shows its card");
     assert!(shows(&mut shot, "Retry") && shows(&mut shot, "Copy details"));
     assert!(!shows(&mut shot, "Faulty content is fine"), "the failed content is gone");
     // Nothing outside the boundary was touched: it did not rerun, it kept its state.
     assert!(shows(&mut shot, "Sibling 1"), "the sibling kept its state");
-    assert!(!shows(&mut shot, "The app ran into a problem"), "the window's own card stays away");
+    assert!(!shows(&mut shot, "Could not show The app"), "the window's own card stays away");
     assert!(
         recorded(marker, FailureKind::Render) || fault != Fault::Render,
         "the failure is in the log"
@@ -273,7 +273,7 @@ fn assert_render_fault_is_recoverable(fault: Fault, marker: &'static str, retry_
         "Retry brings the content back: {:?}",
         texts(&mut shot)
     );
-    assert!(!shows(&mut shot, "Demo ran into a problem"));
+    assert!(!shows(&mut shot, "Could not show Demo"));
     assert_eq!(mounts(), 2, "Retry mounted a new scope, it did not reuse the failed one");
     assert!(shows(&mut shot, "Sibling 2"), "the sibling still has its state after Retry");
 }
@@ -300,10 +300,10 @@ fn a_retry_that_fails_again_shows_the_card_again() {
     let mut shot = start(Fault::Render, "render-again");
     BROKEN.with(|broken| broken.set(true));
     press(&mut shot, "Arm");
-    assert!(shows(&mut shot, "Demo ran into a problem"));
+    assert!(shows(&mut shot, "Could not show Demo"));
     // Still broken: Retry fails again, and the window is still here to try once more.
     press(&mut shot, "Retry");
-    assert!(shows(&mut shot, "Demo ran into a problem"));
+    assert!(shows(&mut shot, "Could not show Demo"));
     assert_eq!(mounts(), 2);
     BROKEN.with(|broken| broken.set(false));
     press(&mut shot, "Retry");
@@ -320,8 +320,8 @@ fn assert_non_render_fault_is_a_toast(fault: Fault, marker: &'static str, button
     shot.settle(Duration::from_millis(400));
     assert!(recorded(marker, kind), "the {kind:?} failure is in the log: {:?}", recent_errors());
     assert!(shows(&mut shot, "Faulty content is fine"), "the content stays: no card for a handler");
-    assert!(!shows(&mut shot, "Demo ran into a problem"));
-    assert!(shows(&mut shot, "Something went wrong"), "a toast tells the user: {:?}", texts(&mut shot));
+    assert!(!shows(&mut shot, "Could not show Demo"));
+    assert!(shows(&mut shot, "stopped working"), "a toast tells the user: {:?}", texts(&mut shot));
     // The window is alive and the siblings answer.
     press(&mut shot, "Count");
     assert!(shows(&mut shot, "Sibling 2"));
@@ -350,7 +350,7 @@ fn a_panic_in_an_effect_is_a_toast_and_the_effect_lives_on() {
     shot.settle(Duration::from_millis(400));
     assert!(recorded("effect-panic", FailureKind::Effect), "{:?}", recent_errors());
     assert!(shows(&mut shot, "Faulty content is fine"));
-    assert!(shows(&mut shot, "Something went wrong"), "{:?}", texts(&mut shot));
+    assert!(shows(&mut shot, "stopped working"), "{:?}", texts(&mut shot));
     press(&mut shot, "Count");
     assert!(shows(&mut shot, "Sibling 1"));
 }
@@ -383,13 +383,13 @@ fn a_panic_in_popup_content_is_an_error_card_in_the_popup() {
     press(&mut shot, "Open popup");
     shot.settle(Duration::from_millis(600));
     assert!(
-        shows(&mut shot, "Popup body ran into a problem"),
+        shows(&mut shot, "Could not show Popup body"),
         "the popup shows its card: {:?}",
         texts(&mut shot)
     );
     assert!(shows(&mut shot, "Sibling 0"), "the window behind the popup is still there");
     assert!(recorded("popup-panic", FailureKind::Render));
-    assert!(!shows(&mut shot, "The app ran into a problem"));
+    assert!(!shows(&mut shot, "Could not show The app"));
     // Retry works inside the popup once the body stops failing.
     BROKEN.with(|broken| broken.set(false));
     press(&mut shot, "Retry");
@@ -416,7 +416,7 @@ fn a_failure_with_no_boundary_of_its_own_reaches_the_window_boundary() {
     BROKEN.with(|broken| broken.set(true));
     let mut shot = Snapshot::new(|| Bare.into(), (420.0, 500.0));
     shot.settle(Duration::from_millis(300));
-    assert!(shows(&mut shot, "The app ran into a problem"), "{:?}", texts(&mut shot));
+    assert!(shows(&mut shot, "Could not show The app"), "{:?}", texts(&mut shot));
     BROKEN.with(|broken| broken.set(false));
     press(&mut shot, "Retry");
     assert!(shows(&mut shot, "Window content is fine"), "{:?}", texts(&mut shot));
@@ -438,7 +438,7 @@ fn a_root_that_fails_before_the_tokens_gets_the_plain_card() {
 
     let mut shot = Snapshot::new(|| NoTokens.into(), (420.0, 500.0));
     shot.settle(Duration::from_millis(300));
-    assert!(shows(&mut shot, "The app ran into a problem"), "{:?}", texts(&mut shot));
+    assert!(shows(&mut shot, "Could not show The app"), "{:?}", texts(&mut shot));
     assert!(shows(&mut shot, "Retry") && shows(&mut shot, "Copy details"));
     assert!(recent_errors().iter().any(|record| record.message.contains("SharedTokens")));
 }

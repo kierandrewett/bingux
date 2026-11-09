@@ -576,17 +576,17 @@ impl Component for TextField {
         let changes_text = !self.read_only;
         let copyable = has_text && !self.password;
         let edit_menu = vec![
-            edit_item("Cut", copyable && changes_text, move |_| {
+            edit_item(&crate::tr!("ui-edit-cut"), copyable && changes_text, move |_| {
                 command.set(Some(InputCommand::Cut))
             }),
-            edit_item("Copy", copyable, move |_| {
+            edit_item(&crate::tr!("ui-edit-copy"), copyable, move |_| {
                 command.set(Some(InputCommand::Copy));
             }),
-            edit_item("Paste", changes_text, move |_| {
+            edit_item(&crate::tr!("ui-edit-paste"), changes_text, move |_| {
                 command.set(Some(InputCommand::Paste));
             }),
             menu_separator(),
-            edit_item("Select all", has_text, move |_| {
+            edit_item(&crate::tr!("ui-edit-select-all"), has_text, move |_| {
                 command.set(Some(InputCommand::SelectAll));
             }),
         ];
@@ -879,21 +879,22 @@ impl Component for TextField {
                     .size(button)
                     .radius(nested)
                     .refocus(input_id)
-                    .tooltip("Clear"),
+                    .tooltip(&crate::tr!("ui-field-clear")),
                 );
             }
             if self.password {
-                let (icon, tip) = if revealed() {
-                    (Icon::ViewConceal, "Hide password")
+                let tip = if revealed() {
+                    crate::tr!("ui-field-hide-password")
                 } else {
-                    (Icon::ViewReveal, "Show password")
+                    crate::tr!("ui-field-show-password")
                 };
+                let icon = if revealed() { Icon::ViewConceal } else { Icon::ViewReveal };
                 trailing = trailing.child(
                     icon_button(icon, move |_| revealed.set(!revealed()))
                         .size(button)
                         .radius(nested)
                         .refocus(input_id)
-                        .tooltip(tip),
+                        .tooltip(&tip),
                 );
             }
             if let Some((icon, label, on_press)) = &self.action {
@@ -975,22 +976,22 @@ impl Component for TextField {
                 press_claimed(&press_core)
                     || overlays.is_some_and(|overlays| overlays.menu_owned_by(input_id))
             });
-        let cut = edit_item("Cut", copyable && changes_text, move |_| {
+        let cut = edit_item(&crate::tr!("ui-edit-cut"), copyable && changes_text, move |_| {
             command.set(Some(InputCommand::Cut));
             bar_open.set(false);
         });
-        let copy = edit_item("Copy", copyable, move |_| {
+        let copy = edit_item(&crate::tr!("ui-edit-copy"), copyable, move |_| {
             command.set(Some(InputCommand::Copy));
             bar_open.set(false);
         });
-        let paste = edit_item("Paste", changes_text, move |_| {
+        let paste = edit_item(&crate::tr!("ui-edit-paste"), changes_text, move |_| {
             command.set(Some(InputCommand::Paste));
             bar_open.set(false);
         });
-        let select = edit_item("Select", has_text, move |_| {
+        let select = edit_item(&crate::tr!("ui-edit-select"), has_text, move |_| {
             request.set(Some(InputRequest::SelectWordAtCursor));
         });
-        let select_all = edit_item("Select all", has_text, move |_| {
+        let select_all = edit_item(&crate::tr!("ui-edit-select-all"), has_text, move |_| {
             command.set(Some(InputCommand::SelectAll));
         });
         // Paste is offered only while the clipboard holds text. A selection shows

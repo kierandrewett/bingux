@@ -235,9 +235,9 @@ impl Component for HeaderBar {
     }
 }
 
-/// A small spinner with a "Working" tooltip, shown beside the header title.
+/// A small spinner with a "Working…" tooltip, shown beside the header title.
 fn busy_indicator() -> Element {
-    hover_tip(spinner(SpinnerSize::Small), "Working")
+    hover_tip(spinner(SpinnerSize::Small), crate::tr!("ui-window-busy"))
 }
 
 /// Provide this below a window that is only a picture of a window (the
@@ -259,7 +259,7 @@ impl Component for WindowControls {
             .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
             .child(WindowControl {
                 icon: Icon::WindowMinimize,
-                tooltip: "Minimise",
+                tooltip: crate::tr!("ui-window-minimise"),
                 danger: false,
                 action: Action::Minimize,
             })
@@ -269,13 +269,17 @@ impl Component for WindowControls {
                 } else {
                     Icon::WindowMaximize
                 },
-                tooltip: if maximized() { "Restore" } else { "Maximise" },
+                tooltip: if maximized() {
+                    crate::tr!("ui-window-restore")
+                } else {
+                    crate::tr!("ui-window-maximise")
+                },
                 danger: false,
                 action: Action::ToggleMaximize,
             })
             .child(WindowControl {
                 icon: Icon::WindowClose,
-                tooltip: "Close",
+                tooltip: crate::tr!("ui-window-close-button"),
                 danger: true,
                 action: Action::Close,
             })
@@ -292,7 +296,7 @@ enum Action {
 #[derive(PartialEq)]
 struct WindowControl {
     icon: Icon,
-    tooltip: &'static str,
+    tooltip: String,
     danger: bool,
     action: Action,
 }
@@ -325,7 +329,7 @@ impl Component for WindowControl {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(self.tooltip)
+            .a11y_alt(self.tooltip.clone())
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 event.stop_propagation();
                 pressing.set(true);

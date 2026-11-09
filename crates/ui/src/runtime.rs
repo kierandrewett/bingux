@@ -27,24 +27,11 @@ impl std::fmt::Display for CommandError {
 pub type CommandResult = Result<String, CommandError>;
 
 /// What a command does for the person using Settings, for error messages:
-/// "nmcli is not installed." means nothing to most people, "Network settings
-/// are not available." does. Programs not listed here use their own name.
+/// "nmcli is not installed." means nothing to most people, "Could not load
+/// network settings." does. Programs not listed in the catalogue's
+/// `ui-command-feature` use their own name.
 fn feature(program: &str) -> String {
-    match program {
-        "nmcli" => "Network settings",
-        "wpctl" => "Sound settings",
-        "bluetoothctl" => "Bluetooth settings",
-        "gsettings" => "Desktop settings",
-        "timedatectl" => "Date and time settings",
-        "upower" => "Battery information",
-        "powerprofilesctl" => "Power mode settings",
-        "gnoblinctl" => "Display and input settings",
-        "busctl" => "Account and display settings",
-        "bingux-config" => "Bingux settings",
-        "gio" => "Application settings",
-        other => other,
-    }
-    .to_string()
+    crate::tr!("ui-command-feature", program = program)
 }
 
 /// Run `program args` with a timeout and return trimmed stdout.
@@ -183,11 +170,10 @@ pub fn run_with_stdin(
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => CommandError(format!(
-                "{} are not available because a part they need is not installed.",
-                feature(program)
-            )),
-            _ => CommandError(format!("{} could not be started.", feature(program))),
+            std::io::ErrorKind::NotFound => {
+                CommandError(crate::tr!("ui-command-missing", feature = feature(program)))
+            }
+            _ => CommandError(crate::tr!("ui-command-not-started", feature = feature(program))),
         })?;
     if let (Some(data), Some(mut pipe)) = (stdin, child.stdin.take()) {
         use std::io::Write;
@@ -224,12 +210,14 @@ pub fn run_with_stdin(
             Ok(None) => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(CommandError(format!(
-                    "{} did not answer. Try again in a moment.",
-                    feature(program)
+                return Err(CommandError(crate::tr!(
+                    "ui-command-timeout",
+                    feature = feature(program)
                 )));
             }
-            Err(_) => return Err(CommandError(format!("{} failed.", feature(program)))),
+            Err(_) => {
+                return Err(CommandError(crate::tr!("ui-command-failed", feature = feature(program))));
+            }
         }
     };
     let stdout_bytes = out_reader.join().unwrap_or_default();
@@ -247,7 +235,7 @@ pub fn run_with_stdin(
         .unwrap_or("")
         .trim();
     Err(CommandError(if detail.is_empty() {
-        format!("{} failed.", feature(program))
+        crate::tr!("ui-command-failed", feature = feature(program))
     } else {
         // The tool's own sentence is the useful part; the program name is not.
         let detail = detail
@@ -256,7 +244,7 @@ pub fn run_with_stdin(
         let mut letters = detail.chars();
         match letters.next() {
             Some(first) => format!("{}{}", first.to_uppercase(), letters.as_str()),
-            None => format!("{} failed.", feature(program)),
+            None => crate::tr!("ui-command-failed", feature = feature(program)),
         }
     }))
 }

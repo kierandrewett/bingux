@@ -64,6 +64,14 @@ notify = { version = "8", default-features = false }
 # The decimal type of ICU4X (exact digits, rounding modes), the same version
 # `icu` uses.
 fixed_decimal = "0.7"
+# Localisation (bingux_ui::i18n): Project Fluent's runtime, parser and
+# language negotiation, Apache-2.0 OR MIT. The bundles are the thread-safe
+# kind (`concurrent`), so any thread can ask for a string.
+fluent-bundle = "0.16"
+fluent-syntax = "0.12"
+fluent-langneg = "0.13"
+intl-memoizer = "0.5"
+unic-langid = "0.9"
 
 # `location` only: the keyless lookups over HTTPS. The location portal uses the
 # `zbus` above (blocking, on a thread of its own).

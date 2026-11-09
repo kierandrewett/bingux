@@ -255,7 +255,7 @@ impl Component for FormField {
         // between words); the field shrinks to what is left, and a line that
         // cannot fit both stacks the title above the field, as on a phone.
         let optional_width = if self.optional {
-            text_width("Optional", CAPTION) + S2.px()
+            text_width(&crate::tr!("ui-form-optional"), CAPTION) + S2.px()
         } else {
             0.0
         };
@@ -322,7 +322,7 @@ impl Component for FormField {
             .child(search_highlight::label(BODY, &tokens, &self.title))
             .maybe_child(
                 self.optional
-                    .then(|| CAPTION.in_ink(Ink::Muted).label(&tokens, "Optional")),
+                    .then(|| CAPTION.in_ink(Ink::Muted).label(&tokens, crate::tr!("ui-form-optional"))),
             );
         let hint = self.hint.clone().map(caption);
         let input_line = rect()
@@ -426,7 +426,7 @@ fn error_line(tokens: &crate::theme::Tokens, message: String) -> Element {
 /// has. Values are in the monospace face and can be selected and copied.
 /// An empty value shows as a dash.
 pub fn live_state(rows: Vec<(String, String)>) -> Element {
-    Group::titled("Right now")
+    Group::titled(&crate::tr!("ui-form-live-state"))
         .rows(rows.into_iter().map(|(label, value)| {
             let value = if value.is_empty() {
                 "\u{2013}".to_string()
@@ -477,10 +477,10 @@ struct PendingBar {
 impl Component for PendingBar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
-        let note = BODY.paragraph(&tokens, "You have unsaved changes");
+        let note = BODY.paragraph(&tokens, crate::tr!("ui-form-unsaved"));
         let phone = is_compact();
-        let revert = action_button("Revert", self.on_revert.clone()).compact();
-        let apply = primary_button("Apply", self.on_apply.clone())
+        let revert = action_button(crate::tr!("ui-form-revert"), self.on_revert.clone()).compact();
+        let apply = primary_button(crate::tr!("ui-form-apply"), self.on_apply.clone())
             .compact()
             .enabled(self.valid);
         let buttons = rect()

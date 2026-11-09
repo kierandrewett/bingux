@@ -363,9 +363,15 @@ impl Blueprint {
             // A relaunch after an unrecoverable failure opens this location.
             crate::resilience::note_location(&crate::nav::use_location().to_string());
             crate::resilience::use_window_notices();
+            // A language switch (`i18n::set_locale`) mounts the content again,
+            // so every string is asked for again; the router above keeps the
+            // location.
+            let language = crate::i18n::use_language();
             // The last resort: whatever fails below and has no boundary of its
             // own fails into this one, as a full-window error card.
-            crate::resilience::window_boundary(boundary_name, root.clone()).into_element()
+            crate::resilience::window_boundary(boundary_name, root.clone())
+                .key(language)
+                .into_element()
         })
         .with_title(self.title)
         .with_app_id(self.app_id.clone())

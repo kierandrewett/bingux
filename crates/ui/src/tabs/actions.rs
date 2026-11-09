@@ -124,10 +124,10 @@ impl<P: TabContent> Tabs<P> {
         match (self.guard)() {
             Some(warning) => self.overlays.show_dialog(
                 dialog(warning.title, warning.message)
-                    .cancel("Keep open")
+                    .cancel(crate::tr!("ui-window-keep-open"))
                     .default_action(CANCEL_ID)
                     .icon(DialogIcon::Warning)
-                    .response("Close window", ResponseKind::Destructive, move |_: ()| {
+                    .response(crate::tr!("ui-window-close"), ResponseKind::Destructive, move |_: ()| {
                         window.close()
                     }),
             ),

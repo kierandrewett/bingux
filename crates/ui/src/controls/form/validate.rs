@@ -1,7 +1,8 @@
 //! Validators for [`FormField::validate`](super::FormField::validate).
 //!
 //! Each one is a pure `fn(&str) -> Result<(), String>`: the error is a
-//! sentence a person can act on, not a parse error. The text is checked as
+//! sentence a person can act on, not a parse error, in the person's language
+//! (`ui-validate-*` in bingux-ui's catalogue). The text is checked as
 //! typed, so a validator never trims: stray spaces are part of what the
 //! person sees rejected, except in the list validators, whose separators
 //! are spaces and commas.
@@ -22,8 +23,8 @@ use std::str::FromStr;
 /// What every validator returns.
 pub type Check = Result<(), String>;
 
-fn fail(message: &str) -> Check {
-    Err(message.to_string())
+fn fail(message: String) -> Check {
+    Err(message)
 }
 
 /// A dotted IPv4 address, such as `192.168.1.10`. Leading zeros are refused,
@@ -31,7 +32,7 @@ fn fail(message: &str) -> Check {
 pub fn ipv4(text: &str) -> Check {
     Ipv4Addr::from_str(text)
         .map(|_| ())
-        .or_else(|_| fail("Enter an IPv4 address such as 192.168.1.10."))
+        .or_else(|_| fail(crate::tr!("ui-validate-ipv4")))
 }
 
 /// An IPv6 address, such as `2001:db8::1`, `::1` or `::ffff:1.2.3.4`. A zone
@@ -39,14 +40,14 @@ pub fn ipv4(text: &str) -> Check {
 pub fn ipv6(text: &str) -> Check {
     Ipv6Addr::from_str(text)
         .map(|_| ())
-        .or_else(|_| fail("Enter an IPv6 address such as 2001:db8::1."))
+        .or_else(|_| fail(crate::tr!("ui-validate-ipv6")))
 }
 
 /// An IPv4 or an IPv6 address.
 pub fn ip(text: &str) -> Check {
     IpAddr::from_str(text)
         .map(|_| ())
-        .or_else(|_| fail("Enter an IP address such as 192.168.1.10 or 2001:db8::1."))
+        .or_else(|_| fail(crate::tr!("ui-validate-ip")))
 }
 
 /// A prefix length written as digits only, within `0..=max`.
@@ -65,7 +66,7 @@ pub fn ipv4_cidr(text: &str) -> Check {
     if valid {
         Ok(())
     } else {
-        fail("Enter an address and prefix length such as 192.168.1.10/24 (0 to 32).")
+        fail(crate::tr!("ui-validate-ipv4-cidr"))
     }
 }
 
@@ -77,7 +78,7 @@ pub fn ipv6_cidr(text: &str) -> Check {
     if valid {
         Ok(())
     } else {
-        fail("Enter an address and prefix length such as 2001:db8::1/64 (0 to 128).")
+        fail(crate::tr!("ui-validate-ipv6-cidr"))
     }
 }
 
@@ -87,12 +88,12 @@ pub fn ip_list(text: &str) -> Check {
     let mut count = 0;
     for item in text.split([',', ' ', '\t']).filter(|item| !item.is_empty()) {
         if IpAddr::from_str(item).is_err() {
-            return Err(format!("\u{201c}{item}\u{201d} is not an IP address."));
+            return Err(crate::tr!("ui-validate-ip-list-item", item = item));
         }
         count += 1;
     }
     if count == 0 {
-        return fail("Enter one or more IP addresses, separated by commas.");
+        return fail(crate::tr!("ui-validate-ip-list"));
     }
     Ok(())
 }
@@ -100,7 +101,7 @@ pub fn ip_list(text: &str) -> Check {
 /// A netmask such as `255.255.255.0` (ones, then zeros), or a prefix length
 /// such as `24` or `/24`.
 pub fn ipv4_netmask_or_prefix(text: &str) -> Check {
-    let message = "Enter a prefix length such as 24, or a netmask such as 255.255.255.0.";
+    let message = || crate::tr!("ui-validate-netmask-or-prefix");
     let digits = text.strip_prefix('/').unwrap_or(text);
     if prefix(digits, 32).is_some() {
         return Ok(());
@@ -113,10 +114,10 @@ pub fn ipv4_netmask_or_prefix(text: &str) -> Check {
             if bits.leading_ones() + bits.trailing_zeros() == 32 {
                 Ok(())
             } else {
-                fail("A netmask has ones and then zeros, such as 255.255.255.0.")
+                fail(crate::tr!("ui-validate-netmask"))
             }
         }
-        Err(_) => fail(message),
+        Err(_) => fail(message()),
     }
 }
 
@@ -132,13 +133,13 @@ pub fn mac(text: &str) -> Check {
     if valid {
         Ok(())
     } else {
-        fail("Enter a MAC address such as 00:1A:2B:3C:4D:5E.")
+        fail(crate::tr!("ui-validate-mac"))
     }
 }
 
 /// A TCP or UDP port, 1 to 65535.
 pub fn port(text: &str) -> Check {
-    integer_in(1..=65535)(text).or_else(|_| fail("Enter a port number from 1 to 65535."))
+    integer_in(1..=65535)(text).or_else(|_| fail(crate::tr!("ui-validate-port")))
 }
 
 /// A whole number within `range`, written in digits with an optional minus.
@@ -149,10 +150,10 @@ pub fn integer_in(range: RangeInclusive<i64>) -> impl Fn(&str) -> Check + 'stati
         let shaped = !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit());
         match text.parse::<i64>() {
             Ok(number) if shaped && range.contains(&number) => Ok(()),
-            _ => Err(format!(
-                "Enter a whole number from {} to {}.",
-                range.start(),
-                range.end()
+            _ => Err(crate::tr!(
+                "ui-validate-integer",
+                least = *range.start(),
+                most = *range.end()
             )),
         }
     }
@@ -164,10 +165,10 @@ pub fn hostname_or_ip(text: &str) -> Check {
     if ip(text).is_ok() {
         return Ok(());
     }
-    let message = "Enter a host name such as vpn.example.com, or an IP address.";
+    let message = || crate::tr!("ui-validate-host");
     let name = text.strip_suffix('.').unwrap_or(text);
     if name.is_empty() || name.len() > 253 {
-        return fail(message);
+        return fail(message());
     }
     let labels: Vec<&str> = name.split('.').collect();
     let labels_ok = labels.iter().all(|label| {
@@ -188,16 +189,16 @@ pub fn hostname_or_ip(text: &str) -> Check {
     if labels_ok && !numeric_tail {
         Ok(())
     } else {
-        fail(message)
+        fail(message())
     }
 }
 
 /// An absolute URL: `scheme://host[:port][/path]`, such as
 /// `http://wpad.example.com/proxy.pac`. A `file:` URL may have no host.
 pub fn url(text: &str) -> Check {
-    let message = "Enter a full address such as http://example.com/proxy.pac.";
+    let message = || crate::tr!("ui-validate-url");
     let Some((scheme, rest)) = text.split_once("://") else {
-        return fail(message);
+        return fail(message());
     };
     let scheme_ok = scheme
         .chars()
@@ -207,7 +208,7 @@ pub fn url(text: &str) -> Check {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
     if !scheme_ok || text.chars().any(|c| c.is_whitespace() || c.is_control()) {
-        return fail(message);
+        return fail(message());
     }
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..authority_end];
@@ -215,7 +216,7 @@ pub fn url(text: &str) -> Check {
         return if scheme.eq_ignore_ascii_case("file") {
             Ok(())
         } else {
-            fail(message)
+            fail(message())
         };
     }
     let host_port = authority
@@ -227,7 +228,7 @@ pub fn url(text: &str) -> Check {
                 format!("[{address}]"),
                 tail.strip_prefix(':').or(tail.is_empty().then_some("")),
             ),
-            None => return fail(message),
+            None => return fail(message()),
         }
     } else {
         match host_port.rsplit_once(':') {
@@ -247,17 +248,16 @@ pub fn url(text: &str) -> Check {
     if host_ok && port_ok {
         Ok(())
     } else {
-        fail(message)
+        fail(message())
     }
 }
 
 /// A WireGuard key: 32 bytes in base64, 44 characters ending in `=`.
 pub fn wireguard_key(text: &str) -> Check {
-    const MESSAGE: &str =
-        "A WireGuard key is 44 characters of letters, digits, + and /, ending in =.";
+    let message = || crate::tr!("ui-validate-wireguard-key");
     let bytes = text.as_bytes();
     if bytes.len() != 44 || bytes[43] != b'=' {
-        return fail(MESSAGE);
+        return fail(message());
     }
     let mut last = 0;
     for byte in &bytes[..43] {
@@ -267,13 +267,13 @@ pub fn wireguard_key(text: &str) -> Check {
             b'0'..=b'9' => byte - b'0' + 52,
             b'+' => 62,
             b'/' => 63,
-            _ => return fail(MESSAGE),
+            _ => return fail(message()),
         };
     }
     // 43 symbols are 258 bits for 256 of data: the last two must be zero,
     // or the key does not decode to exactly 32 bytes.
     if last & 0b11 != 0 {
-        return fail(MESSAGE);
+        return fail(message());
     }
     Ok(())
 }
@@ -281,12 +281,9 @@ pub fn wireguard_key(text: &str) -> Check {
 /// A Wi-Fi network name: 1 to 32 bytes.
 pub fn ssid(text: &str) -> Check {
     if text.is_empty() {
-        fail("Enter the network name.")
+        fail(crate::tr!("ui-validate-ssid-empty"))
     } else if text.len() > 32 {
-        Err(format!(
-            "A network name is at most 32 bytes; this one is {}.",
-            text.len()
-        ))
+        Err(crate::tr!("ui-validate-ssid-long", bytes = text.len()))
     } else {
         Ok(())
     }
@@ -300,17 +297,17 @@ pub fn wpa_passphrase(text: &str) -> Check {
         return if text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
             Ok(())
         } else {
-            fail("A 64-character key may only use the digits 0 to 9 and the letters A to F.")
+            fail(crate::tr!("ui-validate-wpa-hex"))
         };
     }
     if length < 8 {
-        return fail("The password needs at least 8 characters.");
+        return fail(crate::tr!("ui-validate-wpa-short"));
     }
     if length > 63 {
-        return fail("The password is at most 63 characters, or 64 for a hexadecimal key.");
+        return fail(crate::tr!("ui-validate-wpa-long"));
     }
     if !text.bytes().all(|byte| (0x20..=0x7e).contains(&byte)) {
-        return fail("Use only letters, digits, spaces and punctuation without accents.");
+        return fail(crate::tr!("ui-validate-wpa-characters"));
     }
     Ok(())
 }
