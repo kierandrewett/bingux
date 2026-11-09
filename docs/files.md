@@ -196,11 +196,12 @@ so a folder looks the same wherever it shows.
   data (JSON, YAML, TOML), markup (HTML, Markdown, XML), spreadsheet,
   presentation, PDF, document, e-book, image, audio, video, archive, disk image,
   program or script, font, 3D model, database, certificate or key, torrent, and
-  a page with a question mark when the type is unknown. The colours follow the
-  theme: lighter pages with a deep tone of the family's hue for the ink in the
-  dark scheme, deeper pages with white ink in the light one (the yellows stay
-  light and saturated and keep a deep ink; every page has a darker rim of its
-  own colour that holds its edge on any background).
+  a page with a question mark when the type is unknown. A family is one colour
+  in both schemes: a deep page with white ink in the light scheme, and the same
+  colour made only as much lighter as it needs to stand out against the dark
+  list in the dark one, so a PDF is red and a spreadsheet green on both (the
+  yellows stay light and saturated and keep a deep ink; every page has a darker
+  rim of its own colour that holds its edge on a light background).
 - Every **folder** icon, the plain folder, the user folders and the Trash,
   is in the **accent colour** of the system, resting, selected or hidden. A
   folder is the app icon's folder: a tab and a back in the accent darkened, a

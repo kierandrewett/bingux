@@ -30,24 +30,27 @@
 //!   paler lift of it on the light one; the back, the tab, a bin's lid, are the
 //!   body under the shade. The glyph is a deep tone of the accent's hue, set into
 //!   the panel.
-//! - A **file** has one hue per family ([`ColourIcon::hue`]) at a lightness
-//!   tuned for the scheme (a light page with a deep ink on the dark scheme, a
-//!   deeper page with white ink on the light one, except the yellows, which stay
-//!   light and saturated on it and keep a deep ink: a body darkened until it
-//!   stands off white at 3:1 turns olive and brown, so the page's silhouette is
-//!   held by its **rim** instead).
+//! - A **file** has one hue per family ([`ColourIcon::hue`]): a deep page with
+//!   white ink on the light scheme, except the yellows, which stay light and
+//!   saturated on it and keep a deep ink (a body darkened until it stands off
+//!   white at 3:1 turns olive and brown, so the page's silhouette is held by its
+//!   **rim** instead). The dark scheme draws the same colour, raised in
+//!   lightness only as far as it needs to stand 3:1 off the list background
+//!   ([`dark_page`]): a PDF is the same red in both schemes, not a pale page.
 //!
 //! A page has a rim ([`RIM`]): black at 26% over the page along its whole
 //! silhouette, one pixel wide inside it (three on the 128 vector). The body only
 //! has to stand apart from a ground by [`PAGE_BODY`]; the rim is the edge.
 //!
-//! The body is moved along lightness until every edge of the picture shows on
-//! every surface a row is drawn on (the layers, and each of them under the hover
-//! and selection layers), per [`edges`] and [`edge_limits`]: a page's rim, over
-//! the body and over its foot, at 3:1 and over its top, under the sheen, at 2:1; a
-//! folder's panel at 2.2:1, its top and its back at 1.5:1 (the pale panel holds
-//! the folder's silhouette). The ink reads 4.5:1 where a glyph sits
-//! ([`glyph_grounds`]). The same tone is drawn whether the row is selected or not.
+//! On the light scheme the body is moved along lightness until every edge of
+//! the picture shows on every surface a row is drawn on (the layers, and each of
+//! them under the hover and selection layers), per [`edges`] and
+//! [`edge_limits`]: a page's rim, over the body and over its foot, at 3:1 and
+//! over its top, under the sheen, at 2:1; a folder's panel at 2.2:1, its top and
+//! its back at 1.5:1 (the pale panel holds the folder's silhouette). On the dark
+//! scheme a folder follows the same rule and a page the one of [`dark_page`]. The
+//! ink reads 4.5:1 where a glyph sits ([`glyph_grounds`]). The same tone is drawn
+//! whether the row is selected or not.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -55,7 +58,7 @@ use std::sync::{LazyLock, Mutex};
 use freya::prelude::*;
 
 use crate::contrast::{
-    AA_LARGE, AA_TEXT, Oklch, composite, ensure_contrast, on_colour_over, worst_ratio,
+    AA_LARGE, AA_TEXT, Oklch, composite, ensure_contrast, on_colour_over, ratio, worst_ratio,
 };
 use crate::theme::Tokens;
 
@@ -299,9 +302,9 @@ pub struct Tone {
     pub ink: Color,
 }
 
-/// OKLab lightness of a file page, on the dark and the light scheme.
-const PAGE_L_DARK: f32 = 0.76;
-const PAGE_L_LIGHT: f32 = 0.52;
+/// OKLab lightness a file page starts from: the light scheme's, which the dark
+/// scheme raises (see [`dark_page`]).
+const PAGE_L: f32 = 0.52;
 /// The yellows and the yellow greens (OKLCH hue 70 to 128) look brown and
 /// muddy at the light scheme's deep lightness: their page starts this much
 /// lighter there, and this much more saturated (a light yellow at the family's
@@ -503,29 +506,57 @@ fn unlifted(shown: Color) -> Color {
     body(high).to_colour()
 }
 
+/// The page of the dark scheme: the light scheme's colour (`start`), raised in
+/// lightness until it stands [`AA_LARGE`] off the list background, apart from
+/// every other ground by [`PAGE_BODY`], and its ink reads where a glyph sits.
+/// The hue and chroma stay the light scheme's, so a family is one colour in both.
+fn dark_page(start: Oklch, tokens: &Tokens, grounds: &[Color]) -> Color {
+    let mut at = start;
+    for _ in 0..60 {
+        let colour = at.to_colour();
+        if ratio(colour, tokens.bg) >= AA_LARGE
+            && worst_ratio(colour, grounds) >= PAGE_BODY
+            && worst_ratio(ink_for(colour, false), &glyph_grounds(colour, false)) >= AA_TEXT
+        {
+            return colour;
+        }
+        at.l = (at.l + 0.01).min(1.0);
+    }
+    at.to_colour()
+}
+
 fn derive(icon: ColourIcon, tokens: &Tokens) -> Tone {
     let grounds = grounds(tokens);
     let dark = tokens.scheme.is_dark();
-    let start = match icon.hue() {
+    let body = match icon.hue() {
         Some((hue, chroma)) => {
-            let (l, c) = match dark {
-                true => (PAGE_L_DARK, chroma),
-                false if YELLOW_HUES.contains(&hue) => {
-                    (PAGE_L_LIGHT + YELLOW_LIGHT_BONUS, chroma * YELLOW_CHROMA)
+            let start = if YELLOW_HUES.contains(&hue) {
+                Oklch {
+                    l: PAGE_L + YELLOW_LIGHT_BONUS,
+                    c: chroma * YELLOW_CHROMA,
+                    h: hue,
                 }
-                false => (PAGE_L_LIGHT, chroma),
+            } else {
+                Oklch {
+                    l: PAGE_L,
+                    c: chroma,
+                    h: hue,
+                }
             };
-            Oklch { l, c, h: hue }.to_colour()
+            if dark {
+                dark_page(start, tokens, &grounds)
+            } else {
+                // A page's silhouette is held by its rim, not by its body, so the body is only
+                // moved as far as `shows` asks: a light yellow stays a light yellow.
+                settle(start.to_colour(), &grounds, false, false)
+            }
         }
         // The dark scheme's accent is already lifted towards white: the body is what lifting by
         // FACE_LIGHT turns into the accent, so the front panel shows the accent and the back is
         // its deeper self. The light scheme's accent is the body, and the panel the paler lift.
-        None if dark => unlifted(tokens.accent),
-        None => tokens.accent,
+        None if dark => settle(unlifted(tokens.accent), &grounds, true, true),
+        None => settle(tokens.accent, &grounds, true, false),
     };
-    // A page's silhouette is held by its rim, not by its body, so the body is only moved as far
-    // as `shows` asks: a light yellow stays a light yellow.
-    let body = settle(start, &grounds, icon.is_folder(), dark);
     Tone {
         body,
         ink: ink_for(body, icon.is_folder()),

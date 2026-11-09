@@ -1663,22 +1663,25 @@ draws the same picture at any scale.
   the file holds at every size and never its extension in letters (a pie for a
   presentation, a table for a spreadsheet, a drawer box for an archive, a rosette
   for a certificate, `</>` for source, a prompt for a program).
-  The page is OKLCH lightness 0.76 on the dark scheme (a deep ink of its own hue)
-  and 0.52 on the light one (white ink; the yellows, hue 70 to 128, start 0.28
-  lighter and 1.3 times as saturated there and take a deep ink: darkened to
-  stand off white at 3:1 they went olive and brown), at the family's hue and
-  chroma, with the sheen at the top (`LIT_TOP`) and a shade at the foot
-  (`DEEP_BOTTOM`, 10 %). Its silhouette is held by a **rim** (`RIM`, 26 % black
-  over the page, 1 px wide inside the outline, 3 px on the vector; the compiler
-  draws it as an outline stroke clipped to the page): the rim, not the body,
-  must stand off every ground, so a light body can keep its hue and the body
-  itself only has to stand apart by `PAGE_BODY` (1.4:1).
-  The body is moved along lightness until every edge of the picture shows on
-  every ground a row is drawn on (the five layers, and each under hover, press
-  and selection; `edges`, `edge_limits`): a page's rim over its body and over its
-  foot (under the shade) at 3:1 and over its top (under the sheen) at 2:1; a
-  folder's panel at 2.2:1, its top at 1.5:1 and its back at 1.5:1, since the pale
-  panel holds a folder's silhouette. The ink reads 4.5:1 under the share of sheen
+  The page starts at OKLCH lightness 0.52 (white ink; the yellows, hue 70 to
+  128, start 0.28 lighter and 1.3 times as saturated and take a deep ink:
+  darkened to stand off white at 3:1 they went olive and brown), at the
+  family's hue and chroma, with the sheen at the top (`LIT_TOP`) and a shade at
+  the foot (`DEEP_BOTTOM`, 10 %). Its silhouette on the light scheme is held by
+  a **rim** (`RIM`, 26 % black over the page, 1 px wide inside the outline, 3 px
+  on the vector; the compiler draws it as an outline stroke clipped to the
+  page): the rim, not the body, must stand off every ground, so a light body can
+  keep its hue and the body itself only has to stand apart by `PAGE_BODY`
+  (1.4:1). On the light scheme the body is moved along lightness until every
+  edge of the picture shows on every ground a row is drawn on (the five layers,
+  and each under hover, press and selection; `edges`, `edge_limits`): a page's
+  rim over its body and over its foot (under the shade) at 3:1 and over its top
+  (under the sheen) at 2:1. On the dark scheme a page is the same colour raised
+  in lightness only, until the body stands 3:1 off the list background
+  (`Paint::Bg`) and 1.4:1 off every other ground: a PDF is the light scheme's
+  red, not a pale grey page. A folder, in both schemes, needs its panel at
+  2.2:1, its top at 1.5:1 and its back at 1.5:1, since the pale panel holds a
+  folder's silhouette. The ink reads 4.5:1 under the share of sheen
   and shade a glyph sits in (`glyph_grounds`). `colour_tone(icon, &tokens)` gives
   the two colours (`Tone { body, ink }`); a test checks every family and every
   accent in both schemes, and that the yellow families are light and saturated

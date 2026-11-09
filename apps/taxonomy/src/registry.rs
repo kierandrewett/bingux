@@ -1464,7 +1464,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "File icon",
         category: Category::Files,
         page: "File icons",
-        api: "FileIcon::for_entry(&entry) / for_path(path, Kind) / for_name(name) / for_mime(mime) / for_kind(FileKind) / for_place(&place) / for_place_kind(kind) / for_mount(kind) / for_special(folder) / folder_at(path), .linked(bool), .hidden(bool); file_icon_view(&tokens, &spec, size, selected), file_icon_view_floating(&tokens, &spec, size); the colour set: ColourIcon::ALL / name() / family() / is_folder(), colour_icon_view(&tokens, icon, px), colour_tone(icon, &tokens) -> Tone { body, ink }, colour_grid(px) (a pixel grid, PIXEL_GRIDS, up to 40 px; the vector, VECTOR_GRID, above it)",
+        api: "FileIcon::for_entry(&entry) / for_path(path, Kind) / for_name(name) / for_mime(mime) / for_kind(FileKind) / for_place(&place) / for_place_kind(kind) / for_mount(kind) / for_special(folder) / folder_at(path), .linked(bool), .hidden(bool); file_icon_view(&tokens, &spec, size, selected), file_icon_view_floating(&tokens, &spec, size); the colour set: ColourIcon::ALL / name() / family() / is_folder(), colour_icon_view(&tokens, icon, px), colour_tone(icon, &tokens) -> Tone { body, ink } (a page is one hue per family in both schemes: the dark scheme draws the light colour, raised in lightness until it stands 3:1 off the list background; a folder is the accent), colour_grid(px) (a pixel grid, PIXEL_GRIDS, up to 40 px; the vector, VECTOR_GRID, above it)",
         doc: "file-icons",
         covers: &[
             "FileIcon",
