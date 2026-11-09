@@ -135,6 +135,27 @@ fn restore_tab(prefs: &Prefs, saved: &SavedTab, documents: Documents) -> Option<
     Some(DocTab { doc, shared })
 }
 
+/// Trims trailing spaces and adds the final newline that the document's
+/// settings, or the preferences, ask for, before its text is written.
+fn tidy_for_save(id: u64, prefs: &Prefs) {
+    let Some((handle, config)) = document::with(id, |doc| (doc.handle.clone(), doc.config.clone()))
+    else {
+        return;
+    };
+    let trim = config
+        .trim_trailing_whitespace
+        .unwrap_or(prefs.trim_on_save);
+    let final_newline = config.insert_final_newline.unwrap_or(prefs.final_newline);
+    handle.update(|editor| {
+        if trim {
+            editor.trim_trailing_whitespace();
+        }
+        if final_newline && editor.len_chars() > 0 {
+            editor.ensure_final_newline();
+        }
+    });
+}
+
 /// Puts `path` in the shared document manager, over the text of tab document
 /// `doc`, and returns its id. `edited` marks it unsaved, as the old registry's
 /// draft does.
@@ -145,7 +166,9 @@ fn share(documents: Documents, path: &Path, doc: u64, edited: bool) -> Option<Do
     if edited {
         document.set_edited(true);
     }
-    Some(document.id())
+    let id = document.id();
+    document::update(doc, |doc| doc.shared = Some(id));
+    Some(id)
 }
 
 fn restore_doc(prefs: &Prefs, saved: &SavedTab) -> Option<u64> {
@@ -424,17 +447,23 @@ impl Actions {
     /// Saves document `id`, asking for a name first when it has none. `then`
     /// runs after a save that worked.
     fn save(&self, id: u64, then: Option<Rc<dyn Fn()>>) {
-        let Some((path, read_only)) = document::with(id, |doc| (doc.path.clone(), doc.read_only))
+        let Some((shared, path, read_only)) =
+            document::with(id, |doc| (doc.shared, doc.path.clone(), doc.read_only))
         else {
             return;
         };
-        match path {
-            Some(path) if !read_only => self.write(id, path, then),
+        match (shared, path) {
+            (Some(shared), Some(_)) if !read_only => self.save_shared(id, shared, then, false),
+            (None, Some(path)) if !read_only => self.write(id, path, then),
             _ => self.save_as(id, then),
         }
     }
 
     fn save_as(&self, id: u64, then: Option<Rc<dyn Fn()>>) {
+        if let Some(shared) = document::with(id, |doc| doc.shared).flatten() {
+            self.save_shared(id, shared, then, true);
+            return;
+        }
         let actions = *self;
         let Some((name, folder)) = document::with(id, |doc| {
             let name = match &doc.path {
@@ -482,29 +511,13 @@ impl Actions {
 
     fn write(&self, id: u64, path: PathBuf, then: Option<Rc<dyn Fn()>>) {
         let prefs = self.prefs.peek().clone();
-        let Some((handle, format, config, draft)) = document::with(id, |doc| {
-            (
-                doc.handle.clone(),
-                doc.format,
-                doc.config.clone(),
-                doc.draft.clone(),
-            )
+        let Some((handle, format, draft)) = document::with(id, |doc| {
+            (doc.handle.clone(), doc.format, doc.draft.clone())
         }) else {
             return;
         };
-        let trim = config
-            .trim_trailing_whitespace
-            .unwrap_or(prefs.trim_on_save);
-        let final_newline = config.insert_final_newline.unwrap_or(prefs.final_newline);
-        handle.update(|editor| {
-            if trim {
-                editor.trim_trailing_whitespace();
-            }
-            if final_newline && editor.len_chars() > 0 {
-                editor.ensure_final_newline();
-            }
-            editor.mark_saved();
-        });
+        tidy_for_save(id, &prefs);
+        handle.update(|editor| editor.mark_saved());
         let rope = handle.peek().rope().clone();
         let revision = handle.peek().revision();
         let overlays = self.overlays;
@@ -526,6 +539,9 @@ impl Actions {
                             .retain(|notice| matches!(notice, Notice::Binary));
                     });
                     session::remove_draft(draft);
+                    if document::with(id, |doc| doc.shared.is_none()).unwrap_or(false) {
+                        share(actions.documents, &path, id, false);
+                    }
                     if let Some(then) = then {
                         then();
                     }
@@ -565,6 +581,59 @@ impl Actions {
                 }
             }
         });
+    }
+
+    /// Saves a document the shared manager holds, to its file or, with
+    /// `as_new`, to a file the user picks. `then` runs once it has been saved.
+    fn save_shared(&self, id: u64, shared: DocumentId, then: Option<Rc<dyn Fn()>>, as_new: bool) {
+        let prefs = self.prefs.peek().clone();
+        tidy_for_save(id, &prefs);
+        let Some(document) = self.documents.get(shared) else {
+            return;
+        };
+        let actions = *self;
+        let after = move || actions.saved_shared(id, shared, then.clone());
+        if as_new {
+            document.save_as_then(after);
+        } else {
+            document.save_then(after);
+        }
+    }
+
+    /// After the shared manager saved document `id`: the tab follows the file
+    /// it now has, its draft is gone, and `then` runs.
+    fn saved_shared(&self, id: u64, shared: DocumentId, then: Option<Rc<dyn Fn()>>) {
+        let Some(path) = self
+            .documents
+            .get(shared)
+            .and_then(|document| document.path())
+        else {
+            return;
+        };
+        let stamp = document::stamp_now(&path);
+        let Some((handle, draft, revision)) = document::with(id, |doc| {
+            (
+                doc.handle.clone(),
+                doc.draft.clone(),
+                doc.handle.peek().revision(),
+            )
+        }) else {
+            return;
+        };
+        document::update(id, |doc| {
+            doc.path = Some(path.clone());
+            doc.read_only = false;
+            doc.stamp = stamp;
+            doc.draft_revision = revision;
+            doc.notices
+                .retain(|notice| matches!(notice, Notice::Binary));
+        });
+        handle.update(|editor| editor.mark_saved());
+        session::remove_draft(draft);
+        session::add_recent(&path);
+        if let Some(then) = then {
+            then();
+        }
     }
 
     fn save_all(&self) {
