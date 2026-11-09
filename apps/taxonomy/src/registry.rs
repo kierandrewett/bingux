@@ -2271,7 +2271,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Opening the inspector",
         category: Category::Inspector,
         page: "Inspector",
-        api: "Every Application window carries it: Ctrl+Alt+Shift+I opens or closes it, Ctrl+Shift+C toggles inspect mode",
+        api: "Debug builds and BINGUX_INSPECTOR=1 carry it: Ctrl+Alt+Shift+I opens or closes it, Ctrl+Shift+I toggles inspect mode",
         doc: "inspector",
         covers: &[],
         body: Body::States(inspector::OPEN),
