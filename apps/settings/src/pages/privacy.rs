@@ -431,7 +431,7 @@ impl Component for PrivacyPage {
                     .child(PageHead::new())
                     .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
                     .child(status(Status::Info(format!(
-                        "Fix or remove {}, then try again. This page does not change the file while it cannot be read, and portal requests stay denied until then.",
+                        "Fix or remove “{}”, then try again.",
                         path.display()
                     ))))
                     .into_element();

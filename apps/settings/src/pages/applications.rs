@@ -395,7 +395,10 @@ fn run_uninstall(
                         router.pop();
                     }
                 }
-                Err(error) => overlays.toast(format!("Could not uninstall {name}. {error}")),
+                Err(error) => {
+                    eprintln!("[uninstall] {name}: {error}");
+                    overlays.toast(format!("{name} could not be uninstalled."));
+                }
             }
             start_load(model);
         },

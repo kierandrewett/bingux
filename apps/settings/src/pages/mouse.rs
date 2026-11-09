@@ -886,7 +886,7 @@ impl Component for MousePage {
                         with_touchpad(model, |tp| tp.left_handed = value)
                     })
                     .into(),
-                touchpad("disable-while-typing", "Disable while typing")
+                touchpad("disable-while-typing", "Ignore touchpad while typing")
                     .switch(pad.disable_while_typing, |model, on| {
                         with_touchpad(model, |tp| tp.disable_while_typing = on)
                     })
