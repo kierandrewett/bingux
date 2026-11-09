@@ -282,7 +282,7 @@ impl Component for TrackBar {
 #[derive(PartialEq)]
 struct MenuIcon {
     icon: Icon,
-    tooltip: &'static str,
+    tooltip: String,
     items: Vec<MenuItem>,
     enabled: bool,
 }
@@ -308,7 +308,7 @@ impl Component for MenuIcon {
                 })
                 .ink(Ink::OnFloating)
                 .a11y_id(id)
-                .tooltip(self.tooltip)
+                .tooltip(&self.tooltip)
                 .enabled(self.enabled),
             )
     }
@@ -483,14 +483,14 @@ impl Component for MediaControls {
             .maybe_child((!state.subtitles.is_empty()).then(|| {
                 Element::from(MenuIcon {
                     icon: Icon::MediaViewSubtitles,
-                    tooltip: "Subtitles (C)",
+                    tooltip: crate::tr!("ui-preview-subtitles-tooltip"),
                     items: subtitle_items(&state.subtitles, state.subtitle, &on_action),
                     enabled: true,
                 })
             }))
             .child(MenuIcon {
                 icon: Icon::ViewMore,
-                tooltip: "Playback speed ([ and ])",
+                tooltip: crate::tr!("ui-preview-playback-speed-tooltip"),
                 items: rate_items(state.rate, &on_action),
                 enabled: true,
             });
