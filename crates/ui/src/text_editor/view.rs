@@ -1458,11 +1458,23 @@ pub fn caret_caption(editor: &Editor) -> String {
     let range = selection.primary();
     if !range.is_empty() {
         let chars = range.len();
-        let lines = editor.line_of(range.end()) - editor.line_of(range.start()) + 1;
-        return if lines > 1 {
-            format!("{chars} characters, {lines} lines selected")
+        // A selection that ends at the start of a line (a whole line picked
+        // from the gutter or with Ctrl+L) does not reach into that line.
+        let mut last = editor.line_of(range.end());
+        let first = editor.line_of(range.start());
+        if last > first && editor.line_col(range.end()).1 == 0 {
+            last -= 1;
+        }
+        let lines = last - first + 1;
+        let characters = if chars == 1 {
+            "1 character".to_string()
         } else {
-            format!("{chars} characters selected")
+            format!("{chars} characters")
+        };
+        return if lines > 1 {
+            format!("{characters}, {lines} lines selected")
+        } else {
+            format!("{characters} selected")
         };
     }
     let (line, col) = editor.line_col(range.head);
