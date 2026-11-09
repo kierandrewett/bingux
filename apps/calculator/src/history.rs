@@ -37,8 +37,8 @@ impl Component for HistoryPanel {
                 .height(Size::fill())
                 .tw(&tokens, &[flex_col(), center()])
                 .child(
-                    status_page(Icon::Clock, "No history")
-                        .description("Finished calculations appear here."),
+                    status_page(Icon::Clock, tr!("calculator-history-empty-title"))
+                        .description(tr!("calculator-history-empty-description")),
                 )
                 .into_element();
         }
@@ -58,11 +58,13 @@ impl Component for HistoryPanel {
             .collect();
 
         let clear = calc.clone();
-        let group = Group::new("History".to_string())
+        let group = Group::new(tr!("calculator-history-title"))
             .trailing(
-                action_button("Clear", move |_: ()| clear.clear_history())
-                    .flat()
-                    .compact(),
+                action_button(tr!("calculator-history-clear"), move |_: ()| {
+                    clear.clear_history()
+                })
+                .flat()
+                .compact(),
             )
             .rows(rows);
 
@@ -85,27 +87,34 @@ fn history_menu_items(
 ) -> Vec<MenuItem> {
     let use_expr = {
         let (calc, entry) = (calc.clone(), entry.clone());
-        menu_item("Use expression", move |_| calc.reuse(&entry))
+        menu_item(tr!("calculator-history-use-expression"), move |_| {
+            calc.reuse(&entry)
+        })
     };
     let use_result = {
         let (calc, entry) = (calc.clone(), entry.clone());
-        menu_item("Use result", move |_| calc.insert_result(&entry))
+        menu_item(tr!("calculator-history-use-result"), move |_| {
+            calc.insert_result(&entry)
+        })
     };
     let copy_expr = {
         let (calc, text) = (calc.clone(), entry.expr.clone());
-        menu_item("Copy expression", move |_| {
+        menu_item(tr!("calculator-history-copy-expression"), move |_| {
             calc.copy_text(text.clone(), overlays)
         })
     };
     let copy_result = {
         let (calc, text) = (calc.clone(), entry.result.clone());
-        menu_item("Copy result", move |_| {
+        menu_item(tr!("calculator-copy-result"), move |_| {
             calc.copy_text(text.clone(), overlays)
         })
     };
     let delete = {
         let calc = calc.clone();
-        menu_item("Delete", move |_| calc.delete_history(index)).destructive()
+        menu_item(tr!("calculator-history-delete"), move |_| {
+            calc.delete_history(index)
+        })
+        .destructive()
     };
     vec![
         use_expr,

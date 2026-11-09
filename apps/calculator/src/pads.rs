@@ -20,56 +20,66 @@ fn digit(calc: &Calc, digit: &'static str) -> KeypadKey {
     typed(calc, digit, digit)
 }
 
-fn operator(calc: &Calc, label: &str, name: &str, text: &'static str) -> KeypadKey {
+/// An operator key that types `text`, named by the message `name` (an ID).
+fn operator(calc: &Calc, label: &str, name: &'static str, text: &'static str) -> KeypadKey {
+    let name = bingux_ui::i18n::text(name);
     typed(calc, label, text)
-        .name(name)
+        .name(name.clone())
         .tooltip(name)
         .tone(KeyTone::Operator)
 }
 
-fn function(calc: &Calc, label: &str, name: &str, text: &'static str) -> KeypadKey {
+/// A key that types `text`, named by the message `name` (an ID).
+fn function(calc: &Calc, label: &str, name: &'static str, text: &'static str) -> KeypadKey {
+    let name = bingux_ui::i18n::text(name);
     typed(calc, label, text)
-        .name(name)
+        .name(name.clone())
         .tooltip(name)
         .tone(KeyTone::Plain)
 }
 
 fn delete_key(calc: &Calc) -> KeypadKey {
     let calc = calc.clone();
-    keypad_key("Delete", move |_: ()| calc.backspace())
+    keypad_key(tr!("calculator-key-delete"), move |_: ()| calc.backspace())
         .icon(Icon::EditClear)
-        .name("Delete the last character")
-        .tooltip("Delete (Backspace)")
+        .name(tr!("calculator-key-delete.a11y"))
+        .tooltip(tr!("calculator-key-delete.tooltip"))
         .tone(KeyTone::Plain)
 }
 
 fn clear_key(calc: &Calc) -> KeypadKey {
     let entry = calc.can_clear_entry();
     let press = calc.clone();
-    let name = if entry {
-        "Clear the entry"
+    let (name, tip) = if entry {
+        (
+            tr!("calculator-key-clear-entry.a11y"),
+            tr!("calculator-key-clear-entry.tooltip"),
+        )
     } else {
-        "Clear everything"
+        (
+            tr!("calculator-key-clear-all.a11y"),
+            tr!("calculator-key-clear-all.tooltip"),
+        )
     };
     keypad_key(if entry { "C" } else { "AC" }, move |_: ()| press.clear())
         .name(name)
-        .tooltip(format!("{name} (Escape)"))
+        .tooltip(tip)
         .tone(KeyTone::Destructive)
 }
 
 fn equals_key(calc: &Calc) -> KeypadKey {
     let calc = calc.clone();
     keypad_key("=", move |_: ()| calc.equals())
-        .name("Equals")
-        .tooltip("Equals (Enter)")
+        .name(tr!("calculator-key-equals.a11y"))
+        .tooltip(tr!("calculator-key-equals.tooltip"))
         .tone(KeyTone::Suggested)
 }
 
 fn negate_key(calc: &Calc) -> KeypadKey {
     let calc = calc.clone();
     keypad_key("\u{b1}", move |_: ()| calc.negate())
-        .name("Change sign")
-        .tooltip("Change sign")
+        .name(tr!("calculator-key-negate"))
+        .tooltip(tr!("calculator-key-negate"))
         .tone(KeyTone::Plain)
 }
 
@@ -77,7 +87,7 @@ fn point_key(calc: &Calc, decimal: char) -> KeypadKey {
     let calc = calc.clone();
     let text: &'static str = if decimal == ',' { "," } else { "." };
     keypad_key(decimal.to_string(), move |_: ()| calc.type_text(text))
-        .name("Decimal point")
+        .name(tr!("calculator-key-point"))
         .tone(KeyTone::Digit)
 }
 
@@ -87,20 +97,30 @@ pub fn basic_keys(calc: &Calc) -> Vec<KeypadKey> {
     vec![
         clear_key(calc),
         delete_key(calc),
-        operator(calc, "%", "Percent", "%"),
-        operator(calc, "\u{f7}", "Divide", "\u{f7}"),
+        operator(calc, "%", i18n_id!("calculator-key-percent"), "%"),
+        operator(calc, "\u{f7}", i18n_id!("calculator-key-divide"), "\u{f7}"),
         digit(calc, "7"),
         digit(calc, "8"),
         digit(calc, "9"),
-        operator(calc, "\u{d7}", "Multiply", "\u{d7}"),
+        operator(
+            calc,
+            "\u{d7}",
+            i18n_id!("calculator-key-multiply"),
+            "\u{d7}",
+        ),
         digit(calc, "4"),
         digit(calc, "5"),
         digit(calc, "6"),
-        operator(calc, "\u{2212}", "Subtract", "\u{2212}"),
+        operator(
+            calc,
+            "\u{2212}",
+            i18n_id!("calculator-key-subtract"),
+            "\u{2212}",
+        ),
         digit(calc, "1"),
         digit(calc, "2"),
         digit(calc, "3"),
-        operator(calc, "+", "Add", "+"),
+        operator(calc, "+", i18n_id!("calculator-key-add"), "+"),
         negate_key(calc),
         digit(calc, "0"),
         point_key(calc, decimal),
@@ -112,30 +132,35 @@ pub fn basic_keys(calc: &Calc) -> Vec<KeypadKey> {
 pub fn scientific_keys(calc: &Calc) -> Vec<KeypadKey> {
     let second = *calc.second.read();
     let radians = calc.with(|s| s.angle()) == bingux_calc::Angle::Radians;
-    let remember = |label: &str, name: &str, f: fn(&Calc)| {
+    let remember = |label: &str, name: &'static str, f: fn(&Calc)| {
         let calc = calc.clone();
         keypad_key(label, move |_: ()| f(&calc))
-            .name(name)
+            .name(bingux_ui::i18n::text(name))
             .tone(KeyTone::Plain)
     };
     let toggle_second = {
         let calc = calc.clone();
         keypad_key("2nd", move |_: ()| calc.toggle_second())
-            .name("Second functions")
+            .name(tr!("calculator-key-second"))
             .tone(KeyTone::Plain)
             .active(second)
     };
     let angle = {
         let calc = calc.clone();
-        keypad_key(if radians { "Rad" } else { "Deg" }, move |_: ()| {
-            calc.toggle_angle()
-        })
-        .name(if radians {
-            "Angles in radians. Switch to degrees"
+        let (label, name) = if radians {
+            (
+                tr!("calculator-angle-radians"),
+                tr!("calculator-key-angle-radians.a11y"),
+            )
         } else {
-            "Angles in degrees. Switch to radians"
-        })
-        .tone(KeyTone::Plain)
+            (
+                tr!("calculator-angle-degrees"),
+                tr!("calculator-key-angle-degrees.a11y"),
+            )
+        };
+        keypad_key(label, move |_: ()| calc.toggle_angle())
+            .name(name)
+            .tone(KeyTone::Plain)
     };
     let random = {
         let calc = calc.clone();
@@ -143,7 +168,7 @@ pub fn scientific_keys(calc: &Calc) -> Vec<KeypadKey> {
             let number = calc.random_text();
             calc.type_text(&number);
         })
-        .name("Random number")
+        .name(tr!("calculator-key-random"))
         .tone(KeyTone::Plain)
     };
     let pair = |plain: (&'static str, &'static str, &'static str),
@@ -152,59 +177,125 @@ pub fn scientific_keys(calc: &Calc) -> Vec<KeypadKey> {
         function(calc, label, name, text)
     };
     vec![
-        function(calc, "(", "Open bracket", "("),
-        function(calc, ")", "Close bracket", ")"),
-        remember("mc", "Clear memory", Calc::memory_clear),
-        remember("m+", "Add to memory", |c| c.memory_add(false)),
-        remember("m\u{2212}", "Subtract from memory", |c| c.memory_add(true)),
-        remember("mr", "Recall memory", Calc::memory_recall),
+        function(calc, "(", i18n_id!("calculator-key-open-bracket"), "("),
+        function(calc, ")", i18n_id!("calculator-key-close-bracket"), ")"),
+        remember(
+            "mc",
+            i18n_id!("calculator-key-clear-memory"),
+            Calc::memory_clear,
+        ),
+        remember("m+", i18n_id!("calculator-key-add-to-memory"), |c| {
+            c.memory_add(false)
+        }),
+        remember(
+            "m\u{2212}",
+            i18n_id!("calculator-key-subtract-from-memory"),
+            |c| c.memory_add(true),
+        ),
+        remember(
+            "mr",
+            i18n_id!("calculator-key-recall-memory"),
+            Calc::memory_recall,
+        ),
         toggle_second,
-        function(calc, "x\u{b2}", "Square", "\u{b2}"),
-        function(calc, "x\u{b3}", "Cube", "\u{b3}"),
-        function(calc, "x^y", "Power", "^"),
-        function(calc, "e^x", "Exponential", "e^"),
+        function(calc, "x\u{b2}", i18n_id!("calculator-key-square"), "\u{b2}"),
+        function(calc, "x\u{b3}", i18n_id!("calculator-key-cube"), "\u{b3}"),
+        function(calc, "x^y", i18n_id!("calculator-key-power"), "^"),
+        function(calc, "e^x", i18n_id!("calculator-key-exponential"), "e^"),
         pair(
-            ("10^x", "Ten to the power", "10^"),
-            ("2^x", "Two to the power", "2^"),
+            ("10^x", i18n_id!("calculator-key-ten-to-the-power"), "10^"),
+            ("2^x", i18n_id!("calculator-key-two-to-the-power"), "2^"),
         ),
-        function(calc, "1/x", "Reciprocal", "1/("),
-        function(calc, "\u{221a}x", "Square root", "\u{221a}("),
-        function(calc, "\u{221b}x", "Cube root", "\u{221b}("),
-        function(calc, "y\u{221a}x", "Root", "root("),
-        function(calc, "ln", "Natural logarithm", "ln("),
+        function(calc, "1/x", i18n_id!("calculator-key-reciprocal"), "1/("),
+        function(
+            calc,
+            "\u{221a}x",
+            i18n_id!("calculator-key-square-root"),
+            "\u{221a}(",
+        ),
+        function(
+            calc,
+            "\u{221b}x",
+            i18n_id!("calculator-key-cube-root"),
+            "\u{221b}(",
+        ),
+        function(calc, "y\u{221a}x", i18n_id!("calculator-key-root"), "root("),
+        function(
+            calc,
+            "ln",
+            i18n_id!("calculator-key-natural-logarithm"),
+            "ln(",
+        ),
         pair(
-            ("log", "Logarithm base 10", "log("),
-            ("log2", "Logarithm base 2", "log2("),
+            ("log", i18n_id!("calculator-key-logarithm-base-10"), "log("),
+            ("log2", i18n_id!("calculator-key-logarithm-base-2"), "log2("),
         ),
-        function(calc, "x!", "Factorial", "!"),
+        function(calc, "x!", i18n_id!("calculator-key-factorial"), "!"),
         pair(
-            ("sin", "Sine", "sin("),
-            ("sin\u{207b}\u{b9}", "Inverse sine", "asin("),
+            ("sin", i18n_id!("calculator-key-sine"), "sin("),
+            (
+                "sin\u{207b}\u{b9}",
+                i18n_id!("calculator-key-inverse-sine"),
+                "asin(",
+            ),
         ),
         pair(
-            ("cos", "Cosine", "cos("),
-            ("cos\u{207b}\u{b9}", "Inverse cosine", "acos("),
+            ("cos", i18n_id!("calculator-key-cosine"), "cos("),
+            (
+                "cos\u{207b}\u{b9}",
+                i18n_id!("calculator-key-inverse-cosine"),
+                "acos(",
+            ),
         ),
         pair(
-            ("tan", "Tangent", "tan("),
-            ("tan\u{207b}\u{b9}", "Inverse tangent", "atan("),
+            ("tan", i18n_id!("calculator-key-tangent"), "tan("),
+            (
+                "tan\u{207b}\u{b9}",
+                i18n_id!("calculator-key-inverse-tangent"),
+                "atan(",
+            ),
         ),
-        function(calc, "e", "Euler's number", "e"),
-        function(calc, "EE", "Times ten to the power", "E"),
+        function(calc, "e", i18n_id!("calculator-key-euler-number"), "e"),
+        function(
+            calc,
+            "EE",
+            i18n_id!("calculator-key-times-ten-to-the-power"),
+            "E",
+        ),
         angle,
         pair(
-            ("sinh", "Hyperbolic sine", "sinh("),
-            ("sinh\u{207b}\u{b9}", "Inverse hyperbolic sine", "asinh("),
+            ("sinh", i18n_id!("calculator-key-hyperbolic-sine"), "sinh("),
+            (
+                "sinh\u{207b}\u{b9}",
+                i18n_id!("calculator-key-inverse-hyperbolic-sine"),
+                "asinh(",
+            ),
         ),
         pair(
-            ("cosh", "Hyperbolic cosine", "cosh("),
-            ("cosh\u{207b}\u{b9}", "Inverse hyperbolic cosine", "acosh("),
+            (
+                "cosh",
+                i18n_id!("calculator-key-hyperbolic-cosine"),
+                "cosh(",
+            ),
+            (
+                "cosh\u{207b}\u{b9}",
+                i18n_id!("calculator-key-inverse-hyperbolic-cosine"),
+                "acosh(",
+            ),
         ),
         pair(
-            ("tanh", "Hyperbolic tangent", "tanh("),
-            ("tanh\u{207b}\u{b9}", "Inverse hyperbolic tangent", "atanh("),
+            (
+                "tanh",
+                i18n_id!("calculator-key-hyperbolic-tangent"),
+                "tanh(",
+            ),
+            (
+                "tanh\u{207b}\u{b9}",
+                i18n_id!("calculator-key-inverse-hyperbolic-tangent"),
+                "atanh(",
+            ),
         ),
-        function(calc, "\u{3c0}", "Pi", "\u{3c0}"),
+        function(calc, "\u{3c0}", i18n_id!("calculator-key-pi"), "\u{3c0}"),
         random,
     ]
 }
@@ -216,29 +307,39 @@ pub fn programmer_function_keys(calc: &Calc) -> Vec<KeypadKey> {
     let hex = |letter: &'static str| {
         let key = typed(calc, letter, letter)
             .tone(KeyTone::Digit)
-            .name(format!("Hex digit {letter}"));
+            .name(tr!("calculator-key-hex-digit", digit = letter));
         key.enabled(base == 16)
     };
     vec![
-        function(calc, "<<", "Shift left", " << "),
-        function(calc, ">>", "Shift right", " >> "),
-        function(calc, "RoL", "Rotate left", " rol "),
-        function(calc, "RoR", "Rotate right", " ror "),
-        function(calc, "AND", "And", " and "),
-        function(calc, "OR", "Or", " or "),
-        function(calc, "XOR", "Exclusive or", " xor "),
-        function(calc, "NOT", "Not", "not "),
-        function(calc, "NAND", "Not and", " nand "),
-        function(calc, "NOR", "Not or", " nor "),
-        function(calc, "(", "Open bracket", "("),
-        function(calc, ")", "Close bracket", ")"),
+        function(calc, "<<", i18n_id!("calculator-key-shift-left"), " << "),
+        function(calc, ">>", i18n_id!("calculator-key-shift-right"), " >> "),
+        function(calc, "RoL", i18n_id!("calculator-key-rotate-left"), " rol "),
+        function(
+            calc,
+            "RoR",
+            i18n_id!("calculator-key-rotate-right"),
+            " ror ",
+        ),
+        function(calc, "AND", i18n_id!("calculator-key-and"), " and "),
+        function(calc, "OR", i18n_id!("calculator-key-or"), " or "),
+        function(
+            calc,
+            "XOR",
+            i18n_id!("calculator-key-exclusive-or"),
+            " xor ",
+        ),
+        function(calc, "NOT", i18n_id!("calculator-key-not"), "not "),
+        function(calc, "NAND", i18n_id!("calculator-key-not-and"), " nand "),
+        function(calc, "NOR", i18n_id!("calculator-key-not-or"), " nor "),
+        function(calc, "(", i18n_id!("calculator-key-open-bracket"), "("),
+        function(calc, ")", i18n_id!("calculator-key-close-bracket"), ")"),
         hex("A"),
         hex("B"),
         hex("C"),
         hex("D"),
         hex("E"),
         hex("F"),
-        function(calc, "ans", "Last answer", "ans"),
+        function(calc, "ans", i18n_id!("calculator-key-last-answer"), "ans"),
     ]
 }
 
@@ -250,20 +351,30 @@ pub fn programmer_keys(calc: &Calc) -> Vec<KeypadKey> {
     vec![
         clear_key(calc),
         delete_key(calc),
-        operator(calc, "mod", "Remainder", " mod "),
-        operator(calc, "\u{f7}", "Divide", "\u{f7}"),
+        operator(calc, "mod", i18n_id!("calculator-key-remainder"), " mod "),
+        operator(calc, "\u{f7}", i18n_id!("calculator-key-divide"), "\u{f7}"),
         d("7", 7),
         d("8", 8),
         d("9", 9),
-        operator(calc, "\u{d7}", "Multiply", "\u{d7}"),
+        operator(
+            calc,
+            "\u{d7}",
+            i18n_id!("calculator-key-multiply"),
+            "\u{d7}",
+        ),
         d("4", 4),
         d("5", 5),
         d("6", 6),
-        operator(calc, "\u{2212}", "Subtract", "\u{2212}"),
+        operator(
+            calc,
+            "\u{2212}",
+            i18n_id!("calculator-key-subtract"),
+            "\u{2212}",
+        ),
         d("1", 1),
         d("2", 2),
         d("3", 3),
-        operator(calc, "+", "Add", "+"),
+        operator(calc, "+", i18n_id!("calculator-key-add"), "+"),
         d("0", 0).span(2),
         equals_key(calc).span(2),
     ]
