@@ -1417,6 +1417,11 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                     force,
                     ..
                 }) => {
+                    if phase == TouchPhase::Started {
+                        app.platform
+                            .navigation_mode
+                            .set(NavigationMode::NotKeyboard);
+                    }
                     app.position = CursorPoint::from((location.x, location.y));
 
                     let name = match phase {

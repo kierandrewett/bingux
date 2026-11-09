@@ -174,6 +174,9 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   `stop_propagation()`. Freya cancels the global pointer down and up for a
   touch once a press is stopped, so the text field's global handlers could
   not hear a tap, long press or drag. Mouse presses still stop as upstream.
+- `freya-winit/src/renderer.rs`: a touch start sets the navigation mode to pointer, as a
+  mouse press does (upstream sets it only for the mouse). The focus ring is for keyboard
+  focus, so a finger on a control draws no ring.
 - `freya-components/src/scrollviews/virtual_scrollview.rs`:
   `VirtualScrollView::pass_ctrl_wheel(bool)`. When true and Ctrl is held, the
   view neither scrolls on the wheel nor stops the event, so an ancestor's
