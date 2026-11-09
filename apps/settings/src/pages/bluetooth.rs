@@ -1078,7 +1078,7 @@ impl Component for BluetoothDevicePage {
         }
         details = details
             .row(row("Type").value(device_kind(&device.icon)))
-            .row(row("Address").value(device.mac.clone()))
+            .row(row("Address").mono_value(device.mac.clone()))
             .row(row("Paired").value(yes_no(device.paired)));
         let rename_device = device.clone();
         details = details.row(entry_row(

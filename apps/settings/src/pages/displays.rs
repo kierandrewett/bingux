@@ -1930,7 +1930,7 @@ fn monitor_group(
     Group::new(None::<String>)
         // The Primary switch below says the rest; only "Off" adds something.
         .description(if enabled { "" } else { "Off" })
-        .row(row("Port").value(monitor.connector.clone()))
+        .row(row("Port").mono_value(monitor.connector.clone()))
         .row(
             switch_row("Use this display", enabled, move |on: bool| {
                 edit(model, error, move |monitors| {
