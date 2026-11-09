@@ -72,3 +72,11 @@ apps-remove-store = Remove it from the store you installed it from.
 apps-remove-nix = Remove it from your Nix profile or configuration.
 apps-remove-admin = Ask an administrator to remove it.
 apps-remove-system = The system installed it. Ask an administrator to remove it.
+
+## Password change (messages from passwd.rs)
+
+passwd-generic = Could not change the password. Try again.
+passwd-timed-out = The password change timed out. Try again.
+passwd-too-weak = The new password is too weak. Use a longer password with letters, numbers and symbols.
+passwd-mismatch = The new passwords do not match.
+passwd-current-wrong = The current password is not correct. Check it and try again.

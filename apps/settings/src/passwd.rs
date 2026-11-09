@@ -12,6 +12,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use bingux_ui::prelude::tr;
+
 /// How long the change may take. The passwords are already typed when this
 /// starts, so this only covers `passwd` itself and the PAM stack behind it.
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -19,7 +21,9 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const POLL: Duration = Duration::from_millis(20);
 
 /// Shown when the change fails for a reason the person cannot act on.
-const GENERIC: &str = "Could not change the password. Try again.";
+fn generic() -> String {
+    tr!("passwd-generic")
+}
 
 /// The `passwd` program to run. Snapshot builds may point it at a fake, so the
 /// real command is never run while testing.
@@ -57,7 +61,7 @@ fn open_pty() -> Result<(OwnedFd, OwnedFd), String> {
         )
     };
     if opened != 0 {
-        return Err(GENERIC.into());
+        return Err(generic());
     }
     // SAFETY: openpty succeeded, so both descriptors are new and owned by us.
     let (master, slave) = unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
@@ -71,8 +75,8 @@ fn open_pty() -> Result<(OwnedFd, OwnedFd), String> {
 
 fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
     let (master, slave) = open_pty()?;
-    let stdout = slave.try_clone().map_err(|_| GENERIC.to_string())?;
-    let stderr = slave.try_clone().map_err(|_| GENERIC.to_string())?;
+    let stdout = slave.try_clone().map_err(|_| generic())?;
+    let stderr = slave.try_clone().map_err(|_| generic())?;
     let mut command = Command::new(program);
     command
         .env("LC_ALL", "C")
@@ -95,7 +99,7 @@ fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
             Ok(())
         });
     }
-    let mut child = command.spawn().map_err(|_| GENERIC.to_string())?;
+    let mut child = command.spawn().map_err(|_| generic())?;
     // Drop the parent's copies of the slave, so the master sees end of file
     // once the child exits.
     drop(command);
@@ -109,7 +113,7 @@ fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
         if read_available(&mut master, &mut transcript, &mut pending)? {
             answer(&mut master, &mut pending, current, new)?;
         }
-        if let Some(status) = child.try_wait().map_err(|_| GENERIC.to_string())? {
+        if let Some(status) = child.try_wait().map_err(|_| generic())? {
             // Output written just before the exit may still be buffered.
             read_available(&mut master, &mut transcript, &mut pending)?;
             return if status.success() {
@@ -121,7 +125,7 @@ fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("The password change timed out. Try again.".into());
+            return Err(tr!("passwd-timed-out"));
         }
         thread::sleep(POLL);
     }
@@ -132,11 +136,11 @@ fn set_nonblocking(file: &File) -> Result<(), String> {
     // SAFETY: fd is the master descriptor, open for the life of `file`.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
     if flags < 0 {
-        return Err(GENERIC.into());
+        return Err(generic());
     }
     // SAFETY: as above; only the status flags change.
     if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        return Err(GENERIC.into());
+        return Err(generic());
     }
     Ok(())
 }
@@ -193,7 +197,7 @@ fn answer(master: &mut File, pending: &mut String, current: &str, new: &str) -> 
     pending.clear();
     master
         .write_all(format!("{secret}\n").as_bytes())
-        .map_err(|_| GENERIC.to_string())
+        .map_err(|_| generic())
 }
 
 /// The message for a failed change, from the words `passwd` printed.
@@ -205,17 +209,16 @@ fn failure(transcript: &str) -> String {
     {
         let reason = reason.trim();
         eprintln!("settings: password rejected: {reason}");
-        return "The new password is too weak. Use a longer password with letters, numbers and symbols."
-            .into();
+        return tr!("passwd-too-weak");
     }
     if lower.contains("do not match") {
-        return "The new passwords do not match.".into();
+        return tr!("passwd-mismatch");
     }
     if lower.contains("authentication token manipulation error")
         || lower.contains("incorrect password")
         || lower.contains("authentication failure")
     {
-        return "The current password is not correct. Check it and try again.".into();
+        return tr!("passwd-current-wrong");
     }
-    GENERIC.into()
+    generic()
 }
