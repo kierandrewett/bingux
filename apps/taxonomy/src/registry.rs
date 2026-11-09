@@ -471,6 +471,7 @@ pub static ENTRIES: &[Entry] = &[
             "focus_stop_pressed",
             "focus_stop_menu",
             "focus_stop_with",
+            "text_entry_focused",
             "StopRing",
         ],
         body: Body::States(feedback::FOCUS_STOP),

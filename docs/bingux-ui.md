@@ -4096,6 +4096,7 @@ controls still work.
 `step_focus(back)` moves focus to the next or previous stop as Tab does, with no
 host needed. A list answers its Up and Down keys with it, so the arrows walk its
 rows (the inspector's Accessibility list does).
+`focus::text_entry_focused()` is true while the focused node is a text input, so app key handlers (calendar's single-letter shortcuts) can leave typed characters to the field.
 
 ## Taxonomy app
 
