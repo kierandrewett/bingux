@@ -27,6 +27,8 @@ use crate::strings as text;
 
 /// How long the controls stay over a playing film after the pointer stops.
 const HIDE_AFTER: Duration = Duration::from_millis(2500);
+/// A stage narrower than this is a phone: the footer drops the volume slider.
+const NARROW_STAGE: f32 = 480.0;
 /// The seek preview's longer side, in pixels.
 const PREVIEW_SIDE: u32 = 192;
 
@@ -371,6 +373,14 @@ impl Component for FilmStage {
                 ],
             )
         };
+        // Each bar is pinned to its own edge. An absolute box is not given
+        // its parent's height, so the bottom bar is placed from the measured
+        // heights of the stage and of the bar.
+        let mut stage_size = use_state(|| (0.0f32, 0.0f32));
+        let (stage_width, stage_height) = *stage_size.read();
+        // A phone-width stage keeps the mute button and drops the slider, so
+        // the slider cannot collide with the transport. Volume keys still work.
+        let narrow = stage_width > 0.0 && stage_width < NARROW_STAGE;
         let controls = card(
             rect()
                 .width(Size::fill())
@@ -391,9 +401,10 @@ impl Component for FilmStage {
                         .compact_if(mini),
                 )
                 .child(rect().width(Size::flex(1.0)))
-                .maybe_child(
-                    (!mini).then(|| volume_control(status.volume, status.muted, run_volume)),
-                )
+                .maybe_child((!mini).then(|| {
+                    let volume = volume_control(status.volume, status.muted, run_volume);
+                    if narrow { volume.compact() } else { volume }
+                }))
                 .child(tools),
         );
         let top = card(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)]))
@@ -406,11 +417,6 @@ impl Component for FilmStage {
             );
         let fade = use_tween(if visible { 1.0 } else { 0.0 }, tokens.motion(200));
         let margin = if mini { S2 } else { S4 };
-        // Each bar is pinned to its own edge. An absolute box is not given
-        // its parent's height, so the bottom bar is placed from the measured
-        // heights of the stage and of the bar.
-        let mut stage_size = use_state(|| (0.0f32, 0.0f32));
-        let (stage_width, stage_height) = *stage_size.read();
         let edge = |position: Position| {
             rect()
                 .position(position)
