@@ -197,6 +197,12 @@ pub fn import(model: Model, window: Window, overlays: Overlays) {
     );
 }
 
+/// Why a file could not be imported.
+enum Unreadable {
+    Read,
+    NotCalendar,
+}
+
 /// Reads a file of events and asks which calendar they go in.
 pub fn import_file(model: Model, overlays: Overlays, path: PathBuf) {
     let name = path
@@ -206,16 +212,23 @@ pub fn import_file(model: Model, overlays: Overlays, path: PathBuf) {
     spawn(async move {
         let read = path.clone();
         let parsed = spawn_blocking(move || {
-            let bytes =
-                std::fs::read(&read).map_err(|_| "The file could not be read.".to_string())?;
+            let bytes = std::fs::read(&read).map_err(|_| Unreadable::Read)?;
             let text = String::from_utf8_lossy(&bytes).into_owned();
-            ics::parse(&text, "").map_err(|_| "The file is not a calendar file.".to_string())
+            ics::parse(&text, "").map_err(|_| Unreadable::NotCalendar)
         })
         .await;
         let parsed = match parsed {
             Ok(parsed) => parsed,
-            Err(message) => {
-                overlays.toast(format!("Could not import {name}. {message}"));
+            Err(Unreadable::Read) => {
+                overlays.toast(format!(
+                    "Could not read {name}. Check that you can open the file."
+                ));
+                return;
+            }
+            Err(Unreadable::NotCalendar) => {
+                overlays.toast(format!(
+                    "Could not import {name}. It is not a calendar file."
+                ));
                 return;
             }
         };

@@ -16,16 +16,43 @@ use crate::sidebar::Sidebar;
 /// What the bar says about the time on show.
 pub fn title_of(model: &Model) -> String {
     let anchor = *model.anchor.read();
+    let compact = is_compact();
     match *model.view.read() {
+        ViewKind::Day if compact => anchor.short(),
         ViewKind::Day => anchor.long(),
         ViewKind::Week => {
             let start = anchor.week_start(model.first_weekday());
             let end = start.add_days(6);
+            if compact {
+                // A phone has room for the days and the month, and the year
+                // only when it is not this one.
+                let year = if end.year == model.clock.read().today.year {
+                    String::new()
+                } else {
+                    format!(" {}", end.year)
+                };
+                return if start.month == end.month {
+                    format!(
+                        "{} to {} {}{year}",
+                        start.day,
+                        end.day,
+                        month_short(end.month)
+                    )
+                } else {
+                    format!(
+                        "{} {} to {} {}{year}",
+                        start.day,
+                        month_short(start.month),
+                        end.day,
+                        month_short(end.month)
+                    )
+                };
+            }
             if start.month == end.month {
-                format!("{} \u{2013} {} {}", start.day, end.day, anchor_month(end))
+                format!("{} to {} {}", start.day, end.day, anchor_month(end))
             } else if start.year == end.year {
                 format!(
-                    "{} {} \u{2013} {} {} {}",
+                    "{} {} to {} {} {}",
                     start.day,
                     month_short(start.month),
                     end.day,
@@ -34,7 +61,7 @@ pub fn title_of(model: &Model) -> String {
                 )
             } else {
                 format!(
-                    "{} {} {} \u{2013} {} {} {}",
+                    "{} {} {} to {} {} {}",
                     start.day,
                     month_short(start.month),
                     start.year,
@@ -44,8 +71,10 @@ pub fn title_of(model: &Model) -> String {
                 )
             }
         }
+        ViewKind::Month if compact => format!("{} {}", month_short(anchor.month), anchor.year),
         ViewKind::Month => anchor.month_year(),
         ViewKind::Year => anchor.year.to_string(),
+        ViewKind::Agenda if compact => format!("From {} {}", anchor.day, month_short(anchor.month)),
         ViewKind::Agenda => format!("From {}", anchor.long()),
     }
 }
@@ -283,10 +312,11 @@ T  Go to today\n\
 N  New event\n\
 1 to 5  Day, Week, Month, Year, Agenda\n\
 Left, Right  Previous, next\n\
-Up, Down  A week back, ahead (Month)\n\
+Up, Down  A week back, ahead (Month); choose an event (Week, Day)\n\
+Enter  Open the chosen event, or choose the first of the day (Month)\n\
+Escape  Let go of the chosen event, or clear the search\n\
 Page Up, Page Down  A month back, ahead\n\
 Ctrl+F or /  Search\n\
-Escape  Clear the search\n\
 Delete  Delete the chosen event\n\
 Ctrl+Shift+?  About Calendar\n\
 \n\

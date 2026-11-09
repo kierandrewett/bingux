@@ -562,6 +562,13 @@ code on the UI thread can use `bingux_ui::nav::router()`, or `nav::navigate(uri)
 to open a URI. From another thread (a socket, a D-Bus call) use
 `bingux_ui::app::open_uri(uri)`, which queues it as a second launch would.
 
+A window-level key handler (an app's `T` for today, `N` for a new item) must
+not fire under a menu, choice, dialog or sheet. `nav::modal_open()` says
+whether one is open, without subscribing, so an event handler can call it and
+return early (`Router::modal_open_now()` is the same on a router you hold).
+A key typed in a text field never reaches the window's handler, because the
+field takes it.
+
 | Call                                                               | Does                                                                                                                                                                                                                                             |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `push(&location)`, `push_titled(&location, title)`, `open(Target)` | Open a subpage. A row that already knows the name passes it with `push_titled`                                                                                                                                                                   |
@@ -2120,6 +2127,29 @@ folder are an `Index` of `bingux-search`, which answers a search there before
 the walker has read a folder. The engine is for records an app owns (settings,
 applications, contacts, notes, devices), up to about a million short
 documents.
+
+## Calendar views
+
+`calendar` draws a calendar and reports what a person did; it does not know
+what an event is, where it is kept or how it repeats. Dates are civil dates
+(`Date`, `Weekday`) and times are minutes after midnight. The taxonomy's
+Calendar page shows each piece; `apps/calendar` is the app that uses them.
+
+| Component                             | Use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `time_grid(days, today)`              | The hours of a day, three days or a week. `.blocks(Vec<Block>)` are timed events and `.banners(Vec<Banner>)` run across days at the top. Overlapping blocks are packed side by side (`layout::pack`), and a block that has free columns to its right widens into them. `.now(minutes)` draws the time-now line in today's column. Press and drag over empty time (`on_create(SlotRange)`), drag a block to move it or its top or bottom edge to resize it (`on_edit(BlockEdit)`, snapped to `.step(minutes)`), press a block twice or press Enter to open it (`on_open(id)`). Up and Down walk the blocks and call `on_select(id)`; `.selected(id)` draws the chosen one with an outline. A block whose event is read-only has `editable: false`. `.scroll_to(minutes, nonce)` scrolls once per nonce. |
+| `month_view(month, today, on_select)` | A month the size of its window. `.items(Vec<MonthItem>)` are events: a bar for a whole-day or multi-day event, a line of text for a timed one, ordered by `MonthItem::minutes` within a day. A day with more than fit shows "+N more" (`on_activate(Date)`). Arrows, Page Up and Page Down and Home and End move the chosen day; Enter on a day with events chooses the first (`on_pick(Some(id))`), Up and Down walk that day's events, Enter opens one (`on_open(id)`), and Escape or a move to another day lets go (`on_pick(None)`). `.selected_item(id)` draws the chosen event. A day pressed twice asks for a new event (`on_create`).                                                                                                                                                          |
+| `month_grid(month, today, on_select)` | A small month for a sidebar or a popover: days with `.marked(days)` get a dot, `.week_numbers(true)`, `.bare()` for a caller that draws its own header, `.on_page(delta)` for the arrows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `date_picker`, `time_picker`          | A button that opens a month, and a dropdown of quarter hours. `time_picker(..).after(start)` adds how long after the start each time is, as an event's end does.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+Colours are data (a calendar's colour is a hex string another program may have
+written), so `calendar::palette` turns them into the tints blocks are drawn in
+(`event_colours`), lightened in the dark scheme and with text that stays above
+the contrast floor. Event titles use `EVENT_TITLE`.
+
+Keyboard: the grids are focusable and own Up, Down, Enter and Home and End as
+above. A window that wants more (Delete on the chosen event, `T` for today)
+puts its handler on its root and ignores keys under `nav::modal_open()`.
 
 ## Charts
 

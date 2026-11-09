@@ -23,7 +23,7 @@ use crate::model::{Clock, EventRef, Message, Model};
 use crate::quick;
 use crate::sidebar::Sidebar;
 use crate::views::agenda::{AgendaView, SearchResults};
-use crate::views::grid::{GridView, Span3};
+use crate::views::grid::{GridView, Span3, first_day};
 use crate::views::month::MonthPage;
 use crate::views::year::YearPage;
 
@@ -252,8 +252,11 @@ fn keys(
     search_id: AccessibilityId,
     event: &Event<KeyboardEventData>,
 ) {
+    if bingux_ui::nav::modal_open() || overlays.dialog_open() {
+        return;
+    }
     let Key::Character(text) = &event.key else {
-        return other_keys(model, overlays, event);
+        return other_keys(model, window, overlays, event);
     };
     let text = text.to_lowercase();
     let command = event.modifiers.intersects(Modifiers::ctrl_or_meta());
@@ -296,6 +299,29 @@ fn keys(
     }
 }
 
+/// The timed events a day or week grid shows, by day and then start.
+fn grid_events(model: &Model, view: ViewKind, compact: bool) -> Vec<String> {
+    let span = match (view, compact) {
+        (ViewKind::Day, _) => Span3::Day,
+        (_, true) => Span3::ThreeDays,
+        _ => Span3::Week,
+    };
+    let anchor = *model.anchor.peek();
+    let first = first_day(model, anchor, span);
+    let mut found: Vec<_> = model
+        .occurrences(first, first.add_days(span.count()))
+        .into_iter()
+        .filter(|occurrence| {
+            occurrence.status != bingux_calendar_core::Status::Cancelled && !occurrence.is_banner()
+        })
+        .collect();
+    found.sort_by(|a, b| a.start.cmp(&b.start));
+    found
+        .iter()
+        .map(|occurrence| EventRef::of(occurrence).id())
+        .collect()
+}
+
 fn show(model: Model, kind: ViewKind) -> bool {
     model.show(kind);
     true
@@ -317,10 +343,81 @@ fn open_selected(model: Model, window: Window, overlays: Overlays) -> bool {
     }
 }
 
-fn other_keys(model: Model, overlays: Overlays, event: &Event<KeyboardEventData>) {
+fn other_keys(model: Model, window: Window, overlays: Overlays, event: &Event<KeyboardEventData>) {
     let view = *model.view.peek();
     let month_like = matches!(view, ViewKind::Month | ViewKind::Year);
     let anchor = *model.anchor.peek();
+    let picked = model.selected.peek().clone();
+    // The month walks the events of its chosen day; the grids do it themselves.
+    if view == ViewKind::Month {
+        let events = model.day_events(anchor);
+        let at = picked
+            .as_ref()
+            .and_then(|id| events.iter().position(|other| other == id));
+        let walked = match &event.key {
+            Key::Named(NamedKey::ArrowDown) if at.is_some() => {
+                if let Some(next) = at.and_then(|at| events.get(at + 1)) {
+                    model.selected.clone().set(Some(next.clone()));
+                }
+                true
+            }
+            Key::Named(NamedKey::ArrowUp) if at.is_some() => {
+                let next = at.filter(|at| *at > 0).map(|at| events[at - 1].clone());
+                model.selected.clone().set(next);
+                true
+            }
+            Key::Named(NamedKey::Enter) => {
+                match (picked.as_ref().filter(|_| at.is_some()), events.first()) {
+                    (Some(_), _) => {
+                        open_selected(model, window, overlays);
+                    }
+                    (None, Some(first)) => model.selected.clone().set(Some(first.clone())),
+                    (None, None) => {
+                        model.show(ViewKind::Day);
+                    }
+                }
+                true
+            }
+            _ => false,
+        };
+        if walked {
+            event.stop_propagation();
+            event.prevent_default();
+            return;
+        }
+    }
+    // The grids walk their blocks with Up and Down; the same keys work when
+    // the window itself has the focus.
+    if matches!(view, ViewKind::Day | ViewKind::Week) {
+        let events = grid_events(&model, view, is_compact());
+        let at = picked
+            .as_ref()
+            .and_then(|id| events.iter().position(|other| other == id));
+        let next = match &event.key {
+            Key::Named(NamedKey::ArrowDown) => Some(match at {
+                Some(at) => events.get(at + 1).or(events.first()),
+                None => events.first(),
+            }),
+            Key::Named(NamedKey::ArrowUp) => Some(match at {
+                Some(at) if at > 0 => events.get(at - 1),
+                _ => events.last(),
+            }),
+            Key::Named(NamedKey::Enter) if at.is_some() => {
+                open_selected(model, window, overlays);
+                event.stop_propagation();
+                return;
+            }
+            _ => None,
+        };
+        if let Some(next) = next {
+            if let Some(next) = next {
+                model.selected.clone().set(Some(next.clone()));
+            }
+            event.stop_propagation();
+            event.prevent_default();
+            return;
+        }
+    }
     let handled = match &event.key {
         Key::Named(NamedKey::ArrowLeft) => {
             if month_like {
@@ -366,6 +463,10 @@ fn other_keys(model: Model, overlays: Overlays, event: &Event<KeyboardEventData>
             } else {
                 false
             }
+        }
+        Key::Named(NamedKey::Escape) if picked.is_some() => {
+            model.selected.clone().set(None);
+            true
         }
         Key::Named(NamedKey::Escape) => {
             let mut query = model.query;

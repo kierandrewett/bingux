@@ -239,7 +239,31 @@ impl Model {
 
     pub fn go(self, day: Date) {
         let mut anchor = self.anchor;
+        if *anchor.peek() != day {
+            let mut selected = self.selected;
+            selected.set_if_modified(None);
+        }
         anchor.set_if_modified(day);
+    }
+
+    /// The events of one day, in the order the month lists them: whole days
+    /// first, then by start. What Enter and the arrows walk in the month.
+    pub fn day_events(&self, day: Date) -> Vec<String> {
+        let mut found: Vec<Occurrence> = self
+            .occurrences(day, day.add_days(1))
+            .into_iter()
+            .filter(|occurrence| occurrence.status != bingux_calendar_core::Status::Cancelled)
+            .collect();
+        found.sort_by(|a, b| {
+            b.is_banner()
+                .cmp(&a.is_banner())
+                .then(a.start.cmp(&b.start))
+                .then(a.summary.cmp(&b.summary))
+        });
+        found
+            .iter()
+            .map(|occurrence| EventRef::of(occurrence).id())
+            .collect()
     }
 
     pub fn today(self) {
@@ -258,6 +282,8 @@ impl Model {
             return;
         }
         view.set(kind);
+        let mut selected = self.selected;
+        selected.set_if_modified(None);
         let mut next = prefs.peek().clone();
         next.view = kind;
         prefs.set(next.clone());
@@ -393,7 +419,7 @@ impl Model {
     }
 }
 
-/// How an event's time is said: "9:00 – 10:00", "All day", "Until 18:00".
+/// How an event's time is said: "9:00 to 10:00", "All day", "Until 18:00".
 pub fn time_text(occurrence: &Occurrence, day: Date, twelve_hour: bool) -> String {
     use bingux_ui::calendar::format_clock;
     if occurrence.all_day {
@@ -409,7 +435,7 @@ pub fn time_text(occurrence: &Occurrence, day: Date, twelve_hour: bool) -> Strin
         if occurrence.end == occurrence.start {
             start
         } else {
-            format!("{start} – {end}")
+            format!("{start} to {end}")
         }
     } else if day == start_day {
         format!("From {start}")

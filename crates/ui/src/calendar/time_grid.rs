@@ -13,7 +13,7 @@
 //! owns the events and decides what each report changes. Up and Down on the
 //! focused grid move through its events, Enter opens the one chosen.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -354,6 +354,29 @@ impl Component for TimeGrid {
         }
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        // A block the keyboard chose scrolls into view, with an hour above it.
+        let mut grid_height = use_state(|| 0.0f32);
+        let seen_selection = use_hook(|| Rc::new(RefCell::new(None::<String>)));
+        if *seen_selection.borrow() != self.selected {
+            *seen_selection.borrow_mut() = self.selected.clone();
+            let chosen = self
+                .selected
+                .as_ref()
+                .and_then(|id| self.blocks.iter().find(|block| &block.id == id));
+            if let Some(block) = chosen {
+                let top = block.span.start as f32 / 60.0 * hour_h;
+                let bottom =
+                    block.span.end.max(block.span.start + layout::MIN_SPAN) as f32 / 60.0 * hour_h;
+                let (_, offset): (i32, i32) = scroll.into();
+                let view_top = -offset as f32;
+                // The strip of day names and all-day events is above the hours.
+                let view_h = (*grid_height.peek() - 100.0).max(hour_h * 2.0);
+                if top < view_top || bottom > view_top + view_h {
+                    let mut scroll = scroll;
+                    scroll.scroll_to_y(-((top - hour_h.min(view_h / 4.0)).max(0.0) as i32));
+                }
+            }
+        }
 
         let body_width = *width.read();
         let colw = ((body_width - gutter) / columns as f32).max(0.0);
@@ -772,7 +795,7 @@ impl Component for TimeGrid {
                             h_full(),
                             flex_row(),
                             justify(Align::End),
-                            pr(S2),
+                            pr(S1),
                         ],
                     )
                     .child(CAPTION.label(&tokens, "all-day").max_lines(1)),
@@ -864,6 +887,9 @@ impl Component for TimeGrid {
                 self.blocks.len() + self.banners.len()
             ))
             .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
+            .on_sized(move |event: Event<SizedEventData>| {
+                grid_height.set_if_modified(event.area.height());
+            })
             .on_key_down(on_key_down)
             .child(headers)
             .child(strip)
@@ -1003,9 +1029,6 @@ impl Component for BlockView {
                     rounded(Radius::Mark),
                     fill(if strong { colours.strong } else { colours.tint }),
                     clip(),
-                    pl(S2),
-                    py(S0_5),
-                    pr(S1),
                 ],
             )
             .maybe(self.tentative, |element| element.opacity(0.7))
@@ -1024,24 +1047,37 @@ impl Component for BlockView {
                     ),
             )
             .child(
-                EVENT_TITLE
-                    .label(
+                rect()
+                    .tw(
                         &tokens,
-                        if self.clipped_start {
-                            format!("↑ {}", self.title)
-                        } else {
-                            self.title.clone()
-                        },
+                        &[
+                            w_full(),
+                            h_full(),
+                            pl(if self.w < 72.0 { S1 } else { S2 }),
+                            py(S0_5),
+                            pr(S1),
+                        ],
                     )
-                    .max_lines(title_lines)
-                    .text_overflow(TextOverflow::Ellipsis),
+                    .child(
+                        EVENT_TITLE
+                            .label(
+                                &tokens,
+                                if self.clipped_start {
+                                    format!("↑ {}", self.title)
+                                } else {
+                                    self.title.clone()
+                                },
+                            )
+                            .max_lines(title_lines)
+                            .text_overflow(TextOverflow::Ellipsis),
+                    )
+                    .maybe_child(show_detail.then(|| {
+                        CAPTION
+                            .label(&tokens, self.detail.clone())
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis)
+                    })),
             )
-            .maybe_child(show_detail.then(|| {
-                CAPTION
-                    .label(&tokens, self.detail.clone())
-                    .max_lines(1)
-                    .text_overflow(TextOverflow::Ellipsis)
-            }))
     }
 }
 

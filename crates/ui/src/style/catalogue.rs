@@ -16,8 +16,8 @@ use freya::prelude::{Color, FontWeight};
 use super::*;
 use crate::theme::{BannerKind, Tokens};
 use crate::typography::{
-    BADGE, BODY, CAPTION, CODE, EMPHASIS, HEADING, HERO, LINK, NUMERIC, OVERLINE, PAGE_TITLE,
-    SECTION, TITLE, TextStyle, VALUE,
+    BADGE, BODY, CAPTION, CODE, EMPHASIS, EVENT_TITLE, HEADING, HERO, LINK, NUMERIC, OVERLINE,
+    PAGE_TITLE, SECTION, TITLE, TextStyle, VALUE,
 };
 
 /// The space steps, in order.
@@ -257,6 +257,7 @@ pub const TEXT_STYLES: &[(&str, TextStyle)] = &[
     ("VALUE", VALUE),
     ("NUMERIC", NUMERIC),
     ("LINK", LINK),
+    ("EVENT_TITLE", EVENT_TITLE),
     ("CAPTION", CAPTION),
     ("BADGE", BADGE),
     ("OVERLINE", OVERLINE),

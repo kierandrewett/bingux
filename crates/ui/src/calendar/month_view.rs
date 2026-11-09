@@ -37,6 +37,8 @@ pub struct MonthItem {
     pub bar: bool,
     /// The time shown before the title of a chip, such as "9:00".
     pub time: String,
+    /// The minute of the day it starts, which orders the chips of one day.
+    pub minutes: u32,
 }
 
 /// A month of day cells.
@@ -48,6 +50,8 @@ pub struct MonthView {
     first_weekday: Weekday,
     week_numbers: bool,
     items: Vec<MonthItem>,
+    selected_item: Option<String>,
+    on_pick: EventHandler<Option<String>>,
     on_select: EventHandler<Date>,
     on_open: EventHandler<String>,
     on_create: EventHandler<Date>,
@@ -64,6 +68,8 @@ pub fn month_view(month: Date, today: Date, on_select: impl Into<EventHandler<Da
         first_weekday: Weekday::Mon,
         week_numbers: false,
         items: Vec::new(),
+        selected_item: None,
+        on_pick: EventHandler::new(|_| {}),
         on_select: on_select.into(),
         on_open: EventHandler::new(|_| {}),
         on_create: EventHandler::new(|_| {}),
@@ -89,6 +95,21 @@ impl MonthView {
 
     pub fn items(mut self, items: Vec<MonthItem>) -> Self {
         self.items = items;
+        self
+    }
+
+    /// The event, by `MonthItem::id`, that the keyboard has chosen: drawn
+    /// strong, with an outline on a bar.
+    pub fn selected_item(mut self, id: Option<String>) -> Self {
+        self.selected_item = id;
+        self
+    }
+
+    /// The keyboard chose an event (Enter on a day with events, then Up and
+    /// Down walk that day's events) or let go of it (`None`: Escape, or a
+    /// move to another day).
+    pub fn on_pick(mut self, handler: impl Into<EventHandler<Option<String>>>) -> Self {
+        self.on_pick = handler.into();
         self
     }
 
@@ -147,6 +168,7 @@ impl Component for MonthView {
                 .cmp(&y.first)
                 .then((y.last.days() - y.first.days()).cmp(&(x.last.days() - x.first.days())))
                 .then(y.bar.cmp(&x.bar))
+                .then(x.minutes.cmp(&y.minutes))
                 .then(x.title.cmp(&y.title))
         });
         let ranges: Vec<(Date, Date)> = order
@@ -185,6 +207,7 @@ impl Component for MonthView {
                         time: item.time.clone(),
                         colour: item.colour,
                         bar: item.bar,
+                        selected: self.selected_item.as_deref() == Some(item.id.as_str()),
                         x: number_w + p.run.first as f32 * cell_w + gap,
                         y: top + number_h + p.lane as f32 * (chip + gap),
                         w: ((p.run.last - p.run.first + 1) as f32 * cell_w - gap * 2.0).max(0.0),
@@ -308,7 +331,64 @@ impl Component for MonthView {
         let current = self.selected.unwrap_or(self.today);
         let on_select = self.on_select.clone();
         let on_activate = self.on_activate.clone();
+        let on_pick = self.on_pick.clone();
+        let on_open_key = self.on_open.clone();
+        let picked = self.selected_item.clone();
+        // The events of the chosen day, in the order a cell lists them.
+        let day_events: Vec<String> = {
+            let mut found: Vec<&MonthItem> = self
+                .items
+                .iter()
+                .filter(|item| item.first <= current && current <= item.last)
+                .collect();
+            found.sort_by(|a, b| {
+                b.bar
+                    .cmp(&a.bar)
+                    .then(a.minutes.cmp(&b.minutes))
+                    .then(a.title.cmp(&b.title))
+            });
+            found.into_iter().map(|item| item.id.clone()).collect()
+        };
         let on_key_down = move |event: Event<KeyboardEventData>| {
+            let at = picked
+                .as_ref()
+                .and_then(|id| day_events.iter().position(|other| other == id));
+            match &event.key {
+                Key::Named(NamedKey::Escape) if picked.is_some() => {
+                    event.stop_propagation();
+                    on_pick.call(None);
+                    return;
+                }
+                Key::Named(NamedKey::ArrowDown) if at.is_some() => {
+                    event.stop_propagation();
+                    event.prevent_default();
+                    if let Some(next) = at.and_then(|at| day_events.get(at + 1)) {
+                        on_pick.call(Some(next.clone()));
+                    }
+                    return;
+                }
+                Key::Named(NamedKey::ArrowUp) if at.is_some() => {
+                    event.stop_propagation();
+                    event.prevent_default();
+                    match at {
+                        Some(at) if at > 0 => on_pick.call(Some(day_events[at - 1].clone())),
+                        _ => on_pick.call(None),
+                    }
+                    return;
+                }
+                Key::Named(NamedKey::Enter) => {
+                    event.stop_propagation();
+                    if let Some(id) = picked.as_ref().filter(|_| at.is_some()) {
+                        on_open_key.call(id.clone());
+                    } else if let Some(first) = day_events.first() {
+                        on_pick.call(Some(first.clone()));
+                    } else {
+                        on_activate.call(current);
+                    }
+                    return;
+                }
+                _ => {}
+            }
             let target = match &event.key {
                 Key::Named(NamedKey::ArrowLeft) => current.add_days(-1),
                 Key::Named(NamedKey::ArrowRight) => current.add_days(1),
@@ -318,13 +398,11 @@ impl Component for MonthView {
                 Key::Named(NamedKey::PageDown) => current.add_months(1),
                 Key::Named(NamedKey::Home) => current.first_of_month(),
                 Key::Named(NamedKey::End) => current.last_of_month(),
-                Key::Named(NamedKey::Enter) => {
-                    event.stop_propagation();
-                    on_activate.call(current);
-                    return;
-                }
                 _ => return,
             };
+            if picked.is_some() {
+                on_pick.call(None);
+            }
             event.stop_propagation();
             event.prevent_default();
             on_select.call(target);
@@ -460,6 +538,7 @@ struct MonthChip {
     time: String,
     colour: Color,
     bar: bool,
+    selected: bool,
     x: f32,
     y: f32,
     w: f32,
@@ -511,6 +590,9 @@ impl Component for MonthChip {
                         fill(colours.solid),
                     ],
                 )
+                .maybe(self.selected, |element| {
+                    element.tw(&tokens, &[border(Line::Edge(Paint::Accent))])
+                })
                 .maybe(hovering(), |element| element.opacity(0.85))
                 .child(
                     EVENT_TITLE
@@ -524,7 +606,7 @@ impl Component for MonthChip {
             &tokens,
             &[
                 rounded(Radius::Mark),
-                surface(Paint::Transparent, hovering(), false, false),
+                surface(Paint::Transparent, hovering(), false, self.selected),
             ],
         )
         .child(rect().tw(

@@ -64,7 +64,19 @@ impl Component for DatePicker {
         let value = self.value;
         let on_change = self.on_change.clone();
 
-        let button = action_button(value.short() + &format!(" {}", value.year), move |_| {
+        // "Tue 10 Nov 2026", and on a phone, where the line has to hold a time
+        // as well, "10 Nov 2026".
+        let text = if is_compact() {
+            format!(
+                "{} {} {}",
+                value.day,
+                super::date::month_short(value.month),
+                value.year
+            )
+        } else {
+            value.short() + &format!(" {}", value.year)
+        };
+        let button = action_button(text, move |_| {
             let next = !*open.peek();
             if next {
                 shown.set(value.first_of_month());

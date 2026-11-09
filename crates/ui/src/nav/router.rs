@@ -136,6 +136,13 @@ pub fn try_router() -> Option<Router> {
     WINDOW_ROUTER.with(Cell::get)
 }
 
+/// Whether a menu, choice, dialog or sheet is open in the window, read
+/// without subscribing; false before the window opened. Window-level key
+/// handlers call it so a shortcut never fires under a modal.
+pub fn modal_open() -> bool {
+    try_router().is_some_and(|router| router.modal_open_now())
+}
+
 /// The window's router, for code that only runs once a window exists.
 pub fn router() -> Router {
     try_router().expect("navigation used before the window opened")
@@ -162,7 +169,12 @@ pub fn use_location() -> Location {
 /// Reactive.
 pub(crate) fn use_fragment() -> Option<String> {
     let router = use_try_consume::<Router>()?;
-    let fragment = router.model.read().location().fragment().map(str::to_string);
+    let fragment = router
+        .model
+        .read()
+        .location()
+        .fragment()
+        .map(str::to_string);
     fragment
 }
 
@@ -201,6 +213,13 @@ impl Router {
     /// calling component, so it redraws when one opens or closes.
     pub fn modal_open(&self) -> bool {
         !self.model.read().modals().is_empty()
+    }
+
+    /// Whether a menu, choice, dialog or sheet is open in this window, read
+    /// without subscribing. For an event handler: a window shortcut checks it
+    /// and leaves the key to the modal.
+    pub fn modal_open_now(&self) -> bool {
+        !self.model.peek().modals().is_empty()
     }
 
     pub fn journal(&self) -> Journal {
@@ -375,9 +394,9 @@ impl Router {
             .chain(std::iter::once(model.current().id))
             .collect();
         let mut retained = self.retained;
-        retained
-            .write()
-            .retain(|(entry, _), _| alive.contains(entry) || !removed.iter().any(|gone| gone.id == *entry));
+        retained.write().retain(|(entry, _), _| {
+            alive.contains(entry) || !removed.iter().any(|gone| gone.id == *entry)
+        });
     }
 
     /// Ask whether to leave a page that has unsaved changes.
@@ -434,7 +453,12 @@ impl Router {
 
     pub(crate) fn set_title(&self, entry: u64, title: &str) {
         if self.model.peek().current().id != entry
-            && !self.model.peek().back_entries().iter().any(|e| e.id == entry)
+            && !self
+                .model
+                .peek()
+                .back_entries()
+                .iter()
+                .any(|e| e.id == entry)
         {
             return;
         }
@@ -449,7 +473,12 @@ impl Router {
         self.model.peek().set_guard(entry, guard);
     }
 
-    pub(crate) fn open_modal(&self, kind: ModalKind, title: &str, dismiss: EventHandler<()>) -> u64 {
+    pub(crate) fn open_modal(
+        &self,
+        kind: ModalKind,
+        title: &str,
+        dismiss: EventHandler<()>,
+    ) -> u64 {
         let mut model = self.model;
         let id = model.write().open_modal(kind, title);
         let mut dismissers = self.dismissers;
@@ -465,7 +494,13 @@ impl Router {
     pub(crate) fn close_modal(&self, id: u64) {
         let mut dismissers = self.dismissers;
         dismissers.write().remove(&id);
-        if self.model.peek().modals().iter().any(|modal| modal.id == id) {
+        if self
+            .model
+            .peek()
+            .modals()
+            .iter()
+            .any(|modal| modal.id == id)
+        {
             let mut model = self.model;
             model.write().close_modal(id);
         }
@@ -527,8 +562,11 @@ pub fn use_pop_guard(guard: impl Fn() -> PopGuard + 'static) {
     let router = use_try_consume::<Router>();
     let entry = use_entry_id();
     // The closure changes every render; the registration does not.
-    let current: std::rc::Rc<std::cell::RefCell<Box<dyn Fn() -> PopGuard>>> =
-        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Box::new(|| PopGuard::Allow) as Box<dyn Fn() -> PopGuard>)));
+    let current: std::rc::Rc<std::cell::RefCell<Box<dyn Fn() -> PopGuard>>> = use_hook(|| {
+        std::rc::Rc::new(std::cell::RefCell::new(
+            Box::new(|| PopGuard::Allow) as Box<dyn Fn() -> PopGuard>
+        ))
+    });
     *current.borrow_mut() = Box::new(guard);
     let registered = current.clone();
     use_side_effect_with_deps(&entry, move |entry| {

@@ -69,13 +69,7 @@ file:stage.rs # staged(), provide_page() and after_page(): when each part of a p
 window_size                # the window's size in logical pixels, a number read by layouts; nothing to show (held by the in-motion suite at scale 2)
 window_size_peek           # window_size for a handler; same
 
-# The calendar views. They are shown running by bingux-calendar (apps/calendar); a taxonomy page with
-# specimens of each is still to be written, so these are excused until then.
+# The calendar's data modules: dates, overlap maths and colours. Their appearance is the views' (shown on the Calendar page).
 file:calendar/date.rs     # civil dates and clock text for the calendar views: data, no appearance
 file:calendar/layout.rs   # overlap columns, lanes and drag maths of the calendar views: data, no appearance
-file:calendar/palette.rs  # calendar colours and the tints events are drawn in
-file:calendar/month_grid.rs # MonthGrid: seen in bingux-calendar's sidebar; taxonomy specimen not yet written
-file:calendar/month_view.rs # MonthView: seen in bingux-calendar's month view; taxonomy specimen not yet written
-file:calendar/time_grid.rs  # TimeGrid: seen in bingux-calendar's week and day views; taxonomy specimen not yet written
-file:calendar/pickers.rs    # DatePicker and TimePicker: seen in bingux-calendar's editor; taxonomy specimen not yet written
-EVENT_TITLE   # the text style of an event title in the calendar grids; shown by bingux-calendar, no taxonomy specimen yet
+file:calendar/palette.rs  # calendar colours and the tints events are drawn in: the views show them

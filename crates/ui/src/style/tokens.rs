@@ -778,7 +778,7 @@ impl Dim {
             Dim::IconBox => IconSize::Row.sizes(),
             Dim::SignalBar => same(3.0),
             Dim::CalendarHour => (56.0, 64.0),
-            Dim::CalendarGutter => (56.0, 44.0),
+            Dim::CalendarGutter => (56.0, 56.0),
             Dim::CalendarChip => (20.0, 24.0),
             Dim::CalendarWeekNumber => same(28.0),
             Dim::CalendarCellMin => (88.0, 56.0),

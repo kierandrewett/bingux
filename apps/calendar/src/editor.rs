@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use bingux_calendar_core::chrono::{Duration, NaiveDateTime, Utc};
 use bingux_calendar_core::recur::{self, Change, Repeat, RepeatEnd, Scope};
-use bingux_calendar_core::zone::common_zones;
+use bingux_calendar_core::zone::{all_zones, common_zones};
 use bingux_calendar_core::{Availability, Event, Item, Key, Reminder, Series, Zone, ics};
 use bingux_ui::calendar::{Date, date_picker, format_clock, time_picker};
 use bingux_ui::prelude::*;
@@ -516,7 +516,7 @@ impl Component for Editor {
                     move_start(*start_date.peek(), minutes);
                 }));
             }
-            row("Starts").trailing(line)
+            row("Starts").trailing(line).trailing_control()
         };
         let end_row = {
             let picker = date_picker(ed, clock.today, move |date: Date| end_date.set(date))
@@ -531,21 +531,31 @@ impl Component for Editor {
                 }
                 line = line.child(picker);
             }
-            row("Ends").trailing(line).subtitle(if ends_after {
-                ""
-            } else {
-                "The event ends before it starts."
-            })
+            row("Ends")
+                .trailing(line)
+                .trailing_control()
+                .subtitle(if ends_after {
+                    ""
+                } else {
+                    "The event ends before it starts."
+                })
         };
         let mut when = Group::new(None::<String>)
             .row(switch_row("All-day", all, move |on: bool| all_day.set(on)))
             .row(start_row)
             .row(end_row);
         if !all {
+            // The cities people name first, then every zone of the database;
+            // typing in the open list narrows it.
             let mut options: Vec<(String, String)> = common_zones()
                 .iter()
                 .map(|z| (z.tzid(), z.label()))
                 .collect();
+            for zone in all_zones() {
+                if !options.iter().any(|(key, _)| *key == zone.tzid()) {
+                    options.push((zone.tzid(), zone.label()));
+                }
+            }
             let current = *zone.read();
             if !options.iter().any(|(key, _)| *key == current.tzid()) {
                 options.insert(0, (current.tzid(), current.label()));
@@ -568,15 +578,16 @@ impl Component for Editor {
             } else {
                 String::new()
             };
-            when = when.row(row("Time zone").subtitle(note).trailing(dropdown(
-                options,
-                current.tzid(),
-                move |key: String| {
-                    if let Some(next) = Zone::from_tzid(&key) {
-                        zone.set(next);
-                    }
-                },
-            )));
+            when = when.row(
+                row("Time zone").subtitle(note).trailing(
+                    dropdown(options, current.tzid(), move |key: String| {
+                        if let Some(next) = Zone::from_tzid(&key) {
+                            zone.set(next);
+                        }
+                    })
+                    .width(Dim::DropdownMenu),
+                ),
+            );
         }
 
         let repeat_options: Vec<(String, String)> = {
@@ -609,7 +620,10 @@ impl Component for Editor {
             let end_options = vec![
                 ("never".to_string(), "Never".to_string()),
                 ("on".to_string(), "On a date".to_string()),
-                ("after".to_string(), "After a number of times".to_string()),
+                (
+                    "after".to_string(),
+                    "After a set number of times".to_string(),
+                ),
             ];
             let mut line = hstack(S2);
             match repeat_end.read().clone() {
@@ -632,14 +646,17 @@ impl Component for Editor {
                 }
                 RepeatEnd::Never => {}
             }
-            let line = line.child(dropdown(end_options, end_key, move |key: String| {
-                repeat_end.set(match key.as_str() {
-                    "on" => RepeatEnd::On(convert::naive(ed.add_days(30))),
-                    "after" => RepeatEnd::After(10),
-                    _ => RepeatEnd::Never,
-                });
-            }));
-            repeats = repeats.row(row("Ends repeating").trailing(line));
+            let line = line.child(
+                dropdown(end_options, end_key, move |key: String| {
+                    repeat_end.set(match key.as_str() {
+                        "on" => RepeatEnd::On(convert::naive(ed.add_days(30))),
+                        "after" => RepeatEnd::After(10),
+                        _ => RepeatEnd::Never,
+                    });
+                })
+                .width(Dim::DropdownMenu),
+            );
+            repeats = repeats.row(row("Ends repeating").trailing(line).trailing_control());
         }
         if let Some(rule) = draft
             .custom_rule

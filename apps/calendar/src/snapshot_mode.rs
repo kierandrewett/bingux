@@ -6,7 +6,9 @@
 //! person would press. `BINGUX_CALENDAR_SNAPSHOT_SIZE="WxH"` picks the window
 //! size, and `BINGUX_SETTINGS_SNAPSHOT_SCHEME=prefer-light|prefer-dark` the
 //! colour scheme. With `empty` as the third argument the calendar has no
-//! events, for the first-launch state.
+//! events, for the first-launch state; with `editor` the frames are an event
+//! chosen with the keyboard and its editor (a popup stays open in a snapshot,
+//! so it has a run of its own).
 
 use std::fs;
 use std::path::Path;
@@ -229,12 +231,20 @@ pub fn run(dir: &str, mode: Option<&str>) {
     let compact = size.0 < 740.0;
     let frames: &[(&str, &str)] = if empty {
         &[("empty", "")]
+    } else if mode == Some("editor") {
+        &[
+            (
+                "selected",
+                "key 2; wait 300; key down; key down; key down; wait 400",
+            ),
+            ("editor", "key return; wait 900"),
+        ]
     } else if compact {
         &[
             ("week", ""),
             ("month", "key 3; wait 600"),
             ("agenda", "key 5; wait 600"),
-            ("editor", "key 2; wait 400; key n; wait 700"),
+            ("quick", "key 2; wait 400; key n; wait 700"),
         ]
     } else {
         &[
@@ -246,10 +256,6 @@ pub fn run(dir: &str, mode: Option<&str>) {
             (
                 "quick",
                 "key 2; wait 400; key n; wait 700; type Lunch with Sam at Nando's tomorrow 1pm; wait 500",
-            ),
-            (
-                "editor",
-                "key escape; wait 400; key escape; wait 300; click-text Design review; wait 900",
             ),
         ]
     };

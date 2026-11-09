@@ -110,7 +110,7 @@ pub fn layout(
     (banners, blocks)
 }
 
-/// "9:00 – 10:00 · Nando's".
+/// "9:00 to 10:00 · Nando's".
 fn detail_of(occurrence: &Occurrence, twelve: bool, view: Zone) -> String {
     let mut text = time_text(
         occurrence,

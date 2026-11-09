@@ -78,6 +78,7 @@ impl Component for MonthPage {
                     last: convert::date_of(to),
                     title: title_of(occurrence),
                     colour: colour_of(&model, &occurrence.calendar, &tokens),
+                    minutes: convert::minutes_of(occurrence.start),
                     bar: occurrence.is_banner(),
                     time: if occurrence.all_day {
                         String::new()
@@ -93,6 +94,11 @@ impl Component for MonthPage {
             .first_weekday(first_weekday)
             .week_numbers(week_numbers)
             .items(items)
+            .selected_item(model.selected.read().clone())
+            .on_pick(move |id: Option<String>| {
+                let mut selected = model.selected;
+                selected.set(id);
+            })
             .on_open(move |id: String| open(model, window, overlays, &id))
             .on_create(move |day: Date| {
                 // A day pressed twice: an event at nine, or at the next hour

@@ -149,7 +149,7 @@ impl Component for QuickBody {
                 format!("{}, all day", convert::date_of(new.start.date()).short())
             } else {
                 format!(
-                    "{}, {} \u{2013} {}",
+                    "{}, {} to {}",
                     convert::date_of(new.start.date()).short(),
                     format_clock(convert::minutes_of(new.start), twelve),
                     format_clock(convert::minutes_of(new.end), twelve)

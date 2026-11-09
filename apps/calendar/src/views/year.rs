@@ -1,6 +1,9 @@
 //! The year: twelve small months. A day with something on it has a dot;
 //! a press on a day opens it, a press on a month's name opens the month.
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use bingux_ui::calendar::date::month_name;
 use bingux_ui::calendar::{Date, month_grid};
 use bingux_ui::prelude::*;
@@ -79,6 +82,19 @@ impl Component for YearPage {
             })
             .collect();
 
+        // The year opens at the row that holds the month on show, and again
+        // whenever the window asks (Today, a change of view).
+        let mut row_height = use_state(|| 0.0f32);
+        let scroll = use_hook(|| ScrollController::new(0, 0));
+        let applied = use_hook(|| Rc::new(Cell::new(0u64)));
+        let nonce = *model.scroll_nonce.read();
+        if *row_height.read() > 0.0 && applied.get() != nonce {
+            applied.set(nonce);
+            let row = (anchor.month as usize - 1) / columns;
+            let mut scroll = scroll;
+            scroll.scroll_to_y(-((row as f32 * *row_height.peek()) as i32));
+        }
+
         let rows: Vec<Element> = (0..months.len().div_ceil(columns))
             .map(|row| {
                 let cells: Vec<Element> = (0..columns)
@@ -86,12 +102,17 @@ impl Component for YearPage {
                     .collect();
                 rect()
                     .tw(&tokens, &[w_full(), flex_row(), grow_children()])
+                    .maybe(row == 0, |element| {
+                        element.on_sized(move |event: Event<SizedEventData>| {
+                            row_height.set_if_modified(event.area.height());
+                        })
+                    })
                     .children(cells)
                     .into_element()
             })
             .collect();
 
-        ScrollView::new()
+        ScrollView::new_controlled(scroll)
             .width(Size::fill())
             .height(Size::fill())
             .child(
