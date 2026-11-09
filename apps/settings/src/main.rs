@@ -24,11 +24,12 @@ pub(crate) mod ui {
     pub use bingux_ui::surface::use_tokens;
 }
 
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 use crate::pages::PageId;
 
 fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("settings"));
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
         let dir = std::env::args()
@@ -50,10 +51,10 @@ fn main() {
     // page or subpage, with Back leading to the pages above it.
     Application::new("bingux-settings")
         .routes(routes::table())
-        .title("Settings")
+        .title(Message::new(i18n_id!("settings-title")))
         .borderless()
         .about(bingux_ui::app_info!(
-            description = "Change Bingux and system settings",
+            description = tr!("settings-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(usage())
@@ -410,4 +411,15 @@ fn snapshot_numbers<const N: usize>(name: &str) -> Option<[f32; N]> {
         .filter_map(|part| part.trim().parse().ok())
         .collect();
     numbers.try_into().ok()
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "settings")
+            .assert_clean();
+    }
 }
