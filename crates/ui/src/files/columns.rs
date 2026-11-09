@@ -41,6 +41,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use crate::format::{Date, DatePart, Moment, Relative, Time, YearDisplay, Zone};
 use crate::prelude::tr;
 use bingux_files::display::{Civil, local_offset};
+use bingux_files::ops::user_name;
 use bingux_files::{Entry, Kind as EntryKind, Sort, SortKey};
 use freya::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -615,23 +616,9 @@ pub enum DateStyle {
     Relative,
 }
 
-// FilesModel is adding `sized`, `created`, `accessed`, `mode` and `owner` to
-// `Entry` (see /var/tmp/FilesModel/API.md). Until they land these shims stand
-// in for them. Switch each body to the field and delete this note.
-fn sized(_entry: &Entry) -> bool {
-    true
-}
-fn created(_entry: &Entry) -> Option<SystemTime> {
-    None
-}
-fn accessed(_entry: &Entry) -> Option<SystemTime> {
-    None
-}
-fn mode(_entry: &Entry) -> Option<u32> {
-    None
-}
-fn owner(_entry: &Entry) -> String {
-    String::new()
+/// The owner's login name, or the numeric id when it has none.
+fn owner_text(uid: u32) -> String {
+    user_name(uid).unwrap_or_else(|| uid.to_string())
 }
 
 /// What `column` shows for `entry`, with dates written absolutely. `now` is
@@ -679,7 +666,7 @@ fn text_with(
         Column::Size => {
             if entry.is_dir() {
                 String::new()
-            } else if !sized(entry) {
+            } else if !entry.sized {
                 "\u{2013}".to_string()
             } else {
                 super::display::size(entry.size)
@@ -687,12 +674,14 @@ fn text_with(
         }
         Column::Kind => entry.mime.description.to_string(),
         Column::Modified => date(entry.modified),
-        Column::Created => date(created(entry)),
-        Column::Accessed => date(accessed(entry)),
-        Column::Permissions => mode(entry)
-            .map(|mode| permissions_text(mode, entry.kind, entry.symlink))
-            .unwrap_or_default(),
-        Column::Owner => owner(entry),
+        Column::Created => date(entry.created),
+        Column::Accessed => date(entry.accessed),
+        Column::Permissions if entry.sized => {
+            permissions_text(entry.mode, entry.kind, entry.symlink)
+        }
+        Column::Permissions => String::new(),
+        Column::Owner if entry.sized => owner_text(entry.uid),
+        Column::Owner => String::new(),
         Column::Location => location_text(&entry.path, home),
         // Where it was, as the folder it was in; nothing is known when the
         // info file is missing. The Trash says how long ago, as Recent does.
