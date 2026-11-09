@@ -181,7 +181,7 @@ fn apply_now(edit: Edit) -> Result<(), String> {
 fn reload(path: &str, original: &str) -> Result<(), String> {
     match gnoblin::gnoblinctl(&["config", "reload"]) {
         Ok(_) => Ok(()),
-        Err(e) if e.0 == gnoblin::NOT_RUNNING => Ok(()),
+        Err(e) if e.0 == gnoblin::not_running() => Ok(()),
         Err(e) => {
             let restored = write_file(path, original).is_ok();
             if restored {

@@ -5,37 +5,42 @@
 use std::time::Duration;
 
 use crate::system::{self, CommandError, CommandResult};
+use bingux_ui::prelude::tr;
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Shown when the desktop session is not running, so nothing can be read.
-pub const NOT_RUNNING: &str = "The desktop is not running. Sign out and sign in again.";
+pub fn not_running() -> String {
+    tr!("settings-gnoblin-not-running")
+}
 
 /// Shown beside a setting that the desktop configuration controls.
-pub const MANAGED: &str = "Set in your desktop configuration";
+pub fn managed() -> String {
+    tr!("settings-gnoblin-managed")
+}
 
 /// A row for a setting the desktop configuration controls: read only, marked
 /// "Managed", with `value` already in words (see [`on_off`] and [`millis`]).
 pub fn managed_row(title: &str, value: impl Into<String>) -> crate::ui::Row {
     crate::ui::row(title)
-        .subtitle(MANAGED)
-        .badge("Managed")
+        .subtitle(managed())
+        .badge(tr!("settings-gnoblin-managed-badge"))
         .value(value)
 }
 
 /// A Lua boolean in words: `true` and `On` read as On, anything else as Off.
-pub fn on_off(raw: &str) -> &'static str {
+pub fn on_off(raw: &str) -> String {
     if matches!(raw, "true" | "On") {
-        "On"
+        tr!("settings-gnoblin-on")
     } else {
-        "Off"
+        tr!("settings-gnoblin-off")
     }
 }
 
 /// A Lua number of milliseconds in words, such as `500 ms`.
 pub fn millis(raw: &str) -> String {
     match raw.parse::<f64>() {
-        Ok(ms) => format!("{} ms", ms.round() as i64),
+        Ok(ms) => tr!("settings-gnoblin-millis", ms = ms.round() as i64),
         Err(_) => raw.to_string(),
     }
 }
@@ -294,17 +299,15 @@ impl Parser<'_> {
 }
 
 fn parse_error(_error: String) -> CommandError {
-    CommandError(
-        "Could not read the desktop settings. Restart the desktop and try again.".to_string(),
-    )
+    CommandError(tr!("settings-gnoblin-read-error"))
 }
 
 /// Runs `gnoblinctl args`. A missing compositor socket becomes the short
-/// [`NOT_RUNNING`] so pages can show it in one line.
+/// [`not_running()`] so pages can show it in one line.
 pub fn gnoblinctl(args: &[&str]) -> CommandResult {
     system::run("gnoblinctl", args, TIMEOUT).map_err(|error| {
         if error.0.contains("Cannot connect to compositor socket") {
-            CommandError(NOT_RUNNING.to_string())
+            CommandError(not_running())
         } else {
             error
         }
@@ -331,8 +334,8 @@ pub fn lua_override(snapshot: &Json, path: &[&str]) -> Option<String> {
         Json::Null => None,
         Json::String(text) if text == "inherit" => None,
         Json::String(text) => Some(text.clone()),
-        Json::Bool(true) => Some("On".to_string()),
-        Json::Bool(false) => Some("Off".to_string()),
+        Json::Bool(true) => Some(tr!("settings-gnoblin-on")),
+        Json::Bool(false) => Some(tr!("settings-gnoblin-off")),
         Json::Number(number) => Some(number.to_string()),
         Json::Array(items) => Some(
             items
@@ -341,7 +344,7 @@ pub fn lua_override(snapshot: &Json, path: &[&str]) -> Option<String> {
                 .collect::<Vec<_>>()
                 .join(", "),
         ),
-        Json::Object(_) => Some("Custom".to_string()),
+        Json::Object(_) => Some(tr!("settings-gnoblin-custom")),
     }
 }
 

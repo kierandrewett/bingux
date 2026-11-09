@@ -57,3 +57,14 @@ power-button-suspend = Suspend
 power-button-hibernate = Hibernate
 power-button-interactive = Ask what to do
 power-button-shutdown = Power off
+
+## Gnoblin
+
+settings-gnoblin-not-running = The desktop is not running. Sign out and sign in again.
+settings-gnoblin-managed = Set in your desktop configuration
+settings-gnoblin-managed-badge = Managed
+settings-gnoblin-on = On
+settings-gnoblin-off = Off
+settings-gnoblin-custom = Custom
+settings-gnoblin-millis = { $ms } ms
+settings-gnoblin-read-error = Could not read the desktop settings. Restart the desktop and try again.

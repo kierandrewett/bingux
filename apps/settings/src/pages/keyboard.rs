@@ -1018,7 +1018,7 @@ impl Component for ShortcutsPage {
         };
         let list = match result {
             Ok(list) => list,
-            Err(e) if e.0 == gnoblin::NOT_RUNNING => {
+            Err(e) if e.0 == gnoblin::not_running() => {
                 return page_column()
                     .child(PageHead::new())
                     .child(status(Status::Empty(e.0)));
