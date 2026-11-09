@@ -689,11 +689,11 @@ impl Component for PlaceList {
         let mut commands: Vec<(PlaceFacts, EventHandler<PlaceCmd>)> = Vec::with_capacity(total);
         let mut index = 0;
         for (group_index, group) in self.sections.iter().enumerate() {
-            if let Some(title) = group.title {
+            if let Some(title) = &group.title {
                 column = column.child(
                     rect()
                         .tw(&tokens, NAV_LABEL)
-                        .child(CAPTION.label(&tokens, title)),
+                        .child(CAPTION.label(&tokens, title.as_str())),
                 );
             }
             for (item_index, item) in group.items.iter().enumerate() {

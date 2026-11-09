@@ -55,7 +55,7 @@ impl Item {
 /// A group of rows under an optional heading.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Section {
-    pub title: Option<&'static str>,
+    pub title: Option<String>,
     pub items: Vec<Item>,
 }
 
@@ -107,7 +107,7 @@ pub(crate) fn sections(
     }
     if !bookmarks.is_empty() {
         out.push(Section {
-            title: Some("Bookmarks"),
+            title: Some(crate::tr!("ui-files-places-bookmarks")),
             items: bookmarks
                 .iter()
                 .map(|place| place_item(place, ItemKind::Bookmark))
@@ -120,7 +120,7 @@ pub(crate) fn sections(
     // (`31modbehw6`, `fsociety`) reads as one more drive.
     let mut drives = vec![Item {
         icon: FileIcon::for_mount(MountKind::Local),
-        label: "Computer".to_string(),
+        label: crate::tr!("ui-files-root-computer"),
         target: Where::Folder(root.to_path_buf()),
         kind: ItemKind::Drive,
         mount: mounts
@@ -155,7 +155,7 @@ pub(crate) fn sections(
         bookmarked: false,
     }));
     out.push(Section {
-        title: Some("Drives"),
+        title: Some(crate::tr!("ui-files-places-drives")),
         items: drives,
     });
     out
@@ -238,7 +238,7 @@ pub(crate) enum UsageLine {
 
 /// `Not mounted, 16 GB`.
 pub(crate) fn volume_text(volume: &Volume) -> String {
-    format!("Not mounted \u{b7} {}", display::size(volume.size))
+    crate::tr!("ui-files-places-not-mounted", size = display::size(volume.size))
 }
 
 /// `230 GB free of 465 GB`.
@@ -339,7 +339,7 @@ pub(crate) fn type_ahead(labels: &[String], from: Option<usize>, typed: &str) ->
 pub(crate) fn current_name(current: &Where, row: Option<&Item>) -> String {
     match (row, current) {
         (Some(item), _) => item.label.clone(),
-        (None, Where::Recent) => "Recent".to_string(),
+        (None, Where::Recent) => crate::tr!("ui-files-root-recent"),
         (None, Where::Folder(path)) => path
             .file_name()
             .map_or_else(bingux_files::location::host_name, |name| {
@@ -405,8 +405,11 @@ mod tests {
             mount("/mnt/nas", "nas", MountKind::Network, Usage::Unknown),
         ];
         let out = sections(&sample(), &bookmarks, &mounts, &[], true);
-        let titles: Vec<_> = out.iter().map(|section| section.title).collect();
-        assert_eq!(titles, [None, Some("Bookmarks"), Some("Drives")]);
+        let titles: Vec<_> = out.iter().map(|section| section.title.clone()).collect();
+        assert_eq!(
+            titles,
+            [None, Some("Bookmarks".to_string()), Some("Drives".to_string())]
+        );
         let drives: Vec<_> = out[2]
             .items
             .iter()
@@ -427,7 +430,7 @@ mod tests {
         let out = sections(&sample(), &[], &[], &[], false);
         assert_eq!(out[0].items.len(), 2);
         assert_eq!(out.len(), 2);
-        assert_eq!(out[1].title, Some("Drives"));
+        assert_eq!(out[1].title.as_deref(), Some("Drives"));
     }
 
     #[test]

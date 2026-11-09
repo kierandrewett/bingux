@@ -1384,3 +1384,10 @@ ui-files-cmd-reverse-order = Reverse the order
 ui-files-drive-safe-to-remove = { $label } is safe to remove.
 # Toast when a drive is busy. $label is the drive's name.
 ui-files-drive-busy = { $label } is busy. Close the files on it and try again.
+
+## Files: the sidebar's own headings and rows
+
+ui-files-places-bookmarks = Bookmarks
+ui-files-places-drives = Drives
+# $size (String) - the size of a drive that is not mounted
+ui-files-places-not-mounted = Not mounted · { $size }
