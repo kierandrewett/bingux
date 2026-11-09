@@ -8,8 +8,8 @@
 
 use crate::demos::transfer;
 use crate::demos::{
-    accessibility, buttons, containers, data, feedback, files, foundations, icon_set, inputs,
-    inspector, navigation, platform,
+    accessibility, buttons, containers, data, feedback, files, formats, foundations, icon_set,
+    inputs, inspector, navigation, platform,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -973,6 +973,90 @@ pub static ENTRIES: &[Entry] = &[
             "Focusable",
         ],
         body: Body::States(foundations::MOTION),
+    },
+    Entry {
+        name: "Numbers",
+        category: Category::Foundations,
+        page: "Numbers and money",
+        api: "Number::new(f64 | integer | Quantity).fraction_digits(least, most).significant_digits(n).grouping(Grouping).sign(Sign).compact(Compact).locale(&Locale).format(); Percent::new(fraction); Quantity::parse(\"12.50\")",
+        doc: "numbers-and-money",
+        covers: &[
+            "Number", "Percent", "Quantity", "Grouping", "Sign", "Compact",
+        ],
+        body: Body::States(formats::NUMBERS),
+    },
+    Entry {
+        name: "Money",
+        category: Category::Foundations,
+        page: "Numbers and money",
+        api: "Currency::new(amount, \"GBP\").display(CurrencyDisplay).accounting().locale(&Locale).format()",
+        doc: "numbers-and-money",
+        covers: &["Currency", "CurrencyDisplay"],
+        body: Body::States(formats::MONEY),
+    },
+    Entry {
+        name: "Sizes, units and spans",
+        category: Category::Foundations,
+        page: "Sizes and units",
+        api: "Bytes::new(u64).binary().words().fraction_digits(n); Measure::new(value, Unit::Celsius | TimeUnit::Hour).width(Width); Timespan::new(Duration).digital().max_units(n).width(Width)",
+        doc: "sizes-units-and-time-spans",
+        covers: &[
+            "Bytes", "ByteBase", "Measure", "Unit", "TimeUnit", "Timespan", "Width",
+        ],
+        body: Body::States(formats::SIZES),
+    },
+    Entry {
+        name: "Dates and times",
+        category: Category::Foundations,
+        page: "Dates and times",
+        api: "Date::new(Moment).zone(Zone).length(Length).part(DatePart).weekday().year(YearDisplay).with_time(TimePrecision).hour_cycle(HourCycle).locale(&Locale); Date::civil(y, m, d); Time::new(Moment) / Time::of_day(h, m, s); Zone::{Local, Utc, Offset(secs), named(id)}",
+        doc: "dates-times-and-zones",
+        covers: &[
+            "Date",
+            "Time",
+            "Moment",
+            "Zone",
+            "Civil",
+            "Length",
+            "DatePart",
+            "HourCycle",
+            "TimePrecision",
+            "YearDisplay",
+        ],
+        body: Body::States(formats::DATES),
+    },
+    Entry {
+        name: "Relative times",
+        category: Category::Foundations,
+        page: "Relative times",
+        api: "Relative::new(Moment).now(Moment).width(Width).numeric(); Recent::new(Moment).now(Moment): a list cell (the time today, yesterday, the date)",
+        doc: "relative-times",
+        covers: &["Relative", "Recent"],
+        body: Body::States(formats::RELATIVE),
+    },
+    Entry {
+        name: "Lists and counts",
+        category: Category::Foundations,
+        page: "Lists and counts",
+        api: "List::and(items) / List::or(items) / List::units(items).width(Width); Plural::new(count, other).none(text).one(text).few(text).many(text).ordinal(); plural_category(count, PluralKind, Option<&Locale>)",
+        doc: "lists-and-counts",
+        covers: &[
+            "List",
+            "Plural",
+            "PluralCategory",
+            "PluralKind",
+            "plural_category",
+        ],
+        body: Body::States(formats::COUNTS),
+    },
+    Entry {
+        name: "Locale",
+        category: Category::Foundations,
+        page: "Locale",
+        api: "Locale::parse(tag); Locale::current(); Locale::for_category(Category::{Messages, Numeric, Time, Monetary}); Locale::preferred(); Locale::set_current(Option<Locale>); Locale::revision()",
+        doc: "locale",
+        covers: &["Locale", "Category"],
+        body: Body::States(formats::LOCALE),
     },
     // ---- Icons -------------------------------------------------------------
     Entry {

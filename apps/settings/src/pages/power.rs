@@ -366,15 +366,13 @@ fn battery_state(value: &str) -> String {
 }
 
 fn duration_label(seconds: u32) -> String {
-    if seconds % 60 == 0 {
-        let minutes = seconds / 60;
-        format!(
-            "{minutes} {}",
-            if minutes == 1 { "minute" } else { "minutes" }
-        )
+    use bingux_ui::format::{Measure, TimeUnit, Width};
+    let (count, unit) = if seconds % 60 == 0 {
+        (seconds / 60, TimeUnit::Minute)
     } else {
-        format!("{seconds} seconds")
-    }
+        (seconds, TimeUnit::Second)
+    };
+    Measure::new(count, unit).width(Width::Long).format()
 }
 
 /// Timeout choices in seconds, with `zero` as the label for 0. A current

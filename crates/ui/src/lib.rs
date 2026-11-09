@@ -29,6 +29,7 @@ pub mod elide;
 mod expander_tests;
 pub mod files;
 pub mod focus;
+pub mod format;
 pub mod group;
 pub mod icons;
 pub(crate) mod inspector;
@@ -36,6 +37,7 @@ pub mod layers;
 pub mod layout;
 #[cfg(all(test, feature = "testing"))]
 mod loading_shape_tests;
+pub mod locale;
 #[cfg(feature = "location")]
 pub mod location;
 pub mod motion;
