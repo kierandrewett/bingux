@@ -13,10 +13,11 @@ use bingux_media::{Kind, PlayState, Precision, Repeat, Sleep, SleepLeft, Status}
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::media::{
     ArtworkKind, RepeatMode, Seek, TransportAction, VideoFrame, VideoFrames, VolumeChange, artwork,
-    format_time, timeline, transport, video_surface, volume_control,
+    timeline, transport, video_surface, volume_control,
 };
 use bingux_ui::prelude::MenuItem;
 use bingux_ui::prelude::*;
+use bingux_ui::shell::drag_on_pointer_down;
 use bingux_ui::typography::{BODY, CAPTION, EMPHASIS, TITLE};
 use freya::prelude::*;
 
@@ -180,7 +181,7 @@ fn chapter_items(status: &Status) -> Vec<MenuItem> {
         .enumerate()
         .map(|(index, chapter)| {
             menu_item(
-                format!("{}  {}", format_time(chapter.start), chapter.title),
+                format!("{}  {}", text::clock(chapter.start), chapter.title),
                 move |_| engine().player.go_to_chapter(index),
             )
             .checked(status.chapter == Some(index))
@@ -204,7 +205,10 @@ impl Component for Stage {
                 .as_ref()
                 .is_some_and(|item| item.kind == Kind::Video);
         if film {
-            FilmStage { ui: self.ui }.into_element()
+            // A film's controls are dark in a light window too.
+            scheme_scope(Scheme::PreferDark, FilmStage { ui: self.ui })
+                .fill()
+                .into_element()
         } else {
             SongStage { ui: self.ui }.into_element()
         }
@@ -245,6 +249,8 @@ impl Component for FilmStage {
                 }
             });
         };
+        // The controls show when the film starts and fade like any others.
+        use_hook(reveal);
         let visible = *shown.read() || !playing;
         // The pointer hides with the controls.
         use_side_effect_with_deps(&visible, move |visible| {
@@ -391,19 +397,7 @@ impl Component for FilmStage {
                 .child(tools),
         );
         let top = card(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)]))
-            .child(
-                icon_button(Icon::PanDown, move |_| {
-                    if *ui.fullscreen.peek() {
-                        set_fullscreen(ui, false);
-                    }
-                    if *ui.mini.peek() {
-                        set_mini(ui, false);
-                    }
-                    let mut stage = ui.stage;
-                    stage.set(false);
-                })
-                .tooltip(text::CLOSE_PLAYER),
-            )
+            .child(icon_button(Icon::PanDown, move |_| close_stage(ui)).tooltip(text::CLOSE_PLAYER))
             .child(
                 EMPHASIS
                     .label(&tokens, title)
@@ -412,10 +406,49 @@ impl Component for FilmStage {
             );
         let fade = use_tween(if visible { 1.0 } else { 0.0 }, tokens.motion(200));
         let margin = if mini { S2 } else { S4 };
+        // Each bar is pinned to its own edge. An absolute box is not given
+        // its parent's height, so the bottom bar is placed from the measured
+        // heights of the stage and of the bar.
+        let mut stage_size = use_state(|| (0.0f32, 0.0f32));
+        let (stage_width, stage_height) = *stage_size.read();
+        let mut footer_height = use_state(|| 0.0f32);
+        let edge = |position: Position| {
+            rect()
+                .position(position)
+                .width(Size::px(stage_width))
+                .tw(&tokens, &[p(margin)])
+        };
+        let header = edge(Position::new_absolute().top(0.0).left(0.0))
+            // The empty part of the top moves the window, as a title bar does.
+            .on_pointer_down(|event: Event<PointerEventData>| drag_on_pointer_down(event))
+            .child(
+                rect()
+                    .width(Size::fill())
+                    .tw(
+                        &tokens,
+                        &[flex_row(), items(Align::Center), justify(Align::Between)],
+                    )
+                    .child(top)
+                    .maybe_child(
+                        (!fullscreen).then(|| card(rect()).child(WindowControls).into_element()),
+                    ),
+            );
+        let footer_top = (stage_height - *footer_height.read()).max(0.0);
+        let footer = edge(Position::new_absolute().top(footer_top).left(0.0))
+            .on_sized(move |event: Event<SizedEventData>| {
+                footer_height.set_if_modified(event.area.height())
+            })
+            .on_pointer_enter(move |_| hovering_controls.set(true))
+            .on_pointer_leave(move |_| hovering_controls.set(false))
+            .child(controls);
         rect()
             .expanded()
             .tw(&tokens, &[bg(Paint::Backdrop), clip()])
+            .on_sized(move |event: Event<SizedEventData>| {
+                stage_size.set_if_modified((event.area.width(), event.area.height()))
+            })
             .on_pointer_move(move |_| reveal())
+            .on_global_key_down(move |_: Event<KeyboardEventData>| reveal())
             .child(picture)
             .maybe_child(status.error.is_some().then(|| {
                 rect()
@@ -428,20 +461,25 @@ impl Component for FilmStage {
                 rect()
                     .layer(Layer::Overlay)
                     .position(Position::new_absolute().top(0.0).left(0.0))
-                    .expanded()
+                    .width(Size::px(stage_width))
+                    .height(Size::px(stage_height))
                     .opacity(fade)
-                    .tw(&tokens, &[flex_col(), grow_children(), p(margin)])
-                    .child(rect().tw(&tokens, &[flex_row()]).child(top))
-                    .child(rect().width(Size::fill()).height(Size::flex(1.0)))
-                    .child(
-                        rect()
-                            .width(Size::fill())
-                            .on_pointer_enter(move |_| hovering_controls.set(true))
-                            .on_pointer_leave(move |_| hovering_controls.set(false))
-                            .child(controls),
-                    )
+                    .child(header)
+                    .child(footer)
             }))
     }
+}
+
+/// Leaves the player: out of full screen and the mini player first.
+pub fn close_stage(ui: Ui) {
+    if *ui.fullscreen.peek() {
+        set_fullscreen(ui, false);
+    }
+    if *ui.mini.peek() {
+        set_mini(ui, false);
+    }
+    let mut stage = ui.stage;
+    stage.set(false);
 }
 
 #[derive(PartialEq)]
@@ -480,44 +518,21 @@ impl Component for SongStage {
             let status = status.clone();
             move |action: TransportAction| run_transport(action, &status)
         };
-        let close = move |_| {
-            if *ui.mini.peek() {
-                set_mini(ui, false);
-            }
-            let mut stage = ui.stage;
-            stage.set(false);
-        };
+        let close = move |_| close_stage(ui);
         let sleep_label = match status.sleep {
-            Some(SleepLeft::Seconds(seconds)) => text::stops_in(&format_time(f64::from(seconds))),
-            Some(SleepLeft::EndOfItem) => text::END_OF_ITEM.to_owned(),
+            Some(SleepLeft::Seconds(seconds)) => text::stops_in(f64::from(seconds)),
+            Some(SleepLeft::EndOfItem) => text::STOPS_AT_END.to_owned(),
             None => String::new(),
         };
         let queue_target = Location::new(crate::SCHEME).join("queue");
-        rect()
-            .expanded()
-            .tw(
-                &tokens,
-                &[
-                    bg(Paint::Bg),
-                    flex_col(),
-                    grow_children(),
-                    items(Align::Center),
-                    p(if mini { S3 } else { S6 }),
-                    gap(S3),
-                ],
-            )
-            .on_sized(move |event: Event<SizedEventData>| {
-                size.set_if_modified((event.area.width(), event.area.height()))
-            })
-            .child(
+        // The player covers the library's header, so it has its own: it
+        // moves the window and holds the window's buttons.
+        let header = HeaderBar::new("")
+            .fill(Paint::Bg)
+            .leading(icon_button(Icon::PanDown, close).tooltip(text::CLOSE_PLAYER))
+            .trailing(
                 rect()
-                    .width(Size::fill())
-                    .tw(
-                        &tokens,
-                        &[flex_row(), grow_children(), items(Align::Center)],
-                    )
-                    .child(icon_button(Icon::PanDown, close).tooltip(text::CLOSE_PLAYER))
-                    .child(rect().width(Size::flex(1.0)))
+                    .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
                     .maybe_child(
                         (!sleep_label.is_empty())
                             .then(|| CAPTION.in_ink(Ink::Muted).label(&tokens, sleep_label)),
@@ -544,6 +559,24 @@ impl Component for SongStage {
                             }),
                     ),
             )
+            .trailing(WindowControls);
+        let body = rect()
+            .width(Size::fill())
+            .height(Size::flex(1.0))
+            .tw(
+                &tokens,
+                &[
+                    flex_col(),
+                    grow_children(),
+                    items(Align::Center),
+                    px(if mini { S3 } else { S6 }),
+                    pb(if mini { S3 } else { S6 }),
+                    gap(S3),
+                ],
+            )
+            .on_sized(move |event: Event<SizedEventData>| {
+                size.set_if_modified((event.area.width(), event.area.height()))
+            })
             .child(rect().height(Size::flex(1.0)))
             .child(
                 artwork(
@@ -598,7 +631,12 @@ impl Component for SongStage {
                     .enabled(status.item.is_some()),
             )
             .maybe_child((!mini).then(|| volume_control(status.volume, status.muted, run_volume)))
-            .child(rect().height(Size::flex(1.0)))
+            .child(rect().height(Size::flex(1.0)));
+        rect()
+            .expanded()
+            .tw(&tokens, &[bg(Paint::Bg), flex_col(), grow_children()])
+            .child(header)
+            .child(body)
     }
 }
 
