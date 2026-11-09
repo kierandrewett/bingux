@@ -83,7 +83,10 @@ impl Component for Atmosphere {
         let layer = |depth: sky::Depth, along: f32| {
             sky::clouds(self.sky, self.light, depth).map(|svg| {
                 let (left, across) = if width > 0.0 {
-                    (-width * sky::DRIFT * along, Size::px(width * (1.0 + sky::DRIFT)))
+                    (
+                        -width * sky::DRIFT * along,
+                        Size::px(width * (1.0 + sky::DRIFT)),
+                    )
                 } else {
                     (0.0, Size::fill())
                 };
@@ -100,7 +103,11 @@ impl Component for Atmosphere {
                     *hero.write() = width;
                 }
             })
-            .child(Self::layer(sky::still(self.sky, self.light), Size::fill(), 0.0))
+            .child(Self::layer(
+                sky::still(self.sky, self.light),
+                Size::fill(),
+                0.0,
+            ))
             .maybe_child(layer(sky::Depth::Far, swing))
             .maybe_child(layer(sky::Depth::Near, 1.0 - swing))
     }
@@ -124,11 +131,11 @@ impl Component for Backdrop {
                 .width(Size::fill())
                 .height(Size::fill()),
             {
-            // Top to bottom is angle 0 in this engine.
-            LinearGradient::new()
-                .angle(0.0)
-                .stop(GradientStop::new(gradient.top, 0.0))
-                .stop(GradientStop::new(gradient.bottom, 100.0))
+                // Top to bottom is angle 0 in this engine.
+                LinearGradient::new()
+                    .angle(0.0)
+                    .stop(GradientStop::new(gradient.top, 0.0))
+                    .stop(GradientStop::new(gradient.bottom, 100.0))
             },
         );
         rect()

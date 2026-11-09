@@ -87,7 +87,7 @@ impl Component for Page {
                 };
                 let retry = self.retry.clone();
                 return page
-                    .action("Try again", move |_| retry.call(()))
+                    .action(tr!("weather-stale-retry"), move |_| retry.call(()))
                     .into_element();
             }
             Load::Ready(_) => {}
@@ -104,14 +104,15 @@ impl Component for Page {
             let retry = self.retry.clone();
             column = column.child(
                 banner(match failure {
-                    Failure::Offline => {
-                        "Showing the last forecast. Connect to the internet to update it."
-                    }
-                    Failure::Service => "Showing the last forecast. The service did not answer.",
+                    Failure::Offline => tr!("weather-stale-offline"),
+                    Failure::Service => tr!("weather-stale-service"),
                 })
-                .title(format!("Updated {}", ago(now - forecast.fetched_at)))
+                .title(tr!(
+                    "weather-stale-title",
+                    ago = ago(now - forecast.fetched_at)
+                ))
                 .kind(BannerKind::Warning)
-                .action("Try again", move |_| retry.call(())),
+                .action(tr!("weather-stale-retry"), move |_| retry.call(())),
             );
         }
         for notice in notices::notices(forecast, &self.units, local)
