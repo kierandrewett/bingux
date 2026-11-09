@@ -37,7 +37,7 @@ pub enum Load {
 #[derive(Clone, PartialEq)]
 pub struct Page {
     pub place: Place,
-    /// How "My Location" was found, when this is it.
+    /// How "My location" was found, when this is it.
     pub here: Option<String>,
     pub units: Units,
     pub load: Load,

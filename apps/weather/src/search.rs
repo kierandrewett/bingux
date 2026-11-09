@@ -2,7 +2,7 @@
 //! person types, found with Open-Meteo's search. Choosing one saves it and
 //! shows its forecast.
 //!
-//! The sheet also offers "My Location" when it is turned off, so a person who
+//! The sheet also offers "My location" when it is turned off, so a person who
 //! turned it off can bring it back from the place they would look for it.
 
 use std::time::Duration;
@@ -84,7 +84,6 @@ impl Component for Sheet {
                         let chosen = place.clone();
                         row(place.name.clone())
                             .subtitle(place.detail.clone())
-                            .leading(Icon::FindLocation)
                             .on_press(move |_| {
                                 hub.add(chosen.clone());
                                 overlays.dismiss_dialog();
@@ -124,7 +123,7 @@ impl Component for Sheet {
         let bring_back = location_off.then(|| {
             Group::new(None::<String>).row(
                 row("Use my location")
-                    .leading(Icon::FindLocation)
+                    .leading(Icon::LocationArrow)
                     .on_press(move |_| {
                         hub.use_location(true);
                         overlays.dismiss_dialog();
