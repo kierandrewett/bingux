@@ -2,67 +2,45 @@
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs>
         <linearGradient id="wx-sky" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="#6cb4f6"/>
-            <stop offset="1" stop-color="#1b62c8"/>
+            <stop offset="0" stop-color="#5ab8f8"/>
+            <stop offset="1" stop-color="#2a7ee6"/>
         </linearGradient>
-        <radialGradient id="wx-glow" cx="84" cy="38" r="48" gradientUnits="userSpaceOnUse">
-            <stop offset="0.4" stop-color="#fff4b0" stop-opacity="0.85"/>
-            <stop offset="0.6" stop-color="#ffe680" stop-opacity="0.32"/>
-            <stop offset="1" stop-color="#ffe680" stop-opacity="0"/>
-        </radialGradient>
-        <radialGradient id="wx-sun" cx="78" cy="31" fx="76" fy="28" r="27" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stop-color="#fffbe0"/>
-            <stop offset="0.35" stop-color="#ffe14d"/>
-            <stop offset="1" stop-color="#ff9a0a"/>
-        </radialGradient>
-        <!-- One gradient for every puff, so the cloud shades as one body. -->
-        <linearGradient id="wx-cloud" x1="0" x2="0" y1="40" y2="102" gradientUnits="userSpaceOnUse">
+        <linearGradient id="wx-sun" x1="0" x2="0" y1="24" y2="60" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ffe55c"/>
+            <stop offset="1" stop-color="#ffbe1a"/>
+        </linearGradient>
+        <!-- White almost to the base; a very light cool tint only on the underside. -->
+        <linearGradient id="wx-cloud" x1="0" x2="0" y1="46" y2="94" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="0.55" stop-color="#f4f7fb"/>
-            <stop offset="1" stop-color="#c4d3e8"/>
+            <stop offset="0.62" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#e2ebf7"/>
         </linearGradient>
-        <filter id="wx-soft" x="-0.2" y="-0.2" width="1.4" height="1.6" color-interpolation-filters="sRGB">
-            <feGaussianBlur stdDeviation="3"/>
-        </filter>
-        <filter id="wx-crease" x="-0.3" y="-0.3" width="1.6" height="1.6" color-interpolation-filters="sRGB">
-            <feGaussianBlur stdDeviation="2.2"/>
-        </filter>
         <clipPath id="wx-panel">
             <rect height="104" rx="16" width="104" x="12" y="8"/>
         </clipPath>
-        <clipPath id="wx-clip-right">
-            <circle cx="91" cy="74" r="16"/>
-        </clipPath>
-        <clipPath id="wx-clip-top">
-            <circle cx="64" cy="63" r="24"/>
-        </clipPath>
     </defs>
-    <!-- The lower edge of the panel, as the Adwaita app icons draw depth. -->
-    <rect fill="#154f9e" height="104" rx="16" width="104" x="12" y="16"/>
+    <!-- The lower edge of the panel at the set's depth, in a lighter blue so it stays airy. -->
+    <rect fill="#1c5fc0" height="104" rx="16" width="104" x="12" y="16"/>
     <rect fill="url(#wx-sky)" height="104" rx="16" width="104" x="12" y="8"/>
     <g clip-path="url(#wx-panel)">
-        <!-- The sun: a soft glow does the work of rays. -->
-        <circle cx="84" cy="38" r="48" fill="url(#wx-glow)"/>
-        <circle cx="84" cy="38" r="20" fill="url(#wx-sun)"/>
-        <!-- The cloud's soft shadow on the sky. -->
-        <g fill="#0a3a80" opacity="0.4" filter="url(#wx-soft)" transform="translate(0 5)">
-            <circle cx="64" cy="63" r="24"/>
-            <circle cx="91" cy="74" r="16"/>
-            <circle cx="40" cy="78" r="16"/>
-            <rect height="22" rx="11" width="84" x="22" y="78"/>
+        <rect fill="#ffffff" height="1.5" opacity="0.5" rx="0.75" width="80" x="24" y="9"/>
+        <!-- The sun, with a crisp halo, behind the cloud. -->
+        <circle cx="82" cy="42" r="29" fill="#fff6c4" opacity="0.12"/>
+        <circle cx="82" cy="42" r="23" fill="#fff6c4" opacity="0.24"/>
+        <circle cx="82" cy="42" r="18" fill="url(#wx-sun)"/>
+        <!-- A crisp offset shadow lifts the cloud off the sky. -->
+        <g fill="#0b4fae" opacity="0.14">
+            <rect height="18" width="36" x="44" y="80"/>
+            <circle cx="44" cy="80" r="18"/>
+            <circle cx="58" cy="72" r="22"/>
+            <circle cx="80" cy="84" r="14"/>
         </g>
-        <!-- The top highlight, kept inside the panel's rounded corners. -->
-        <rect fill="#ffffff" height="1.5" opacity="0.6" rx="0.75" width="80" x="24" y="9"/>
-        <!-- The cloud, back to front: each puff casts a soft crease on the one behind. -->
-        <circle cx="91" cy="74" r="16" fill="url(#wx-cloud)"/>
-        <g clip-path="url(#wx-clip-right)">
-            <circle cx="65" cy="62" r="24" fill="#7f9cc4" opacity="0.5" filter="url(#wx-crease)"/>
+        <!-- The cloud: overlapping circles on a flat, round-ended base. -->
+        <g fill="url(#wx-cloud)">
+            <rect height="18" width="36" x="44" y="76"/>
+            <circle cx="44" cy="76" r="18"/>
+            <circle cx="58" cy="68" r="22"/>
+            <circle cx="80" cy="80" r="14"/>
         </g>
-        <circle cx="64" cy="63" r="24" fill="url(#wx-cloud)"/>
-        <g clip-path="url(#wx-clip-top)">
-            <circle cx="41" cy="77" r="16" fill="#7f9cc4" opacity="0.5" filter="url(#wx-crease)"/>
-        </g>
-        <circle cx="40" cy="78" r="16" fill="url(#wx-cloud)"/>
-        <rect fill="url(#wx-cloud)" height="22" rx="11" width="84" x="22" y="78"/>
     </g>
 </svg>
