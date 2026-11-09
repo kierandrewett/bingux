@@ -2155,6 +2155,9 @@ line_chart([Series::new("Charge", points)])
 | `donut(segments)`      | A share of a whole, with a legend. `unit`, `caption`, `label`.                                  |
 | `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range.                                     |
 | `flame_graph(tree)`    | Weighted calls as stacked bars, widest first.                                                   |
+| `range_bar(from, to)`  | A span on a scale, with a marker. `span`, `marker`, `colours`, `label`.                         |
+| `compass(bearing)`     | A rose with a pointer and a value in the middle. `centre`, `label`.                             |
+| `day_arc(progress)`    | The sun's path from sunrise to sunset. `times`, `label`.                                        |
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
@@ -2212,6 +2215,20 @@ ellipsis; the detail line beneath gives the full name and shares of the whole.
 A click zooms into a bar, Escape zooms out, and the view starts past the calls
 at the top that only call one thing. Down, Up, Left and Right walk the tree.
 
+**Range bar, compass and day arc.** `range_bar(from, to)` is a pill track for a
+scale. `span(low, high)` fills the part of it a value takes (a day's low and
+high among the week's), `marker(value)` puts a dot on it (now) and `colours`
+gives the colours along the _scale_ as `(position, colour)` pairs: the fill is
+that gradient cut to the span, so a column of bars that share the stops reads
+as one picture. A span narrower than a twentieth of the track is widened so a
+single value still shows. The bar fills the width it is given and is as tall as
+its marker. `compass(bearing)` draws a 132 px rose, north up, with a pointer on
+the rim at the bearing (degrees clockwise from north) and `centre(value,
+caption)` in the middle. `day_arc(Some(progress))` draws the sun on its path,
+0 at sunrise and 1 at sunset; `None` draws the path with no sun, for the
+night. `times(from, to)` writes the two ends. Dials are not mirrored in a
+right-to-left interface. Weather uses all three.
+
 `Unit` formats values: `Number`, `Percent` (values already in percent),
 `Bytes` (binary units, `3.2 GiB`), `DecimalBytes` (decimal units, `3.2 GB`,
 with ticks on round decimal numbers), `Duration` (seconds as `2 h 15 min`) and
@@ -2243,6 +2260,52 @@ a swipe that scrolls the page over a chart shows nothing.
 
 Keyboard: a chart with points is focusable. Left and Right move between
 points, Home and End jump to the ends, and the tooltip follows the point.
+
+## Location
+
+`bingux_ui::location` finds where the computer is, for an application that needs
+a position (Weather today; a map or a calendar's time zone later). It needs the
+`location` feature, which carries an HTTPS client and a D-Bus client that other
+applications leave out:
+
+```toml
+bingux-ui = { path = "../../crates/ui", features = ["location"] }
+```
+
+```rust
+use bingux_ui::location::{LocateError, Locator};
+
+// In a `spawn` task. The lookup blocks, so it runs on the background pool.
+match Locator::new().locate_async().await {
+    Ok(fix) => use_position(fix.latitude, fix.longitude, fix.name, fix.source.describe()),
+    Err(LocateError::Denied) => ask_for_a_city(),
+    Err(_) => ask_for_a_city(),
+}
+```
+
+`Locator::locate` tries, in order:
+
+1. **The location portal** (`org.freedesktop.portal.Location`, which GeoClue
+   serves where it is installed). The desktop asks the person once. A refusal
+   ends the search (`LocateError::Denied`): the network address is never used to
+   get round a "no". A missing portal, or none that answers within the timeout,
+   moves on.
+2. **The network address**, looked up with keyless services (ipwho.is, then
+   geojs.io, then ipapi.co). The position is about as good as the city, so
+   `Fix::accuracy` is 25 km. The service sees the computer's address, which is
+   why `Source::Network` exists: show `Source::describe()` ("Approximate, from
+   the network address") next to a position that came this way.
+3. **Nothing**: `LocateError::Offline` when no service could be reached,
+   `Unavailable` when some answered and none gave a position, `Disabled` when
+   the caller turned both sources off (`portal(false)`, `network(false)`).
+   The application asks for a city and keeps working.
+
+A fix that has no town name is named from its coordinates with OpenStreetMap's
+Nominatim (one request; `name_places(false)` skips it). `timeout` sets how long
+each source gets (ten seconds by default); the portal exchange runs on a thread
+of its own, so a portal that never answers costs a parked thread, never a hung
+window. The module keeps nothing: an application stores the last `Fix` itself
+and offers "use my location" as one entry among the places a person chose.
 
 ## Typography
 

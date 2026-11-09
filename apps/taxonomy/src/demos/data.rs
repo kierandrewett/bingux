@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use bingux_ui::charts::{
-    Bar, FlameTree, Segment, Series, SeriesColour, Unit, bar_chart, donut, flame_graph, line_chart,
-    ring, sparkline, timeline_chart,
+    Bar, FlameTree, Segment, Series, SeriesColour, Unit, bar_chart, compass, day_arc, donut,
+    flame_graph, line_chart, range_bar, ring, sparkline, timeline_chart,
 };
 use bingux_ui::controls::TreeNode;
 use bingux_ui::prelude::*;
@@ -238,6 +238,96 @@ pub const SPARKLINE: &[Spec] = &[Spec::forced("With and without an area", || {
             .child(sparkline([3.0, 5.0, 4.0, 8.0, 6.0, 9.0, 7.0]).label("Errors")),
     )
 })];
+
+/// One line of the week: a day, its low and high among the week's, and now.
+fn day_line(day: &'static str, low: f64, high: f64, now: Option<f64>) -> Element {
+    let tokens = use_tokens();
+    let stops = vec![
+        (0.0, Paint::Accent.color(&tokens)),
+        (12.0, Paint::Success.color(&tokens)),
+        (22.0, Paint::Warning.color(&tokens)),
+        (30.0, Paint::Danger.color(&tokens)),
+    ];
+    let mut bar = range_bar(0.0, 30.0)
+        .span(low, high)
+        .colours(stops)
+        .label(format!("{day}: low {low}, high {high}"));
+    if let Some(now) = now {
+        bar = bar.marker(now);
+    }
+    hstack(S4)
+        .tw_layout(&[w_full(), items(Align::Center)])
+        .child(
+            rect()
+                .tw_layout(&[w(Dim::Box11)])
+                .child(typography::BODY.label(&tokens, day)),
+        )
+        .child(rect().width(Size::flex(1.0)).child(bar))
+        .into()
+}
+
+pub const RANGE_BAR: &[Spec] = &[
+    Spec::forced("A week of lows and highs, with now", || {
+        card(
+            vstack(S3)
+                .tw_layout(&[w_full()])
+                .child(day_line("Mon", 6.0, 14.0, Some(11.0)))
+                .child(day_line("Tue", 8.0, 21.0, None))
+                .child(day_line("Wed", 11.0, 26.0, None))
+                .child(day_line("Thu", 2.0, 9.0, None))
+                .child(day_line("Fri", 14.0, 15.0, None)),
+        )
+    }),
+    Spec::forced("A value on its scale", || {
+        let tokens = use_tokens();
+        card(
+            vstack(S3).tw_layout(&[w_full()]).child(
+                range_bar(0.0, 11.0)
+                    .colours(vec![
+                        (0.0, Paint::Success.color(&tokens)),
+                        (5.0, Paint::Warning.color(&tokens)),
+                        (8.0, Paint::Danger.color(&tokens)),
+                    ])
+                    .marker(6.0)
+                    .label("UV index 6 of 11"),
+            ),
+        )
+    }),
+];
+
+pub const DIALS: &[Spec] = &[
+    Spec::forced("Compass with a value", || {
+        card(
+            hstack(S8)
+                .child(
+                    compass(45.0)
+                        .centre("12", "km/h")
+                        .label("From the north-east at 12 km/h"),
+                )
+                .child(
+                    compass(250.0)
+                        .centre("4", "km/h")
+                        .label("From the west-south-west at 4 km/h"),
+                ),
+        )
+    }),
+    Spec::forced("Day arc, sun up and sun down", || {
+        card(
+            vstack(S4)
+                .tw_layout(&[w_full()])
+                .child(
+                    day_arc(Some(0.62))
+                        .times("07:08", "16:20")
+                        .label("Sunrise 07:08, sunset 16:20"),
+                )
+                .child(
+                    day_arc(None)
+                        .times("07:08", "16:20")
+                        .label("Sunrise 07:08, sunset 16:20"),
+                ),
+        )
+    }),
+];
 
 pub const TIMELINE: &[Spec] = &[
     Spec::live("Frame times with a budget line", || {
