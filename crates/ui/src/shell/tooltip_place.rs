@@ -6,8 +6,9 @@
 //! pointer rests, and the side is remembered by the caller, so a window edge
 //! cannot make it flip back and forth:
 //!
-//! - The bubble opens on the first side that has room, in the order below,
-//!   above, right, left.
+//! - The bubble opens on the side it is given first (the side it was on, or the
+//!   caller's preference) when that side has room. Otherwise it opens on the first
+//!   side that has room, in the order below, above, right, left.
 //! - A bubble that is already on a side stays there for as long as that side
 //!   has room. It leaves only when staying would put it outside the window.
 //! - It sits beside its control, never over it. It is centred on the control
@@ -30,9 +31,10 @@ pub(crate) struct Placement {
 const ORDER: [Side; 4] = [Side::Below, Side::Above, Side::Right, Side::Left];
 
 /// Where a bubble of `size` goes beside `anchor` in a window of `window`.
-/// `previous` is the side the bubble was on at its last placement, if it was
-/// placed: it is kept while it fits. With no window size yet, the bubble sits
-/// on `previous` or below, unclamped.
+/// `preferred` is the side to try first: the side the bubble was on at its last
+/// placement, or the caller's preference. It is kept while it fits, and the usual
+/// order is used when it does not. With no window size yet, the bubble sits on
+/// `preferred` or below, unclamped.
 ///
 /// When no side has room, which needs a window smaller than the control and
 /// bubble together, the side with the most room is used, and the bubble stays
@@ -42,13 +44,13 @@ pub(crate) fn decide(
     anchor: PanelRect,
     size: (f32, f32),
     window: (f32, f32),
-    previous: Option<Side>,
+    preferred: Option<Side>,
 ) -> Placement {
     let unknown = window.0 <= 0.0 || window.1 <= 0.0;
     let side = if unknown {
-        previous.unwrap_or(Side::Below)
+        preferred.unwrap_or(Side::Below)
     } else {
-        previous
+        preferred
             .filter(|&side| fits(side, anchor, size, window))
             .or_else(|| {
                 ORDER
@@ -193,19 +195,65 @@ mod tests {
         // below stays below. Without a side it opens below.
         let anchor = control(300.0, 300.0);
         assert_eq!(decide(anchor, BUBBLE, WINDOW, None).side, Side::Below);
-        assert_eq!(decide(anchor, BUBBLE, WINDOW, Some(Side::Above)).side, Side::Above);
-        assert_eq!(decide(anchor, BUBBLE, WINDOW, Some(Side::Below)).side, Side::Below);
-        assert_eq!(decide(anchor, BUBBLE, WINDOW, Some(Side::Right)).side, Side::Right);
+        assert_eq!(
+            decide(anchor, BUBBLE, WINDOW, Some(Side::Above)).side,
+            Side::Above
+        );
+        assert_eq!(
+            decide(anchor, BUBBLE, WINDOW, Some(Side::Below)).side,
+            Side::Below
+        );
+        assert_eq!(
+            decide(anchor, BUBBLE, WINDOW, Some(Side::Right)).side,
+            Side::Right
+        );
+    }
+
+    #[test]
+    fn a_preferred_side_is_taken_when_it_fits() {
+        let anchor = control(300.0, 300.0);
+        for side in [Side::Above, Side::Right, Side::Left] {
+            assert_eq!(decide(anchor, BUBBLE, WINDOW, Some(side)).side, side);
+        }
+        assert_eq!(decide(anchor, BUBBLE, WINDOW, None).side, Side::Below);
+    }
+
+    #[test]
+    fn a_preferred_side_without_room_falls_back_to_the_usual_order() {
+        // Below has no room at the foot of the window, so the order gives Above.
+        let low = control(300.0, WINDOW.1 - 40.0);
+        assert_eq!(
+            decide(low, BUBBLE, WINDOW, Some(Side::Below)).side,
+            Side::Above
+        );
+        // Above has no room at the top of the window, so the order gives Below.
+        let high = control(300.0, 20.0);
+        assert_eq!(
+            decide(high, BUBBLE, WINDOW, Some(Side::Above)).side,
+            Side::Below
+        );
+        // Right has no room at the right edge, so the order gives Below.
+        let edge = control(WINDOW.0 - 40.0, 300.0);
+        assert_eq!(
+            decide(edge, BUBBLE, WINDOW, Some(Side::Right)).side,
+            Side::Below
+        );
     }
 
     #[test]
     fn leaves_a_remembered_side_only_when_it_would_leave_the_window() {
         let anchor = control(300.0, WINDOW.1 - 40.0);
         // Below no longer fits: it moves above, as with no side at all.
-        assert_eq!(decide(anchor, BUBBLE, WINDOW, Some(Side::Below)).side, Side::Above);
+        assert_eq!(
+            decide(anchor, BUBBLE, WINDOW, Some(Side::Below)).side,
+            Side::Above
+        );
         // Above no longer fits: it moves below.
         let near_top = control(300.0, 20.0);
-        assert_eq!(decide(near_top, BUBBLE, WINDOW, Some(Side::Above)).side, Side::Below);
+        assert_eq!(
+            decide(near_top, BUBBLE, WINDOW, Some(Side::Above)).side,
+            Side::Below
+        );
     }
 
     #[test]
@@ -287,11 +335,17 @@ mod tests {
                     }
                     Side::Right => {
                         assert_eq!(bubble.x, anchor.right() + PANEL_GAP);
-                        assert_eq!(bubble.y + bubble.height / 2.0, anchor.y + anchor.height / 2.0);
+                        assert_eq!(
+                            bubble.y + bubble.height / 2.0,
+                            anchor.y + anchor.height / 2.0
+                        );
                     }
                     Side::Left => {
                         assert_eq!(bubble.right() + PANEL_GAP, anchor.x);
-                        assert_eq!(bubble.y + bubble.height / 2.0, anchor.y + anchor.height / 2.0);
+                        assert_eq!(
+                            bubble.y + bubble.height / 2.0,
+                            anchor.y + anchor.height / 2.0
+                        );
                     }
                 }
             }
@@ -306,9 +360,17 @@ mod tests {
             for x in (0..=(WINDOW.0 as i32 - 28)).step_by(36) {
                 for y in (0..=(WINDOW.1 as i32 - 28)).step_by(36) {
                     let anchor = control(x as f32, y as f32);
-                    for previous in [None, Some(Side::Below), Some(Side::Above), Some(Side::Right), Some(Side::Left)] {
+                    for previous in [
+                        None,
+                        Some(Side::Below),
+                        Some(Side::Above),
+                        Some(Side::Right),
+                        Some(Side::Left),
+                    ] {
                         let placed = decide(anchor, size, WINDOW, previous);
-                        let any_fits = ORDER.into_iter().any(|side| fits(side, anchor, size, WINDOW));
+                        let any_fits = ORDER
+                            .into_iter()
+                            .any(|side| fits(side, anchor, size, WINDOW));
                         if any_fits {
                             assert!(
                                 !overlaps(rect_of(placed, size), anchor),
