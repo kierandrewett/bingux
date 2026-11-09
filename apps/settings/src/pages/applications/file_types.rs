@@ -310,7 +310,7 @@ impl Component for OtherFileTypes {
 
         let cards = if groups.is_empty() {
             page_column().child(
-                Group::new(None).row(status(Status::Empty("No file type matches.".to_string()))),
+                Group::new(None).row(status(Status::Empty("No matching file types".to_string()))),
             )
         } else {
             groups

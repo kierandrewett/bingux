@@ -94,7 +94,9 @@ fn set_font(family: &str) -> Result<Option<Model>, CommandError> {
         config(&["unset", FONT_KEY])?;
     } else {
         if crate::theme::font_files(family, 1).is_empty() {
-            return Err(CommandError(format!("The font {family} is not installed.")));
+            return Err(CommandError(format!(
+                "Could not set the font “{family}”. Choose an installed font."
+            )));
         }
         config(&["set", FONT_KEY, family])?;
     }
@@ -510,7 +512,7 @@ impl Component for AppearancePage {
                     current: model_value.wallpaper.clone(),
                 })
                 .child(
-                    Group::titled("Font")
+                    Group::titled("Text")
                         .rows(
                             model_value
                                 .interface
@@ -603,8 +605,7 @@ impl Component for AppearancePage {
                 }))
                 .maybe_child((!model_value.gsettings).then(|| {
                     Element::from(status(Status::Info(
-                        "\"Accent colour\" and \"Colour scheme\" are not available on this system."
-                            .into(),
+                        "Accent colour and colour scheme are not available on this system.".into(),
                     )))
                 })),
         )

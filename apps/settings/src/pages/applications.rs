@@ -377,14 +377,14 @@ fn run_uninstall(
             busy.set(false);
             match result {
                 Ok(()) => {
-                    overlays.toast(format!("{name} was uninstalled."));
+                    overlays.toast(format!("“{name}” uninstalled"));
                     if let Some(router) = leave {
                         router.pop();
                     }
                 }
                 Err(error) => {
                     eprintln!("[uninstall] {name}: {error}");
-                    overlays.toast(format!("{name} could not be uninstalled."));
+                    overlays.toast(format!("Could not uninstall “{name}”. Try again."));
                 }
             }
             start_load(model);
@@ -401,10 +401,14 @@ fn ask_uninstall(
     leave: Option<Router>,
 ) {
     let body = match &app.details {
-        Some(details) => format!("{} is installed from {}.", app.name, details.source.label()),
-        None => format!("{} is installed on this system.", app.name),
+        Some(details) => format!(
+            "“{}” is installed from {}.",
+            app.name,
+            details.source.label()
+        ),
+        None => format!("“{}” is installed on this system.", app.name),
     };
-    let title = format!("Uninstall {}?", app.name);
+    let title = format!("Uninstall “{}”?", app.name);
     overlays.show_dialog(
         dialog(title, body)
             .cancel("Cancel")
@@ -767,7 +771,9 @@ impl Component for ApplicationsPage {
                     ))
                     .below_title(search);
                 if rows.is_empty() {
-                    group.row(status(Status::Empty("No applications match.".to_string())))
+                    group.row(status(Status::Empty(
+                        "No matching applications".to_string(),
+                    )))
                 } else {
                     group.rows(rows)
                 }
@@ -893,7 +899,7 @@ impl Component for AppPage {
                     .collect();
                 if handled.is_empty() {
                     Group::titled("Open by default").row(status(Status::Empty(
-                        "Not registered for any of these.".to_string(),
+                        "Not available as a default application.".to_string(),
                     )))
                 } else {
                     let app = app.clone();
@@ -1016,7 +1022,7 @@ impl Component for AppPage {
                 };
                 let target = app.clone();
                 Group::titled("Uninstall").row(
-                    row("Uninstall this application").subtitle(reason).trailing(
+                    row("Remove from this computer").subtitle(reason).trailing(
                         action_button("Uninstall", move |_| {
                             ask_uninstall(target.clone(), model, busy, overlays, Some(router))
                         })
@@ -1434,7 +1440,7 @@ impl Component for DefaultKindPage {
             return page_column()
                 .child(PageHead::new())
                 .child(status(Status::Empty(
-                    "This file type is not known.".to_string(),
+                    "Could not find this file type.".to_string(),
                 )));
         };
 
@@ -1447,8 +1453,9 @@ impl Component for DefaultKindPage {
             .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
             .collect();
         let list = if listed.is_empty() {
-            radio_rows(None::<String>, Vec::new())
-                .row(status(Status::Empty("No applications match.".to_string())))
+            radio_rows(None::<String>, Vec::new()).row(status(Status::Empty(
+                "No matching applications".to_string(),
+            )))
         } else {
             // One radio per application: the selected one is the current default.
             let selected = current.clone().unwrap_or_default();

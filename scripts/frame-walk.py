@@ -70,7 +70,7 @@ NO_MATCH = np.iinfo(np.int64).max
 WALK = {
     "network": ("network/wifi/saved", None),
     "datetime": ("datetime/timezone", "Set date and time"),
-    "keyboard": ("keyboard/shortcuts", "Add an input source"),
+    "keyboard": ("keyboard/shortcuts", "Add input source…"),
     "background": ("background/font", None),
     "applications": ("applications/default", None),
     "users": (None, "Change password"),

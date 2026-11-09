@@ -67,9 +67,11 @@ fn get_bool(schema: &str, key: &str) -> Result<bool, CommandError> {
 
 fn get_speed(schema: &str) -> Result<f64, CommandError> {
     let raw = system::gsettings_get(schema, "speed")?;
-    raw.trim()
-        .parse::<f64>()
-        .map_err(|_| CommandError("The pointer speed could not be read.".to_string()))
+    raw.trim().parse::<f64>().map_err(|_| {
+        CommandError(
+            "Could not read the pointer speed. Restart Settings and try again.".to_string(),
+        )
+    })
 }
 
 fn get_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
@@ -77,7 +79,12 @@ fn get_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
     raw.split_whitespace()
         .last()
         .and_then(|word| word.parse::<u32>().ok())
-        .ok_or_else(|| CommandError(format!("The {key} setting could not be read.")))
+        .ok_or_else(|| {
+            eprintln!("settings: could not parse {schema} {key}");
+            CommandError(
+                "Could not read the mouse settings. Restart Settings and try again.".to_string(),
+            )
+        })
 }
 
 /// A touchpad standing in for hardware. Snapshot builds only:

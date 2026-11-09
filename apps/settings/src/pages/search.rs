@@ -273,7 +273,7 @@ impl Parser {
 }
 
 fn missing(_key: &str) -> CommandError {
-    CommandError("Some search settings could not be read.".into())
+    CommandError("Could not read the search settings. Restart Settings and try again.".into())
 }
 
 fn json_text(object: &Json, key: &str) -> Result<String, CommandError> {
@@ -311,10 +311,14 @@ fn strings(value: Option<&Json>) -> Vec<String> {
 
 /// Reads the `search` and `previews` sections from `bingux-config dump`.
 fn parse_dump(text: &str) -> Result<Model, CommandError> {
-    let root = Json::parse(text)
-        .map_err(|_| CommandError("The search settings could not be read.".into()))?;
+    let root = Json::parse(text).map_err(|_| {
+        CommandError("Could not read the search settings. Restart Settings and try again.".into())
+    })?;
     if let Some(message) = root.get("error").and_then(Json::as_str) {
-        return Err(CommandError(message.to_string()));
+        eprintln!("settings: bingux-config dump failed: {message}");
+        return Err(CommandError(
+            "Could not read the search settings. Restart Settings and try again.".into(),
+        ));
     }
     let data = root.get("data").ok_or_else(|| missing("data"))?;
     let search = data.get("search").ok_or_else(|| missing("search"))?;
@@ -511,7 +515,8 @@ fn write_then(ctx: Ctx, args: Vec<String>, after: impl FnOnce(bool) + 'static) {
         move |result| match result {
             Ok(_) => after(true),
             Err(e) => {
-                ctx.overlays.toast(e.0);
+                eprintln!("settings: search write failed: {}", e.0);
+                ctx.overlays.toast("Could not save the change. Try again.");
                 after(false);
             }
         },
@@ -543,7 +548,7 @@ fn write_engines(ctx: Ctx, default: &str, list: Vec<Engine>) {
         .find(|engine| engine.enabled)
         .map(|engine| engine.id.clone())
     else {
-        ctx.overlays.toast("At least one engine must stay enabled.");
+        ctx.overlays.toast("Keep at least one engine on.");
         return;
     };
     write_then(
@@ -806,7 +811,7 @@ fn confirm_remove(ctx: Ctx, name: &str, default: &str, without: &[Engine]) {
     let without = without.to_vec();
     ctx.overlays.show_dialog(
         dialog(
-            format!("Remove {name}?"),
+            format!("Remove “{name}”?"),
             "Its shortcut stops working. You can add the engine again later.",
         )
         .cancel("Cancel")
@@ -855,7 +860,7 @@ impl Component for AddEngine {
             url.set(String::new());
             open_engine_sheet(window, form, engines.clone());
         };
-        row("Add a search engine…").trailing(primary_button("Add", open).compact())
+        row("New search engine").trailing(primary_button("Add…", open).compact())
     }
 }
 
@@ -885,13 +890,13 @@ fn engine_fields(form: EngineForm) -> (String, String, String) {
 
 fn engine_problems(shortcut: &str, url: &str, engines: &[Engine]) -> EngineProblems {
     let shortcut_problem = if shortcut.chars().any(char::is_whitespace) {
-        Some("A shortcut has no spaces.")
+        Some("Remove the spaces from the shortcut.")
     } else if !shortcut.is_empty()
         && engines
             .iter()
             .any(|engine| engine.id == engine_id(shortcut))
     {
-        Some("Another engine uses this shortcut.")
+        Some("Another engine already uses this shortcut. Choose a different one.")
     } else {
         None
     };
@@ -921,7 +926,7 @@ fn engine_ready(name: &str, shortcut: &str, url: &str, engines: &[Engine]) -> bo
 
 /// Opens the add-engine popup. Its body reads the form, so the Add button follows the fields.
 fn open_engine_sheet(window: Window, form: EngineForm, engines: Vec<Engine>) {
-    window.open(popup("Add a search engine", EngineBody { form, engines }).flags(PopupFlags::FORM));
+    window.open(popup("Add search engine", EngineBody { form, engines }).flags(PopupFlags::FORM));
 }
 
 /// Writes the engines with the new one appended. The popup closes only once the write succeeds.
@@ -1063,12 +1068,12 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
 fn confirm_remove_folder(ctx: Ctx, folder: String, remaining: Vec<String>) {
     ctx.overlays.show_dialog(
         dialog(
-            format!("Stop searching {}?", folder_name(&folder)),
+            format!("Stop searching “{}”?", folder_name(&folder)),
             "Files in this folder no longer appear in search results.",
         )
         .cancel("Cancel")
         .default_action(CANCEL_ID)
-        .response("Remove", ResponseKind::Destructive, move |_| {
+        .response("Stop searching", ResponseKind::Destructive, move |_| {
             let args = if remaining.is_empty() {
                 vec!["unset".into(), "search.file_roots".into()]
             } else {
@@ -1111,7 +1116,8 @@ impl Component for FileRootAdd {
                             if searchable {
                                 add_folder(ctx, &roots, path);
                             } else {
-                                ctx.overlays.toast("That folder cannot be searched.");
+                                ctx.overlays
+                                    .toast("Could not add that folder. Choose a different folder.");
                             }
                         },
                     );
@@ -1119,7 +1125,7 @@ impl Component for FileRootAdd {
             );
         };
 
-        row("Add a folder").trailing(primary_button("Choose folder", choose).compact())
+        row("New folder").trailing(primary_button("Choose folder", choose).compact())
     }
 }
 
@@ -1132,7 +1138,7 @@ fn searchable(path: &str) -> bool {
 fn add_folder(ctx: Ctx, roots: &[String], path: String) {
     if roots.contains(&path) {
         ctx.overlays
-            .toast(format!("{} is already searched.", folder_name(&path)));
+            .toast(format!("“{}” is already searched", folder_name(&path)));
         return;
     }
     let mut list = roots.to_vec();

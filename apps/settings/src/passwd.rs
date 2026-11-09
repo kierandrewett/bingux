@@ -18,6 +18,9 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 /// How often the terminal is polled for output and the child's exit.
 const POLL: Duration = Duration::from_millis(20);
 
+/// Shown when the change fails for a reason the person cannot act on.
+const GENERIC: &str = "Could not change the password. Try again.";
+
 /// The `passwd` program to run. Snapshot builds may point it at a fake, so the
 /// real command is never run while testing.
 fn program() -> String {
@@ -54,7 +57,7 @@ fn open_pty() -> Result<(OwnedFd, OwnedFd), String> {
         )
     };
     if opened != 0 {
-        return Err("A terminal could not be opened for the password change.".into());
+        return Err(GENERIC.into());
     }
     // SAFETY: openpty succeeded, so both descriptors are new and owned by us.
     let (master, slave) = unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
@@ -68,12 +71,8 @@ fn open_pty() -> Result<(OwnedFd, OwnedFd), String> {
 
 fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
     let (master, slave) = open_pty()?;
-    let stdout = slave
-        .try_clone()
-        .map_err(|_| "The password change could not start.".to_string())?;
-    let stderr = slave
-        .try_clone()
-        .map_err(|_| "The password change could not start.".to_string())?;
+    let stdout = slave.try_clone().map_err(|_| GENERIC.to_string())?;
+    let stderr = slave.try_clone().map_err(|_| GENERIC.to_string())?;
     let mut command = Command::new(program);
     command
         .env("LC_ALL", "C")
@@ -96,9 +95,7 @@ fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
             Ok(())
         });
     }
-    let mut child = command
-        .spawn()
-        .map_err(|_| "The password tool could not be started.".to_string())?;
+    let mut child = command.spawn().map_err(|_| GENERIC.to_string())?;
     // Drop the parent's copies of the slave, so the master sees end of file
     // once the child exits.
     drop(command);
@@ -112,10 +109,7 @@ fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
         if read_available(&mut master, &mut transcript, &mut pending)? {
             answer(&mut master, &mut pending, current, new)?;
         }
-        if let Some(status) = child
-            .try_wait()
-            .map_err(|_| "The password change could not be checked.".to_string())?
-        {
+        if let Some(status) = child.try_wait().map_err(|_| GENERIC.to_string())? {
             // Output written just before the exit may still be buffered.
             read_available(&mut master, &mut transcript, &mut pending)?;
             return if status.success() {
@@ -127,7 +121,7 @@ fn run(program: &str, current: &str, new: &str) -> Result<(), String> {
         if Instant::now() >= deadline {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("The password change took too long and was stopped.".into());
+            return Err("The password change timed out. Try again.".into());
         }
         thread::sleep(POLL);
     }
@@ -138,11 +132,11 @@ fn set_nonblocking(file: &File) -> Result<(), String> {
     // SAFETY: fd is the master descriptor, open for the life of `file`.
     let flags = unsafe { libc::fcntl(fd, libc::F_GETFL) };
     if flags < 0 {
-        return Err("The password change could not start.".into());
+        return Err(GENERIC.into());
     }
     // SAFETY: as above; only the status flags change.
     if unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
-        return Err("The password change could not start.".into());
+        return Err(GENERIC.into());
     }
     Ok(())
 }
@@ -199,7 +193,7 @@ fn answer(master: &mut File, pending: &mut String, current: &str, new: &str) -> 
     pending.clear();
     master
         .write_all(format!("{secret}\n").as_bytes())
-        .map_err(|_| "The password could not be sent to the password tool.".to_string())
+        .map_err(|_| GENERIC.to_string())
 }
 
 /// The message for a failed change, from the words `passwd` printed.
@@ -210,11 +204,9 @@ fn failure(transcript: &str) -> String {
         .find_map(|line| line.trim().strip_prefix("BAD PASSWORD:"))
     {
         let reason = reason.trim();
-        return if reason.is_empty() {
-            "The new password was rejected.".into()
-        } else {
-            reason.to_string()
-        };
+        eprintln!("settings: password rejected: {reason}");
+        return "The new password is too weak. Use a longer password with letters, numbers and symbols."
+            .into();
     }
     if lower.contains("do not match") {
         return "The new passwords do not match.".into();
@@ -223,7 +215,7 @@ fn failure(transcript: &str) -> String {
         || lower.contains("incorrect password")
         || lower.contains("authentication failure")
     {
-        return "The current password is not correct.".into();
+        return "The current password is not correct. Check it and try again.".into();
     }
-    "The password could not be changed.".into()
+    GENERIC.into()
 }
