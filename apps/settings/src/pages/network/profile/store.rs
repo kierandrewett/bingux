@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use bingux_ui::prelude::tr;
+
 use crate::pages::connection_editor::{Changes, ProfileData, read_args};
 use crate::pages::network::model::{CONNECT, NetCtx, Overview, nmcli};
 use crate::pages::network::{Device, DeviceKind, Owner};
@@ -181,8 +183,8 @@ mod fake {
 /// Tell the person that a saved change waits for a reconnect, and offer it.
 fn offer_reconnect(ctx: NetCtx, name: String) {
     ctx.overlays.toast_with_action(
-        "Saved. Reconnect to apply the change.",
-        "Reconnect",
+        tr!("network-profile-saved-reconnect"),
+        tr!("network-profile-reconnect"),
         move |_| reconnect(ctx, name.clone()),
     );
 }
@@ -195,7 +197,7 @@ pub fn reconnect(ctx: NetCtx, name: String) {
             if let Err(error) = result {
                 ctx.overlays.toast(super::super::plain(
                     &error.0,
-                    "Could not reconnect. Try again.",
+                    &tr!("network-profile-error-reconnect"),
                 ));
             }
             ctx.reload();
@@ -228,7 +230,7 @@ pub fn apply_now(ctx: NetCtx, owner: &Owner, state: ProfileState, changes: Chang
                 shown.set(Some(Ok(current)));
                 ctx.overlays.toast(super::super::plain(
                     &error.0,
-                    "Could not save the change. Try again.",
+                    &tr!("network-profile-error-save-change"),
                 ));
             }
         },
@@ -278,7 +280,7 @@ pub fn apply_batch(
                 }
                 Err(error) => ctx.overlays.toast(super::super::plain(
                     &error.0,
-                    "Could not save the settings. Try again.",
+                    &tr!("network-profile-error-save-settings"),
                 )),
             }
         },

@@ -4,6 +4,7 @@
 use freya::prelude::*;
 
 use bingux_ui::controls::pending_bar;
+use bingux_ui::prelude::tr;
 
 use super::draft::{Draft, ListLook, Values, list_rows, use_draft};
 use super::ip::method_is_bare;
@@ -132,10 +133,7 @@ impl Component for DnsBody {
 
         let (v4_allowed, v6_allowed) = families_allowed(&page.saved);
         if !v4_allowed && !v6_allowed {
-            return page_column().child(status(Status::Empty(
-                "IPv4 and IPv6 are both off for this connection. Turn one on to set DNS servers."
-                    .into(),
-            )));
+            return page_column().child(status(Status::Empty(tr!("network-dns-both-off").into())));
         }
 
         let dirty = draft.dirty(&page.saved);
@@ -159,7 +157,7 @@ impl Component for DnsBody {
             !(page.saved.yes("ipv4.ignore-auto-dns") || page.saved.yes("ipv6.ignore-auto-dns"));
         let automatic_row = {
             let page = page.clone();
-            switch_row("Automatic DNS", automatic, move |on: bool| {
+            switch_row(tr!("network-dns-automatic"), automatic, move |on: bool| {
                 let mut changes = Changes::one("ipv4.ignore-auto-dns", yes_no(!on));
                 changes.set("ipv6.ignore-auto-dns", yes_no(!on));
                 page.apply_now(changes);
@@ -169,7 +167,7 @@ impl Component for DnsBody {
             let page = page.clone();
             let selected = page.saved.get("connection.dns-over-tls").to_string();
             choice_row(
-                "DNS over TLS",
+                tr!("network-dns-over-tls"),
                 options(DNS_OVER_TLS_CHOICES),
                 &selected,
                 move |value: String| page.apply_now(Changes::one("connection.dns-over-tls", value)),
@@ -179,28 +177,32 @@ impl Component for DnsBody {
         let servers = list_rows(
             draft.list("servers"),
             ListLook {
-                title: "Server",
+                title: tr!("network-dns-server"),
                 placeholder: "1.1.1.1",
                 check: dns_server,
-                add: "Add server",
+                add: tr!("network-dns-add-server"),
                 monospace: true,
             },
         );
         let search = list_rows(
             draft.list("search"),
             ListLook {
-                title: "Domain",
+                title: tr!("network-dns-domain"),
                 placeholder: "example.com",
                 check: search_domain,
-                add: "Add search domain",
+                add: tr!("network-dns-add-search"),
                 monospace: false,
             },
         );
         page_column()
             .child(pending_bar(dirty, ok && !*busy.read(), apply, revert))
-            .child(Group::titled("DNS").row(automatic_row).row(tls_row))
-            .child(Group::titled("Servers").rows(servers))
-            .child(Group::titled("Search domains").rows(search))
+            .child(
+                Group::titled(&tr!("network-dns-section"))
+                    .row(automatic_row)
+                    .row(tls_row),
+            )
+            .child(Group::titled(&tr!("network-dns-servers-section")).rows(servers))
+            .child(Group::titled(&tr!("network-dns-search-section")).rows(search))
     }
 }
 

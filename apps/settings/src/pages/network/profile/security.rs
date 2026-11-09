@@ -10,7 +10,7 @@ use freya::prelude::*;
 
 use bingux_ui::controls::form::validate::{self, Check};
 use bingux_ui::controls::{form_field, pending_bar};
-use bingux_ui::prelude::tr;
+use bingux_ui::prelude::{i18n_id, tr};
 
 use super::draft::{Draft, Values, use_draft};
 use super::store;
@@ -33,7 +33,10 @@ const WEP_TYPE: &str = "802-11-wireless-security.wep-key-type";
 const DOT1X: &str = "802-1x";
 
 /// How a WEP key is typed: the key itself, or a passphrase NetworkManager turns into one.
-const WEP_TYPE_CHOICES: &[(&str, &str)] = &[("1", "Key"), ("2", "Passphrase")];
+const WEP_TYPE_CHOICES: &[(&str, &str)] = &[
+    ("1", i18n_id!("network-security-wep-type-key")),
+    ("2", i18n_id!("network-security-wep-passphrase")),
+];
 
 /// Every value the page edits, as typed. A wired page uses only the 802.1X ones.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -413,15 +416,10 @@ fn pick_eap(draft: &Draft, eap: &str) {
 
 /// A button that opens the file chooser and puts the file the person picks into `target`. A
 /// cancelled chooser leaves the field as it was.
-fn browse_button(
-    window: Window,
-    title: &'static str,
-    filter: Filter,
-    target: State<String>,
-) -> Element {
+fn browse_button(window: Window, title: String, filter: Filter, target: State<String>) -> Element {
     row_button(&tr!("network-security-browse"), move |_| {
         let request = ChooserRequest::open()
-            .title(title)
+            .title(title.clone())
             .filter(filter.clone())
             .filter(Filter::new(&tr!("network-security-all-files")));
         let mut target = target;
@@ -527,7 +525,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
                 .validate(file_path)
                 .trailing(browse_button(
                     window,
-                    "CA certificate",
+                    tr!("network-security-ca-certificate"),
                     certificate(),
                     draft.text("ca"),
                 ))
@@ -545,7 +543,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
                 .validate(file_path)
                 .trailing(browse_button(
                     window,
-                    "Client certificate",
+                    tr!("network-security-client-certificate"),
                     certificate(),
                     draft.text("client_cert"),
                 ))
@@ -553,7 +551,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
             )
             .row(
                 form_field(
-                    &tr!("network-security-private-key"),
+                    tr!("network-security-private-key"),
                     draft.text("private_key"),
                 )
                 .placeholder("/home/you/client.key")
@@ -561,7 +559,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
                 .validate(file_path)
                 .trailing(browse_button(
                     window,
-                    "Private key",
+                    tr!("network-security-private-key"),
                     key(),
                     draft.text("private_key"),
                 ))

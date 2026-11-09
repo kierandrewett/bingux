@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use bingux_ui::controls::form::validate;
 use bingux_ui::controls::{form_field, pending_bar};
-use bingux_ui::prelude::tr;
+use bingux_ui::prelude::{i18n_id, tr};
 
 use super::super::{Owner, Section};
 use super::advanced::options_with;
@@ -23,7 +23,10 @@ use crate::routes;
 use crate::ui::{Group, choice_row, page_column, row};
 
 /// How the MTU is chosen: left to the network, or set in bytes.
-const MTU_CHOICES: Choices = &[("auto", "Automatic"), ("custom", "Custom")];
+const MTU_CHOICES: Choices = &[
+    ("auto", i18n_id!("network-identity-mtu-automatic")),
+    ("custom", i18n_id!("network-identity-mtu-custom")),
+];
 
 /// What the form holds, as typed.
 #[derive(Clone, Debug, PartialEq)]
@@ -221,7 +224,7 @@ impl Component for IdentityBody {
                 .row(row(&tr!("network-identity-name")).value(page.saved.get("connection.id")));
             let bssid = page.saved.get("802-11-wireless.bssid");
             if !bssid.is_empty() {
-                identity = identity.row(row("BSSID").technical_value(bssid));
+                identity = identity.row(row(tr!("network-identity-bssid")).technical_value(bssid));
             }
         }
 
@@ -265,7 +268,7 @@ impl Component for IdentityBody {
         .validate(validate::mac);
         let mtu_field = form_field(&tr!("network-identity-mtu-size"), draft.text("mtu_value"))
             .placeholder("1500")
-            .suffix("bytes")
+            .suffix(tr!("network-identity-bytes"))
             .validate(mtu);
         let mut hardware = Group::titled(&tr!("network-identity-group-hardware"))
             .row(mac_row.nested(form.mac_mode == "address", vec![mac_field.into()]))

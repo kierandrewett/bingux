@@ -117,7 +117,7 @@ fn everyday_group(page: &Page) -> Element {
     let autoconnect = {
         let page = page.clone();
         switch_row(
-            "Connect automatically",
+            tr!("network-profile-autoconnect"),
             saved.yes("connection.autoconnect"),
             move |on: bool| page.apply_now(Changes::one("connection.autoconnect", yes_no(on))),
         )
@@ -125,7 +125,7 @@ fn everyday_group(page: &Page) -> Element {
     let metered = {
         let page = page.clone();
         choice_row(
-            "Metered connection",
+            tr!("network-profile-metered"),
             options(METERED_CHOICES),
             saved.get("connection.metered"),
             move |value: String| page.apply_now(Changes::one("connection.metered", value)),
@@ -170,10 +170,14 @@ impl Component for PasswordRow {
         let overlays = crate::ui::use_overlays();
         let shown = use_state(|| false);
         if self.password.is_empty() {
-            return Element::from(row("Password").subtitle("Not saved").subtitle_one_line());
+            return Element::from(
+                row(tr!("network-profile-password"))
+                    .subtitle(tr!("network-profile-not-saved"))
+                    .subtitle_one_line(),
+            );
         }
         Element::from(super::wifi::secret_row(
-            "Password",
+            &tr!("network-profile-password"),
             &self.password,
             shown,
             overlays,
@@ -326,7 +330,7 @@ impl Component for SectionPage {
             Section::Proxy => keyed(loading, proxy::ProxyBody { page }),
             Section::Options => keyed(loading, advanced::AdvancedBody { page }),
             Section::Usage | Section::Tunnel | Section::Peer(_) => {
-                status(Status::Empty("Nothing to set here.".into())).into()
+                status(Status::Empty(tr!("network-profile-nothing-here"))).into()
             }
         };
         veiled(page_column().child(head).child(body), loading).into()
@@ -337,7 +341,7 @@ impl Component for SectionPage {
 fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
     let saved = &page.saved;
     let kind = page.kind();
-    let addressing = Group::titled("Addressing")
+    let addressing = Group::titled(&tr!("network-profile-addressing"))
         .row(section_row(page, Section::Ipv4, ip_summary(saved, 4, kind)))
         .row(section_row(page, Section::Ipv6, ip_summary(saved, 6, kind)))
         .row(section_row(page, Section::Dns, dns_summary(saved)));
@@ -367,15 +371,15 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
         page,
         Section::Proxy,
         if saved.get("proxy.method") == "auto" {
-            "Automatic"
+            tr!("network-profile-proxy-automatic")
         } else {
-            "None"
+            tr!("network-profile-proxy-none")
         },
     ));
 
     let priority = {
         let page = page.clone();
-        row("Priority").trailing(
+        row(tr!("network-profile-priority")).trailing(
             stepper(
                 saved.int("connection.autoconnect-priority").unwrap_or(0),
                 move |value: i64| {
@@ -391,7 +395,7 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
     let everyone = {
         let page = page.clone();
         switch_row(
-            "Available to other users",
+            tr!("network-profile-other-users"),
             saved.get("connection.permissions").is_empty(),
             move |on: bool| {
                 page.apply_now(Changes::one(
