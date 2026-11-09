@@ -1,19 +1,20 @@
 //! Text Editor: the plain text and code editor of the Bingux desktop.
 //!
-//! The editing surface, find bar and Markdown view are `bingux_ui::text_editor`
-//! and the text engine is `bingux-text`; this crate is the window around
-//! them: tabs of documents, opening and saving files in any encoding, drafts
-//! that keep unsaved text across restarts, and the menus.
+//! The editing surface, find bar and Markdown view are `bingux_ui::text_editor`,
+//! the documents (open, save, close, drafts, recovery, recents, the files that
+//! change under them) are `bingux_ui::document`, and the text engine is
+//! `bingux-text`; this crate is the window around them: tabs of documents,
+//! reading and writing text in any encoding, and the menus.
 //!
 //! A second launch hands its files to the running window, which opens each
 //! in a tab, and exits.
 
 mod app;
 mod content;
-mod document;
 mod launch;
+mod legacy;
+mod positions;
 mod prefs;
-mod session;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 
@@ -47,7 +48,8 @@ fn main() {
     }
     // The grammars load on a worker while the window opens.
     std::thread::spawn(bingux_text::highlight::warm);
-    app::prepare(prefs::load(), session::load_session());
+    legacy::import_earlier_session();
+    app::prepare(prefs::load());
     let (width, height) = app::window_size();
     Application::new("bingux-text-editor")
         .routes(launch::table())

@@ -1986,7 +1986,14 @@ is the open documents in order and a read of it redraws when it changes, so a
 tab strip can be drawn from it. Tell it which one is showing with
 `documents.set_current(Some(document))`: the window title and the scene follow.
 
-`documents.open_path_with(path, content)` opens or creates the file with the app's own `Rc<dyn DocumentContent>` instead of a fresh one, so a tab that already holds its text hands that text to the manager. The manager still calls the content's `load` with the file's bytes; the content decides whether to take them.
+`document.content_as::<EditorContent>()` is the app's content of a document, so
+the app keeps no list of its own beside the manager's. `documents.claim(id)` is
+for a window whose tabs hold ids: a tab torn off another window, or dropped on
+this one, finds its document in the window that had it (the content, the
+unsaved changes and the draft move; nobody is asked), and a closed tab brought
+back (Reopen closed tab) opens the file the document had, as a new document
+with a new id. It returns `None` when the id is neither. Ids are unique in the
+process, so a tab's id means the same in every window.
 
 The app's side of one document is `DocumentContent`:
 
@@ -1999,10 +2006,29 @@ impl DocumentContent for EditorContent {
     }
     // UI thread: show the file's bytes. Not an edit: mark_edited in here is ignored.
     fn load(&self, bytes: Vec<u8>, reason: LoadReason) { /* Open, Reload, Recover */ }
+    // UI thread, just before snapshot() for a save (not for a draft): trim spaces, add a
+    // final new line. Edits made here are in the file.
+    fn will_save(&self) {}
+    // UI thread, after a save: `clean` is false when the content changed while it was written.
+    fn saved(&self, path: &Path, clean: bool) { /* mark the content saved */ }
+    // The file name Save As offers for a document with no file (default: its title).
+    fn suggested_name(&self) -> Option<String> { Some(format!("{}.txt", first_words(&self.text))) }
     // The handle, once it exists: call document.mark_edited() when the content changes.
     fn attached(&self, document: Document) { *self.document.borrow_mut() = Some(document); }
 }
 ```
+
+A content whose decoding is heavy (a large file's text, a parse) shares the work
+with a worker: `prepare(reason)` returns the function that turns the bytes into
+whatever `load_prepared(Prepared, reason)` shows, so the UI thread only takes
+the result. `Prepared::new(value)` and `prepared.take::<T>()` carry it.
+
+A content that cannot be turned into bytes says so in `snapshot`'s error (what is
+wrong and what to change). When one change would let it be saved (the text has a
+character its encoding cannot hold, and UTF-8 can), it offers it with
+`save_fallback() -> Option<SaveFallback { label, apply }>`: the save-failed dialog
+shows `label` as its default button (`dialogs::save_not_possible_offering`), and
+the manager saves again once `apply` has run.
 
 Reads and writes are owned bytes handed to and from a worker: **nothing here
 blocks the UI thread**, and an app never reads or writes the file itself.
@@ -2034,6 +2060,11 @@ between the watch and the save) asks before replacing it. Saves that follow
 each other never share a temporary file, and an edit made while the bytes are
 being written leaves the document unsaved (the document compares the revision
 it saved with the revision it has).
+
+Every string the manager shows (the chooser titles, the dialogs, the toast, the
+advice of an error, "Untitled") is a `ui-document-*` message in
+`locale/en-GB/bingux-ui.ftl`, so a translation of the catalogue translates them;
+an app that names its documents differently passes `DocumentsConfig::untitled`.
 
 ### The dialogs
 
@@ -2697,15 +2728,15 @@ rect()
     })
 ```
 
-| Piece                                  | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `EditorHandle`                         | One document: the `Editor`, a signal that redraws its views, and what the view remembers (scroll position, highlighting). `use_editor(init)` makes one for a component; `EditorHandle::new(editor, signal)` makes one an app keeps (a window of tabs gives all its documents one `State<u64>`). `.read()` subscribes, `.peek()` does not, `.update(f)` changes and redraws, `.scroll()` and `.set_scroll(ScrollPos)` save and restore the place. |
-| `text_editor(handle)`                  | The surface. `.line_numbers`, `.wrap`, `.show_whitespace` (`·` and `→`), `.highlight_line`, `.read_only`, `.syntax_highlighting`, `.zoom(factor, on_zoom)`, `.matches(hits, current)`, `.placeholder(text)` for an empty document, `.label(text)` for assistive technology, `.menu_extra(items)` after Cut, Copy, Paste and Select all.                                                                                                          |
-| `use_find()`, `find_bar(find, handle)` | Find and replace: a query with Match case, Whole words and Regular expression (toggles on a desktop, one menu on a phone), the count (`3 of 12`, `No results`, `10,000+`), previous and next, and a replace row with Replace and Replace all (one undo step). A large document is searched on a worker over a snapshot of the rope.                                                                                                              |
-| `go_to_line_bar(handle, open)`         | Go to `120`, `120:8`, `+5` or `-5`.                                                                                                                                                                                                                                                                                                                                                                                                              |
-| `markdown_view(source)`                | Markdown drawn with the type ramp: headings, emphasis, code, lists and task lists, quotes, tables and fenced code highlighted in its language. `.follow(line)` keeps the block of a source line in sight; `.on_link(f)` opens a link.                                                                                                                                                                                                            |
-| `keymap`                               | The keys and the commands: `command_for(key, modifiers)` and `run(editor, command, page_rows, read_only)`, pure and tested.                                                                                                                                                                                                                                                                                                                      |
-| `SyntaxPalette`                        | The colours of highlighted code for the current tokens: a hue a kind of text (keywords pink, strings orange, numbers violet, types teal, functions blue, comments grey italic) lifted to 4.5:1 on the background and the current-line band, so it follows light and dark.                                                                                                                                                                        |
+| Piece                                  | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EditorHandle`                         | One document: the `Editor`, a signal that redraws its views, and what the view remembers (scroll position, highlighting). `use_editor(init)` makes one for a component; `EditorHandle::new(editor, signal)` makes one an app keeps (a window of tabs gives all its documents one `State<u64>`). `.read()` subscribes, `.peek()` does not, `.update(f)` changes and redraws, `.on_update(f)` calls `f(&Editor)` after every update, whatever made it (keys, commands, menus): how a document manager hears of an edit. `.scroll()` and `.set_scroll(ScrollPos)` save and restore the place. |
+| `text_editor(handle)`                  | The surface. `.line_numbers`, `.wrap`, `.show_whitespace` (`·` and `→`), `.highlight_line`, `.read_only`, `.syntax_highlighting`, `.zoom(factor, on_zoom)`, `.matches(hits, current)`, `.placeholder(text)` for an empty document, `.label(text)` for assistive technology, `.menu_extra(items)` after Cut, Copy, Paste and Select all.                                                                                                                                                                                                                                                    |
+| `use_find()`, `find_bar(find, handle)` | Find and replace: a query with Match case, Whole words and Regular expression (toggles on a desktop, one menu on a phone), the count (`3 of 12`, `No results`, `10,000+`), previous and next, and a replace row with Replace and Replace all (one undo step). A large document is searched on a worker over a snapshot of the rope.                                                                                                                                                                                                                                                        |
+| `go_to_line_bar(handle, open)`         | Go to `120`, `120:8`, `+5` or `-5`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `markdown_view(source)`                | Markdown drawn with the type ramp: headings, emphasis, code, lists and task lists, quotes, tables and fenced code highlighted in its language. `.follow(line)` keeps the block of a source line in sight; `.on_link(f)` opens a link.                                                                                                                                                                                                                                                                                                                                                      |
+| `keymap`                               | The keys and the commands: `command_for(key, modifiers)` and `run(editor, command, page_rows, read_only)`, pure and tested.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `SyntaxPalette`                        | The colours of highlighted code for the current tokens: a hue a kind of text (keywords pink, strings orange, numbers violet, types teal, functions blue, comments grey italic) lifted to 4.5:1 on the background and the current-line band, so it follows light and dark.                                                                                                                                                                                                                                                                                                                  |
 
 **Drawing.** The view is a grid of monospace cells. Each frame it lays out
 only the rows on screen, from the row at the top down, and draws the

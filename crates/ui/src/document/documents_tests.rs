@@ -46,11 +46,38 @@ struct Text {
     /// A load that marks the document edited, as a careless app's would.
     marks_edited_when_loaded: bool,
     document: RefCell<Option<Document>>,
+    /// What the manager told the content: `will_save`, `saved`, `prepared`.
+    calls: Rc<RefCell<Vec<String>>>,
+    /// Shares the decoding with a worker (upper-cases the text there).
+    prepares: bool,
+    /// Adds `!` on the way to disk, as format on save does.
+    appends_on_save: bool,
+    /// Offers a file name for Save as.
+    suggests: bool,
+    /// The content cannot be turned into bytes until the fallback has run.
+    broken: Rc<std::cell::Cell<bool>>,
+    /// Offers "Save in UTF-8" when it is broken.
+    offers: bool,
 }
 
 impl DocumentContent for Text {
+    fn suggested_name(&self) -> Option<String> {
+        self.suggests.then(|| "notes.txt".to_string())
+    }
+
     fn snapshot(&self) -> DocumentSnapshot {
+        if self.broken.get() {
+            return DocumentSnapshot::encode(|| Err("It has a character this cannot hold.".into()));
+        }
         DocumentSnapshot::bytes(self.text.borrow().clone().into_bytes())
+    }
+
+    fn save_fallback(&self) -> Option<SaveFallback> {
+        let broken = self.broken.clone();
+        self.offers.then(|| SaveFallback {
+            label: "Save in UTF-8".into(),
+            apply: Rc::new(move || broken.set(false)),
+        })
     }
 
     fn load(&self, bytes: Vec<u8>, reason: LoadReason) {
@@ -66,6 +93,48 @@ impl DocumentContent for Text {
     fn attached(&self, document: Document) {
         *self.document.borrow_mut() = Some(document);
     }
+
+    fn will_save(&self) {
+        self.calls.borrow_mut().push("will_save".into());
+        if self.appends_on_save {
+            self.text.borrow_mut().push('!');
+            if let Some(document) = *self.document.borrow() {
+                document.mark_edited();
+            }
+        }
+    }
+
+    fn saved(&self, path: &Path, clean: bool) {
+        let name = path.file_name().unwrap().to_string_lossy();
+        self.calls.borrow_mut().push(format!(
+            "saved {name} {}",
+            if clean { "clean" } else { "dirty" }
+        ));
+    }
+
+    fn prepare(&self, reason: LoadReason) -> Option<Preparer> {
+        self.prepares.then(|| {
+            self.calls.borrow_mut().push(format!("prepare {reason:?}"));
+            Box::new(|bytes: Vec<u8>| Prepared::new(String::from_utf8_lossy(&bytes).to_uppercase()))
+                as Preparer
+        })
+    }
+
+    fn load_prepared(&self, prepared: Prepared, reason: LoadReason) {
+        *self.text.borrow_mut() = prepared.take::<String>().expect("the string prepared");
+        self.loads.borrow_mut().push(reason);
+    }
+}
+
+/// A content of another type, for `content_as`.
+struct Other;
+
+impl DocumentContent for Other {
+    fn snapshot(&self) -> DocumentSnapshot {
+        DocumentSnapshot::bytes(Vec::new())
+    }
+
+    fn load(&self, _bytes: Vec<u8>, _reason: LoadReason) {}
 }
 
 #[derive(Default)]
@@ -76,6 +145,15 @@ struct World {
     inits: Vec<DocumentInit>,
     events: Vec<String>,
     careless: bool,
+    calls: HashMap<u64, Rc<RefCell<Vec<String>>>>,
+    prepares: bool,
+    appends_on_save: bool,
+    suggests: bool,
+    broken: bool,
+    offers: bool,
+    /// A second window's manager is made too: `other`.
+    second: bool,
+    other: Option<Documents>,
 }
 
 thread_local! {
@@ -116,9 +194,11 @@ impl Component for Root {
             |init| {
                 let text = Rc::new(RefCell::new(String::new()));
                 let loads = Rc::new(RefCell::new(Vec::new()));
+                let calls = Rc::new(RefCell::new(Vec::new()));
                 world(|world| {
                     world.texts.insert(init.id.get(), text.clone());
                     world.loads.insert(init.id.get(), loads.clone());
+                    world.calls.insert(init.id.get(), calls.clone());
                     world.inits.push(init.clone());
                 });
                 Rc::new(Text {
@@ -126,6 +206,12 @@ impl Component for Root {
                     loads,
                     marks_edited_when_loaded: world(|world| world.careless),
                     document: RefCell::new(None),
+                    calls,
+                    prepares: world(|world| world.prepares),
+                    appends_on_save: world(|world| world.appends_on_save),
+                    suggests: world(|world| world.suggests),
+                    broken: Rc::new(std::cell::Cell::new(world(|world| world.broken))),
+                    offers: world(|world| world.offers),
                 })
             },
             |event| {
@@ -143,6 +229,31 @@ impl Component for Root {
             },
         );
         world(|world| world.docs = Some(documents));
+        if world(|world| world.second) {
+            let other = use_documents(
+                DocumentsConfig::new("test-app-two", "Test App")
+                    .mime("text/plain")
+                    .sandboxed(&self.sandbox)
+                    .restore(false)
+                    .blank_when_empty(false),
+                |_| {
+                    Rc::new(Text {
+                        text: Rc::default(),
+                        loads: Rc::default(),
+                        marks_edited_when_loaded: false,
+                        document: RefCell::new(None),
+                        calls: Rc::default(),
+                        prepares: false,
+                        appends_on_save: false,
+                        suggests: false,
+                        broken: Rc::default(),
+                        offers: false,
+                    })
+                },
+                |_| {},
+            );
+            world(|world| world.other = Some(other));
+        }
         let mut column = rect().vertical();
         for document in documents.list() {
             column = column.child(label().text(document.display_title()));
@@ -471,23 +582,185 @@ fn save_then_runs_its_callback_once_the_save_has_worked() {
 }
 
 #[test]
-fn a_file_opened_with_the_apps_own_content_loads_into_that_content() {
+fn the_content_hears_of_a_save_before_and_after_it_and_a_draft_is_not_a_save() {
     reset();
-    let mut session = Session::new("with-content");
+    let mut session = Session::new("hooks");
     let path = session.file("a.txt", "hello");
-    let text = Rc::new(RefCell::new(String::new()));
-    let loads = Rc::new(RefCell::new(Vec::new()));
-    let content = Rc::new(Text {
-        text: text.clone(),
-        loads: loads.clone(),
-        marks_edited_when_loaded: false,
-        document: RefCell::new(None),
-    });
-    let document = session.run(|docs| docs.open_path_with(&path, content.clone()));
-    session.wait_until("ready", |_| document.phase() == Phase::Ready);
-    assert_eq!(*text.borrow(), "hello");
-    assert_eq!(*loads.borrow(), [LoadReason::Open]);
+    let document = session.open(&path);
+    let calls = world(|world| world.calls[&document.id().get()].clone());
+    session.set_text(document, "hello world");
+    session.wait_drafts(2);
+    assert!(calls.borrow().is_empty(), "a draft is not a save");
+    session.run(|_| document.save());
+    session.wait_until("saved", |_| !document.is_unsaved());
+    assert_eq!(*calls.borrow(), ["will_save", "saved a.txt clean"]);
+}
+
+#[test]
+fn what_the_content_does_to_itself_before_a_save_is_in_the_file_and_leaves_the_document_clean() {
+    reset();
+    world(|world| world.appends_on_save = true);
+    let mut session = Session::new("will-save");
+    let path = session.file("a.txt", "hello");
+    let document = session.open(&path);
+    session.set_text(document, "hello world");
+    session.run(|_| document.save());
+    session.wait_until("saved", |_| !document.is_unsaved() && !document.is_saving());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello world!");
+    assert_eq!(text_of(document), "hello world!");
+}
+
+#[test]
+fn a_content_that_prepares_has_its_decoding_done_on_the_worker_for_open_and_reload() {
+    reset();
+    world(|world| world.prepares = true);
+    let mut session = Session::new("prepare");
+    let path = session.file("a.txt", "hello");
+    let document = session.open(&path);
+    assert_eq!(
+        text_of(document),
+        "HELLO",
+        "the worker's work is what is shown"
+    );
     assert!(!document.is_unsaved());
+    session.shot.settle(Duration::from_millis(400));
+    std::fs::write(&path, "again").unwrap();
+    session.wait_until("reloaded", |_| text_of(document) == "AGAIN");
+    let loads = world(|world| world.loads[&document.id().get()].borrow().clone());
+    assert_eq!(loads, [LoadReason::Open, LoadReason::Reload]);
+    let calls = world(|world| world.calls[&document.id().get()].borrow().clone());
+    assert_eq!(calls, ["prepare Open", "prepare Reload"]);
+}
+
+#[test]
+fn recovered_work_is_prepared_on_the_worker_too() {
+    reset();
+    world(|world| world.prepares = true);
+    let mut session = Session::with("prepare-recover", |dir| {
+        let meta = DraftMeta {
+            title: "Untitled".into(),
+            path: None,
+            base: None,
+            extra: serde_json::json!({"app": null, "untitled": 1, "scroll": [0.0, 0.0]}),
+        };
+        crashed_draft(dir, "69f-3-0", &meta, "unsaved thoughts");
+    });
+    session.wait_for("Recover “Untitled”?");
+    session.click("Recover");
+    session.wait_until("the text is back", |_| {
+        world(|world| {
+            world
+                .texts
+                .values()
+                .any(|text| *text.borrow() == "UNSAVED THOUGHTS")
+        })
+    });
+}
+
+#[test]
+fn the_content_of_a_document_is_found_by_its_type() {
+    reset();
+    let mut session = Session::new("content-as");
+    let path = session.file("a.txt", "hello");
+    let document = session.open(&path);
+    assert!(document.content_as::<Text>().is_some());
+    assert!(document.content_as::<Other>().is_none());
+}
+
+#[test]
+fn save_as_for_a_document_with_no_file_offers_the_name_its_content_suggests() {
+    reset();
+    world(|world| world.suggests = true);
+    let mut session = Session::new("suggested-name");
+    let document = session.run(|docs| docs.new_document());
+    session.set_text(document, "some words");
+    session.run(|_| document.save());
+    session.wait_for("Save as");
+    assert!(
+        session.shows("notes.txt"),
+        "on screen: {:?}",
+        session.texts()
+    );
+}
+
+#[test]
+fn a_blank_nobody_typed_in_does_not_keep_its_number_from_recovered_work() {
+    reset();
+    let mut session = Session::with("blank-yields", |dir| {
+        let meta = DraftMeta {
+            title: "Untitled".into(),
+            path: None,
+            base: None,
+            extra: serde_json::json!({"app": null, "untitled": 1, "scroll": [0.0, 0.0]}),
+        };
+        crashed_draft(dir, "69f-2-0", &meta, "unsaved thoughts");
+    });
+    session.wait_for("Recover “Untitled”?");
+    // The app made its blank document while the question was on screen.
+    let blank = session.run(|docs| docs.new_document());
+    assert_eq!(blank.title(), "Untitled");
+    session.click("Recover");
+    session.wait_until("the work is back", |_| titles().len() == 2);
+    assert_eq!(titles(), ["Untitled", "Untitled"]);
+}
+
+// ---- Between windows ---------------------------------------------------------
+
+#[test]
+fn a_document_moves_to_the_window_that_claims_it_with_its_text_and_unsaved_changes() {
+    reset();
+    world(|world| world.second = true);
+    let mut session = Session::new("claim");
+    let path = session.file("a.txt", "hello");
+    let document = session.open(&path);
+    session.set_text(document, "hello there");
+    let other = world(|world| world.other).expect("a second window");
+    let moved = session
+        .run(|_| other.claim(document.id()))
+        .expect("the document is claimed");
+    assert_eq!(
+        moved.id(),
+        document.id(),
+        "the id is the same in every window"
+    );
+    assert!(
+        !document.is_open(),
+        "it left the window it was in, and nobody was asked"
+    );
+    assert!(moved.is_unsaved());
+    assert_eq!(moved.path().as_deref(), Some(path.as_path()));
+    assert_eq!(text_of(moved), "hello there");
+    // Saving in the new window writes what the content holds.
+    session.run(|_| moved.save());
+    session.wait_until("saved", |_| !moved.is_unsaved());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "hello there");
+    // A document that nobody has is nobody's to claim.
+    assert!(session.run(|_| other.claim(DocumentId(u64::MAX))).is_none());
+}
+
+#[test]
+fn a_closed_documents_file_is_opened_again_by_claim_once_and_a_failed_open_is_not_remembered() {
+    reset();
+    let mut session = Session::new("reopen");
+    let path = session.file("a.txt", "hello");
+    let document = session.open(&path);
+    let id = document.id();
+    session.run(|_| document.close());
+    assert!(!document.is_open());
+    let again = session
+        .run(|docs| docs.claim(id))
+        .expect("the file is opened again");
+    assert_ne!(again.id(), id, "it is a new document");
+    session.wait_until("read", |_| again.phase() == Phase::Ready);
+    assert_eq!(text_of(again), "hello");
+    assert!(
+        session.run(|docs| docs.claim(id)).is_none(),
+        "once: the document is open again"
+    );
+    let missing = session.dir.join("none.txt");
+    let failed = session.run(|docs| docs.open_path(&missing));
+    session.wait_until("gone", |_| !failed.is_open());
+    assert!(session.run(|docs| docs.claim(failed.id())).is_none());
 }
 
 #[test]
@@ -1006,4 +1279,43 @@ fn opening_and_saving_register_the_file_in_the_shared_list_and_the_menu_offers_i
         ),
         Vec::<PathBuf>::new()
     );
+}
+
+#[test]
+fn a_save_that_cannot_be_encoded_offers_the_contents_fix_and_saves_again_when_it_is_taken() {
+    reset();
+    world(|world| {
+        world.broken = true;
+        world.offers = true;
+    });
+    let mut session = Session::new("fallback");
+    let path = session.file("a.txt", "one");
+    let document = session.open(&path);
+    session.set_text(document, "two");
+    session.run(|_| document.save());
+    session.wait_for("Save in UTF-8");
+    assert!(session.shows("It has a character this cannot hold."));
+    assert_eq!(
+        std::fs::read_to_string(&path).unwrap(),
+        "one",
+        "nothing was written"
+    );
+    session.click("Save in UTF-8");
+    session.wait_until("saved", |_| !document.is_unsaved() && !document.is_saving());
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "two");
+}
+
+#[test]
+fn a_save_that_cannot_be_encoded_offers_nothing_when_the_content_has_no_fix() {
+    reset();
+    world(|world| world.broken = true);
+    let mut session = Session::new("no-fallback");
+    let path = session.file("a.txt", "one");
+    let document = session.open(&path);
+    session.set_text(document, "two");
+    session.run(|_| document.save());
+    session.wait_for("It has a character this cannot hold.");
+    assert!(!session.shows("Save in UTF-8"));
+    session.click("Close");
+    assert!(document.is_unsaved());
 }

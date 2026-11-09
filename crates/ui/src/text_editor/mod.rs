@@ -88,6 +88,7 @@ pub struct EditorHandle {
     editor: Rc<RefCell<Editor>>,
     signal: State<u64>,
     memory: Rc<RefCell<ViewMemory>>,
+    observer: Rc<RefCell<Option<Rc<dyn Fn(&Editor)>>>>,
 }
 
 impl PartialEq for EditorHandle {
@@ -108,6 +109,7 @@ impl EditorHandle {
                 highlight: None,
                 shown: (0, 0),
             })),
+            observer: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -122,12 +124,26 @@ impl EditorHandle {
         self.editor.borrow()
     }
 
-    /// Changes the editor and re-renders its views.
+    /// Changes the editor and re-renders its views, then tells the observer
+    /// ([`on_update`](Self::on_update)).
     pub fn update<R>(&self, edit: impl FnOnce(&mut Editor) -> R) -> R {
         let result = edit(&mut self.editor.borrow_mut());
         let mut signal = self.signal;
         *signal.write() += 1;
+        let observer = self.observer.borrow().clone();
+        if let Some(observer) = observer {
+            observer(&self.editor.borrow());
+        }
         result
+    }
+
+    /// Calls `observer` after every [`update`](Self::update), with the
+    /// editor as it is then, so that something that follows the document (the
+    /// unsaved mark, the draft) hears of every edit wherever it came from:
+    /// the view's keys, a command, a menu. Replaces the previous observer,
+    /// and is shared by the clones of this handle. It must not call `update`.
+    pub fn on_update(&self, observer: impl Fn(&Editor) + 'static) {
+        *self.observer.borrow_mut() = Some(Rc::new(observer));
     }
 
     /// Re-renders the views without a change to the text: a new scroll

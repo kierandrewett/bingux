@@ -18,21 +18,39 @@ time, including any changes you had not saved.
 | Close a document             | Ctrl+W or the tab's ×; a document with changes asks Save, Discard or Cancel         |
 | Bring back a closed document | Ctrl+Shift+T                                                                        |
 
-- **Nothing typed is lost.** Two seconds after a change, the text is written
-  as a draft in `~/.local/state/bingux/text-editor/drafts/`. If the window
-  closes, the computer restarts or the program stops, the next start opens the
-  same documents with their changes. A draft is deleted when its document is
-  saved, or closed with Discard.
+- **Nothing typed is lost.** Three seconds after a change, the text is written
+  as a draft in `~/.local/state/bingux-text-editor/drafts/`, with where the
+  caret was and how the file is written. If the program stops (a crash, a
+  restart), the next start asks "Recover unsaved work?" and the documents come
+  back with their changes, still unsaved. Recover is the default; Discard
+  deletes the drafts; Not now (Escape) deletes nothing. A draft is deleted
+  when its document is saved, or closed with Discard.
+- **The same tabs next time.** Closing the window with files open opens them
+  again in the same order, on the tab you left, each with its caret and scroll
+  position (`~/.local/state/bingux-text-editor/scene.json`). A file that has
+  gone is left out. Closing a tab forgets it.
 - **Each file opens where you left it.** The caret and scroll position of the
   last 500 files are remembered.
 - **A file that changes on disk** while it is open is read again by itself
-  when the document has no unsaved changes, with an Undo in the notice. With
-  unsaved changes, a notice offers Read again or Keep mine. A file moved or
-  deleted says so and offers Save.
+  when the document has no unsaved changes, and a message says so (Ctrl+Z takes
+  the old text back). With unsaved changes, a question offers Keep my version
+  (the default; your next save replaces the file) or Reload (your changes are
+  lost). A save that finds the file changed since it was read asks before it
+  replaces it. A file moved or deleted stays open as an unsaved document, so
+  closing it asks, and Save writes it again.
 - **A file you cannot write** opens normally with a notice; Save asks for a new
   place.
 - **A file that is not text** (a program, a picture) shows "This file is not
-  text" with Open anyway, so it is not damaged by accident.
+  text" with Open anyway, so it is not damaged by accident. Until then it
+  cannot be saved from here.
+- **A new document** has no file: Ctrl+S, or closing it with Save, asks where
+  to put it, and offers its first words as the name (`groceries to buy.txt`,
+  or `.md` for Markdown).
+- **A file is open once.** Opening it again goes to its tab, from a second
+  launch, a drop or the Open dialog.
+- **A tab dragged to another window** takes its document with it, unsaved
+  changes and undo history included. **Bring back a closed document** reads
+  the file again from disk; changes you discarded are gone.
 - Saving writes to a temporary file in the same folder and renames it over the
   old one, so a full disk or a crash never leaves half a file. The file keeps
   its permissions, and a link stays a link.
@@ -51,7 +69,7 @@ endings of the document; each is a menu.
 | A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                    |
 | UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                      |
 | Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; the encoding menu ▸ Read again as tries another |
-| A character the file's encoding cannot hold, on save            | Save stops and offers Save in UTF-8                                                                         |
+| A character the file's encoding cannot hold, on save            | Save stops, says which character, and offers Save in UTF-8 (the status bar picks any other encoding)        |
 | CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                 |
 
 The editor reads `.editorconfig` files from the file's folder upwards:
@@ -135,8 +153,7 @@ follows the part of the text on screen, and a link opens in the browser.
 
 Only the lines on screen are laid out and drawn, so a large log opens and
 scrolls quickly; a line longer than 10,000 characters is drawn a part at a
-time. Files over 8 MB are not coloured, and drafts are not written for
-documents over 64 MB (the file itself is the copy).
+time. Files over 8 MB are not coloured, and files over 512 MB are not opened.
 
 ## Preferences
 
@@ -169,6 +186,20 @@ The window is `apps/text-editor`. The editing surface, find bar, go-to-line
 bar and Markdown view are `bingux_ui::text_editor` (`docs/bingux-ui.md`,
 "Text editor"), and the text engine (rope, undo, encodings, languages,
 highlighting) is the `bingux-text` crate in `crates/text`.
+
+What a document is (open, save, save as, close with its question, drafts and
+recovery, the file changing under it, recent files, the tabs that come back,
+a document moving to another window) is `bingux_ui::document`
+(`docs/bingux-ui.md`, "Documents"). The app's side is `content.rs`: it turns
+bytes into text on a worker (`decode`), text into bytes (`encode`), trims and
+ends the file as a save should (`tidy`), and tells the manager of each edit.
+Where files were left (`positions.rs`) is all the app keeps of its own.
+
+The first start with the shared manager imports what earlier builds kept in
+`~/.local/state/bingux/text-editor/` (`session.json` and `drafts/`): each old
+draft is offered by "Recover unsaved work?" and each file of the old session
+joins Open recent. A marker (`~/.local/state/bingux-text-editor/imported-earlier-session`)
+makes it happen once, and the old files are left where they are (`legacy.rs`).
 
 `bingux-text-editor --snapshot DIR [FILE]` (built with `--features snapshot`)
 renders the window to PNG without a compositor, and `--bench-typing FILE`

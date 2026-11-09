@@ -20,8 +20,9 @@
 
 use std::rc::Rc;
 
-use crate::format::{List, Moment, Plural, Relative};
+use crate::format::{List, Moment, Relative};
 use crate::shell::{CANCEL_ID, Dialog, DialogIcon, ResponseKind, dialog};
+use crate::tr;
 
 use super::io::OpenError;
 use super::write::SaveError;
@@ -37,15 +38,9 @@ fn quoted(names: &[String]) -> String {
         .collect();
     let more = names.len().saturating_sub(LISTED);
     if more > 0 {
-        shown.push(more.to_string() + " more");
+        shown.push(tr!("ui-document-more", count = more));
     }
     List::and(shown).format()
-}
-
-fn count_of(count: usize, noun_one: &str, noun_other: &str) -> String {
-    Plural::new(count as f64, &format!("{{n}} {noun_other}"))
-        .one(&format!("{{n}} {noun_one}"))
-        .format()
 }
 
 // ---- Unsaved changes -----------------------------------------------------
@@ -72,37 +67,42 @@ pub fn unsaved_changes(names: &[String], answer: impl Fn(Unsaved) + 'static) -> 
     let many = names.len() > 1;
     let (title, body) = if many {
         (
-            format!(
-                "Save changes to {}?",
-                count_of(names.len(), "document", "documents")
-            ),
-            format!(
-                "{} have unsaved changes. If you do not save them, they are lost.",
-                quoted(names)
-            ),
+            tr!("ui-document-unsaved-title-many", count = names.len()),
+            tr!("ui-document-unsaved-body-many", names = quoted(names)),
         )
     } else {
         let name = names.first().map(String::as_str).unwrap_or_default();
         (
-            format!("Save changes to “{name}”?"),
-            "If you do not save, your changes are lost.".to_string(),
+            tr!("ui-document-unsaved-title", name = name),
+            tr!("ui-document-unsaved-body"),
         )
     };
     let (cancel, discard, save) = (answer.clone(), answer.clone(), answer);
     dialog(title, body)
         .icon(DialogIcon::Warning)
-        .action(CANCEL_ID, "Cancel", ResponseKind::Default, move |_| {
-            cancel(Unsaved::Cancel)
-        })
+        .action(
+            CANCEL_ID,
+            tr!("ui-document-cancel"),
+            ResponseKind::Default,
+            move |_| cancel(Unsaved::Cancel),
+        )
         .action(
             "discard",
-            if many { "Discard all" } else { "Discard" },
+            if many {
+                tr!("ui-document-discard-all")
+            } else {
+                tr!("ui-document-discard")
+            },
             ResponseKind::Destructive,
             move |_| discard(Unsaved::Discard),
         )
         .action(
             "save",
-            if many { "Save all" } else { "Save" },
+            if many {
+                tr!("ui-document-save-all")
+            } else {
+                tr!("ui-document-save")
+            },
             ResponseKind::Suggested,
             move |_| save(Unsaved::Save),
         )
@@ -151,34 +151,40 @@ pub fn recover_work(
         .unwrap_or_default();
     let (title, body) = match items {
         [only] => (
-            format!("Recover “{}”?", only.title),
-            format!(
-                "{app_name} closed before you saved this document. Its last copy was kept {when}."
-            ),
+            tr!("ui-document-recover-title", name = only.title.as_str()),
+            tr!("ui-document-recover-body", app = app_name, when = when),
         ),
         _ => (
-            format!(
-                "Recover {}?",
-                count_of(items.len(), "unsaved document", "unsaved documents")
-            ),
-            format!(
-                "{app_name} closed before you saved {}. The latest copy was kept {when}.",
-                quoted(&titles)
+            tr!("ui-document-recover-title-many", count = items.len()),
+            tr!(
+                "ui-document-recover-body-many",
+                app = app_name,
+                names = quoted(&titles),
+                when = when
             ),
         ),
     };
     let (later, discard, recover) = (answer.clone(), answer.clone(), answer);
     dialog(title, body)
         .icon(DialogIcon::Info)
-        .action(CANCEL_ID, "Not now", ResponseKind::Default, move |_| {
-            later(Recovery::Later)
-        })
-        .action("discard", "Discard", ResponseKind::Destructive, move |_| {
-            discard(Recovery::Discard)
-        })
-        .action("recover", "Recover", ResponseKind::Suggested, move |_| {
-            recover(Recovery::Recover)
-        })
+        .action(
+            CANCEL_ID,
+            tr!("ui-document-not-now"),
+            ResponseKind::Default,
+            move |_| later(Recovery::Later),
+        )
+        .action(
+            "discard",
+            tr!("ui-document-discard"),
+            ResponseKind::Destructive,
+            move |_| discard(Recovery::Discard),
+        )
+        .action(
+            "recover",
+            tr!("ui-document-recover"),
+            ResponseKind::Suggested,
+            move |_| recover(Recovery::Recover),
+        )
         .default_action("recover")
         .cancel_action(CANCEL_ID)
 }
@@ -204,16 +210,22 @@ pub fn file_changed(name: &str, answer: impl Fn(Changed) + 'static) -> Dialog {
     let answer = Rc::new(answer);
     let (keep, reload) = (answer.clone(), answer);
     dialog(
-        format!("“{name}” changed on disk"),
-        "Another program saved this file after you opened it. You also have unsaved changes here. Reloading replaces them.",
+        tr!("ui-document-changed-title", name = name),
+        tr!("ui-document-changed-body"),
     )
     .icon(DialogIcon::Warning)
-    .action(CANCEL_ID, "Keep my version", ResponseKind::Default, move |_| {
-        keep(Changed::Keep)
-    })
-    .action("reload", "Reload", ResponseKind::Destructive, move |_| {
-        reload(Changed::Reload)
-    })
+    .action(
+        CANCEL_ID,
+        tr!("ui-document-keep-my-version"),
+        ResponseKind::Default,
+        move |_| keep(Changed::Keep),
+    )
+    .action(
+        "reload",
+        tr!("ui-document-reload"),
+        ResponseKind::Destructive,
+        move |_| reload(Changed::Reload),
+    )
     .default_action(CANCEL_ID)
     .cancel_action(CANCEL_ID)
 }
@@ -233,16 +245,19 @@ pub fn file_removed(name: &str, answer: impl Fn(Gone) + 'static) -> Dialog {
     let answer = Rc::new(answer);
     let (keep, save_as) = (answer.clone(), answer);
     dialog(
-        format!("“{name}” is no longer there"),
-        "It was deleted or moved. Your copy stays open. Save it to keep it.",
+        tr!("ui-document-removed-title", name = name),
+        tr!("ui-document-removed-body"),
     )
     .icon(DialogIcon::Warning)
-    .action(CANCEL_ID, "Keep open", ResponseKind::Default, move |_| {
-        keep(Gone::KeepOpen)
-    })
+    .action(
+        CANCEL_ID,
+        tr!("ui-document-keep-open"),
+        ResponseKind::Default,
+        move |_| keep(Gone::KeepOpen),
+    )
     .action(
         "save_as",
-        "Save as…",
+        tr!("ui-document-save-as"),
         ResponseKind::Suggested,
         move |_| save_as(Gone::SaveAs),
     )
@@ -268,19 +283,25 @@ pub fn save_conflict(name: &str, answer: impl Fn(Conflict) + 'static) -> Dialog 
     let answer = Rc::new(answer);
     let (cancel, save_as, replace) = (answer.clone(), answer.clone(), answer);
     dialog(
-        format!("Replace “{name}”?"),
-        "Another program changed this file after you opened it. Saving replaces its changes.",
+        tr!("ui-document-conflict-title", name = name),
+        tr!("ui-document-conflict-body"),
     )
     .icon(DialogIcon::Warning)
-    .action(CANCEL_ID, "Cancel", ResponseKind::Default, move |_| {
-        cancel(Conflict::Cancel)
-    })
-    .action("replace", "Replace", ResponseKind::Destructive, move |_| {
-        replace(Conflict::Replace)
-    })
+    .action(
+        CANCEL_ID,
+        tr!("ui-document-cancel"),
+        ResponseKind::Default,
+        move |_| cancel(Conflict::Cancel),
+    )
+    .action(
+        "replace",
+        tr!("ui-document-replace"),
+        ResponseKind::Destructive,
+        move |_| replace(Conflict::Replace),
+    )
     .action(
         "save_as",
-        "Save as…",
+        tr!("ui-document-save-as"),
         ResponseKind::Suggested,
         move |_| save_as(Conflict::SaveAs),
     )
@@ -306,25 +327,39 @@ pub enum Retry {
 pub fn save_failed(name: &str, error: &SaveError, answer: impl Fn(Retry) + 'static) -> Dialog {
     let answer = Rc::new(answer);
     let (cancel, other) = (answer.clone(), answer);
-    let base = dialog(format!("Could not save “{name}”"), error.advice())
-        .icon(DialogIcon::Error)
-        .action(CANCEL_ID, "Cancel", ResponseKind::Default, move |_| {
-            cancel(Retry::Cancel)
-        });
+    let base = dialog(
+        tr!("ui-document-save-failed-title", name = name),
+        error.advice(),
+    )
+    .icon(DialogIcon::Error)
+    .action(
+        CANCEL_ID,
+        tr!("ui-document-cancel"),
+        ResponseKind::Default,
+        move |_| cancel(Retry::Cancel),
+    );
     match error {
         SaveError::Full | SaveError::Other(_) => base
-            .action("try_again", "Try again", ResponseKind::Suggested, {
-                let again = other.clone();
-                move |_| again(Retry::TryAgain)
-            })
-            .action("save_as", "Save as…", ResponseKind::Default, move |_| {
-                other(Retry::SaveAs)
-            })
+            .action(
+                "try_again",
+                tr!("ui-document-try-again"),
+                ResponseKind::Suggested,
+                {
+                    let again = other.clone();
+                    move |_| again(Retry::TryAgain)
+                },
+            )
+            .action(
+                "save_as",
+                tr!("ui-document-save-as"),
+                ResponseKind::Default,
+                move |_| other(Retry::SaveAs),
+            )
             .default_action("try_again"),
         _ => base
             .action(
                 "save_as",
-                "Save as…",
+                tr!("ui-document-save-as"),
                 ResponseKind::Suggested,
                 move |_| other(Retry::SaveAs),
             )
@@ -336,16 +371,42 @@ pub fn save_failed(name: &str, error: &SaveError, answer: impl Fn(Retry) + 'stat
 /// "Could not save “name”" for a document the app could not turn into bytes.
 /// `advice` is the app's own text: what is wrong and what to change.
 pub fn save_not_possible(name: &str, advice: &str) -> Dialog {
-    dialog(format!("Could not save “{name}”"), advice)
+    dialog(tr!("ui-document-save-failed-title", name = name), advice)
         .icon(DialogIcon::Error)
-        .cancel("Close")
+        .cancel(tr!("ui-document-close"))
+}
+
+/// Like [`save_not_possible`], with the one way out the app offers: a button
+/// labelled `label` (the default) that runs `apply`, which the manager follows
+/// with a new save. The app's text is what the button does, such as "Save in
+/// UTF-8".
+pub fn save_not_possible_offering(
+    name: &str,
+    advice: &str,
+    label: &str,
+    apply: impl Fn() + 'static,
+) -> Dialog {
+    dialog(tr!("ui-document-save-failed-title", name = name), advice)
+        .icon(DialogIcon::Error)
+        .action(
+            CANCEL_ID,
+            tr!("ui-document-close"),
+            ResponseKind::Default,
+            |_| {},
+        )
+        .action("fallback", label, ResponseKind::Suggested, move |_| apply())
+        .default_action("fallback")
+        .cancel_action(CANCEL_ID)
 }
 
 /// "Could not open “name”", with what to do about it as the body.
 pub fn open_failed(name: &str, error: &OpenError) -> Dialog {
-    dialog(format!("Could not open “{name}”"), error.advice())
-        .icon(DialogIcon::Error)
-        .cancel("Close")
+    dialog(
+        tr!("ui-document-open-failed-title", name = name),
+        error.advice(),
+    )
+    .icon(DialogIcon::Error)
+    .cancel(tr!("ui-document-close"))
 }
 
 /// What the person chose in [`revert_changes`].
@@ -363,16 +424,22 @@ pub fn revert_changes(name: &str, answer: impl Fn(Revert) + 'static) -> Dialog {
     let answer = Rc::new(answer);
     let (cancel, revert) = (answer.clone(), answer);
     dialog(
-        format!("Revert “{name}”?"),
-        "The file is read again, and your unsaved changes are lost.",
+        tr!("ui-document-revert-title", name = name),
+        tr!("ui-document-revert-body"),
     )
     .icon(DialogIcon::Warning)
-    .action(CANCEL_ID, "Cancel", ResponseKind::Default, move |_| {
-        cancel(Revert::Cancel)
-    })
-    .action("revert", "Revert", ResponseKind::Destructive, move |_| {
-        revert(Revert::Revert)
-    })
+    .action(
+        CANCEL_ID,
+        tr!("ui-document-cancel"),
+        ResponseKind::Default,
+        move |_| cancel(Revert::Cancel),
+    )
+    .action(
+        "revert",
+        tr!("ui-document-revert"),
+        ResponseKind::Destructive,
+        move |_| revert(Revert::Revert),
+    )
     .default_action(CANCEL_ID)
     .cancel_action(CANCEL_ID)
 }
@@ -381,11 +448,11 @@ pub fn revert_changes(name: &str, answer: impl Fn(Revert) + 'static) -> Dialog {
 /// document has open: two documents for one file would overwrite each other.
 pub fn already_open(name: &str) -> Dialog {
     dialog(
-        format!("“{name}” is already open"),
-        "Close that document first, or save under another name.",
+        tr!("ui-document-open-elsewhere-title", name = name),
+        tr!("ui-document-open-elsewhere-body"),
     )
     .icon(DialogIcon::Warning)
-    .cancel("Close")
+    .cancel(tr!("ui-document-close"))
 }
 
 #[cfg(test)]
