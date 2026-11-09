@@ -21,7 +21,7 @@ use crate::ui::{
     use_window,
 };
 use bingux_ui::motion::reveal_block_if;
-use bingux_ui::prelude::{Router, Target, use_router};
+use bingux_ui::prelude::{Router, Target, tr, use_router};
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
@@ -144,7 +144,7 @@ fn bool_property(path: &str, name: &str) -> Result<bool, CommandError> {
 }
 
 fn unexpected() -> CommandError {
-    CommandError("Could not read the accounts. Restart Settings and try again.".into())
+    CommandError(tr!("settings-users-read-error"))
 }
 
 /// Set the full name of the account at `path` through polkit.
@@ -241,14 +241,16 @@ impl Component for UsersPage {
             Err(e) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(model, refresh)),
+                        .action(&tr!("settings-users-try-again"), move |_| {
+                            background(model, refresh)
+                        }),
                 );
             }
         };
 
-        let group = Group::titled("Accounts");
+        let group = Group::titled(&tr!("settings-users-accounts"));
         let group = if accounts.is_empty() {
-            group.row(status(Status::Empty("No accounts".into())))
+            group.row(status(Status::Empty(tr!("settings-users-no-accounts"))))
         } else {
             group.rows(accounts.iter().map(|account| {
                 let route =
@@ -283,7 +285,9 @@ impl Component for AccountPage {
                 return Element::from(
                     page_column().child(PageHead::new()).child(
                         status(Status::Error(e.0))
-                            .action("Try again", move |_| background(model, refresh)),
+                            .action(&tr!("settings-users-try-again"), move |_| {
+                                background(model, refresh)
+                            }),
                     ),
                 );
             }
@@ -294,7 +298,7 @@ impl Component for AccountPage {
             .find(|account| account.path == self.path)
         else {
             return Element::from(page_column().child(PageHead::new()).child(status(
-                Status::Empty("This account no longer exists.".to_string()),
+                Status::Empty(tr!("settings-users-no-longer-exists")),
             )));
         };
         Element::from(AccountDetails { model, account })
@@ -324,7 +328,7 @@ impl Component for AccountDetails {
         let password = use_password();
         let name = use_name(account, model);
         let path = account.path.clone();
-        let name_row = row("Full name")
+        let name_row = row(tr!("settings-users-full-name"))
             .value(name.shown.read().clone())
             .on_press(move |_| name.open(path.clone()));
         let shown_name = name.shown.read().clone();
@@ -334,9 +338,9 @@ impl Component for AccountDetails {
             shown_name
         };
         let role = if account.administrator {
-            "Administrator"
+            tr!("settings-users-administrator")
         } else {
-            "Standard"
+            tr!("settings-users-standard")
         };
         let header = rect()
             .tw(
@@ -347,35 +351,47 @@ impl Component for AccountDetails {
             .child(heading(heading_text))
             .child(caption(role));
         let password_group = account.current.then(|| {
-            Element::from(
-                Group::titled("Password").row(
-                    row("Password")
-                        .trailing(action_button("Change password", move |_| password.open())),
-                ),
-            )
+            Element::from(Group::titled(&tr!("settings-users-password")).row(
+                row(tr!("settings-users-password")).trailing(action_button(
+                    tr!("settings-users-change-password"),
+                    move |_| password.open(),
+                )),
+            ))
         });
         page_column()
             .child(header)
             .child(
-                Group::titled("Account")
+                Group::titled(&tr!("settings-users-account"))
                     .row(name_row)
-                    .row(row("User name").value(account.user_name.clone()))
-                    .row(row("Account type").value(if account.administrator {
-                        "Administrator"
-                    } else {
-                        "Standard"
-                    }))
-                    .row(row("Automatic login").value(if account.automatic_login {
-                        "On"
-                    } else {
-                        "Off"
-                    }))
-                    .row(row("Language").value(if account.language.is_empty() {
-                        "Not set".to_string()
-                    } else {
-                        account.language.clone()
-                    }))
-                    .row(row("Account locked").value(if account.locked { "Yes" } else { "No" })),
+                    .row(row(tr!("settings-users-user-name")).value(account.user_name.clone()))
+                    .row(
+                        row(tr!("settings-users-account-type")).value(if account.administrator {
+                            tr!("settings-users-administrator")
+                        } else {
+                            tr!("settings-users-standard")
+                        }),
+                    )
+                    .row(row(tr!("settings-users-automatic-login")).value(
+                        if account.automatic_login {
+                            tr!("settings-users-on")
+                        } else {
+                            tr!("settings-users-off")
+                        },
+                    ))
+                    .row(row(tr!("settings-users-language")).value(
+                        if account.language.is_empty() {
+                            tr!("settings-users-not-set")
+                        } else {
+                            account.language.clone()
+                        },
+                    ))
+                    .row(
+                        row(tr!("settings-users-account-locked")).value(if account.locked {
+                            tr!("settings-users-yes")
+                        } else {
+                            tr!("settings-users-no")
+                        }),
+                    ),
             )
             .maybe_child(password_group)
     }
@@ -439,8 +455,13 @@ impl PasswordSheet {
 
     /// Shows the sheet with whatever is in the fields.
     fn show(self) {
-        self.window
-            .open(popup("Change password", PasswordBody { sheet: self }).flags(PopupFlags::FORM));
+        self.window.open(
+            popup(
+                tr!("settings-users-change-password"),
+                PasswordBody { sheet: self },
+            )
+            .flags(PopupFlags::FORM),
+        );
     }
 
     fn clear(self) {
@@ -481,7 +502,7 @@ impl PasswordSheet {
                     Ok(()) => {
                         self.clear();
                         window.close();
-                        self.overlays.toast("Password changed".to_string());
+                        self.overlays.toast(tr!("settings-users-password-changed"));
                     }
                     Err(message) => {
                         let mut error = self.error;
@@ -494,13 +515,13 @@ impl PasswordSheet {
 }
 
 /// The first problem with the three password fields, if there is one.
-fn password_problem(current: &str, new: &str, confirm: &str) -> Option<&'static str> {
+fn password_problem(current: &str, new: &str, confirm: &str) -> Option<String> {
     if current.is_empty() {
-        Some("Enter your current password.")
+        Some(tr!("settings-users-enter-current-password"))
     } else if new.is_empty() {
-        Some("Enter a new password.")
+        Some(tr!("settings-users-enter-new-password"))
     } else if new != confirm {
-        Some("The new passwords do not match.")
+        Some(tr!("settings-users-passwords-mismatch"))
     } else {
         None
     }
@@ -518,15 +539,15 @@ impl Component for PasswordBody {
         let window = use_window();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Change password".into(),
+                label: tr!("settings-users-change-password"),
                 enabled: true,
                 on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
             }),
         });
-        let current = form_field("Current password", sheet.current)
+        let current = form_field(tr!("settings-users-current-password"), sheet.current)
             .password()
             .on_submit(move |_: ()| sheet.submit(window));
-        let new = form_field("New password", sheet.new)
+        let new = form_field(tr!("settings-users-new-password"), sheet.new)
             .password()
             .on_submit(move |_: ()| sheet.submit(window));
         let error = sheet.error.read().clone();
@@ -536,12 +557,12 @@ impl Component for PasswordBody {
             let confirm_text = sheet.confirm.read();
             !confirm_text.is_empty() && *confirm_text != *new_text
         };
-        let confirm = form_field("Confirm password", sheet.confirm)
+        let confirm = form_field(tr!("settings-users-confirm-password"), sheet.confirm)
             .password()
-            .error(mismatch.then(|| "The new passwords do not match.".to_string()))
+            .error(mismatch.then(|| tr!("settings-users-passwords-mismatch")))
             .on_submit(move |_: ()| sheet.submit(window));
         let group = Group::new(None::<String>)
-            .description("Enter your current password, then the new one twice.")
+            .description(tr!("settings-users-password-description"))
             .row(current)
             .row(new)
             .row(confirm);
@@ -554,9 +575,9 @@ impl Component for PasswordBody {
             .child(reveal_block_if(
                 S6,
                 busy.then(|| {
-                    Element::from(status(Status::Loading(
-                        "Changing your password…".to_string(),
-                    )))
+                    Element::from(status(Status::Loading(tr!(
+                        "settings-users-changing-password"
+                    ))))
                 }),
             ))
     }
@@ -603,7 +624,11 @@ impl NameSheet {
 
     fn show(self, path: String) {
         self.window.open(
-            popup("Change full name", NameBody { sheet: self, path }).flags(PopupFlags::FORM),
+            popup(
+                tr!("settings-users-change-name"),
+                NameBody { sheet: self, path },
+            )
+            .flags(PopupFlags::FORM),
         );
     }
 
@@ -655,7 +680,8 @@ impl Component for NameBody {
         let field = text_field(sheet.field, move |_: String| {
             sheet.submit(path.clone(), window)
         });
-        popup_column().child(Group::new(None::<String>).row(form_row("Full name", field)))
+        popup_column()
+            .child(Group::new(None::<String>).row(form_row(tr!("settings-users-full-name"), field)))
     }
 }
 
@@ -669,9 +695,9 @@ fn account_row(
     password: PasswordSheet,
 ) -> Element {
     let role = if account.administrator {
-        "Administrator"
+        tr!("settings-users-administrator")
     } else {
-        "Standard"
+        tr!("settings-users-standard")
     };
     let subtitle = if account.real_name.is_empty() {
         role.to_string()
@@ -684,9 +710,14 @@ fn account_row(
         .navigates();
     let current = account.current;
     let open_route = route.clone();
-    let mut menu = vec![menu_item("Open", move |_| router.open(open_route.clone()))];
+    let mut menu = vec![menu_item(tr!("settings-users-open"), move |_| {
+        router.open(open_route.clone())
+    })];
     if current {
-        menu.push(menu_item("Change password", move |_| password.open()));
+        menu.push(menu_item(
+            tr!("settings-users-change-password"),
+            move |_| password.open(),
+        ));
     }
     item.on_press(move |_| router.open(route.clone()))
         .context_menu(menu)
