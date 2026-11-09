@@ -14,3 +14,4 @@ pub mod inputs;
 pub mod inspector;
 pub mod navigation;
 pub mod platform;
+pub mod transfer;

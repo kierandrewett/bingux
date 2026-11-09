@@ -646,8 +646,17 @@ move there. Hold Ctrl to copy. The target under the pointer is highlighted.
 Dragging uses the same operations as cut and paste, so a move between drives
 copies, checks and then removes the source, and nothing is half-written.
 
-Dragging files **to or from other applications** is not supported: Freya and
-its winit version have no drag-and-drop source or target on Wayland.
+Files also works with **other applications** (through bingux-ui's drag and
+drop, `docs/bingux-ui.md`, "Drag and drop"):
+
+| Drag                                             | What happens                                                                                                                                       |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Files from another app onto a folder in the list | They are copied into that folder (Shift moves). The row is highlighted while the pointer is over it                                                |
+| Files from another app onto empty space          | They are copied into the folder shown, which is ringed in the accent colour                                                                        |
+| Hold a drag still on a folder for 0.7 seconds    | The folder opens, so you can drop further in (spring-loaded folders). Drags from Files itself do this once they have left the window and come back |
+| Files dragged out of the window                  | Once the pointer leaves the window the drag belongs to the desktop: drop on another Files window or any app that takes files                       |
+
+The sidebar places and tabs take drops from Files itself only for now.
 
 ## Drives
 
