@@ -35,7 +35,8 @@ impl Component for Faces {
                             rounded(Radius::Control),
                         ],
                     )
-                    .child(text("Collabora Office")).focusable(Focus::Keyboard),
+                    .child(text("Collabora Office"))
+                    .focusable(Focus::Keyboard),
             )
             .child(
                 // A face whose size comes from its padded content.
@@ -43,9 +44,16 @@ impl Component for Faces {
                     .component("PaddedContent")
                     .tw(
                         &tokens,
-                        &[py(S2), pl(S3), pr(S4), bg(Paint::Control), rounded(Radius::Control)],
+                        &[
+                            py(S2),
+                            pl(S3),
+                            pr(S4),
+                            bg(Paint::Control),
+                            rounded(Radius::Control),
+                        ],
                     )
-                    .child(text("Content sized")).focusable(Focus::Keyboard),
+                    .child(text("Content sized"))
+                    .focusable(Focus::Keyboard),
             )
             .child(
                 // A face that fills its row's width by flex while its
@@ -63,7 +71,8 @@ impl Component for Faces {
                                 rounded(Radius::Control),
                             ],
                         )
-                        .child(text("Flex face")).focusable(Focus::Keyboard),
+                        .child(text("Flex face"))
+                        .focusable(Focus::Keyboard),
                 ),
             )
             .child(
@@ -80,7 +89,8 @@ impl Component for Faces {
                                 rounded(Radius::Control),
                             ],
                         )
-                        .child(text("Margin")).focusable(Focus::Keyboard),
+                        .child(text("Margin"))
+                        .focusable(Focus::Keyboard),
                 ),
             )
             .child(
@@ -96,7 +106,8 @@ impl Component for Faces {
                                 bg(Paint::Control),
                                 rounded(Radius::Control),
                             ],
-                        ).focusable(Focus::Keyboard),
+                        )
+                        .focusable(Focus::Keyboard),
                 ),
             )
     }

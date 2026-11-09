@@ -257,6 +257,11 @@ fn keys(
     if bingux_ui::nav::modal_open() || overlays.dialog_open() {
         return;
     }
+    // A text field keeps its letters and digits: 1-5, t, n and e typed in it
+    // must not switch views or open a dialog.
+    if bingux_ui::focus::text_entry_focused() {
+        return;
+    }
     let Key::Character(text) = &event.key else {
         return other_keys(model, window, overlays, event);
     };
