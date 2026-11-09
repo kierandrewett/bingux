@@ -2827,6 +2827,13 @@ rect()
 Text uses a `TextStyle` from `typography.rs` with an `Ink`. An icon takes
 an `IconSize` and a token colour: `Paint::Muted.color(&tokens)`.
 
+A part of a window can keep one colour scheme whatever the window's:
+`scheme_scope(Scheme::PreferDark, controls).fill()`. The controls over a film
+or a photo are dark, as QuickTime's and Photos' are, in a light window too.
+Everything below the scope reads the window's accent, contrast and motion in
+that scheme and follows them as they change; menus opened from inside are
+windows of their own and keep the window's scheme.
+
 `scripts/ui-lint.py` (run by `make check`) fails when code outside the style
 system does any of these:
 
@@ -5317,8 +5324,9 @@ step).retry(f))` shows what failed and a Try again button. With no rows, the
   the heading row.
 - On a phone there is no heading row. A row is two lines: its first column
   (or that column's element), then the text of the other columns in one muted
-  line, with a chevron when it opens something. A button above the rows opens the
-  sort menu. A tap opens the row, or, while rows are selected, joins or leaves
+  line, with a chevron when it opens something (`.chevrons(false)` leaves it out
+  where opening a row goes nowhere: a song plays). A button above the rows opens
+  the sort menu. A tap opens the row, or, while rows are selected, joins or leaves
   the selection; a long press selects a row (when the table has batch actions) or
   opens its menu.
 

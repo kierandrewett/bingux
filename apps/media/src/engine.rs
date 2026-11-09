@@ -180,6 +180,48 @@ fn languages() -> Vec<String> {
     languages
 }
 
+/// A player listener that keeps the screen on while a film plays (not for
+/// music: the screen may sleep with a song going). The hold is asked for and
+/// let go on a thread of its own, since it is a bus call.
+fn keep_awake() -> impl Fn(bingux_media::Change) + Send + Sync + 'static {
+    use bingux_ui::platform::inhibit::{Inhibitor, What, inhibit};
+    let (send, receive) = std::sync::mpsc::channel::<bool>();
+    let _ = std::thread::Builder::new()
+        .name("media-awake".into())
+        .spawn(move || {
+            let mut hold: Option<Inhibitor> = None;
+            for want in receive {
+                if want && hold.is_none() {
+                    hold = inhibit("Media", "Playing a video", What::IDLE)
+                        .map_err(|error| eprintln!("[media] the screen may sleep: {error}"))
+                        .ok();
+                } else if !want {
+                    hold = None;
+                }
+            }
+        });
+    let send = Mutex::new(send);
+    let held = AtomicBool::new(false);
+    move |_| {
+        let Some(engine) = ENGINE.get() else {
+            return;
+        };
+        let status = engine.player.status();
+        let want = status.state == bingux_media::PlayState::Playing
+            && (status.has_video
+                || status
+                    .item
+                    .as_ref()
+                    .is_some_and(|item| item.kind == Kind::Video));
+        if held.swap(want, Ordering::AcqRel) != want {
+            let _ = send
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .send(want);
+        }
+    }
+}
+
 /// Starts the engine. Before the window: it waits for mpv and the index.
 pub fn start() {
     let settings = Arc::new(Mutex::new(settings::load()));
@@ -238,6 +280,7 @@ pub fn start() {
     }
     let shared = engine();
     player.subscribe(|_| engine().announce());
+    player.subscribe(keep_awake());
     let session = mpris::Session::start(player, |request| match request {
         mpris::Request::Raise => {
             bingux_ui::app::open_uri("bingux-media://");
@@ -316,7 +359,9 @@ impl Engine {
                     .snapshot()
                     .videos
                     .iter()
-                    .filter(|video| video.thumbnail.is_none())
+                    // A thumbnail kept from before the length was learnt is
+                    // made again, which learns it.
+                    .filter(|video| video.thumbnail.is_none() || video.duration.is_none())
                 {
                     let path = video.path.clone();
                     self.thumbs

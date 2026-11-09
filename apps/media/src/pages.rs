@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use bingux_media::library::{Album, Snapshot, Track, Video};
 use bingux_media::{Item, Kind};
+use bingux_ui::dnd::{Dropped, Format, drop_target};
 use bingux_ui::files::{ChooserRequest, choose};
-use bingux_ui::media::{ArtworkKind, artwork, format_time};
-use bingux_ui::prelude::MenuItem;
+use bingux_ui::media::{ArtworkKind, artwork};
 use bingux_ui::prelude::*;
 use bingux_ui::typography::{CAPTION, EMPHASIS, HEADING, TITLE};
 use freya::prelude::*;
@@ -74,10 +74,16 @@ impl Component for Empty {
                 .description(self.body)
                 .into_element();
         }
-        status_page(Icon::FolderMusic, text::EMPTY_TITLE)
-            .description(text::EMPTY_BODY)
-            .action(text::EMPTY_ACTION, move |_| add_folder(window))
-            .into_element()
+        // Files dropped here play, as they do anywhere in the window; the
+        // page lights up to say it takes them.
+        drop_target(
+            status_page(Icon::FolderMusic, text::EMPTY_TITLE)
+                .description(text::EMPTY_BODY)
+                .action(text::EMPTY_ACTION, move |_| add_folder(window)),
+        )
+        .accepts([Format::Uris])
+        .on_drop(|dropped: Dropped| crate::app::play_paths(dropped.data.files()))
+        .into_element()
     }
 }
 
@@ -122,7 +128,6 @@ impl Component for SongsPage {
         let tokens = use_tokens();
         let live = use_media();
         let ui = use_ui();
-        let router = use_router();
         let library = live.library.read().clone();
         let current = live
             .status
@@ -152,6 +157,8 @@ impl Component for SongsPage {
                 current,
                 lead: Lead::Artwork,
                 album: true,
+                artist: true,
+                id: "songs",
             })
             .into_element()
     }
@@ -270,8 +277,8 @@ impl Component for AlbumsPage {
         if albums.is_empty() {
             return Empty {
                 icon: Icon::MediaOptical,
-                title: text::EMPTY_SECTION_SONGS,
-                body: text::EMPTY_SECTION_SONGS_BODY,
+                title: text::EMPTY_SECTION_ALBUMS,
+                body: text::EMPTY_SECTION_ALBUMS_BODY,
             }
             .into_element();
         }
@@ -324,6 +331,9 @@ impl Component for AlbumPage {
                 .into_element();
         };
         let tracks = Arc::new(album.tracks.clone());
+        // An album by one artist does not say so on every row; a
+        // compilation or a song with a guest does.
+        let mixed = tracks.iter().any(|track| track.artist != album.artist);
         let duration = album.duration();
         let details = match album.year {
             Some(year) => format!(
@@ -376,6 +386,8 @@ impl Component for AlbumPage {
                 current,
                 lead: Lead::Number,
                 album: false,
+                artist: mixed,
+                id: "album",
             })
             .into_element()
     }
@@ -397,12 +409,13 @@ impl Component for ArtistsPage {
         if artists.is_empty() {
             return Empty {
                 icon: Icon::AvatarDefault,
-                title: text::EMPTY_SECTION_SONGS,
-                body: text::EMPTY_SECTION_SONGS_BODY,
+                title: text::EMPTY_SECTION_ARTISTS,
+                body: text::EMPTY_SECTION_ARTISTS_BODY,
             }
             .into_element();
         }
         let mut group = Group::new(None::<String>);
+        let count = artists.len();
         for artist in &artists {
             let target = location(&["artists", &artist.name]);
             group = group.row(
@@ -417,7 +430,10 @@ impl Component for ArtistsPage {
                     .on_press(move |_| router.push(&target)),
             );
         }
-        page(&tokens).child(group).into_element()
+        page(&tokens)
+            .child(PageHead::new().subtitle(text::artists(count)))
+            .child(group)
+            .into_element()
     }
 }
 
@@ -478,11 +494,10 @@ impl Component for ArtistPage {
                             ),
                     ),
             )
-            .child(
-                Group::new(Some(text::ALBUMS.to_owned())).content(AlbumGrid {
-                    albums: artist.albums.clone(),
-                }),
-            )
+            .child(group_head(text::ALBUMS, rect()))
+            .child(AlbumGrid {
+                albums: artist.albums.clone(),
+            })
             .into_element()
     }
 }
@@ -504,10 +519,8 @@ impl Component for VideoTile {
         let item = self.video.item();
         let progress = self.video.progress();
         let details = match (self.video.duration, progress) {
-            (Some(duration), Some(progress)) => {
-                format!("{} left", format_time(duration * (1.0 - progress)))
-            }
-            (Some(duration), None) => format_time(duration),
+            (Some(duration), Some(progress)) => text::left(duration * (1.0 - progress)),
+            (Some(duration), None) => text::clock(duration),
             _ => self.video.folder.clone(),
         };
         rect()
@@ -602,13 +615,15 @@ impl Component for VideosPage {
             .into_element();
         }
         let resume = library.continue_watching();
-        page(&tokens)
-            .maybe_child((!resume.is_empty()).then(|| {
-                Group::new(Some(text::CONTINUE_WATCHING.to_owned()))
-                    .content(VideoGrid { videos: resume })
-            }))
-            .child(Group::new(Some(text::ALL_VIDEOS.to_owned())).content(VideoGrid { videos }))
-            .into_element()
+        let count = videos.len();
+        let mut column = page(&tokens).child(PageHead::new().subtitle(text::videos(count)));
+        if !resume.is_empty() {
+            column = column
+                .child(group_head(text::CONTINUE_WATCHING, rect()))
+                .child(VideoGrid { videos: resume })
+                .child(group_head(text::ALL_VIDEOS, rect()));
+        }
+        column.child(VideoGrid { videos }).into_element()
     }
 }
 
@@ -636,7 +651,6 @@ impl Component for QueuePage {
             } else {
                 Some(item.artist.clone())
             };
-            let count = queue.items().len();
             let mut menu = vec![menu_item(text::REMOVE_FROM_QUEUE, move |_| {
                 engine().player.remove(index)
             })];
@@ -648,19 +662,9 @@ impl Component for QueuePage {
                     }),
                 );
             }
-            if index + 1 < count && index > current {
-                menu.push(menu_item("Move down", move |_| {
-                    engine().player.reorder(index, index + 1)
-                }));
-            }
-            if index > current + 1 {
-                menu.push(menu_item("Move up", move |_| {
-                    engine().player.reorder(index, index - 1)
-                }));
-            }
             row(item.title.clone())
                 .maybe_subtitle(subtitle)
-                .value(item.duration.map(format_time).unwrap_or_default())
+                .value(item.duration.map(text::clock).unwrap_or_default())
                 .leading(if item.kind == Kind::Video {
                     Icon::VideoGeneric
                 } else {
@@ -684,10 +688,29 @@ impl Component for QueuePage {
         let playing = queue.items()[current].clone();
         let mut now = Group::new(Some(text::NOW_PLAYING.to_owned()));
         now = now.row(item_row(current, &playing).selected(true));
-        let mut next = Group::new(Some(text::UP_NEXT.to_owned()));
-        for (offset, item) in queue.upcoming().iter().enumerate() {
-            next = next.row(item_row(current + 1 + offset, item));
-        }
+        // Up next is put in order by dragging a row's grip, or with Alt+Up
+        // and Alt+Down.
+        let upcoming = queue.upcoming();
+        let next = (!upcoming.is_empty()).then(|| {
+            let rows: Vec<Element> = upcoming
+                .iter()
+                .enumerate()
+                .map(|(offset, item)| item_row(current + 1 + offset, item).into_element())
+                .collect();
+            let labels: Vec<String> = upcoming.iter().map(|item| item.title.clone()).collect();
+            let long = rows.len() > 12;
+            let list = sortable(rows, move |(from, to): (usize, usize)| {
+                engine()
+                    .player
+                    .reorder(current + 1 + from, current + 1 + to)
+            })
+            .labels(labels);
+            rect()
+                .width(Size::fill())
+                .tw(&tokens, &[flex_col()])
+                .child(group_head(text::UP_NEXT, rect()))
+                .child(if long { list.drop_indicator() } else { list })
+        });
         page(&tokens)
             .child(
                 PageHead::new()
@@ -695,7 +718,7 @@ impl Component for QueuePage {
                     .action(text::CLEAR_UP_NEXT, |_| engine().player.clear_upcoming()),
             )
             .child(now)
-            .maybe_child((!queue.upcoming().is_empty()).then_some(next))
+            .maybe_child(next)
             .into_element()
     }
 }
@@ -711,7 +734,6 @@ impl Component for SearchResults {
         let tokens = use_tokens();
         let live = use_media();
         let ui = use_ui();
-        let router = use_router();
         let query = self.query.read().clone();
         let library: Arc<Snapshot> = live.library.read().clone();
         let (songs, videos) = library.search(&query);
@@ -736,6 +758,8 @@ impl Component for SearchResults {
                     current: current.clone(),
                     lead: Lead::Artwork,
                     album: true,
+                    artist: true,
+                    id: "search",
                 });
         }
         if !videos.is_empty() {
@@ -745,7 +769,7 @@ impl Component for SearchResults {
                 group = group.row(
                     row(video.title.clone())
                         .leading(Icon::VideoGeneric)
-                        .value(video.duration.map(format_time).unwrap_or_default())
+                        .value(video.duration.map(text::clock).unwrap_or_default())
                         .on_press(move |_| play(vec![item.clone()], 0, ui)),
                 );
             }

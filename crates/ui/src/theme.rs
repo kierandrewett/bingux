@@ -903,6 +903,57 @@ pub fn provide_tokens() -> Tokens {
     current
 }
 
+/// Content that keeps one colour scheme whatever the window's: the controls
+/// over a film or a photo are dark, as QuickTime's are, in a light window
+/// too. Everything below reads the window's accent, contrast and motion in
+/// `scheme` and follows them as they change. Popups opened from inside
+/// (menus are windows of their own) keep the window's scheme.
+///
+/// ```ignore
+/// scheme_scope(Scheme::PreferDark, player_controls).fill()
+/// ```
+pub fn scheme_scope(scheme: Scheme, child: impl Into<Element>) -> SchemeScope {
+    SchemeScope {
+        scheme,
+        child: child.into(),
+        fill: false,
+    }
+}
+
+/// See [`scheme_scope`].
+#[derive(PartialEq)]
+pub struct SchemeScope {
+    scheme: Scheme,
+    child: Element,
+    fill: bool,
+}
+
+impl SchemeScope {
+    /// The scope's box fills its parent. Without it the box is the size of
+    /// its child.
+    pub fn fill(mut self) -> Self {
+        self.fill = true;
+        self
+    }
+}
+
+impl Component for SchemeScope {
+    fn render(&self) -> impl IntoElement {
+        let window = use_consume::<SharedTokens>();
+        let scheme = self.scheme;
+        let rescheme =
+            move |tokens: Tokens| Tokens::new(tokens.accent_name, scheme, tokens.reduced_motion);
+        let mut own = use_hook(|| State::create(rescheme(*window.0.peek())));
+        use_side_effect(move || {
+            own.set_if_modified(rescheme(*window.0.read()));
+        });
+        use_provide_context(|| SharedTokens(own));
+        rect()
+            .maybe(self.fill, |scope| scope.expanded())
+            .child(self.child.clone())
+    }
+}
+
 /// Builds Freya's component theme from the tokens so built-in controls
 /// (switches, sliders, selects, inputs) use the Bingux palette.
 pub fn freya_theme(tokens: &Tokens) -> Theme {

@@ -8,8 +8,9 @@
 
 use crate::demos::transfer;
 use crate::demos::{
-    accessibility, buttons, calendar, commands, containers, data, documents, feedback, files, formats,
-    foundations, icon_set, inputs, inspector, localisation, media, navigation, text, platform, table,
+    accessibility, buttons, calendar, commands, containers, data, documents, feedback, files,
+    formats, foundations, icon_set, inputs, inspector, localisation, media, navigation, platform,
+    table, text,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -587,7 +588,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Theme at run time",
         category: Category::Foundations,
         page: "Colour",
-        api: "provide_tokens() in the window root; use_tokens() in a component; freya_theme(&tokens); load_tokens() (every appearance source, see Platform); reduced_motion_from_env()",
+        api: "provide_tokens() in the window root; use_tokens() in a component; freya_theme(&tokens); load_tokens() (every appearance source, see Platform); reduced_motion_from_env(); scheme_scope(Scheme::PreferDark, child).fill() keeps a part (controls over a film) in one scheme",
         doc: "styling-with-tokens",
         covers: &[
             "provide_tokens",
@@ -598,6 +599,8 @@ pub static ENTRIES: &[Entry] = &[
             "reduced_motion_from_env",
             "font_family",
             "font_files",
+            "scheme_scope",
+            "SchemeScope",
         ],
         body: Body::States(foundations::THEME_STATE),
     },
@@ -1722,7 +1725,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Data table",
         category: Category::Data,
         page: "Tables",
-        api: "data_table(rows, columns, key).id(text).selection(State<Selection<K>>).selection_mode(mode).sorted_by(column, direction).status(TableStatus).empty_state(element).density(RowDensity).marks().striped().batch_actions(vec![batch_action(label, f)]).row_menu(f).on_activate(f).on_edit(f); Column::text(id, title, f).flex().width(px).numeric().priority(n).sort_by_text().editable()",
+        api: "data_table(rows, columns, key).id(text).selection(State<Selection<K>>).selection_mode(mode).sorted_by(column, direction).status(TableStatus).empty_state(element).density(RowDensity).marks().striped().batch_actions(vec![batch_action(label, f)]).row_menu(f).on_activate(f).chevrons(bool).on_edit(f); Column::text(id, title, f).flex().width(px).numeric().priority(n).sort_by_text().editable()",
         doc: "data-table",
         covers: &[
             "DataTable",

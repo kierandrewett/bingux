@@ -118,6 +118,7 @@ pub struct DataTable<T, K> {
     on_edit: EventHandler<CellEdit<K>>,
     on_sort: EventHandler<Option<SortOrder>>,
     label: String,
+    chevrons: bool,
 }
 
 impl<T, K: 'static> PartialEq for DataTable<T, K> {
@@ -145,6 +146,7 @@ impl<T, K: 'static> PartialEq for DataTable<T, K> {
             && self.header == other.header
             && self.batch == other.batch
             && same(&self.menu, &other.menu)
+            && self.chevrons == other.chevrons
             && self.on_activate == other.on_activate
             && self.on_edit == other.on_edit
             && self.on_sort == other.on_sort
@@ -193,6 +195,7 @@ pub fn data_table<T: 'static, K: Clone + Eq + Hash + 'static>(
         on_edit: EventHandler::new(|_: CellEdit<K>| {}),
         on_sort: EventHandler::new(|_: Option<SortOrder>| {}),
         label: String::new(),
+        chevrons: true,
     }
 }
 
@@ -311,6 +314,13 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> DataTable<T, K> {
     /// The table's name for assistive technology, such as "Installed apps".
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = label.into();
+        self
+    }
+
+    /// Whether a phone row that opens shows a chevron (it does by default).
+    /// Leave it out when opening a row does not go to a place: a song plays.
+    pub fn chevrons(mut self, show: bool) -> Self {
+        self.chevrons = show;
         self
     }
 }
@@ -476,9 +486,15 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for DataTable<T, K> {
         // A change of the selection or the sort is read out ("3 selected",
         // "Sorted by Name, ascending").
         let sort_now = (*sort.read()).and_then(|order| {
-            specs.iter().find(|spec| spec.id == order.column).map(|spec| {
-                (spec.title.clone(), order.direction == SortDirection::Ascending)
-            })
+            specs
+                .iter()
+                .find(|spec| spec.id == order.column)
+                .map(|spec| {
+                    (
+                        spec.title.clone(),
+                        order.direction == SortDirection::Ascending,
+                    )
+                })
         });
         crate::a11y::use_collection_announcements(selection.read().len(), sort_now);
         let order = self.ordered(*sort.read(), &sort_cache);
@@ -614,7 +630,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for DataTable<T, K> {
                     marks,
                     striped: self.striped,
                     picking,
-                    activates: on_activate.is_some(),
+                    activates: on_activate.is_some() && self.chevrons,
                 };
                 VirtualScrollView::new_with_data_controlled(
                     data,
