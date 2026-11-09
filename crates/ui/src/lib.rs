@@ -146,7 +146,9 @@ pub mod prelude {
         BatchAction, CellEdit, Column, Columns, DataTable, RowDensity, RowSource, Rows,
         SortDirection, SortOrder, TableFailure, TableStatus, batch_action, data_table,
     };
-    pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
+    pub use crate::theme::{
+        Scheme, SchemeScope, SharedTokens, Tokens, provide_tokens, scheme_scope,
+    };
     pub use crate::toolbar::{
         ButtonGroup, GroupButton, Placement, Toolbar, ToolbarGroup, ToolbarItem, button_group,
         group_button, toolbar, toolbar_element, toolbar_group, toolbar_item, toolbar_menu,
