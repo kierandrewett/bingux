@@ -7,7 +7,7 @@
 //! taxonomy entry" in `docs/bingux-ui.md`.
 
 use crate::demos::{
-    buttons, containers, data, feedback, files, foundations, icon_set, inputs, inspector,
+    buttons, containers, data, feedback, files, foundations, icon_set, inputs, inspector, media,
     navigation,
 };
 use crate::model::{Body, Category, Entry};
@@ -1438,6 +1438,61 @@ pub static ENTRIES: &[Entry] = &[
             "navigate",
         ],
         body: Body::States(navigation::ADDRESS),
+    },
+    // ---- Data: Media -------------------------------------------------------
+    Entry {
+        name: "Video surface",
+        category: Category::Data,
+        page: "Media",
+        api: "video_surface(VideoFrames).label(text).on_press(f).on_double_press(f); VideoFrames::new().push(VideoFrame { width, height, pixels }) from any thread, .size() the device pixels shown, .on_resize(f), .clear()",
+        doc: "media",
+        covers: &["VideoSurface", "video_surface", "VideoFrames", "VideoFrame"],
+        body: Body::States(media::VIDEO_SURFACE),
+    },
+    Entry {
+        name: "Timeline",
+        category: Category::Data,
+        page: "Media",
+        api: "timeline(position, Option<duration>, |Seek { to, done }|).buffered(ranges).chapters(vec![(start, title)]).loop_points(a, b).on_hover(f).preview(Option<Element>).times().floating().on_surface(Paint)",
+        doc: "media",
+        covers: &["Timeline", "timeline", "Seek"],
+        body: Body::States(media::TIMELINE),
+    },
+    Entry {
+        name: "Transport",
+        category: Category::Data,
+        page: "Media",
+        api: "transport(playing, |TransportAction|).shuffle(bool).repeat(RepeatMode).skips().can_next(bool).can_previous(bool).enabled(bool).floating().compact()",
+        doc: "media",
+        covers: &["Transport", "transport", "TransportAction", "RepeatMode"],
+        body: Body::States(media::TRANSPORT),
+    },
+    Entry {
+        name: "Volume control",
+        category: Category::Data,
+        page: "Media",
+        api: "volume_control(level 0..100, muted, |VolumeChange::Level(v) | Mute(b)|).compact().floating().enabled(bool)",
+        doc: "media",
+        covers: &["VolumeControl", "volume_control", "VolumeChange"],
+        body: Body::States(media::VOLUME),
+    },
+    Entry {
+        name: "Artwork",
+        category: Category::Data,
+        page: "Media",
+        api: "artwork(Option<PathBuf>, seed).kind(ArtworkKind::Album | Song | Artist | Video | Playlist).size(Dim).side(px).label(text); format_time(seconds)",
+        doc: "media",
+        covers: &["Artwork", "artwork", "ArtworkKind", "format_time"],
+        body: Body::States(media::ARTWORK),
+    },
+    Entry {
+        name: "Now playing bar",
+        category: Category::Data,
+        page: "Media",
+        api: "now_playing_bar(title, subtitle).artwork(path, seed, kind).picture(Element).playing(bool).progress(position, duration).buffered(..).chapters(..).shuffle(bool).repeat(mode).volume(level, muted, f).on_transport(f).on_seek(f).on_open(f).trailing(element)",
+        doc: "media",
+        covers: &["NowPlayingBar", "now_playing_bar"],
+        body: Body::States(media::NOW_PLAYING),
     },
     // ---- Files -------------------------------------------------------------
     Entry {

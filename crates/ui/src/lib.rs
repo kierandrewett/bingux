@@ -32,6 +32,7 @@ pub mod layers;
 pub mod layout;
 #[cfg(all(test, feature = "testing"))]
 mod loading_shape_tests;
+pub mod media;
 pub mod motion;
 #[cfg(all(test, feature = "testing"))]
 mod motion_stress;
