@@ -15,6 +15,7 @@ use crate::cards::{Details, Trends, section};
 use crate::hero::Hero;
 use crate::hourly::HourStrip;
 use crate::week::Week;
+use crate::words;
 
 /// The most notices shown above the hero.
 const NOTICES_SHOWN: usize = 3;
@@ -117,16 +118,16 @@ impl Component for Page {
                 .action(tr!("weather-stale-retry"), move |_| retry.call(())),
             );
         }
-        for notice in notices::notices(forecast, &self.units, local)
+        for notice in notices::notices(forecast, local)
             .into_iter()
             .take(NOTICES_SHOWN)
         {
-            column = column.child(banner(notice.detail).title(notice.title).kind(
-                match notice.severity {
-                    Severity::Warning => BannerKind::Warning,
-                    Severity::Advisory => BannerKind::Info,
-                },
-            ));
+            let title = words::notice_title(notice.kind);
+            let detail = words::notice_detail(notice.kind, notice.span, &self.units, local);
+            column = column.child(banner(detail).title(title).kind(match notice.severity {
+                Severity::Warning => BannerKind::Warning,
+                Severity::Advisory => BannerKind::Info,
+            }));
         }
 
         column = column

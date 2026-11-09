@@ -4,9 +4,11 @@
 use bingux_ui::prelude::tr;
 use bingux_weather::astro::MoonPhase;
 use bingux_weather::codes::Condition;
+use bingux_weather::notices::{Kind, Span};
 use bingux_weather::text::{
     AqiBand, DewComfort, Point, PressureTrend, UvLevel, Visibility, WindForce,
 };
+use bingux_weather::time::day_of;
 use bingux_weather::{Forecast, Place, Units, text};
 
 /// The sky's condition in words: `Light rain`. Sentence case.
@@ -370,5 +372,102 @@ pub fn point_title(point: Point) -> String {
         Point::Wnw => tr!("weather-point-title-wnw"),
         Point::Nw => tr!("weather-point-title-nw"),
         Point::Nnw => tr!("weather-point-title-nnw"),
+    }
+}
+
+/// The heading of a notice.
+pub fn notice_title(kind: Kind) -> String {
+    match kind {
+        Kind::Thunderstorms { hail: true } => tr!("weather-notice-thunder-hail-title"),
+        Kind::Thunderstorms { hail: false } => tr!("weather-notice-thunder-title"),
+        Kind::HeavyRain { .. } => tr!("weather-notice-rain-title"),
+        Kind::FreezingRain => tr!("weather-notice-ice-title"),
+        Kind::HeavySnow => tr!("weather-notice-snow-title"),
+        Kind::Wind { strong: true, .. } => tr!("weather-notice-wind-strong-title"),
+        Kind::Wind { strong: false, .. } => tr!("weather-notice-wind-gusty-title"),
+        Kind::ExtremeHeat { .. } => tr!("weather-notice-heat-title"),
+        Kind::ExtremeCold { .. } => tr!("weather-notice-cold-title"),
+        Kind::VeryHighUv => tr!("weather-notice-uv-title"),
+        Kind::Air {
+            unhealthy: true, ..
+        } => tr!("weather-notice-air-unhealthy-title"),
+        Kind::Air {
+            unhealthy: false, ..
+        } => tr!("weather-notice-air-poor-title"),
+    }
+}
+
+/// The body of a notice: what it is, and when, when the forecast gives a time.
+pub fn notice_detail(kind: Kind, span: Option<Span>, units: &Units, local: i64) -> String {
+    let timed = || span.map_or_else(String::new, |span| when_text(units, local, span));
+    match kind {
+        Kind::Thunderstorms { .. } | Kind::HeavySnow => timed(),
+        Kind::HeavyRain { per_hour } => match span {
+            Some(span) => tr!(
+                "weather-notice-rain-detail",
+                amount = units.rain(per_hour),
+                when = when_text(units, local, span)
+            ),
+            None => tr!(
+                "weather-notice-rain-detail-untimed",
+                amount = units.rain(per_hour)
+            ),
+        },
+        Kind::FreezingRain => tr!("weather-notice-ice-detail", when = timed()),
+        Kind::Wind { gusts, .. } => match span {
+            Some(span) => tr!(
+                "weather-notice-wind-detail",
+                speed = units.speed(gusts),
+                when = when_text(units, local, span)
+            ),
+            None => tr!(
+                "weather-notice-wind-detail-untimed",
+                speed = units.speed(gusts)
+            ),
+        },
+        Kind::ExtremeHeat { feels_like } => tr!(
+            "weather-notice-heat-detail",
+            temperature = units.temperature_with_unit(feels_like)
+        ),
+        Kind::ExtremeCold { feels_like } => tr!(
+            "weather-notice-cold-detail",
+            temperature = units.temperature_with_unit(feels_like)
+        ),
+        Kind::VeryHighUv => tr!("weather-notice-uv-detail", when = timed()),
+        Kind::Air { aqi, .. } => tr!("weather-notice-air-detail", index = aqi.round() as i64),
+    }
+}
+
+/// A stretch of wall times as a phrase: `Until 15:00 tomorrow.`,
+/// `From 03:00 to 06:00.`, `From 23:00 tomorrow to 02:00 tomorrow.`
+fn when_text(units: &Units, local: i64, span: Span) -> String {
+    let clock = units.clock;
+    let (from, to) = (span.from, span.to);
+    let start_tomorrow = day_of(from) != day_of(local);
+    let end_tomorrow = day_of(to - 1) != day_of(local);
+    if from <= local {
+        if end_tomorrow {
+            tr!("weather-when-until-tomorrow", time = clock.time(to))
+        } else {
+            tr!("weather-when-until", time = clock.time(to))
+        }
+    } else if start_tomorrow && !end_tomorrow {
+        tr!(
+            "weather-when-from-tomorrow-to",
+            from = clock.time(from),
+            to = clock.time(to)
+        )
+    } else if end_tomorrow {
+        tr!(
+            "weather-when-between-tomorrow",
+            from = clock.time(from),
+            to = clock.time(to)
+        )
+    } else {
+        tr!(
+            "weather-when-between",
+            from = clock.time(from),
+            to = clock.time(to)
+        )
     }
 }

@@ -364,3 +364,49 @@ weather-card-dew-point = The dew point is { $temperature } right now.
 ## Card label for the air quality range
 # $index: the AQI number. $level: the band in lower case, from aqi_inline.
 weather-card-aqi-label = Air quality index { $index }, { $level }
+
+## Notice headings: one per kind of notice
+weather-notice-thunder-hail-title = Thunderstorms with hail
+weather-notice-thunder-title = Thunderstorms
+weather-notice-rain-title = Heavy rain
+weather-notice-ice-title = Freezing rain
+weather-notice-snow-title = Heavy snow
+weather-notice-wind-strong-title = Strong wind
+weather-notice-wind-gusty-title = Gusty wind
+weather-notice-heat-title = Extreme heat
+weather-notice-cold-title = Extreme cold
+weather-notice-uv-title = Very high UV
+weather-notice-air-unhealthy-title = Unhealthy air
+weather-notice-air-poor-title = Poor air for sensitive groups
+
+## Notice bodies
+# $amount: the rain, already formatted with its unit. $when: the time span from weather-when-*.
+weather-notice-rain-detail = Up to { $amount } an hour. { $when }
+# $amount: the rain, already formatted with its unit.
+weather-notice-rain-detail-untimed = Up to { $amount } an hour.
+# $when: the time span from weather-when-*.
+weather-notice-ice-detail = Roads and paths may be icy. { $when }
+# $speed: the gust, already formatted with its unit. $when: the time span from weather-when-*.
+weather-notice-wind-detail = Gusts up to { $speed }. { $when }
+# $speed: the gust, already formatted with its unit.
+weather-notice-wind-detail-untimed = Gusts up to { $speed }.
+# $temperature: the apparent temperature, already formatted with its unit.
+weather-notice-heat-detail = It feels like { $temperature }. Drink water and avoid the afternoon sun.
+# $temperature: the apparent temperature, already formatted with its unit.
+weather-notice-cold-detail = It feels like { $temperature }. Cover exposed skin.
+# $when: the time span from weather-when-*.
+weather-notice-uv-detail = UV index 8 or more. { $when }
+# $index: the air quality index, rounded.
+weather-notice-air-detail = Air quality index { $index }.
+
+## Time spans: a stretch of the day, as a phrase
+# $time: a clock time.
+weather-when-until = Until { $time }.
+# $time: a clock time, on the next day.
+weather-when-until-tomorrow = Until { $time } tomorrow.
+# $from: a clock time. $to: a clock time.
+weather-when-between = From { $from } to { $to }.
+# $from: a clock time, on the next day. $to: a clock time.
+weather-when-from-tomorrow-to = From { $from } tomorrow to { $to }.
+# $from: a clock time. $to: a clock time, on the next day.
+weather-when-between-tomorrow = From { $from } to { $to } tomorrow.
