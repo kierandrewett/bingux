@@ -5,6 +5,7 @@
 //! one that is active, or else the one that connects by itself. Everything is
 //! `nmcli`; nothing is kept anywhere else.
 
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 
 use crate::icons::Icon;
@@ -64,17 +65,17 @@ impl Auth {
         }))
     }
 
-    fn label(key: &str) -> &'static str {
+    fn label(key: &str) -> String {
         match key {
-            "auto" => "Automatic",
-            "none" => "None",
-            "pap" => "PAP",
-            "chap" => "CHAP",
-            "pap-chap" => "PAP or CHAP",
-            "mschap" => "MSCHAP",
-            "mschapv2" => "MSCHAPv2",
-            "eap" => "EAP",
-            _ => "Custom",
+            "auto" => tr!("network-apn-auth-auto"),
+            "none" => tr!("network-apn-auth-none"),
+            "pap" => tr!("network-apn-auth-pap"),
+            "chap" => tr!("network-apn-auth-chap"),
+            "pap-chap" => tr!("network-apn-auth-pap-chap"),
+            "mschap" => tr!("network-apn-auth-mschap"),
+            "mschapv2" => tr!("network-apn-auth-mschapv2"),
+            "eap" => tr!("network-apn-auth-eap"),
+            _ => tr!("network-apn-auth-custom"),
         }
     }
 
@@ -88,7 +89,7 @@ impl Auth {
             keys.push("custom");
         }
         keys.into_iter()
-            .map(|key| (key.to_string(), Self::label(key).to_string()))
+            .map(|key| (key.to_string(), Self::label(key)))
             .collect()
     }
 }
@@ -118,11 +119,11 @@ impl IpType {
         }
     }
 
-    fn label(self) -> &'static str {
+    fn label(self) -> String {
         match self {
-            Self::V4 => "IPv4",
-            Self::V6 => "IPv6",
-            Self::V4V6 => "IPv4 and IPv6",
+            Self::V4 => tr!("network-apn-ip-v4"),
+            Self::V6 => tr!("network-apn-ip-v6"),
+            Self::V4V6 => tr!("network-apn-ip-v4v6"),
         }
     }
 
@@ -194,9 +195,9 @@ impl Profile {
     /// What the list shows under the name.
     pub fn summary(&self) -> String {
         if self.auto_config && self.apn.is_empty() {
-            "Detected from the carrier".to_string()
+            tr!("network-apn-summary-detected")
         } else if self.apn.is_empty() {
-            "No access point name".to_string()
+            tr!("network-apn-summary-empty")
         } else {
             self.apn.clone()
         }
@@ -543,7 +544,7 @@ pub fn set_network_id(profiles: &[Profile], code: &str) -> Result<(), CommandErr
 /// 64 characters. An empty APN is allowed; it means no APN.
 pub fn apn_error(text: &str) -> Result<(), String> {
     if text.chars().count() > 64 {
-        return Err("Use 64 characters or fewer.".to_string());
+        return Err(tr!("network-apn-error-length"));
     }
     if text
         .chars()
@@ -551,7 +552,7 @@ pub fn apn_error(text: &str) -> Result<(), String> {
     {
         Ok(())
     } else {
-        Err("Use only letters, numbers, dots, hyphens and underscores.".to_string())
+        Err(tr!("network-apn-error-characters"))
     }
 }
 
@@ -559,7 +560,7 @@ pub fn apn_error(text: &str) -> Result<(), String> {
 fn name_error(name: &str, original: &str, names: &[String]) -> Option<String> {
     let name = name.trim();
     (!name.is_empty() && name != original && names.iter().any(|other| other == name))
-        .then(|| "Use a name that no other connection has.".to_string())
+        .then(|| tr!("network-apn-error-name-taken"))
 }
 
 // ---------------------------------------------------------------------------
@@ -619,9 +620,9 @@ impl Component for ApnListPage {
                     page_column().child(PageHead::new()).child(
                         status(Status::Error(super::super::plain(
                             &error.0,
-                            "Could not read the access point names. Try again.",
+                            &tr!("network-apn-error-read"),
                         )))
-                        .action("Try again", move |_| reload(profiles)),
+                        .action(&tr!("network-apn-retry"), move |_| reload(profiles)),
                     ),
                     false,
                 );
@@ -640,7 +641,7 @@ impl Component for ApnListPage {
         let mut page = page_column().child(PageHead::new());
         if list.is_empty() {
             page = page.child(Group::new(None::<String>).row(Element::from(status(
-                Status::Empty("No access point names yet.".into()),
+                Status::Empty(tr!("network-apn-empty").into()),
             ))));
         } else {
             let rows = list
@@ -661,16 +662,16 @@ impl Component for ApnListPage {
                         icon_button(Icon::Pencil, move |_| {
                             ctx.router.open(routes::mobile_apn(Some(&edit.clone())))
                         })
-                        .tooltip("Edit access point"),
+                        .tooltip(&tr!("network-apn-edit-tooltip")),
                     ))
                 })
                 .collect();
-            page = page.child(radio_rows("Access point names".to_string(), rows));
+            page = page.child(radio_rows(tr!("network-apn-list-title"), rows));
         }
         veiled(
             page.child(
                 Group::new(None::<String>).row(
-                    row("Add access point…")
+                    row(tr!("network-apn-add"))
                         .navigates()
                         .on_press(move |_| ctx.router.open(routes::mobile_apn(None))),
                 ),
@@ -699,7 +700,7 @@ fn use_profile(
             if let Err(error) = result {
                 ctx.overlays.toast(super::super::plain(
                     &error.0,
-                    "Could not switch the access point. Try again.",
+                    &tr!("network-apn-error-switch"),
                 ));
             }
             reload(profiles);
@@ -738,9 +739,9 @@ impl Component for ApnPage {
                 page_column().child(PageHead::new()).child(
                     status(Status::Error(super::super::plain(
                         &error.0,
-                        "Could not read the access point. Try again.",
+                        &tr!("network-apn-error-read-one"),
                     )))
-                    .action("Try again", move |_| load()),
+                    .action(&tr!("network-apn-retry"), move |_| load()),
                 ),
                 false,
             ),
@@ -840,7 +841,7 @@ impl Component for ApnForm {
                         match result {
                             Err(error) => ctx.overlays.toast(super::super::plain(
                                 &error.0,
-                                "Could not save the access point. Try again.",
+                                &tr!("network-apn-error-save"),
                             )),
                             Ok(()) => {
                                 reload(profiles);
@@ -874,8 +875,8 @@ impl Component for ApnForm {
             }
         };
 
-        let mut name_field = form_field("Name", name)
-            .placeholder("Carrier")
+        let mut name_field = form_field(tr!("network-apn-name-label"), name)
+            .placeholder(tr!("network-apn-name-placeholder"))
             .error(name_clash);
         if !existing {
             name_field = name_field.autofocus();
@@ -886,7 +887,7 @@ impl Component for ApnForm {
         // `Draft::properties`.
         if !existing || self.initial.auto_config {
             general = general.row(switch_row(
-                "Detect settings automatically",
+                tr!("network-apn-detect-switch"),
                 draft.auto_config,
                 move |on: bool| {
                     let mut auto_config = auto_config;
@@ -902,17 +903,21 @@ impl Component for ApnForm {
 
         if !draft.auto_config {
             page = page.child(
-                Group::titled("Access point")
+                Group::titled(&tr!("network-apn-section-title"))
                     .row(
-                        form_field("APN", apn)
+                        form_field(tr!("network-apn-apn-label"), apn)
                             .placeholder("internet")
-                            .hint("Leave empty for none.")
+                            .hint(tr!("network-apn-apn-hint"))
                             .error(apn_message),
                     )
-                    .row(form_field("User name", user).optional())
-                    .row(form_field("Password", password).password().optional())
+                    .row(form_field(tr!("network-apn-user-label"), user).optional())
+                    .row(
+                        form_field(tr!("network-apn-password-label"), password)
+                            .password()
+                            .optional(),
+                    )
                     .row(choice_row(
-                        "Authentication",
+                        tr!("network-apn-auth-label"),
                         Auth::options(draft.auth),
                         draft.auth.key(),
                         move |key: String| {
@@ -924,7 +929,7 @@ impl Component for ApnForm {
         }
         page = page.child(
             Group::new(None::<String>).row(choice_row(
-                "IP type",
+                tr!("network-apn-ip-label"),
                 [IpType::V4, IpType::V6, IpType::V4V6]
                     .into_iter()
                     .map(|kind| (kind.key().to_string(), kind.label().to_string()))
@@ -941,7 +946,7 @@ impl Component for ApnForm {
             let delete = self.initial.clone();
             page = page.child(
                 Group::new(None::<String>).row(
-                    row("Delete access point")
+                    row(tr!("network-apn-delete"))
                         .destructive()
                         .on_press(move |_| confirm_delete(ctx, profiles, delete.clone())),
                 ),
@@ -949,7 +954,7 @@ impl Component for ApnForm {
         } else {
             page = page.child(Group::new(None::<String>).row(action_row(
                 None,
-                primary_button("Add access point", apply).enabled(valid && dirty),
+                primary_button(tr!("network-apn-add-button"), apply).enabled(valid && dirty),
             )));
         }
         page
@@ -957,31 +962,32 @@ impl Component for ApnForm {
 }
 
 fn confirm_delete(ctx: NetCtx, profiles: Profiles, profile: Profile) {
-    let title = format!("Delete “{}”?", profile.name);
+    let title = tr!("network-apn-delete-title", name = profile.name.clone());
     ctx.overlays.show_dialog(
-        dialog(
-            title,
-            "Mobile data stops working if no other access point is left.",
-        )
-        .cancel("Cancel")
-        .default_action(CANCEL_ID)
-        .response("Delete", ResponseKind::Destructive, move |_| {
-            let gone = profile.clone();
-            background_then(
-                move || delete(&gone),
-                move |result| match result {
-                    Ok(()) => {
-                        reload(profiles);
-                        ctx.reload();
-                        ctx.router.pop();
-                    }
-                    Err(error) => ctx.overlays.toast(super::super::plain(
-                        &error.0,
-                        "Could not delete the access point. Try again.",
-                    )),
+        dialog(title, tr!("network-apn-delete-body"))
+            .cancel(tr!("network-apn-cancel"))
+            .default_action(CANCEL_ID)
+            .response(
+                tr!("network-apn-delete-confirm"),
+                ResponseKind::Destructive,
+                move |_| {
+                    let gone = profile.clone();
+                    background_then(
+                        move || delete(&gone),
+                        move |result| match result {
+                            Ok(()) => {
+                                reload(profiles);
+                                ctx.reload();
+                                ctx.router.pop();
+                            }
+                            Err(error) => ctx.overlays.toast(super::super::plain(
+                                &error.0,
+                                &tr!("network-apn-error-delete"),
+                            )),
+                        },
+                    );
                 },
-            );
-        }),
+            ),
     );
 }
 

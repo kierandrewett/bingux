@@ -312,3 +312,65 @@ network-mobile-sim-attempts-left = { $count ->
     [one] 1 { $what } attempt left
    *[other] { $count } { $what } attempts left
 }
+
+## Mobile APN
+
+# Authentication method labels, in the order shown in the picker.
+network-apn-auth-auto = Automatic
+network-apn-auth-none = None
+network-apn-auth-pap = PAP
+network-apn-auth-chap = CHAP
+network-apn-auth-pap-chap = PAP or CHAP
+network-apn-auth-mschap = MSCHAP
+network-apn-auth-mschapv2 = MSCHAPv2
+network-apn-auth-eap = EAP
+network-apn-auth-custom = Custom
+
+# IP type labels.
+network-apn-ip-v4 = IPv4
+network-apn-ip-v6 = IPv6
+network-apn-ip-v4v6 = IPv4 and IPv6
+
+# Row summaries for an access point without a typed name.
+network-apn-summary-detected = Detected from the carrier
+network-apn-summary-empty = No access point name
+
+# Validation messages.
+network-apn-error-length = Use 64 characters or fewer.
+network-apn-error-characters = Use only letters, numbers, dots, hyphens and underscores.
+network-apn-error-name-taken = Use a name that no other connection has.
+
+# Error and toast messages.
+network-apn-error-read = Could not read the access point names. Try again.
+network-apn-error-read-one = Could not read the access point. Try again.
+network-apn-error-switch = Could not switch the access point. Try again.
+network-apn-error-save = Could not save the access point. Try again.
+network-apn-error-delete = Could not delete the access point. Try again.
+network-apn-retry = Try again
+
+# The list of access points.
+network-apn-empty = No access point names yet.
+network-apn-edit-tooltip = Edit access point
+network-apn-list-title = Access point names
+network-apn-add = Add access point…
+
+# The editor form.
+network-apn-name-label = Name
+network-apn-name-placeholder = Carrier
+network-apn-detect-switch = Detect settings automatically
+network-apn-section-title = Access point
+network-apn-apn-label = APN
+network-apn-apn-hint = Leave empty for none.
+network-apn-user-label = User name
+network-apn-password-label = Password
+network-apn-auth-label = Authentication
+network-apn-ip-label = IP type
+network-apn-delete = Delete access point
+network-apn-add-button = Add access point
+
+# The delete dialog. $name is the access point name.
+# $name (String) - the name of the access point being deleted.
+network-apn-delete-title = Delete “{ $name }”?
+network-apn-delete-body = Mobile data stops working if no other access point is left.
+network-apn-cancel = Cancel
+network-apn-delete-confirm = Delete
