@@ -51,7 +51,7 @@ pub fn default_apps() -> Target {
 pub fn default_app(kind: usize, name: &str) -> Target {
     let slug = applications::KINDS
         .get(kind)
-        .map(|kind| kind.title.to_ascii_lowercase())
+        .map(|kind| kind.slug.to_string())
         .unwrap_or_default();
     Target::from(PageId::Applications.location().join("default").join(slug)).titled(name)
 }
@@ -266,11 +266,8 @@ pub fn table() -> RouteTable {
         .page(|_| applications::DefaultAppsPage.into());
     for (kind, known) in applications::KINDS.iter().enumerate() {
         table = table
-            .route(&format!(
-                "applications/default/{}",
-                known.title.to_ascii_lowercase()
-            ))
-            .title(known.title)
+            .route(&format!("applications/default/{}", known.slug.to_string()))
+            .title_with(move |_| (known.title)())
             .page(move |_| applications::DefaultKindPage { kind }.into());
     }
     table = table

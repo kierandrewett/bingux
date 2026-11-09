@@ -10,6 +10,7 @@
 use std::path::PathBuf;
 
 use bingux_ui::component::ComponentName;
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 
 use super::{Change, Ctx, Model, write};
@@ -105,21 +106,21 @@ fn on_right_click(
 fn dock_items(ctx: Ctx, m: &Model) -> Vec<MenuItem> {
     let shown = m.dock;
     let alignment = m.dock_alignment.clone();
-    let align = |key: &'static str, label: &'static str| {
+    let align = |key: &'static str, label: String| {
         menu_item(label, move |_| {
             write(ctx, Change::Set("desktop.dock_alignment", key.to_string()))
         })
         .checked(alignment == key)
     };
     vec![
-        menu_item("Show dock", move |_| {
+        menu_item(tr!("settings-desktop-show-dock"), move |_| {
             write(ctx, Change::Set("desktop.dock", (!shown).to_string()))
         })
         .checked(shown),
         menu_separator(),
-        align("left", "Align left"),
-        align("center", "Align centre"),
-        align("right", "Align right"),
+        align("left", tr!("settings-desktop-align-left-menu")),
+        align("center", tr!("settings-desktop-align-centre-menu")),
+        align("right", tr!("settings-desktop-align-right-menu")),
     ]
 }
 
@@ -127,7 +128,7 @@ fn dock_items(ctx: Ctx, m: &Model) -> Vec<MenuItem> {
 fn sidebar_items(ctx: Ctx, m: &Model) -> Vec<MenuItem> {
     let shown = m.sidebar;
     let edge = m.sidebar_edge.clone();
-    let choose = |key: &'static str, label: &'static str| {
+    let choose = |key: &'static str, label: String| {
         menu_item(label, move |_| {
             if key == "auto" {
                 write(ctx, Change::Unset("desktop.sidebar_edge"))
@@ -141,15 +142,15 @@ fn sidebar_items(ctx: Ctx, m: &Model) -> Vec<MenuItem> {
         })
     };
     vec![
-        menu_item("Show sidebar", move |_| {
+        menu_item(tr!("settings-desktop-show-sidebar"), move |_| {
             write(ctx, Change::Set("desktop.sidebar", (!shown).to_string()))
         })
         .checked(shown),
         menu_separator(),
-        choose("auto", "Automatic"),
-        choose("left", "Left"),
-        choose("right", "Right"),
-        choose("top", "Top"),
+        choose("auto", tr!("settings-desktop-sidebar-auto")),
+        choose("left", tr!("settings-desktop-sidebar-left")),
+        choose("right", tr!("settings-desktop-sidebar-right")),
+        choose("top", tr!("settings-desktop-sidebar-top")),
     ]
 }
 
@@ -191,7 +192,7 @@ fn icon_box(size: u32) -> Dim {
 fn interactive(
     panel: Rect,
     menus: Option<Ctx>,
-    label: &'static str,
+    label: String,
     build: fn(Ctx, &Model) -> Vec<MenuItem>,
 ) -> Element {
     match menus {
@@ -301,7 +302,7 @@ fn dock_row(tokens: &Tokens, dock: &Dock, bar: Paint, frame: Frame, menus: Optio
             ],
         )
         .child(pill);
-    interactive(row, menus, "Dock", dock_items)
+    interactive(row, menus, tr!("settings-desktop-dock"), dock_items)
 }
 
 /// The sidebar: a column on the left or right, or a strip along the top.
@@ -345,7 +346,7 @@ fn sidebar_panel(
             .child(stub_line(tokens, w_full(), stub))
             .child(stub_line(tokens, w_full(), stub))
     };
-    interactive(panel, menus, "Sidebar", sidebar_items)
+    interactive(panel, menus, tr!("settings-desktop-sidebar"), sidebar_items)
 }
 
 /// The top bar: a launcher stand-in and a title stand-in on the left, a clock

@@ -42,14 +42,18 @@ const OTHER_ICON_SIZES: [u32; 2] = [40, 128];
 /// A kind of file or link and the content types that stand for it. The
 /// first type is the one the choices are read from; every type is set.
 pub(crate) struct Kind {
-    pub(crate) title: &'static str,
+    pub(crate) title: fn() -> String,
+    /// The English name in the route path: `applications/default/<slug>`. Fixed,
+    /// so the route resolves in every locale.
+    pub(crate) slug: &'static str,
     icon: Icon,
     mimes: &'static [&'static str],
 }
 
 pub(crate) const KINDS: [Kind; 9] = [
     Kind {
-        title: "Web",
+        slug: "web",
+        title: || tr!("settings-applications-kind-web"),
         icon: Icon::WebBrowser,
         mimes: &[
             "x-scheme-handler/http",
@@ -58,42 +62,50 @@ pub(crate) const KINDS: [Kind; 9] = [
         ],
     },
     Kind {
-        title: "Mail",
+        slug: "mail",
+        title: || tr!("settings-applications-kind-mail"),
         icon: Icon::MailUnread,
         mimes: &["x-scheme-handler/mailto"],
     },
     Kind {
-        title: "Calendar",
+        slug: "calendar",
+        title: || tr!("settings-applications-kind-calendar"),
         icon: Icon::XOfficeCalendar,
         mimes: &["text/calendar"],
     },
     Kind {
-        title: "Files",
+        slug: "files",
+        title: || tr!("settings-applications-kind-files"),
         icon: Icon::Folder,
         mimes: &["inode/directory"],
     },
     Kind {
-        title: "Text",
+        slug: "text",
+        title: || tr!("settings-applications-kind-text"),
         icon: Icon::DefaultAppText,
         mimes: &["text/plain"],
     },
     Kind {
-        title: "Documents",
+        slug: "documents",
+        title: || tr!("settings-applications-kind-documents"),
         icon: Icon::DefaultAppDocuments,
         mimes: &["application/pdf"],
     },
     Kind {
-        title: "Photos",
+        slug: "photos",
+        title: || tr!("settings-applications-kind-photos"),
         icon: Icon::ImageGeneric,
         mimes: &["image/png", "image/jpeg"],
     },
     Kind {
-        title: "Music",
+        slug: "music",
+        title: || tr!("settings-applications-kind-music"),
         icon: Icon::ApplicationsMultimedia,
         mimes: &["audio/mpeg", "audio/flac", "audio/ogg"],
     },
     Kind {
-        title: "Video",
+        slug: "video",
+        title: || tr!("settings-applications-kind-video"),
         icon: Icon::VideoGeneric,
         mimes: &["video/mp4", "video/x-matroska", "video/webm"],
     },
@@ -377,14 +389,20 @@ fn run_uninstall(
             busy.set(false);
             match result {
                 Ok(()) => {
-                    overlays.toast(format!("“{name}” uninstalled"));
+                    overlays.toast(tr!(
+                        "settings-applications-uninstalled",
+                        name = name.as_str()
+                    ));
                     if let Some(router) = leave {
                         router.pop();
                     }
                 }
                 Err(error) => {
                     eprintln!("[uninstall] {name}: {error}");
-                    overlays.toast(format!("Could not uninstall “{name}”. Try again."));
+                    overlays.toast(tr!(
+                        "settings-applications-uninstall-failed",
+                        name = name.as_str()
+                    ));
                 }
             }
             start_load(model);
@@ -401,21 +419,29 @@ fn ask_uninstall(
     leave: Option<Router>,
 ) {
     let body = match &app.details {
-        Some(details) => format!(
-            "“{}” is installed from {}.",
-            app.name,
-            details.source.label()
+        Some(details) => tr!(
+            "settings-applications-uninstall-body-source",
+            name = app.name.as_str(),
+            source = details.source.label()
         ),
-        None => format!("“{}” is installed on this system.", app.name),
+        None => tr!(
+            "settings-applications-uninstall-body-system",
+            name = app.name.as_str()
+        ),
     };
-    let title = format!("Uninstall “{}”?", app.name);
+    let title = tr!(
+        "settings-applications-uninstall-title",
+        name = app.name.as_str()
+    );
     overlays.show_dialog(
         dialog(title, body)
-            .cancel("Cancel")
+            .cancel(tr!("settings-applications-cancel"))
             .default_action(CANCEL_ID)
-            .response("Uninstall", ResponseKind::Destructive, move |_| {
-                run_uninstall(app.clone(), model, busy, overlays, leave)
-            }),
+            .response(
+                tr!("settings-applications-uninstall"),
+                ResponseKind::Destructive,
+                move |_| run_uninstall(app.clone(), model, busy, overlays, leave),
+            ),
     );
 }
 
@@ -448,7 +474,7 @@ fn browser_default(model: &Model) -> String {
         Some(Choice {
             current: Some(id), ..
         }) => app_name(&model.apps, id),
-        Some(_) => "Not set".to_string(),
+        Some(_) => tr!("settings-applications-not-set"),
         None => String::new(),
     }
 }
@@ -460,13 +486,13 @@ fn kind_menu(app: Option<AppEntry>, overlays: Overlays, router: Router) -> Vec<M
     let route = app
         .as_ref()
         .map(|app| routes::app(&app.id.clone(), &app.name.clone()));
-    let open = menu_item("Open", move |_| {
+    let open = menu_item(tr!("settings-applications-open"), move |_| {
         if let Some(app) = &app {
             apps::launch(app, move |reason| overlays.toast(reason));
         }
     })
     .icon(Icon::DocumentOpen);
-    let details = menu_item("Show details", move |_| {
+    let details = menu_item(tr!("settings-applications-show-details"), move |_| {
         if let Some(route) = &route {
             router.open(route.clone());
         }
@@ -491,19 +517,21 @@ fn default_menu(
     let chosen = app.id.clone();
     let open = app.clone();
     let details = routes::app(&app.id.clone(), &app.name.clone());
-    let make = menu_item("Make default", move |_| {
+    let make = menu_item(tr!("settings-applications-make-default"), move |_| {
         set_default(model, kind, chosen.clone(), overlays)
     });
     let make = if is_default { make.disabled() } else { make };
     vec![
         make,
         menu_separator(),
-        menu_item("Open", move |_| {
+        menu_item(tr!("settings-applications-open"), move |_| {
             apps::launch(&open, move |reason| overlays.toast(reason))
         })
         .icon(Icon::DocumentOpen),
-        menu_item("Show details", move |_| router.open(details.clone()))
-            .icon(Icon::DialogInformation),
+        menu_item(tr!("settings-applications-show-details"), move |_| {
+            router.open(details.clone())
+        })
+        .icon(Icon::DialogInformation),
     ]
 }
 
@@ -574,18 +602,20 @@ fn app_menu(
     let open = app.clone();
     let uninstall = app.clone();
     let details = routes::app(&app.id.clone(), &app.name.clone());
-    let uninstall_item = menu_item("Uninstall", move |_| {
+    let uninstall_item = menu_item(tr!("settings-applications-uninstall"), move |_| {
         ask_uninstall(uninstall.clone(), model, busy, overlays, None)
     })
     .icon(Icon::UserTrash)
     .destructive();
     vec![
-        menu_item("Open", move |_| {
+        menu_item(tr!("settings-applications-open"), move |_| {
             apps::launch(&open, move |reason| overlays.toast(reason))
         })
         .icon(Icon::DocumentOpen),
-        menu_item("Show details", move |_| router.open(details.clone()))
-            .icon(Icon::DialogInformation),
+        menu_item(tr!("settings-applications-show-details"), move |_| {
+            router.open(details.clone())
+        })
+        .icon(Icon::DialogInformation),
         menu_separator(),
         if removable {
             uninstall_item
@@ -664,20 +694,33 @@ fn installed_tools(
         searching.set(!open);
     })
     .active(*searching.read())
-    .tooltip("Search");
-    let mut sources =
-        vec![menu_item("All", move |_| set_source(source, limit, None)).checked(filter.is_none())];
+    .tooltip(&tr!("settings-applications-search"));
+    let mut sources = vec![
+        menu_item(tr!("settings-applications-filter-all"), move |_| {
+            set_source(source, limit, None)
+        })
+        .checked(filter.is_none()),
+    ];
     sources.extend(SOURCE_CHOICES.into_iter().map(|kind| {
         menu_item(kind.label(), move |_| set_source(source, limit, Some(kind)))
             .checked(filter == Some(kind))
     }));
     let sort_items = vec![
-        menu_item("Name", move |_| set_sort(sort, limit, Sort::Name)).checked(order == Sort::Name),
-        menu_item("Size", move |_| set_sort(sort, limit, Sort::Size)).checked(order == Sort::Size),
+        menu_item(tr!("settings-applications-sort-name"), move |_| {
+            set_sort(sort, limit, Sort::Name)
+        })
+        .checked(order == Sort::Name),
+        menu_item(tr!("settings-applications-sort-size"), move |_| {
+            set_sort(sort, limit, Sort::Size)
+        })
+        .checked(order == Sort::Size),
     ];
     let filter_menu = menu_button(
-        "Filter and sort",
-        vec![submenu("Source", sources), submenu("Sort by", sort_items)],
+        &tr!("settings-applications-filter-and-sort"),
+        vec![
+            submenu(tr!("settings-applications-source"), sources),
+            submenu(tr!("settings-applications-sort-by"), sort_items),
+        ],
     )
     .icon(Icon::Filter);
     hstack(S2).child(filter_menu).child(search).into()
@@ -711,7 +754,7 @@ impl Component for ApplicationsPage {
             search_field(query, move |_| set_limit(limit, PAGE)).fill_width(),
         );
         let list = match loaded {
-            None => Group::titled("Installed")
+            None => Group::titled(&tr!("settings-applications-installed"))
                 .trailing(installed_tools(
                     searching,
                     query,
@@ -766,24 +809,29 @@ impl Component for ApplicationsPage {
                         }));
                     }
                 }
-                let group = Group::titled("Installed")
+                let group = Group::titled(&tr!("settings-applications-installed"))
                     .trailing(installed_tools(
                         searching, query, sort, source, limit, order, filter,
                     ))
                     // The menu hides what is on, so the header says it.
                     .description(match (filter, order) {
                         (None, Sort::Name) => String::new(),
-                        (Some(kind), Sort::Name) => format!("Showing {}", kind.label()),
-                        (None, Sort::Size) => "Largest first".to_string(),
+                        (Some(kind), Sort::Name) => {
+                            tr!("settings-applications-showing", kind = kind.label())
+                        }
+                        (None, Sort::Size) => tr!("settings-applications-largest-first"),
                         (Some(kind), Sort::Size) => {
-                            format!("Showing {}, largest first", kind.label())
+                            tr!(
+                                "settings-applications-showing-largest-first",
+                                kind = kind.label()
+                            )
                         }
                     })
                     .below_title(search);
                 if rows.is_empty() {
-                    group.row(status(Status::Empty(
-                        "No matching applications".to_string(),
-                    )))
+                    group.row(status(Status::Empty(tr!(
+                        "settings-applications-no-matching"
+                    ))))
                 } else {
                     group.rows(rows)
                 }
@@ -795,7 +843,7 @@ impl Component for ApplicationsPage {
                 .child(PageHead::new())
                 .child(
                     Group::new(None).row(
-                        row("Default applications")
+                        row(tr!("settings-applications-default-applications"))
                             .value(summary)
                             .navigates()
                             .on_press(move |_| router.open(routes::default_apps())),
@@ -814,7 +862,7 @@ const DETAIL_ROWS: usize = 6;
 /// A detail's text, or `Unknown` while it is empty.
 fn unknown_if_empty(text: &str) -> String {
     if text.is_empty() {
-        "Unknown".to_string()
+        tr!("settings-applications-unknown")
     } else {
         text.to_string()
     }
@@ -882,9 +930,9 @@ impl Component for AppPage {
             Some(data) => data,
         };
         let Some(app) = data.apps.iter().find(|app| app.id == self.id).cloned() else {
-            return page_column().child(status(Status::Empty(
-                "This application is no longer installed.".to_string(),
-            )));
+            return page_column().child(status(Status::Empty(tr!(
+                "settings-applications-no-longer-installed"
+            ))));
         };
 
         // The kinds this application is registered for. Each row shows whether
@@ -892,10 +940,14 @@ impl Component for AppPage {
         // choice is made, so no control is repeated here. The group is a
         // skeleton until `gio mime` has answered, and says so if it fails.
         let defaults = match &data.choices {
-            None => Group::titled("Open by default").row(skeleton_row()),
-            Some(Err(failure)) => Group::titled("Open by default").row(
+            None => {
+                Group::titled(&tr!("settings-applications-open-by-default")).row(skeleton_row())
+            }
+            Some(Err(failure)) => Group::titled(&tr!("settings-applications-open-by-default")).row(
                 status(Status::Error(failure.0.clone()))
-                    .action("Try again", move |_| start_load(model)),
+                    .action(&tr!("settings-applications-try-again"), move |_| {
+                        start_load(model)
+                    }),
             ),
             Some(Ok(choices)) => {
                 let handled: Vec<(usize, bool)> = choices
@@ -909,30 +961,32 @@ impl Component for AppPage {
                     })
                     .collect();
                 if handled.is_empty() {
-                    Group::titled("Open by default").row(status(Status::Empty(
-                        "Not available as a default application.".to_string(),
-                    )))
+                    Group::titled(&tr!("settings-applications-open-by-default")).row(status(
+                        Status::Empty(tr!("settings-applications-not-default-application")),
+                    ))
                 } else {
                     let app = app.clone();
-                    Group::titled("Open by default").rows(handled.iter().map(
-                        |&(kind, is_default)| {
+                    Group::titled(&tr!("settings-applications-open-by-default")).rows(
+                        handled.iter().map(|&(kind, is_default)| {
                             let menu =
                                 default_menu(&app, kind, is_default, model, overlays, router);
                             Element::from(
-                                row(KINDS[kind].title)
+                                row((KINDS[kind].title)())
                                     .leading(KINDS[kind].icon)
-                                    .value(if is_default { "Default" } else { "Not default" })
+                                    .value(if is_default {
+                                        tr!("settings-applications-default")
+                                    } else {
+                                        tr!("settings-applications-not-default")
+                                    })
                                     .navigates()
                                     .on_press(move |_| {
-                                        router.open(routes::default_app(
-                                            kind,
-                                            &KINDS[kind].title.to_string(),
-                                        ))
+                                        router
+                                            .open(routes::default_app(kind, &(KINDS[kind].title)()))
                                     })
                                     .context_menu(menu),
                             )
-                        },
-                    ))
+                        }),
+                    )
                 }
             }
         };
@@ -944,32 +998,40 @@ impl Component for AppPage {
             .child(heading(app.name.clone()))
             .maybe_child((!app.comment.is_empty()).then(|| centered_caption(app.comment.clone())))
             .child(
-                primary_button("Open", move |_| {
+                primary_button(tr!("settings-applications-open"), move |_| {
                     apps::launch(&launch, move |reason| overlays.toast(reason))
                 })
                 .compact(),
             );
 
         let details = match app.details.clone() {
-            None => Group::titled("Details").rows((0..DETAIL_ROWS).map(|_| skeleton_row())),
+            None => Group::titled(&tr!("settings-applications-details"))
+                .rows((0..DETAIL_ROWS).map(|_| skeleton_row())),
             Some(details) => {
                 let rows = vec![
-                    row("Source").value(details.source.label().to_string()),
-                    row("Version").value(if details.version.is_empty() {
-                        "Unknown".to_string()
-                    } else {
-                        details.version.clone()
-                    }),
-                    row("Size").value(
+                    row(tr!("settings-applications-source"))
+                        .value(details.source.label().to_string()),
+                    row(tr!("settings-applications-version")).value(
+                        if details.version.is_empty() {
+                            tr!("settings-applications-unknown")
+                        } else {
+                            details.version.clone()
+                        },
+                    ),
+                    row(tr!("settings-applications-size")).value(
                         details
                             .size
-                            .map_or_else(|| "Unknown".to_string(), size_text),
+                            .map_or_else(|| tr!("settings-applications-unknown"), size_text),
                     ),
-                    row("Installed from").value(unknown_if_empty(&details.origin)),
-                    row("Location").path_value(unknown_if_empty(&details.location)),
-                    row("Category").value(unknown_if_empty(&app.category)),
+                    row(tr!("settings-applications-installed-from"))
+                        .value(unknown_if_empty(&details.origin)),
+                    row(tr!("settings-applications-location"))
+                        .path_value(unknown_if_empty(&details.location)),
+                    row(tr!("settings-applications-category"))
+                        .value(unknown_if_empty(&app.category)),
                 ];
-                Group::titled("Details").rows(rows.into_iter().map(Element::from))
+                Group::titled(&tr!("settings-applications-details"))
+                    .rows(rows.into_iter().map(Element::from))
             }
         };
 
@@ -979,17 +1041,21 @@ impl Component for AppPage {
             let (id, source) = (app.id.clone(), app.desktop_file.clone());
             let on = *autostart.read();
             let read = *startup_read.read();
-            Group::titled("Startup").row(switch_row("Start at login", on, move |next: bool| {
-                // Before the read has landed the switch shows a guess, and a
-                // press must not write on top of the real value.
-                if !read {
-                    return;
-                }
-                let (id, source) = (id.clone(), source.clone());
-                optimistic(autostart, Some(overlays), !next, next, move || {
-                    write_autostart(&id, &source, next).map_err(|error| error.to_string())
-                });
-            }))
+            Group::titled(&tr!("settings-applications-startup")).row(switch_row(
+                tr!("settings-applications-start-at-login"),
+                on,
+                move |next: bool| {
+                    // Before the read has landed the switch shows a guess, and a
+                    // press must not write on top of the real value.
+                    if !read {
+                        return;
+                    }
+                    let (id, source) = (id.clone(), source.clone());
+                    optimistic(autostart, Some(overlays), !next, next, move || {
+                        write_autostart(&id, &source, next).map_err(|error| error.to_string())
+                    });
+                },
+            ))
         };
 
         // GNOME's per-application notification switches. The group appears only
@@ -998,49 +1064,65 @@ impl Component for AppPage {
         let notifications_group = if *startup_read.read() {
             (*notifications.read()).map(|current| {
                 let switches = [
-                    ("Show notifications", NotifyKey::Enable, current.enable),
                     (
-                        "Show on the lock screen",
+                        tr!("settings-applications-show-notifications"),
+                        NotifyKey::Enable,
+                        current.enable,
+                    ),
+                    (
+                        tr!("settings-applications-show-on-lock-screen"),
                         NotifyKey::LockScreen,
                         current.lock_screen,
                     ),
-                    ("Play notification sounds", NotifyKey::Sound, current.sound),
+                    (
+                        tr!("settings-applications-play-notification-sounds"),
+                        NotifyKey::Sound,
+                        current.sound,
+                    ),
                 ];
-                Group::titled("Notifications").rows(switches.into_iter().map(|(title, key, on)| {
-                    let id = app.id.clone();
-                    Element::from(switch_row(title, on, move |next: bool| {
-                        set_notification(notifications, overlays, id.clone(), current, key, next);
-                    }))
-                }))
+                Group::titled(&tr!("settings-applications-notifications")).rows(
+                    switches.into_iter().map(|(title, key, on)| {
+                        let id = app.id.clone();
+                        Element::from(switch_row(title, on, move |next: bool| {
+                            set_notification(
+                                notifications,
+                                overlays,
+                                id.clone(),
+                                current,
+                                key,
+                                next,
+                            );
+                        }))
+                    }),
+                )
             })
         } else {
-            Some(Group::titled("Notifications").rows((0..3).map(|_| skeleton_row())))
+            Some(
+                Group::titled(&tr!("settings-applications-notifications"))
+                    .rows((0..3).map(|_| skeleton_row())),
+            )
         };
 
         let uninstall = match app.details.as_ref() {
-            None => Group::titled("Uninstall").row(skeleton_row()),
+            None => Group::titled(&tr!("settings-applications-uninstall")).row(skeleton_row()),
             Some(details) => {
                 let (reason, removable) = match &details.removal {
-                    Removal::Command(_) => (
-                        "Removes the package this application came from.".to_string(),
-                        true,
-                    ),
-                    Removal::Files(_) => (
-                        "Deletes the files this application installed.".to_string(),
-                        true,
-                    ),
+                    Removal::Command(_) => (tr!("settings-applications-removes-package"), true),
+                    Removal::Files(_) => (tr!("settings-applications-deletes-files"), true),
                     Removal::Unavailable(reason) => (reason.to_string(), false),
                 };
                 let target = app.clone();
-                Group::titled("Uninstall").row(
-                    row("Remove from this computer").subtitle(reason).trailing(
-                        action_button("Uninstall", move |_| {
-                            ask_uninstall(target.clone(), model, busy, overlays, Some(router))
-                        })
-                        .destructive()
-                        .compact()
-                        .enabled(removable && !*busy.read()),
-                    ),
+                Group::titled(&tr!("settings-applications-uninstall")).row(
+                    row(tr!("settings-applications-remove-from-computer"))
+                        .subtitle(reason)
+                        .trailing(
+                            action_button(tr!("settings-applications-uninstall"), move |_| {
+                                ask_uninstall(target.clone(), model, busy, overlays, Some(router))
+                            })
+                            .destructive()
+                            .compact()
+                            .enabled(removable && !*busy.read()),
+                        ),
                 )
             }
         };
@@ -1048,8 +1130,10 @@ impl Component for AppPage {
         // The file types the desktop entry says the application opens. Read
         // from the entry only; changing them means editing the entry itself.
         let file_types = (!app.mime_types.is_empty()).then(|| {
-            Group::titled("File types")
-                .row(row("Supported file types").subtitle(app.mime_types.join(", ")))
+            Group::titled(&tr!("settings-applications-file-types")).row(
+                row(tr!("settings-applications-supported-file-types"))
+                    .subtitle(app.mime_types.join(", ")),
+            )
         });
 
         page_column()
@@ -1252,11 +1336,14 @@ pub struct DefaultAppsPage;
 /// The file-type rows at their final height, before `gio mime` has answered.
 /// One row per kind, with blank values and no navigation.
 fn kind_placeholder() -> Group {
-    Group::new(None).rows(
-        KINDS
-            .iter()
-            .map(|kind| Element::from(row(kind.title).leading(kind.icon).value("").enabled(false))),
-    )
+    Group::new(None).rows(KINDS.iter().map(|kind| {
+        Element::from(
+            row((kind.title)())
+                .leading(kind.icon)
+                .value("")
+                .enabled(false),
+        )
+    }))
 }
 
 impl Component for DefaultAppsPage {
@@ -1279,7 +1366,9 @@ impl Component for DefaultAppsPage {
             Some(Err(failure)) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0.clone()))
-                        .action("Try again", move |_| start_load(model)),
+                        .action(&tr!("settings-applications-try-again"), move |_| {
+                            start_load(model)
+                        }),
                 );
             }
             Some(Ok(choices)) => choices,
@@ -1289,9 +1378,11 @@ impl Component for DefaultAppsPage {
         let other = match &data.file_types {
             None => None,
             Some(Err(failure)) => Some(Element::from(
-                Group::titled("Other file types").row(
+                Group::titled(&tr!("settings-applications-other-file-types")).row(
                     status(Status::Error(failure.0.clone()))
-                        .action("Try again", move |_| start_load(model)),
+                        .action(&tr!("settings-applications-try-again"), move |_| {
+                            start_load(model)
+                        }),
                 ),
             )),
             Some(Ok(types)) => (!types.is_empty()).then(|| {
@@ -1311,18 +1402,18 @@ impl Component for DefaultAppsPage {
                     .as_ref()
                     .and_then(|id| data.apps.iter().find(|app| app.id == *id))
                     .cloned();
-                let value = choice
-                    .current
-                    .as_ref()
-                    .map_or_else(|| "Not set".to_string(), |id| app_name(&data.apps, id));
+                let value = choice.current.as_ref().map_or_else(
+                    || tr!("settings-applications-not-set"),
+                    |id| app_name(&data.apps, id),
+                );
                 let menu = kind_menu(current, overlays, router);
                 Element::from(
-                    row(KINDS[kind].title)
+                    row((KINDS[kind].title)())
                         .leading(KINDS[kind].icon)
                         .value(value)
                         .navigates()
                         .on_press(move |_| {
-                            router.open(routes::default_app(kind, &KINDS[kind].title.to_string()))
+                            router.open(routes::default_app(kind, &(KINDS[kind].title)()))
                         })
                         .context_menu(menu),
                 )
@@ -1442,7 +1533,9 @@ impl Component for DefaultKindPage {
             Some(Err(failure)) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0.clone()))
-                        .action("Try again", move |_| start_load(model)),
+                        .action(&tr!("settings-applications-try-again"), move |_| {
+                            start_load(model)
+                        }),
                 );
             }
             Some(Ok(choices)) => choices,
@@ -1450,9 +1543,9 @@ impl Component for DefaultKindPage {
         let Some(choice) = choices.iter().find(|choice| choice.kind == kind) else {
             return page_column()
                 .child(PageHead::new())
-                .child(status(Status::Empty(
-                    "Could not find this file type.".to_string(),
-                )));
+                .child(status(Status::Empty(tr!(
+                    "settings-applications-could-not-find-file-type"
+                ))));
         };
 
         let needle = query.read().trim().to_lowercase();
@@ -1464,9 +1557,9 @@ impl Component for DefaultKindPage {
             .filter(|app| needle.is_empty() || app.name.to_lowercase().contains(&needle))
             .collect();
         let list = if listed.is_empty() {
-            radio_rows(None::<String>, Vec::new()).row(status(Status::Empty(
-                "No matching applications".to_string(),
-            )))
+            radio_rows(None::<String>, Vec::new()).row(status(Status::Empty(tr!(
+                "settings-applications-no-matching"
+            ))))
         } else {
             // One radio per application: the selected one is the current default.
             let selected = current.clone().unwrap_or_default();

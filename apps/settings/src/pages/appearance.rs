@@ -40,7 +40,7 @@ use crate::ui::{
     Group, Icon, Overlays, PageHead, Status, Window, focus_stop, icon, menu_item, menu_separator,
     page_column, row, skeleton_shape, status, use_overlays, use_tokens, use_window,
 };
-use bingux_ui::prelude::use_router;
+use bingux_ui::prelude::{tr, use_router};
 use bingux_ui::style::*;
 use interface::{Interface, Setting, text_size_row, theme_group};
 
@@ -94,8 +94,9 @@ fn set_font(family: &str) -> Result<Option<Model>, CommandError> {
         config(&["unset", FONT_KEY])?;
     } else {
         if crate::theme::font_files(family, 1).is_empty() {
-            return Err(CommandError(format!(
-                "Could not set the font “{family}”. Choose an installed font."
+            return Err(CommandError(tr!(
+                "settings-appearance-font-not-installed",
+                family = family
             )));
         }
         config(&["set", FONT_KEY, family])?;
@@ -141,9 +142,9 @@ fn set_wallpaper(mut model: State<Option<Loaded>>, overlays: Overlays, path: Opt
 /// cancelled chooser leaves the page as it was.
 fn choose_wallpaper(model: State<Option<Loaded>>, overlays: Overlays, window: Window) {
     let mut request = ChooserRequest::open()
-        .title("Choose a wallpaper")
+        .title(tr!("settings-appearance-choose-wallpaper"))
         .filter(
-            Filter::new("Pictures")
+            Filter::new(tr!("settings-appearance-filter-pictures"))
                 .glob("*.png")
                 .glob("*.jpg")
                 .glob("*.jpeg")
@@ -274,7 +275,7 @@ impl Component for Swatch {
                         )
                         .maybe_child(mark),
                 ),
-            format!("Accent colour {name}"),
+            tr!("settings-appearance-accent-label", name = name),
             AccessibilityRole::Button,
             true,
             Radius::Pill,
@@ -324,7 +325,7 @@ fn card_picture(
 /// switcher. The default scheme shows the light and the dark desktop side by
 /// side. A component of its own, as `swatch` is.
 fn scheme_card(
-    title: &'static str,
+    title: String,
     scheme: Scheme,
     tokens: Tokens,
     desktop: Option<&desktop::Model>,
@@ -350,7 +351,7 @@ fn scheme_card(
 }
 
 struct SchemeCard {
-    title: &'static str,
+    title: String,
     selected: bool,
     picture: Element,
     on_press: EventHandler<()>,
@@ -392,7 +393,7 @@ impl Component for SchemeCard {
                 &[flex_col(), w_full(), gap(S2), items(Align::Center)],
             )
             .child(frame)
-            .child(caption.label(&tokens, self.title));
+            .child(caption.label(&tokens, self.title.clone()));
         focus_stop(
             card,
             format!("{} colour scheme", self.title),
@@ -448,13 +449,16 @@ impl Component for AppearancePage {
             Ok(value) => value,
             Err(failure) => {
                 return page_column().child(PageHead::new()).child(
-                    status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+                    status(Status::Error(failure.0))
+                        .action(&tr!("settings-appearance-try-again"), move |_| {
+                            reload(model)
+                        }),
                 );
             }
         };
 
         let font_name = if model_value.font.is_empty() {
-            "System default".to_string()
+            tr!("settings-appearance-system-default")
         } else {
             model_value.font.clone()
         };
@@ -479,12 +483,12 @@ impl Component for AppearancePage {
                 overlays.show_menu(
                     (at.x as f32, at.y as f32),
                     vec![
-                        menu_item("Choose picture", move |_| {
+                        menu_item(tr!("settings-appearance-choose-picture"), move |_| {
                             choose_wallpaper(model, overlays, window)
                         })
                         .icon(Icon::ImageGeneric),
                         menu_separator(),
-                        menu_item("Use system wallpaper", move |_| {
+                        menu_item(tr!("settings-appearance-use-system-wallpaper"), move |_| {
                             set_wallpaper(model, overlays, None)
                         }),
                     ],
@@ -512,7 +516,7 @@ impl Component for AppearancePage {
                     current: model_value.wallpaper.clone(),
                 })
                 .child(
-                    Group::titled("Text")
+                    Group::titled(&tr!("settings-appearance-text"))
                         .rows(
                             model_value
                                 .interface
@@ -520,7 +524,7 @@ impl Component for AppearancePage {
                                 .map(|interface| text_size_row(interface, on_setting)),
                         )
                         .row(
-                            row("Font")
+                            row(tr!("settings-appearance-font"))
                                 .value(font_name)
                                 .navigates()
                                 .on_press(move |_| router.open(routes::font())),
@@ -534,7 +538,7 @@ impl Component for AppearancePage {
                 )
                 .maybe_child(model_value.gsettings.then(|| {
                     Element::from(
-                        Group::titled("Accent colour").row(
+                        Group::titled(&tr!("settings-appearance-accent-colour")).row(
                             rect()
                                 .tw(&tokens, BOX_BODY)
                                 .tw(
@@ -556,7 +560,7 @@ impl Component for AppearancePage {
                 // accent variant.
                 .maybe_child(model_value.gsettings.then(|| {
                     Element::from(
-                        Group::titled("Colour scheme").row(
+                        Group::titled(&tr!("settings-appearance-colour-scheme")).row(
                             rect()
                                 .tw(&tokens, BOX_BODY)
                                 .tw(&tokens, &[items(Align::Center)])
@@ -573,7 +577,7 @@ impl Component for AppearancePage {
                                             ],
                                         )
                                         .child(scheme_card(
-                                            "Default",
+                                            tr!("settings-appearance-scheme-default"),
                                             Scheme::Default,
                                             tokens,
                                             model_value.desktop.as_ref(),
@@ -582,7 +586,7 @@ impl Component for AppearancePage {
                                             },
                                         ))
                                         .child(scheme_card(
-                                            "Light",
+                                            tr!("settings-appearance-scheme-light"),
                                             Scheme::PreferLight,
                                             tokens,
                                             model_value.desktop.as_ref(),
@@ -591,7 +595,7 @@ impl Component for AppearancePage {
                                             },
                                         ))
                                         .child(scheme_card(
-                                            "Dark",
+                                            tr!("settings-appearance-scheme-dark"),
                                             Scheme::PreferDark,
                                             tokens,
                                             model_value.desktop.as_ref(),
@@ -605,7 +609,7 @@ impl Component for AppearancePage {
                 }))
                 .maybe_child((!model_value.gsettings).then(|| {
                     Element::from(status(Status::Info(
-                        "Accent colour and colour scheme are not available on this system.".into(),
+                        tr!("settings-appearance-gsettings-unavailable").into(),
                     )))
                 })),
         )

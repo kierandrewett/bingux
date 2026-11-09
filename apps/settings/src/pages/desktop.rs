@@ -9,6 +9,7 @@ use crate::ui::{
     Group, Icon, Overlays, PageHead, Row, Status, dropdown, level_row, page_column, row,
     row_button, segmented, status, switch_row, use_overlays, use_tokens,
 };
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 use freya::prelude::*;
 
@@ -22,16 +23,35 @@ pub(crate) mod preview;
 use preview::desktop_preview;
 
 /// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
-const TILES: [(&str, &str, Icon); 5] = [
-    ("vpn", "VPN", Icon::NetworkVpn),
-    ("dnd", "Do not disturb", Icon::NotificationsDisabled),
-    ("nightLight", "Night light", Icon::NightLight),
-    ("power", "Power mode", Icon::PowerProfileBalanced),
-    ("awake", "Keep awake", Icon::ChangesPrevent),
+const TILES: [(&str, fn() -> String, Icon); 5] = [
+    ("vpn", || tr!("settings-desktop-tile-vpn"), Icon::NetworkVpn),
+    (
+        "dnd",
+        || tr!("settings-desktop-tile-dnd"),
+        Icon::NotificationsDisabled,
+    ),
+    (
+        "nightLight",
+        || tr!("settings-desktop-tile-night-light"),
+        Icon::NightLight,
+    ),
+    (
+        "power",
+        || tr!("settings-desktop-tile-power-mode"),
+        Icon::PowerProfileBalanced,
+    ),
+    (
+        "awake",
+        || tr!("settings-desktop-tile-keep-awake"),
+        Icon::ChangesPrevent,
+    ),
 ];
 /// What the shell shows when `controlCentre` is absent (`ControlCentreServices.qml`).
 const TILE_DEFAULTS: [bool; 5] = [true, true, false, false, false];
-const UNREADABLE: &str = "Could not read the desktop settings. Restart the desktop and try again.";
+
+fn unreadable() -> String {
+    tr!("settings-desktop-unreadable")
+}
 
 const DOCK_SIZE_MIN: f64 = 32.0;
 const DOCK_SIZE_RANGE: f64 = 48.0;
@@ -63,9 +83,9 @@ pub(crate) struct Model {
 
 impl Model {
     fn from_json(root: &Json) -> Result<Self, String> {
-        let data = root.get("data").ok_or(UNREADABLE)?;
-        let desktop = data.get("desktop").ok_or(UNREADABLE)?;
-        let privacy = data.get("privacy").ok_or(UNREADABLE)?;
+        let data = root.get("data").ok_or_else(unreadable)?;
+        let desktop = data.get("desktop").ok_or_else(unreadable)?;
+        let privacy = data.get("privacy").ok_or_else(unreadable)?;
         // A fresh config has no `controlCentre`; the shell then shows its
         // defaults, which are the `TILES` defaults here.
         let mut tiles = TILE_DEFAULTS;
@@ -112,7 +132,7 @@ fn flag(object: &Json, key: &str) -> Result<bool, String> {
     object
         .get(key)
         .and_then(Json::as_bool)
-        .ok_or_else(|| UNREADABLE.to_string())
+        .ok_or_else(unreadable)
 }
 
 fn text(object: &Json, key: &str) -> Result<String, String> {
@@ -120,14 +140,14 @@ fn text(object: &Json, key: &str) -> Result<String, String> {
         .get(key)
         .and_then(Json::as_str)
         .map(str::to_string)
-        .ok_or_else(|| UNREADABLE.to_string())
+        .ok_or_else(unreadable)
 }
 
 fn number(object: &Json, key: &str) -> Result<f64, String> {
     object
         .get(key)
         .and_then(Json::as_number)
-        .ok_or_else(|| UNREADABLE.to_string())
+        .ok_or_else(unreadable)
 }
 
 /// The `save` patch for all Control Centre tiles. `save` takes every tile, so
@@ -153,7 +173,7 @@ fn size_for_percent(percent: f64) -> u32 {
 
 pub(crate) fn load() -> Result<Model, CommandError> {
     let text = system::run(&bingux_config(), &["dump"], Duration::from_secs(5))?;
-    let json = Json::parse(&text).map_err(|_| CommandError(UNREADABLE.to_string()))?;
+    let json = Json::parse(&text).map_err(|_| CommandError(unreadable()))?;
     let mut model = Model::from_json(&json).map_err(CommandError)?;
     model.gnome = Gnome::read();
     Ok(model)
@@ -268,19 +288,19 @@ impl GnomeSetting {
 
 /// "Removable media": what happens when a drive is plugged in.
 fn media_group(ctx: Ctx, gnome: &Gnome) -> Group {
-    Group::titled("Removable media")
+    Group::titled(&tr!("settings-desktop-removable-media"))
         .row(switch_row(
-            "Mount drives when they are plugged in",
+            &tr!("settings-desktop-mount-when-plugged"),
             gnome.automount,
             move |on: bool| write(ctx, Change::Gnome(GnomeSetting::Automount(on))),
         ))
         .row(switch_row(
-            "Open the folder after mounting",
+            &tr!("settings-desktop-open-after-mount"),
             gnome.automount_open,
             move |on: bool| write(ctx, Change::Gnome(GnomeSetting::AutomountOpen(on))),
         ))
         .row(switch_row(
-            "Run programs from removable media",
+            &tr!("settings-desktop-run-programs"),
             gnome.autorun,
             move |on: bool| write(ctx, Change::Gnome(GnomeSetting::Autorun(on))),
         ))
@@ -289,16 +309,18 @@ fn media_group(ctx: Ctx, gnome: &Gnome) -> Group {
 /// "Privacy": the public IP lookup, the login-screen images, then the recent-file
 /// keys when they can be read.
 fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option<&Gnome>) -> Group {
-    let mut group = Group::titled("Privacy")
+    let mut group = Group::titled(&tr!("settings-desktop-privacy"))
         .row(
-            switch_row("Show my public IP address", public_ip, move |on: bool| {
-                write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string()))
-            })
+            switch_row(
+                &tr!("settings-desktop-show-public-ip"),
+                public_ip,
+                move |on: bool| write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string())),
+            )
             .leading(Icon::ViewConceal),
         )
         .row(
             switch_row(
-                "Show on sign-in screen",
+                &tr!("settings-desktop-show-on-sign-in"),
                 personal_images,
                 move |on: bool| {
                     write(
@@ -307,19 +329,19 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
                     )
                 },
             )
-            .subtitle("Picture and wallpaper")
+            .subtitle(&tr!("settings-desktop-picture-and-wallpaper"))
             .leading(Icon::AvatarDefault),
         );
     if let Some(gnome) = gnome {
         let days = gnome.recent_max_age;
         group = group
             .row(switch_row(
-                "Remember recent files",
+                &tr!("settings-desktop-remember-recent"),
                 gnome.remember_recent,
                 move |on: bool| write(ctx, Change::Gnome(GnomeSetting::RememberRecent(on))),
             ))
             .row(menu_row(
-                "Forget recent files after",
+                &tr!("settings-desktop-forget-recent-after"),
                 recent_age_options(days),
                 &days.to_string(),
                 move |key: String| {
@@ -334,12 +356,13 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
 
 /// "Introduction": reopen the first-login guide in the running shell.
 fn introduction_group(error: State<Option<String>>) -> Group {
-    Group::titled("Introduction").row(
-        row("Shortcuts and shell tour")
-            .subtitle("Shown at first sign-in")
-            .trailing(row_button("Show introduction", move |_| {
-                show_introduction(error)
-            })),
+    Group::titled(&tr!("settings-desktop-introduction")).row(
+        row(tr!("settings-desktop-shortcuts-tour"))
+            .subtitle(&tr!("settings-desktop-shown-at-sign-in"))
+            .trailing(row_button(
+                &tr!("settings-desktop-show-introduction"),
+                move |_| show_introduction(error),
+            )),
     )
 }
 
@@ -358,10 +381,7 @@ fn show_introduction(mut error: State<Option<String>>) {
             Ok(_) => error.set(None),
             Err(failure) => {
                 eprintln!("settings: introduction failed: {}", failure.0);
-                error.set(Some(
-                    "Could not show the introduction. Restart the desktop and try again."
-                        .to_string(),
-                ));
+                error.set(Some(tr!("settings-desktop-introduction-failed")));
             }
         },
     );
@@ -378,9 +398,9 @@ fn recent_age_options(current: i32) -> Vec<(String, String)> {
     days.into_iter()
         .map(|days| {
             let label = match days {
-                -1 => "Never".to_string(),
-                1 => "1 day".to_string(),
-                days => format!("{days} days"),
+                -1 => tr!("settings-desktop-recent-never"),
+                1 => tr!("settings-desktop-recent-one-day"),
+                days => tr!("settings-desktop-recent-days", count = days),
             };
             (days.to_string(), label)
         })
@@ -460,11 +480,18 @@ fn dock_size_row(ctx: Ctx, size: u32) -> Element {
         .tw_layout(&[w_full()])
         .on_global_pointer_up(move |_: Event<PointerEventData>| release_dock_size(ctx, size))
         .child(
-            level_row("Icon size", percent, move |value: f64| {
-                let mut pending = ctx.pending;
-                pending.set(Some(value));
-            })
-            .value_text(format!("{} px", size_for_percent(percent))),
+            level_row(
+                &tr!("settings-desktop-icon-size"),
+                percent,
+                move |value: f64| {
+                    let mut pending = ctx.pending;
+                    pending.set(Some(value));
+                },
+            )
+            .value_text(tr!(
+                "settings-desktop-icon-size-px",
+                px = size_for_percent(percent)
+            )),
         )
         .into()
 }
@@ -514,39 +541,43 @@ impl Component for DesktopPage {
             Some(Err(failure)) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0))
-                        .action("Try again", move |_| background(model, refresh)),
+                        .action(&tr!("settings-desktop-try-again"), move |_| {
+                            background(model, refresh)
+                        }),
                 );
             }
         };
         let edge = m.sidebar_edge.clone().unwrap_or_else(|| "auto".to_string());
-        let mut dock =
-            Group::titled("Dock").row(switch_row("Show dock", m.dock, move |on: bool| {
-                write(ctx, Change::Set("desktop.dock", on.to_string()))
-            }));
+        let mut dock = Group::titled(&tr!("settings-desktop-dock")).row(switch_row(
+            &tr!("settings-desktop-show-dock"),
+            m.dock,
+            move |on: bool| write(ctx, Change::Set("desktop.dock", on.to_string())),
+        ));
         if m.dock {
             dock = dock.row(dock_size_row(ctx, m.dock_size)).row(segment_row(
-                "Alignment",
+                &tr!("settings-desktop-alignment"),
                 vec![
-                    ("left".into(), "Left".into()),
-                    ("center".into(), "Centre".into()),
-                    ("right".into(), "Right".into()),
+                    ("left".into(), tr!("settings-desktop-align-left")),
+                    ("center".into(), tr!("settings-desktop-align-centre")),
+                    ("right".into(), tr!("settings-desktop-align-right")),
                 ],
                 &m.dock_alignment,
                 move |key: String| write(ctx, Change::Set("desktop.dock_alignment", key)),
             ));
         }
-        let mut sidebar =
-            Group::titled("Sidebar").row(switch_row("Show sidebar", m.sidebar, move |on: bool| {
-                write(ctx, Change::Set("desktop.sidebar", on.to_string()))
-            }));
+        let mut sidebar = Group::titled(&tr!("settings-desktop-sidebar")).row(switch_row(
+            &tr!("settings-desktop-show-sidebar"),
+            m.sidebar,
+            move |on: bool| write(ctx, Change::Set("desktop.sidebar", on.to_string())),
+        ));
         if m.sidebar {
             sidebar = sidebar.row(menu_row(
-                "Side of the screen",
+                &tr!("settings-desktop-sidebar-side"),
                 vec![
-                    ("auto".into(), "Automatic".into()),
-                    ("left".into(), "Left".into()),
-                    ("right".into(), "Right".into()),
-                    ("top".into(), "Top".into()),
+                    ("auto".into(), tr!("settings-desktop-sidebar-auto")),
+                    ("left".into(), tr!("settings-desktop-sidebar-left")),
+                    ("right".into(), tr!("settings-desktop-sidebar-right")),
+                    ("top".into(), tr!("settings-desktop-sidebar-top")),
                 ],
                 &edge,
                 move |key: String| {
@@ -565,23 +596,23 @@ impl Component for DesktopPage {
         let page = page
             .child(dock)
             .maybe_child(m.dock.then(|| {
-                Group::titled("Dock mouse actions")
+                Group::titled(&tr!("settings-desktop-dock-mouse-actions"))
                     .row(menu_row(
-                        "Click",
+                        &tr!("settings-desktop-click"),
                         vec![
-                            ("toggle".into(), "Show or hide windows".into()),
-                            ("focus".into(), "Bring the window to the front".into()),
-                            ("launch".into(), "Open a new window".into()),
+                            ("toggle".into(), tr!("settings-desktop-click-toggle")),
+                            ("focus".into(), tr!("settings-desktop-click-focus")),
+                            ("launch".into(), tr!("settings-desktop-click-launch")),
                         ],
                         &m.dock_click,
                         move |key: String| write(ctx, Change::Set("desktop.dock_click", key)),
                     ))
                     .row(menu_row(
-                        "Middle click",
+                        &tr!("settings-desktop-middle-click"),
                         vec![
-                            ("launch".into(), "Open a new window".into()),
-                            ("close".into(), "Close all its windows".into()),
-                            ("none".into(), "Do nothing".into()),
+                            ("launch".into(), tr!("settings-desktop-middle-launch")),
+                            ("close".into(), tr!("settings-desktop-middle-close")),
+                            ("none".into(), tr!("settings-desktop-middle-none")),
                         ],
                         &m.dock_middle_click,
                         move |key: String| {
@@ -589,19 +620,19 @@ impl Component for DesktopPage {
                         },
                     ))
                     .row(menu_row(
-                        "Scroll",
+                        &tr!("settings-desktop-scroll"),
                         vec![
-                            ("cycle".into(), "Switch between windows".into()),
-                            ("none".into(), "Do nothing".into()),
+                            ("cycle".into(), tr!("settings-desktop-scroll-cycle")),
+                            ("none".into(), tr!("settings-desktop-scroll-none")),
                         ],
                         &m.dock_scroll,
                         move |key: String| write(ctx, Change::Set("desktop.dock_scroll", key)),
                     ))
                     .row(segment_row(
-                        "Scroll direction",
+                        &tr!("settings-desktop-scroll-direction"),
                         vec![
-                            ("natural".into(), "Like a touchscreen".into()),
-                            ("reverse".into(), "Reversed".into()),
+                            ("natural".into(), tr!("settings-desktop-scroll-natural")),
+                            ("reverse".into(), tr!("settings-desktop-scroll-reverse")),
                         ],
                         &m.dock_scroll_direction,
                         move |key: String| {
@@ -611,35 +642,33 @@ impl Component for DesktopPage {
             }))
             .child(sidebar)
             .child(
-                Group::titled("Top bar")
+                Group::titled(&tr!("settings-desktop-top-bar"))
                     .row(switch_row(
-                        "Show system usage",
+                        &tr!("settings-desktop-show-system-usage"),
                         m.metrics,
                         move |on: bool| write(ctx, Change::Set("desktop.metrics", on.to_string())),
                     ))
                     .row(switch_row(
-                        "Show seconds in the clock",
+                        &tr!("settings-desktop-show-clock-seconds"),
                         m.clock_seconds,
                         move |on: bool| {
                             write(ctx, Change::Set("desktop.clock_seconds", on.to_string()))
                         },
                     )),
             )
-            .child(
-                Group::titled("Control Centre").rows(TILES.iter().enumerate().map(
-                    |(index, (_, label, icon))| {
-                        let tiles = m.tiles;
-                        Element::from(
-                            switch_row(*label, tiles[index], move |on: bool| {
-                                let mut next = tiles;
-                                next[index] = on;
-                                write(ctx, Change::Tiles(next))
-                            })
-                            .leading(*icon),
-                        )
-                    },
-                )),
-            )
+            .child(Group::titled(&tr!("settings-desktop-control-centre")).rows(
+                TILES.iter().enumerate().map(|(index, (_, label, icon))| {
+                    let tiles = m.tiles;
+                    Element::from(
+                        switch_row(label(), tiles[index], move |on: bool| {
+                            let mut next = tiles;
+                            next[index] = on;
+                            write(ctx, Change::Tiles(next))
+                        })
+                        .leading(*icon),
+                    )
+                }),
+            ))
             .maybe_child(m.gnome.as_ref().map(|gnome| media_group(ctx, gnome)))
             .child(privacy_group(
                 ctx,

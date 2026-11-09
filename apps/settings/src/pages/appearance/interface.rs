@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 
 use crate::system::{self, CommandError};
 use crate::ui::{Group, dropdown, row};
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 use freya::prelude::*;
 
@@ -203,7 +204,7 @@ pub fn text_size_row(
 ) -> Element {
     let on_change: EventHandler<Setting> = on_change.into();
     let current = percent(interface.text_scale);
-    row("Text size")
+    row(tr!("settings-appearance-text-size"))
         .trailing(
             dropdown(
                 text_size_options(current),
@@ -226,9 +227,9 @@ pub fn theme_group(interface: &Interface, on_change: impl Into<EventHandler<Sett
     let cursors = theme_options(&interface.cursor_themes, &interface.cursor_theme);
     let on_icons = on_change.clone();
     let on_cursors = on_change;
-    Group::titled("Themes")
+    Group::titled(&tr!("settings-appearance-themes"))
         .row(
-            row("Icons").trailing(
+            row(tr!("settings-appearance-icons")).trailing(
                 dropdown(icons, interface.icon_theme.clone(), move |id: String| {
                     on_icons.call(Setting::IconTheme(id))
                 })
@@ -236,7 +237,7 @@ pub fn theme_group(interface: &Interface, on_change: impl Into<EventHandler<Sett
             ),
         )
         .row(
-            row("Cursor").trailing(
+            row(tr!("settings-appearance-cursor")).trailing(
                 dropdown(
                     cursors,
                     interface.cursor_theme.clone(),
