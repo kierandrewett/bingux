@@ -49,10 +49,10 @@ pub fn date(zone: Option<&str>, format: &str) -> CommandResult {
     if let Some(epoch) = epoch {
         command.arg("-d").arg(format!("@{epoch}"));
     }
-    let output = command
-        .arg(format)
-        .output()
-        .map_err(|error| CommandError(format!("date could not run: {error}")))?;
+    let output = command.arg(format).output().map_err(|error| {
+        eprintln!("bingux-settings: date could not run: {error}");
+        CommandError("The time could not be read. Try again.".into())
+    })?;
     if !output.status.success() {
         return Err(CommandError("The time could not be read.".into()));
     }

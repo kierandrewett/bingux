@@ -558,7 +558,13 @@ pub fn load_overview() -> Result<Overview, CommandError> {
     }
     let general = split_terse(
         nmcli(&["-t", "-f", "STATE,CONNECTIVITY", "general"], QUICK)
-            .map_err(|error| CommandError(format!("NetworkManager is not available. {}", error.0)))?
+            .map_err(|error| {
+                eprintln!("bingux-settings: nmcli general status failed: {}", error.0);
+                CommandError(
+                    "Network status could not be read. Restart NetworkManager and try again."
+                        .into(),
+                )
+            })?
             .trim(),
     );
     let radio =
