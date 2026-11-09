@@ -51,6 +51,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::prelude::tr;
 use bingux_files::selection::{TypeAhead, type_ahead_target};
 use bingux_files::{Entry, Listing, Selection, Sort, SortKey};
 use freya::prelude::*;
@@ -1940,7 +1941,7 @@ impl Component for FileView {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::List)
-            .a11y_alt("Files")
+            .a11y_alt(tr!("ui-files-a11y-files"))
             .tw(
                 &tokens,
                 &[
@@ -1981,9 +1982,10 @@ impl Component for FileView {
                 pane_row.set_if_modified(event.area);
             })
             .child(
-                rect()
-                    .tw(&tokens, &[w_flex(), h_full()])
-                    .child(crate::commands::command_scope("File list", commands, view).fill()),
+                rect().tw(&tokens, &[w_flex(), h_full()]).child(
+                    crate::commands::command_scope(tr!("ui-files-a11y-file-list"), commands, view)
+                        .fill(),
+                ),
             )
             .child(super::preview::dock(&shared, *pane_row.read()))
     }
@@ -2054,43 +2056,49 @@ fn view_commands(shared: &Shared) -> Vec<crate::commands::Command> {
     let mut commands: Vec<Cmd> = [
         item(
             "files.new-folder",
-            "New folder",
+            &tr!("ui-files-cmd-new-folder"),
             Command::NewFolder,
             File,
             "new",
         ),
         item(
             "files.duplicate",
-            "Duplicate",
+            &tr!("ui-files-cmd-duplicate"),
             Command::Duplicate,
             File,
             "change",
         ),
-        item("files.rename", "Rename…", Command::Rename, File, "change"),
+        item(
+            "files.rename",
+            &tr!("ui-files-cmd-rename"),
+            Command::Rename,
+            File,
+            "change",
+        ),
         item(
             "files.compress",
-            "Compress…",
+            &tr!("ui-files-cmd-compress"),
             Command::Compress,
             File,
             "archive",
         ),
         item(
             "files.extract-to",
-            "Extract to…",
+            &tr!("ui-files-cmd-extract-to"),
             Command::ExtractTo,
             File,
             "archive",
         ),
         item(
             "files.trash",
-            "Move to Trash",
+            &tr!("ui-files-cmd-move-to-trash"),
             Command::Trash,
             File,
             "delete",
         ),
         item(
             "files.delete",
-            "Delete permanently…",
+            &tr!("ui-files-cmd-delete-permanently"),
             Command::DeletePermanently,
             File,
             "delete",
@@ -2098,38 +2106,56 @@ fn view_commands(shared: &Shared) -> Vec<crate::commands::Command> {
         .map(Cmd::destructive),
         item(
             "files.properties",
-            "Properties",
+            &tr!("ui-files-cmd-properties"),
             Command::Properties,
             File,
             "info",
         ),
-        item("files.cut", "Cut", Command::Cut, Edit, "clipboard"),
-        item("files.copy", "Copy", Command::Copy, Edit, "clipboard"),
-        item("files.paste", "Paste", Command::Paste, Edit, "clipboard"),
+        item(
+            "files.cut",
+            &tr!("ui-files-cmd-cut"),
+            Command::Cut,
+            Edit,
+            "clipboard",
+        ),
+        item(
+            "files.copy",
+            &tr!("ui-files-cmd-copy"),
+            Command::Copy,
+            Edit,
+            "clipboard",
+        ),
+        item(
+            "files.paste",
+            &tr!("ui-files-cmd-paste"),
+            Command::Paste,
+            Edit,
+            "clipboard",
+        ),
         item(
             "files.copy-path",
-            "Copy path",
+            &tr!("ui-files-cmd-copy-path"),
             Command::CopyPath,
             Edit,
             "clipboard",
         ),
         item(
             "files.select-all",
-            "Select all",
+            &tr!("ui-files-cmd-select-all"),
             Command::SelectAll,
             Edit,
             "select",
         ),
         item(
             "files.invert",
-            "Invert selection",
+            &tr!("ui-files-cmd-invert-selection"),
             Command::InvertSelection,
             Edit,
             "select",
         ),
         item(
             "files.preview",
-            "Preview",
+            &tr!("ui-files-cmd-preview"),
             Command::Preview,
             View,
             "preview",
@@ -2141,30 +2167,40 @@ fn view_commands(shared: &Shared) -> Vec<crate::commands::Command> {
     commands.extend([
         Cmd::key_hint(
             "files.type-select",
-            "Select an item by its name",
-            "Type a name",
+            tr!("ui-files-cmd-select-by-name"),
+            tr!("ui-files-cmd-type-a-name"),
         )
         .group(Edit)
         .section("select"),
-        view("files.as-list", "Show as list", "Ctrl+1", ViewKind::List),
-        view("files.as-grid", "Show as grid", "Ctrl+2", ViewKind::Grid),
+        view(
+            "files.as-list",
+            &tr!("ui-files-cmd-show-as-list"),
+            "Ctrl+1",
+            ViewKind::List,
+        ),
+        view(
+            "files.as-grid",
+            &tr!("ui-files-cmd-show-as-grid"),
+            "Ctrl+2",
+            ViewKind::Grid,
+        ),
         Cmd::key_hint(
             "files.zoom",
-            "Larger, smaller, actual size",
+            tr!("ui-files-cmd-zoom"),
             "Ctrl+Plus, Ctrl+Minus, Ctrl+0",
         )
         .group(View)
         .section("zoom"),
+        Cmd::key_hint("files.sort", tr!("ui-files-cmd-sort-by"), "Ctrl+Alt+1 to 4")
+            .group(View)
+            .section("sort"),
         Cmd::key_hint(
-            "files.sort",
-            "Sort by name, size, type, date",
-            "Ctrl+Alt+1 to 4",
+            "files.sort-reverse",
+            tr!("ui-files-cmd-reverse-order"),
+            "Ctrl+Alt+R",
         )
         .group(View)
         .section("sort"),
-        Cmd::key_hint("files.sort-reverse", "Reverse the order", "Ctrl+Alt+R")
-            .group(View)
-            .section("sort"),
     ]);
     commands
 }
@@ -2276,7 +2312,7 @@ impl Component for DragChip {
         let copy = freya_winit::modifiers::live().contains(Modifiers::CONTROL);
         let drag_icon = drag.icon;
         let label = if copy {
-            format!("Copy {}", drag.label)
+            format!("{} {}", tr!("ui-files-drag-copy"), drag.label)
         } else {
             drag.label
         };

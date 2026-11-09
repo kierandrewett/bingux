@@ -32,6 +32,7 @@
 use super::display;
 use crate::format::isolate;
 use crate::layout::divider;
+use crate::prelude::tr;
 use freya::prelude::*;
 
 use super::actions::Ui;
@@ -79,77 +80,52 @@ pub(super) struct StatusInfo {
     pub free: Option<u64>,
 }
 
-/// `1204` as `1,204`.
-fn grouped(number: usize) -> String {
-    let digits = number.to_string();
-    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at) % 3 == 0 {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
-}
-
-// Counts and sizes are isolated (`format::isolate`): in a right-to-left
-// interface "3 items" and "1.2 MB" keep their order inside the sentence.
-fn item_count(count: usize) -> String {
-    isolate(format!(
-        "{} {}",
-        grouped(count),
-        if count == 1 { "item" } else { "items" }
-    ))
-}
-
-fn folder_count(count: usize) -> String {
-    isolate(format!(
-        "{} {}",
-        grouped(count),
-        if count == 1 { "folder" } else { "folders" }
-    ))
+// Yes or no, for a message's selector.
+fn yes_no(on: bool) -> &'static str {
+    if on { "yes" } else { "no" }
 }
 
 /// The text of the line while nothing else is going on.
 pub(super) fn status_text(info: &StatusInfo) -> String {
     if info.unresponsive {
-        return "Waiting for the drive to answer…".to_owned();
+        return tr!("ui-files-status-unresponsive");
     }
     // Loading and Stopped read alike: the state, then what has come in so
     // far. No count until the first rows arrive, so it never says "0 items".
     if info.stopped {
         return match info.total_listed {
-            0 => "Stopped".to_owned(),
-            count => format!("Stopped · {} so far", item_count(count)),
+            0 => tr!("ui-files-status-stopped"),
+            count => tr!("ui-files-status-stopped-so-far", count = count),
         };
     }
     if info.loading && !info.complete {
         return match info.total_listed {
-            0 => "Loading…".to_owned(),
-            count => format!("Loading · {} so far", item_count(count)),
+            0 => tr!("ui-files-status-loading"),
+            count => tr!("ui-files-status-loading-so-far", count = count),
         };
-    }
-    let mut size = String::new();
-    if info.selected_bytes > 0 {
-        size = format!(" ({})", isolate(display::size(info.selected_bytes)));
     }
     // The drive's free space follows the count, not a selection: a selection
     // has its own size to say.
-    let free = info.free.map_or_else(String::new, |free| {
-        format!(", {} free", isolate(display::size(free)))
-    });
     match () {
-        _ if info.selected > 0 => format!(
-            "{}{} of {} selected{size}{}",
-            if info.trash { "Trash · " } else { "" },
-            isolate(grouped(info.selected)),
-            isolate(grouped(info.shown)),
-            info.link
-                .as_ref()
-                .map_or_else(String::new, |target| format!(" · Link to {target}"))
+        _ if info.selected > 0 => tr!(
+            "ui-files-status-selected",
+            trash = yes_no(info.trash),
+            sized = yes_no(info.selected_bytes > 0),
+            linked = yes_no(info.link.is_some()),
+            selected = info.selected,
+            shown = info.shown,
+            size = display::size(info.selected_bytes).to_string(),
+            target = info.link.clone().unwrap_or_default(),
         ),
-        _ if info.trash => format!("Trash · {}", item_count(info.shown)),
-        _ => format!("{}{free}", item_count(info.shown)),
+        _ if info.trash => tr!("ui-files-status-trash-items", count = info.shown),
+        _ => match info.free {
+            Some(free) => tr!(
+                "ui-files-status-items-free",
+                count = info.shown,
+                free = display::size(free).to_string(),
+            ),
+            None => tr!("ui-files-status-items", count = info.shown),
+        },
     }
 }
 
@@ -201,7 +177,7 @@ impl Component for StatusBar {
             .maybe_child(cancel.map(|cancel| {
                 icon_button(Icon::WindowClose, move |_| cancel.cancel())
                     .size(Dim::DenseControl)
-                    .tooltip("Cancel")
+                    .tooltip(&tr!("ui-files-cancel"))
             }))
         } else {
             let (text, ink) = match notice {
@@ -354,7 +330,7 @@ impl Component for StatusLine {
                 .maybe_child(cancel.map(|cancel| {
                     icon_button(Icon::WindowClose, move |_| cancel.cancel())
                         .size(Dim::InlineButton)
-                        .tooltip("Cancel")
+                        .tooltip(&tr!("ui-files-cancel"))
                 }))
                 .into_element();
         }
@@ -474,15 +450,6 @@ mod tests {
         };
         assert_eq!(status_text(&stopped), "Stopped · 12,000 items so far");
         assert!(has_news(&stopped));
-    }
-
-    #[test]
-    fn thousands_are_separated() {
-        assert_eq!(grouped(0), "0");
-        assert_eq!(grouped(999), "999");
-        assert_eq!(grouped(1_000), "1,000");
-        assert_eq!(grouped(1_204), "1,204");
-        assert_eq!(grouped(1_234_567), "1,234,567");
     }
 
     #[test]

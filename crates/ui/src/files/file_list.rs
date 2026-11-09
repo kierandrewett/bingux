@@ -26,6 +26,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::SystemTime;
 
+use crate::prelude::tr;
 use bingux_files::Entry;
 use freya::prelude::*;
 
@@ -453,7 +454,7 @@ impl Component for FileRow {
                 // In the Trash the date that matters is when it was deleted.
                 match cell_text_styled(Column::Deleted, entry, now, &ctx.home, dates) {
                     text if text.is_empty() => text,
-                    text => format!("Deleted {text}"),
+                    text => tr!("ui-files-deleted-when", when = text),
                 }
             } else {
                 cell_text_styled(Column::Modified, entry, now, &ctx.home, dates)

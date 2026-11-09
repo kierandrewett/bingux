@@ -45,6 +45,7 @@ use bingux_files::ops;
 
 use super::directory::Where;
 use super::file_icon::FileIcon;
+use crate::prelude::tr;
 
 /// The scheme of the recent files, `recent:///`.
 pub const RECENT_SCHEME: &str = "recent";
@@ -74,12 +75,12 @@ impl Root {
     pub const ALL: [Root; 4] = [Root::Computer, Root::Home, Root::Recent, Root::Trash];
 
     /// The name the root goes by in a tab, the window and a history row.
-    pub const fn name(self) -> &'static str {
+    pub fn name(self) -> String {
         match self {
-            Root::Computer => "Computer",
-            Root::Home => "Home",
-            Root::Recent => "Recent",
-            Root::Trash => "Trash",
+            Root::Computer => tr!("ui-files-root-computer"),
+            Root::Home => tr!("ui-files-root-home"),
+            Root::Recent => tr!("ui-files-root-recent"),
+            Root::Trash => tr!("ui-files-root-trash"),
         }
     }
 
@@ -152,7 +153,10 @@ pub struct Roots {
 
 impl Roots {
     pub fn new(home: impl Into<PathBuf>, trash: Option<PathBuf>) -> Roots {
-        Roots { home: home.into(), trash }
+        Roots {
+            home: home.into(),
+            trash,
+        }
     }
 
     /// The roots of this session: `$HOME` and `$XDG_DATA_HOME/Trash/files`.
@@ -185,8 +189,12 @@ impl Roots {
     pub fn root_of(&self, at: &Where) -> Option<Root> {
         match at {
             Where::Recent => Some(Root::Recent),
-            Where::Folder(path) if Some(path.as_path()) == self.trash.as_deref() => Some(Root::Trash),
-            Where::Folder(path) if *path == self.home && self.home != Path::new("/") => Some(Root::Home),
+            Where::Folder(path) if Some(path.as_path()) == self.trash.as_deref() => {
+                Some(Root::Trash)
+            }
+            Where::Folder(path) if *path == self.home && self.home != Path::new("/") => {
+                Some(Root::Home)
+            }
             Where::Folder(path) if path == Path::new("/") => Some(Root::Computer),
             Where::Folder(_) => None,
         }
@@ -211,7 +219,10 @@ impl Roots {
             Where::Folder(path) => match self.below_trash(path) {
                 Some(below) => {
                     let encoded = file_uri(below);
-                    format!("{TRASH_SCHEME}:///{}", encoded.trim_start_matches("file://"))
+                    format!(
+                        "{TRASH_SCHEME}:///{}",
+                        encoded.trim_start_matches("file://")
+                    )
                 }
                 None => file_uri(path),
             },
@@ -226,7 +237,10 @@ impl Roots {
             Where::Folder(path) => match self.below_trash(path) {
                 Some(below) if below.as_os_str().is_empty() => format!("{TRASH_SCHEME}:///"),
                 Some(below) => {
-                    let names: Vec<String> = below.components().map(|part| escape_name(part.as_os_str())).collect();
+                    let names: Vec<String> = below
+                        .components()
+                        .map(|part| escape_name(part.as_os_str()))
+                        .collect();
                     format!("{TRASH_SCHEME}:///{}/", names.join("/"))
                 }
                 None if path == Path::new("/") => "/".into(),
@@ -247,7 +261,8 @@ impl Roots {
         {
             return Typed::Recent;
         }
-        if let (Some(rest), Some(trash)) = (scheme_rest(text, TRASH_SCHEME), self.trash.as_deref()) {
+        if let (Some(rest), Some(trash)) = (scheme_rest(text, TRASH_SCHEME), self.trash.as_deref())
+        {
             return Typed::Folder(inside(trash, rest));
         }
         Typed::Folder(location::resolve(text, base, &self.home))
@@ -274,7 +289,11 @@ impl Roots {
             return None;
         }
         let decoded = String::from_utf8_lossy(&percent_decode(rest)).into_owned();
-        Some(format!("{}/{}", trash.display(), decoded.trim_start_matches('/')))
+        Some(format!(
+            "{}/{}",
+            trash.display(),
+            decoded.trim_start_matches('/')
+        ))
     }
 
     /// The crumbs of `at`, outermost first. The Trash is one crumb, `Trash`,
@@ -283,21 +302,39 @@ impl Roots {
     /// computer.
     pub fn crumbs(&self, at: &Where) -> Vec<Stop> {
         let path = match at {
-            Where::Recent => return vec![Stop { label: Root::Recent.name().into(), at: Where::Recent }],
+            Where::Recent => {
+                return vec![Stop {
+                    label: Root::Recent.name().into(),
+                    at: Where::Recent,
+                }];
+            }
             Where::Folder(path) => path,
         };
         let Some((trash, below)) = self.trash.as_deref().zip(self.below_trash(path)) else {
             return location::crumbs(path, &self.home)
                 .into_iter()
-                .map(|crumb| Stop { label: crumb.label, at: Where::Folder(crumb.path) })
+                .map(|crumb| Stop {
+                    label: crumb.label,
+                    at: Where::Folder(crumb.path),
+                })
                 .collect();
         };
-        let mut stops = vec![Stop { label: Root::Trash.name().into(), at: Where::Folder(trash.to_path_buf()) }];
+        let mut stops = vec![Stop {
+            label: Root::Trash.name().into(),
+            at: Where::Folder(trash.to_path_buf()),
+        }];
         let mut walked = trash.to_path_buf();
         for (index, part) in below.components().enumerate() {
             walked.push(part.as_os_str());
-            let label = if index == 0 { item_name(&walked) } else { part.as_os_str().to_string_lossy().into_owned() };
-            stops.push(Stop { label, at: Where::Folder(walked.clone()) });
+            let label = if index == 0 {
+                item_name(&walked)
+            } else {
+                part.as_os_str().to_string_lossy().into_owned()
+            };
+            stops.push(Stop {
+                label,
+                at: Where::Folder(walked.clone()),
+            });
         }
         stops
     }
@@ -312,12 +349,14 @@ impl Roots {
         }
         match at {
             Where::Recent => Root::Recent.name().to_string(),
-            Where::Folder(path) if self.below_trash(path).is_some() => {
-                self.crumbs(at).pop().map_or_else(|| Root::Trash.name().to_string(), |stop| stop.label)
-            }
-            Where::Folder(path) => path
-                .file_name()
-                .map_or_else(|| Root::Computer.name().to_string(), |name| name.to_string_lossy().into_owned()),
+            Where::Folder(path) if self.below_trash(path).is_some() => self
+                .crumbs(at)
+                .pop()
+                .map_or_else(|| Root::Trash.name().to_string(), |stop| stop.label),
+            Where::Folder(path) => path.file_name().map_or_else(
+                || Root::Computer.name().to_string(),
+                |name| name.to_string_lossy().into_owned(),
+            ),
         }
     }
 
@@ -340,7 +379,8 @@ impl Roots {
         if self.root_of(at) == Some(Root::Trash) {
             return None;
         }
-        path.parent().map(|parent| Where::Folder(parent.to_path_buf()))
+        path.parent()
+            .map(|parent| Where::Folder(parent.to_path_buf()))
     }
 
     /// The text a person reads for `path` where a path is spelled out (a
@@ -349,9 +389,12 @@ impl Roots {
     pub fn spoken(&self, at: &Where) -> String {
         match at {
             Where::Recent => Root::Recent.name().to_string(),
-            Where::Folder(_) if self.inside_of(at).is_some() => {
-                self.crumbs(at).into_iter().map(|stop| stop.label).collect::<Vec<_>>().join(" / ")
-            }
+            Where::Folder(_) if self.inside_of(at).is_some() => self
+                .crumbs(at)
+                .into_iter()
+                .map(|stop| stop.label)
+                .collect::<Vec<_>>()
+                .join(" / "),
             Where::Folder(path) => path.display().to_string(),
         }
     }
@@ -362,7 +405,11 @@ impl Roots {
 fn item_name(in_trash: &Path) -> String {
     match ops::trash_item(in_trash) {
         Some(item) => item.original_name().to_string_lossy().into_owned(),
-        None => in_trash.file_name().unwrap_or_default().to_string_lossy().into_owned(),
+        None => in_trash
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .into_owned(),
     }
 }
 
@@ -402,12 +449,24 @@ fn escape_name(name: &OsStr) -> String {
     match std::str::from_utf8(name.as_bytes()) {
         Ok(text) => text
             .chars()
-            .map(|c| if c == '%' || c.is_control() { format!("%{:02X}", c as u32) } else { c.to_string() })
+            .map(|c| {
+                if c == '%' || c.is_control() {
+                    format!("%{:02X}", c as u32)
+                } else {
+                    c.to_string()
+                }
+            })
             .collect(),
         Err(_) => name
             .as_bytes()
             .iter()
-            .map(|&byte| if byte.is_ascii_graphic() && byte != b'%' { (byte as char).to_string() } else { format!("%{byte:02X}") })
+            .map(|&byte| {
+                if byte.is_ascii_graphic() && byte != b'%' {
+                    (byte as char).to_string()
+                } else {
+                    format!("%{byte:02X}")
+                }
+            })
             .collect(),
     }
 }
@@ -424,7 +483,10 @@ mod tests {
 
     /// The roots of a user `me` whose Trash is at the usual place.
     fn roots() -> Roots {
-        Roots::new("/home/me", Some(PathBuf::from("/home/me/.local/share/Trash/files")))
+        Roots::new(
+            "/home/me",
+            Some(PathBuf::from("/home/me/.local/share/Trash/files")),
+        )
     }
 
     const TRASH: &str = "/home/me/.local/share/Trash/files";
@@ -436,9 +498,17 @@ mod tests {
         let schemes: Vec<_> = Root::ALL.iter().map(|root| root.scheme()).collect();
         assert_eq!(schemes, ["file", "file", "recent", "trash"]);
         let named: Vec<_> = Root::ALL.iter().map(|root| root.is_virtual()).collect();
-        assert_eq!(named, [false, false, true, true], "only Recent and Trash are not paths");
+        assert_eq!(
+            named,
+            [false, false, true, true],
+            "only Recent and Trash are not paths"
+        );
         for root in [Root::Computer, Root::Home, Root::Recent] {
-            assert_eq!(root.icon(), FileIcon::for_place_kind(root.place_kind()), "{root:?}");
+            assert_eq!(
+                root.icon(),
+                FileIcon::for_place_kind(root.place_kind()),
+                "{root:?}"
+            );
         }
         // The Trash is a bin, empty or full as the sidebar last saw it.
         assert_eq!(Root::Trash.icon().glyph, FileIcon::for_trash(false).glyph);
@@ -453,8 +523,15 @@ mod tests {
         assert_eq!(roots.root_of(&folder(TRASH)), Some(Root::Trash));
         assert_eq!(roots.root_of(&Where::Recent), Some(Root::Recent));
         assert_eq!(roots.root_of(&folder("/home/me/Documents")), None);
-        assert_eq!(roots.root_of(&folder("/home/me/.local/share/Trash")), None, "the bin's own folder is no root");
-        assert_eq!(roots.inside_of(&folder(&format!("{TRASH}/old"))), Some(Root::Trash));
+        assert_eq!(
+            roots.root_of(&folder("/home/me/.local/share/Trash")),
+            None,
+            "the bin's own folder is no root"
+        );
+        assert_eq!(
+            roots.inside_of(&folder(&format!("{TRASH}/old"))),
+            Some(Root::Trash)
+        );
         assert_eq!(roots.inside_of(&folder("/home/me/old")), None);
     }
 
@@ -464,8 +541,14 @@ mod tests {
         let uris = [
             (Where::Recent, "recent:///"),
             (folder(TRASH), "trash:///"),
-            (folder(&format!("{TRASH}/Old folder")), "trash:///Old%20folder"),
-            (folder(&format!("{TRASH}/Old folder/sub#1")), "trash:///Old%20folder/sub%231"),
+            (
+                folder(&format!("{TRASH}/Old folder")),
+                "trash:///Old%20folder",
+            ),
+            (
+                folder(&format!("{TRASH}/Old folder/sub#1")),
+                "trash:///Old%20folder/sub%231",
+            ),
             (folder("/home/me/Documents"), "file:///home/me/Documents"),
             (folder("/"), "file:///"),
         ];
@@ -495,7 +578,11 @@ mod tests {
             "trash:///..",
             "trash:///../../etc",
         ] {
-            let expect = if text.ends_with("etc") { Typed::Folder(PathBuf::from(TRASH).join("etc")) } else { trash.clone() };
+            let expect = if text.ends_with("etc") {
+                Typed::Folder(PathBuf::from(TRASH).join("etc"))
+            } else {
+                trash.clone()
+            };
             assert_eq!(roots.parse(text, Path::new("/srv")), expect, "{text:?}");
         }
     }
@@ -504,8 +591,14 @@ mod tests {
     fn what_is_typed_inside_the_trash_is_inside_it() {
         let roots = roots();
         let inside = |text: &str| roots.parse(text, Path::new("/srv")).place();
-        assert_eq!(inside("trash:///Old/sub"), folder(&format!("{TRASH}/Old/sub")));
-        assert_eq!(inside("trash:///Old/./sub/"), folder(&format!("{TRASH}/Old/sub")));
+        assert_eq!(
+            inside("trash:///Old/sub"),
+            folder(&format!("{TRASH}/Old/sub"))
+        );
+        assert_eq!(
+            inside("trash:///Old/./sub/"),
+            folder(&format!("{TRASH}/Old/sub"))
+        );
         assert_eq!(inside("trash:///a%20b"), folder(&format!("{TRASH}/a b")));
         assert_eq!(inside("trash:Old"), folder(&format!("{TRASH}/Old")));
         // A bad escape stays as written, as in a file URI.
@@ -515,8 +608,18 @@ mod tests {
     #[test]
     fn recent_is_recent_in_every_spelling() {
         let roots = roots();
-        for text in ["recent:", "recent:/", "recent://", "recent:///", " Recent:/// "] {
-            assert_eq!(roots.parse(text, Path::new("/srv")), Typed::Recent, "{text:?}");
+        for text in [
+            "recent:",
+            "recent:/",
+            "recent://",
+            "recent:///",
+            " Recent:/// ",
+        ] {
+            assert_eq!(
+                roots.parse(text, Path::new("/srv")),
+                Typed::Recent,
+                "{text:?}"
+            );
         }
         // A path that only starts with the word is a path.
         assert_eq!(
@@ -530,17 +633,29 @@ mod tests {
     fn ordinary_paths_are_read_as_before() {
         let roots = roots();
         let at = |text: &str, base: &str| roots.parse(text, Path::new(base));
-        assert_eq!(at("~/Music", "/srv"), Typed::Folder(PathBuf::from("/home/me/Music")));
+        assert_eq!(
+            at("~/Music", "/srv"),
+            Typed::Folder(PathBuf::from("/home/me/Music"))
+        );
         assert_eq!(at("..", "/srv/a"), Typed::Folder(PathBuf::from("/srv")));
         assert_eq!(at("x", "/srv"), Typed::Folder(PathBuf::from("/srv/x")));
-        assert_eq!(at("file:///etc/", "/srv"), Typed::Folder(PathBuf::from("/etc")));
+        assert_eq!(
+            at("file:///etc/", "/srv"),
+            Typed::Folder(PathBuf::from("/etc"))
+        );
     }
 
     #[test]
     fn a_bare_word_is_a_root_only_when_no_folder_has_the_name() {
         let roots = roots();
-        assert_eq!(roots.by_word("Trash"), Some(Typed::Folder(PathBuf::from(TRASH))));
-        assert_eq!(roots.by_word(" trash/ "), Some(Typed::Folder(PathBuf::from(TRASH))));
+        assert_eq!(
+            roots.by_word("Trash"),
+            Some(Typed::Folder(PathBuf::from(TRASH)))
+        );
+        assert_eq!(
+            roots.by_word(" trash/ "),
+            Some(Typed::Folder(PathBuf::from(TRASH)))
+        );
         assert_eq!(roots.by_word("RECENT"), Some(Typed::Recent));
         assert_eq!(roots.by_word("trashy"), None);
         assert_eq!(roots.by_word("Documents"), None);
@@ -552,10 +667,20 @@ mod tests {
     fn the_field_says_trash_and_reads_it_back_without_changing_its_size() {
         let roots = roots();
         assert_eq!(roots.edit_text(&folder(TRASH)), "trash:///");
-        assert_eq!(roots.edit_text(&folder(&format!("{TRASH}/Old folder/sub"))), "trash:///Old folder/sub/");
-        assert_eq!(roots.edit_text(&folder("/home/me/Documents")), "/home/me/Documents/");
+        assert_eq!(
+            roots.edit_text(&folder(&format!("{TRASH}/Old folder/sub"))),
+            "trash:///Old folder/sub/"
+        );
+        assert_eq!(
+            roots.edit_text(&folder("/home/me/Documents")),
+            "/home/me/Documents/"
+        );
         assert_eq!(roots.edit_text(&folder("/")), "/");
-        for at in [folder(TRASH), folder(&format!("{TRASH}/100% a#b/c")), folder(&format!("{TRASH}/x y"))] {
+        for at in [
+            folder(TRASH),
+            folder(&format!("{TRASH}/100% a#b/c")),
+            folder(&format!("{TRASH}/x y")),
+        ] {
             let text = roots.edit_text(&at);
             assert_eq!(roots.parse(&text, Path::new("/")).place(), at, "{text}");
         }
@@ -576,9 +701,18 @@ mod tests {
     #[test]
     fn the_trash_is_one_crumb_and_what_is_in_it_follows() {
         let roots = roots();
-        let labels = |at: &Where| roots.crumbs(at).into_iter().map(|stop| stop.label).collect::<Vec<_>>();
+        let labels = |at: &Where| {
+            roots
+                .crumbs(at)
+                .into_iter()
+                .map(|stop| stop.label)
+                .collect::<Vec<_>>()
+        };
         assert_eq!(labels(&folder(TRASH)), ["Trash"]);
-        assert_eq!(labels(&folder(&format!("{TRASH}/Old/sub"))), ["Trash", "Old", "sub"]);
+        assert_eq!(
+            labels(&folder(&format!("{TRASH}/Old/sub"))),
+            ["Trash", "Old", "sub"]
+        );
         // Never the folders the bin is made of.
         let stops = roots.crumbs(&folder(&format!("{TRASH}/Old")));
         assert_eq!(stops[0].at, folder(TRASH));
@@ -586,7 +720,11 @@ mod tests {
         assert_eq!(labels(&Where::Recent), ["Recent"]);
         assert_eq!(labels(&folder("/home/me/Documents")), ["Home", "Documents"]);
         assert_eq!(roots.crumbs(&folder("/home/me"))[0].label, "Home");
-        assert_eq!(labels(&folder("/home/me/.local/share")), ["Home", ".local", "share"], "the bin's parents are plain folders");
+        assert_eq!(
+            labels(&folder("/home/me/.local/share")),
+            ["Home", ".local", "share"],
+            "the bin's parents are plain folders"
+        );
     }
 
     #[test]
@@ -599,7 +737,10 @@ mod tests {
         assert_eq!(title(folder("/")), "Computer");
         assert_eq!(title(folder("/home/me/Documents")), "Documents");
         assert_eq!(title(folder(&format!("{TRASH}/Old/sub"))), "sub");
-        assert_eq!(roots.spoken(&folder(&format!("{TRASH}/Old/sub"))), "Trash / Old / sub");
+        assert_eq!(
+            roots.spoken(&folder(&format!("{TRASH}/Old/sub"))),
+            "Trash / Old / sub"
+        );
         assert_eq!(roots.spoken(&folder(TRASH)), "Trash");
         assert_eq!(roots.spoken(&folder("/srv/x")), "/srv/x");
     }
@@ -608,8 +749,14 @@ mod tests {
     fn up_never_leaves_the_trash_for_the_bin_it_lives_in() {
         let roots = roots();
         assert_eq!(roots.parent(&folder(TRASH)), None);
-        assert_eq!(roots.parent(&folder(&format!("{TRASH}/Old"))), Some(folder(TRASH)));
-        assert_eq!(roots.parent(&folder(&format!("{TRASH}/Old/sub"))), Some(folder(&format!("{TRASH}/Old"))));
+        assert_eq!(
+            roots.parent(&folder(&format!("{TRASH}/Old"))),
+            Some(folder(TRASH))
+        );
+        assert_eq!(
+            roots.parent(&folder(&format!("{TRASH}/Old/sub"))),
+            Some(folder(&format!("{TRASH}/Old")))
+        );
         assert_eq!(roots.parent(&folder("/home/me")), Some(folder("/home")));
         assert_eq!(roots.parent(&Where::Recent), None);
     }
@@ -617,10 +764,23 @@ mod tests {
     #[test]
     fn the_trash_is_completed_from_its_own_folder() {
         let roots = roots();
-        assert_eq!(roots.completion_text("trash:///Ol"), Some(format!("{TRASH}/Ol")));
-        assert_eq!(roots.completion_text("trash:///"), Some(format!("{TRASH}/")));
-        assert_eq!(roots.completion_text("trash://"), None, "before the root's slash there is nothing to complete");
-        assert_eq!(roots.completion_text("trash:///Old/s"), Some(format!("{TRASH}/Old/s")));
+        assert_eq!(
+            roots.completion_text("trash:///Ol"),
+            Some(format!("{TRASH}/Ol"))
+        );
+        assert_eq!(
+            roots.completion_text("trash:///"),
+            Some(format!("{TRASH}/"))
+        );
+        assert_eq!(
+            roots.completion_text("trash://"),
+            None,
+            "before the root's slash there is nothing to complete"
+        );
+        assert_eq!(
+            roots.completion_text("trash:///Old/s"),
+            Some(format!("{TRASH}/Old/s"))
+        );
         assert_eq!(roots.completion_text("/home/me/Do"), None);
         assert_eq!(roots.completion_text("recent:///"), None);
     }
@@ -628,7 +788,11 @@ mod tests {
     /// A bin on a drive (`.Trash-1000`), so the names come from real info
     /// files without touching the environment.
     fn bin_with(items: &[(&str, &str)]) -> (PathBuf, Roots) {
-        let top = std::env::temp_dir().join(format!("named-roots-{}-{}", std::process::id(), items.len()));
+        let top = std::env::temp_dir().join(format!(
+            "named-roots-{}-{}",
+            std::process::id(),
+            items.len()
+        ));
         let _ = fs::remove_dir_all(&top);
         let bin = top.join(".Trash-1000");
         fs::create_dir_all(bin.join("files")).unwrap();
@@ -652,11 +816,22 @@ mod tests {
         let trash = roots.trash_folder().unwrap().to_path_buf();
         let second = Where::Folder(trash.join("Photos.2"));
         assert_eq!(roots.title(&second), "Photos");
-        let labels: Vec<_> = roots.crumbs(&Where::Folder(trash.join("Photos.2").join("raw"))).into_iter().map(|stop| stop.label).collect();
-        assert_eq!(labels, ["Trash", "Photos", "raw"], "the first name is the original one, the deeper names are as they are");
+        let labels: Vec<_> = roots
+            .crumbs(&Where::Folder(trash.join("Photos.2").join("raw")))
+            .into_iter()
+            .map(|stop| stop.label)
+            .collect();
+        assert_eq!(
+            labels,
+            ["Trash", "Photos", "raw"],
+            "the first name is the original one, the deeper names are as they are"
+        );
         // The address stays exact: it names the item in the bin.
         assert_eq!(roots.uri(&second), "trash:///Photos.2");
-        assert_eq!(roots.parse("trash:///Photos.2", Path::new("/")).place(), second);
+        assert_eq!(
+            roots.parse("trash:///Photos.2", Path::new("/")).place(),
+            second
+        );
         fs::remove_dir_all(top).unwrap();
     }
 }
