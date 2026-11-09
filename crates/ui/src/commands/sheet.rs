@@ -13,6 +13,7 @@ use freya::prelude::*;
 
 use super::fuzzy::fuzzy;
 use super::{CommandGroup, Commands, Resolved, Shortcut};
+use crate::a11y::SemanticsExt;
 use crate::component::ComponentName;
 use crate::controls::{icon_button, search_field};
 use crate::group::{Group, caption};
@@ -183,10 +184,32 @@ impl Component for ShortcutsSheet {
                                     .into_element(),
                                 (None, None) => rect().into_element(),
                             };
-                            row(line.title.clone())
-                                .title_marks(line.marks.clone())
-                                .trailing(keys)
-                                .trailing_fit()
+                            // A line is one list item, named by the command's
+                            // title, its keys its keyboard shortcut and its
+                            // description ("Command palette", then
+                            // "Ctrl+Shift+P"), never part of the name. The key
+                            // caps are hidden, as the item says them.
+                            let spoken: Vec<String> = line
+                                .shortcuts
+                                .iter()
+                                .map(Shortcut::label)
+                                .chain(line.keys_text.clone())
+                                .collect();
+                            let mut semantics = crate::a11y::Semantics::new()
+                                .role(AccessibilityRole::ListItem)
+                                .hint(spoken.join(" or "));
+                            if let Some(first) = line.shortcuts.first() {
+                                semantics = semantics.shortcut(first.label());
+                            }
+                            rect()
+                                .width(Size::fill())
+                                .semantics(semantics)
+                                .child(
+                                    row(line.title.clone())
+                                        .title_marks(line.marks.clone())
+                                        .trailing(rect().a11y_hidden().child(keys))
+                                        .trailing_fit(),
+                                )
                                 .into_element()
                         }))
                         .into_element()

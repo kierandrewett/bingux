@@ -3284,6 +3284,14 @@ selected and the reached one the active descendant. Sliders, steppers and
 faders take the arrows, Page Up and Page Down, Home and End; a pane divider
 (`Splitter`) takes the arrows and Home and End, and says its position as a
 value. Dialogs trap the focus and give it back (Keyboard focus, above).
+The command palette's field keeps the focus and names the highlighted result
+as its active descendant (`SearchField::semantics` with `Semantics::controls`
+and `active_descendant`, for any field over a list of results); each result is
+named by its title with its shortcut as its keyboard shortcut and its group as
+its description, and how many match is read out once typing pauses. In the
+shortcuts sheet each line is one list item named by the command, its keys its
+shortcut and description. Undo and Redo from the keyboard or a menu say what
+they did ("Undid rename").
 
 **Notices stay.** A toast does not go while the pointer is over it, a finger
 is on it or one of its buttons has the focus, and while a screen reader runs it

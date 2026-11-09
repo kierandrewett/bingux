@@ -151,6 +151,9 @@ fn offset_for(index: usize, current: i32, row: f32, viewport: f32) -> i32 {
     -(want.max(0.0) as i32)
 }
 
+/// How long typing must pause before the number of matches is read out.
+const ANNOUNCE_PAUSE: std::time::Duration = std::time::Duration::from_millis(700);
+
 /// The palette's content: the field and the rows.
 #[derive(PartialEq)]
 pub struct CommandPalette {
@@ -172,6 +175,45 @@ impl Component for CommandPalette {
         let rows = picks(&commands.resolved(), &commands.recent(), &query.read());
         let count = rows.len();
         let at = (*highlight.read()).min(count.saturating_sub(1));
+        // The field keeps the focus while the arrows move: it names the
+        // highlighted row as its active descendant and the list as what it
+        // controls (WAI-ARIA combobox), so a screen reader reads each row the
+        // arrows reach. Each command keeps one id while the palette is open.
+        let list_id = use_hook(AccessibilityId::new_unique);
+        let row_ids = use_hook(|| {
+            std::rc::Rc::new(std::cell::RefCell::new(
+                std::collections::HashMap::<String, AccessibilityId>::new(),
+            ))
+        });
+        let ids: Vec<AccessibilityId> = rows
+            .iter()
+            .map(|row| {
+                *row_ids
+                    .borrow_mut()
+                    .entry(row.command.id.clone())
+                    .or_insert_with(AccessibilityId::new_unique)
+            })
+            .collect();
+        let active = ids.get(at).copied();
+        // How many commands match, read out once typing pauses, not per key.
+        let announcer = crate::a11y::use_announcer();
+        let typed = query.read().trim().to_string();
+        use_side_effect_with_deps(&(typed.clone(), count), move |(typed, count)| {
+            if typed.is_empty() {
+                return;
+            }
+            let (typed, count) = (typed.clone(), *count);
+            spawn(async move {
+                timer(ANNOUNCE_PAUSE).await;
+                if query.peek().trim() == typed {
+                    announcer.announce(match count {
+                        0 => "No commands match".to_string(),
+                        1 => "1 command matches".to_string(),
+                        count => format!("{count} commands match"),
+                    });
+                }
+            });
+        });
         let row_height = Dim::MenuItem.px();
 
         let chosen = self.chosen.clone();
@@ -212,6 +254,12 @@ impl Component for CommandPalette {
         .autofocus()
         .on_submit(submit)
         .on_arrow(step)
+        .semantics(
+            crate::a11y::Semantics::new()
+                .label("Search commands")
+                .controls(list_id)
+                .active_descendant(active),
+        )
         .on_escape(move |_| overlays.dismiss_dialog());
 
         let list: Element = if rows.is_empty() {
@@ -224,18 +272,24 @@ impl Component for CommandPalette {
                 .into_element()
         } else {
             ScrollView::new_controlled(scroll)
-                .child(rect().tw(&tokens, &[flex_col(), w_full(), p(S2)]).children(
-                    rows.iter().enumerate().map(|(index, row)| {
+                .child(
+                    rect()
+                        .a11y_id(list_id)
+                        .a11y_role(AccessibilityRole::ListBox)
+                        .a11y_alt("Commands")
+                        .tw(&tokens, &[flex_col(), w_full(), p(S2)])
+                        .children(rows.iter().enumerate().map(|(index, row)| {
                         let choose = choose.clone();
                         PaletteRow {
+                            id: ids[index],
                             pick: row.clone(),
                             highlighted: index == at,
                             on_hover: EventHandler::new(move |_: ()| highlight.set(index)),
                             on_press: EventHandler::new(move |_: ()| choose(index)),
                         }
                         .into_element()
-                    }),
-                ))
+                    })),
+                )
                 .into_element()
         };
 
@@ -260,6 +314,9 @@ impl Component for CommandPalette {
 /// One command in the palette.
 #[derive(PartialEq)]
 struct PaletteRow {
+    /// The row's accessibility id, the field's active descendant while it is
+    /// highlighted.
+    id: AccessibilityId,
     pick: Pick,
     highlighted: bool,
     on_hover: EventHandler<()>,
@@ -311,11 +368,25 @@ impl Component for PaletteRow {
         }
         rect()
             .component("PaletteRow")
+            .a11y_id(self.id)
             .a11y_role(AccessibilityRole::ListBoxOption)
             .a11y_alt(command.title.clone())
             .a11y_builder({
                 let selected = self.highlighted;
-                move |node| node.set_selected(selected)
+                // Named by its title; the shortcut is its keyboard shortcut and
+                // the group its description, never part of the name.
+                let keys = self.pick.shortcut.as_ref().map(|shortcut| shortcut.label());
+                let group = (command.group != super::CommandGroup::App)
+                    .then(|| command.group.title().to_string());
+                move |node| {
+                    node.set_selected(selected);
+                    if let Some(keys) = keys {
+                        node.set_keyboard_shortcut(keys);
+                    }
+                    if let Some(group) = group {
+                        node.set_description(group);
+                    }
+                }
             })
             .tw(&tokens, crate::style::MENU_ITEM)
             .tw(

@@ -337,8 +337,9 @@ impl TextField {
     }
 
     /// The field's name and hint for assistive technology, for a field outside
-    /// a row or form line (which name it from their title). The label, hint
-    /// and invalid parts are read; the text is always the field's value.
+    /// a row or form line (which name it from their title). The label, hint,
+    /// invalid, controls and active descendant parts are read; the text is
+    /// always the field's value.
     pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
         self.semantics = Some(semantics);
         self
@@ -637,6 +638,13 @@ impl Component for TextField {
                 input.a11y_description(a11y_hint.unwrap_or_default())
             })
             .a11y_invalid(a11y_invalid)
+            .a11y_active_descendant(
+                self.semantics.as_ref().and_then(|semantics| semantics.active_descendant),
+                self.semantics
+                    .as_ref()
+                    .map(|semantics| semantics.controls.clone())
+                    .unwrap_or_default(),
+            )
             .on_submit(move |text: String| on_submit.call(text))
             .auto_focus(self.autofocus)
             .on_pre_key_down(move |event: Event<KeyboardEventData>| {

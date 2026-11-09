@@ -180,3 +180,58 @@ fn the_palette_and_the_sheet_open_on_their_keys_and_hold_the_keyboard() {
     chord(&mut shot, "/", Modifiers::CONTROL);
     assert!(has_class(&mut shot, "ShortcutsSheet"), "Ctrl+/ too");
 }
+
+// What a screen reader is told: the palette's field names the row the arrows
+// reach, each row carries its shortcut and is named by its title alone, and
+// Ctrl+Z says what it undid.
+
+fn nodes_where<T>(
+    shot: &mut Snapshot,
+    pick: impl Fn(&accesskit::Node, Option<accesskit::NodeId>) -> Option<T>,
+) -> Vec<T> {
+    shot.runner().find_many(|_, element| {
+        let data = element.accessibility();
+        pick(&data.builder, data.a11y_id)
+    })
+}
+
+#[test]
+fn the_palette_field_names_the_highlighted_row_and_rows_carry_their_shortcut() {
+    let mut shot = window();
+    chord(&mut shot, "P", Modifiers::CONTROL | Modifiers::SHIFT);
+    shot.key(Key::Named(NamedKey::ArrowDown));
+    shot.settle(Duration::from_millis(200));
+    let active: Vec<Option<accesskit::NodeId>> = nodes_where(&mut shot, |node, _| {
+        (node.role() == accesskit::Role::SearchInput).then(|| node.active_descendant())
+    });
+    assert_eq!(active.len(), 1, "one palette field: {active:?}");
+    let active = active[0].expect("the field names the highlighted row");
+    let rows: Vec<(Option<accesskit::NodeId>, Option<String>, Option<String>)> =
+        nodes_where(&mut shot, |node, id| {
+            (node.role() == accesskit::Role::ListBoxOption).then(|| {
+                (
+                    id,
+                    node.label().map(str::to_owned),
+                    node.keyboard_shortcut().map(str::to_owned),
+                )
+            })
+        });
+    assert!(rows.iter().any(|(id, ..)| *id == Some(active)), "{rows:?}");
+    let save = rows
+        .iter()
+        .find(|(_, label, _)| label.as_deref() == Some("Save"))
+        .expect("a Save row");
+    assert_eq!(save.2.as_deref(), Some("Ctrl+S"), "the shortcut is not part of the name");
+}
+
+#[test]
+fn undo_from_the_keyboard_says_what_it_undid() {
+    let mut shot = window();
+    chord(&mut shot, "z", Modifiers::CONTROL);
+    assert_eq!(take_log(), ["undo rename"]);
+    let said: Vec<String> = nodes_where(&mut shot, |node, _| {
+        (node.role() == accesskit::Role::Status && node.live() == Some(accesskit::Live::Polite))
+            .then(|| node.label().unwrap_or_default().to_owned())
+    });
+    assert!(said.iter().any(|text| text == "Undid rename"), "{said:?}");
+}

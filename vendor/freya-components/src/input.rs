@@ -164,6 +164,8 @@ pub struct Input {
     a11y_label: Option<Cow<'static, str>>,
     a11y_description: Option<Cow<'static, str>>,
     a11y_invalid: bool,
+    a11y_active_descendant: Option<AccessibilityId>,
+    a11y_controls: Vec<AccessibilityId>,
     leading: Option<Element>,
     role: Option<AccessibilityRole>,
     hover_background: Option<Color>,
@@ -321,6 +323,8 @@ impl Input {
             a11y_label: None,
             a11y_description: None,
             a11y_invalid: false,
+            a11y_active_descendant: None,
+            a11y_controls: Vec::new(),
             leading: None,
             role: None,
             hover_background: None,
@@ -498,6 +502,18 @@ impl Input {
     /// Bingux patch: the help line under the field, read after its name.
     pub fn a11y_description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
         self.a11y_description = Some(description.into());
+        self
+    }
+
+    /// Bingux patch: the result the arrows have reached in a list this field
+    /// drives while it keeps the focus (WAI-ARIA combobox), and that list.
+    pub fn a11y_active_descendant(
+        mut self,
+        active: Option<AccessibilityId>,
+        controls: Vec<AccessibilityId>,
+    ) -> Self {
+        self.a11y_active_descendant = active;
+        self.a11y_controls = controls;
         self
     }
 
@@ -1153,6 +1169,8 @@ impl Component for Input {
         let a11y_description = self.a11y_description.clone();
         let a11y_invalid = self.a11y_invalid;
         let a11y_read_only = self.read_only;
+        let a11y_active = self.a11y_active_descendant;
+        let a11y_controls = self.a11y_controls.clone();
 
         let a11_role = match (self.role, self.mode) {
             (Some(role), _) => role,
@@ -1184,6 +1202,12 @@ impl Component for Input {
                 }
                 if a11y_read_only {
                     node.set_read_only();
+                }
+                if let Some(active) = a11y_active {
+                    node.set_active_descendant(active);
+                }
+                for id in a11y_controls {
+                    node.push_controlled(id);
                 }
             })
             .maybe(self.enabled, |el| {

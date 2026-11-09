@@ -388,8 +388,10 @@ impl UndoStack {
 
     /// The Edit menu's Undo and Redo, as they are now, for a window whose
     /// components use the stack. Read when the router or a menu asks, so the
-    /// titles are never stale.
-    pub(crate) fn commands(self) -> Vec<Command> {
+    /// titles are never stale. Each says what it did through `announcer`
+    /// ("Undid rename"): the change may be nowhere near the focus, so without
+    /// it a screen reader hears nothing.
+    pub(crate) fn commands(self, announcer: crate::a11y::Announcer) -> Vec<Command> {
         let Some(history) = self.history.try_peek() else {
             return Vec::new();
         };
@@ -401,7 +403,9 @@ impl UndoStack {
         drop(history);
         vec![
             Command::new("edit.undo", titled("Undo", undo_name.clone()), move |_| {
-                self.undo();
+                if let Some(name) = self.undo() {
+                    announcer.announce(titled("Undid", Some(name)));
+                }
             })
             .shortcut("Ctrl+Z")
             .enabled(undo_name.is_some())
@@ -409,7 +413,9 @@ impl UndoStack {
             .section("history")
             .hidden_from_palette_if(undo_name.is_none()),
             Command::new("edit.redo", titled("Redo", redo_name.clone()), move |_| {
-                self.redo();
+                if let Some(name) = self.redo() {
+                    announcer.announce(titled("Redid", Some(name)));
+                }
             })
             .shortcut("Ctrl+Shift+Z")
             .shortcut("Ctrl+Y")

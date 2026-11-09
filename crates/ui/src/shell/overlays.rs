@@ -362,7 +362,7 @@ impl Component for OverlayHost {
         // app's own). A host inside another leaves routing to the outer one.
         let commands = crate::commands::provide_commands();
         let undo = crate::undo::provide_undo();
-        let router = crate::commands::use_router(commands, overlays, undo);
+        let router = crate::commands::use_router(commands, overlays, undo, announcer);
         crate::commands::attach_router(rect().expanded(), commands, overlays, router)
             .child(crate::window::WindowHost::new(self.child.clone()))
             .child(OverlayLayers {

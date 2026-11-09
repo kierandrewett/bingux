@@ -77,6 +77,7 @@ pub struct Semantics {
     pub described_by: Vec<AccessibilityId>,
     pub error_message: Option<AccessibilityId>,
     pub controls: Vec<AccessibilityId>,
+    pub active_descendant: Option<AccessibilityId>,
     pub position: Option<(usize, usize)>,
 }
 
@@ -206,6 +207,14 @@ impl Semantics {
         self
     }
 
+    /// The item inside a composite control (a list, a menu, a grid) that the
+    /// arrows have reached while the focus stays on this element: a search
+    /// field over its results, a combo box over its options (WAI-ARIA).
+    pub fn active_descendant(mut self, id: Option<AccessibilityId>) -> Self {
+        self.active_descendant = id;
+        self
+    }
+
     /// The element is item `index` (from 0) of `count` in its list.
     pub fn position(mut self, index: usize, count: usize) -> Self {
         self.position = Some((index, count));
@@ -274,6 +283,9 @@ impl Semantics {
         }
         for id in &self.controls {
             node.push_controlled(*id);
+        }
+        if let Some(id) = self.active_descendant {
+            node.set_active_descendant(id);
         }
         if let Some((index, count)) = self.position {
             node.set_position_in_set(index + 1);

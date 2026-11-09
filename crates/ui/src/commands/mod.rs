@@ -906,6 +906,7 @@ pub(crate) fn use_router(
     commands: Commands,
     overlays: Overlays,
     undo: crate::undo::UndoStack,
+    announcer: crate::a11y::Announcer,
 ) -> u64 {
     let id = use_hook(move || {
         commands
@@ -916,7 +917,7 @@ pub(crate) fn use_router(
                     id,
                     overlays,
                     extras: Rc::new(move || {
-                        let mut extras = undo.commands();
+                        let mut extras = undo.commands(announcer);
                         extras.extend(standard(commands));
                         extras
                     }),
