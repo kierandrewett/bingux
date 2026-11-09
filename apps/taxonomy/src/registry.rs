@@ -1664,7 +1664,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Payloads and the clipboard",
         category: Category::Data,
         page: "Drag and drop",
-        api: "Payload::new().text(t).html(h).uris(list).image(mime, bytes).bytes(mime, bytes).lazy(mime, || bytes).local(value); Payload::files(paths); Payload::copied_files(paths, cut); Received::{mime, format, bytes, text, uris, files, is_cut, image, local::<T>, is_local}; Format::{Uris, Text, Html, Image, Mime(m)}.best_mime(offered); Clipboard::general() / primary() .write(payload) .write_text(t) .read(Format) -> Result<Received, ClipboardError> .read_async(Format) .read_text() .formats() .has(&Format) .mime_types() .clear(); file_uri(path), file_path(uri), uri_list(uris); URI_LIST, GNOME_COPIED_FILES, KDE_CUT_SELECTION, TEXT_TYPES, READ_TIMEOUT",
+        api: "Payload::new().text(t).html(h).uris(list).image(mime, bytes).bytes(mime, bytes).lazy(mime, || bytes).local(value); Payload::files(paths); Payload::copied_files(paths, cut); Received::{mime, format, bytes, text, uris, files, is_cut, image, local::<T>, is_local}; Format::{Uris, Text, Html, Image, Mime(m)}.best_mime(offered); Clipboard::general() / primary() .write(payload) .write_text(t) .read(Format) -> Result<Received, ClipboardError> .read_async(Format) .read_text() .formats() .has(&Format) .mime_types() .clear(); uri_list(uris); URI_LIST, GNOME_COPIED_FILES, KDE_CUT_SELECTION, TEXT_TYPES, READ_TIMEOUT",
         doc: "the-clipboard",
         covers: &[
             "Payload",
