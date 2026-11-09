@@ -627,6 +627,13 @@ impl Component for Row {
         // its own), else the width the last row of this window had, else the
         // window's own. A value is never cut.
         let hint = use_try_consume::<RowWidthHint>().map(|hint| (hint.0)());
+        // The title and the subtitle share one column, as wide as the wider of
+        // them asks: measured on the title alone, a subtitle longer than its
+        // title was wrapped at the title's width, a word to a line.
+        let text_facts = match &self.subtitle {
+            Some(subtitle) => LabelFacts::measure(&self.title, BODY).wider(LabelFacts::measure(subtitle, CAPTION)),
+            None => LabelFacts::measure(&self.title, BODY),
+        };
         let value_line = self.value.as_ref().map(|value| {
             let face = if face_size().0 > 0.0 {
                 face_size().0
@@ -647,7 +654,7 @@ impl Component for Row {
             choose_value_line(
                 (inner_of(face) - beyond).max(0.0),
                 S3.px() + S1.px(),
-                LabelFacts::measure(&self.title, BODY),
+                text_facts,
                 ValueFacts::measure(&value.text, value.style(), value.breaks_anywhere()),
                 is_compact(),
             )
