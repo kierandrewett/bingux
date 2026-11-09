@@ -1176,8 +1176,8 @@ impl Component for ChooserBody {
 
         if browse.is_some() {
             // A window: the places run the window's full height on the
-            // sidebar surface, with a band of the header's height above them
-            // that drags the window, and the content pane beside them has
+            // sidebar surface, the first place on the header bar's row (no
+            // empty band above it), and the content pane beside them has
             // the header bar, the tab bar and the files, as in Settings.
             let pane = rect()
                 .tw(
@@ -1213,16 +1213,7 @@ impl Component for ChooserBody {
                 .maybe_child(sidebar.map(|sidebar| {
                     rect()
                         .tw(&tokens, &[flex_row(), h_full(), w(Dim::PlacesColumn)])
-                        .child(
-                            rect()
-                                .tw(&tokens, &[flex_col(), w_flex(), h_full()])
-                                .child(
-                                    HeaderBar::new(String::new())
-                                        .fill(Paint::Sidebar)
-                                        .title_slot(rect()),
-                                )
-                                .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(sidebar)),
-                        )
+                        .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(sidebar))
                         .child(rect().tw(&tokens, SPLIT_HAIRLINE))
                 }))
                 .child(pane)
@@ -1775,14 +1766,10 @@ fn browser_header(
     let address = rect()
         .tw(
             tokens,
-            &[
-                flex_row(),
-                grow_children(),
-                items(Align::Center),
-                w_full(),
-                px(S1),
-            ],
+            &[flex_row(), grow_children(), items(Align::Center), w_full()],
         )
+        // A phone's title needs every pixel for the folder's name.
+        .maybe(!compact, |row| row.tw(tokens, &[px(S1)]))
         .child(rect().tw(tokens, &[w_flex()]).child(parts.path_bar));
     if compact {
         let mut items = parts.view_items;

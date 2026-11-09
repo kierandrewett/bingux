@@ -189,7 +189,10 @@ impl Component for Crumbs {
                         }
                         .into(),
                     );
-                    if let Some(path) = &stop.path {
+                    // A chevron between two crumbs opens the folder's other
+                    // subfolders. After the last crumb it would list what the
+                    // file view already shows, and read as a dangling "›".
+                    if let Some(path) = stop.path.as_ref().filter(|_| !current) {
                         row.push(
                             Chevron {
                                 path: path.clone(),
@@ -910,24 +913,17 @@ impl Component for CompactTrail {
         // are the typed-path field's, so the field replaces it in place.
         let face = Interaction::use_interaction();
         let title = self.title;
-        // As a title the name takes its own width, up to what the bar has
-        // after the chevron and the insets, so the chevron follows the name.
-        let bar_width = area.read().width();
-        let room = if bar_width > 0.0 {
-            (bar_width - IconSize::Row.px() - S1.px() - S2.px() - S3.px()).max(0.0)
-        } else {
-            f32::MAX
-        };
-        // A couple of pixels over the measured run, as a label lays its last
-        // glyph's side bearing out too and would cut the name short.
-        let name_width = (measure_text(&name, EMPHASIS).ceil() + S1.px()).min(room);
+        // As a title, the name takes all the room the bar has between its
+        // inset and the chevron (the layout measures the run, so nothing here
+        // guesses a width) and is cut with an ellipsis only when the bar is
+        // narrower than the name. No icon and no pencil take room from it.
         let name_label = if title {
             EMPHASIS
                 .in_ink(Ink::Text)
                 .label(&tokens, name.clone())
                 .max_lines(1)
                 .text_overflow(TextOverflow::Ellipsis)
-                .width(Size::px(name_width))
+                .width(Size::flex(1.0))
         } else {
             BODY.in_ink(Ink::Text)
                 .label(&tokens, name.clone())
@@ -948,7 +944,7 @@ impl Component for CompactTrail {
                         gap(S1),
                         w_full(),
                         h_full(),
-                        pr(S3),
+                        pr(if title { S1 } else { S3 }),
                         rounded(Radius::Control),
                         surface(
                             if title {
@@ -962,7 +958,7 @@ impl Component for CompactTrail {
                         ),
                     ],
                 ))
-                .maybe(title, |row| row.tw(&tokens, &[pl(S2)]))
+                .maybe(title, |row| row.tw(&tokens, &[pl(S1)]))
                 .maybe_child((!title).then(|| {
                     rect()
                         .tw(&tokens, &[w(Dim::Control), h_full(), center()])
@@ -978,8 +974,7 @@ impl Component for CompactTrail {
                     Icon::PanDown,
                     IconSize::Row,
                     Ink::Muted.color(&tokens),
-                ))
-                .maybe_child(title.then(|| rect().tw(&tokens, &[w_flex()]))),
+                )),
             );
         let trail = crate::controls::focus_stop(
             content,

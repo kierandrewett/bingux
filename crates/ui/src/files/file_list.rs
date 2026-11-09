@@ -374,9 +374,12 @@ impl Component for FileRow {
             return rect().into_element();
         };
         let row = self.row;
-        if !entry.sized {
-            ctx.wants.want(&self.rows.listing, &[self.rows.order[row]]);
-        }
+        // Every row on screen asks, not only one with no size yet: a row from
+        // the on-disk cache carries the size it had, and a file rewritten in
+        // place does not change its folder's stamp, so only a stat of the
+        // file tells. The loader stats each entry once (it skips the ones a
+        // read has verified) and the request is sent once per revision.
+        ctx.wants.want(&self.rows.listing, &[self.rows.order[row]]);
         let selected = ctx.env.selection.read().contains(&entry.path);
         let renaming = ctx
             .env

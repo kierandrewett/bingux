@@ -43,20 +43,20 @@ their own sort and icon size, and the cached listing of their parent keeps both.
 
 ```text
 +-----------+-------------------------------------------------------------+
-|           | <  >  [ Home > Documents >        ]   Q  +folder  ▦ v  ≡ _ □ x |  header bar
+|           | <  >  [ Home > Documents          ]   Q  +folder  ▦ v  ≡ _ □ x |  header bar
 | Recent    | [ Documents                 ][ Downloads                 ]   |  tabs (two or more)
 | Home      |  Name               Size     Modified                       |
 | Documents |  Notes                       27 Oct                         |  file view
 | Trash     |  Budget.xlsx        88 kB    15 Oct                         |
 | Drives    |                                                             |
-| fsociety  |              2 items, 96 GB free                            |  status bar
+| Computer  |              2 items, 96 GB free                            |  status bar
 +-----------+-------------------------------------------------------------+
 ```
 
 The window is laid out as Settings is: the **sidebar** runs the window's full
-height on the sidebar's own colour, with a band at the top that drags the
-window, and the content pane beside it has the header bar, the tab bar and the
-files on the page colour.
+height on the sidebar's own colour, its first place on the header bar's row,
+and the content pane beside it has the header bar, the tab bar and the files
+on the page colour.
 
 - The **header bar** is the toolbar, grouped by what a person reaches for:
   Back and Forward at the start (hold or right-click either for its history),
@@ -651,8 +651,8 @@ its winit version have no drag-and-drop source or target on Wayland.
 
 ## Drives
 
-The sidebar's **Drives** section starts with the computer itself (its name,
-the whole file system and its free space), then the drives a person uses,
+The sidebar's **Drives** section starts with **Computer** (the whole file
+system and its free space), then the drives a person uses,
 each with a usage bar, then each USB stick, card and disc that is plugged in
 and not mounted yet, marked "Not mounted". Open one to mount it (through
 `udisksctl`, with your own rights) and enter it. A drive's menu has

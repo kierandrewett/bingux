@@ -253,9 +253,9 @@ impl Component for Tile {
             return rect().into_element();
         };
         let row = self.row;
-        if !entry.sized {
-            ctx.wants.want(&self.rows.listing, &[self.rows.order[row]]);
-        }
+        // Every tile on screen asks: see the list's row (a cached size may be
+        // stale; the loader stats each entry once).
+        ctx.wants.want(&self.rows.listing, &[self.rows.order[row]]);
         let metrics = self.metrics;
         let selected = ctx.env.selection.read().contains(&entry.path);
         let renaming = ctx
