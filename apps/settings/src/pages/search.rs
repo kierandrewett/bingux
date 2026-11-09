@@ -314,7 +314,10 @@ fn parse_dump(text: &str) -> Result<Model, CommandError> {
     let root = Json::parse(text)
         .map_err(|_| CommandError("The search settings could not be read.".into()))?;
     if let Some(message) = root.get("error").and_then(Json::as_str) {
-        return Err(CommandError(message.to_string()));
+        eprintln!("[search] settings dump reported: {message}");
+        return Err(CommandError(
+            "The search settings could not be read. Try again.".into(),
+        ));
     }
     let data = root.get("data").ok_or_else(|| missing("data"))?;
     let search = data.get("search").ok_or_else(|| missing("search"))?;
@@ -635,9 +638,15 @@ impl Component for SearchPage {
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
+                eprintln!("[search] could not load: {}", e.0);
                 return page_column()
                     .child(PageHead::new())
-                    .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
+                    .child(
+                        status(Status::Error(
+                            "Could not read the search settings. Try again.".into(),
+                        ))
+                        .action("Try again", move |_| reload(ctx)),
+                    )
                     .into_element();
             }
         };
@@ -1070,7 +1079,7 @@ fn confirm_remove_folder(ctx: Ctx, folder: String, remaining: Vec<String>) {
         )
         .cancel("Cancel")
         .default_action(CANCEL_ID)
-        .response("Remove", ResponseKind::Destructive, move |_| {
+        .response("Stop searching", ResponseKind::Destructive, move |_| {
             let args = if remaining.is_empty() {
                 vec!["unset".into(), "search.file_roots".into()]
             } else {
@@ -1113,7 +1122,8 @@ impl Component for FileRootAdd {
                             if searchable {
                                 add_folder(ctx, &roots, path);
                             } else {
-                                ctx.overlays.toast("That folder cannot be searched.");
+                                ctx.overlays
+                                    .toast("That folder can't be searched. Choose another.");
                             }
                         },
                     );
