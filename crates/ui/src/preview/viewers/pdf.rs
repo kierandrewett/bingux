@@ -464,7 +464,7 @@ impl Component for Reading {
         if matches!(now.load, Load::Ready) && !visible.is_empty() && vw > 1.0 && vh > 1.0 {
             let mut state = caches.borrow_mut();
             let mut wanted: Vec<(usize, u32)> = visible.clone().map(|page| (page, key)).collect();
-            if *sidebar.read() && !compact {
+            if *sidebar.read() {
                 let thumbs = thumb_layout(sizes);
                 let shown = thumbs.visible(-(<(i32, i32)>::from(side_scroll).1 as f32), side_viewport.read().1);
                 let thumb_key = THUMB_KEY | ((THUMB_WIDTH * display as f32).round() as u32);
@@ -923,7 +923,7 @@ impl Component for Reading {
         // ui-lint: allow(the page gap is the document layout's measured geometry)
         let pages_view = ScrollView::new_controlled(scroll).width(Size::fill()).height(Size::fill()).spacing(GAP).child(column);
 
-        let thumbs = (*sidebar.read() && !compact && matches!(now.load, Load::Ready)).then(|| {
+        let thumbs = (*sidebar.read() && matches!(now.load, Load::Ready)).then(|| {
             let thumbs = thumb_layout(sizes);
             let shown = thumbs.visible(-(<(i32, i32)>::from(side_scroll).1 as f32), side_viewport.read().1);
             let thumb_key = THUMB_KEY | ((THUMB_WIDTH * display as f32).round() as u32);
@@ -1006,8 +1006,9 @@ impl Component for Reading {
             let width = if tab == SideTab::Outline { OUTLINE_WIDTH } else { SIDEBAR_WIDTH };
             Element::from(
                 rect()
-                    .width(Size::px(width))
+                    .width(if compact { Size::fill() } else { Size::px(width) })
                     .height(Size::fill())
+                    .maybe(compact, |sheet| sheet.position(Position::new_absolute().left(0.0).top(0.0)))
                     .tw(&tokens, &[bg(Paint::Sidebar), flex_row()])
                     .on_sized(move |event: Event<SizedEventData>| {
                         let mut side_viewport = side_viewport;
@@ -1017,7 +1018,8 @@ impl Component for Reading {
                     .child(rect().tw(&tokens, &[w(Dim::Hairline), h_full(), bg(Paint::Separator)])),
             )
         });
-
+        // A phone has no room for a docked column: the pages sheet floats over the stage.
+        let (docked, sheet) = if compact { (None, thumbs) } else { (thumbs, None) };
         let body: Element = match &now.load {
             Load::Failed { code, message } => {
                 let retry = matches!(code, ErrorCode::Internal | ErrorCode::NotFound).then(|| self.on_retry.clone());
@@ -1033,7 +1035,7 @@ impl Component for Reading {
                 .into(),
             Load::Ready => rect()
                 .tw(&tokens, &[w_full(), h_full(), flex_row(), grow_children(), bg(Paint::Recess)])
-                .maybe_child(thumbs)
+                .maybe_child(docked)
                 .child(
                     rect()
                         .width(Size::flex(1.0))
@@ -1053,7 +1055,7 @@ impl Component for Reading {
             .on_global_key_down(on_key)
             .maybe_child(matches!(now.load, Load::Ready).then(|| Element::from(toolbar)))
             .maybe_child(find_bar)
-            .child(rect().width(Size::fill()).height(Size::flex(1.0)).child(body))
+            .child(rect().width(Size::fill()).height(Size::flex(1.0)).child(body).maybe_child(sheet))
     }
 }
 
