@@ -195,6 +195,13 @@ pub trait DocumentContent: Any {
     /// Show what [`prepare`](Self::prepare)'s function made. Like
     /// [`load`](Self::load) in every other way.
     fn load_prepared(&self, _prepared: Prepared, _reason: LoadReason) {}
+
+    /// The file name to offer when a document with no file is saved: its
+    /// first words and an extension, say. `None` (the default) offers the
+    /// document's title.
+    fn suggested_name(&self) -> Option<String> {
+        None
+    }
 }
 
 /// Where a document came from, for the app that makes its content.
@@ -1511,11 +1518,16 @@ impl Documents {
         }) else {
             return;
         };
+        // A document with a file offers its name; one without offers what its
+        // content suggests (the first words of a text), else its title.
         let name = self
             .with(|store| {
                 store
                     .entry(id)
-                    .and_then(|entry| entry.path.as_deref().map(display_name))
+                    .and_then(|entry| match entry.path.as_deref() {
+                        Some(path) => Some(display_name(path)),
+                        None => entry.content.suggested_name(),
+                    })
             })
             .unwrap_or(name);
         let mut request = ChooserRequest::save(name).title("Save as");

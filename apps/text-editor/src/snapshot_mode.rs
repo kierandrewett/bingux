@@ -18,7 +18,7 @@ use bingux_ui::prelude::*;
 use bingux_ui::snapshot::Snapshot;
 use freya::prelude::*;
 
-use crate::{app, launch, prefs, session};
+use crate::{app, content, launch, prefs};
 
 const SIZE: (f32, f32) = (1100.0, 720.0);
 
@@ -49,7 +49,7 @@ fn start(file: Option<&str>) -> Snapshot {
     if std::env::var("BINGUX_TEXT_EDITOR_SNAPSHOT_NOWRAP").is_ok() {
         prefs.wrap = false;
     }
-    app::prepare(prefs, session::Session::default());
+    app::prepare(prefs);
     let address = file.map(|file| launch::normalise(std::ffi::OsStr::new(file)));
     let location = address
         .and_then(|address| Location::parse(&address))
@@ -111,12 +111,13 @@ pub fn run(dir: &str, files: &[String]) {
 pub fn bench_typing(file: &str) {
     isolate();
     let started = Instant::now();
-    let read = crate::document::read(std::path::Path::new(file), None, false);
+    let read = std::fs::read(file)
+        .map(|bytes| content::decode(bytes, Some(std::path::Path::new(file)), None, false));
     let read_time = started.elapsed();
     let (lines, bytes) = match &read {
-        Ok(loaded) => (loaded.rope.len_lines(), loaded.rope.len_bytes()),
-        Err(message) => {
-            eprintln!("{message}");
+        Ok(read) => (read.rope.len_lines(), read.rope.len_bytes()),
+        Err(error) => {
+            eprintln!("could not read {file}: {error}");
             return;
         }
     };
@@ -171,4 +172,88 @@ pub fn bench_typing(file: &str) {
         times[times.len() * 95 / 100],
         times[times.len() - 1]
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn texts(shot: &mut Snapshot) -> Vec<String> {
+        let mut all: Vec<String> = shot.runner().find_many(|_, element| {
+            Label::try_downcast(element).map(|label| label.text.to_string())
+        });
+        all.extend(shot.runner().find_many(|_, element| {
+            Paragraph::try_downcast(element).map(|paragraph| {
+                paragraph
+                    .spans
+                    .iter()
+                    .map(|span| span.text.to_string())
+                    .collect::<String>()
+            })
+        }));
+        all
+    }
+
+    fn shows(shot: &mut Snapshot, text: &str) -> bool {
+        texts(shot).iter().any(|shown| shown.contains(text))
+    }
+
+    fn open(shot: &mut Snapshot, path: &std::path::Path) {
+        let address = launch::normalise(path.as_os_str());
+        shot.navigate(Location::parse(&address).expect("an address"));
+        shot.settle(Duration::from_millis(1500));
+    }
+
+    /// The window's tabs follow the shared document manager: a second file
+    /// opens in its own tab, closing one with changes asks, Discard closes
+    /// it, and Reopen closed tab brings the file back from disk.
+    #[test]
+    fn tabs_follow_the_documents_close_asks_and_a_closed_file_comes_back() {
+        isolate();
+        let dir =
+            std::env::temp_dir().join(format!("bingux-text-editor-tabs-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (first, second) = (dir.join("first.txt"), dir.join("second.txt"));
+        std::fs::write(&first, "one\n").unwrap();
+        std::fs::write(&second, "two\n").unwrap();
+        std::thread::spawn(bingux_text::highlight::warm).join().ok();
+
+        let mut shot = start(first.to_str());
+        shot.settle(Duration::from_millis(2500));
+        open(&mut shot, &second);
+        assert!(shows(&mut shot, "first.txt") && shows(&mut shot, "second.txt"));
+        // The same file again is the same tab.
+        open(&mut shot, &first);
+        let tabs = texts(&mut shot)
+            .iter()
+            .filter(|shown| shown.as_str() == "first.txt")
+            .count();
+        assert_eq!(tabs, 1, "a file is open once");
+
+        // A tab with no changes closes without asking.
+        shot.run_script("key ctrl+w; wait 600", launch::SCHEME)
+            .unwrap();
+        assert!(!shows(&mut shot, "Save changes to"));
+        assert!(!shows(&mut shot, "first.txt"), "its tab is gone");
+        // One with changes asks, and Discard closes it.
+        open(&mut shot, &first);
+        shot.run_script("type x; wait 300; key ctrl+w; wait 800", launch::SCHEME)
+            .unwrap();
+        assert!(shows(&mut shot, "Save changes to “first.txt”?"));
+        assert!(shot.click_text("Discard"));
+        shot.settle(Duration::from_millis(800));
+        assert!(!shows(&mut shot, "Save changes to"));
+        assert!(!shows(&mut shot, "first.txt"));
+        assert_eq!(
+            std::fs::read_to_string(&first).unwrap(),
+            "one\n",
+            "discarding never touches the file"
+        );
+
+        // Reopen closed tab opens the file again, from disk.
+        shot.run_script("key ctrl+shift+t; wait 1500", launch::SCHEME)
+            .unwrap();
+        assert!(shows(&mut shot, "first.txt"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

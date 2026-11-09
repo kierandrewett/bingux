@@ -52,9 +52,15 @@ struct Text {
     prepares: bool,
     /// Adds `!` on the way to disk, as format on save does.
     appends_on_save: bool,
+    /// Offers a file name for Save as.
+    suggests: bool,
 }
 
 impl DocumentContent for Text {
+    fn suggested_name(&self) -> Option<String> {
+        self.suggests.then(|| "notes.txt".to_string())
+    }
+
     fn snapshot(&self) -> DocumentSnapshot {
         DocumentSnapshot::bytes(self.text.borrow().clone().into_bytes())
     }
@@ -127,6 +133,7 @@ struct World {
     calls: HashMap<u64, Rc<RefCell<Vec<String>>>>,
     prepares: bool,
     appends_on_save: bool,
+    suggests: bool,
     /// A second window's manager is made too: `other`.
     second: bool,
     other: Option<Documents>,
@@ -185,6 +192,7 @@ impl Component for Root {
                     calls,
                     prepares: world(|world| world.prepares),
                     appends_on_save: world(|world| world.appends_on_save),
+                    suggests: world(|world| world.suggests),
                 })
             },
             |event| {
@@ -218,6 +226,7 @@ impl Component for Root {
                         calls: Rc::default(),
                         prepares: false,
                         appends_on_save: false,
+                        suggests: false,
                     })
                 },
                 |_| {},
@@ -635,6 +644,22 @@ fn the_content_of_a_document_is_found_by_its_type() {
     let document = session.open(&path);
     assert!(document.content_as::<Text>().is_some());
     assert!(document.content_as::<Other>().is_none());
+}
+
+#[test]
+fn save_as_for_a_document_with_no_file_offers_the_name_its_content_suggests() {
+    reset();
+    world(|world| world.suggests = true);
+    let mut session = Session::new("suggested-name");
+    let document = session.run(|docs| docs.new_document());
+    session.set_text(document, "some words");
+    session.run(|_| document.save());
+    session.wait_for("Save as");
+    assert!(
+        session.shows("notes.txt"),
+        "on screen: {:?}",
+        session.texts()
+    );
 }
 
 #[test]
