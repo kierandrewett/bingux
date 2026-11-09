@@ -221,9 +221,9 @@ fn copy_text(overlays: Overlays, name: &str) {
         move || freya::clipboard::Clipboard::set(text).is_ok(),
         move |copied| {
             if copied {
-                overlays.toast("Font name copied.");
+                overlays.toast("Font name copied");
             } else {
-                overlays.toast("The font name could not be copied.");
+                overlays.toast("Could not copy the font name. Try again.");
             }
         },
     );

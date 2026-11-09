@@ -189,7 +189,7 @@ fn source_options() -> Vec<(String, String)> {
     vec![
         (SOURCE_ALL.to_string(), "All".to_string()),
         (SOURCE_SYSTEM.to_string(), "System".to_string()),
-        (SOURCE_YOURS.to_string(), "Your pictures".to_string()),
+        (SOURCE_YOURS.to_string(), "Pictures".to_string()),
     ]
 }
 

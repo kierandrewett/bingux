@@ -94,7 +94,9 @@ fn set_font(family: &str) -> Result<Option<Model>, CommandError> {
         config(&["unset", FONT_KEY])?;
     } else {
         if crate::theme::font_files(family, 1).is_empty() {
-            return Err(CommandError(format!("The font {family} is not installed.")));
+            return Err(CommandError(format!(
+                "Could not use “{family}”. Install the font, then try again."
+            )));
         }
         config(&["set", FONT_KEY, family])?;
     }
@@ -445,8 +447,12 @@ impl Component for AppearancePage {
         let model_value = match loaded {
             Ok(value) => value,
             Err(failure) => {
+                eprintln!("[appearance] could not load: {}", failure.0);
                 return page_column().child(PageHead::new()).child(
-                    status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+                    status(Status::Error(
+                        "Could not read the appearance settings. Try again.".into(),
+                    ))
+                    .action("Try again", move |_| reload(model)),
                 );
             }
         };
@@ -603,8 +609,7 @@ impl Component for AppearancePage {
                 }))
                 .maybe_child((!model_value.gsettings).then(|| {
                     Element::from(status(Status::Info(
-                        "\"Accent colour\" and \"Colour scheme\" are not available on this system."
-                            .into(),
+                        "Accent colour and colour scheme are not available on this system.".into(),
                     )))
                 })),
         )
