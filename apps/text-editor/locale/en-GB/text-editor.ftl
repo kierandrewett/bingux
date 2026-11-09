@@ -71,3 +71,54 @@ text-editor-save-as = Save as…
 text-editor-mixed-encoding = This file mixes UTF-8 with { $encoding } text. Saving writes it all as UTF-8.
 text-editor-lossy = Some characters do not fit this encoding and show as �. Saving replaces them.
 text-editor-mixed-endings = This file mixes line endings. Saving writes one kind.
+
+## Commands
+
+text-editor-cmd-new = New document
+text-editor-cmd-open = Open…
+text-editor-cmd-open-recent = Open recent
+text-editor-cmd-save = Save
+text-editor-cmd-save-as = Save as…
+text-editor-cmd-save-all = Save all
+text-editor-cmd-reload = Read again from disk
+text-editor-cmd-find = Find…
+text-editor-cmd-replace = Find and replace…
+text-editor-cmd-find-next = Find next
+text-editor-cmd-find-previous = Find previous
+text-editor-cmd-go-line = Go to line…
+text-editor-cmd-line-numbers = Line numbers
+text-editor-cmd-wrap = Wrap lines
+text-editor-cmd-whitespace = Show spaces and tabs
+text-editor-cmd-highlight-line = Highlight current line
+text-editor-cmd-markdown-preview = Markdown preview
+text-editor-cmd-zoom-in = Zoom in
+text-editor-cmd-zoom-out = Zoom out
+text-editor-cmd-actual-size = Actual size
+text-editor-cmd-statistics = Statistics
+text-editor-cmd-auto-close = Close brackets and quotes
+text-editor-cmd-trim-on-save = Trim spaces on save
+text-editor-cmd-final-newline = Add final new line
+
+## Dialogs, menus and placeholders
+
+text-editor-chooser-open = Open
+text-editor-chooser-save-as = Save as
+text-editor-filter-text = Text files
+text-editor-filter-all = All files
+text-editor-replaced = Replaced { $count ->
+    [one] { $count } match
+   *[other] { $count } matches
+}
+text-editor-change-case = Change case
+text-editor-drop-hint = Start typing or drop a file
+text-editor-drop-to-open = Drop to open
+text-editor-scope-editor = Editor
+text-editor-show-text = Show text
+text-editor-show-preview = Show preview
+text-editor-document-menu = Document
+text-editor-other-languages = Other languages
+text-editor-tab-width = Tab width
+text-editor-detect-indent = Detect indentation
+text-editor-encode-as = Encode as
+text-editor-read-again-as = Read again as
+text-editor-bom = Byte order mark

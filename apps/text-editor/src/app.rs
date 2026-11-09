@@ -363,10 +363,10 @@ impl Actions {
             .flatten()
         });
         let mut request = ChooserRequest::open()
-            .title("Open")
+            .title(tr!("text-editor-chooser-open"))
             .multiple(true)
-            .filter(Filter::new("Text files").mime("text/*"))
-            .filter(Filter::new("All files"));
+            .filter(Filter::new(tr!("text-editor-filter-text")).mime("text/*"))
+            .filter(Filter::new(tr!("text-editor-filter-all")));
         if let Some(folder) = folder {
             request = request.current_folder(folder);
         }
@@ -408,7 +408,7 @@ impl Actions {
         }) else {
             return;
         };
-        let mut request = ChooserRequest::save(name).title("Save as");
+        let mut request = ChooserRequest::save(name).title(tr!("text-editor-chooser-save-as"));
         if let Some(folder) = folder {
             request = request.current_folder(folder);
         }
@@ -921,7 +921,7 @@ impl Component for Content {
                     .on_close(focus_back)
                     .on_replaced(move |count: usize| {
                         if count > 1 {
-                            overlays.toast(format!("Replaced {count} matches"));
+                            overlays.toast(tr!("text-editor-replaced", count = count));
                         }
                     })
                     .into(),
@@ -995,7 +995,7 @@ impl Component for Content {
                     &[&["text.uppercase", "text.lowercase", "text.title-case"]],
                 );
                 if !case.is_empty() {
-                    context.push(submenu("Change case", case));
+                    context.push(submenu(tr!("text-editor-change-case"), case));
                 }
                 let view = text_editor(handle.clone())
                     .line_numbers(prefs_now.line_numbers && !compact)
@@ -1003,7 +1003,7 @@ impl Component for Content {
                     .show_whitespace(prefs_now.show_whitespace)
                     .highlight_line(prefs_now.highlight_line)
                     .zoom(prefs_now.zoom, move |step: ZoomStep| actions.zoom(step))
-                    .placeholder("Start typing or drop a file")
+                    .placeholder(tr!("text-editor-drop-hint"))
                     .label(doc_title.clone())
                     .a11y_id(editor_id)
                     .menu_extra(context);
@@ -1013,7 +1013,9 @@ impl Component for Content {
                 };
                 // The editor's keys are its own; the scope lists them in the
                 // menus, the palette and the shortcuts sheet.
-                let editor: Element = command_scope("Editor", scope, view).fill().into();
+                let editor: Element = command_scope(tr!("text-editor-scope-editor"), scope, view)
+                    .fill()
+                    .into();
                 let small = handle.read().rope().len_bytes() <= PREVIEW_LIMIT;
                 if is_markdown && prefs_now.markdown_preview && small {
                     let source: Rc<str> = handle.read().text().into();
@@ -1089,7 +1091,7 @@ impl Component for Content {
                             IconSize::App,
                             Paint::Accent.color(&tokens),
                         ))
-                        .child(typography::SECTION.label(&tokens, "Drop to open")),
+                        .child(typography::SECTION.label(&tokens, tr!("text-editor-drop-to-open"))),
                 )
         });
 
@@ -1452,55 +1454,66 @@ fn window_commands(
     let mut previous_open = find.open;
     let auto_close = prefs.auto_close;
 
-    let toggle = |id: &'static str,
-                  title: &'static str,
-                  on: bool,
-                  group: CommandGroup,
-                  change: fn(&mut Prefs)| {
-        Command::new(id, title, move |_| actions.update_prefs(change))
-            .checked(on)
-            .group(group)
-    };
+    let toggle =
+        |id: &'static str, title: String, on: bool, group: CommandGroup, change: fn(&mut Prefs)| {
+            Command::new(id, title, move |_| actions.update_prefs(change))
+                .checked(on)
+                .group(group)
+        };
 
     let mut list = vec![
-        Command::new("file.new", "New document", move |_| actions.new_document())
-            .shortcut("Ctrl+N")
-            .shortcut("Ctrl+T")
-            .group(CommandGroup::File)
-            .section("new"),
-        Command::new("file.open", "Open…", move |_| actions.open_dialog())
-            .shortcut("Ctrl+O")
-            .icon(Icon::DocumentOpen)
-            .group(CommandGroup::File)
-            .section("new"),
-        Command::submenu("file.open-recent", "Open recent", recent_items(actions))
-            .group(CommandGroup::File)
-            .section("new"),
-        Command::new("file.save", "Save", move |_| actions.save(id, None))
-            .shortcut("Ctrl+S")
-            .icon(Icon::DocumentSave)
-            .enabled(ready)
-            .group(CommandGroup::File)
-            .section("save"),
-        Command::new("file.save-as", "Save as…", move |_| {
+        Command::new("file.new", tr!("text-editor-cmd-new"), move |_| {
+            actions.new_document()
+        })
+        .shortcut("Ctrl+N")
+        .shortcut("Ctrl+T")
+        .group(CommandGroup::File)
+        .section("new"),
+        Command::new("file.open", tr!("text-editor-cmd-open"), move |_| {
+            actions.open_dialog()
+        })
+        .shortcut("Ctrl+O")
+        .icon(Icon::DocumentOpen)
+        .group(CommandGroup::File)
+        .section("new"),
+        Command::submenu(
+            "file.open-recent",
+            tr!("text-editor-cmd-open-recent"),
+            recent_items(actions),
+        )
+        .group(CommandGroup::File)
+        .section("new"),
+        Command::new("file.save", tr!("text-editor-cmd-save"), move |_| {
+            actions.save(id, None)
+        })
+        .shortcut("Ctrl+S")
+        .icon(Icon::DocumentSave)
+        .enabled(ready)
+        .group(CommandGroup::File)
+        .section("save"),
+        Command::new("file.save-as", tr!("text-editor-cmd-save-as"), move |_| {
             actions.save_as(id, None)
         })
         .shortcut("Ctrl+Shift+S")
         .enabled(ready)
         .group(CommandGroup::File)
         .section("save"),
-        Command::new("file.save-all", "Save all", move |_| actions.save_all())
-            .enabled(shown.any_dirty)
-            .group(CommandGroup::File)
-            .section("save"),
-        Command::new("file.reload", "Read again from disk", move |_| {
+        Command::new(
+            "file.save-all",
+            tr!("text-editor-cmd-save-all"),
+            move |_| actions.save_all(),
+        )
+        .enabled(shown.any_dirty)
+        .group(CommandGroup::File)
+        .section("save"),
+        Command::new("file.reload", tr!("text-editor-cmd-reload"), move |_| {
             actions.reload(id, None)
         })
         .keywords(["revert", "reload"])
         .enabled(ready && shown.has_path)
         .group(CommandGroup::File)
         .section("save"),
-        Command::new("find.find", "Find…", move |_| {
+        Command::new("find.find", tr!("text-editor-cmd-find"), move |_| {
             go_to_close.set(false);
             find.open_from(&find_handle, false);
         })
@@ -1509,7 +1522,7 @@ fn window_commands(
         .enabled(ready)
         .group(CommandGroup::Edit)
         .section("find"),
-        Command::new("find.replace", "Find and replace…", move |_| {
+        Command::new("find.replace", tr!("text-editor-cmd-replace"), move |_| {
             go_to_close.set(false);
             find.open_from(&replace_handle, true);
         })
@@ -1518,7 +1531,7 @@ fn window_commands(
         .enabled(ready)
         .group(CommandGroup::Edit)
         .section("find"),
-        Command::new("find.next", "Find next", move |_| {
+        Command::new("find.next", tr!("text-editor-cmd-find-next"), move |_| {
             if !*find.open.peek() && !find.query.peek().is_empty() {
                 next_open.set(true);
             }
@@ -1529,18 +1542,22 @@ fn window_commands(
         .enabled(ready)
         .group(CommandGroup::Edit)
         .section("find"),
-        Command::new("find.previous", "Find previous", move |_| {
-            if !*find.open.peek() && !find.query.peek().is_empty() {
-                previous_open.set(true);
-            }
-            find.step(&previous_handle, false);
-        })
+        Command::new(
+            "find.previous",
+            tr!("text-editor-cmd-find-previous"),
+            move |_| {
+                if !*find.open.peek() && !find.query.peek().is_empty() {
+                    previous_open.set(true);
+                }
+                find.step(&previous_handle, false);
+            },
+        )
         .shortcut("Ctrl+Shift+G")
         .shortcut("Shift+F3")
         .enabled(ready)
         .group(CommandGroup::Edit)
         .section("find"),
-        Command::new("go.line", "Go to line…", move |_| {
+        Command::new("go.line", tr!("text-editor-cmd-go-line"), move |_| {
             find_open.set(false);
             go_to_open.set(true);
         })
@@ -1551,7 +1568,7 @@ fn window_commands(
         .section("lines"),
         toggle(
             "view.line-numbers",
-            "Line numbers",
+            tr!("text-editor-cmd-line-numbers"),
             prefs.line_numbers,
             CommandGroup::View,
             |prefs| prefs.line_numbers = !prefs.line_numbers,
@@ -1559,7 +1576,7 @@ fn window_commands(
         .section("show"),
         toggle(
             "view.wrap",
-            "Wrap lines",
+            tr!("text-editor-cmd-wrap"),
             prefs.wrap,
             CommandGroup::View,
             |prefs| prefs.wrap = !prefs.wrap,
@@ -1569,7 +1586,7 @@ fn window_commands(
         .section("show"),
         toggle(
             "view.whitespace",
-            "Show spaces and tabs",
+            tr!("text-editor-cmd-whitespace"),
             prefs.show_whitespace,
             CommandGroup::View,
             |prefs| prefs.show_whitespace = !prefs.show_whitespace,
@@ -1578,7 +1595,7 @@ fn window_commands(
         .section("show"),
         toggle(
             "view.highlight-line",
-            "Highlight current line",
+            tr!("text-editor-cmd-highlight-line"),
             prefs.highlight_line,
             CommandGroup::View,
             |prefs| prefs.highlight_line = !prefs.highlight_line,
@@ -1586,42 +1603,48 @@ fn window_commands(
         .section("show"),
         toggle(
             "view.markdown-preview",
-            "Markdown preview",
+            tr!("text-editor-cmd-markdown-preview"),
             prefs.markdown_preview,
             CommandGroup::View,
             |prefs| prefs.markdown_preview = !prefs.markdown_preview,
         )
         .shortcut("Ctrl+Shift+V")
         .section("show"),
-        Command::new("view.zoom-in", "Zoom in", move |_| {
+        Command::new("view.zoom-in", tr!("text-editor-cmd-zoom-in"), move |_| {
             actions.zoom(ZoomStep::In)
         })
         .shortcut("Ctrl+Plus")
         .shortcut("Ctrl+=")
         .group(CommandGroup::View)
         .section("zoom"),
-        Command::new("view.zoom-out", "Zoom out", move |_| {
-            actions.zoom(ZoomStep::Out)
-        })
+        Command::new(
+            "view.zoom-out",
+            tr!("text-editor-cmd-zoom-out"),
+            move |_| actions.zoom(ZoomStep::Out),
+        )
         .shortcut("Ctrl+-")
         .group(CommandGroup::View)
         .section("zoom"),
-        Command::new("view.zoom-reset", "Actual size", move |_| {
-            actions.zoom(ZoomStep::Reset)
-        })
+        Command::new(
+            "view.zoom-reset",
+            tr!("text-editor-cmd-actual-size"),
+            move |_| actions.zoom(ZoomStep::Reset),
+        )
         .shortcut("Ctrl+0")
         .group(CommandGroup::View)
         .section("zoom"),
-        Command::new("text.statistics", "Statistics", move |_| {
-            actions.show_statistics(id)
-        })
+        Command::new(
+            "text.statistics",
+            tr!("text-editor-cmd-statistics"),
+            move |_| actions.show_statistics(id),
+        )
         .keywords(["word count", "characters", "reading time"])
         .enabled(ready)
         .group(bingux_ui::text_editor::TEXT_GROUP)
         .section("info"),
         Command::new(
             "editing.auto-close",
-            "Close brackets and quotes",
+            tr!("text-editor-cmd-auto-close"),
             move |_| {
                 actions.update_prefs(|prefs| prefs.auto_close = !auto_close);
                 for id in document::ids() {
@@ -1636,7 +1659,7 @@ fn window_commands(
         .section("typing"),
         toggle(
             "editing.trim-on-save",
-            "Trim spaces on save",
+            tr!("text-editor-cmd-trim-on-save"),
             prefs.trim_on_save,
             CommandGroup::Other("Editing"),
             |prefs| prefs.trim_on_save = !prefs.trim_on_save,
@@ -1644,7 +1667,7 @@ fn window_commands(
         .section("saving"),
         toggle(
             "editing.final-newline",
-            "Add final new line",
+            tr!("text-editor-cmd-final-newline"),
             prefs.final_newline,
             CommandGroup::Other("Editing"),
             |prefs| prefs.final_newline = !prefs.final_newline,
@@ -1728,13 +1751,18 @@ fn status_bar(
             let on = *preview_on_phone.read();
             items.insert(
                 0,
-                menu_item(if on { "Show text" } else { "Show preview" }, move |_| {
-                    preview_on_phone.set(!on)
-                }),
+                menu_item(
+                    if on {
+                        tr!("text-editor-show-text")
+                    } else {
+                        tr!("text-editor-show-preview")
+                    },
+                    move |_| preview_on_phone.set(!on),
+                ),
             );
         }
         return row
-            .child(menu_button("Document", items).icon(Icon::ViewMore))
+            .child(menu_button(tr!("text-editor-document-menu"), items).icon(Icon::ViewMore))
             .into();
     }
     row.child(menu_button(language.name.clone(), language_menu))
@@ -1802,7 +1830,7 @@ fn language_items(handle: EditorHandle, current: &Language) -> Vec<MenuItem> {
     }
     items.push(menu_separator());
     items.push(submenu(
-        "Other languages",
+        tr!("text-editor-other-languages"),
         groups
             .into_iter()
             .map(|(letter, list)| submenu(letter.to_string(), list))
@@ -1838,9 +1866,9 @@ fn indent_items(handle: EditorHandle, indent: Indent, tab_width: usize) -> Vec<M
             .checked(tab_width == width),
         );
     }
-    items.push(submenu("Tab width", widths));
+    items.push(submenu(tr!("text-editor-tab-width"), widths));
     let convert = handle.clone();
-    items.push(menu_item("Detect indentation", move |_| {
+    items.push(menu_item(tr!("text-editor-detect-indent"), move |_| {
         convert.update(|editor| {
             if let Some(found) = bingux_text::indent::detect(editor.rope()) {
                 editor.settings.indent = found;
@@ -1890,8 +1918,8 @@ fn encoding_items(actions: Actions, id: u64, format: encoding::FileFormat) -> Ve
         })
         .collect();
     // Labels short enough for the narrow menu (`Dim::Menu`), which cuts longer ones off.
-    let mut items = vec![submenu("Encode as", save_with)];
-    let reopen_item = submenu("Read again as", reopen);
+    let mut items = vec![submenu(tr!("text-editor-encode-as"), save_with)];
+    let reopen_item = submenu(tr!("text-editor-read-again-as"), reopen);
     items.push(if has_path {
         reopen_item
     } else {
@@ -1900,7 +1928,7 @@ fn encoding_items(actions: Actions, id: u64, format: encoding::FileFormat) -> Ve
     if format.encoding == encoding_rs::UTF_8 {
         let bom = format.bom;
         items.push(
-            menu_item("Byte order mark", move |_| {
+            menu_item(tr!("text-editor-bom"), move |_| {
                 document::update(id, |doc| doc.format.bom = !bom);
                 if let Some(handle) = document::handle(id) {
                     handle.update(|editor| editor.history_mut().mark_unsaved());
