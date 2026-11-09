@@ -251,6 +251,12 @@ const SECTIONS: [(&str, Section); 9] = [
 pub fn table() -> RouteTable {
     let mut table = RouteTable::new(SCHEME)
         .rewrite(legacy)
+        .group_titles(|group| match group {
+            "connections" => tr!("settings-group-connections"),
+            "devices" => tr!("settings-group-devices"),
+            "desktop" => tr!("settings-group-desktop"),
+            _ => tr!("settings-group-system"),
+        })
         .index("Settings", |_| rect().into());
 
     // The sidebar pages, in sidebar order, then the account page the profile opens.

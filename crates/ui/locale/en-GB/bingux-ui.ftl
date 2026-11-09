@@ -93,6 +93,8 @@ ui-dialog-close = Close
 ## The sidebar and its search
 
 # Title of the page that lists what a sidebar search found.
+# The placeholder of every search field.
+ui-search-placeholder = Search
 ui-search-results = Search results
 ui-search-no-matches = Nothing matches.
 # Screen reader names of the sidebar and of its list.

@@ -153,6 +153,7 @@ pub struct QuerySpec {
 type PageFn = Arc<dyn Fn(&Params) -> Element + Send + Sync>;
 type UpFn = Arc<dyn Fn(&Params) -> Option<Location> + Send + Sync>;
 type RewriteFn = Arc<dyn Fn(&Location) -> Location + Send + Sync>;
+type GroupTitleFn = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
 /// One route: data, plus the function that makes its page.
 #[derive(Clone)]
@@ -204,6 +205,7 @@ pub struct RouteTable {
     routes: Vec<RouteDef>,
     rewrite: Option<RewriteFn>,
     not_found: Option<PageFn>,
+    group_title: Option<GroupTitleFn>,
 }
 
 impl RouteTable {
@@ -218,6 +220,7 @@ impl RouteTable {
             routes: Vec::new(),
             rewrite: None,
             not_found: None,
+            group_title: None,
         }
     }
 
@@ -263,6 +266,29 @@ impl RouteTable {
     ) -> Self {
         self.not_found = Some(Arc::new(page));
         self
+    }
+
+    /// How the sidebar names a group: `title` gets the id given to
+    /// [`group`](Self::group) and returns the heading, read from the catalogue
+    /// each time the sidebar is drawn so it follows the language. Without it the
+    /// heading is the id with its first letter in capitals.
+    pub fn group_titles(mut self, title: impl Fn(&str) -> String + Send + Sync + 'static) -> Self {
+        self.group_title = Some(Arc::new(title));
+        self
+    }
+
+    /// The sidebar heading of the group `id`.
+    pub fn group_title(&self, id: &str) -> String {
+        match &self.group_title {
+            Some(title) => title(id),
+            None => {
+                let mut name = id.to_string();
+                if let Some(first) = name.get_mut(0..1) {
+                    first.make_ascii_uppercase();
+                }
+                name
+            }
+        }
     }
 
     pub fn scheme(&self) -> &str {

@@ -48,7 +48,7 @@ pub struct SearchField {
     semantics: Option<crate::a11y::Semantics>,
 }
 
-/// A search field over `value`. Its placeholder is `Search`.
+/// A search field over `value`. Its placeholder is `Search`, from the catalogue.
 pub fn search_field(
     value: State<String>,
     on_change: impl Into<EventHandler<String>>,
@@ -56,7 +56,7 @@ pub fn search_field(
     SearchField {
         value,
         on_change: on_change.into(),
-        placeholder: "Search".to_string(),
+        placeholder: crate::tr!("ui-search-placeholder"),
         width: Dim::Field,
         fill: false,
         well: false,

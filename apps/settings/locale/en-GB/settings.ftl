@@ -2875,3 +2875,11 @@ settings-users-password-description = Enter your current password, then the new 
 settings-users-changing-password = Changing your password…
 settings-users-change-name = Change full name
 settings-users-open = Open
+
+## Sidebar groups
+
+# The headings above the groups of pages in the sidebar.
+settings-group-connections = Connections
+settings-group-devices = Devices
+settings-group-desktop = Desktop
+settings-group-system = System

@@ -692,6 +692,8 @@ struct RootItem {
     title: String,
     icon: Icon,
     group: &'static str,
+    /// The group's heading in the language shown now.
+    group_title: String,
     keywords: &'static str,
     location: Location,
 }
@@ -705,6 +707,7 @@ fn root_items(table: &RouteTable) -> Vec<RootItem> {
                 title: table.title_of(&table.pattern_location(route)?),
                 icon: def.icon.unwrap_or(Icon::Folder),
                 group: def.group,
+                group_title: table.group_title(def.group),
                 keywords: def.keywords,
                 location: table.pattern_location(route)?,
             })
@@ -1953,7 +1956,7 @@ impl Component for Sidebar {
         for item in visible.iter().filter(|_| hit_list.is_none()) {
             let group = item.group;
             if group != last_group && !group.is_empty() {
-                entries.push(group_label(&tokens, group));
+                entries.push(group_label(&tokens, &item.group_title));
             }
             last_group = group;
             entries.push(Element::from(NavEntry {
@@ -2123,15 +2126,11 @@ impl Component for ScrollEdge {
 }
 
 /// The name of a group of pages, in small muted type above its first page.
-fn group_label(tokens: &Tokens, group: &str) -> Element {
-    let mut name = group.to_string();
-    if let Some(first) = name.get_mut(0..1) {
-        first.make_ascii_uppercase();
-    }
+fn group_label(tokens: &Tokens, title: &str) -> Element {
     rect()
         .tw_layout(NAV_LABEL)
         .a11y_heading(2)
-        .child(CAPTION.label(tokens, name))
+        .child(CAPTION.label(tokens, title))
         .into()
 }
 

@@ -2276,7 +2276,7 @@ pub fn choice_list(
     ChoiceList {
         options,
         selected: selected.into(),
-        placeholder: "Search".to_string(),
+        placeholder: crate::tr!("ui-search-placeholder"),
         on_select: on_select.into(),
     }
 }
