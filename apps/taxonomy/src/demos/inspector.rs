@@ -25,7 +25,7 @@ pub const OPEN: &[Spec] = &[
             ),
             key_row(
                 "Inspect mode",
-                "Ctrl+Shift+C",
+                "Ctrl+Shift+I",
                 "Point at an element to select it in the tree",
             ),
             key_row(

@@ -406,8 +406,9 @@ fn main() {
   navigation contract), never forwarded.
 - **The inspector comes with it.** `Application::run` is the only way to start
   a bingux-ui window: it builds the one launch configuration (interface font,
-  the inspector plugin, the borderless plugin) in a private function, so every
-  app, example and tool has the inspector and its Ctrl+Alt+Shift+I shortcut
+  the inspector plugin when `inspector::enabled()` says so, the borderless
+  plugin) in a private function, so every app, example and tool in a debug build
+  (or with `BINGUX_INSPECTOR=1`) has the inspector and its Ctrl+Alt+Shift+I shortcut
   with no code of its own, in the main window and in any other window the
   process opens. Do not call `freya::launch` or build a `LaunchConfig`: the
   inspector would be missing, and `scripts/ui-lint.py` fails on both anywhere
@@ -4310,7 +4311,10 @@ matrix under "Gaps".
 ## Inspector
 
 Every bingux-ui app includes a devtools window, modelled on the Chrome and
-WebKit inspectors. Press Ctrl+Alt+Shift+I to open or close it. It opens as a
+WebKit inspectors. Press Ctrl+Alt+Shift+I to open or close it. It is in
+debug builds (`cfg!(debug_assertions)`) and in any build started with
+`BINGUX_INSPECTOR=1`. A release build without the variable installs no
+inspector: no plugin, no shortcut, no cost. It opens as a
 separate native window, and the app needs no code for it: the inspector is a
 plugin that `Application::run` installs in the one launch function, so no
 window can start without it (see Application loop; `scripts/ui-lint.py`
@@ -4340,12 +4344,13 @@ preview all act on that window and no other, and its window is titled with it:
   key event the plugin sees (`[inspector-key] window … key=… code=… mods=…`) to
   stderr. A new inspector window asks for keyboard focus when it opens and when
   the pointer enters it.
-- Inspect mode (the button, or Ctrl+Shift+C) in an inspector picks in its own
+- Inspect mode (the button, or Ctrl+Shift+I) in an inspector picks in its own
   target: the second inspector's picks and hover boxes land in the first
-  inspector's window. Ctrl+Shift+C pressed in an inspector's window is that
+  inspector's window. Ctrl+Shift+I pressed in an inspector's window is that
   inspector's own inspect button; in any other window it turns on inspect mode
   of the inspector over it, opening one if there is none. Escape cancels in
-  either window.
+  either window. Ctrl+Shift+C is not the inspector's: applications use it to
+  copy, so one press never copies and opens the inspector at once.
 - An inspector never watches itself: it takes snapshots of its target only, and
   a window is a target only once an inspector has been opened over it.
 - A target that redraws every frame is copied at most ten times a second, and
@@ -4361,7 +4366,7 @@ preview all act on that window and no other, and its window is titled with it:
   throttle, the title) is `inspector/target.rs`, tested without a window
   system.
 
-The header is the shell's header bar: the inspect button (Ctrl+Shift+C) and
+The header is the shell's header bar: the inspect button (Ctrl+Shift+I) and
 the phone preview toggle at the left, the Elements, Performance and
 Accessibility tabs as a segmented rail in the middle (Ctrl+[ and Ctrl+] step
 between them, Ctrl+1 to Ctrl+3 jump), and pause, refresh (F5) and the window
