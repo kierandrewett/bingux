@@ -755,17 +755,23 @@ fn device_state(device: &Device) -> String {
 
 /// The actions for one device, as a strip: connect, disconnect or pair, and
 /// forget once the device is paired.
-fn device_strip(device: &Device, ctx: Ctx) -> Element {
+fn device_strip(device: &Device, ctx: Ctx, adapter_on: bool, idle: bool) -> Element {
     let job = device_job(device);
     let (icon, label) = device_action(device);
-    let mut actions = vec![strip_action(icon, label, move |_| {
-        run_job(ctx, job.clone())
-    })];
+    // Connecting needs the adapter and no job running; Forget stays reachable
+    // whenever the device is paired, and waits only for a running job.
+    let mut actions = vec![
+        strip_action(icon, label, move |_| run_job(ctx, job.clone())).enabled(adapter_on && idle),
+    ];
     if device.paired {
         let forget = device.clone();
-        actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
-            confirm_forget(ctx, &forget)
-        }));
+        actions.push(
+            strip_action(Icon::UserTrash, "Forget", move |_| {
+                confirm_forget(ctx, &forget)
+            })
+            .destructive()
+            .enabled(idle),
+        );
     }
     action_strip(actions).into()
 }
@@ -1078,7 +1084,7 @@ impl Component for BluetoothDevicePage {
         }
         details = details
             .row(row("Type").value(device_kind(&device.icon)))
-            .row(row("Address").value(device.mac.clone()))
+            .row(row("Address").mono_value(device.mac.clone()))
             .row(row("Paired").value(yes_no(device.paired)));
         let rename_device = device.clone();
         details = details.row(entry_row(
@@ -1097,7 +1103,8 @@ impl Component for BluetoothDevicePage {
             .child(identity)
             .child(bingux_ui::motion::reveal_block_if(
                 S10,
-                (adapter_on && busy.is_none()).then(|| device_strip(device, ctx)),
+                (adapter_on || device.paired)
+                    .then(|| device_strip(device, ctx, adapter_on, busy.is_none())),
             ))
             .child(details)
     }

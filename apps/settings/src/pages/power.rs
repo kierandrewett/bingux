@@ -446,7 +446,7 @@ fn choose(
         Some(overlays),
         previous,
         next,
-        move || work().map(|_| ()),
+        move || work().map(|_| ()).map_err(|e| write_failed(&e.0)),
         move || background(loaded, refresh),
     );
 }
@@ -460,7 +460,12 @@ fn mode_group(
     profiles: &Profiles,
     tokens: &Tokens,
 ) -> Group {
-    let mut cards = rect().tw(tokens, &[flex_row(), w_full(), gap(S2)]);
+    // Three cards in a row do not fit a phone: they stack, one per row.
+    let mut cards = if is_compact() {
+        rect().tw(tokens, &[flex_col(), w_full(), gap(S2)])
+    } else {
+        rect().tw(tokens, &[flex_row(), w_full(), gap(S2)])
+    };
     let chosen = picked(picks, "profile", &profiles.active);
     for name in ["power-saver", "balanced", "performance"] {
         let offered = profiles.choices.iter().any(|(key, _)| key == name);
@@ -515,7 +520,7 @@ impl Component for ModeCard {
                 &tokens,
                 &[
                     flex_col(),
-                    w_flex(),
+                    if is_compact() { w_full() } else { w_flex() },
                     gap(S2),
                     items(Align::Center),
                     p(S3),
@@ -549,6 +554,12 @@ impl Component for ModeCard {
     }
 }
 
+/// A failed write: the raw text goes to the log and the person gets a sentence.
+fn write_failed(raw: &str) -> String {
+    eprintln!("power: {raw}");
+    "Could not change the power setting. Try again.".to_string()
+}
+
 /// Switches shown at once: a value here wins over the loaded one until the
 /// page is left, so a switch never waits on its command.
 type Pending = State<BTreeMap<String, bool>>;
@@ -570,7 +581,7 @@ fn set_switch(
     let mut value = previous.clone();
     value.insert(key.to_string(), on);
     optimistic(pending, Some(overlays), previous, value, move || {
-        work().map(|_| ())
+        work().map(|_| ()).map_err(|e| write_failed(&e.0))
     });
 }
 
@@ -748,7 +759,12 @@ impl Component for PowerPage {
                 }
             }
             Ok(None) => page,
-            Err(e) => page.child(Group::titled("Battery").row(status(Status::Error(e.0)))),
+            Err(e) => page.child(
+                Group::titled("Battery").row(
+                    status(Status::Error(e.0))
+                        .action("Try again", move |_| background(loaded, refresh)),
+                ),
+            ),
         };
 
         // Power mode
@@ -757,7 +773,12 @@ impl Component for PowerPage {
             Err(_) if !model.profiles_tool => page.child(Group::titled("Power mode").row(status(
                 Status::Info("Power modes are not available on this computer.".into()),
             ))),
-            Err(e) => page.child(Group::titled("Power mode").row(status(Status::Error(e.0)))),
+            Err(e) => page.child(
+                Group::titled("Power mode").row(
+                    status(Status::Error(e.0))
+                        .action("Try again", move |_| background(loaded, refresh)),
+                ),
+            ),
         };
 
         // Screen: blanking, locking and dimming

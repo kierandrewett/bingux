@@ -187,11 +187,8 @@ fn reload(path: &str, original: &str) -> Result<(), String> {
             if restored {
                 let _ = gnoblin::gnoblinctl(&["config", "reload"]);
             }
-            eprintln!("settings: gnoblin rejected the change: {}", e.0);
-            Err(
-                "Gnoblin did not accept the change. Check the configuration file, then try again."
-                    .to_string(),
-            )
+            eprintln!("keyboard: the desktop did not accept the change: {}", e.0);
+            Err("The desktop did not accept the change, so it was undone. Try again.".to_string())
         }
     }
 }

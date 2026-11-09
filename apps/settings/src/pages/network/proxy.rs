@@ -628,6 +628,7 @@ impl Component for ProxyForm {
                             .placeholder("http://wpad.example.com/proxy.pac")
                             .hint("Leave empty to find the configuration automatically.")
                             .validate(|text| validate::url(text))
+                            .wide()
                             .optional(),
                     ),
                 );

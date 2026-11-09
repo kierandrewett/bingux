@@ -1,19 +1,16 @@
-//! The short popups for joining a network: the password of a network in
+//! The form dialogs for joining a network: the password of a network in
 //! range, the sign-in of an 802.1X network, and a hidden network by name.
-//! A popup stays open while NetworkManager connects, shows a failure inside
+//! A dialog stays open while the connection is made, shows a failure inside
 //! itself (a wrong password is not a toast), and closes on success.
 
 use freya::prelude::*;
 
 use super::nm::{self, HiddenSecurity, Security};
 use crate::system::{CommandError, background_then};
-use crate::ui::{
-    Group, PopupAction, PopupActions, Status, Window, choice_row, form_field, popup, popup_column,
-    status, use_popup_actions, use_window,
-};
+use crate::ui::{Group, Overlays, Status, choice_row, form_field, status, use_overlays};
 use bingux_ui::controls::form::validate;
-use bingux_ui::style::{Dim, S6};
-use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
+use bingux_ui::shell::{form_dialog, open_form};
+use bingux_ui::style::*;
 
 /// Where a join stands, shown under the fields.
 #[derive(Clone, PartialEq)]
@@ -41,10 +38,10 @@ fn phase_line(phase: &Phase, ssid: &str) -> Option<Element> {
 }
 
 /// A join ended: close on success, show the reason otherwise.
-fn finish(mut phase: State<Phase>, window: Window, result: Result<(), CommandError>) {
+fn finish(mut phase: State<Phase>, overlays: Overlays, result: Result<(), CommandError>) {
     match result {
         Ok(()) => {
-            window.close();
+            overlays.dismiss_dialog();
             super::reload_all();
         }
         Err(error) => phase.set(Phase::Failed(nm::join_error(&error))),
@@ -54,14 +51,14 @@ fn finish(mut phase: State<Phase>, window: Window, result: Result<(), CommandErr
 /// Run `work` off the UI thread and report to the popup.
 fn run(
     mut phase: State<Phase>,
-    window: Window,
+    overlays: Overlays,
     work: impl FnOnce() -> Result<(), CommandError> + Send + 'static,
 ) {
     if phase.read().busy() {
         return;
     }
     phase.set(Phase::Connecting);
-    background_then(work, move |result| finish(phase, window, result));
+    background_then(work, move |result| finish(phase, overlays, result));
 }
 
 /// A WEP key: 5 or 13 characters, or 10 or 26 hexadecimal digits.
@@ -92,12 +89,13 @@ fn password_check(security: Security) -> fn(&str) -> Result<(), String> {
     }
 }
 
-/// The popup that asks for the password of a network in range.
-pub fn open_password(window: Window, ssid: String, security: Security) {
-    window.open(
-        popup(ssid.clone(), PasswordBody { ssid, security })
-            .width(Dim::PopupNarrow)
-            .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
+/// The form dialog that asks for the password of a network in range.
+pub fn open_password(overlays: Overlays, ssid: String, security: Security) {
+    open_form(
+        overlays,
+        ssid.clone(),
+        PasswordBody { ssid, security },
+        None,
     );
 }
 
@@ -109,35 +107,36 @@ struct PasswordBody {
 
 impl Component for PasswordBody {
     fn render(&self) -> impl IntoElement {
-        let window = use_window();
+        let overlays = use_overlays();
         let password = use_state(String::new);
         let phase = use_state(|| Phase::Idle);
         let check = password_check(self.security);
-        let valid = check(&password.read()).is_ok();
+        let problem = check(&password.read()).err();
         let busy = phase.read().busy();
         let ssid = self.ssid.clone();
-        let start = move |ssid: String| {
-            let secret = password.read().clone();
-            if check(&secret).is_ok() {
-                run(phase, window, move || nm::connect_new(&ssid, Some(&secret)));
+        let start = {
+            let ssid = ssid.clone();
+            move || {
+                let secret = password.read().clone();
+                if check(&secret).is_ok() {
+                    let ssid = ssid.clone();
+                    run(phase, overlays, move || {
+                        nm::connect_new(&ssid, Some(&secret))
+                    });
+                }
             }
         };
-        let press = start.clone();
-        let press_ssid = ssid.clone();
-        use_popup_actions(PopupActions {
-            primary: Some(PopupAction {
-                label: "Connect".into(),
-                enabled: valid && !busy,
-                on_press: EventHandler::new(move |_: ()| press(press_ssid.clone())),
-            }),
-        });
-        let submit_ssid = ssid.clone();
+        let submit = start.clone();
         let field = form_field("Password", password)
             .password()
             .autofocus()
             .validate(check)
-            .on_submit(move |_: ()| start(submit_ssid.clone()));
-        popup_column()
+            .on_submit(move |_: ()| submit());
+        let body = rect()
+            .tw(
+                &bingux_ui::surface::tokens_now(),
+                &[flex_col(), w_full(), gap(S4)],
+            )
             .child(Group::new(None::<String>).row(field).footer(format!(
                 "{} network. Passwords are case sensitive.",
                 self.security.label()
@@ -145,17 +144,16 @@ impl Component for PasswordBody {
             .child(bingux_ui::motion::reveal_block_if(
                 S6,
                 phase_line(&phase.read(), &ssid),
-            ))
+            ));
+        form_dialog(self.ssid.clone(), body, "Connect", move |_: ()| start())
+            .blocked(if busy { None } else { problem })
+            .stays_open()
     }
 }
 
-/// The popup for an 802.1X network: a user name and password.
-pub fn open_enterprise(window: Window, ssid: String) {
-    window.open(
-        popup(ssid.clone(), EnterpriseBody { ssid })
-            .width(Dim::PopupNarrow)
-            .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
-    );
+/// The form dialog for an 802.1X network: a user name and password.
+pub fn open_enterprise(overlays: Overlays, ssid: String) {
+    open_form(overlays, ssid.clone(), EnterpriseBody { ssid }, None);
 }
 
 #[derive(PartialEq)]
@@ -165,57 +163,57 @@ struct EnterpriseBody {
 
 impl Component for EnterpriseBody {
     fn render(&self) -> impl IntoElement {
-        let window = use_window();
+        let overlays = use_overlays();
         let user = use_state(String::new);
         let password = use_state(String::new);
         let phase = use_state(|| Phase::Idle);
-        let ready = !user.read().trim().is_empty() && !password.read().is_empty();
-        let busy = phase.read().busy();
+        let blocked = if user.read().trim().is_empty() {
+            Some("Enter the user name.".to_string())
+        } else if password.read().is_empty() {
+            Some("Enter the password.".to_string())
+        } else {
+            None
+        };
         let ssid = self.ssid.clone();
-        let start = move |ssid: String| {
-            let name = user.read().trim().to_string();
-            let secret = password.read().clone();
-            if !name.is_empty() && !secret.is_empty() {
-                run(phase, window, move || {
-                    nm::connect_enterprise(&ssid, &name, &secret)
-                });
+        let start = {
+            let ssid = ssid.clone();
+            move || {
+                let name = user.read().trim().to_string();
+                let secret = password.read().clone();
+                if !name.is_empty() && !secret.is_empty() {
+                    let ssid = ssid.clone();
+                    run(phase, overlays, move || {
+                        nm::connect_enterprise(&ssid, &name, &secret)
+                    });
+                }
             }
         };
-        let press = start.clone();
-        let press_ssid = ssid.clone();
-        use_popup_actions(PopupActions {
-            primary: Some(PopupAction {
-                label: "Connect".into(),
-                enabled: ready && !busy,
-                on_press: EventHandler::new(move |_: ()| press(press_ssid.clone())),
-            }),
-        });
-        let submit_ssid = ssid.clone();
-        popup_column()
+        let submit = start.clone();
+        let body = rect()
+            .tw(&bingux_ui::surface::tokens_now(), &[flex_col(), w_full(), gap(S4)])
             .child(
                 Group::new(None::<String>)
                     .row(form_field("User name", user).autofocus())
                     .row(
                         form_field("Password", password)
                             .password()
-                            .on_submit(move |_: ()| start(submit_ssid.clone())),
+                            .on_submit(move |_: ()| submit()),
                     )
                     .footer(
                         "Signs in with PEAP and MSCHAPv2, and checks the network's certificate \
                          against the system's. Other methods are set in the network's Security settings.",
                     ),
             )
-            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)))
+            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)));
+        form_dialog(self.ssid.clone(), body, "Connect", move |_: ()| start())
+            .blocked(if phase.read().busy() { None } else { blocked })
+            .stays_open()
     }
 }
 
-/// The popup for a network that does not announce its name.
-pub fn open_hidden(window: Window) {
-    window.open(
-        popup("Hidden network", HiddenBody)
-            .width(Dim::PopupNarrow)
-            .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
-    );
+/// The form dialog for a network that does not announce its name.
+pub fn open_hidden(overlays: Overlays) {
+    open_form(overlays, "Hidden network", HiddenBody, None);
 }
 
 #[derive(PartialEq)]
@@ -234,7 +232,7 @@ fn hidden_security(key: &str) -> HiddenSecurity {
 
 impl Component for HiddenBody {
     fn render(&self) -> impl IntoElement {
-        let window = use_window();
+        let overlays = use_overlays();
         let name = use_state(String::new);
         let password = use_state(String::new);
         let mut security = use_state(|| "wpa2".to_string());
@@ -246,8 +244,13 @@ impl Component for HiddenBody {
             Security::Wpa2
         });
         let needs_password = kind != HiddenSecurity::Open;
-        let ready = validate::ssid(name.read().trim()).is_ok()
-            && (!needs_password || check(&password.read()).is_ok());
+        let blocked = validate::ssid(name.read().trim()).err().or_else(|| {
+            if needs_password {
+                check(&password.read()).err()
+            } else {
+                None
+            }
+        });
         let busy = phase.read().busy();
         let start = move || {
             let ssid = name.read().trim().to_string();
@@ -260,19 +263,12 @@ impl Component for HiddenBody {
             let valid = validate::ssid(&ssid).is_ok()
                 && (kind == HiddenSecurity::Open || check(&secret).is_ok());
             if valid {
-                run(phase, window, move || {
+                run(phase, overlays, move || {
                     nm::connect_hidden(&ssid, kind, &secret)
                 });
             }
         };
         let press = start.clone();
-        use_popup_actions(PopupActions {
-            primary: Some(PopupAction {
-                label: "Connect".into(),
-                enabled: ready && !busy,
-                on_press: EventHandler::new(move |_: ()| press()),
-            }),
-        });
         let options = SECURITY_OPTIONS
             .iter()
             .map(|(key, label)| (key.to_string(), label.to_string()))
@@ -300,12 +296,19 @@ impl Component for HiddenBody {
             );
         }
         let ssid = name.read().trim().to_string();
-        popup_column()
+        let body = rect()
+            .tw(
+                &bingux_ui::surface::tokens_now(),
+                &[flex_col(), w_full(), gap(S4)],
+            )
             .child(fields)
             .child(bingux_ui::motion::reveal_block_if(
                 S6,
                 phase_line(&phase.read(), &ssid),
-            ))
+            ));
+        form_dialog("Hidden network", body, "Connect", move |_: ()| press())
+            .blocked(if busy { None } else { blocked })
+            .stays_open()
     }
 }
 

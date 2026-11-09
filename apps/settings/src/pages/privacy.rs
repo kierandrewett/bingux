@@ -17,6 +17,7 @@ use crate::ui::{
     Group, Overlays, PageHead, ResponseKind, Row, Status, choice_row, dialog, icon_button,
     page_column, primary_button, row, status, switch_row, text_row, use_overlays,
 };
+use bingux_ui::shell::{form_dialog, open_form};
 use bingux_ui::style::*;
 
 /// Every capability, in the order the editor lists them.
@@ -373,16 +374,17 @@ fn open_editor(ctx: Ctx, model: &Model, index: Option<usize>, draft: Draft) {
     } else {
         "Add rule"
     };
-    ctx.overlays.show_dialog(
-        dialog(title, "")
-            .content(RuleEditor {
-                store: model.store.clone(),
-                path: model.path.clone(),
-                index,
-                initial: draft,
-                ctx,
-            })
-            .cancel("Cancel"),
+    open_form(
+        ctx.overlays,
+        title,
+        RuleEditor {
+            store: model.store.clone(),
+            path: model.path.clone(),
+            index,
+            initial: draft,
+            ctx,
+        },
+        None,
     );
 }
 
@@ -550,8 +552,8 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
         .trailing(actions)
 }
 
-/// The rule form, shown in a dialog. It owns its field state and saves the
-/// rule itself, because the dialog's own buttons cannot read the form.
+/// The rule form, shown as a form dialog: the body scrolls and Cancel and Save
+/// stay in the footer. It owns its field state and saves the rule itself.
 #[derive(PartialEq)]
 struct RuleEditor {
     store: Store,
@@ -690,10 +692,17 @@ impl Component for RuleEditor {
         if let Some(message) = error.read().clone() {
             form = form.child(status(Status::Error(message)));
         }
-        form.child(
-            Group::new(None::<String>)
-                .row(row("Save the rule").trailing(primary_button("Save", save))),
-        )
+        form_dialog(self.title(), form, "Save", save).stays_open()
+    }
+}
+
+impl RuleEditor {
+    fn title(&self) -> &'static str {
+        if self.index.is_some() {
+            "Edit rule"
+        } else {
+            "Add rule"
+        }
     }
 }
 

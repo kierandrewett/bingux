@@ -104,7 +104,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Action strip",
         category: Category::Controls,
         page: "Buttons",
-        api: "action_strip(vec![strip_action(Icon, label, on_press).enabled(bool)])",
+        api: "action_strip(vec![strip_action(Icon, label, on_press).enabled(bool).destructive()])",
         doc: "components",
         covers: &["ActionStrip", "StripAction", "action_strip", "strip_action"],
         body: Body::States(buttons::ACTION_STRIP),

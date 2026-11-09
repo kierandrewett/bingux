@@ -663,6 +663,7 @@ fn installed_tools(
         }
         searching.set(!open);
     })
+    .active(*searching.read())
     .tooltip("Search");
     let mut sources =
         vec![menu_item("All", move |_| set_source(source, limit, None)).checked(filter.is_none())];
@@ -769,6 +770,15 @@ impl Component for ApplicationsPage {
                     .trailing(installed_tools(
                         searching, query, sort, source, limit, order, filter,
                     ))
+                    // The menu hides what is on, so the header says it.
+                    .description(match (filter, order) {
+                        (None, Sort::Name) => String::new(),
+                        (Some(kind), Sort::Name) => format!("Showing {}", kind.label()),
+                        (None, Sort::Size) => "Largest first".to_string(),
+                        (Some(kind), Sort::Size) => {
+                            format!("Showing {}, largest first", kind.label())
+                        }
+                    })
                     .below_title(search);
                 if rows.is_empty() {
                     group.row(status(Status::Empty(
@@ -883,9 +893,10 @@ impl Component for AppPage {
         // skeleton until `gio mime` has answered, and says so if it fails.
         let defaults = match &data.choices {
             None => Group::titled("Open by default").row(skeleton_row()),
-            Some(Err(failure)) => {
-                Group::titled("Open by default").row(status(Status::Error(failure.0.clone())))
-            }
+            Some(Err(failure)) => Group::titled("Open by default").row(
+                status(Status::Error(failure.0.clone()))
+                    .action("Try again", move |_| start_load(model)),
+            ),
             Some(Ok(choices)) => {
                 let handled: Vec<(usize, bool)> = choices
                     .iter()
@@ -955,7 +966,7 @@ impl Component for AppPage {
                             .map_or_else(|| "Unknown".to_string(), size_text),
                     ),
                     row("Installed from").value(unknown_if_empty(&details.origin)),
-                    row("Location").value(unknown_if_empty(&details.location)),
+                    row("Location").path_value(unknown_if_empty(&details.location)),
                     row("Category").value(unknown_if_empty(&app.category)),
                 ];
                 Group::titled("Details").rows(rows.into_iter().map(Element::from))
@@ -1028,7 +1039,7 @@ impl Component for AppPage {
                         })
                         .destructive()
                         .compact()
-                        .enabled(removable),
+                        .enabled(removable && !*busy.read()),
                     ),
                 )
             }

@@ -1,4 +1,4 @@
-//! The short popups that ask for a SIM's codes: unlock with the PIN or the
+//! The form dialogs that ask for a SIM's codes: unlock with the PIN or the
 //! PUK, turn the PIN lock on or off, change the PIN. Each runs `mmcli -i`.
 
 use freya::prelude::*;
@@ -7,12 +7,9 @@ use super::ModemState;
 use super::modem::{self, pin_error, puk_error};
 use crate::pages::network::model::NetCtx;
 use crate::system::{CommandError, background_then};
-use crate::ui::{
-    Group, PopupAction, PopupActions, Status, caption, form_field, popup, popup_column, status,
-    use_popup_actions, use_window,
-};
-use bingux_ui::style::S6;
-use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
+use crate::ui::{Group, Status, form_field, status};
+use bingux_ui::shell::{form_dialog, open_form};
+use bingux_ui::style::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PinTask {
@@ -39,7 +36,7 @@ impl PinTask {
     fn action(self) -> &'static str {
         match self {
             Self::Unlock | Self::Puk => "Unlock",
-            Self::Enable => "Turn on",
+            Self::Enable => "Lock SIM",
             Self::Disable => "Turn off",
             Self::Change => "Change",
         }
@@ -63,7 +60,7 @@ impl PinTask {
         }
     }
 
-    /// Whether the popup also asks for a new PIN, twice.
+    /// Whether the dialog also asks for a new PIN, twice.
     fn new_pin(self) -> bool {
         matches!(self, Self::Puk | Self::Change)
     }
@@ -84,19 +81,18 @@ impl PinTask {
     }
 }
 
-/// Open the popup for `task` on the SIM `sim`.
+/// Open the dialog for `task` on the SIM `sim`.
 pub fn open(ctx: NetCtx, modem: ModemState, task: PinTask, sim: String) {
-    ctx.window.open(
-        popup(
-            task.title(),
-            PinBody {
-                ctx,
-                modem,
-                task,
-                sim,
-            },
-        )
-        .flags(PopupFlags::FORM | PopupFlags::NO_DISMISS_OUTSIDE),
+    open_form(
+        ctx.overlays,
+        task.title(),
+        PinBody {
+            ctx,
+            modem,
+            task,
+            sim,
+        },
+        None,
     );
 }
 
@@ -122,7 +118,6 @@ struct PinBody {
 impl Component for PinBody {
     fn render(&self) -> impl IntoElement {
         let (ctx, task, modem_state) = (self.ctx, self.task, self.modem);
-        let window = use_window();
         let first = use_state(String::new);
         let new_pin = use_state(String::new);
         let repeat = use_state(String::new);
@@ -159,7 +154,7 @@ impl Component for PinBody {
                     super::reload_modem(modem_state);
                     match result {
                         Ok(()) => {
-                            window.close();
+                            ctx.overlays.dismiss_dialog();
                             ctx.overlays.toast(task.done());
                         }
                         Err(failure) => {
@@ -172,13 +167,23 @@ impl Component for PinBody {
         };
 
         let press = submit.clone();
-        use_popup_actions(PopupActions {
-            primary: Some(PopupAction {
-                label: task.action().into(),
-                enabled: valid && !*busy.read(),
-                on_press: EventHandler::new(move |_: ()| press()),
-            }),
-        });
+        let blocked = if *busy.read() {
+            None
+        } else {
+            first_check(&first.read()).err().or_else(|| {
+                if task.new_pin() {
+                    pin_error(&new_pin.read())
+                        .err()
+                        .map(|text| format!("New PIN: {text}"))
+                        .or_else(|| {
+                            (*repeat.read() != *new_pin.read())
+                                .then(|| "The two PINs are not the same.".to_string())
+                        })
+                } else {
+                    None
+                }
+            })
+        };
 
         let attempts = modem_state
             .read()
@@ -216,15 +221,22 @@ impl Component for PinBody {
         if let Some(note) = note {
             fields = fields.footer(note);
         }
-        popup_column().child(fields.description(task.hint())).child(
-            bingux_ui::motion::reveal_block_if(
+        let body = rect()
+            .tw(
+                &bingux_ui::surface::tokens_now(),
+                &[flex_col(), w_full(), gap(S4)],
+            )
+            .child(fields.description(task.hint()))
+            .child(bingux_ui::motion::reveal_block_if(
                 S6,
                 error
                     .read()
                     .clone()
                     .map(|text| Element::from(status(Status::Error(text)))),
-            ),
-        )
+            ));
+        form_dialog(task.title(), body, task.action(), move |_: ()| press())
+            .blocked(blocked)
+            .stays_open()
     }
 }
 

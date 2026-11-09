@@ -12,7 +12,33 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 pub const NOT_RUNNING: &str = "The desktop is not running. Sign out and sign in again.";
 
 /// Shown beside a setting that the desktop configuration controls.
-pub const MANAGED: &str = "Managed by your desktop configuration";
+pub const MANAGED: &str = "Set in your desktop configuration";
+
+/// A row for a setting the desktop configuration controls: read only, marked
+/// "Managed", with `value` already in words (see [`on_off`] and [`millis`]).
+pub fn managed_row(title: &str, value: impl Into<String>) -> crate::ui::Row {
+    crate::ui::row(title)
+        .subtitle(MANAGED)
+        .badge("Managed")
+        .value(value)
+}
+
+/// A Lua boolean in words: `true` and `On` read as On, anything else as Off.
+pub fn on_off(raw: &str) -> &'static str {
+    if matches!(raw, "true" | "On") {
+        "On"
+    } else {
+        "Off"
+    }
+}
+
+/// A Lua number of milliseconds in words, such as `500 ms`.
+pub fn millis(raw: &str) -> String {
+    match raw.parse::<f64>() {
+        Ok(ms) => format!("{} ms", ms.round() as i64),
+        Err(_) => raw.to_string(),
+    }
+}
 
 /// A parsed JSON document. Objects keep their member order.
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
