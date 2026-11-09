@@ -1,34 +1,88 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
     <defs>
-        <linearGradient id="paper" x1="0" x2="0" y1="0" y2="1">
+        <linearGradient id="te-paper" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#fffefb"/>
+            <stop offset="1" stop-color="#eeeae1"/>
+        </linearGradient>
+        <linearGradient id="te-flap" x1="86" x2="100" y1="30" y2="16" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#e6e0d5"/>
+            <stop offset="1" stop-color="#fdfbf7"/>
+        </linearGradient>
+        <!-- Pen gradients run across the pen, in its own frame (axis along x, light from -y). -->
+        <linearGradient id="te-barrel" x1="0" x2="0" y1="-8" y2="8" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#686c78"/>
+            <stop offset="0.28" stop-color="#2b2e37"/>
+            <stop offset="0.72" stop-color="#101116"/>
+            <stop offset="1" stop-color="#30333d"/>
+        </linearGradient>
+        <linearGradient id="te-metal" x1="0" x2="0" y1="-8.6" y2="8.6" gradientUnits="userSpaceOnUse">
             <stop offset="0" stop-color="#ffffff"/>
-            <stop offset="1" stop-color="#ebeae8"/>
+            <stop offset="0.3" stop-color="#d6d5d2"/>
+            <stop offset="0.7" stop-color="#77767b"/>
+            <stop offset="1" stop-color="#b0afac"/>
         </linearGradient>
-        <linearGradient id="pencil" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0" stop-color="#f6d32d"/>
-            <stop offset="1" stop-color="#e5a50a"/>
+        <linearGradient id="te-clip" x1="0" x2="0" y1="-1.8" y2="1.8" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#ebeae7"/>
+            <stop offset="1" stop-color="#6f6e73"/>
         </linearGradient>
+        <linearGradient id="te-nib" x1="0" x2="0" y1="-6.4" y2="6.4" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stop-color="#fcebb0"/>
+            <stop offset="0.45" stop-color="#e2b34c"/>
+            <stop offset="1" stop-color="#94640f"/>
+        </linearGradient>
+        <filter id="te-soft" x="-20" y="-20" width="168" height="168" filterUnits="userSpaceOnUse">
+            <feGaussianBlur stdDeviation="2.2"/>
+        </filter>
+        <filter id="te-softer" x="-20" y="-20" width="168" height="168" filterUnits="userSpaceOnUse">
+            <feGaussianBlur stdDeviation="1.2"/>
+        </filter>
     </defs>
-    <!-- A sheet with a folded corner, its edge darker beneath for depth. -->
-    <path d="M24 16a10 10 0 0 1 10-10h44l26 26v80a10 10 0 0 1-10 10H34a10 10 0 0 1-10-10z" fill="#9a9996" transform="translate(0 3)"/>
-    <path d="M24 16a10 10 0 0 1 10-10h44l26 26v80a10 10 0 0 1-10 10H34a10 10 0 0 1-10-10z" fill="url(#paper)"/>
-    <path d="M78 6v18a8 8 0 0 0 8 8h18z" fill="#deddda"/>
-    <!-- Lines of text: code coloured as the editor colours it. -->
-    <rect fill="#e01b76" height="6" rx="3" width="16" x="36" y="40"/>
-    <rect fill="#c0bfbc" height="6" rx="3" width="28" x="56" y="40"/>
-    <rect fill="#c0bfbc" height="6" rx="3" width="12" x="46" y="54"/>
-    <rect fill="#1c71d8" height="6" rx="3" width="22" x="62" y="54"/>
-    <rect fill="#c0bfbc" height="6" rx="3" width="20" x="46" y="68"/>
-    <rect fill="#e66100" height="6" rx="3" width="18" x="70" y="68"/>
-    <rect fill="#c0bfbc" height="6" rx="3" width="10" x="36" y="82"/>
-    <!-- The caret. -->
-    <rect fill="#3584e4" height="14" rx="1.5" width="3" x="50" y="78"/>
-    <!-- A pencil across the corner. -->
-    <g transform="rotate(45 94 92)">
-        <rect fill="url(#pencil)" height="12" rx="2" width="44" x="72" y="86"/>
-        <rect fill="#c0bfbc" height="12" width="6" x="112" y="86"/>
-        <path d="M72 86l-12 6 12 6z" fill="#f9f06b"/>
-        <path d="M64 90l-4 2 4 2z" fill="#3d3846"/>
+    <!-- The sheet: a soft shadow on the desk, its lower edge for thickness, then the page. -->
+    <path d="M24 13h62l24 24v78a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V19a6 6 0 0 1 6-6z" fill="#000000" filter="url(#te-soft)" opacity="0.3"/>
+    <path d="M24 13h62l24 24v78a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V19a6 6 0 0 1 6-6z" fill="#a8a296"/>
+    <path d="M24 8h62l24 24v78a6 6 0 0 1-6 6H24a6 6 0 0 1-6-6V14a6 6 0 0 1 6-6z" fill="url(#te-paper)" stroke="#5e5446" stroke-opacity="0.12" stroke-width="0.6"/>
+    <rect fill="#ffffff" height="1.5" opacity="0.9" rx="0.75" width="60" x="24" y="8.6"/>
+    <!-- The folded corner: its shadow on the page, then the back of the flap. -->
+    <path d="M86 8v20a4 4 0 0 0 4 4h20z" fill="#000000" filter="url(#te-softer)" opacity="0.32" transform="translate(-1.5 2)"/>
+    <path d="M86 8v20a4 4 0 0 0 4 4h20z" fill="url(#te-flap)"/>
+    <path d="M86 8l24 24" stroke="#ffffff" stroke-linecap="round" stroke-opacity="0.9" stroke-width="1"/>
+    <!-- Plain text: a heading, then ragged lines of body. -->
+    <rect fill="#9a958c" height="6" rx="3" width="40" x="29" y="22"/>
+    <g fill="#c6c1b8">
+        <rect height="5" rx="2.5" width="70" x="29" y="40"/>
+        <rect height="5" rx="2.5" width="64" x="29" y="51"/>
+        <rect height="5" rx="2.5" width="42" x="29" y="62"/>
+        <rect height="5" rx="2.5" width="68" x="29" y="78"/>
+        <rect height="5" rx="2.5" width="58" x="29" y="89"/>
+        <rect height="5" rx="2.5" width="30" x="29" y="100"/>
+    </g>
+    <!-- The pen's shadow on the paper. -->
+    <g filter="url(#te-soft)" opacity="0.42" transform="translate(3.5 5.5) translate(27 108) rotate(-40)">
+        <path d="M0 0L24 -6.6H98a7.5 7.5 0 0 1 0 15H24z" fill="#000000"/>
+    </g>
+    <!-- A fountain pen, nib down to the left, lying across the page. -->
+    <g transform="translate(27 108) rotate(-40)">
+        <!-- Nib: the black feed under it, the gold nib with its slit and breather hole. -->
+        <path d="M9 1.6C14 4.4 19 6.2 25 6.6V3z" fill="#1b1c21"/>
+        <path d="M0 0C6 -1.4 14 -6 25 -6.4V6.4C14 6 6 1.4 0 0z" fill="url(#te-nib)"/>
+        <path d="M1.5 0H15" stroke="#5a3a06" stroke-linecap="round" stroke-width="1"/>
+        <circle cx="16.4" cy="0" fill="#5a3a06" r="1.6"/>
+        <path d="M5 -1.8C11 -3.9 17 -5.2 23.5 -5.4" fill="none" stroke="#fff8dc" stroke-linecap="round" stroke-opacity="0.85" stroke-width="0.9"/>
+        <path d="M20 -6V6" stroke="#94640f" stroke-opacity="0.5" stroke-width="0.6"/>
+        <!-- Grip section, tapering to the nib. -->
+        <path d="M24 -6.2L36 -7.2V7.2L24 6.2z" fill="url(#te-barrel)"/>
+        <!-- Metal band between grip and cap. -->
+        <rect fill="url(#te-metal)" height="17.2" rx="1.2" width="5" x="35.5" y="-8.6"/>
+        <!-- Cap and barrel, with a rounded end. -->
+        <path d="M40.5 -8H97a8 8 0 0 1 0 16H40.5z" fill="url(#te-barrel)"/>
+        <rect fill="url(#te-metal)" height="16.6" rx="0.9" width="3" x="66" y="-8.3"/>
+        <!-- Gloss along the top of the pen. -->
+        <path d="M26 -4.4L34.5 -5.1M43 -5.2H64M71 -5.2H98" stroke="#ffffff" stroke-linecap="round" stroke-opacity="0.55" stroke-width="1.6"/>
+        <!-- Steel clip on the cap. -->
+        <path d="M76 2H99" stroke="#000000" stroke-linecap="round" stroke-opacity="0.45" stroke-width="3.6"/>
+        <path d="M76 0H100" stroke="url(#te-clip)" stroke-linecap="round" stroke-width="3"/>
+        <circle cx="76" cy="0" fill="url(#te-clip)" r="2.3"/>
+        <circle cx="75.4" cy="-0.8" fill="#ffffff" opacity="0.9" r="0.8"/>
     </g>
 </svg>
