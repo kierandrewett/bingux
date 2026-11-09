@@ -4,6 +4,9 @@
 use bingux_ui::prelude::tr;
 use bingux_weather::astro::MoonPhase;
 use bingux_weather::codes::Condition;
+use bingux_weather::text::{
+    AqiBand, DewComfort, Point, PressureTrend, UvLevel, Visibility, WindForce,
+};
 use bingux_weather::{Forecast, Place, Units, text};
 
 /// The sky's condition in words: `Light rain`. Sentence case.
@@ -130,7 +133,9 @@ pub fn conditions(place: &Place, forecast: &Forecast, units: &Units) -> String {
 
     let wind = current.wind_speed.map(|speed| {
         let speed = units.speed(speed);
-        let direction = current.wind_direction.map(text::cardinal_long);
+        let direction = current
+            .wind_direction
+            .map(|degrees| point_long(text::point(degrees)));
         (speed, direction)
     });
     let air = air_sentence(wind, current.humidity.map(|h| h.round() as i64));
@@ -187,4 +192,183 @@ fn air_sentence(wind: Option<(String, Option<String>)>, humidity: Option<i64>) -
         (None, Some(percent)) => tr!("weather-air-humidity", percent = percent),
         (None, None) => return None,
     })
+}
+
+/// The UV band's name, as a title, e.g. `Very high`.
+pub fn uv_category(level: UvLevel) -> String {
+    match level {
+        UvLevel::Low => tr!("weather-uv-low"),
+        UvLevel::Moderate => tr!("weather-uv-moderate"),
+        UvLevel::High => tr!("weather-uv-high"),
+        UvLevel::VeryHigh => tr!("weather-uv-very-high"),
+        UvLevel::Extreme => tr!("weather-uv-extreme"),
+    }
+}
+
+/// The UV band lowercase, for a sentence.
+pub fn uv_inline(level: UvLevel) -> String {
+    match level {
+        UvLevel::Low => tr!("weather-uv-inline-low"),
+        UvLevel::Moderate => tr!("weather-uv-inline-moderate"),
+        UvLevel::High => tr!("weather-uv-inline-high"),
+        UvLevel::VeryHigh => tr!("weather-uv-inline-very-high"),
+        UvLevel::Extreme => tr!("weather-uv-inline-extreme"),
+    }
+}
+
+/// What a UV band asks of a person, in one line.
+pub fn uv_advice(level: UvLevel) -> String {
+    match level {
+        UvLevel::Low => tr!("weather-uv-advice-low"),
+        UvLevel::Moderate => tr!("weather-uv-advice-moderate"),
+        UvLevel::High => tr!("weather-uv-advice-high"),
+        UvLevel::VeryHigh => tr!("weather-uv-advice-very-high"),
+        UvLevel::Extreme => tr!("weather-uv-advice-extreme"),
+    }
+}
+
+/// The US air quality band's name, as a title.
+pub fn aqi_category(band: AqiBand) -> String {
+    match band {
+        AqiBand::Good => tr!("weather-aqi-good"),
+        AqiBand::Moderate => tr!("weather-aqi-moderate"),
+        AqiBand::UnhealthySensitive => tr!("weather-aqi-unhealthy-sensitive"),
+        AqiBand::Unhealthy => tr!("weather-aqi-unhealthy"),
+        AqiBand::VeryUnhealthy => tr!("weather-aqi-very-unhealthy"),
+        AqiBand::Hazardous => tr!("weather-aqi-hazardous"),
+    }
+}
+
+/// The air quality band lowercase, for a sentence.
+pub fn aqi_inline(band: AqiBand) -> String {
+    match band {
+        AqiBand::Good => tr!("weather-aqi-inline-good"),
+        AqiBand::Moderate => tr!("weather-aqi-inline-moderate"),
+        AqiBand::UnhealthySensitive => tr!("weather-aqi-inline-unhealthy-sensitive"),
+        AqiBand::Unhealthy => tr!("weather-aqi-inline-unhealthy"),
+        AqiBand::VeryUnhealthy => tr!("weather-aqi-inline-very-unhealthy"),
+        AqiBand::Hazardous => tr!("weather-aqi-inline-hazardous"),
+    }
+}
+
+/// What the air quality band means for a person, in one line.
+pub fn aqi_advice(band: AqiBand) -> String {
+    match band {
+        AqiBand::Good => tr!("weather-aqi-advice-good"),
+        AqiBand::Moderate => tr!("weather-aqi-advice-moderate"),
+        AqiBand::UnhealthySensitive => tr!("weather-aqi-advice-unhealthy-sensitive"),
+        AqiBand::Unhealthy => tr!("weather-aqi-advice-unhealthy"),
+        AqiBand::VeryUnhealthy => tr!("weather-aqi-advice-very-unhealthy"),
+        AqiBand::Hazardous => tr!("weather-aqi-advice-hazardous"),
+    }
+}
+
+/// How humid the air feels.
+pub fn dew_comfort(comfort: DewComfort) -> String {
+    match comfort {
+        DewComfort::Dry => tr!("weather-dew-dry"),
+        DewComfort::Comfortable => tr!("weather-dew-comfortable"),
+        DewComfort::Humid => tr!("weather-dew-humid"),
+        DewComfort::VeryHumid => tr!("weather-dew-very-humid"),
+        DewComfort::Oppressive => tr!("weather-dew-oppressive"),
+    }
+}
+
+/// How far a person can see.
+pub fn visibility(band: Visibility) -> String {
+    match band {
+        Visibility::Excellent => tr!("weather-visibility-excellent"),
+        Visibility::Clear => tr!("weather-visibility-clear"),
+        Visibility::Moderate => tr!("weather-visibility-moderate"),
+        Visibility::Poor => tr!("weather-visibility-poor"),
+        Visibility::VeryPoor => tr!("weather-visibility-very-poor"),
+    }
+}
+
+/// The pressure trend over three hours.
+pub fn pressure_trend(trend: PressureTrend) -> String {
+    match trend {
+        PressureTrend::Rising => tr!("weather-pressure-rising"),
+        PressureTrend::Falling => tr!("weather-pressure-falling"),
+        PressureTrend::Steady => tr!("weather-pressure-steady"),
+    }
+}
+
+/// How windy it is, on the Beaufort scale's plain names.
+pub fn wind_force(force: WindForce) -> String {
+    match force {
+        WindForce::Calm => tr!("weather-force-calm"),
+        WindForce::LightBreeze => tr!("weather-force-light-breeze"),
+        WindForce::Breeze => tr!("weather-force-breeze"),
+        WindForce::StrongBreeze => tr!("weather-force-strong-breeze"),
+        WindForce::Gale => tr!("weather-force-gale"),
+        WindForce::Storm => tr!("weather-force-storm"),
+        WindForce::HurricaneForce => tr!("weather-force-hurricane-force"),
+    }
+}
+
+/// The compass point, short: `NE`.
+pub fn point_short(point: Point) -> String {
+    match point {
+        Point::N => tr!("weather-point-short-n"),
+        Point::Nne => tr!("weather-point-short-nne"),
+        Point::Ne => tr!("weather-point-short-ne"),
+        Point::Ene => tr!("weather-point-short-ene"),
+        Point::E => tr!("weather-point-short-e"),
+        Point::Ese => tr!("weather-point-short-ese"),
+        Point::Se => tr!("weather-point-short-se"),
+        Point::Sse => tr!("weather-point-short-sse"),
+        Point::S => tr!("weather-point-short-s"),
+        Point::Ssw => tr!("weather-point-short-ssw"),
+        Point::Sw => tr!("weather-point-short-sw"),
+        Point::Wsw => tr!("weather-point-short-wsw"),
+        Point::W => tr!("weather-point-short-w"),
+        Point::Wnw => tr!("weather-point-short-wnw"),
+        Point::Nw => tr!("weather-point-short-nw"),
+        Point::Nnw => tr!("weather-point-short-nnw"),
+    }
+}
+
+/// The compass point spelled out, lower case: `north-east`.
+pub fn point_long(point: Point) -> String {
+    match point {
+        Point::N => tr!("weather-point-long-n"),
+        Point::Nne => tr!("weather-point-long-nne"),
+        Point::Ne => tr!("weather-point-long-ne"),
+        Point::Ene => tr!("weather-point-long-ene"),
+        Point::E => tr!("weather-point-long-e"),
+        Point::Ese => tr!("weather-point-long-ese"),
+        Point::Se => tr!("weather-point-long-se"),
+        Point::Sse => tr!("weather-point-long-sse"),
+        Point::S => tr!("weather-point-long-s"),
+        Point::Ssw => tr!("weather-point-long-ssw"),
+        Point::Sw => tr!("weather-point-long-sw"),
+        Point::Wsw => tr!("weather-point-long-wsw"),
+        Point::W => tr!("weather-point-long-w"),
+        Point::Wnw => tr!("weather-point-long-wnw"),
+        Point::Nw => tr!("weather-point-long-nw"),
+        Point::Nnw => tr!("weather-point-long-nnw"),
+    }
+}
+
+/// The compass point spelled out, as a title: `North-east`.
+pub fn point_title(point: Point) -> String {
+    match point {
+        Point::N => tr!("weather-point-title-n"),
+        Point::Nne => tr!("weather-point-title-nne"),
+        Point::Ne => tr!("weather-point-title-ne"),
+        Point::Ene => tr!("weather-point-title-ene"),
+        Point::E => tr!("weather-point-title-e"),
+        Point::Ese => tr!("weather-point-title-ese"),
+        Point::Se => tr!("weather-point-title-se"),
+        Point::Sse => tr!("weather-point-title-sse"),
+        Point::S => tr!("weather-point-title-s"),
+        Point::Ssw => tr!("weather-point-title-ssw"),
+        Point::Sw => tr!("weather-point-title-sw"),
+        Point::Wsw => tr!("weather-point-title-wsw"),
+        Point::W => tr!("weather-point-title-w"),
+        Point::Wnw => tr!("weather-point-title-wnw"),
+        Point::Nw => tr!("weather-point-title-nw"),
+        Point::Nnw => tr!("weather-point-title-nnw"),
+    }
 }

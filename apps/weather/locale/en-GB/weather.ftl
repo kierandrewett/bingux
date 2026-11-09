@@ -238,3 +238,129 @@ weather-air-wind-from = wind { $speed } from the { $direction }.
 weather-air-wind-humidity = wind { $speed }, humidity { $percent }%.
 weather-air-wind = wind { $speed }.
 weather-air-humidity = humidity { $percent }%.
+
+
+## UV scale, one per band; inline is the lowercase form for a sentence; advice is one line
+weather-uv-low = Low
+weather-uv-inline-low = low
+weather-uv-advice-low = No protection needed.
+weather-uv-moderate = Moderate
+weather-uv-inline-moderate = moderate
+weather-uv-advice-moderate = Wear sunscreen if you are outside for long.
+weather-uv-high = High
+weather-uv-inline-high = high
+weather-uv-advice-high = Wear sunscreen and a hat. Seek shade at midday.
+weather-uv-very-high = Very high
+weather-uv-inline-very-high = very high
+weather-uv-advice-very-high = Cover up and wear sunscreen. Avoid the midday sun.
+weather-uv-extreme = Extreme
+weather-uv-inline-extreme = extreme
+weather-uv-advice-extreme = Stay out of the sun at midday.
+
+## Air quality, one per US AQI band; inline is lowercase; advice is one line
+weather-aqi-good = Good
+weather-aqi-inline-good = good
+weather-aqi-advice-good = Air quality is satisfactory.
+weather-aqi-moderate = Moderate
+weather-aqi-inline-moderate = moderate
+weather-aqi-advice-moderate = Unusually sensitive people may notice effects.
+weather-aqi-unhealthy-sensitive = Unhealthy for sensitive groups
+weather-aqi-inline-unhealthy-sensitive = unhealthy for sensitive groups
+weather-aqi-advice-unhealthy-sensitive = People with lung or heart disease should limit time outside.
+weather-aqi-unhealthy = Unhealthy
+weather-aqi-inline-unhealthy = unhealthy
+weather-aqi-advice-unhealthy = Everyone may notice effects. Limit time outside.
+weather-aqi-very-unhealthy = Very unhealthy
+weather-aqi-inline-very-unhealthy = very unhealthy
+weather-aqi-advice-very-unhealthy = Avoid exertion outside.
+weather-aqi-hazardous = Hazardous
+weather-aqi-inline-hazardous = hazardous
+weather-aqi-advice-hazardous = Stay indoors.
+
+## Dew point comfort, one per band
+weather-dew-dry = Dry
+weather-dew-comfortable = Comfortable
+weather-dew-humid = Humid
+weather-dew-very-humid = Very humid
+weather-dew-oppressive = Oppressive
+
+## Visibility, one per band
+weather-visibility-excellent = Excellent
+weather-visibility-clear = Clear
+weather-visibility-moderate = Moderate
+weather-visibility-poor = Poor
+weather-visibility-very-poor = Very poor
+
+## Pressure trend
+weather-pressure-rising = Rising
+weather-pressure-falling = Falling
+weather-pressure-steady = Steady
+
+## Wind force, Beaufort plain names
+weather-force-calm = Calm
+weather-force-light-breeze = Light breeze
+weather-force-breeze = Breeze
+weather-force-strong-breeze = Strong breeze
+weather-force-gale = Gale
+weather-force-storm = Storm
+weather-force-hurricane-force = Hurricane force
+
+## Compass points: short code, long word, and the title form that starts a sentence
+# Short code for the hourly forecast's wind
+weather-point-short-n = N
+weather-point-short-nne = NNE
+weather-point-short-ne = NE
+weather-point-short-ene = ENE
+weather-point-short-e = E
+weather-point-short-ese = ESE
+weather-point-short-se = SE
+weather-point-short-sse = SSE
+weather-point-short-s = S
+weather-point-short-ssw = SSW
+weather-point-short-sw = SW
+weather-point-short-wsw = WSW
+weather-point-short-w = W
+weather-point-short-wnw = WNW
+weather-point-short-nw = NW
+weather-point-short-nnw = NNW
+# Long word, lower case, for a sentence
+weather-point-long-n = north
+weather-point-long-nne = north-north-east
+weather-point-long-ne = north-east
+weather-point-long-ene = east-north-east
+weather-point-long-e = east
+weather-point-long-ese = east-south-east
+weather-point-long-se = south-east
+weather-point-long-sse = south-south-east
+weather-point-long-s = south
+weather-point-long-ssw = south-south-west
+weather-point-long-sw = south-west
+weather-point-long-wsw = west-south-west
+weather-point-long-w = west
+weather-point-long-wnw = west-north-west
+weather-point-long-nw = north-west
+weather-point-long-nnw = north-north-west
+# Title form, for a card label
+weather-point-title-n = North
+weather-point-title-nne = North-north-east
+weather-point-title-ne = North-east
+weather-point-title-ene = East-north-east
+weather-point-title-e = East
+weather-point-title-ese = East-south-east
+weather-point-title-se = South-east
+weather-point-title-sse = South-south-east
+weather-point-title-s = South
+weather-point-title-ssw = South-south-west
+weather-point-title-sw = South-west
+weather-point-title-wsw = West-south-west
+weather-point-title-w = West
+weather-point-title-wnw = West-north-west
+weather-point-title-nw = North-west
+weather-point-title-nnw = North-north-west
+## Card sentence: the dew point
+# $temperature: the dew point, already formatted with its unit.
+weather-card-dew-point = The dew point is { $temperature } right now.
+
+## Card label for the air quality range
+# $index: the AQI number. $level: the band in lower case, from aqi_inline.
+weather-card-aqi-label = Air quality index { $index }, { $level }

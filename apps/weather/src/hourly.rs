@@ -95,7 +95,7 @@ impl HourStrip {
                 if let Some(speed) = hour.wind_speed {
                     let from = hour
                         .wind_direction
-                        .map(|degrees| format!(" {}", text::cardinal(degrees)))
+                        .map(|degrees| format!(" {}", words::point_short(text::point(degrees))))
                         .unwrap_or_default();
                     parts.push(tr!(
                         "weather-hourly-wind",
