@@ -10,6 +10,7 @@
 use std::time::Duration;
 
 use bingux_media::{Kind, PlayState, Precision, Repeat, Sleep, SleepLeft, Status};
+use bingux_ui::controls::TipSide;
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::media::{
     ArtworkKind, RepeatMode, Seek, TransportAction, VideoFrame, VideoFrames, VolumeChange, artwork,
@@ -345,6 +346,7 @@ impl Component for FilmStage {
             .child(
                 icon_button(Icon::ViewPip, move |_| set_mini(ui, !*ui.mini.peek()))
                     .active(mini)
+                    .tooltip_side(TipSide::Above)
                     .tooltip(if mini {
                         text::LEAVE_MINI_PLAYER
                     } else {
@@ -356,6 +358,7 @@ impl Component for FilmStage {
                     set_fullscreen(ui, !*ui.fullscreen.peek())
                 })
                 .morph(Icon::ViewRestore, fullscreen)
+                .tooltip_side(TipSide::Above)
                 .tooltip(if fullscreen {
                     text::LEAVE_FULL_SCREEN
                 } else {

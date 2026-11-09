@@ -106,6 +106,37 @@ pub fn hover_tip(child: impl IntoElement, text: impl Into<String>) -> Element {
         child: child.into_element(),
         text: text.into(),
         size: None,
+        prefer: None,
+    })
+}
+
+/// Which side of its control a tip opens on when there is room. The tip falls
+/// back to the usual order (below, above, right, left) when that side has none.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum TipSide {
+    Below,
+    Above,
+    Right,
+    Left,
+}
+
+/// [`hover_tip`] that opens on `prefer` when it fits, and otherwise on the
+/// first side that does. A tip keeps its side after it opens, as always.
+pub fn hover_tip_preferring(
+    child: impl IntoElement,
+    text: impl Into<String>,
+    prefer: TipSide,
+) -> Element {
+    Element::from(HoverTip {
+        child: child.into_element(),
+        text: text.into(),
+        size: None,
+        prefer: Some(match prefer {
+            TipSide::Below => Side::Below,
+            TipSide::Above => Side::Above,
+            TipSide::Right => Side::Right,
+            TipSide::Left => Side::Left,
+        }),
     })
 }
 
@@ -123,6 +154,7 @@ pub fn hover_tip_sized(
         child: child.into_element(),
         text: text.into(),
         size: Some((width, height)),
+        prefer: None,
     })
 }
 
@@ -343,6 +375,8 @@ struct HoverTip {
     /// The width and height the child is laid out with in its parent, when
     /// the child does not size from its content.
     size: Option<(Size, Size)>,
+    /// The side the tip opens on when it fits, before the usual order.
+    prefer: Option<Side>,
 }
 
 /// The box around a tip and its child, with the size the child asked for.
@@ -561,7 +595,7 @@ impl Component for HoverTip {
             PanelRect::from_area(&area),
             shown.size,
             (window.width, window.height),
-            side.get(),
+            side.get().or(self.prefer),
         );
         side.set(Some(placed.side));
 

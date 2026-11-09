@@ -377,9 +377,15 @@ pub static ENTRIES: &[Entry] = &[
         name: "Tooltip",
         category: Category::Controls,
         page: "Feedback",
-        api: "hover_tip(child, text) -> Element; hover_tip_sized(child, text, width, height) -> Element for a child that flexes; tooltip_icon(Icon, IconSize, Paint, text) -> Element; icon_button(..).tooltip(text)",
+        api: "hover_tip(child, text) -> Element; hover_tip_sized(child, text, width, height) -> Element for a child that flexes; hover_tip_preferring(child, text, TipSide) -> Element opens on the side when it fits; icon_button(..).tooltip_side(TipSide); tooltip_icon(Icon, IconSize, Paint, text) -> Element; icon_button(..).tooltip(text)",
         doc: "components",
-        covers: &["hover_tip", "hover_tip_sized", "tooltip_icon"],
+        covers: &[
+            "hover_tip",
+            "hover_tip_sized",
+            "hover_tip_preferring",
+            "TipSide",
+            "tooltip_icon",
+        ],
         body: Body::States(feedback::TOOLTIP),
     },
     Entry {

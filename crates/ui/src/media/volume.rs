@@ -11,6 +11,7 @@ use freya::prelude::*;
 use crate::component::ComponentName;
 use crate::controls::button::icon_button;
 use crate::controls::slider::slider;
+use crate::controls::tooltip::TipSide;
 use crate::icons::Icon;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -117,6 +118,7 @@ impl Component for VolumeControl {
             move |_| on_change.call(VolumeChange::Mute(!muted))
         })
         .ink(ink)
+        .tooltip_side(TipSide::Above)
         .tooltip(if muted { "Unmute (M)" } else { "Mute (M)" })
         .enabled(self.enabled);
         let wheel = {

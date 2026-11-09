@@ -13,6 +13,7 @@ use freya::prelude::*;
 
 use crate::component::ComponentName;
 use crate::controls::button::icon_button;
+use crate::controls::tooltip::TipSide;
 use crate::icons::Icon;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -138,6 +139,7 @@ impl Component for Transport {
         let button = |glyph: Icon, which: TransportAction, tip: &str, enabled: bool| -> Element {
             icon_button(glyph, action(which))
                 .ink(ink)
+                .tooltip_side(TipSide::Above)
                 .tooltip(tip)
                 .enabled(self.enabled && enabled)
                 .into()
@@ -153,6 +155,7 @@ impl Component for Transport {
             .radius(Radius::Pill)
             .filled()
             .ink(ink)
+            .tooltip_side(TipSide::Above)
             .tooltip(play_tip)
             .enabled(self.enabled);
 
@@ -183,6 +186,7 @@ impl Component for Transport {
                 icon_button(Icon::MediaPlaylistShuffle, action(TransportAction::Shuffle))
                     .ink(ink)
                     .active(on)
+                    .tooltip_side(TipSide::Above)
                     .tooltip(if on { "Shuffle is on" } else { "Shuffle" })
                     .enabled(self.enabled),
             );
@@ -226,6 +230,7 @@ impl Component for Transport {
                 icon_button(glyph, action(TransportAction::Repeat))
                     .ink(ink)
                     .active(mode != RepeatMode::Off)
+                    .tooltip_side(TipSide::Above)
                     .tooltip(tip)
                     .enabled(self.enabled),
             );
