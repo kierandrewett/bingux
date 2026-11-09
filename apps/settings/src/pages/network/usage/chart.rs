@@ -2,6 +2,7 @@
 
 use bingux_data_usage::{Bucket, Granularity, Zone};
 use bingux_ui::charts::{Series, Unit, bar_chart};
+use bingux_ui::prelude::tr;
 use freya::prelude::Element;
 
 use super::format;
@@ -81,8 +82,8 @@ pub fn has_traffic(buckets: &[Bucket]) -> bool {
 /// reader.
 pub fn chart(data: &ChartData, label: String) -> Element {
     bar_chart([
-        Series::values("Received", data.received.iter().copied()),
-        Series::values("Sent", data.sent.iter().copied()),
+        Series::values(&tr!("data-usage-received"), data.received.iter().copied()),
+        Series::values(&tr!("data-usage-sent"), data.sent.iter().copied()),
     ])
     .categories(data.names.iter().cloned())
     .details(data.details.iter().cloned())
