@@ -174,7 +174,7 @@ fn sends_hostname(saved: &ProfileData) -> bool {
 /// A dropdown that writes `key` as soon as a choice is made. `unset` is what an empty stored value means.
 fn choice_now(
     page: &Page,
-    title: &'static str,
+    title: impl Into<String>,
     key: &'static str,
     choices: Choices,
     unset: &'static str,
@@ -197,7 +197,7 @@ fn choice_now(
 /// A switch that writes `key` as soon as it is flipped: `values.0` when it turns on, `values.1` when off.
 fn switch_now(
     page: &Page,
-    title: &'static str,
+    title: impl Into<String>,
     key: &'static str,
     on: bool,
     values: (&'static str, &'static str),
