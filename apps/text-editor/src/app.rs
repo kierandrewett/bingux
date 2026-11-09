@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::content::EditorContent;
 use bingux_text::encoding::{self, LineEnding};
 use bingux_text::encoding_rs;
 use bingux_text::{Editor, Indent, Language};
@@ -20,6 +21,7 @@ use bingux_ui::commands::{
     Command, CommandGroup, command_scope, use_commands, use_window_commands,
 };
 use bingux_ui::dnd::{DragActions, DropTarget, Dropped, Format, use_drop_target};
+use bingux_ui::document::{DocumentId, Documents, DocumentsConfig, use_documents};
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::prelude::*;
 use bingux_ui::tabs::{Birth, Tab, TabContent, TabSet, Tabs, tab_items, use_tab_window};
@@ -73,51 +75,76 @@ pub fn window_size() -> (f32, f32) {
 #[derive(Clone, PartialEq)]
 pub struct DocTab {
     pub doc: u64,
+    /// The same file in the shared document manager, for a file tab.
+    pub shared: Option<DocumentId>,
 }
 
 impl TabContent for DocTab {
     fn duplicate(&self) -> Self {
         DocTab {
             doc: document::duplicate(self.doc, &prefs_now()),
+            shared: None,
         }
     }
 }
 
 /// The tabs of the last session, or one new document.
-fn restore(prefs: &Prefs, session: Session) -> TabSet<DocTab> {
-    let mut docs = Vec::new();
+fn restore(prefs: &Prefs, session: Session, documents: Documents) -> TabSet<DocTab> {
+    let mut tabs = Vec::new();
     for saved in &session.tabs {
-        if let Some(id) = restore_tab(prefs, saved) {
-            docs.push(id);
+        if let Some(tab) = restore_tab(prefs, saved, documents) {
+            tabs.push(tab);
         }
     }
     // Drafts no tab names, from a run that ended before it wrote its session.
     for draft in session::orphan_drafts(&session) {
-        if let Some(id) = restore_tab(
+        if let Some(tab) = restore_tab(
             prefs,
             &SavedTab {
                 draft: Some(draft),
                 ..SavedTab::default()
             },
+            documents,
         ) {
-            docs.push(id);
+            tabs.push(tab);
         }
     }
-    let mut ids = docs.into_iter();
-    let Some(first) = ids.next() else {
+    let mut tabs = tabs.into_iter();
+    let Some(first) = tabs.next() else {
         return TabSet::new(DocTab {
             doc: document::new_untitled(prefs),
+            shared: None,
         });
     };
-    let mut set = TabSet::new(DocTab { doc: first });
-    for id in ids {
-        set.open(DocTab { doc: id });
+    let mut set = TabSet::new(first);
+    for tab in tabs {
+        set.open(tab);
     }
     set.nth(session.active);
     set
 }
 
-fn restore_tab(prefs: &Prefs, saved: &SavedTab) -> Option<u64> {
+/// The tab for a saved tab, with its file in the shared manager too.
+fn restore_tab(prefs: &Prefs, saved: &SavedTab, documents: Documents) -> Option<DocTab> {
+    let doc = restore_doc(prefs, saved)?;
+    let shared = saved.path.as_deref().map(|path| {
+        // A draft holds unsaved text: the shared copy is edited too.
+        share(documents, path, saved.draft.is_some())
+    });
+    Some(DocTab { doc, shared })
+}
+
+/// Puts `path` in the shared document manager and returns its id. `edited`
+/// marks it unsaved, as the old registry's draft does.
+fn share(documents: Documents, path: &Path, edited: bool) -> DocumentId {
+    let document = documents.open_or_create(path);
+    if edited {
+        document.set_edited(true);
+    }
+    document.id()
+}
+
+fn restore_doc(prefs: &Prefs, saved: &SavedTab) -> Option<u64> {
     let draft_text = saved.draft.as_deref().and_then(session::read_draft);
     let language = saved
         .language
@@ -268,6 +295,7 @@ struct Actions {
     overlays: Overlays,
     prefs: State<Prefs>,
     editor_id: AccessibilityId,
+    documents: Documents,
 }
 
 impl Actions {
@@ -284,7 +312,10 @@ impl Actions {
 
     fn new_document(&self) {
         let id = document::new_untitled(&self.prefs.peek());
-        self.tabs.open(DocTab { doc: id });
+        self.tabs.open(DocTab {
+            doc: id,
+            shared: None,
+        });
         self.focus_editor();
     }
 
@@ -331,6 +362,7 @@ impl Actions {
                 document::new_draft_name(),
             )
         };
+        let shared = share(self.documents, &path, false);
         session::add_recent(&path);
         let blank = self.current().filter(|current| {
             document::with(*current, |doc| {
@@ -341,12 +373,21 @@ impl Actions {
         let current_tab = self.tabs.set().peek().current().map(|tab| tab.id);
         match (blank, current_tab) {
             (Some(old), Some(tab)) => {
-                self.tabs
-                    .update_if(tab, |_| true, move |content| content.doc = id);
+                self.tabs.update_if(
+                    tab,
+                    |_| true,
+                    move |content| {
+                        content.doc = id;
+                        content.shared = Some(shared);
+                    },
+                );
                 document::remove(old);
             }
             _ => {
-                self.tabs.open(DocTab { doc: id });
+                self.tabs.open(DocTab {
+                    doc: id,
+                    shared: Some(shared),
+                });
             }
         }
         self.focus_editor();
@@ -717,15 +758,25 @@ impl Component for Content {
                     .unwrap_or_else(prefs_now)
             }
         });
+        let documents = use_documents(
+            DocumentsConfig::new("bingux-text-editor", "Text Editor")
+                .mime("text/plain")
+                .filter(Filter::new("Text files").mime("text/*"))
+                .sandboxed(session::folder().join("shared"))
+                .restore(false),
+            |_| Rc::new(EditorContent::new(Editor::new(""))),
+            |_| {},
+        );
         let set = use_state({
             let start = start.clone();
             move || {
                 birth
                     .and_then(|birth| birth.into_set())
                     .unwrap_or_else(|| match start {
-                        Some((prefs, session)) => restore(&prefs, session),
+                        Some((prefs, session)) => restore(&prefs, session, documents),
                         None => TabSet::new(DocTab {
                             doc: document::new_untitled(&prefs_now()),
+                            shared: None,
                         }),
                     })
             }
@@ -739,6 +790,7 @@ impl Component for Content {
             overlays,
             prefs,
             editor_id,
+            documents,
         };
         let commands = use_commands();
         let find = use_find();
@@ -1146,6 +1198,7 @@ fn tick(actions: Actions) {
     let mut saved = Vec::new();
     for tab in &tabs {
         let id = tab.content.doc;
+        let shared = tab.content.shared;
         let Some((handle, path, draft, draft_revision, untitled, phase)) =
             document::with(id, |doc| {
                 (
@@ -1179,6 +1232,9 @@ fn tick(actions: Actions) {
             session::write_draft(draft.clone(), editor.text());
             drop(editor);
             document::update(id, |doc| doc.draft_revision = revision);
+            if let Some(shared) = shared.and_then(|shared| actions.documents.get(shared)) {
+                shared.set_edited(true);
+            }
         } else {
             drop(editor);
         }
