@@ -493,12 +493,9 @@ impl Component for Timeline {
         } else {
             format_time(shown - duration)
         };
-        // Wide enough for the longest reading, so the track does not move as digits change.
-        let label_width = if duration >= 3600.0 {
-            Dim::Box24
-        } else {
-            Dim::Box11
-        };
+        // Wide enough for the longest signed reading ("-1:02:03"), so the track
+        // does not move as digits change and the remaining time is never clipped.
+        let label_width = Dim::Box24;
         rect()
             .component("Timeline")
             .text_direction(TextDirection::Ltr)
