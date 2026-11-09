@@ -37,7 +37,7 @@ impl Week {
             parts.push(words::condition(Condition::of(code)));
         }
         if let Some(chance) = day.precip_chance.filter(|c| *c >= CHANCE_SHOWN) {
-            parts.push(format!("{} chance of rain", format::percent(chance)));
+            parts.push(tr!("weather-week-chance", chance = format::percent(chance)));
         }
         if let Some(rain) = day.precipitation.filter(|rain| *rain >= 0.1) {
             parts.push(self.units.rain(rain));
@@ -48,7 +48,7 @@ impl Week {
         if let Some(uv) = day.uv_max.filter(|uv| *uv >= 3.0) {
             parts.push(tr!("weather-week-uv", index = uv.round() as i64));
         }
-        parts.join(", ")
+        words::join_list(&parts)
     }
 }
 

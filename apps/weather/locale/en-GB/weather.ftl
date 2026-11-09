@@ -42,13 +42,20 @@ weather-hero-feels = Feels like { $temperature }
 weather-week-title = Daily forecast
 weather-week-wind = wind up to { $speed }
 weather-week-uv = UV { $index }
+# $chance: the chance of rain as a percentage.
+weather-week-chance = { $chance } chance of rain
+# Separator between the parts of a day or hour's detail line.
+weather-list-separator = ,{" "}
 weather-week-low-high = Low { $low }, high { $high }
 weather-week-highs-lows = Highs from { $high_low } to { $high_high }, lows from { $low_low } to { $low_high }
 weather-hourly-title = Hourly forecast
 weather-hourly-now = Now
 weather-hourly-sunrise = Sunrise at { $time }
 weather-hourly-sunset = Sunset at { $time }
-weather-hourly-wind = Wind { $speed }{ $from }
+# $speed: the wind speed with its unit.
+weather-hourly-wind = Wind { $speed }
+# $speed: the wind speed with its unit. $point: the compass point, short.
+weather-hourly-wind-from = Wind { $speed } from { $point }
 weather-hourly-chance = { $chance } chance of rain
 weather-hourly-range = Next 24 hours: low { $low }, high { $high }.
 weather-hourly-sunrise-short = Sunrise

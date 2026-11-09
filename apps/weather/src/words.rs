@@ -375,6 +375,12 @@ pub fn point_title(point: Point) -> String {
     }
 }
 
+/// Join the parts of a detail line with the translated separator.
+pub fn join_list(parts: &[String]) -> String {
+    let separator = tr!("weather-list-separator");
+    parts.join(&separator)
+}
+
 /// The heading of a notice.
 pub fn notice_title(kind: Kind) -> String {
     match kind {
