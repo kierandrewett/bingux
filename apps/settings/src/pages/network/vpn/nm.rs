@@ -19,7 +19,7 @@ pub fn run(args: &[&str]) -> Result<String, String> {
             }
             _ => {
                 eprintln!("bingux-settings: nmcli could not start: {error}");
-                "Network settings could not be opened. Try again.".to_string()
+                "Could not open the network settings. Try again.".to_string()
             }
         })?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();

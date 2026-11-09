@@ -142,9 +142,9 @@ fn field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 }
 
 fn flag(text: &str, key: &str) -> Result<bool, CommandError> {
-    field(text, key)
-        .map(|value| value == "yes")
-        .ok_or_else(|| CommandError("Could not read Bluetooth status. Restart Settings.".into()))
+    field(text, key).map(|value| value == "yes").ok_or_else(|| {
+        CommandError("Could not read the Bluetooth status. Try again in a moment.".into())
+    })
 }
 
 /// `Battery Percentage` reads `0x5a (90)`; the percentage is in brackets.
@@ -497,7 +497,7 @@ fn trust_job(device: &Device, on: bool) -> Job {
         steps: vec![step(&[word, device.mac.as_str()], TIMEOUT)],
         done: String::new(),
         failed: format!(
-            "Could not change automatic connection for “{}”.",
+            "Could not change automatic connection for “{}”. Try again.",
             device.name
         ),
     }

@@ -29,7 +29,7 @@ fn busctl(args: &[&str]) -> Result<String, String> {
             }
             _ => {
                 eprintln!("bingux-settings: busctl could not start: {error}");
-                "Peers could not be read. Try again.".to_string()
+                "Could not read the VPN settings. Try again in a moment.".to_string()
             }
         })?;
     if output.status.success() {
