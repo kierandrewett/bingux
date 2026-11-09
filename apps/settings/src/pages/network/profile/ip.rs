@@ -5,6 +5,7 @@ use freya::prelude::*;
 use bingux_ui::controls::form::validate;
 use bingux_ui::controls::{form_field, pending_bar};
 use bingux_ui::motion::reveal_block;
+use bingux_ui::prelude::tr;
 use bingux_ui::style::S10;
 
 use super::draft::{Draft, ListLook, Values, list_rows, remove_slot, use_draft};
@@ -198,9 +199,12 @@ impl Component for IpBody {
         let methods = ip_methods(version, page.kind());
         let method_row = {
             let draft = draft.clone();
-            choice_row("Method", options(methods), &method, move |value: String| {
-                draft.set("method", value)
-            })
+            choice_row(
+                tr!("network-ip-method"),
+                options(methods),
+                &method,
+                move |value: String| draft.set("method", value),
+            )
         };
 
         let mut column = page_column()
@@ -231,46 +235,48 @@ impl Component for IpBody {
             let addresses = list_rows(
                 draft.list("addresses"),
                 ListLook {
-                    title: "Address",
+                    title: tr!("network-ip-address"),
                     placeholder,
                     check: address_check,
-                    add: "Add address",
+                    add: tr!("network-ip-add-address"),
                     monospace: true,
                 },
             );
             column = column.child(reveal_block(
                 visible.addresses,
                 S10,
-                Group::titled("Addresses").rows(addresses).row(
-                    form_field("Gateway", draft.text("gateway"))
-                        .placeholder(gateway_placeholder)
-                        .optional()
-                        .monospace()
-                        .wide()
-                        .trailing(remove_slot())
-                        .validate(gateway_check),
-                ),
+                Group::titled(&tr!("network-ip-addresses"))
+                    .rows(addresses)
+                    .row(
+                        form_field(tr!("network-ip-gateway"), draft.text("gateway"))
+                            .placeholder(gateway_placeholder)
+                            .optional()
+                            .monospace()
+                            .wide()
+                            .trailing(remove_slot())
+                            .validate(gateway_check),
+                    ),
             ));
         }
         {
             let routes = list_rows(
                 draft.list("routes"),
                 ListLook {
-                    title: "Route",
+                    title: tr!("network-ip-route"),
                     placeholder: if version == 4 {
                         "10.0.0.0/8 192.168.1.1"
                     } else {
                         "2001:db8::/32 fe80::1"
                     },
                     check: if version == 4 { route4 } else { route6 },
-                    add: "Add route",
+                    add: tr!("network-ip-add-route"),
                     monospace: true,
                 },
             );
             column = column.child(reveal_block(
                 visible.routes,
                 S10,
-                Group::titled("Static routes").rows(routes),
+                Group::titled(&tr!("network-ip-static-routes")).rows(routes),
             ));
         }
 
@@ -278,7 +284,7 @@ impl Component for IpBody {
         if visible.auto_routes {
             let page = page.clone();
             behaviour = behaviour.row(switch_row(
-                "Use automatic routes",
+                tr!("network-ip-auto-routes"),
                 !page.saved.yes(&format!("{prefix}.ignore-auto-routes")),
                 move |on: bool| {
                     page.apply_now(Changes::one(
@@ -291,7 +297,7 @@ impl Component for IpBody {
         if visible.never_default {
             let page = page.clone();
             behaviour = behaviour.row(switch_row(
-                "Use only for resources on this network",
+                tr!("network-ip-never-default"),
                 page.saved.yes(&format!("{prefix}.never-default")),
                 move |on: bool| {
                     page.apply_now(Changes::one(&format!("{prefix}.never-default"), yes_no(on)))
@@ -302,7 +308,7 @@ impl Component for IpBody {
             let page = page.clone();
             let selected = page.saved.get("ipv6.ip6-privacy").to_string();
             behaviour = behaviour.row(choice_row(
-                "Privacy extensions",
+                tr!("network-ip-privacy"),
                 options(IP6_PRIVACY_CHOICES),
                 &selected,
                 move |value: String| page.apply_now(Changes::one("ipv6.ip6-privacy", value)),

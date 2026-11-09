@@ -1,6 +1,7 @@
 //! Data usage: totals, a chart over time, limits.
 
 use bingux_ui::prelude::Location;
+use bingux_ui::prelude::tr;
 
 mod breakdown;
 mod chart;
@@ -24,7 +25,7 @@ pub enum UsageScope {
 impl UsageScope {
     pub fn title(&self) -> String {
         match self {
-            Self::All => "Data usage".to_string(),
+            Self::All => tr!("data-usage-title"),
             Self::Interface(name) | Self::Connection(name) => name.clone(),
         }
     }

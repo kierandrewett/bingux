@@ -10,6 +10,7 @@ use freya::prelude::*;
 
 use bingux_ui::controls::form::validate::{self, Check};
 use bingux_ui::controls::{form_field, pending_bar};
+use bingux_ui::prelude::{i18n_id, tr};
 
 use super::draft::{Draft, Values, use_draft};
 use super::store;
@@ -32,7 +33,10 @@ const WEP_TYPE: &str = "802-11-wireless-security.wep-key-type";
 const DOT1X: &str = "802-1x";
 
 /// How a WEP key is typed: the key itself, or a passphrase NetworkManager turns into one.
-const WEP_TYPE_CHOICES: &[(&str, &str)] = &[("1", "Key"), ("2", "Passphrase")];
+const WEP_TYPE_CHOICES: &[(&str, &str)] = &[
+    ("1", i18n_id!("network-security-wep-type-key")),
+    ("2", i18n_id!("network-security-wep-passphrase")),
+];
 
 /// Every value the page edits, as typed. A wired page uses only the 802.1X ones.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -181,7 +185,7 @@ fn wep_phrase(text: &str) -> Check {
     if (1..=64).contains(&text.len()) && printable {
         Ok(())
     } else {
-        Err("Use 1 to 64 letters, numbers or symbols.".to_string())
+        Err(tr!("network-security-wep-phrase-error"))
     }
 }
 
@@ -412,17 +416,12 @@ fn pick_eap(draft: &Draft, eap: &str) {
 
 /// A button that opens the file chooser and puts the file the person picks into `target`. A
 /// cancelled chooser leaves the field as it was.
-fn browse_button(
-    window: Window,
-    title: &'static str,
-    filter: Filter,
-    target: State<String>,
-) -> Element {
-    row_button("Browse…", move |_| {
+fn browse_button(window: Window, title: String, filter: Filter, target: State<String>) -> Element {
+    row_button(&tr!("network-security-browse"), move |_| {
         let request = ChooserRequest::open()
-            .title(title)
+            .title(title.clone())
             .filter(filter.clone())
-            .filter(Filter::new("All files"));
+            .filter(Filter::new(&tr!("network-security-all-files")));
         let mut target = target;
         files::choose(window, request, move |chosen| {
             if let Some(path) = chosen.and_then(|chosen| chosen.paths.into_iter().next()) {
@@ -442,7 +441,7 @@ fn browse_slot() -> Element {
         .opacity(0.0)
         .a11y_focusable(false)
         .tw(&tokens, &[px(S3)])
-        .child(bingux_ui::typography::BODY.label(&tokens, "Browse…"))
+        .child(bingux_ui::typography::BODY.label(&tokens, &tr!("network-security-browse")))
         .into()
 }
 
@@ -452,7 +451,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
     let eap = draft.get("eap");
     let tls = !eap_uses_password(&eap);
     let certificate = || {
-        Filter::new("Certificates")
+        Filter::new(&tr!("network-security-cert-filter"))
             .glob("*.pem")
             .glob("*.crt")
             .glob("*.cer")
@@ -460,7 +459,7 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
             .glob("*.p12")
     };
     let key = || {
-        Filter::new("Private keys")
+        Filter::new(&tr!("network-security-key-filter"))
             .glob("*.pem")
             .glob("*.key")
             .glob("*.der")
@@ -470,34 +469,37 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
     let method = {
         let draft = draft.clone();
         choice_row(
-            "Method",
+            &tr!("network-security-method"),
             options(EAP_CHOICES),
             &eap,
             move |value: String| pick_eap(&draft, &value),
         )
     };
-    let mut sign_in = Group::titled("Authentication").row(method);
+    let mut sign_in = Group::titled(&tr!("network-security-auth-group")).row(method);
     if !tls {
         let phase2 = draft.get("phase2");
         let draft = draft.clone();
         sign_in = sign_in.row(choice_row(
-            "Inner authentication",
+            &tr!("network-security-inner-auth"),
             options(phase2_choices(&eap)),
             &phase2,
             move |value: String| draft.set("phase2", value),
         ));
     }
     sign_in = sign_in
-        .row(form_field("Identity", draft.text("identity")).wide())
+        .row(form_field(&tr!("network-security-identity"), draft.text("identity")).wide())
         .row(
-            form_field("Anonymous identity", draft.text("anonymous"))
-                .hint("Sent before the secure connection starts. Leave empty unless the network asks for it.")
-                .optional()
-                .wide(),
+            form_field(
+                &tr!("network-security-anon-identity"),
+                draft.text("anonymous"),
+            )
+            .hint(tr!("network-security-anon-hint"))
+            .optional()
+            .wide(),
         );
     if !tls {
         sign_in = sign_in.row(
-            form_field("Password", draft.text("password"))
+            form_field(&tr!("network-security-password"), draft.text("password"))
                 .password()
                 .wide(),
         );
@@ -506,61 +508,72 @@ fn dot1x_groups(draft: &Draft, window: Window) -> Vec<Element> {
     let system_ca = {
         let draft = draft.clone();
         switch_row(
-            "Use the system's trusted certificates",
+            &tr!("network-security-system-ca"),
             draft.get("system_ca") == "yes",
             move |on: bool| draft.set("system_ca", if on { "yes" } else { "no" }),
         )
     };
-    let mut certificates = Group::titled("Certificates").row(system_ca).row(
-        form_field("CA certificate", draft.text("ca"))
-            .placeholder("/etc/ssl/certs/ca.pem")
-            // "Optional" is said in the hint: next to the Browse button the title column is too
-            // narrow for the word after the title.
-            .hint("Optional. The certificate that signed the network's own. Leave empty to skip this check.")
-            .monospace()
-            .validate(file_path)
-            .trailing(browse_button(
-                window,
-                "CA certificate",
-                certificate(),
-                draft.text("ca"),
-            ))
-            .wide(),
-    );
+    let mut certificates = Group::titled(&tr!("network-security-certs-group"))
+        .row(system_ca)
+        .row(
+            form_field(&tr!("network-security-ca-cert"), draft.text("ca"))
+                .placeholder("/etc/ssl/certs/ca.pem")
+                // "Optional" is said in the hint: next to the Browse button the title column is too
+                // narrow for the word after the title.
+                .hint(tr!("network-security-ca-hint"))
+                .monospace()
+                .validate(file_path)
+                .trailing(browse_button(
+                    window,
+                    tr!("network-security-ca-certificate"),
+                    certificate(),
+                    draft.text("ca"),
+                ))
+                .wide(),
+        );
     if tls {
         certificates = certificates
             .row(
-                form_field("Client certificate", draft.text("client_cert"))
-                    .placeholder("/home/you/client.pem")
-                    .monospace()
-                    .validate(file_path)
-                    .trailing(browse_button(
-                        window,
-                        "Client certificate",
-                        certificate(),
-                        draft.text("client_cert"),
-                    ))
-                    .wide(),
+                form_field(
+                    &tr!("network-security-client-cert"),
+                    draft.text("client_cert"),
+                )
+                .placeholder("/home/you/client.pem")
+                .monospace()
+                .validate(file_path)
+                .trailing(browse_button(
+                    window,
+                    tr!("network-security-client-certificate"),
+                    certificate(),
+                    draft.text("client_cert"),
+                ))
+                .wide(),
             )
             .row(
-                form_field("Private key", draft.text("private_key"))
-                    .placeholder("/home/you/client.key")
-                    .monospace()
-                    .validate(file_path)
-                    .trailing(browse_button(
-                        window,
-                        "Private key",
-                        key(),
-                        draft.text("private_key"),
-                    ))
-                    .wide(),
+                form_field(
+                    tr!("network-security-private-key"),
+                    draft.text("private_key"),
+                )
+                .placeholder("/home/you/client.key")
+                .monospace()
+                .validate(file_path)
+                .trailing(browse_button(
+                    window,
+                    tr!("network-security-private-key"),
+                    key(),
+                    draft.text("private_key"),
+                ))
+                .wide(),
             )
             .row(
-                form_field("Private key password", draft.text("key_password"))
-                    .password()
-                    .optional()
-                    .trailing(browse_slot())
-                    .wide(),
+                form_field(
+                    &tr!("network-security-key-password"),
+                    draft.text("key_password"),
+                )
+                .password()
+                .optional()
+                .trailing(browse_slot())
+                .wide(),
             );
     }
     vec![sign_in.into(), certificates.into()]
@@ -581,7 +594,7 @@ impl Component for SecurityBody {
 
         if kind == Kind::Vpn {
             return page_column().child(status(Status::Empty(
-                "This connection has no security settings here.".into(),
+                tr!("network-security-vpn-none").into(),
             )));
         }
 
@@ -612,7 +625,7 @@ fn wired_page(column: Rect, draft: &Draft, window: Window) -> Rect {
     let on = !draft.get("eap").is_empty();
     let toggle = {
         let draft = draft.clone();
-        switch_row("Use 802.1X authentication", on, move |on: bool| {
+        switch_row(&tr!("network-security-8021x"), on, move |on: bool| {
             if on {
                 enter_eap(&draft);
             } else {
@@ -635,7 +648,7 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
     let kind_row = {
         let draft = draft.clone();
         choice_row(
-            "Security",
+            &tr!("network-security-label"),
             options(WIFI_SECURITY_CHOICES),
             &kind,
             move |value: String| {
@@ -646,17 +659,17 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
             },
         )
     };
-    let mut group = Group::titled("Security");
+    let mut group = Group::titled(&tr!("network-security-label"));
     match kind.as_str() {
-        "none" => group = group.description("Open network: traffic is not encrypted."),
-        "wep" => group = group.description("WEP is easy to break."),
+        "none" => group = group.description(&tr!("network-security-open-note")),
+        "wep" => group = group.description(&tr!("network-security-wep-note")),
         _ => {}
     }
     // What the key type needs slides in under it.
     let needs: Vec<Element> = match kind.as_str() {
         "wpa-psk" | "sae" => vec![
-            form_field("Password", draft.text("psk"))
-                .hint("Use 8 to 63 characters, or 64 hexadecimal digits.")
+            form_field(&tr!("network-security-password"), draft.text("psk"))
+                .hint(tr!("network-security-psk-hint"))
                 .password()
                 .validate(validate::wpa_passphrase)
                 .into(),
@@ -666,7 +679,7 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
             let type_row = {
                 let draft = draft.clone();
                 choice_row(
-                    "Key type",
+                    &tr!("network-security-key-type"),
                     options(WEP_TYPE_CHOICES),
                     &wep_type,
                     move |value: String| draft.set("wep_type", value),
@@ -674,7 +687,7 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
             };
             vec![
                 type_row.into(),
-                form_field("WEP key", draft.text("wep_key"))
+                form_field(&tr!("network-security-wep-key"), draft.text("wep_key"))
                     .password()
                     .validate(wep_check(&wep_type))
                     .into(),

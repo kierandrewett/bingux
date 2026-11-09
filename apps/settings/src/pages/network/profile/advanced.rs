@@ -10,6 +10,7 @@ use freya::prelude::*;
 use bingux_ui::controls::form::validate::Check;
 use bingux_ui::controls::form_field;
 use bingux_ui::controls::pending_bar;
+use bingux_ui::prelude::tr;
 
 use super::Page;
 use super::draft::{Draft, Values, use_draft};
@@ -33,7 +34,7 @@ pub(super) fn options_with(choices: &[(&str, &str)], current: &str) -> Vec<(Stri
 /// The DHCP client ID: any text, without spaces at either end.
 fn client_id(text: &str) -> Check {
     if text.trim() != text || text.len() > 255 {
-        Err("Use up to 255 characters, with no space at either end.".to_string())
+        Err(tr!("network-advanced-client-id-invalid"))
     } else {
         Ok(())
     }
@@ -45,7 +46,7 @@ fn route_metric(text: &str) -> Check {
     metric(text)?;
     match text.parse::<u32>() {
         Ok(number) if number.to_string() == text => Ok(()),
-        _ => Err("Enter a whole number, or leave it empty for automatic.".to_string()),
+        _ => Err(tr!("network-advanced-route-metric-invalid")),
     }
 }
 
@@ -173,7 +174,7 @@ fn sends_hostname(saved: &ProfileData) -> bool {
 /// A dropdown that writes `key` as soon as a choice is made. `unset` is what an empty stored value means.
 fn choice_now(
     page: &Page,
-    title: &'static str,
+    title: impl Into<String>,
     key: &'static str,
     choices: Choices,
     unset: &'static str,
@@ -196,7 +197,7 @@ fn choice_now(
 /// A switch that writes `key` as soon as it is flipped: `values.0` when it turns on, `values.1` when off.
 fn switch_now(
     page: &Page,
-    title: &'static str,
+    title: impl Into<String>,
     key: &'static str,
     on: bool,
     values: (&'static str, &'static str),
@@ -249,24 +250,24 @@ impl Component for AdvancedBody {
             move |_: ()| draft.reset(&page.saved)
         };
 
-        let mut connection = Group::titled("Connection")
+        let mut connection = Group::titled(&tr!("network-advanced-group-connection"))
             .row(choice_now(
                 &page,
-                "Connection retries",
+                &tr!("network-advanced-retries"),
                 "connection.autoconnect-retries",
                 RETRY_CHOICES,
                 "-1",
             ))
             .row(choice_now(
                 &page,
-                "Multicast DNS",
+                &tr!("network-advanced-mdns"),
                 "connection.mdns",
                 MULTICAST_DNS_CHOICES,
                 "-1",
             ))
             .row(choice_now(
                 &page,
-                "LLMNR",
+                &tr!("network-advanced-llmnr"),
                 "connection.llmnr",
                 MULTICAST_DNS_CHOICES,
                 "-1",
@@ -275,14 +276,14 @@ impl Component for AdvancedBody {
             connection = connection
                 .row(switch_now(
                     &page,
-                    "Hidden network",
+                    &tr!("network-advanced-hidden"),
                     "802-11-wireless.hidden",
                     saved.yes("802-11-wireless.hidden"),
                     ("yes", "no"),
                 ))
                 .row(choice_now(
                     &page,
-                    "Frequency band",
+                    &tr!("network-advanced-band"),
                     "802-11-wireless.band",
                     BAND_CHOICES,
                     "",
@@ -291,7 +292,7 @@ impl Component for AdvancedBody {
 
         let mut ipv4 = Group::titled("IPv4").row(switch_now(
             &page,
-            "Require IPv4 to connect",
+            &tr!("network-advanced-ipv4-required"),
             "ipv4.may-fail",
             saved.get("ipv4.may-fail") == "no",
             ("no", "yes"),
@@ -300,36 +301,36 @@ impl Component for AdvancedBody {
             ipv4 = ipv4
                 .row(switch_now(
                     &page,
-                    "Send host name",
+                    &tr!("network-advanced-send-hostname"),
                     "ipv4.dhcp-send-hostname",
                     sends_hostname(saved),
                     ("yes", "no"),
                 ))
                 .row(
-                    form_field("Host name", draft.text("hostname"))
-                        .hint("Leave empty to send this computer's own name.")
+                    form_field(&tr!("network-advanced-hostname"), draft.text("hostname"))
+                        .hint(&tr!("network-advanced-hostname-hint"))
                         .optional()
                         .validate(dhcp_hostname),
                 )
                 .row(
-                    form_field("Client ID", draft.text("client_id"))
-                        .hint("mac, duid, or a hex string")
+                    form_field(&tr!("network-advanced-client-id"), draft.text("client_id"))
+                        .hint(&tr!("network-advanced-client-id-hint"))
                         .optional()
                         .monospace()
                         .validate(client_id),
                 );
         }
         ipv4 = ipv4.row(
-            form_field("Route metric", draft.text("metric4"))
-                .placeholder("Automatic")
-                .hint("Lower numbers are preferred.")
+            form_field(&tr!("network-advanced-route-metric"), draft.text("metric4"))
+                .placeholder(&tr!("network-advanced-automatic"))
+                .hint(&tr!("network-advanced-metric-hint"))
                 .optional()
                 .validate(route_metric),
         );
 
         let mut ipv6 = Group::titled("IPv6").row(switch_now(
             &page,
-            "Require IPv6 to connect",
+            &tr!("network-advanced-ipv6-required"),
             "ipv6.may-fail",
             saved.get("ipv6.may-fail") == "no",
             ("no", "yes"),
@@ -337,16 +338,16 @@ impl Component for AdvancedBody {
         if layout.addr_gen {
             ipv6 = ipv6.row(choice_now(
                 &page,
-                "Address generation",
+                &tr!("network-advanced-addr-gen"),
                 "ipv6.addr-gen-mode",
                 ADDR_GEN_CHOICES,
                 "default",
             ));
         }
         ipv6 = ipv6.row(
-            form_field("Route metric", draft.text("metric6"))
-                .placeholder("Automatic")
-                .hint("Lower numbers are preferred.")
+            form_field(&tr!("network-advanced-route-metric"), draft.text("metric6"))
+                .placeholder(&tr!("network-advanced-automatic"))
+                .hint(&tr!("network-advanced-metric-hint"))
                 .optional()
                 .validate(route_metric),
         );

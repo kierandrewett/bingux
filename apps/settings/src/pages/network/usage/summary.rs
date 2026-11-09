@@ -1,6 +1,7 @@
 //! The Data usage rows of the Network pages: today's traffic and a limit badge. The Network page
 //! has one for everything; a connection's page has one for that connection.
 
+use bingux_ui::prelude::tr;
 use std::time::Duration;
 
 use bingux_data_usage::{Totals, open_best, unix_now};
@@ -66,7 +67,7 @@ fn load() -> Summary {
 fn value(summary: Option<&Summary>) -> String {
     match summary {
         None => "—".to_string(),
-        Some(Summary { today: None, .. }) => "No data yet".to_string(),
+        Some(Summary { today: None, .. }) => tr!("data-usage-no-data"),
         Some(Summary {
             today: Some((rx, tx)),
             ..
@@ -77,14 +78,14 @@ fn value(summary: Option<&Summary>) -> String {
 /// The row for `summary`, which opens `open`.
 fn entry(ctx: NetCtx, summary: Option<&Summary>, open: Target) -> Row {
     let badge = match summary.and_then(|summary| summary.level) {
-        Some(Level::Warn) => "Near limit",
-        Some(Level::Over) => "Over limit",
-        None => "",
+        Some(Level::Warn) => tr!("data-usage-near-limit"),
+        Some(Level::Over) => tr!("data-usage-over-limit"),
+        None => String::new(),
     };
     // A phone has no room for the numbers beside the title, so they go
     // under it; a wider row keeps them on the right.
     let text = value(summary);
-    let entry = row("Data usage").badge(badge);
+    let entry = row(&tr!("data-usage-title")).badge(badge);
     let entry = if is_compact() {
         entry.subtitle(text)
     } else {

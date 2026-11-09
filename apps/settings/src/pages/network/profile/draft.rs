@@ -191,14 +191,14 @@ impl Draft {
 }
 
 /// What a list's rows look like.
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ListLook {
     /// The title of a row; several rows are numbered.
-    pub title: &'static str,
+    pub title: String,
     pub placeholder: &'static str,
     pub check: fn(&str) -> Check,
     /// The label of the row that adds one.
-    pub add: &'static str,
+    pub add: String,
     pub monospace: bool,
 }
 
@@ -223,7 +223,7 @@ pub fn list_rows(list: ListState, look: ListLook) -> Vec<Element> {
                     list,
                     id: entry.id,
                     title,
-                    look: LookKey::of(look),
+                    look: LookKey::of(&look),
                 },
             )
         })
@@ -245,7 +245,7 @@ struct LookKey {
 }
 
 impl LookKey {
-    fn of(look: ListLook) -> Self {
+    fn of(look: &ListLook) -> Self {
         Self {
             placeholder: look.placeholder,
             check: look.check,

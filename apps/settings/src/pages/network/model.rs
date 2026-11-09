@@ -13,7 +13,7 @@ use freya::prelude::*;
 use crate::icons::{self, Icon};
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{Overlays, Tokens, Window, centered_caption, heading, use_overlays, use_window};
-use bingux_ui::prelude::{Router, use_router};
+use bingux_ui::prelude::{Router, tr, use_router};
 use bingux_ui::style::*;
 
 pub const QUICK: Duration = Duration::from_secs(5);
@@ -289,10 +289,10 @@ pub fn set_airplane_mode(on: bool) -> Result<(), CommandError> {
     .map_err(|error| {
         CommandError(super::plain(
             &error.0,
-            if on {
-                "Could not turn on airplane mode. Try again."
+            &if on {
+                tr!("network-airplane-on-failed")
             } else {
-                "Could not turn off airplane mode. Try again."
+                tr!("network-airplane-off-failed")
             },
         ))
     })
@@ -309,10 +309,10 @@ pub fn set_wifi_radio(on: bool) -> Result<(), CommandError> {
         .map_err(|error| {
             CommandError(super::plain(
                 &error.0,
-                if on {
-                    "Could not turn on Wi-Fi. Try again."
+                &if on {
+                    tr!("network-wifi-on-failed")
                 } else {
-                    "Could not turn off Wi-Fi. Try again."
+                    tr!("network-wifi-off-failed")
                 },
             ))
         })
@@ -581,7 +581,7 @@ pub fn load_overview() -> Result<Overview, CommandError> {
         nmcli(&["-t", "-f", "STATE,CONNECTIVITY", "general"], QUICK)
             .map_err(|error| {
                 eprintln!("bingux-settings: nmcli general status failed: {}", error.0);
-                CommandError("Could not read the network status. Try again in a moment.".into())
+                CommandError(tr!("network-status-error-read"))
             })?
             .trim(),
     );

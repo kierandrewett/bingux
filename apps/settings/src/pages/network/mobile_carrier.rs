@@ -5,6 +5,7 @@
 //! NetworkManager registers on that carrier each time it connects. ModemManager
 //! does not report whether the modem was told to stay on one carrier.
 
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 
 use super::apn::{self, Profile, use_profiles};
@@ -32,12 +33,12 @@ fn network_id(carrier: &Carrier) -> String {
     carrier.code.clone()
 }
 
-fn availability(carrier: &Carrier) -> &'static str {
+fn availability(carrier: &Carrier) -> String {
     match carrier.availability.as_str() {
-        "current" => "Connected",
-        "forbidden" => "Not allowed by your SIM",
-        "available" => "Available",
-        _ => "",
+        "current" => tr!("network-carrier-availability-current"),
+        "forbidden" => tr!("network-carrier-availability-forbidden"),
+        "available" => tr!("network-carrier-availability-available"),
+        _ => String::new(),
     }
 }
 
@@ -68,9 +69,11 @@ impl Component for MobileNetworkPage {
                     page_column().child(PageHead::new()).child(
                         status(Status::Error(super::super::plain(
                             &error.0,
-                            "Could not read the modem. Try again.",
+                            &tr!("network-carrier-error-read"),
                         )))
-                        .action("Try again", move |_| reload_modem(modem_state)),
+                        .action(&tr!("network-carrier-retry"), move |_| {
+                            reload_modem(modem_state)
+                        }),
                     ),
                     false,
                 );
@@ -79,7 +82,9 @@ impl Component for MobileNetworkPage {
                 return veiled(
                     page_column()
                         .child(PageHead::new())
-                        .child(status(Status::Empty("No mobile modem found".into()))),
+                        .child(status(Status::Empty(
+                            tr!("network-carrier-modem-empty").into(),
+                        ))),
                     false,
                 );
             }
@@ -87,11 +92,11 @@ impl Component for MobileNetworkPage {
         };
         if modem.locked() || modem.no_sim() || modem.off() {
             let text = if modem.locked() {
-                "Unlock the SIM to choose a carrier."
+                tr!("network-carrier-locked")
             } else if modem.no_sim() {
-                "No SIM card"
+                tr!("network-carrier-no-sim")
             } else {
-                "Mobile network is off"
+                tr!("network-carrier-off")
             };
             return veiled(
                 page_column()
@@ -122,7 +127,7 @@ impl Component for MobileNetworkPage {
                             Ok(found) => Search::Found(found),
                             Err(error) => Search::Failed(super::super::plain(
                                 &error.0,
-                                "Could not search for networks. Try again.",
+                                &tr!("network-carrier-error-search"),
                             )),
                         });
                     },
@@ -132,37 +137,41 @@ impl Component for MobileNetworkPage {
 
         let automatic = {
             let (id, list, start) = (id.clone(), list.clone(), start_search.clone());
-            switch_row("Automatic", !manual_now, move |on: bool| {
-                let mut manual = manual;
-                manual.set(Some(!on));
-                if !on {
-                    start();
-                    return;
-                }
-                let (id, list) = (id.clone(), list.clone());
-                let mut registering = registering;
-                registering.set(Some(String::new()));
-                background_then(
-                    move || {
-                        modem::register_home(&id)?;
-                        apn::set_network_id(&list, "")
-                    },
-                    move |result: Result<(), CommandError>| {
-                        let mut registering = registering;
-                        registering.set(None);
-                        if let Err(error) = result {
-                            let mut manual = manual;
-                            manual.set(Some(true));
-                            ctx.overlays.toast(super::super::plain(
-                                &error.0,
-                                "Could not switch to automatic network selection. Try again.",
-                            ));
-                        }
-                        apn::reload(profiles);
-                        reload_modem(modem_state);
-                    },
-                );
-            })
+            switch_row(
+                tr!("network-carrier-automatic"),
+                !manual_now,
+                move |on: bool| {
+                    let mut manual = manual;
+                    manual.set(Some(!on));
+                    if !on {
+                        start();
+                        return;
+                    }
+                    let (id, list) = (id.clone(), list.clone());
+                    let mut registering = registering;
+                    registering.set(Some(String::new()));
+                    background_then(
+                        move || {
+                            modem::register_home(&id)?;
+                            apn::set_network_id(&list, "")
+                        },
+                        move |result: Result<(), CommandError>| {
+                            let mut registering = registering;
+                            registering.set(None);
+                            if let Err(error) = result {
+                                let mut manual = manual;
+                                manual.set(Some(true));
+                                ctx.overlays.toast(super::super::plain(
+                                    &error.0,
+                                    &tr!("network-carrier-error-automatic"),
+                                ));
+                            }
+                            apn::reload(profiles);
+                            reload_modem(modem_state);
+                        },
+                    );
+                },
+            )
         };
 
         let mut page = page_column()
@@ -173,24 +182,26 @@ impl Component for MobileNetworkPage {
             let busy = registering.read().clone();
             let searching = *search.read() == Search::Searching;
             let list_group: Element = match search.read().clone() {
-                Search::Idle => Group::titled("Networks")
+                Search::Idle => Group::titled(&tr!("network-carrier-section-title"))
                     .row(Element::from(status(Status::Empty(
-                        "Search to see the carriers around you.".into(),
+                        tr!("network-carrier-idle").into(),
                     ))))
                     .into(),
-                Search::Searching => Group::titled("Networks")
+                Search::Searching => Group::titled(&tr!("network-carrier-section-title"))
                     .row(Element::from(status(Status::Loading(
-                        "Searching for networks…".into(),
+                        tr!("network-carrier-searching").into(),
                     ))))
                     .into(),
-                Search::Failed(text) => Group::titled("Networks")
+                Search::Failed(text) => Group::titled(&tr!("network-carrier-section-title"))
                     .row(Element::from(status(Status::Error(text))))
                     .into(),
-                Search::Found(found) if found.is_empty() => Group::titled("Networks")
-                    .row(Element::from(status(Status::Empty(
-                        "No networks found".into(),
-                    ))))
-                    .into(),
+                Search::Found(found) if found.is_empty() => {
+                    Group::titled(&tr!("network-carrier-section-title"))
+                        .row(Element::from(status(Status::Empty(
+                            tr!("network-carrier-empty").into(),
+                        ))))
+                        .into()
+                }
                 Search::Found(found) => {
                     let rows = found
                         .iter()
@@ -210,7 +221,7 @@ impl Component for MobileNetworkPage {
                                 )
                             })
                             .subtitle(
-                                [carrier.technology.as_str(), availability(carrier)]
+                                [carrier.technology.clone(), availability(carrier)]
                                     .into_iter()
                                     .filter(|part| !part.is_empty())
                                     .collect::<Vec<_>>()
@@ -224,12 +235,12 @@ impl Component for MobileNetworkPage {
                             }
                         })
                         .collect();
-                    radio_rows(Some("Networks".to_string()), rows).into()
+                    radio_rows(Some(tr!("network-carrier-section-title")), rows).into()
                 }
             };
             page = page.child(list_group).child(
                 Group::new(None::<String>).row(
-                    row("Search again")
+                    row(tr!("network-carrier-search-again"))
                         .navigates()
                         .enabled(!searching && busy.is_none())
                         .on_press(move |_| start_search()),
@@ -293,7 +304,7 @@ fn choose(
                 }
                 Err(error) => ctx.overlays.toast(super::super::plain(
                     &error.0,
-                    "Could not join that network. Try again.",
+                    &tr!("network-carrier-error-join"),
                 )),
             }
             apn::reload(profiles);
@@ -317,6 +328,7 @@ mod tests {
 
     #[test]
     fn availability_words() {
+        crate::register_catalogue_for_tests();
         assert_eq!(availability(&carrier("current")), "Connected");
         assert_eq!(
             availability(&carrier("forbidden")),

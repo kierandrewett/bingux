@@ -27,7 +27,7 @@ use crate::icons::Icon;
 use crate::routes;
 use crate::system::{self, CommandError};
 use crate::ui::{Group, PageHead, Status, page_column, row, status, switch_row};
-use bingux_ui::prelude::{Location, Target};
+use bingux_ui::prelude::{Location, Target, tr};
 
 pub use ethernet::cached_ethernet_title;
 pub use model::{Device, DeviceKind, NetCtx, Overview, QUICK, prefetch, use_net_ctx};
@@ -117,17 +117,17 @@ pub enum Section {
 impl Section {
     pub fn title(&self) -> String {
         match self {
-            Self::Advanced => "Advanced".to_string(),
-            Self::Ipv4 => "IPv4".to_string(),
-            Self::Ipv6 => "IPv6".to_string(),
-            Self::Dns => "DNS".to_string(),
-            Self::Security => "Security".to_string(),
-            Self::Identity => "Identity".to_string(),
-            Self::Proxy => "Proxy".to_string(),
-            Self::Options => "Other options".to_string(),
-            Self::Usage => "Data usage".to_string(),
-            Self::Tunnel => "Tunnel".to_string(),
-            Self::Peer(index) => format!("Peer {}", index + 1),
+            Self::Advanced => tr!("network-section-advanced"),
+            Self::Ipv4 => tr!("network-section-ipv4"),
+            Self::Ipv6 => tr!("network-section-ipv6"),
+            Self::Dns => tr!("network-section-dns"),
+            Self::Security => tr!("network-section-security"),
+            Self::Identity => tr!("network-section-identity"),
+            Self::Proxy => tr!("network-section-proxy"),
+            Self::Options => tr!("network-section-options"),
+            Self::Usage => tr!("network-section-usage"),
+            Self::Tunnel => tr!("network-section-tunnel"),
+            Self::Peer(index) => tr!("network-section-peer", number = index + 1),
         }
     }
 
@@ -153,21 +153,24 @@ impl Section {
 /// The one-line status under the page title.
 fn summary(ov: &Overview, airplane: bool) -> String {
     if airplane {
-        return "Offline (airplane mode)".to_string();
+        return tr!("network-summary-airplane");
     }
     if ov.connectivity == "portal" {
-        return "Sign-in required".to_string();
+        return tr!("network-summary-sign-in");
     }
     match ov.primary() {
         Some(device) => match device.kind {
-            DeviceKind::Wifi => format!("Online through Wi-Fi ({})", device.connection),
-            DeviceKind::Modem => "Online through the mobile network".to_string(),
-            _ => "Online through Ethernet".to_string(),
+            DeviceKind::Wifi => tr!(
+                "network-summary-wifi",
+                connection = device.connection.as_str()
+            ),
+            DeviceKind::Modem => tr!("network-summary-modem"),
+            _ => tr!("network-summary-ethernet"),
         },
         None if ov.state == "connected" || ov.state.starts_with("connected") => {
-            "Connected, no internet".to_string()
+            tr!("network-summary-no-internet")
         }
-        None => "Offline".to_string(),
+        None => tr!("network-summary-offline"),
     }
 }
 
@@ -247,10 +250,8 @@ fn open_portal(ctx: NetCtx) {
         || system::run("xdg-open", &[portal_uri().as_str()], QUICK),
         move |result| {
             if let Err(error) = result {
-                ctx.overlays.toast(plain(
-                    &error.0,
-                    "Could not open the sign-in page. Try again.",
-                ));
+                ctx.overlays
+                    .toast(plain(&error.0, &tr!("network-portal-open-failed")));
             }
         },
     );
@@ -273,21 +274,24 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
         (Some(device), false) => {
             let target = connection_target(ov, device);
             let internet = match ov.connectivity.as_str() {
-                "limited" => "Limited",
+                "limited" => tr!("network-status-limited"),
                 // The sign-in row under this one says it, so it is not said twice.
-                "portal" => "",
-                "none" => "No internet",
-                _ => "",
+                "portal" => String::new(),
+                "none" => tr!("network-status-no-internet"),
+                _ => String::new(),
             };
             let address = device.address4();
             let mut line = row(device.connection.clone())
                 .leading(device_icon(device.kind))
                 .subtitle(if address.is_empty() {
-                    "Connected".to_string()
+                    tr!("network-status-connected")
                 } else {
-                    format!("Connected · {address}")
+                    tr!(
+                        "network-status-connected-address",
+                        address = address.as_str()
+                    )
                 })
-                .value(internet)
+                .value(internet.clone())
                 .navigates()
                 .on_press(move |_| ctx.router.open(target.clone()));
             if internet.is_empty() && ov.connectivity != "portal" {
@@ -296,7 +300,7 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
             group = group.row(line);
             if ov.connectivity == "portal" {
                 group = group.row(
-                    row("Sign-in required")
+                    row(tr!("network-summary-sign-in"))
                         .navigates()
                         .on_press(move |_| open_portal(ctx)),
                 );
@@ -304,16 +308,16 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
         }
         (_, true) => {
             group = group.row(
-                row("Airplane mode is on")
+                row(tr!("network-airplane-on"))
                     .leading(Icon::AirplaneMode)
-                    .subtitle("Turn it off below to connect."),
+                    .subtitle(tr!("network-airplane-on-hint")),
             );
         }
         _ => {
             group = group.row(
-                row("Not connected")
+                row(tr!("network-not-connected"))
                     .leading(Icon::Network)
-                    .subtitle("Choose a Wi-Fi network or plug in a cable."),
+                    .subtitle(tr!("network-not-connected-hint")),
             );
         }
     }
@@ -334,18 +338,16 @@ impl Component for NetworkPage {
             None => placeholder(),
             Some(Ok(ov)) => ov,
             Some(Err(failure)) => {
-                let message = plain(
-                    &failure.0,
-                    "Could not read the network status. Try again in a moment.",
-                );
+                let message = plain(&failure.0, &tr!("network-status-read-failed"));
                 return page_column().child(PageHead::new()).child(
-                    status(Status::Error(message)).action("Try again", move |_| ctx.reload()),
+                    status(Status::Error(message))
+                        .action(&tr!("network-try-again"), move |_| ctx.reload()),
                 );
             }
         };
         let airplane = model::pending_for("airplane").unwrap_or(ov.airplane);
         let head = PageHead::new().subtitle(if loading {
-            "Loading…".to_string()
+            tr!("network-loading")
         } else {
             summary(&ov, airplane)
         });
@@ -357,17 +359,17 @@ impl Component for NetworkPage {
         connections.extend(ethernet::ethernet_rows(ctx, &ov));
         connections.extend(mobile::mobile_row(ctx, &ov, airplane));
         let connections = if connections.is_empty() {
-            Group::titled("Connections").row(Element::from(status(Status::Empty(
-                "No network devices".into(),
-            ))))
+            Group::titled(&tr!("network-group-connections")).row(Element::from(status(
+                Status::Empty(tr!("network-connections-empty").into()),
+            )))
         } else {
-            Group::titled("Connections").rows(connections)
+            Group::titled(&tr!("network-group-connections")).rows(connections)
         };
         blocks.push(Element::from(connections));
         blocks.push(vpn::vpn_group(ctx, &ov));
 
         let mut more: Vec<Element> = vec![Element::from(switch_row(
-            "Airplane mode",
+            tr!("network-airplane-mode"),
             airplane,
             move |on: bool| {
                 model::toggle_link(ctx, "airplane".to_string(), on, move || {
@@ -377,7 +379,9 @@ impl Component for NetworkPage {
         ))];
         more.extend(wifi::hotspot_row(ctx, &ov));
         more.push(proxy::proxy_row(ctx));
-        blocks.push(Element::from(Group::titled("More").rows(more)));
+        blocks.push(Element::from(
+            Group::titled(&tr!("network-group-more")).rows(more),
+        ));
 
         veiled(page_column().child(head).children(blocks), loading)
     }
@@ -391,8 +395,8 @@ pub fn plain(raw: &str, message: &str) -> String {
 
 /// The error a screen shows when the network settings cannot be read.
 pub fn failure_page(error: CommandError, retry: impl Fn() + 'static) -> Element {
-    let message = plain(&error.0, "Could not read the network settings. Try again.");
+    let message = plain(&error.0, &tr!("network-read-failed"));
     page_column()
-        .child(status(Status::Error(message)).action("Try again", move |_| retry()))
+        .child(status(Status::Error(message)).action(&tr!("network-try-again"), move |_| retry()))
         .into()
 }

@@ -2,6 +2,7 @@
 //! and the snapshot of numbers a read returns. Everything here runs off the UI
 //! thread except the small pure helpers the page calls while it draws.
 
+use bingux_ui::prelude::tr;
 use std::path::Path;
 
 use bingux_data_usage::{
@@ -49,24 +50,24 @@ impl Period {
     }
 
     /// The short name on the period control.
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::Today => "Today",
-            Self::Week => "Week",
-            Self::Month => "Month",
-            Self::Cycle => "Cycle",
-            Self::Custom => "Custom",
+            Self::Today => tr!("data-usage-today"),
+            Self::Week => tr!("data-usage-period-week"),
+            Self::Month => tr!("data-usage-period-month"),
+            Self::Cycle => tr!("data-usage-period-cycle"),
+            Self::Custom => tr!("data-usage-period-custom"),
         }
     }
 
     /// What the groups say the numbers are for.
-    pub fn phrase(self) -> &'static str {
+    pub fn phrase(self) -> String {
         match self {
-            Self::Today => "Today",
-            Self::Week => "This week",
-            Self::Month => "This month",
-            Self::Cycle => "This billing cycle",
-            Self::Custom => "The chosen dates",
+            Self::Today => tr!("data-usage-today"),
+            Self::Week => tr!("data-usage-this-week"),
+            Self::Month => tr!("data-usage-this-month"),
+            Self::Cycle => tr!("data-usage-this-cycle"),
+            Self::Custom => tr!("data-usage-the-chosen-dates"),
         }
     }
 
@@ -100,10 +101,10 @@ const MAX_CUSTOM_DAYS: i64 = 366;
 pub fn custom_dates(from: &str, to: &str) -> Result<(Date, Date), String> {
     let (from, to) = (format::parse_date(from)?, format::parse_date(to)?);
     if to < from {
-        return Err("Choose an end date after the start date.".into());
+        return Err(tr!("data-usage-err-range-order"));
     }
     if to.to_days() - from.to_days() >= MAX_CUSTOM_DAYS {
-        return Err("Choose a range of one year or less.".into());
+        return Err(tr!("data-usage-err-range-length"));
     }
     Ok((from, to))
 }
@@ -237,7 +238,7 @@ pub fn no_history(error: &Error) -> bool {
 /// Log what the recorder said and return the sentence the person sees.
 pub fn unreadable(error: &dyn std::fmt::Display) -> String {
     eprintln!("bingux-settings: data usage: {error}");
-    "Could not read the data usage. Try again.".to_string()
+    tr!("data-usage-err-read")
 }
 
 /// The limits of `connection` and the limits for all, from the recorder's
@@ -349,7 +350,7 @@ fn read(
             Err(Error::UnknownScope(_)) => Ok(Vec::new()),
             Err(Error::Unsupported(what)) => {
                 eprintln!("bingux-settings: data usage unsupported: {what}");
-                Err("Data usage history is not available here.".to_string())
+                Err(tr!("data-usage-unavailable"))
             }
             Err(error) => return Err(unreadable(&error)),
         },

@@ -1,6 +1,7 @@
 //! The Data usage screen: totals, a chart over time, the breakdowns and the
 //! limit, for everything, one interface or one connection.
 
+use bingux_ui::prelude::tr;
 use std::time::Duration;
 
 use bingux_data_usage::{Kind, Totals, Zone, unix_now};
@@ -26,19 +27,21 @@ use bingux_ui::task::use_polled_resource;
 const POLL: Duration = Duration::from_secs(30);
 
 /// Shown when the recorder is not keeping the history up to date.
-const NOT_RUNNING: &str = "The data usage recorder is not running.";
+fn not_running() -> String {
+    tr!("data-usage-not-running")
+}
 
 #[derive(PartialEq)]
 pub struct UsagePage {
     pub scope: UsageScope,
 }
 
-pub(super) fn kind_name(kind: Kind) -> &'static str {
+pub(super) fn kind_name(kind: Kind) -> String {
     match kind {
-        Kind::Wifi => "Wi-Fi",
-        Kind::Ethernet => "Ethernet",
-        Kind::Mobile => "Mobile",
-        Kind::Vpn => "VPN",
+        Kind::Wifi => tr!("data-usage-kind-wifi"),
+        Kind::Ethernet => tr!("data-usage-kind-ethernet"),
+        Kind::Mobile => tr!("data-usage-kind-mobile"),
+        Kind::Vpn => tr!("data-usage-kind-vpn"),
     }
 }
 
@@ -52,13 +55,13 @@ pub(super) fn kind_icon(kind: Kind) -> Icon {
 }
 
 /// The title of the chart group for a period.
-fn chart_title(period: Period) -> &'static str {
+fn chart_title(period: Period) -> String {
     match period {
-        Period::Today => "Today by hour",
-        Period::Week => "This week by day",
-        Period::Month => "This month by day",
-        Period::Cycle => "This billing cycle by day",
-        Period::Custom => "Chosen dates by day",
+        Period::Today => tr!("data-usage-chart-today"),
+        Period::Week => tr!("data-usage-chart-week"),
+        Period::Month => tr!("data-usage-chart-month"),
+        Period::Cycle => tr!("data-usage-chart-cycle"),
+        Period::Custom => tr!("data-usage-chart-custom"),
     }
 }
 
@@ -70,15 +73,18 @@ fn notices(snapshot: &Snapshot, scope: &UsageScope) -> Vec<Element> {
     let mut notices = Vec::new();
     if !snapshot.live {
         let detail = match snapshot.last_sample {
-            Some(last) => format!("Last recorded {}.", format::ago(snapshot.now, last)),
-            None => "Nothing has been recorded yet.".to_string(),
+            Some(last) => tr!(
+                "data-usage-last-recorded",
+                when = format::ago(snapshot.now, last).as_str()
+            ),
+            None => tr!("data-usage-nothing-recorded"),
         };
-        warnings.push(Element::from(warning(row(NOT_RUNNING).subtitle(detail))));
+        warnings.push(Element::from(warning(row(&not_running()).subtitle(detail))));
     }
     if snapshot.unsupported.is_some() {
-        notices.push(Element::from(status(Status::Info(
-            "Data usage history is not available here.".into(),
-        ))));
+        notices.push(Element::from(status(Status::Info(tr!(
+            "data-usage-unavailable"
+        )))));
     }
     // An interface is compared with no limit: limits belong to the whole
     // computer or to one connection.
@@ -108,55 +114,55 @@ fn totals_rows(
     let periods = &snapshot.periods;
     let mut rows = vec![
         Element::from(
-            row("Today")
+            row(&tr!("data-usage-today"))
                 .subtitle(span(periods.today))
                 .value(format::pair(snapshot.today)),
         ),
         Element::from(
-            row("This week")
+            row(&tr!("data-usage-this-week"))
                 .subtitle(span(periods.week))
                 .value(format::pair(snapshot.week)),
         ),
         Element::from(
-            row("This month")
+            row(&tr!("data-usage-this-month"))
                 .subtitle(span(periods.month))
                 .value(format::pair(snapshot.month)),
         ),
         Element::from(
-            row("Billing cycle")
+            row(&tr!("data-usage-billing-cycle"))
                 .subtitle(span(periods.cycle))
                 .value(format::pair(snapshot.cycle)),
         ),
     ];
     if let (Period::Custom, Some(custom), Some(chosen)) = (period, snapshot.custom, custom_span) {
         rows.push(Element::from(
-            row("Chosen dates")
+            row(&tr!("data-usage-chosen-dates"))
                 .subtitle(span(chosen))
                 .value(format::pair(custom)),
         ));
     }
     if let Some(since_boot) = snapshot.since_boot {
         rows.push(Element::from(
-            row("Since boot").value(format::pair(since_boot)),
+            row(&tr!("data-usage-since-boot")).value(format::pair(since_boot)),
         ));
     }
     rows
 }
 
 fn chart_group(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Group {
-    let group = Group::titled(chart_title(period));
+    let group = Group::titled(&chart_title(period));
     if custom_missing {
-        return group.row(Element::from(status(Status::Empty(
-            "Enter a start and end date to see that range.".into(),
-        ))));
+        return group.row(Element::from(status(Status::Empty(tr!(
+            "data-usage-enter-dates"
+        )))));
     }
     match &snapshot.series {
         Err(why) => group.row(Element::from(status(Status::Info(why.clone())))),
         Ok(buckets) if !chart::has_traffic(buckets) => group.row(Element::from(status(
             Status::Empty(if snapshot.source.is_none() {
-                "Nothing has been recorded yet.".into()
+                tr!("data-usage-nothing-recorded")
             } else {
-                "Nothing was received or sent in this period.".into()
+                tr!("data-usage-nothing-in-period")
             }),
         ))),
         Ok(buckets) => {
@@ -167,11 +173,11 @@ fn chart_group(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Gro
                     tx: bucket.tx,
                 }
             });
-            let label = format!(
-                "Data received and sent, {}. Received {}, sent {}.",
-                chart_title(period).to_lowercase(),
-                format::bytes(total.rx),
-                format::bytes(total.tx)
+            let label = tr!(
+                "data-usage-chart-label",
+                period = chart_title(period).to_lowercase(),
+                received = format::bytes(total.rx),
+                sent = format::bytes(total.tx)
             );
             group.content(chart::chart(&data, label))
         }
@@ -199,9 +205,12 @@ impl Component for UsagePage {
             use_polled_resource(request.clone(), model::load, POLL, Snapshot::draws_same);
 
         if let Some(failure) = resource.with(|state| state.error().map(str::to_string)) {
-            return Element::from(page_column().child(
-                status(Status::Error(failure)).action("Try again", move |_| resource.refresh()),
-            ));
+            return Element::from(
+                page_column().child(
+                    status(Status::Error(failure))
+                        .action(&tr!("data-usage-try-again"), move |_| resource.refresh()),
+                ),
+            );
         }
         let (snapshot, loading) = resource.with(|state| match state.value() {
             Some(snapshot) => (snapshot.clone(), false),
@@ -226,12 +235,13 @@ impl Component for UsagePage {
         let shown_span = current
             .span(&snapshot.periods, custom_span)
             .map(|(first, last)| format::range(snapshot.zone, first, last));
-        let mut selector =
-            Group::titled("Period").row(row("Show").maybe_subtitle(shown_span).trailing(
-                segmented(options, current.key(), move |key: String| {
+        let mut selector = Group::titled(&tr!("data-usage-period")).row(
+            row(&tr!("data-usage-show"))
+                .maybe_subtitle(shown_span)
+                .trailing(segmented(options, current.key(), move |key: String| {
                     period.set(Period::from_key(&key))
-                }),
-            ));
+                })),
+        );
         if current == Period::Custom {
             let range_error = match (
                 format::parse_date(&from.read()),
@@ -244,12 +254,12 @@ impl Component for UsagePage {
             };
             selector = selector
                 .row(
-                    form_field("From", from)
+                    form_field(&tr!("data-usage-from"), from)
                         .placeholder("2026-10-01")
                         .validate(format::check_date),
                 )
                 .row(
-                    form_field("To", to)
+                    form_field(&tr!("data-usage-to"), to)
                         .placeholder("2026-10-07")
                         .validate(format::check_date)
                         .error(range_error),
@@ -258,8 +268,11 @@ impl Component for UsagePage {
         page = page.child(selector);
 
         // Totals.
-        page =
-            page.child(Group::titled("Totals").rows(totals_rows(&snapshot, current, custom_span)));
+        page = page.child(Group::titled(&tr!("data-usage-totals")).rows(totals_rows(
+            &snapshot,
+            current,
+            custom_span,
+        )));
 
         // Chart.
         let custom_missing = current == Period::Custom && request.custom.is_none();
@@ -268,21 +281,21 @@ impl Component for UsagePage {
         // Breakdowns, for the whole computer only.
         if scope == UsageScope::All {
             page = page.child(breakdown_group(
-                "By interface",
+                tr!("data-usage-by-interface"),
                 current.phrase(),
                 "usage.interfaces",
-                "Interface",
+                tr!("data-usage-interface"),
                 &snapshot.interfaces,
-                "No interface has been recorded yet.",
+                tr!("data-usage-no-interface"),
                 move |name: String| router.open(routes::usage(&UsageScope::Interface(name))),
             ));
             page = page.child(breakdown_group(
-                "By connection",
+                tr!("data-usage-by-connection"),
                 current.phrase(),
                 "usage.connections",
-                "Connection",
+                tr!("data-usage-connection"),
                 &snapshot.connections,
-                "No connection has been recorded yet.",
+                tr!("data-usage-no-connection"),
                 move |name: String| router.open(routes::usage(&UsageScope::Connection(name))),
             ));
         }
@@ -301,11 +314,14 @@ impl Component for UsagePage {
 
         // Where the numbers come from.
         let source = match snapshot.source {
-            Some(Source::Own) => "Recorded by Bingux",
-            Some(Source::Vnstat) => "vnStat",
-            None => "Nothing recorded yet",
+            Some(Source::Own) => tr!("data-usage-source-own"),
+            Some(Source::Vnstat) => "vnStat".to_string(),
+            None => tr!("data-usage-nothing-recorded-yet"),
         };
-        page = page.child(Group::titled("About this data").row(property_row("Source", source)));
+        page = page.child(
+            Group::titled(&tr!("data-usage-about"))
+                .row(property_row(&tr!("data-usage-source"), source)),
+        );
 
         Element::from(veiled(page, loading))
     }

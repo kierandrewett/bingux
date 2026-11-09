@@ -13,6 +13,7 @@ use super::{Owner, Section};
 use crate::routes;
 use crate::system::{self, CommandError, background_then};
 use crate::ui::{Group, PageHead, Status, page_column, row, skeleton_rows, status};
+use bingux_ui::prelude::tr;
 use bingux_ui::prelude::use_router;
 use bingux_ui::style::*;
 
@@ -135,16 +136,24 @@ fn format_route(text: &str) -> String {
     if destination.is_empty() {
         return text.trim().to_string();
     }
-    let mut line = destination;
-    if next_hop.is_empty() || next_hop == "0.0.0.0" || next_hop == "::" {
-        line.push_str(" direct");
+    let line = if next_hop.is_empty() || next_hop == "0.0.0.0" || next_hop == "::" {
+        tr!("network-route-direct", destination = destination.as_str())
     } else {
-        line.push_str(&format!(" via {next_hop}"));
+        tr!(
+            "network-route-via",
+            destination = destination.as_str(),
+            hop = next_hop.as_str()
+        )
+    };
+    if metric.is_empty() {
+        line
+    } else {
+        tr!(
+            "network-route-metric",
+            route = line.as_str(),
+            metric = metric.as_str()
+        )
     }
-    if !metric.is_empty() {
-        line.push_str(&format!(", metric {metric}"));
-    }
-    line
 }
 
 /// The routes of a saved profile. nmcli prints them either as
@@ -186,15 +195,14 @@ fn parse_saved_list(text: &str) -> Vec<String> {
 /// An IP method in words.
 fn method_label(method: &str) -> String {
     match method {
-        "auto" => "Automatic",
-        "dhcp" => "Automatic (DHCP)",
-        "manual" => "Manual",
-        "disabled" | "ignore" => "Off",
-        "link-local" => "Link-local only",
-        "shared" => "Shared with other computers",
-        other => other,
+        "auto" => tr!("network-method-auto"),
+        "dhcp" => tr!("network-method-dhcp"),
+        "manual" => tr!("network-method-manual"),
+        "disabled" | "ignore" => tr!("network-method-off"),
+        "link-local" => tr!("network-method-link-local"),
+        "shared" => tr!("network-method-shared"),
+        other => other.to_string(),
     }
-    .to_string()
 }
 
 /// The live facts of one family from an active connection.
@@ -228,18 +236,18 @@ fn saved_family(pairs: &Pairs, prefix: &str) -> Family {
 /// What a connection type is called.
 fn kind_label(kind: &str, service: &str) -> String {
     match kind {
-        "802-3-ethernet" | "ethernet" => "Ethernet".into(),
-        "802-11-wireless" | "wifi" => "Wi-Fi".into(),
+        "802-3-ethernet" | "ethernet" => tr!("network-kind-ethernet"),
+        "802-11-wireless" | "wifi" => tr!("network-kind-wifi"),
         "wireguard" => "WireGuard".into(),
-        "gsm" | "cdma" => "Mobile broadband".into(),
+        "gsm" | "cdma" => tr!("network-kind-mobile"),
         "vpn" => match service.rsplit('.').next().unwrap_or("") {
             "openvpn" => "OpenVPN".into(),
             "openconnect" => "OpenConnect".into(),
             "vpnc" => "Cisco VPN (vpnc)".into(),
-            "" => "VPN".into(),
-            other => format!("VPN ({other})"),
+            "" => tr!("network-kind-vpn"),
+            other => tr!("network-kind-vpn-named", name = other),
         },
-        "bridge" => "Bridge".into(),
+        "bridge" => tr!("network-kind-bridge"),
         other => super::model::capitalise(other),
     }
 }
@@ -316,7 +324,7 @@ fn read_wifi(device: &str) -> Option<WifiFacts> {
             channel: field(2),
             band: band_of(&field(3)),
             security: if field(4).is_empty() {
-                "Open".into()
+                tr!("network-security-open")
             } else {
                 field(4)
             },
@@ -534,17 +542,24 @@ fn family_group(title: &str, family: &Family, with_addresses: bool) -> Option<El
         return None;
     }
     let mut rows: Vec<Element> = Vec::new();
-    rows.extend(fact("Method", &family.method));
+    rows.extend(fact(tr!("network-facts-method"), &family.method));
     if with_addresses {
-        list_facts(&mut rows, "Address", &family.addresses);
+        list_facts(&mut rows, &tr!("network-facts-address"), &family.addresses);
     }
-    rows.extend(fact("Gateway", &family.gateway));
-    list_facts(&mut rows, "DNS server", &family.dns);
-    list_facts(&mut rows, "Search domain", &family.domains);
+    rows.extend(fact(tr!("network-facts-gateway"), &family.gateway));
+    list_facts(&mut rows, &tr!("network-facts-dns-server"), &family.dns);
+    list_facts(
+        &mut rows,
+        &tr!("network-facts-search-domain"),
+        &family.domains,
+    );
     for route in &family.routes {
         // The destination is the row's title, how it is reached its value.
         let (destination, how) = route.split_once(' ').unwrap_or((route, ""));
-        rows.extend(fact(format!("Route to {destination}"), how));
+        rows.extend(fact(
+            tr!("network-facts-route-to", destination = destination),
+            how,
+        ));
     }
     if rows.is_empty() {
         return None;
@@ -557,28 +572,26 @@ fn family_group(title: &str, family: &Family, with_addresses: bool) -> Option<El
 fn view(details: &Details) -> Vec<Element> {
     let mut blocks: Vec<Element> = Vec::new();
     if details.state == Live::Saved {
-        blocks.push(
-            status(Status::Info(
-                "This connection is not active. These are its saved settings, not live values."
-                    .into(),
-            ))
-            .into(),
-        );
+        blocks.push(status(Status::Info(tr!("network-facts-not-active"))).into());
     }
 
     let mut general: Vec<Element> = Vec::new();
-    general.extend(fact("Device", &details.device));
-    general.extend(fact("Type", &details.kind_label));
-    general.extend(fact("UUID", &details.uuid));
-    general.extend(fact("MAC address", &details.mac));
-    general.extend(fact("MTU", &details.mtu));
+    general.extend(fact(tr!("network-facts-device"), &details.device));
+    general.extend(fact(tr!("network-facts-type"), &details.kind_label));
+    general.extend(fact(tr!("network-facts-uuid"), &details.uuid));
+    general.extend(fact(tr!("network-facts-mac"), &details.mac));
+    general.extend(fact(tr!("network-facts-mtu"), &details.mtu));
     if let Some(wifi) = &details.wifi {
-        general.extend(fact("Access point", &wifi.bssid));
-        general.extend(fact("Band", &wifi.band));
-        general.extend(fact("Channel", &wifi.channel));
-        general.extend(fact("Security", &wifi.security));
+        general.extend(fact(tr!("network-facts-access-point"), &wifi.bssid));
+        general.extend(fact(tr!("network-facts-band"), &wifi.band));
+        general.extend(fact(tr!("network-facts-channel"), &wifi.channel));
+        general.extend(fact(tr!("network-facts-security"), &wifi.security));
     }
-    blocks.push(Group::titled("Technical details").rows(general).into());
+    blocks.push(
+        Group::titled(&tr!("network-facts-technical-details"))
+            .rows(general)
+            .into(),
+    );
 
     blocks.extend(family_group(
         "IPv4",
@@ -621,9 +634,9 @@ impl Component for TechnicalDetails {
             Some(Err(error)) => column.child(
                 status(Status::Error(super::plain(
                     &error.0,
-                    "Could not read the connection details. Try again.",
+                    &tr!("network-facts-error-details"),
                 )))
-                .action("Try again", {
+                .action(&tr!("network-facts-try-again"), {
                     let name = self.connection.clone();
                     move |_| reload(loaded, name.clone())
                 }),
@@ -666,11 +679,11 @@ impl Component for DetailsPage {
         let page = page_column().child(PageHead::new());
         match found {
             None | Some(Ok(Some(_))) => {
-                page.child(status(Status::Loading("Reading connection…".into())))
+                page.child(status(Status::Loading(tr!("network-facts-reading"))))
             }
             Some(Err(error)) => page.child(status(Status::Error(super::plain(
                 &error.0,
-                "Could not read the connection. Try again.",
+                &tr!("network-facts-error-connection"),
             )))),
             Some(Ok(None)) => page.child(TechnicalDetails {
                 connection: self.connection.clone(),

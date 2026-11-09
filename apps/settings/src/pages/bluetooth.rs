@@ -21,7 +21,7 @@ use crate::ui::{
     use_page_busy, use_tokens,
 };
 use bingux_ui::layout::{hstack, vstack};
-use bingux_ui::prelude::{Router, use_router};
+use bingux_ui::prelude::{Router, i18n_id, tr, use_router};
 use bingux_ui::shell::{MenuItem, menu_item};
 use bingux_ui::style::*;
 
@@ -126,7 +126,7 @@ fn run_tool(program: &str, args: &[&str], timeout: Duration) -> Result<String, C
         // Without bluetoothd, bluetoothctl aborts on a D-Bus assertion and
         // prints a build-flag complaint that means nothing to a user.
         if error.0.contains("D-Bus") || error.0.contains("rdynamic") {
-            CommandError("Bluetooth is not available. Restart the computer and try again.".into())
+            CommandError(tr!("bluetooth-error-unavailable"))
         } else {
             error
         }
@@ -142,9 +142,9 @@ fn field<'a>(text: &'a str, key: &str) -> Option<&'a str> {
 }
 
 fn flag(text: &str, key: &str) -> Result<bool, CommandError> {
-    field(text, key).map(|value| value == "yes").ok_or_else(|| {
-        CommandError("Could not read the Bluetooth status. Try again in a moment.".into())
-    })
+    field(text, key)
+        .map(|value| value == "yes")
+        .ok_or_else(|| CommandError(tr!("bluetooth-error-status-read")))
 }
 
 /// `Battery Percentage` reads `0x5a (90)`; the percentage is in brackets.
@@ -192,7 +192,7 @@ fn hostname() -> String {
         .map(|name| name.trim().to_string())
         .ok()
         .filter(|name| !name.is_empty())
-        .unwrap_or_else(|| "This computer".to_string())
+        .unwrap_or_else(|| tr!("bluetooth-this-computer"))
 }
 
 /// Snapshot builds only: `BINGUX_SETTINGS_FAKE_BLUETOOTH=1` stands in a
@@ -308,29 +308,26 @@ fn verdict(text: &str, failed: bool) -> Result<(), String> {
 
 /// Known BlueZ failures, in words for a person. The first match wins.
 const REASONS: &[(&[&str], &str)] = &[
-    (
-        &["did not answer"],
-        "Bluetooth did not answer. Try again in a moment.",
-    ),
+    (&["did not answer"], i18n_id!("bluetooth-error-no-answer")),
     (
         &["d-bus", "rdynamic"],
-        "Bluetooth is not available. Restart the computer and try again.",
+        i18n_id!("bluetooth-error-unavailable"),
     ),
     (
         &["inprogress", "in progress"],
-        "Bluetooth is busy. Try again in a moment.",
+        i18n_id!("bluetooth-error-busy"),
     ),
     (
         &["authentic", "rejected"],
-        "The device did not accept the pairing request. Try pairing again.",
+        i18n_id!("bluetooth-error-pairing-rejected"),
     ),
     (
         &["notavailable", "not available", "doesnotexist", "not found"],
-        "The device is out of range or turned off. Turn it on, then try again.",
+        i18n_id!("bluetooth-error-out-of-range"),
     ),
     (
         &["timeout", "timed out"],
-        "The device did not respond in time. Bring it closer and try again.",
+        i18n_id!("bluetooth-error-timeout"),
     ),
     (
         &[
@@ -339,7 +336,7 @@ const REASONS: &[(&[&str], &str)] = &[
             "host is down",
             "failed to connect",
         ],
-        "The device did not respond. Turn it on, bring it closer and try again.",
+        i18n_id!("bluetooth-error-no-response"),
     ),
 ];
 
@@ -347,13 +344,13 @@ fn plain_reason(text: &str) -> String {
     let lower = text.to_lowercase();
     for (keys, reason) in REASONS {
         if keys.iter().any(|key| lower.contains(key)) {
-            return reason.to_string();
+            return bingux_ui::i18n::text(reason);
         }
     }
     if lower.contains("org.") || lower.contains("bluez") || lower.contains("bluetoothd") {
-        return "Could not finish the action. Try again.".to_string();
+        return tr!("bluetooth-error-generic");
     }
-    "Try again in a moment.".to_string()
+    tr!("bluetooth-error-try-later")
 }
 
 fn run_steps(steps: &[Step]) -> Result<(), String> {
@@ -371,7 +368,7 @@ fn run_steps(steps: &[Step]) -> Result<(), String> {
 /// One job runs at a time; a second request says so instead of queuing.
 fn run_job(ctx: Ctx, job: Job) {
     if ctx.busy.read().is_some() {
-        ctx.overlays.toast("Another action is still running");
+        ctx.overlays.toast(tr!("bluetooth-toast-busy"));
         return;
     }
     let Ctx {
@@ -397,8 +394,12 @@ fn run_job(ctx: Ctx, job: Job) {
                     }
                 }
                 Err(reason) => overlays.toast_with_action(
-                    format!("{failed} {reason}"),
-                    "Try again",
+                    tr!(
+                        "bluetooth-toast-failed",
+                        failed = failed.as_str(),
+                        reason = reason.as_str()
+                    ),
+                    tr!("bluetooth-action-retry"),
                     move |_| run_job(ctx, retry.clone()),
                 ),
             }
@@ -419,7 +420,15 @@ fn set_switch_job(ctx: Ctx, pending: State<Option<bool>>, job: Job, on: bool) {
         Some(ctx.overlays),
         None,
         Some(on),
-        move || run_steps(&steps).map_err(|reason| format!("{failed} {reason}")),
+        move || {
+            run_steps(&steps).map_err(|reason| {
+                tr!(
+                    "bluetooth-toast-failed",
+                    failed = failed.as_str(),
+                    reason = reason.as_str()
+                )
+            })
+        },
         move || {
             background_then(
                 || system::load_persistent("bluetooth", load),
@@ -436,22 +445,22 @@ fn power_job(on: bool) -> Job {
     let (word, busy, failed) = if on {
         (
             "on",
-            "Turning Bluetooth on…",
-            "Could not turn on Bluetooth. Restart the computer and try again.",
+            tr!("bluetooth-busy-power-on"),
+            tr!("bluetooth-failed-power-on"),
         )
     } else {
         (
             "off",
-            "Turning Bluetooth off…",
-            "Could not turn off Bluetooth. Try again.",
+            tr!("bluetooth-busy-power-off"),
+            tr!("bluetooth-failed-power-off"),
         )
     };
     Job {
         mac: String::new(),
-        busy: busy.to_string(),
+        busy,
         steps: vec![step(&["power", word], TIMEOUT)],
         done: String::new(),
-        failed: failed.to_string(),
+        failed,
     }
 }
 
@@ -460,13 +469,13 @@ fn power_job(on: bool) -> Job {
 fn rename_job(device: &Device, alias: &str) -> Job {
     let path = format!("/org/bluez/hci0/dev_{}", device.mac.replace(':', "_"));
     let done = if alias.is_empty() {
-        format!("“{}” uses its own name again", device.name)
+        tr!("bluetooth-toast-alias-reset", name = device.name.as_str())
     } else {
-        format!("Renamed to “{alias}”")
+        tr!("bluetooth-toast-renamed", alias = alias)
     };
     Job {
         mac: device.mac.clone(),
-        busy: "Renaming…".to_string(),
+        busy: tr!("bluetooth-busy-rename"),
         steps: vec![Step {
             program: "busctl",
             args: [
@@ -485,7 +494,7 @@ fn rename_job(device: &Device, alias: &str) -> Job {
             timeout: TIMEOUT,
         }],
         done,
-        failed: format!("Could not rename “{}”.", device.name),
+        failed: tr!("bluetooth-failed-rename", name = device.name.as_str()),
     }
 }
 
@@ -493,23 +502,20 @@ fn trust_job(device: &Device, on: bool) -> Job {
     let word = if on { "trust" } else { "untrust" };
     Job {
         mac: device.mac.clone(),
-        busy: "Saving…".to_string(),
+        busy: tr!("bluetooth-busy-save"),
         steps: vec![step(&[word, device.mac.as_str()], TIMEOUT)],
         done: String::new(),
-        failed: format!(
-            "Could not change automatic connection for “{}”. Try again.",
-            device.name
-        ),
+        failed: tr!("bluetooth-failed-trust", name = device.name.as_str()),
     }
 }
 
 fn remove_job(device: &Device) -> Job {
     Job {
         mac: device.mac.clone(),
-        busy: "Forgetting…".to_string(),
+        busy: tr!("bluetooth-busy-forget"),
         steps: vec![step(&["remove", device.mac.as_str()], TIMEOUT)],
-        done: format!("Forgot “{}”", device.name),
-        failed: format!("Could not forget “{}”.", device.name),
+        done: tr!("bluetooth-toast-forgot", name = device.name.as_str()),
+        failed: tr!("bluetooth-failed-forget", name = device.name.as_str()),
     }
 }
 
@@ -522,29 +528,29 @@ fn device_job(device: &Device) -> Job {
     if device.connected {
         Job {
             mac: device.mac.clone(),
-            busy: "Disconnecting…".to_string(),
+            busy: tr!("bluetooth-busy-disconnect"),
             steps: vec![step(&["disconnect", mac], TIMEOUT)],
-            done: format!("Disconnected from “{name}”"),
-            failed: format!("Could not disconnect from “{name}”."),
+            done: tr!("bluetooth-toast-disconnected", name = name),
+            failed: tr!("bluetooth-failed-disconnect", name = name),
         }
     } else if device.paired {
         Job {
             mac: device.mac.clone(),
-            busy: "Connecting…".to_string(),
+            busy: tr!("bluetooth-busy-connect"),
             steps: vec![step(&["connect", mac], CONNECT_TIMEOUT)],
-            done: format!("Connected to “{name}”"),
-            failed: format!("Could not connect to “{name}”."),
+            done: tr!("bluetooth-toast-connected", name = name),
+            failed: tr!("bluetooth-failed-connect", name = name),
         }
     } else {
         Job {
             mac: device.mac.clone(),
-            busy: "Pairing…".to_string(),
+            busy: tr!("bluetooth-busy-pair"),
             steps: vec![
                 step(&["--timeout", "30", "pair", mac], PAIR_TIMEOUT),
                 step(&["connect", mac], CONNECT_TIMEOUT),
             ],
-            done: format!("Connected to “{name}”"),
-            failed: format!("Could not set up “{name}”."),
+            done: tr!("bluetooth-toast-connected", name = name),
+            failed: tr!("bluetooth-failed-pair", name = name),
         }
     }
 }
@@ -685,14 +691,14 @@ fn header_subtitle(model: &Loaded) -> Option<String> {
                     ..
                 }),
             ..
-        })) => Some(format!("Visible as {alias}")),
+        })) => Some(tr!("bluetooth-header-visible", alias = alias)),
         Some(Ok(Model {
             adapter: Some(Adapter { powered: true, .. }),
             ..
         })) => None,
         Some(Ok(Model {
             adapter: Some(_), ..
-        })) => Some("Off".to_string()),
+        })) => Some(tr!("bluetooth-header-off")),
         _ => None,
     }
 }
@@ -716,31 +722,31 @@ fn device_icon(name: &str) -> Icon {
 }
 
 /// What kind of device the icon name stands for, in words.
-fn device_kind(name: &str) -> &'static str {
+fn device_kind(name: &str) -> String {
     match name {
-        "audio-headphones" | "audio-headset" => "Headphones",
-        "audio-card" | "audio-speakers" => "Speakers",
-        "input-keyboard" => "Keyboard",
-        "input-mouse" => "Mouse",
-        "input-tablet" => "Tablet",
-        "input-gaming" => "Game controller",
-        "phone" => "Phone",
-        "computer" => "Computer",
-        "video-display" => "Display",
-        "printer" => "Printer",
-        "camera-photo" | "camera-video" | "camera-web" => "Camera",
-        _ => "Other",
+        "audio-headphones" | "audio-headset" => tr!("bluetooth-kind-headphones"),
+        "audio-card" | "audio-speakers" => tr!("bluetooth-kind-speakers"),
+        "input-keyboard" => tr!("bluetooth-kind-keyboard"),
+        "input-mouse" => tr!("bluetooth-kind-mouse"),
+        "input-tablet" => tr!("bluetooth-kind-tablet"),
+        "input-gaming" => tr!("bluetooth-kind-game-controller"),
+        "phone" => tr!("bluetooth-kind-phone"),
+        "computer" => tr!("bluetooth-kind-computer"),
+        "video-display" => tr!("bluetooth-kind-display"),
+        "printer" => tr!("bluetooth-kind-printer"),
+        "camera-photo" | "camera-video" | "camera-web" => tr!("bluetooth-kind-camera"),
+        _ => tr!("bluetooth-kind-other"),
     }
 }
 
 /// The state of a device in words.
-fn device_word(device: &Device) -> &'static str {
+fn device_word(device: &Device) -> String {
     if device.connected {
-        "Connected"
+        tr!("bluetooth-state-connected")
     } else if device.paired {
-        "Not connected"
+        tr!("bluetooth-state-not-connected")
     } else {
-        "Not paired"
+        tr!("bluetooth-state-not-paired")
     }
 }
 
@@ -748,8 +754,12 @@ fn device_word(device: &Device) -> &'static str {
 fn device_state(device: &Device) -> String {
     let state = device_word(device);
     match device.battery {
-        Some(level) => format!("{state} · {level}% battery"),
-        None => state.to_string(),
+        Some(level) => tr!(
+            "bluetooth-state-battery",
+            state = state.as_str(),
+            level = level
+        ),
+        None => state,
     }
 }
 
@@ -766,7 +776,7 @@ fn device_strip(device: &Device, ctx: Ctx, adapter_on: bool, idle: bool) -> Elem
     if device.paired {
         let forget = device.clone();
         actions.push(
-            strip_action(Icon::UserTrash, "Forget", move |_| {
+            strip_action(Icon::UserTrash, tr!("bluetooth-action-forget"), move |_| {
                 confirm_forget(ctx, &forget)
             })
             .destructive()
@@ -777,13 +787,13 @@ fn device_strip(device: &Device, ctx: Ctx, adapter_on: bool, idle: bool) -> Elem
 }
 
 /// The one action a device allows, with its icon and label.
-fn device_action(device: &Device) -> (Icon, &'static str) {
+fn device_action(device: &Device) -> (Icon, String) {
     if device.connected {
-        (Icon::WindowClose, "Disconnect")
+        (Icon::WindowClose, tr!("bluetooth-action-disconnect"))
     } else if device.paired {
-        (Icon::Bluetooth, "Connect")
+        (Icon::Bluetooth, tr!("bluetooth-action-connect"))
     } else {
-        (Icon::ListAdd, "Pair")
+        (Icon::ListAdd, tr!("bluetooth-action-pair"))
     }
 }
 
@@ -795,9 +805,11 @@ fn device_menu(ctx: Ctx, device: &Device) -> Vec<MenuItem> {
     if device.paired {
         let forget = device.clone();
         items.push(
-            menu_item("Forget", move |_| confirm_forget(ctx, &forget))
-                .icon(Icon::UserTrash)
-                .destructive(),
+            menu_item(tr!("bluetooth-action-forget"), move |_| {
+                confirm_forget(ctx, &forget)
+            })
+            .icon(Icon::UserTrash)
+            .destructive(),
         );
     }
     items
@@ -808,7 +820,7 @@ fn device_menu(ctx: Ctx, device: &Device) -> Vec<MenuItem> {
 fn device_name(device: &Device) -> String {
     let as_address = device.name.replace('-', ":");
     if device.name.is_empty() || as_address.eq_ignore_ascii_case(&device.mac) {
-        "Unnamed device".to_string()
+        tr!("bluetooth-device-unnamed")
     } else {
         device.name.clone()
     }
@@ -842,10 +854,9 @@ fn device_row(
                 IconSize::Control,
                 Paint::Muted.color(&tokens),
             ))
-            .child(caption(format!("{level}%")));
+            .child(caption(tr!("bluetooth-battery-percent", level = level)));
     }
-    let status =
-        busy_label.or_else(|| (!device.connected).then(|| device_word(device).to_string()));
+    let status = busy_label.or_else(|| (!device.connected).then(|| device_word(device)));
     if let Some(status) = status {
         glyphs = glyphs.child(caption(status));
     }
@@ -929,7 +940,7 @@ impl Component for BluetoothPage {
                 overlays,
             };
             let shown = (*power_pending.read()).unwrap_or(on);
-            head = head.switch("Bluetooth", shown, move |next: bool| {
+            head = head.switch(tr!("bluetooth-master-switch"), shown, move |next: bool| {
                 set_switch_job(ctx, power_pending, power_job(next), next)
             });
         }
@@ -944,28 +955,25 @@ impl Component for BluetoothPage {
             Ok(data) => data,
             Err(e) => {
                 return page_column().child(head.clone()).child(
-                    status(Status::Error(e.0)).action("Try again", move |_| refresh(model)),
+                    status(Status::Error(e.0))
+                        .action(&tr!("bluetooth-action-retry"), move |_| refresh(model)),
                 );
             }
         };
         let Some(adapter) = data.adapter.clone() else {
             return page_column().child(head.clone()).child(
-                status_page(Icon::Bluetooth, "No Bluetooth adapter found")
-                    .description("Plug in a Bluetooth adapter to connect devices."),
+                status_page(Icon::Bluetooth, tr!("bluetooth-empty-no-adapter"))
+                    .description(tr!("bluetooth-empty-no-adapter-body")),
             );
         };
         if let Some(block) = data.blocked {
             let reason = match block {
-                Block::Hardware => {
-                    "A switch on this computer has turned Bluetooth off. Move it back to turn Bluetooth on."
-                }
-                Block::Software => {
-                    "Airplane mode or another system setting has turned Bluetooth off. Turn off airplane mode, then try again."
-                }
+                Block::Hardware => tr!("bluetooth-blocked-hardware-body"),
+                Block::Software => tr!("bluetooth-blocked-software-body"),
             };
-            return page_column()
-                .child(head.clone())
-                .child(status_page(Icon::Bluetooth, "Bluetooth is blocked").description(reason));
+            return page_column().child(head.clone()).child(
+                status_page(Icon::Bluetooth, tr!("bluetooth-blocked-title")).description(reason),
+            );
         }
 
         let busy = busy_state.read().clone();
@@ -978,9 +986,11 @@ impl Component for BluetoothPage {
         let mut page = page_column().child(head);
         if !adapter.powered {
             return page.child(
-                status_page(Icon::Bluetooth, "Bluetooth is off")
-                    .description("Turn on Bluetooth to find and connect devices.")
-                    .action("Turn on", move |_| run_job(ctx, power_job(true))),
+                status_page(Icon::Bluetooth, tr!("bluetooth-off-title"))
+                    .description(tr!("bluetooth-off-body"))
+                    .action(&tr!("bluetooth-off-action"), move |_| {
+                        run_job(ctx, power_job(true))
+                    }),
             );
         }
 
@@ -991,22 +1001,22 @@ impl Component for BluetoothPage {
         let no_mine = mine.is_empty();
 
         if !no_mine {
-            page = page.child(
-                Group::titled("My devices").rows(mine.into_iter().map(|device| {
+            page = page.child(Group::titled(&tr!("bluetooth-group-mine")).rows(
+                mine.into_iter().map(|device| {
                     Element::from(device_row(ctx, device, busy.as_ref(), tokens, router))
-                })),
-            );
+                }),
+            ));
         }
         // Nearby devices carries the scanning spinner. It stays on screen
         // while a scan runs, so the page does not jump when the first device
         // appears.
         if !nearby.is_empty() || scanning {
-            let mut group = Group::titled("Nearby devices");
+            let mut group = Group::titled(&tr!("bluetooth-group-nearby"));
             if scanning {
                 group = group.trailing(spinner(SpinnerSize::Small));
             }
             page = page.child(if nearby.is_empty() {
-                group.row(status(Status::Empty("Looking for nearby devices…".into())))
+                group.row(status(Status::Empty(tr!("bluetooth-scanning"))))
             } else {
                 group.rows(nearby.into_iter().map(|device| {
                     Element::from(device_row(ctx, device, busy.as_ref(), tokens, router))
@@ -1014,8 +1024,8 @@ impl Component for BluetoothPage {
             });
         } else if no_mine {
             page = page.child(
-                status_page(Icon::Bluetooth, "No devices found")
-                    .description("Turn on a device and make it visible."),
+                status_page(Icon::Bluetooth, tr!("bluetooth-empty-title"))
+                    .description(tr!("bluetooth-empty-body")),
             );
         }
         revealed(page, false)
@@ -1073,28 +1083,34 @@ impl Component for BluetoothDevicePage {
             .child(heading(device_name(device)))
             .child(centered_caption(device_state(device)));
 
-        let yes_no = |value: bool| if value { "Yes" } else { "No" };
-        let mut details = Group::titled("Details");
+        let yes_no = |value: bool| {
+            if value {
+                tr!("bluetooth-value-yes")
+            } else {
+                tr!("bluetooth-value-no")
+            }
+        };
+        let mut details = Group::titled(&tr!("bluetooth-group-details"));
         if let Some(level) = device.battery {
             details = details.row(
-                row("Battery")
+                row(tr!("bluetooth-detail-battery"))
                     .leading(Icon::battery_level(level))
-                    .value(format!("{level}%")),
+                    .value(tr!("bluetooth-battery-percent", level = level)),
             );
         }
         details = details
-            .row(row("Type").value(device_kind(&device.icon)))
-            .row(row("Address").mono_value(device.mac.clone()))
-            .row(row("Paired").value(yes_no(device.paired)));
+            .row(row(tr!("bluetooth-detail-type")).value(device_kind(&device.icon)))
+            .row(row(tr!("bluetooth-detail-address")).mono_value(device.mac.clone()))
+            .row(row(tr!("bluetooth-detail-paired")).value(yes_no(device.paired)));
         let rename_device = device.clone();
         details = details.row(entry_row(
-            "Name",
+            tr!("bluetooth-detail-name"),
             device.name.clone(),
             move |name: String| run_job(ctx, rename_job(&rename_device, name.trim())),
         ));
         let trust_device = device.clone();
         details = details.row(switch_row(
-            "Connects automatically",
+            tr!("bluetooth-detail-trust"),
             device.trusted,
             move |on: bool| run_job(ctx, trust_job(&trust_device, on)),
         ));
@@ -1115,14 +1131,16 @@ fn confirm_forget(ctx: Ctx, device: &Device) {
     let job = remove_job(device);
     ctx.overlays.show_dialog(
         dialog(
-            format!("Forget “{}”?", device_name(device)),
-            "This computer will forget the pairing. Pair again to use the device.",
+            tr!("bluetooth-forget-title", name = device_name(device)),
+            tr!("bluetooth-forget-body"),
         )
-        .cancel("Cancel")
+        .cancel(tr!("bluetooth-forget-cancel"))
         .default_action(CANCEL_ID)
-        .response("Forget", ResponseKind::Destructive, move |_| {
-            run_job(ctx, job.clone())
-        }),
+        .response(
+            tr!("bluetooth-action-forget"),
+            ResponseKind::Destructive,
+            move |_| run_job(ctx, job.clone()),
+        ),
     );
 }
 

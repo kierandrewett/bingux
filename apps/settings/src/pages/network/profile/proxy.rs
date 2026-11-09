@@ -16,6 +16,7 @@ use super::store;
 use super::{Page, options};
 use crate::pages::connection_editor::{Changes, PROXY_CHOICES, ProfileData, diff, yes_no};
 use crate::ui::{Group, choice_row, page_column, switch_row};
+use bingux_ui::prelude::tr;
 
 /// What the form holds, as typed.
 #[derive(Clone, Debug, PartialEq)]
@@ -139,7 +140,7 @@ impl Component for ProxyBody {
         let method_row = {
             let (draft, saved) = (draft.clone(), page.saved.clone());
             choice_row(
-                "Proxy",
+                tr!("network-profile-proxy-method"),
                 options(PROXY_CHOICES),
                 &form.method,
                 move |value: String| {
@@ -159,35 +160,41 @@ impl Component for ProxyBody {
         let browser_only = {
             let page = page.clone();
             switch_row(
-                "Only for web browsers",
+                tr!("network-profile-proxy-browser-only"),
                 page.saved.yes("proxy.browser-only"),
                 move |on: bool| page.apply_now(Changes::one("proxy.browser-only", yes_no(on))),
             )
         };
-        let proxy = Group::titled("Proxy")
+        let proxy = Group::titled(&tr!("network-profile-proxy-group"))
             .row(method_row.nested(form.automatic(), vec![browser_only.into()]));
         column = column.child(proxy);
         {
             column = column.child(reveal_block(
                 form.automatic(),
                 S10,
-                Group::titled("Automatic configuration")
+                Group::titled(&tr!("network-profile-proxy-auto-group"))
                     .row(
-                        form_field("Address", draft.text("pac_url"))
-                            .placeholder("http://wpad.example.com/proxy.pac")
-                            .hint("Where the proxy configuration file is.")
-                            .optional()
-                            .wide()
-                            .monospace()
-                            .validate(validate::url),
+                        form_field(
+                            tr!("network-profile-proxy-address-label"),
+                            draft.text("pac_url"),
+                        )
+                        .placeholder("http://wpad.example.com/proxy.pac")
+                        .hint(tr!("network-profile-proxy-address-hint"))
+                        .optional()
+                        .wide()
+                        .monospace()
+                        .validate(validate::url),
                     )
                     .row(
-                        form_field("Script", draft.text("pac_script"))
-                            .hint("The text of a proxy configuration file.")
-                            .optional()
-                            .wide()
-                            .monospace()
-                            .multiline(6),
+                        form_field(
+                            tr!("network-profile-proxy-script-label"),
+                            draft.text("pac_script"),
+                        )
+                        .hint(tr!("network-profile-proxy-script-hint"))
+                        .optional()
+                        .wide()
+                        .monospace()
+                        .multiline(6),
                     ),
             ));
         }

@@ -25,6 +25,7 @@ mod store;
 
 use freya::prelude::*;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 
 use super::details::TechnicalDetails;
@@ -33,8 +34,8 @@ use super::model::{NetCtx, use_net_ctx};
 use super::{Owner, Section};
 use crate::pages::connection_editor::{
     CLONED_MAC_CHOICES, Changes, Kind, METERED_CHOICES, ProfileData, WIFI_SECURITY_CHOICES,
-    dns_summary, dot1x_summary, ip_summary, label_of, permissions_value, split_cloned_mac,
-    wifi_security_kind, yes_no,
+    dns_summary, dot1x_summary, has_custom_dns, ip_summary, label_of, permissions_value,
+    split_cloned_mac, wifi_security_kind, yes_no,
 };
 use crate::pages::loading::veiled;
 use crate::routes;
@@ -116,7 +117,7 @@ fn everyday_group(page: &Page) -> Element {
     let autoconnect = {
         let page = page.clone();
         switch_row(
-            "Connect automatically",
+            tr!("network-profile-autoconnect"),
             saved.yes("connection.autoconnect"),
             move |on: bool| page.apply_now(Changes::one("connection.autoconnect", yes_no(on))),
         )
@@ -124,7 +125,7 @@ fn everyday_group(page: &Page) -> Element {
     let metered = {
         let page = page.clone();
         choice_row(
-            "Metered connection",
+            tr!("network-profile-metered"),
             options(METERED_CHOICES),
             saved.get("connection.metered"),
             move |value: String| page.apply_now(Changes::one("connection.metered", value)),
@@ -169,10 +170,14 @@ impl Component for PasswordRow {
         let overlays = crate::ui::use_overlays();
         let shown = use_state(|| false);
         if self.password.is_empty() {
-            return Element::from(row("Password").subtitle("Not saved").subtitle_one_line());
+            return Element::from(
+                row(tr!("network-profile-password"))
+                    .subtitle(tr!("network-profile-not-saved"))
+                    .subtitle_one_line(),
+            );
         }
         Element::from(super::wifi::secret_row(
-            "Password",
+            &tr!("network-profile-password"),
             &self.password,
             shown,
             overlays,
@@ -180,11 +185,12 @@ impl Component for PasswordRow {
     }
 }
 
-/// A dropdown's `(key, label)` pairs as owned strings.
+/// A dropdown's `(key, label)` pairs as owned strings. Each label is a message ID, shown in the
+/// language in use.
 fn options(choices: &[(&str, &str)]) -> Vec<(String, String)> {
     choices
         .iter()
-        .map(|(key, label)| (key.to_string(), label.to_string()))
+        .map(|(key, label)| (key.to_string(), bingux_ui::i18n::text(label)))
         .collect()
 }
 
@@ -211,7 +217,7 @@ fn advanced_row(page: &Page) -> Element {
     let router = page.ctx.router;
     Group::new(None::<String>)
         .row(
-            row("Advanced")
+            row(tr!("network-profile-advanced-title"))
                 .subtitle(advanced_summary(&page.saved, page.kind()))
                 .navigates()
                 .on_press(move |_| router.open(route.clone())),
@@ -223,37 +229,40 @@ fn advanced_row(page: &Page) -> Element {
 fn advanced_summary(saved: &ProfileData, kind: Kind) -> String {
     let mut parts: Vec<String> = Vec::new();
     if saved.get("ipv4.method") == "manual" {
-        parts.push("Manual IPv4".to_string());
+        parts.push(tr!("network-profile-advanced-manual-ipv4"));
     }
     match saved.get("ipv6.method") {
-        "manual" => parts.push("Manual IPv6".to_string()),
-        "disabled" | "ignore" => parts.push("IPv6 off".to_string()),
+        "manual" => parts.push(tr!("network-profile-advanced-manual-ipv6")),
+        "disabled" | "ignore" => parts.push(tr!("network-profile-advanced-ipv6-off")),
         _ => {}
     }
-    if dns_summary(saved) != "Automatic" {
-        parts.push("Custom DNS".to_string());
+    if has_custom_dns(saved) {
+        parts.push(tr!("network-profile-advanced-custom-dns"));
     }
     if saved.get("proxy.method") == "auto" {
-        parts.push("Proxy".to_string());
+        parts.push(tr!("network-profile-advanced-proxy"));
     }
     if kind != Kind::Vpn {
         let identity = identity_summary(saved);
-        if identity != "Default" {
+        if identity != tr!("network-profile-identity-default") {
             parts.push(identity);
         }
     }
-    if kind == Kind::Wired && dot1x_summary(saved) == "802.1X on" {
-        parts.push("802.1X".to_string());
+    if kind == Kind::Wired && !saved.get("802-1x.eap").is_empty() {
+        parts.push(tr!("network-profile-advanced-802-1x"));
     }
     let priority = saved.int("connection.autoconnect-priority").unwrap_or(0);
     if priority != 0 {
-        parts.push(format!("Priority {priority}"));
+        parts.push(tr!(
+            "network-profile-advanced-priority",
+            priority = priority
+        ));
     }
     if !saved.get("connection.permissions").is_empty() {
-        parts.push("Only for you".to_string());
+        parts.push(tr!("network-profile-advanced-only-for-you"));
     }
     if parts.is_empty() {
-        "Addresses, DNS, security and technical details".to_string()
+        tr!("network-profile-advanced-empty")
     } else {
         parts.join(", ")
     }
@@ -272,7 +281,7 @@ fn identity_summary(saved: &ProfileData) -> String {
         parts.push(format!("MTU {mtu}"));
     }
     if parts.is_empty() {
-        "Default".to_string()
+        tr!("network-profile-identity-default")
     } else {
         parts.join(" · ")
     }
@@ -321,7 +330,7 @@ impl Component for SectionPage {
             Section::Proxy => keyed(loading, proxy::ProxyBody { page }),
             Section::Options => keyed(loading, advanced::AdvancedBody { page }),
             Section::Usage | Section::Tunnel | Section::Peer(_) => {
-                status(Status::Empty("Nothing to set here.".into())).into()
+                status(Status::Empty(tr!("network-profile-nothing-here"))).into()
             }
         };
         veiled(page_column().child(head).child(body), loading).into()
@@ -332,7 +341,7 @@ impl Component for SectionPage {
 fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
     let saved = &page.saved;
     let kind = page.kind();
-    let addressing = Group::titled("Addressing")
+    let addressing = Group::titled(&tr!("network-profile-addressing"))
         .row(section_row(page, Section::Ipv4, ip_summary(saved, 4, kind)))
         .row(section_row(page, Section::Ipv6, ip_summary(saved, 6, kind)))
         .row(section_row(page, Section::Dns, dns_summary(saved)));
@@ -362,15 +371,15 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
         page,
         Section::Proxy,
         if saved.get("proxy.method") == "auto" {
-            "Automatic"
+            tr!("network-profile-proxy-automatic")
         } else {
-            "None"
+            tr!("network-profile-proxy-none")
         },
     ));
 
     let priority = {
         let page = page.clone();
-        row("Priority").trailing(
+        row(tr!("network-profile-priority")).trailing(
             stepper(
                 saved.int("connection.autoconnect-priority").unwrap_or(0),
                 move |value: i64| {
@@ -386,7 +395,7 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
     let everyone = {
         let page = page.clone();
         switch_row(
-            "Available to other users",
+            tr!("network-profile-other-users"),
             saved.get("connection.permissions").is_empty(),
             move |on: bool| {
                 page.apply_now(Changes::one(
@@ -449,6 +458,7 @@ mod tests {
 
     #[test]
     fn identity_summary_names_only_what_differs() {
+        crate::register_catalogue_for_tests();
         let plain = ProfileData::parse("connection.type:802-3-ethernet\n802-3-ethernet.mtu:auto\n");
         assert_eq!(identity_summary(&plain), "Default");
         let custom = ProfileData::parse(
@@ -459,6 +469,7 @@ mod tests {
 
     #[test]
     fn the_advanced_row_names_only_what_is_not_default() {
+        crate::register_catalogue_for_tests();
         let plain = ProfileData::parse(
             "connection.type:802-3-ethernet\nipv4.method:auto\nipv6.method:auto\n802-3-ethernet.mtu:auto\n",
         );

@@ -4,6 +4,7 @@
 use bingux_data_usage::{
     KEY_BILLING_DAY, KEY_MONTHLY_LIMIT, KEY_WARN_PERCENT, Settings, UsageSettings,
 };
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 
 use super::format::{self, LimitUnit};
@@ -34,10 +35,10 @@ pub fn level(used: u64, settings: &UsageSettings) -> Option<Level> {
 pub fn message(level: Level, used: u64, settings: &UsageSettings) -> String {
     let limit = settings.monthly_limit_bytes.unwrap_or(0);
     match level {
-        Level::Over => format!(
-            "Over the monthly limit: {} used of {} this billing cycle.",
-            format::bytes(used),
-            format::bytes(limit)
+        Level::Over => tr!(
+            "data-usage-over-limit-message",
+            used = format::bytes(used).as_str(),
+            limit = format::bytes(limit).as_str()
         ),
         Level::Warn => {
             let percent = if limit == 0 {
@@ -68,7 +69,7 @@ pub enum Change {
 /// Log what the recorder said and return the sentence the person sees.
 fn unsaved(error: &dyn std::fmt::Display) -> String {
     eprintln!("bingux-settings: data usage limit: {error}");
-    "Could not save the data limit. Try again.".to_string()
+    tr!("data-usage-err-save-limit")
 }
 
 /// Writes a change. `connection` is the connection whose own limits change,
@@ -235,16 +236,16 @@ impl Component for LimitsGroup {
             limit_on.set(saved.monthly_limit_bytes.is_some());
         };
 
-        let mut group = Group::titled("Limit").row(
-            row("Billing cycle starts on day")
+        let mut group = Group::titled(&tr!("data-usage-limit")).row(
+            row(&tr!("data-usage-cycle-day"))
                 .subtitle(format!("This cycle: {}", self.cycle))
                 .trailing(stepper(i64::from(current.billing_day), on_day).range(1, 31)),
         );
-        group = group.row(switch_row("Monthly limit", on, on_toggle));
+        group = group.row(switch_row(&tr!("data-usage-monthly-limit"), on, on_toggle));
         if on {
             group = group
                 .row(
-                    form_field("Limit size", size)
+                    form_field(&tr!("data-usage-limit-size"), size)
                         .suffix(chosen.key())
                         .placeholder("10")
                         .on_submit({
@@ -258,14 +259,14 @@ impl Component for LimitsGroup {
                         .validate(format::check_size),
                 )
                 .row(choice_row(
-                    "Unit",
+                    &tr!("data-usage-unit"),
                     vec![("GB".into(), "GB".into()), ("MB".into(), "MB".into())],
                     chosen.key(),
                     move |key: String| unit.set(LimitUnit::from_key(&key)),
                 ));
         }
         group = group.row(
-            row("Warn at").trailing(
+            row(&tr!("data-usage-warn-at")).trailing(
                 stepper(i64::from(current.warn_percent), on_warn)
                     .range(1, 100)
                     .step(5)
@@ -277,7 +278,7 @@ impl Component for LimitsGroup {
             let connection = connection.clone();
             let changed = changed.clone();
             group = group.row(
-                row("Use the limit for all connections")
+                row(&tr!("data-usage-use-global"))
                     .navigates()
                     .on_press(move |_| {
                         let connection = connection.clone();

@@ -1,6 +1,7 @@
 //! The by-interface and by-connection breakdowns: a table the person sorts by
 //! what was received, sent or used, with the columns they want.
 
+use bingux_ui::prelude::tr;
 use std::rc::Rc;
 
 use bingux_ui::prelude::{Column, Group, Rows, SortDirection, data_table};
@@ -14,7 +15,7 @@ use super::page::{kind_icon, kind_name};
 /// The most rows the table shows before it scrolls inside its card.
 const VISIBLE_ROWS: usize = 8;
 
-fn columns(first: &'static str) -> Vec<Column<Breakdown>> {
+fn columns(first: String) -> Vec<Column<Breakdown>> {
     vec![
         Column::text("name", first, |entry: &Breakdown| entry.name.clone())
             .leading_icon(|entry: &Breakdown| kind_icon(entry.kind))
@@ -22,14 +23,14 @@ fn columns(first: &'static str) -> Vec<Column<Breakdown>> {
             .min_width(140.0)
             .priority(0)
             .sort_by_text(),
-        Column::text("kind", "Type", |entry: &Breakdown| {
+        Column::text("kind", tr!("data-usage-col-type"), |entry: &Breakdown| {
             kind_name(entry.kind).to_string()
         })
         .width(110.0)
         .priority(3)
         .muted()
         .sort_by_text(),
-        Column::text("rx", "Received", |entry: &Breakdown| {
+        Column::text("rx", tr!("data-usage-received"), |entry: &Breakdown| {
             format::bytes(entry.totals.rx)
         })
         .width(110.0)
@@ -37,7 +38,7 @@ fn columns(first: &'static str) -> Vec<Column<Breakdown>> {
         .priority(2)
         .not_on_phone()
         .sort_by_key(|entry: &Breakdown| entry.totals.rx),
-        Column::text("tx", "Sent", |entry: &Breakdown| {
+        Column::text("tx", tr!("data-usage-sent"), |entry: &Breakdown| {
             format::bytes(entry.totals.tx)
         })
         .width(110.0)
@@ -45,7 +46,7 @@ fn columns(first: &'static str) -> Vec<Column<Breakdown>> {
         .priority(2)
         .not_on_phone()
         .sort_by_key(|entry: &Breakdown| entry.totals.tx),
-        Column::text("total", "Total", |entry: &Breakdown| {
+        Column::text("total", tr!("data-usage-total"), |entry: &Breakdown| {
             format::bytes(entry.totals.total())
         })
         .width(110.0)
@@ -61,13 +62,13 @@ fn columns(first: &'static str) -> Vec<Column<Breakdown>> {
 struct BreakdownTable {
     entries: Vec<Breakdown>,
     id: &'static str,
-    first: &'static str,
+    first: String,
     open: EventHandler<String>,
 }
 
 impl Component for BreakdownTable {
     fn render(&self) -> impl IntoElement {
-        let first = self.first;
+        let first = self.first.clone();
         let columns = use_hook(move || Rc::new(columns(first)));
         let rows: Rows<Breakdown> = Rc::new(self.entries.clone()).into();
         let open = self.open.clone();
@@ -82,7 +83,7 @@ impl Component for BreakdownTable {
         rect().width(Size::fill()).height(Size::px(height)).child(
             data_table(rows, columns, |entry: &Breakdown| entry.name.clone())
                 .id(self.id)
-                .label(self.first)
+                .label(&self.first)
                 .sorted_by("total", SortDirection::Descending)
                 .on_activate(move |name: String| open.call(name)),
         )
@@ -92,19 +93,17 @@ impl Component for BreakdownTable {
 /// A group titled `title` holding the breakdown of `entries`, or `empty` when
 /// there are none. Pressing a row opens `open` with its name.
 pub fn breakdown_group(
-    title: &'static str,
-    description: &'static str,
+    title: String,
+    description: String,
     id: &'static str,
-    first: &'static str,
+    first: String,
     entries: &[Breakdown],
-    empty: &'static str,
+    empty: String,
     open: impl Fn(String) + 'static,
 ) -> Group {
-    let group = Group::titled(title).description(description);
+    let group = Group::titled(&title).description(&description);
     if entries.is_empty() {
-        return group.row(crate::ui::status(crate::ui::Status::Empty(
-            empty.to_string(),
-        )));
+        return group.row(crate::ui::status(crate::ui::Status::Empty(empty)));
     }
     group.row(BreakdownTable {
         entries: entries.to_vec(),

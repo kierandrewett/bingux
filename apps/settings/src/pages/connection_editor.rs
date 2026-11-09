@@ -6,10 +6,11 @@
 use std::collections::BTreeMap;
 
 use bingux_ui::controls::form::validate::{self, Check};
+use bingux_ui::prelude::{i18n_id, tr};
 
 use crate::pages::network::model::unescape;
 
-/// The `(key, label)` pairs a dropdown shows.
+/// The `(key, label)` pairs a dropdown shows. Each label is a message ID, resolved when shown.
 pub type Choices = &'static [(&'static str, &'static str)];
 
 /// Every key the settings pages read, in one `nmcli connection show` call. A key the profile's
@@ -344,40 +345,44 @@ pub fn yes_no(value: bool) -> &'static str {
 // ---- Choices ----------------------------------------------------------------------------------------
 
 /// Metered choices, in the order the dropdown shows them.
-pub const METERED_CHOICES: Choices = &[("unknown", "Automatic"), ("yes", "Yes"), ("no", "No")];
+pub const METERED_CHOICES: Choices = &[
+    ("unknown", i18n_id!("network-editor-metered-automatic")),
+    ("yes", i18n_id!("network-editor-metered-yes")),
+    ("no", i18n_id!("network-editor-metered-no")),
+];
 
 /// The IPv4 method names NetworkManager uses, with the label shown to the user.
 pub const IPV4_METHODS: Choices = &[
-    ("auto", "Automatic (DHCP)"),
-    ("manual", "Manual"),
-    ("link-local", "Link-local only"),
-    ("shared", "Shared with other computers"),
-    ("disabled", "Off"),
+    ("auto", i18n_id!("network-editor-ipv4-auto")),
+    ("manual", i18n_id!("network-editor-ipv4-manual")),
+    ("link-local", i18n_id!("network-editor-ipv4-link-local")),
+    ("shared", i18n_id!("network-editor-ipv4-shared")),
+    ("disabled", i18n_id!("network-editor-ipv4-off")),
 ];
 
 /// The IPv6 method names, with the label shown to the user.
 pub const IPV6_METHODS: Choices = &[
-    ("auto", "Automatic"),
-    ("dhcp", "Automatic, DHCP only"),
-    ("manual", "Manual"),
-    ("link-local", "Link-local only"),
-    ("shared", "Shared with other computers"),
-    ("ignore", "Ignore"),
-    ("disabled", "Off"),
+    ("auto", i18n_id!("network-editor-ipv6-auto")),
+    ("dhcp", i18n_id!("network-editor-ipv6-dhcp")),
+    ("manual", i18n_id!("network-editor-ipv6-manual")),
+    ("link-local", i18n_id!("network-editor-ipv6-link-local")),
+    ("shared", i18n_id!("network-editor-ipv6-shared")),
+    ("ignore", i18n_id!("network-editor-ipv6-ignore")),
+    ("disabled", i18n_id!("network-editor-ipv6-off")),
 ];
 
 /// The methods a VPN offers: it has no link to share or limit to the local network.
 pub const VPN_IPV4_METHODS: Choices = &[
-    ("auto", "Automatic (DHCP)"),
-    ("manual", "Manual"),
-    ("disabled", "Off"),
+    ("auto", i18n_id!("network-editor-vpn-ipv4-auto")),
+    ("manual", i18n_id!("network-editor-vpn-ipv4-manual")),
+    ("disabled", i18n_id!("network-editor-vpn-ipv4-off")),
 ];
 
 pub const VPN_IPV6_METHODS: Choices = &[
-    ("auto", "Automatic"),
-    ("manual", "Manual"),
-    ("ignore", "Ignore"),
-    ("disabled", "Off"),
+    ("auto", i18n_id!("network-editor-vpn-ipv6-auto")),
+    ("manual", i18n_id!("network-editor-vpn-ipv6-manual")),
+    ("ignore", i18n_id!("network-editor-vpn-ipv6-ignore")),
+    ("disabled", i18n_id!("network-editor-vpn-ipv6-off")),
 ];
 
 /// The methods offered for IP `version` (4 or 6) on a profile of `kind`.
@@ -395,7 +400,7 @@ pub fn label_of(choices: Choices, key: &str) -> String {
     choices
         .iter()
         .find(|(candidate, _)| *candidate == key)
-        .map(|(_, label)| label.to_string())
+        .map(|(_, label)| bingux_ui::i18n::text(label))
         .unwrap_or_else(|| key.to_string())
 }
 
@@ -431,64 +436,68 @@ pub fn shown(version: u8, method: &str) -> Shown {
 
 /// The IPv6 privacy extension choices. Keys are the `ipv6.ip6-privacy` numbers.
 pub const IP6_PRIVACY_CHOICES: Choices = &[
-    ("-1", "Default"),
-    ("0", "Off"),
-    ("1", "Prefer public addresses"),
-    ("2", "Prefer temporary addresses"),
+    ("-1", i18n_id!("network-editor-privacy-default")),
+    ("0", i18n_id!("network-editor-privacy-off")),
+    ("1", i18n_id!("network-editor-privacy-public")),
+    ("2", i18n_id!("network-editor-privacy-temporary")),
 ];
 
 /// How an IPv6 address is made from the hardware address.
 pub const ADDR_GEN_CHOICES: Choices = &[
-    ("default", "Default"),
-    ("stable-privacy", "Stable and private"),
-    ("eui64", "From the hardware address"),
+    ("default", i18n_id!("network-editor-addr-gen-default")),
+    ("stable-privacy", i18n_id!("network-editor-addr-gen-stable")),
+    ("eui64", i18n_id!("network-editor-addr-gen-eui64")),
 ];
 
 /// The `connection.mdns` and `connection.llmnr` numbers: -1 default, 0 off, 1 resolve only, 2 on.
 pub const MULTICAST_DNS_CHOICES: Choices = &[
-    ("-1", "Default"),
-    ("0", "Off"),
-    ("1", "Resolve only"),
-    ("2", "On"),
+    ("-1", i18n_id!("network-editor-multicast-default")),
+    ("0", i18n_id!("network-editor-multicast-off")),
+    ("1", i18n_id!("network-editor-multicast-resolve")),
+    ("2", i18n_id!("network-editor-multicast-on")),
 ];
 
 /// `connection.dns-over-tls`: -1 default, 0 off, 1 when the server offers it, 2 always.
 pub const DNS_OVER_TLS_CHOICES: Choices = &[
-    ("-1", "Default"),
-    ("0", "Off"),
-    ("1", "When available"),
-    ("2", "Always"),
+    ("-1", i18n_id!("network-editor-dot-default")),
+    ("0", i18n_id!("network-editor-dot-off")),
+    ("1", i18n_id!("network-editor-dot-when-available")),
+    ("2", i18n_id!("network-editor-dot-always")),
 ];
 
 /// `connection.autoconnect-retries`: how often NetworkManager tries before it gives up.
 pub const RETRY_CHOICES: Choices = &[
-    ("-1", "Default"),
-    ("1", "Once"),
-    ("2", "2 times"),
-    ("3", "3 times"),
-    ("5", "5 times"),
-    ("10", "10 times"),
-    ("0", "Forever"),
+    ("-1", i18n_id!("network-editor-retry-default")),
+    ("1", i18n_id!("network-editor-retry-once")),
+    ("2", i18n_id!("network-editor-retry-2")),
+    ("3", i18n_id!("network-editor-retry-3")),
+    ("5", i18n_id!("network-editor-retry-5")),
+    ("10", i18n_id!("network-editor-retry-10")),
+    ("0", i18n_id!("network-editor-retry-forever")),
 ];
 
 /// The 5 GHz and 2.4 GHz choices for a Wi-Fi profile.
-pub const BAND_CHOICES: Choices = &[("", "Automatic"), ("bg", "2.4 GHz"), ("a", "5 GHz")];
+pub const BAND_CHOICES: Choices = &[
+    ("", i18n_id!("network-editor-band-automatic")),
+    ("bg", i18n_id!("network-editor-band-2ghz")),
+    ("a", i18n_id!("network-editor-band-5ghz")),
+];
 
 /// The Wi-Fi scan and connect MAC randomisation choices, with their labels.
 pub const MAC_RANDOMIZATION_CHOICES: Choices = &[
-    ("default", "Default"),
-    ("never", "Never"),
-    ("always", "Always"),
+    ("default", i18n_id!("network-editor-mac-default")),
+    ("never", i18n_id!("network-editor-mac-never")),
+    ("always", i18n_id!("network-editor-mac-always")),
 ];
 
 /// The cloned MAC choices: the mode keyword, or "address" for a literal address.
 pub const CLONED_MAC_CHOICES: Choices = &[
-    ("", "Default"),
-    ("preserve", "Preserve"),
-    ("permanent", "Permanent"),
-    ("random", "Random"),
-    ("stable", "Stable"),
-    ("address", "Specific address"),
+    ("", i18n_id!("network-editor-cloned-default")),
+    ("preserve", i18n_id!("network-editor-cloned-preserve")),
+    ("permanent", i18n_id!("network-editor-cloned-permanent")),
+    ("random", i18n_id!("network-editor-cloned-random")),
+    ("stable", i18n_id!("network-editor-cloned-stable")),
+    ("address", i18n_id!("network-editor-cloned-address")),
 ];
 
 /// The cloned MAC modes NetworkManager accepts as keywords. Any other value is a literal address.
@@ -514,18 +523,18 @@ pub fn join_cloned_mac(mode: &str, address: &str) -> String {
 
 /// Wake on LAN choices for a wired connection.
 pub const WAKE_ON_LAN_CHOICES: Choices = &[
-    ("default", "Default"),
-    ("none", "Off"),
-    ("magic", "Magic packet"),
+    ("default", i18n_id!("network-editor-wol-default")),
+    ("none", i18n_id!("network-editor-wol-off")),
+    ("magic", i18n_id!("network-editor-wol-magic")),
 ];
 
 /// Wi-Fi key types. `none` removes the security setting; `wep` is `key-mgmt none` with a WEP key.
 pub const WIFI_SECURITY_CHOICES: Choices = &[
-    ("none", "None"),
-    ("wpa-psk", "WPA & WPA2 Personal"),
-    ("sae", "WPA3 Personal"),
-    ("wpa-eap", "WPA & WPA2 Enterprise"),
-    ("wep", "WEP"),
+    ("none", i18n_id!("network-editor-wifi-security-none")),
+    ("wpa-psk", i18n_id!("network-editor-wifi-security-wpa-psk")),
+    ("sae", i18n_id!("network-editor-wifi-security-sae")),
+    ("wpa-eap", i18n_id!("network-editor-wifi-security-wpa-eap")),
+    ("wep", i18n_id!("network-editor-wifi-security-wep")),
 ];
 
 /// The key type of a Wi-Fi profile as the Security page names it.
@@ -542,25 +551,32 @@ pub fn wifi_security_kind(data: &ProfileData) -> &'static str {
 
 /// The EAP methods 802.1X offers.
 pub const EAP_CHOICES: Choices = &[
-    ("peap", "PEAP"),
-    ("ttls", "Tunnelled TLS"),
-    ("tls", "TLS"),
-    ("fast", "FAST"),
+    ("peap", i18n_id!("network-editor-eap-peap")),
+    ("ttls", i18n_id!("network-editor-eap-ttls")),
+    ("tls", i18n_id!("network-editor-eap-tls")),
+    ("fast", i18n_id!("network-editor-eap-fast")),
 ];
 
 /// The inner authentication methods an EAP method accepts. Empty for TLS, which has none.
 pub fn phase2_choices(eap: &str) -> Choices {
     match eap {
-        "peap" => &[("mschapv2", "MSCHAPv2"), ("gtc", "GTC"), ("md5", "MD5")],
-        "ttls" => &[
-            ("mschapv2", "MSCHAPv2"),
-            ("mschap", "MSCHAP"),
-            ("pap", "PAP"),
-            ("chap", "CHAP"),
-            ("gtc", "GTC"),
-            ("md5", "MD5"),
+        "peap" => &[
+            ("mschapv2", i18n_id!("network-editor-phase2-mschapv2")),
+            ("gtc", i18n_id!("network-editor-phase2-gtc")),
+            ("md5", i18n_id!("network-editor-phase2-md5")),
         ],
-        "fast" => &[("mschapv2", "MSCHAPv2"), ("gtc", "GTC")],
+        "ttls" => &[
+            ("mschapv2", i18n_id!("network-editor-phase2-mschapv2")),
+            ("mschap", i18n_id!("network-editor-phase2-mschap")),
+            ("pap", i18n_id!("network-editor-phase2-pap")),
+            ("chap", i18n_id!("network-editor-phase2-chap")),
+            ("gtc", i18n_id!("network-editor-phase2-gtc")),
+            ("md5", i18n_id!("network-editor-phase2-md5")),
+        ],
+        "fast" => &[
+            ("mschapv2", i18n_id!("network-editor-phase2-mschapv2")),
+            ("gtc", i18n_id!("network-editor-phase2-gtc")),
+        ],
         _ => &[],
     }
 }
@@ -571,14 +587,17 @@ pub fn eap_uses_password(eap: &str) -> bool {
 }
 
 /// The proxy choices of a profile.
-pub const PROXY_CHOICES: Choices = &[("none", "None"), ("auto", "Automatic")];
+pub const PROXY_CHOICES: Choices = &[
+    ("none", i18n_id!("network-editor-proxy-off")),
+    ("auto", i18n_id!("network-editor-proxy-automatic")),
+];
 
 /// What the Security row of the settings screen shows for a wired profile.
-pub fn dot1x_summary(data: &ProfileData) -> &'static str {
+pub fn dot1x_summary(data: &ProfileData) -> String {
     if data.get("802-1x.eap").is_empty() {
-        "802.1X off"
+        tr!("network-editor-dot1x-off")
     } else {
-        "802.1X on"
+        tr!("network-editor-dot1x-on")
     }
 }
 
@@ -591,7 +610,7 @@ pub fn ip_summary(data: &ProfileData, version: u8, kind: Kind) -> String {
         if method.is_empty() { "auto" } else { method },
     );
     match (method, data.list(&format!("{prefix}.addresses")).first()) {
-        ("manual", Some(first)) => format!("Manual · {first}"),
+        ("manual", Some(first)) => tr!("network-editor-summary-manual", address = first.as_str()),
         _ => label,
     }
 }
@@ -601,11 +620,22 @@ pub fn dns_summary(data: &ProfileData) -> String {
     let servers = dns_servers(data);
     let automatic = !(data.yes("ipv4.ignore-auto-dns") || data.yes("ipv6.ignore-auto-dns"));
     match (automatic, servers.is_empty()) {
-        (true, true) => "Automatic".to_string(),
-        (true, false) => format!("Automatic + {}", servers.join(", ")),
-        (false, true) => "None".to_string(),
+        (true, true) => tr!("network-editor-dns-automatic"),
+        (true, false) => {
+            let servers = servers.join(", ");
+            tr!(
+                "network-editor-dns-automatic-servers",
+                servers = servers.as_str()
+            )
+        }
+        (false, true) => tr!("network-editor-dns-none"),
         (false, false) => servers.join(", "),
     }
+}
+/// Whether the DNS row shows something other than automatic DNS.
+pub fn has_custom_dns(data: &ProfileData) -> bool {
+    let automatic = !(data.yes("ipv4.ignore-auto-dns") || data.yes("ipv6.ignore-auto-dns"));
+    !automatic || !dns_servers(data).is_empty()
 }
 
 /// The DNS servers set on the profile: the IPv4 ones, then the IPv6 ones.
@@ -639,8 +669,7 @@ pub fn split_dns(servers: &[String]) -> (Vec<String>, Vec<String>) {
 /// A route as nmcli writes it: `destination/prefix`, then an optional next hop and metric.
 pub fn route(text: &str) -> Check {
     let parts: Vec<&str> = text.split_whitespace().collect();
-    let message =
-        "Write a route as network/prefix, next hop and metric, such as 10.0.0.0/8 192.168.1.1 100.";
+    let message = tr!("network-editor-route-hint");
     let Some(destination) = parts.first() else {
         return Err(message.to_string());
     };
@@ -671,7 +700,7 @@ pub fn route(text: &str) -> Check {
 pub fn route4(text: &str) -> Check {
     route(text)?;
     if text.contains(':') {
-        return Err("Enter an IPv4 route such as 10.0.0.0/8 192.168.1.1.".to_string());
+        return Err(tr!("network-editor-route4-hint"));
     }
     Ok(())
 }
@@ -680,7 +709,7 @@ pub fn route4(text: &str) -> Check {
 pub fn route6(text: &str) -> Check {
     route(text)?;
     if !text.contains(':') {
-        return Err("Enter an IPv6 route such as 2001:db8::/32 fe80::1.".to_string());
+        return Err(tr!("network-editor-route6-hint"));
     }
     Ok(())
 }
@@ -692,26 +721,25 @@ pub fn dns_server(text: &str) -> Check {
 
 /// An MTU in bytes.
 pub fn mtu(text: &str) -> Check {
-    validate::integer_in(576..=65535)(text)
-        .map_err(|_| "Enter a size in bytes from 576 to 65535.".to_string())
+    validate::integer_in(576..=65535)(text).map_err(|_| tr!("network-editor-mtu-hint"))
 }
 
 /// A route metric: -1 for automatic, or a whole number.
 pub fn metric(text: &str) -> Check {
     validate::integer_in(-1..=i64::from(u32::MAX))(text)
-        .map_err(|_| "Enter -1 for automatic, or a whole number.".to_string())
+        .map_err(|_| tr!("network-editor-metric-hint"))
 }
 
 /// A DNS search domain such as `example.com`.
 pub fn search_domain(text: &str) -> Check {
     let name = text.strip_prefix('~').unwrap_or(text);
-    validate::hostname_or_ip(name).map_err(|_| "Enter a domain such as example.com.".to_string())
+    validate::hostname_or_ip(name).map_err(|_| tr!("network-editor-search-domain-hint"))
 }
 
 /// The name a DHCP server sees for this computer.
 pub fn dhcp_hostname(text: &str) -> Check {
     if text.is_empty() || text.len() > 253 || text.chars().any(char::is_whitespace) {
-        Err("Enter a host name without spaces.".to_string())
+        Err(tr!("network-editor-dhcp-hostname-hint"))
     } else {
         Ok(())
     }
@@ -723,7 +751,7 @@ pub fn file_path(text: &str) -> Check {
     if path.starts_with('/') && !path.ends_with('/') {
         Ok(())
     } else {
-        Err("Enter the full path of a file, such as /etc/ssl/certs/ca.pem.".to_string())
+        Err(tr!("network-editor-file-path-hint"))
     }
 }
 
@@ -735,14 +763,14 @@ pub fn wep_key(text: &str) -> Check {
     if hex || ascii {
         Ok(())
     } else {
-        Err("Use 5 or 13 characters, or 10 or 26 hexadecimal digits.".to_string())
+        Err(tr!("network-editor-wep-key-hint"))
     }
 }
 
 /// A connection name.
 pub fn connection_name(text: &str) -> Check {
     if text.trim().is_empty() {
-        Err("Enter a name.".to_string())
+        Err(tr!("network-editor-connection-name-empty"))
     } else {
         Ok(())
     }
@@ -903,6 +931,7 @@ ipv6.dns:\n";
 
     #[test]
     fn summaries_follow_the_stored_values() {
+        crate::register_catalogue_for_tests();
         let data = ProfileData::parse(SHOW);
         assert_eq!(
             ip_summary(&data, 4, Kind::Wired),

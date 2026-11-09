@@ -6,6 +6,7 @@
 //! Changes to a running tunnel are applied to it with `nmcli device reapply`
 //! when NetworkManager takes that, and the screen says so when it does not.
 
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 
 use super::model::{self, NetCtx};
@@ -26,7 +27,9 @@ use crate::ui::{
 use bingux_ui::style::*;
 
 /// The note shown when saved changes could not be given to a running tunnel.
-const RECONNECT_NOTE: &str = "Saved. Turn the VPN off and on to apply the changes.";
+fn reconnect_note() -> String {
+    tr!("network-vpn-reconnect-note")
+}
 
 /// After saving: give the changes to the running tunnel `device`, if any.
 /// Returns whether the person has to reconnect for them to count.
@@ -90,9 +93,10 @@ impl Component for TunnelPage {
                 let retry = name.clone();
                 page_column()
                     .child(
-                        status(Status::Error(message)).action("Try again", move |_| {
-                            reload(retry.clone(), profile, generation)
-                        }),
+                        status(Status::Error(message))
+                            .action(&tr!("network-vpn-try-again"), move |_| {
+                                reload(retry.clone(), profile, generation)
+                            }),
                     )
                     .into()
             }
@@ -120,9 +124,9 @@ impl Component for TunnelPage {
 
 /// The shape of the screen while the profile loads.
 fn placeholder_group() -> Element {
-    Group::titled("Tunnel")
-        .row(row("Server").value("—"))
-        .row(row("Sign in with").value("—"))
+    Group::titled(&tr!("network-vpn-group-tunnel"))
+        .row(row(tr!("network-vpn-row-server")).value("—"))
+        .row(row(tr!("network-vpn-row-sign-in")).value("—"))
         .into()
 }
 
@@ -175,13 +179,15 @@ pub(super) fn interface_error(interface: &Interface) -> Option<String> {
         .err()
         .or_else(|| {
             // NetworkManager refuses DNS servers of a family with no address.
-            let has = |v6: bool, items: &[String]| items.iter().any(|item| item.contains(':') == v6);
+            let has =
+                |v6: bool, items: &[String]| items.iter().any(|item| item.contains(':') == v6);
             for v6 in [false, true] {
                 if has(v6, &interface.dns) && !has(v6, &interface.addresses) {
-                    return Some(format!(
-                        "A DNS server needs an {} address for the tunnel. Add one above or remove the server.",
-                        if v6 { "IPv6" } else { "IPv4" }
-                    ));
+                    return Some(if v6 {
+                        tr!("network-vpn-dns-needs-ipv6")
+                    } else {
+                        tr!("network-vpn-dns-needs-ipv4")
+                    });
                 }
             }
             None
@@ -245,7 +251,7 @@ impl Component for WgTunnel {
                         match result {
                             Ok(reconnect) => {
                                 if reconnect {
-                                    ctx.overlays.toast(RECONNECT_NOTE);
+                                    ctx.overlays.toast(reconnect_note());
                                 }
                                 saved.call(());
                             }
@@ -274,67 +280,68 @@ impl Component for WgTunnel {
         };
 
         let public_row = if has_wg {
-            row("Public key").technical_value(public.read().clone().unwrap_or_default())
+            row(tr!("network-vpn-row-public-key"))
+                .technical_value(public.read().clone().unwrap_or_default())
         } else {
-            row("Public key").subtitle("Not available")
+            row(tr!("network-vpn-row-public-key")).subtitle(tr!("network-vpn-not-available"))
         };
-        let mut interface = Group::titled("Interface")
+        let mut interface = Group::titled(&tr!("network-vpn-group-interface"))
             .row(
-                form_field("Private key", draft.private_key)
+                form_field(tr!("network-vpn-field-private-key"), draft.private_key)
                     .password()
                     .monospace()
-                    .hint("Stays on this computer. Never share it.")
+                    .hint(tr!("network-vpn-hint-private-key"))
                     .validate(check::key),
             )
             .row(public_row);
         if has_wg {
             interface = interface.row(action_row(
-                Some("A new key needs the other side to be given the new public key."),
-                action_button("Generate new key", generate).compact(),
+                Some(&tr!("network-vpn-new-key-note")),
+                action_button(tr!("network-vpn-generate-key"), generate).compact(),
             ));
         }
         interface = interface
             .row(
-                form_field("Addresses", draft.addresses)
+                form_field(tr!("network-vpn-field-addresses"), draft.addresses)
                     .multiline(3)
                     .monospace()
-                    .hint("This computer's addresses inside the tunnel, one per line, with the prefix length.")
+                    .hint(tr!("network-vpn-hint-addresses"))
                     .placeholder("10.8.0.2/32")
                     .validate(check::cidr_list),
             )
             .row(
-                form_field("DNS servers", draft.dns)
+                form_field(tr!("network-vpn-field-dns"), draft.dns)
                     .multiline(2)
                     .monospace()
                     .optional()
-                    .hint("Used while the tunnel is up, one per line.")
+                    .hint(tr!("network-vpn-hint-dns"))
                     .validate(check::dns_list),
             )
             .row(
-                form_field("Listen port", draft.listen_port)
+                form_field(tr!("network-vpn-field-listen-port"), draft.listen_port)
                     .optional()
-                    .placeholder("Automatic")
+                    .placeholder(tr!("network-vpn-placeholder-automatic"))
                     .validate(check::port),
             )
             .row(
-                form_field("MTU", draft.mtu)
+                form_field(tr!("network-vpn-field-mtu"), draft.mtu)
                     .optional()
-                    .placeholder("Automatic")
-                    .suffix("bytes")
+                    .placeholder(tr!("network-vpn-placeholder-automatic"))
+                    .suffix(tr!("network-vpn-unit-bytes"))
                     .validate(check::mtu),
             )
             .row(
-                form_field("Firewall mark", draft.fwmark)
+                form_field(tr!("network-vpn-field-firewall-mark"), draft.fwmark)
                     .optional()
-                    .placeholder("None")
+                    .placeholder(tr!("network-vpn-placeholder-none"))
                     .validate(check::fwmark),
             );
 
-        let mut peers = Group::titled("Peers");
+        let mut peers = Group::titled(&tr!("network-vpn-group-peers"));
         for (index, peer) in self.profile.peers.iter().enumerate() {
             let owner = self.owner.clone();
             peers = peers.row(
-                row(format!("Peer {}", index + 1))
+                row(tr!("network-vpn-peer-title", number = index + 1))
                     .leading(Icon::NetworkServer)
                     .subtitle(peer_summary(peer))
                     .subtitle_one_line()
@@ -348,7 +355,7 @@ impl Component for WgTunnel {
         let owner = self.owner.clone();
         let next = self.profile.peers.len();
         peers = peers.row(
-            row("Add peer")
+            row(tr!("network-vpn-add-peer"))
                 .leading(Icon::ListAdd)
                 .navigates()
                 .on_press(move |_| {
@@ -374,16 +381,16 @@ impl Component for WgTunnel {
 /// One line about a peer for the list: where it is and what it carries.
 fn peer_summary(peer: &Peer) -> String {
     let endpoint = if peer.endpoint.is_empty() {
-        "No endpoint".to_string()
+        tr!("network-vpn-no-endpoint")
     } else {
         peer.endpoint.clone()
     };
     let carries = if wireguard::is_all_traffic(&peer.allowed_ips) {
-        "all traffic".to_string()
+        tr!("network-vpn-all-traffic")
     } else if peer.allowed_ips.len() == 1 {
         peer.allowed_ips[0].clone()
     } else {
-        format!("{} address ranges", peer.allowed_ips.len())
+        tr!("network-vpn-address-ranges", count = peer.allowed_ips.len())
     };
     format!("{endpoint} · {carries}")
 }
@@ -420,9 +427,10 @@ impl Component for PeerPage {
                 let retry = name.clone();
                 page_column()
                     .child(
-                        status(Status::Error(message)).action("Try again", move |_| {
-                            reload(retry.clone(), profile, generation)
-                        }),
+                        status(Status::Error(message))
+                            .action(&tr!("network-vpn-try-again"), move |_| {
+                                reload(retry.clone(), profile, generation)
+                            }),
                     )
                     .into()
             }
@@ -436,9 +444,9 @@ impl Component for PeerPage {
             }
             .into(),
             Some(Ok(Profile::Plugin(_))) => page_column()
-                .child(status(Status::Empty(
-                    "Only a WireGuard VPN has peers.".into(),
-                )))
+                .child(status(Status::Empty(tr!(
+                    "network-vpn-only-wireguard-peers"
+                ))))
                 .into(),
         };
         rect().key(generation()).child(body)
@@ -446,9 +454,9 @@ impl Component for PeerPage {
 }
 
 fn placeholder_peer() -> Element {
-    Group::titled("Peer")
-        .row(row("Public key").value("—"))
-        .row(row("Endpoint").value("—"))
+    Group::titled(&tr!("network-vpn-group-peer"))
+        .row(row(tr!("network-vpn-row-public-key")).value("—"))
+        .row(row(tr!("network-vpn-row-endpoint")).value("—"))
         .into()
 }
 
@@ -505,7 +513,7 @@ pub(super) fn peer_error(peer: &Peer, keepalive_text: &str, others: &[&str]) -> 
         .or_else(|| {
             others
                 .contains(&peer.public_key.as_str())
-                .then(|| "Another peer of this tunnel already has this public key.".to_string())
+                .then(|| tr!("network-vpn-duplicate-key"))
         })
 }
 
@@ -563,7 +571,7 @@ impl Component for PeerForm {
         let problem = peer_error(&peer, &keepalive_text, &others);
         let dirty = peer != saved_peer;
         let duplicate = (!peer.public_key.is_empty() && others.contains(&peer.public_key.as_str()))
-            .then(|| "Another peer of this tunnel already has this public key.".to_string());
+            .then(|| tr!("network-vpn-duplicate-key"));
 
         let apply = EventHandler::new({
             let form = PeerForm {
@@ -597,7 +605,7 @@ impl Component for PeerForm {
                         match result {
                             Ok(reconnect) => {
                                 if reconnect {
-                                    ctx.overlays.toast(RECONNECT_NOTE);
+                                    ctx.overlays.toast(reconnect_note());
                                 }
                                 if was_new {
                                     ctx.router.pop();
@@ -617,55 +625,58 @@ impl Component for PeerForm {
         };
 
         let all = wireguard::is_all_traffic(&peer.allowed_ips);
-        let mut traffic =
-            Group::titled("Traffic").row(switch_row("Route all traffic", all, move |on: bool| {
+        let mut traffic = Group::titled(&tr!("network-vpn-group-traffic")).row(switch_row(
+            &tr!("network-vpn-route-all"),
+            all,
+            move |on: bool| {
                 let mut allowed = draft.allowed;
                 allowed.set(if on {
                     wireguard::list_text(&wireguard::ALL_TRAFFIC.map(String::from).to_vec())
                 } else {
                     String::new()
                 });
-            }));
+            },
+        ));
         if !all {
             traffic = traffic.row(
-                form_field("Allowed addresses", draft.allowed)
+                form_field(tr!("network-vpn-field-allowed"), draft.allowed)
                     .multiline(3)
                     .monospace()
-                    .hint("Networks that go through this peer, one per line, such as 10.8.0.0/24.")
+                    .hint(tr!("network-vpn-hint-allowed"))
                     .placeholder("10.8.0.0/24")
                     .validate(check::cidr_list),
             );
         }
 
-        let peer_group = Group::titled("Peer")
+        let peer_group = Group::titled(&tr!("network-vpn-group-peer"))
             .row(
-                form_field("Public key", draft.public_key)
+                form_field(tr!("network-vpn-row-public-key"), draft.public_key)
                     .monospace()
-                    .hint("The other side's public key.")
+                    .hint(tr!("network-vpn-hint-public-key"))
                     .validate(check::key)
                     .error(duplicate),
             )
             .row(
-                form_field("Preshared key", draft.preshared_key)
+                form_field(tr!("network-vpn-field-preshared"), draft.preshared_key)
                     .password()
                     .monospace()
                     .optional()
-                    .hint("An extra secret both sides share, if they use one.")
+                    .hint(tr!("network-vpn-hint-preshared"))
                     .validate(check::key),
             )
             .row(
-                form_field("Endpoint", draft.endpoint)
+                form_field(tr!("network-vpn-row-endpoint"), draft.endpoint)
                     .optional()
-                    .hint("Where to reach it, as host:port. Leave empty if it connects to you.")
+                    .hint(tr!("network-vpn-hint-endpoint"))
                     .placeholder("vpn.example.com:51820")
                     .validate(check::endpoint),
             )
             .row(
-                form_field("Keepalive", draft.keepalive)
+                form_field(tr!("network-vpn-field-keepalive"), draft.keepalive)
                     .optional()
-                    .placeholder("Off")
-                    .suffix("seconds")
-                    .hint("Keeps the connection open through a router. 25 is usual.")
+                    .placeholder(tr!("network-vpn-placeholder-off"))
+                    .suffix(tr!("network-vpn-unit-seconds"))
+                    .hint(tr!("network-vpn-hint-keepalive"))
                     .validate(check::keepalive),
             );
 
@@ -688,7 +699,7 @@ impl Component for PeerForm {
             page = page.child(
                 Group::new(None::<String>).row(action_row(
                     None,
-                    primary_button("Add peer", move |_| add.call(()))
+                    primary_button(tr!("network-vpn-add-peer"), move |_| add.call(()))
                         .enabled(problem.is_none() && !*busy.read())
                         .loading(*busy.read()),
                 )),
@@ -702,10 +713,10 @@ impl Component for PeerForm {
                 restart: self.restart.clone(),
                 saved: self.saved.clone(),
             };
-            let label = format!("Peer {}", self.index + 1);
+            let label = tr!("network-vpn-peer-title", number = self.index + 1);
             page = page.child(
                 Group::new(None::<String>).row(
-                    row("Delete peer")
+                    row(tr!("network-vpn-delete-peer"))
                         .leading(Icon::UserTrash)
                         .destructive()
                         .on_press(move |_| confirm_delete_peer(ctx, &form, &label)),
@@ -722,24 +733,31 @@ fn confirm_delete_peer(ctx: NetCtx, form: &PeerForm, label: &str) {
     let uuid = form.profile.uuid.clone();
     let device = form.device.clone();
     ctx.overlays.show_dialog(
-        dialog(format!("Delete {label}?"), "The tunnel to this peer stops.")
-            .cancel("Cancel")
-            .default_action(CANCEL_ID)
-            .response("Delete", ResponseKind::Destructive, move |_| {
+        dialog(
+            tr!("network-vpn-delete-peer-title", label = label.to_string()),
+            tr!("network-vpn-delete-peer-body"),
+        )
+        .cancel(&tr!("network-vpn-cancel"))
+        .default_action(CANCEL_ID)
+        .response(
+            &tr!("network-vpn-delete"),
+            ResponseKind::Destructive,
+            move |_| {
                 let (peers, uuid, device) = (peers.clone(), uuid.clone(), device.clone());
                 system::background_then(
                     move || wireguard::save_peers(&uuid, &peers).map(|_| needs_reconnect(&device)),
                     move |result| match result {
                         Ok(reconnect) => {
                             if reconnect {
-                                ctx.overlays.toast(RECONNECT_NOTE);
+                                ctx.overlays.toast(reconnect_note());
                             }
                             ctx.router.pop();
                         }
                         Err(message) => ctx.overlays.toast(message),
                     },
                 );
-            }),
+            },
+        ),
     );
 }
 
@@ -881,7 +899,10 @@ pub(super) fn field_error(
         let value = values[index].trim();
         if value.is_empty() {
             if field.required {
-                return Some(format!("{} is needed.", field.label));
+                return Some(tr!(
+                    "network-vpn-field-needed",
+                    label = field.label.to_string()
+                ));
             }
             continue;
         }
@@ -1004,10 +1025,10 @@ pub(super) fn field_rows(
                     .collect();
                 let current = texts.flags[index].clone();
                 if !options.iter().any(|(value, _)| *value == current) {
-                    options.push((current.clone(), "Not needed".to_string()));
+                    options.push((current.clone(), tr!("network-vpn-not-needed")));
                 }
                 group = group.row(choice_row(
-                    format!("Remember {}", field.label.to_lowercase()),
+                    tr!("network-vpn-remember", label = field.label.to_lowercase()),
                     options,
                     &current,
                     move |key: String| {
@@ -1089,7 +1110,7 @@ impl Component for PluginForm {
                                 // A plugin reads its settings when it connects;
                                 // a running tunnel cannot be given new ones.
                                 if running {
-                                    ctx.overlays.toast(RECONNECT_NOTE);
+                                    ctx.overlays.toast(reconnect_note());
                                 }
                                 saved.call(());
                             }
@@ -1107,7 +1128,7 @@ impl Component for PluginForm {
         let mut sign_in = Group::titled(&plugins::display_name(&short));
         sign_in = field_rows(sign_in, fields, &states, &texts);
 
-        let mut advanced = Group::titled("Advanced");
+        let mut advanced = Group::titled(&tr!("network-vpn-group-advanced"));
         for extra in &current_extras {
             advanced = advanced.row(Element::from(rect().key(&extra.key).child(ExtraRow {
                 extra: extra.clone(),
@@ -1139,21 +1160,23 @@ impl Component for PluginForm {
         };
         advanced = advanced
             .row(
-                form_field("New setting", new_key)
+                form_field(tr!("network-vpn-field-new-setting"), new_key)
                     .optional()
-                    .placeholder("name")
+                    .placeholder(tr!("network-vpn-placeholder-name"))
                     .monospace()
                     .error(name_problem),
             )
             .row(
-                form_field("Value", new_value)
+                form_field(tr!("network-vpn-field-value"), new_value)
                     .optional()
                     .monospace()
                     .on_submit(add.clone()),
             )
             .row(action_row(
                 None,
-                action_button("Add setting", add).compact().enabled(can_add),
+                action_button(tr!("network-vpn-add-setting"), add)
+                    .compact()
+                    .enabled(can_add),
             ));
 
         page_column()
@@ -1175,9 +1198,9 @@ fn new_key_error(key: &str, taken: &[String]) -> Option<String> {
     if key.is_empty() {
         None
     } else if key.contains(['=', ',']) {
-        Some("A setting's name cannot contain = or a comma.".to_string())
+        Some(tr!("network-vpn-setting-no-equals"))
     } else if taken.iter().any(|other| other == key) {
-        Some("This setting is already in the list.".to_string())
+        Some(tr!("network-vpn-setting-taken"))
     } else {
         None
     }
@@ -1247,7 +1270,7 @@ impl Component for ExtraRow {
             let mut extras = extras;
             extras.set(list);
         })
-        .tooltip("Remove setting");
+        .tooltip(&tr!("network-vpn-remove-setting"));
         row(key).trailing(
             rect()
                 .tw_layout(&[flex_row(), gap(S2), items(Align::Center)])

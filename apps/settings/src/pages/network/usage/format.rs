@@ -5,6 +5,7 @@
 //! point, whatever the locale, so a screenshot reads the same everywhere.
 
 use bingux_data_usage::{Date, Totals, Zone};
+use bingux_ui::prelude::tr;
 
 const UNITS: [&str; 6] = ["B", "KB", "MB", "GB", "TB", "PB"];
 
@@ -68,15 +69,13 @@ const MAX_LIMIT: f64 = 1e15;
 /// accepted as the decimal separator.
 pub fn parse_size(text: &str, unit: LimitUnit) -> Result<u64, String> {
     let text = text.trim().replace(',', ".");
-    let number: f64 = text
-        .parse()
-        .map_err(|_| "Enter a number, such as 10 or 2.5.".to_string())?;
+    let number: f64 = text.parse().map_err(|_| tr!("data-usage-err-number"))?;
     if !number.is_finite() || number <= 0.0 {
-        return Err("Enter a size greater than zero.".into());
+        return Err(tr!("data-usage-err-size-zero"));
     }
     let bytes = (number * unit.factor()).round();
     if bytes > MAX_LIMIT {
-        return Err("Enter a smaller size.".into());
+        return Err(tr!("data-usage-err-size-smaller"));
     }
     Ok(bytes as u64)
 }
@@ -144,7 +143,7 @@ pub fn range(zone: Zone, from: i64, to: i64) -> String {
 
 /// The date in `YYYY-MM-DD`.
 pub fn parse_date(text: &str) -> Result<Date, String> {
-    let invalid = || "Use the form 2026-10-26.".to_string();
+    let invalid = || tr!("data-usage-err-date-form");
     let mut parts = text.trim().split('-');
     let (Some(year), Some(month), Some(day), None) =
         (parts.next(), parts.next(), parts.next(), parts.next())
@@ -157,8 +156,7 @@ pub fn parse_date(text: &str) -> Result<Date, String> {
     let (Ok(year), Ok(month), Ok(day)) = (year.parse(), month.parse(), day.parse()) else {
         return Err(invalid());
     };
-    Date::new(year, month, day)
-        .ok_or_else(|| "Enter a date that exists, such as 2026-10-01.".to_string())
+    Date::new(year, month, day).ok_or_else(|| tr!("data-usage-err-date-exists"))
 }
 
 /// The check the custom range fields run.
@@ -191,13 +189,16 @@ pub fn local_hour(zone: Zone, timestamp: i64) -> u32 {
 pub fn ago(now: i64, then: i64) -> String {
     let seconds = (now - then).max(0);
     match seconds {
-        0..=59 => "just now".into(),
-        60..=3599 => format!("{} min ago", seconds / 60),
-        3600..=86_399 => format!("{} h ago", seconds / 3600),
-        _ => {
-            let days = seconds / 86_400;
-            format!("{days} {} ago", if days == 1 { "day" } else { "days" })
-        }
+        0..=59 => tr!("data-usage-just-now"),
+        60..=3599 => tr!(
+            "data-usage-minutes-ago",
+            count = (seconds / 60).to_string().as_str()
+        ),
+        3600..=86_399 => tr!(
+            "data-usage-hours-ago",
+            count = (seconds / 3600).to_string().as_str()
+        ),
+        _ => tr!("data-usage-days-ago", count = seconds / 86_400),
     }
 }
 
