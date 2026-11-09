@@ -39,16 +39,16 @@ const CATEGORIES: [Category; 8] = [
 ];
 
 impl Category {
-    fn label(self) -> &'static str {
+    fn label(self) -> String {
         match self {
-            Self::Images => "Images",
-            Self::Audio => "Audio",
-            Self::Video => "Video",
-            Self::Documents => "Documents",
-            Self::Archives => "Archives",
-            Self::Fonts => "Fonts",
-            Self::Code => "Code",
-            Self::Other => "Other",
+            Self::Images => tr!("settings-applications-category-images"),
+            Self::Audio => tr!("settings-applications-category-audio"),
+            Self::Video => tr!("settings-applications-category-video"),
+            Self::Documents => tr!("settings-applications-category-documents"),
+            Self::Archives => tr!("settings-applications-category-archives"),
+            Self::Fonts => tr!("settings-applications-category-fonts"),
+            Self::Code => tr!("settings-applications-category-code"),
+            Self::Other => tr!("settings-applications-category-other"),
         }
     }
 
@@ -278,14 +278,14 @@ impl Component for OtherFileTypes {
                 Some((open, rows)) if *open == entry.file.category => rows.push(element),
                 _ => {
                     if let Some((done, rows)) = current.take() {
-                        groups.push(Group::titled(done.label()).rows(rows));
+                        groups.push(Group::titled(&done.label()).rows(rows));
                     }
                     current = Some((entry.file.category, vec![element]));
                 }
             }
         }
         if let Some((done, rows)) = current {
-            groups.push(Group::titled(done.label()).rows(rows));
+            groups.push(Group::titled(&done.label()).rows(rows));
         }
 
         let search = reveal(
@@ -295,7 +295,7 @@ impl Component for OtherFileTypes {
         let head = rect()
             .tw(&tokens, &[flex_col(), w_full(), gap(S3)])
             .child(group_head(
-                "Other file types",
+                &tr!("settings-applications-other-file-types"),
                 toolbar(
                     searching,
                     query,
@@ -309,9 +309,9 @@ impl Component for OtherFileTypes {
             .child(search);
 
         let cards = if groups.is_empty() {
-            page_column().child(
-                Group::new(None).row(status(Status::Empty("No matching file types".to_string()))),
-            )
+            page_column().child(Group::new(None).row(status(Status::Empty(tr!(
+                "settings-applications-no-matching-file-types"
+            )))))
         } else {
             groups
                 .into_iter()
@@ -345,14 +345,18 @@ fn toolbar(
         }
         searching.set(!open);
     })
-    .tooltip("Search");
+    .tooltip(&tr!("settings-applications-search"));
     let pick_category = move |next: Option<Category>| {
         let mut category = category;
         category.set(next);
         set_limit(limit, PAGE);
     };
-    let mut categories: Vec<MenuItem> =
-        vec![menu_item("All", move |_| pick_category(None)).checked(category_now.is_none())];
+    let mut categories: Vec<MenuItem> = vec![
+        menu_item(tr!("settings-applications-filter-all"), move |_| {
+            pick_category(None)
+        })
+        .checked(category_now.is_none()),
+    ];
     categories.extend(CATEGORIES.into_iter().map(|kind| {
         menu_item(kind.label(), move |_| pick_category(Some(kind)))
             .checked(category_now == Some(kind))
@@ -363,14 +367,18 @@ fn toolbar(
         set_limit(limit, PAGE);
     };
     let handlers = vec![
-        menu_item("All", move |_| pick_handler(HandlerFilter::All))
-            .checked(handler_now == HandlerFilter::All),
-        menu_item("Has a default", move |_| {
+        menu_item(tr!("settings-applications-filter-all"), move |_| {
+            pick_handler(HandlerFilter::All)
+        })
+        .checked(handler_now == HandlerFilter::All),
+        menu_item(tr!("settings-applications-has-default"), move |_| {
             pick_handler(HandlerFilter::Custom)
         })
         .checked(handler_now == HandlerFilter::Custom),
-        menu_item("Not set", move |_| pick_handler(HandlerFilter::Unset))
-            .checked(handler_now == HandlerFilter::Unset),
+        menu_item(tr!("settings-applications-not-set"), move |_| {
+            pick_handler(HandlerFilter::Unset)
+        })
+        .checked(handler_now == HandlerFilter::Unset),
     ];
     let pick_sort = move |next: TypeSort| {
         let mut sort = sort;
@@ -378,16 +386,21 @@ fn toolbar(
         set_limit(limit, PAGE);
     };
     let sorts = vec![
-        menu_item("Name", move |_| pick_sort(TypeSort::Name)).checked(sort_now == TypeSort::Name),
-        menu_item("Application", move |_| pick_sort(TypeSort::Handler))
-            .checked(sort_now == TypeSort::Handler),
+        menu_item(tr!("settings-applications-sort-name"), move |_| {
+            pick_sort(TypeSort::Name)
+        })
+        .checked(sort_now == TypeSort::Name),
+        menu_item(tr!("settings-applications-sort-application"), move |_| {
+            pick_sort(TypeSort::Handler)
+        })
+        .checked(sort_now == TypeSort::Handler),
     ];
     let menu = menu_button(
-        "Filter and sort",
+        &tr!("settings-applications-filter-and-sort"),
         vec![
-            submenu("Category", categories),
-            submenu("Default application", handlers),
-            submenu("Sort by", sorts),
+            submenu(tr!("settings-applications-category"), categories),
+            submenu(tr!("settings-applications-default-application"), handlers),
+            submenu(tr!("settings-applications-sort-by"), sorts),
         ],
     )
     .icon(Icon::Filter);
@@ -413,7 +426,11 @@ fn file_type_row(
     }
     let mut options: Vec<AppChoice> = Vec::new();
     if file.current.is_none() {
-        options.push(AppChoice::new(String::new(), "Not set", String::new()));
+        options.push(AppChoice::new(
+            String::new(),
+            tr!("settings-applications-not-set"),
+            String::new(),
+        ));
     }
     for id in &ids {
         let icon = apps
