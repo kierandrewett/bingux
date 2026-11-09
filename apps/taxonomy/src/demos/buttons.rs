@@ -10,6 +10,24 @@ use crate::model::Spec;
 
 // ---- Buttons ---------------------------------------------------------------
 
+/// Save beside Delete under the red accent, whatever the window's accent: the
+/// destructive button is tinted, so it never looks like the primary one.
+#[derive(PartialEq)]
+struct RedAccent;
+
+impl Component for RedAccent {
+    fn render(&self) -> impl IntoElement {
+        let outer = use_tokens();
+        let tokens = Tokens::with_access("red", outer.scheme, outer.access());
+        let shared = use_provide_context(|| SharedTokens(State::create(tokens)));
+        let mut palette = shared.0;
+        palette.set_if_modified(tokens);
+        hstack(S2)
+            .child(action_button("Delete", |_| {}).destructive())
+            .child(primary_button("Save", |_| {}))
+    }
+}
+
 pub const BUTTON: &[Spec] = &[
     Spec::live("Default", || action_button("Action", |_| {}).into_element()),
     Spec::live("Suggested", || {
@@ -17,6 +35,9 @@ pub const BUTTON: &[Spec] = &[
     }),
     Spec::live("Destructive", || {
         action_button("Delete", |_| {}).destructive().into_element()
+    }),
+    Spec::forced("Destructive beside a red accent", || {
+        RedAccent.into_element()
     }),
     Spec::live("Flat", || {
         action_button("Skip", |_| {}).flat().into_element()
@@ -162,7 +183,7 @@ pub const SPLIT_BUTTON: &[Spec] = &[
 
 pub const ACTION_STRIP: &[Spec] = &[Spec::live("Three actions, one disabled", || {
     action_strip(vec![
-        strip_action(Icon::Delete, "Forget", |_| {}),
+        strip_action(Icon::Delete, "Forget", |_| {}).destructive(),
         strip_action(Icon::WindowClose, "Disconnect", |_| {}),
         strip_action(Icon::EmblemSystem, "Settings", |_| {}).enabled(false),
     ])
@@ -280,6 +301,15 @@ pub const SLIDER: &[Spec] = &[
         slider(85.0, |_| {})
             .mark(100.0)
             .danger_from(90.0)
+            .fill()
+            .into_element()
+    }),
+    Spec::live("From a centre (balance)", || {
+        let mut balance = use_state(|| 70.0_f64);
+        slider(balance(), move |next| balance.set(next))
+            .max(200.0)
+            .origin(100.0)
+            .mark(100.0)
             .fill()
             .into_element()
     }),

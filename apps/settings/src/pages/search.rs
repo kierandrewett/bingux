@@ -719,14 +719,16 @@ fn web_group(data: &Model, ctx: Ctx) -> Group {
         .filter(|engine| engine.enabled)
         .map(|engine| (engine.id.clone(), engine.name.clone()))
         .collect();
-    let mut group = Group::titled("Web search").row(choice_row(
+    let default_engine = choice_row(
         "Default engine",
         enabled_engines,
         &data.default_engine,
         move |id: String| {
             commit(ctx, set_args("search.default_engine", toml_string(&id)));
         },
-    ));
+    )
+    .dropdown();
+    let mut group = Group::titled("Web search").row(default_engine);
     for engine in &data.engines {
         group = group.row(engine_row(
             engine.clone(),

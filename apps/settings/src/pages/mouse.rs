@@ -377,6 +377,7 @@ impl Setting<'_> {
                     )
                 })
                 .value_text(speed_label(speed))
+                .widest_value("Faster than normal")
                 .into()
             }
         }

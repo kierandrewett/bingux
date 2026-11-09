@@ -548,6 +548,12 @@ impl Currency {
     /// The text. A code that names no currency is written after the number
     /// (`12.50 XYZ`).
     pub fn format(&self) -> String {
+        super::isolate(self.compose())
+    }
+
+    /// The text without the isolate [`format`](Self::format) adds in a
+    /// right-to-left interface: for a formatter that writes it into its own.
+    pub(super) fn compose(&self) -> String {
         let locale = self
             .locale
             .clone()

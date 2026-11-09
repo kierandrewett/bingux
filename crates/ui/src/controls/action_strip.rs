@@ -17,10 +17,10 @@ use crate::typography::{BODY, Ink};
 #[derive(PartialEq, Clone)]
 pub struct StripAction {
     icon: Icon,
+    destructive: bool,
     label: String,
     on_press: EventHandler<()>,
     enabled: bool,
-    destructive: bool,
 }
 
 /// An action with an icon and a label, such as `strip_action(Icon::Delete, "Forget", ...)`.
@@ -39,15 +39,14 @@ pub fn strip_action(
 }
 
 impl StripAction {
-    /// Draw the icon and label in the danger colour, for an action that removes
-    /// something (Forget, Delete).
-    pub fn destructive(mut self) -> Self {
-        self.destructive = true;
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
         self
     }
 
-    pub fn enabled(mut self, enabled: bool) -> Self {
-        self.enabled = enabled;
+    /// Marks the action as destructive: its icon and label take the danger ink.
+    pub fn destructive(mut self) -> Self {
+        self.destructive = true;
         self
     }
 }
