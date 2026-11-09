@@ -1775,8 +1775,9 @@ fn encoding_items(actions: Actions, id: u64, format: encoding::FileFormat) -> Ve
             )
         })
         .collect();
-    let mut items = vec![submenu("Save with encoding", save_with)];
-    let reopen_item = submenu("Read again with encoding", reopen);
+    // Labels short enough for the narrow menu (`Dim::Menu`), which cuts longer ones off.
+    let mut items = vec![submenu("Encode as", save_with)];
+    let reopen_item = submenu("Read again as", reopen);
     items.push(if has_path {
         reopen_item
     } else {

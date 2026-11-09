@@ -44,15 +44,15 @@ time, including any changes you had not saved.
 The status bar shows the language, the indentation, the encoding and the line
 endings of the document; each is a menu.
 
-| Situation                                                       | What happens                                                                                                  |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| UTF-8, with or without a byte order mark                        | Read and written back the same way                                                                            |
-| UTF-16 (with or without a byte order mark)                      | Detected and written back as UTF-16                                                                           |
-| A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                      |
-| UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                        |
-| Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; Encoding ▸ Read again with encoding tries another |
-| A character the file's encoding cannot hold, on save            | Save stops and offers Save in UTF-8                                                                           |
-| CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                   |
+| Situation                                                       | What happens                                                                                                |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| UTF-8, with or without a byte order mark                        | Read and written back the same way                                                                          |
+| UTF-16 (with or without a byte order mark)                      | Detected and written back as UTF-16                                                                         |
+| A legacy encoding (Windows-1252, Shift_JIS, GBK, KOI8-R, …)     | Detected from the bytes; saving writes the same encoding                                                    |
+| UTF-8 with some Latin-1 lines in it (a file two programs wrote) | Both parts read correctly; a notice says saving writes it all as UTF-8                                      |
+| Bytes that do not fit the detected encoding                     | A notice says they show as � and that saving replaces them; the encoding menu ▸ Read again as tries another |
+| A character the file's encoding cannot hold, on save            | Save stops and offers Save in UTF-8                                                                         |
+| CRLF, LF or CR line endings                                     | Kept; Line endings changes them; a file that mixes them is written with the most common one                 |
 
 The editor reads `.editorconfig` files from the file's folder upwards:
 `indent_style`, `indent_size`, `tab_width`, `end_of_line`,
