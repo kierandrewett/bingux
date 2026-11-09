@@ -191,23 +191,15 @@ pub(crate) fn duration(seconds: f64) -> String {
         total % 60,
     );
     let text = if days > 0 {
-        join(days, "d", hours, "h")
+        crate::tr!("ui-chart-days-hours", days = days, hours = hours)
     } else if hours > 0 {
-        join(hours, "h", minutes, "min")
+        crate::tr!("ui-chart-hours-minutes", hours = hours, minutes = minutes)
     } else if minutes > 0 {
-        format!("{minutes} min")
+        crate::tr!("ui-chart-minutes", minutes = minutes)
     } else {
-        format!("{secs} s")
+        crate::tr!("ui-chart-seconds", seconds = secs)
     };
     format!("{sign}{text}")
-}
-
-fn join(major: u64, major_unit: &str, minor: u64, minor_unit: &str) -> String {
-    if minor > 0 {
-        format!("{major} {major_unit} {minor} {minor_unit}")
-    } else {
-        format!("{major} {major_unit}")
-    }
 }
 
 /// Local time as `HH:MM`.
@@ -216,13 +208,12 @@ fn clock_time(seconds: f64, offset: f64) -> String {
     format!("{hour:02}:{minute:02}")
 }
 
-/// Local date as `23 Oct`.
+/// Local date as `23 Oct`, in the order and words of the language shown.
 fn date(seconds: f64, offset: f64) -> String {
-    const MONTHS: [&str; 12] = [
-        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-    ];
-    let (_, month, day, _, _) = parts(seconds, offset);
-    format!("{day} {}", MONTHS[(month - 1) as usize])
+    let (year, month, day, _, _) = parts(seconds, offset);
+    crate::format::Date::civil(year as i32, month as u8, day as u8)
+        .part(crate::format::DatePart::DayMonth)
+        .format()
 }
 
 /// Year, month, day, hour and minute of a Unix time in local time.
@@ -300,7 +291,12 @@ mod tests {
         // 2026-10-23 14:05 UTC, shown at +01:00.
         let seconds = 1_792_764_300.0;
         assert_eq!(clock_time(seconds, 3600.0), "15:05");
-        assert_eq!(date(seconds, 3600.0), "23 Oct");
+        assert_eq!(
+            date(seconds, 3600.0),
+            crate::format::Date::civil(2026, 10, 23)
+                .part(crate::format::DatePart::DayMonth)
+                .format()
+        );
     }
 
     #[test]

@@ -216,7 +216,7 @@ pub fn data(name: impl Into<String>) -> String {
 
 /// The accented form of a letter: still readable, but not ASCII, so a font or
 /// an encoding that cannot take it shows.
-fn accent(letter: char) -> char {
+pub(crate) fn accent(letter: char) -> char {
     match letter {
         'a' => 'á',
         'b' => 'ƀ',

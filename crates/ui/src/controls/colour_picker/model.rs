@@ -235,9 +235,9 @@ impl HexError {
     /// What the field says about the entry, short enough for one line.
     pub fn message(self) -> String {
         match self {
-            HexError::Empty => "Enter a hex colour, such as #3584e4.".to_string(),
-            HexError::BadDigit(c) => format!("\u{201c}{c}\u{201d} is not a hex digit."),
-            HexError::Length(n) => format!("{n} digits: use 3, 4, 6 or 8."),
+            HexError::Empty => crate::tr!("ui-colour-hex-missing-error"),
+            HexError::BadDigit(c) => crate::tr!("ui-colour-hex-digit-error", digit = c.to_string()),
+            HexError::Length(n) => crate::tr!("ui-colour-hex-length-error", count = n),
         }
     }
 }
@@ -329,13 +329,26 @@ impl Mode {
         }
     }
 
-    /// The spoken names of the three boxes.
-    pub fn names(self) -> [&'static str; 3] {
-        match self {
-            Mode::Rgb => ["Red", "Green", "Blue"],
-            Mode::Hsl => ["Hue", "Saturation", "Lightness"],
-            Mode::Hsv => ["Hue", "Saturation", "Value"],
-        }
+    /// The spoken names of the three boxes, in the language shown.
+    pub fn names(self) -> [String; 3] {
+        let ids = match self {
+            Mode::Rgb => [
+                crate::i18n_id!("ui-colour-red"),
+                crate::i18n_id!("ui-colour-green"),
+                crate::i18n_id!("ui-colour-blue"),
+            ],
+            Mode::Hsl => [
+                crate::i18n_id!("ui-colour-hue"),
+                crate::i18n_id!("ui-colour-saturation"),
+                crate::i18n_id!("ui-colour-lightness"),
+            ],
+            Mode::Hsv => [
+                crate::i18n_id!("ui-colour-hue"),
+                crate::i18n_id!("ui-colour-saturation"),
+                crate::i18n_id!("ui-colour-value"),
+            ],
+        };
+        ids.map(crate::i18n::text)
     }
 
     /// The largest whole number each box takes: 255 for a channel, 360 for a

@@ -1027,6 +1027,7 @@ impl Component for NavigationSplitView {
         };
         let can_back = model.can_go_back();
         let window_title = model.window_title(&self.app_title);
+        crate::app::claim_window_title();
         use_side_effect_with_deps(&window_title, |title| {
             let title = title.clone();
             crate::shell::window::with_window(move |window| window.set_title(&title));
@@ -1080,7 +1081,7 @@ impl Component for NavigationSplitView {
             entry: current.id,
             place: shown_location.path_text(),
             title: if searching {
-                "Search results".to_string()
+                crate::tr!("ui-search-results")
             } else {
                 title.clone()
             },
@@ -1441,7 +1442,7 @@ impl Component for NavigationSplitView {
                         ScrolledTitle {
                             scroll,
                             title: if searching {
-                                "Search results".to_string()
+                                crate::tr!("ui-search-results")
                             } else {
                                 title.clone()
                             },
@@ -1635,7 +1636,7 @@ impl Component for NavigationSplitView {
             entry: current.id,
             scroll,
             title: if searching {
-                "Search results".to_string()
+                crate::tr!("ui-search-results")
             } else {
                 title.clone()
             },
@@ -1995,18 +1996,23 @@ impl Component for Sidebar {
                         .tw(&tokens, SIDEBAR_LIST)
                         .tw(&tokens, &[pt(S2)])
                         .a11y_role(AccessibilityRole::ListBox)
-                        .a11y_alt(if typing { "Results" } else { "Pages" })
+                        .a11y_alt(if typing {
+                            crate::tr!("ui-sidebar-results")
+                        } else {
+                            crate::tr!("ui-sidebar-pages")
+                        })
                         .children(entries)
                         .maybe_child(no_matches.then(|| {
-                            rect()
-                                .tw(&tokens, &[pt(S3), px(S3)])
-                                .child(BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."))
+                            rect().tw(&tokens, &[pt(S3), px(S3)]).child(
+                                BODY.in_ink(Ink::Muted)
+                                    .label(&tokens, crate::tr!("ui-search-no-matches")),
+                            )
                         })),
                 ),
             );
         shell
             .a11y_role(AccessibilityRole::Navigation)
-            .a11y_alt("Sidebar")
+            .a11y_alt(crate::tr!("ui-sidebar"))
             .on_press({
                 let press = region.clone();
                 move |event: Event<PressEventData>| press.press(&event)

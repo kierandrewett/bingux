@@ -19,9 +19,17 @@ mod switcher;
 mod tests;
 mod view;
 
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, Message, i18n_id};
+
+/// Registers the taxonomy's catalogue once, for the window and for the
+/// snapshot renderer alike.
+fn register_catalogue() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| bingux_ui::i18n::register(bingux_ui::catalogue!("taxonomy")));
+}
 
 fn main() {
+    register_catalogue();
     let mut args = std::env::args().skip(1);
     if args.next().as_deref() == Some("--snapshot") {
         let dir = args
@@ -37,7 +45,7 @@ fn main() {
     Application::new("bingux-taxonomy")
         .routes(app::table())
         .size(1320.0, 820.0)
-        .title("Taxonomy")
+        .title(Message::new(i18n_id!("taxonomy-title")))
         .borderless()
         .about(bingux_ui::app_info!(
             description = "Every Bingux UI component, icon and token, running",

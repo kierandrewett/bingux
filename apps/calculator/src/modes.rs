@@ -47,7 +47,7 @@ impl Component for ProgrammerPanel {
             size_calc.set_word(bits, signed);
         });
         let signed_switch = hstack(S2)
-            .child(bingux_ui::typography::BODY.label(&tokens, "Signed"))
+            .child(bingux_ui::typography::BODY.label(&tokens, tr!("calculator-signed")))
             .child(switch(signed, move |on: bool| {
                 signed_calc.set_word(bits, on)
             }));
@@ -150,7 +150,7 @@ impl Component for ConvertPanel {
             .collect();
 
         let pick_category = calc.clone();
-        let category_row = row("Category").trailing(
+        let category_row = row(tr!("calculator-convert-category")).trailing(
             dropdown(categories, category.id, move |id: String| {
                 pick_category.with(|s| s.set_category(&id));
                 pick_category.changed();
@@ -185,13 +185,13 @@ impl Component for ConvertPanel {
                         keypad(
                             1,
                             vec![
-                                keypad_key("Swap", move |_: ()| {
+                                keypad_key(tr!("calculator-convert-swap"), move |_: ()| {
                                     swap_calc.with(|s| s.swap_units());
                                     swap_calc.changed();
                                 })
                                 .icon(Icon::Swap)
-                                .name("Swap units")
-                                .tooltip("Swap units")
+                                .name(tr!("calculator-convert-swap.a11y"))
+                                .tooltip(tr!("calculator-convert-swap.a11y"))
                                 .tone(KeyTone::Plain),
                             ],
                         )
@@ -233,7 +233,7 @@ impl Component for ConvertPanel {
                     )
                     .child(
                         icon_button(Icon::Refresh, move |_: ()| refresh.refresh_rates())
-                            .tooltip("Update rates")
+                            .tooltip(&tr!("calculator-rates-update.tooltip"))
                             .busy(fetching)
                             .refocus(calc.field_id),
                     ),

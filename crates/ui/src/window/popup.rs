@@ -576,10 +576,13 @@ impl Component for PopupFrame {
         let cancel = flags.contains(PopupFlags::CANCEL).then(|| {
             if sheet {
                 Element::from(
-                    icon_button(Icon::WindowClose, move |_: ()| window.close()).tooltip("Close"),
+                    icon_button(Icon::WindowClose, move |_: ()| window.close())
+                        .tooltip(&crate::tr!("ui-dialog-close")),
                 )
             } else {
-                Element::from(action_button("Cancel", move |_: ()| window.close()).compact())
+                Element::from(
+                    action_button(crate::tr!("ui-dialog-cancel"), move |_: ()| window.close()).compact(),
+                )
             }
         });
 

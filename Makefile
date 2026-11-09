@@ -250,6 +250,8 @@ check-static:
 	python3 scripts/ui-lint.py
 	python3 scripts/ui-lint.py --self-test
 	python3 scripts/taxonomy-check.py
+	python3 scripts/ftl-check.py
+	python3 scripts/ftl-check.py --self-test
 	python3 tests/app-env.test.py
 	python3 tests/frame-walk.test.py
 	python3 tests/rules-check.test.py

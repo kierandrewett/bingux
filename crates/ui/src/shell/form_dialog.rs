@@ -153,13 +153,14 @@ impl Component for FormDialog {
         let cancel = move |_: ()| overlays.dismiss_dialog();
 
         let header = HeaderBar::new(form.title.clone()).draggable(false).trailing(
-            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog()).tooltip("Close"),
+            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                .tooltip(&crate::tr!("ui-dialog-close")),
         );
         let action = primary_button(form.action.clone(), press)
             .default_action()
             .enabled(runnable)
             .radius(button_radius);
-        let dismiss = action_button("Cancel", cancel).radius(button_radius);
+        let dismiss = action_button(crate::tr!("ui-dialog-cancel"), cancel).radius(button_radius);
         let (action, dismiss) = if compact {
             (action.fill_width(), dismiss.fill_width())
         } else {

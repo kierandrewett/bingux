@@ -16,18 +16,6 @@ use crate::model::Calc;
 use crate::modes::{ConvertPanel, ProgrammerPanel};
 use crate::pads;
 
-/// What the shortcuts dialog says.
-const SHORTCUTS: &str = "\
-Enter  Finish the calculation\n\
-Escape  Clear the entry, then everything\n\
-Backspace  Delete the last character\n\
-Ctrl+Shift+C  Copy the result\n\
-Ctrl+H  Show or hide the history\n\
-Ctrl+1 to 4  Basic, Scientific, Programmer, Convert\n\
-+ \u{2212} \u{d7} \u{f7} ^  Operators. Type x or * to multiply\n\
-%  Percent: 200 + 10% is 220\n\
-Ctrl+Shift+?  About Calculator";
-
 /// The window root. The content is below the overlay host, which provides
 /// the window handle and the menus.
 #[derive(PartialEq)]
@@ -55,11 +43,14 @@ fn slug(mode: Mode) -> String {
 
 /// The modes as places, so a second launch reaches the open window.
 pub fn routes() -> RouteTable {
+    // The table keeps its titles for the life of the process; the window
+    // shows the app's title from the catalogue, which follows the language.
+    let title: &'static str = Box::leak(tr!("calculator-title").into_boxed_str());
     let mut table = RouteTable::new("bingux-calculator")
         .mode(bingux_ui::nav::Mode::Linear)
-        .index("Calculator", |_| rect().into());
+        .index(title, |_| rect().into());
     for mode in Mode::ALL {
-        table = table.root(&slug(mode)).title("Calculator");
+        table = table.root(&slug(mode)).title(title);
     }
     table
 }
@@ -78,6 +69,50 @@ fn mode_at(location: &Location) -> Option<Mode> {
 fn switch_mode(calc: &Calc, mode: Mode) {
     calc.set_mode(mode);
     bingux_ui::nav::navigate(&slug(mode));
+}
+
+/// What the shortcuts dialog says, one shortcut a line.
+fn shortcuts_text() -> String {
+    [
+        tr!("calculator-shortcut-equals"),
+        tr!("calculator-shortcut-clear"),
+        tr!("calculator-shortcut-delete"),
+        tr!("calculator-shortcut-copy"),
+        tr!("calculator-shortcut-history"),
+        tr!("calculator-shortcut-modes"),
+        tr!("calculator-shortcut-operators"),
+        tr!("calculator-shortcut-percent"),
+        tr!("calculator-shortcut-about"),
+    ]
+    .join("\n")
+}
+
+/// The name of a mode as shown, in the language shown. `Mode::name` stays
+/// the English key of addresses and the saved state.
+pub fn mode_title(mode: Mode) -> String {
+    match mode {
+        Mode::Basic => tr!("calculator-mode-basic"),
+        Mode::Scientific => tr!("calculator-mode-scientific"),
+        Mode::Programmer => tr!("calculator-mode-programmer"),
+        Mode::Convert => tr!("calculator-mode-convert"),
+    }
+}
+
+/// What failed, in the language shown. The parser's detail of a syntax error,
+/// a domain error and a unit error comes from `bingux_calc` in English.
+pub fn error_text(error: &bingux_calc::CalcError) -> String {
+    use bingux_calc::CalcError;
+    match error {
+        CalcError::DivideByZero => tr!("calculator-divide-by-zero-error"),
+        CalcError::NotReal => tr!("calculator-not-real-error"),
+        CalcError::Undefined(what) => tr!("calculator-undefined-error", function = *what),
+        CalcError::Incomplete => tr!("calculator-incomplete-error"),
+        CalcError::TooLarge => tr!("calculator-too-large-error"),
+        CalcError::Unknown(name) => tr!("calculator-unknown-name-error", name = name),
+        CalcError::NeedsInteger(what) => tr!("calculator-needs-integer-error", function = *what),
+        CalcError::NoRate(code) => tr!("calculator-no-rate-error", currency = code),
+        CalcError::Syntax { .. } | CalcError::Domain(_) | CalcError::Unit(_) => error.to_string(),
+    }
 }
 
 fn mode_key(mode: Mode) -> String {
@@ -104,7 +139,7 @@ impl Component for Content {
 
         let options: Vec<(String, String)> = Mode::ALL
             .iter()
-            .map(|m| (mode_key(*m), m.name().to_string()))
+            .map(|m| (mode_key(*m), mode_title(*m)))
             .collect();
         let pick = calc.clone();
         let switch = segmented(options, &mode_key(mode), move |key: String| {
@@ -146,16 +181,17 @@ impl Component for Content {
         let toggle = calc.clone();
         let showing_history = if compact { history_page } else { history_open };
         let history_button = icon_button(Icon::Clock, move |_: ()| toggle_history(&toggle))
-            .tooltip(if showing_history {
-                "Hide history (Ctrl+H)"
+            .tooltip(&if showing_history {
+                tr!("calculator-history-hide.tooltip")
             } else {
-                "Show history (Ctrl+H)"
+                tr!("calculator-history-show.tooltip")
             });
 
         // The history button sits beside the menu on a desktop. A phone's
         // header has no room for a third button there, so it goes first.
-        let menu = menu_button("Main menu", main_menu(&calc, overlays)).icon(Icon::OpenMenu);
-        let header = HeaderBar::new("Calculator").title_slot(switch);
+        let menu =
+            menu_button(tr!("ui-main-menu"), main_menu(&calc, overlays)).icon(Icon::OpenMenu);
+        let header = HeaderBar::new(tr!("calculator-title")).title_slot(switch);
         let header = if compact {
             header.leading(history_button)
         } else {
@@ -412,7 +448,7 @@ fn main_menu(calc: &Calc, overlays: Overlays) -> Vec<MenuItem> {
     let (group, precision) = calc.with(|s| (s.saved.settings.group, s.saved.settings.precision));
     let group_calc = calc.clone();
     let mut items = vec![
-        menu_item("Group digits", move |_| {
+        menu_item(tr!("calculator-menu-group-digits"), move |_| {
             group_calc.with(|s| s.set_group(!s.saved.settings.group));
             group_calc.changed();
         })
@@ -423,20 +459,27 @@ fn main_menu(calc: &Calc, overlays: Overlays) -> Vec<MenuItem> {
         .map(|digits| {
             let calc = calc.clone();
             let digits = *digits;
-            menu_item(format!("{digits} digits"), move |_| {
+            menu_item(tr!("calculator-menu-digits", count = digits), move |_| {
                 calc.with(|s| s.set_precision(digits));
                 calc.changed();
             })
             .checked(precision == digits)
         })
         .collect();
-    items.push(submenu("Precision", precisions));
+    items.push(submenu(tr!("calculator-menu-precision"), precisions));
     items.push(menu_separator());
     let history_calc = calc.clone();
-    items.push(menu_item("Clear history", move |_| history_calc.clear_history()).destructive());
+    items.push(
+        menu_item(tr!("calculator-history-clear-menu"), move |_| {
+            history_calc.clear_history()
+        })
+        .destructive(),
+    );
     items.push(menu_separator());
-    items.push(menu_item("Keyboard shortcuts", move |_| {
-        overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
+    items.push(menu_item(tr!("ui-command-shortcuts"), move |_| {
+        overlays.show_dialog(
+            dialog(tr!("ui-shortcuts-title"), shortcuts_text()).cancel(tr!("ui-dialog-close")),
+        );
     }));
     items.extend(bingux_ui::about::app_menu_items(overlays));
     items

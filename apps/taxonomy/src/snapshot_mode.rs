@@ -35,7 +35,9 @@ const MAX_HEIGHT: f32 = 12000.0;
 /// `BINGUX_SNAPSHOT_SETTLE_MS` on a busy machine, where the icons of a long
 /// page are still being rasterised on their workers after the default.
 fn settle_time() -> Duration {
-    let ms = std::env::var("BINGUX_SNAPSHOT_SETTLE_MS").ok().and_then(|raw| raw.parse().ok());
+    let ms = std::env::var("BINGUX_SNAPSHOT_SETTLE_MS")
+        .ok()
+        .and_then(|raw| raw.parse().ok());
     Duration::from_millis(ms.unwrap_or(900))
 }
 
@@ -113,6 +115,7 @@ fn file_stem(page: PageId) -> String {
 
 /// The app at a page's address, in a window of `size`.
 pub fn open(page: PageId, size: (f32, f32)) -> Snapshot {
+    crate::register_catalogue();
     let location = location_of(page);
     Snapshot::new(
         move || {

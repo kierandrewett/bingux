@@ -4859,6 +4859,156 @@ The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and
 times, Relative times, Lists and counts and Locale pages show every formatter
 in ten languages.
 
+## Localisation
+
+Every string a person reads comes from a [Project Fluent](https://projectfluent.org)
+catalogue, through `bingux_ui::i18n`. Fluent is the one localisation system of
+bingux-ui apps: no gettext, no hand-made string tables. British English
+(`en-GB`) is the source language.
+
+```rust
+use bingux_ui::prelude::*; // brings `tr!`, `i18n_id!`, `Message`, `Title`
+
+fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("calculator"));
+    Application::new("bingux-calculator")
+        .title(Message::new(i18n_id!("calculator-title")))
+        .run(|| app::App);
+}
+
+let empty = tr!("calculator-history-empty-title");
+let count = tr!("calculator-history-count", count = entries.len());
+let tip = tr!("calculator-mode.tooltip");
+```
+
+| API                                               | What it does                                                                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `tr!("id")`, `tr!("id.attr")`, `tr!("id", n = 3)` | The message as a `String` in the language shown. The ID is a literal, so the checks see it                        |
+| `i18n_id!("id")`                                  | An ID kept in a table and asked for later with `i18n::text(id)` or `Message::new(id)`                             |
+| `Message::new(id).arg("name", value).format()`    | A message whose ID is chosen at run time                                                                          |
+| `Arg::text(x)`, `Arg::number(x, least, most)`     | A variable's value: text, a number with fixed decimals; integers, floats and `format::Moment` convert by `Into`   |
+| `catalogue!("domain")`, `i18n::register(..)`      | The app's `locale/en-GB/<domain>.ftl`, compiled in; register it before `Application::run`                         |
+| `i18n::text(id)`, `i18n::has(id)`                 | A message with no variables; whether a message exists                                                             |
+| `i18n::set_locale(Some(locale))`                  | Shows every window in another language, now. `None` goes back to the environment's                                |
+| `i18n::language()`, `languages()`, `direction()`  | The language shown, the fallback chain (`de`, `en-GB`), and its reading direction                                 |
+| `i18n::set_pseudo(Some(Pseudo::Accented \| Rtl))` | A pseudo-locale, as `BINGUX_PSEUDO_LOCALE=accented\|rtl` sets it                                                  |
+| `i18n::use_language()`, `revision()`              | A number that changes with the language; window roots are keyed on it, so nothing else has to                     |
+| `i18n::check::crate_catalogue(dir, domain)`       | A test: every `tr!` ID exists with the variables it passes, and the catalogue has no unused message (`Report`)    |
+| `Application::title(impl Into<Title>)`            | `Title::Text` stays as written; `Title::Message` (from a `Message`) follows the language, in the window title too |
+
+A language switch rebuilds each window's content under its router, so the
+location, scroll and open tabs stay. Shortcut labels (`Ctrl+Shift+P` is
+`Strg+Umschalt+P` in German), the command groups, the palette, the shortcuts
+sheet, undo titles, the About window, previews, charts and the colour picker
+all come from the `bingux-ui` catalogue (`crates/ui/locale/en-GB/bingux-ui.ftl`).
+
+### Where catalogues live
+
+An app's catalogues sit next to its crate: `apps/calculator/locale/en-GB/calculator.ftl`
+is the source, `apps/calculator/locale/de/calculator.ftl` a translation. At
+run time a translation is found, first match wins, in each directory of
+`BINGUX_LOCALE_DIR`, the crate's own `locale/` (debug builds), then
+`$XDG_DATA_HOME/bingux/locale/` and `<each $XDG_DATA_DIRS>/bingux/locale/`.
+`make install` (and `scripts/install-shell.py`, `scripts/build-prefix.sh`, the
+RPM and Arch packages) installs every `.ftl` to `<prefix>/share/bingux/locale/<language>/`.
+A message a translation lacks falls back to `en-GB`, never to its ID.
+
+### Conventions
+
+- **IDs.** Lower case words joined by `-`, starting with the catalogue's
+  prefix: `ui-` in bingux-ui, `<app>-` in an app (`files-`, `settings-`,
+  `calculator-`). Then the place, then the thing: `files-trash-empty-title`.
+- **The last word says the kind** when it is one of `title`, `subtitle`,
+  `label`, `description` (or `hint`, `caption`, `body`), `tooltip`,
+  `placeholder`, `empty`, `error`, `confirm`, `notification`, `status`,
+  `a11y`, `onboarding`, `button`, `menu`. `scripts/ftl-to-strings.py` reads it,
+  so the copy linter judges each string by the right rules. Anything else is
+  plain text (a button or menu label usually needs no suffix).
+- **Attributes for the parts of one control.** A control's tooltip, screen
+  reader name, placeholder and search keywords are attributes of its message,
+  named for their kind: `.tooltip`, `.a11y`, `.placeholder`, `.description`,
+  `.keywords`. `tr!("files-new-folder.tooltip")`. A message may be only
+  attributes (`ui-palette-search =` then `.placeholder = ..`).
+- **Translator comments.** A `#` comment directly above a message says where
+  it shows and what each variable holds: `# $count (Number) - how many files`.
+  `##` starts a group, `###` describes the file. A comment can never sit
+  between a message and its attributes: Fluent reads it as text
+  (`ftl-check.py` reports it).
+- **Variables, never sentence building.** Pass the parts as variables and let
+  the whole sentence live in the catalogue: `tr!("files-moved", name = name)`
+  with `files-moved = Moved “{ $name }” to Trash`, never
+  `format!("{} {}", tr!("moved"), name)`. Word order differs between languages,
+  and a translator can only reorder what is in one message.
+- **Plurals.** A count is a number variable and the message selects on it:
+  `{ $count -> [one] { $count } file *[other] { $count } files }`. Each
+  language uses its own CLDR categories (`few`, `many`) and may add an exact
+  `[0]`. Never pick between two messages in Rust by `count == 1`.
+- **Numbers and dates.** A number variable is written in the language shown
+  (`1,234.5`, `1.234,5`); `NUMBER($size, maximumFractionDigits: 1)` sets
+  decimals and `DATETIME($when, timeStyle: "short")` writes a `format::Moment`.
+  For a size, a duration or a relative time, format it with `bingux_ui::format`
+  first and pass the text.
+- **Terms.** A name used in many messages is a term (`-brand-name = Bingux`),
+  referred to as `{ -brand-name }`, so it is translated, or kept, once.
+- **Bidirectional text.** Placeables are wrapped in Unicode isolation marks in
+  a right-to-left catalogue and around right-to-left values in a left-to-right
+  one; do not add marks by hand.
+- **Copy.** Every message follows the app-copy voice (sentence case, errors
+  say what failed and what to do next). Lint a catalogue with
+  `scripts/ftl-to-strings.py <file>.ftl | node ~/dev/myvoice/dist/index.js strings - --profile app-copy`.
+- **Not translated.** Logs, `eprintln!`, panics, the Copy details text of the
+  About window and error reports (they are read by developers), protocol and
+  file names, and the technical examples inside a message (`192.168.1.10`).
+
+### Checks
+
+- `scripts/ftl-check.py` (in `make check-static`) parses every catalogue under
+  `crates/ui/locale` and `apps/*/locale`: syntax, unbalanced braces, duplicate
+  messages and attributes, comments inside a message, and in each translation
+  an ID, attribute or variable the source does not have, or a file with no
+  source. It prints, per language, how many messages still fall back
+  (`--missing` lists them).
+- `i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "calculator").assert_clean()`
+  in a crate's tests fails on a `tr!` ID the source lacks, wrong variables, or
+  a message nothing uses (`i18n_id!` counts as a use).
+- `BINGUX_PSEUDO_LOCALE=accented` writes every catalogue message with accents
+  and padding ([Ĉàñçéļ]), so a string that is not localised stands out as
+  plain English; `rtl` writes it right to left and turns the window. These
+  differ from the stress modes `expand`, `ar` and `he` (`stress.rs`), which
+  rewrite every string at draw time, localised or not.
+- `BINGUX_LOCALE_DIR=/tmp/try LANGUAGE=de bingux-calculator` tries a
+  translation without installing it.
+
+The taxonomy's Foundations > Localisation page switches the language of the
+whole window (English, the `de` stub, both pseudo-locales) and shows plurals,
+attributes, a fallback and isolation in a right-to-left sentence.
+
+### Migrating an app
+
+1. Make `apps/<app>/locale/en-GB/<app>.ftl` starting with a `###` comment that
+   names the app, and register it first thing in `main`:
+   `bingux_ui::i18n::register(bingux_ui::catalogue!("<app>"));`.
+2. Give the app's name a message (`<app>-title = Calculator`) and pass
+   `.title(Message::new(i18n_id!("<app>-title")))`; use `tr!("<app>-title")`
+   wherever the name is shown (a `NavigationSplitView`, the About info).
+3. Move each visible string, one view at a time, to a message and replace the
+   literal with `tr!`. Join the sentence parts of every `format!` into one
+   message with variables; turn each `if n == 1` into a plural; turn tooltips,
+   placeholders and screen reader names into attributes. A table of labels in
+   a `const` keeps `i18n_id!` IDs and calls `i18n::text` when drawn.
+4. Strings in a `const`, a `static` or a `&'static str` field become `String`
+   or an ID; anything built once at start-up and shown later must be built
+   where it is drawn, so a language switch reaches it.
+5. Add the catalogue test to the crate:
+   `#[test] fn the_catalogue_is_clean() { bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "<app>").assert_clean(); }`.
+6. Run `python3 scripts/ftl-check.py` and the copy lint above; fix every
+   finding. Install rules pick the new catalogue up by themselves.
+7. Look at the app with `BINGUX_PSEUDO_LOCALE=accented` (anything plain is
+   still a literal) and `rtl`, at desktop width and 390x800.
+
+Calculator is the reference: `apps/calculator/src` and
+`apps/calculator/locale/en-GB/calculator.ftl`.
+
 ## Commands
 
 A command is one thing an application can do: an id, a title, an optional

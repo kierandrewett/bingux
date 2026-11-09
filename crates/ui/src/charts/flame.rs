@@ -310,12 +310,12 @@ impl Component for FlameGraph {
                             .in_ink(Ink::Muted)
                             .label(
                                 &tokens,
-                                format!(
-                                    "{:.1}% of all  ·  {:.1}% in the call itself  ·  {}  ·  depth {}",
-                                    value / total * 100.0,
-                                    own / total * 100.0,
-                                    format_value(value, self.unit),
-                                    tree.depth(node),
+                                crate::tr!(
+                                    "ui-flame-bar-description",
+                                    share = crate::i18n::Arg::number(value / total * 100.0, 1, 1),
+                                    own = crate::i18n::Arg::number(own / total * 100.0, 1, 1),
+                                    value = format_value(value, self.unit),
+                                    depth = tree.depth(node),
                                 ),
                             )
                             .max_lines(1),
@@ -327,21 +327,18 @@ impl Component for FlameGraph {
                 .label(
                     &tokens,
                     if view_root == 0 {
-                        "Point at a bar for its full name and numbers. Click it to zoom in; Escape zooms out."
-                            .to_string()
+                        crate::tr!("ui-flame-hint")
                     } else if chosen.is_some() {
-                        format!(
-                            "Zoomed to {}. Escape zooms out; point at a bar for its full name and numbers.",
-                            tree.nodes[view_root]
+                        crate::tr!(
+                            "ui-flame-zoomed-hint",
+                            name = tree.nodes[view_root]
                                 .label
                                 .as_ref()
                                 .unwrap_or(&tree.nodes[view_root].name)
+                                .to_string()
                         )
                     } else {
-                        format!(
-                            "Showing from {} calls down, where the work splits. Point at a bar for its full name and numbers; click to zoom in.",
-                            tree.depth(view_root)
-                        )
+                        crate::tr!("ui-flame-split-hint", depth = tree.depth(view_root))
                     },
                 )
                 .max_lines(2)
@@ -372,7 +369,7 @@ impl Component for FlameGraph {
         });
 
         let all_calls = (view_root != 0).then(|| {
-            action_button("All calls", move |()| {
+            action_button(crate::tr!("ui-flame-all-calls"), move |()| {
                 let mut zoom = zoom;
                 zoom.set(Some((key, 0)));
             })
@@ -456,7 +453,7 @@ impl Component for FlameGraph {
         let graph: Element = if tree.total() <= 0.0 {
             CAPTION
                 .in_ink(Ink::Muted)
-                .label(&tokens, "Nothing was sampled in this range.")
+                .label(&tokens, crate::tr!("ui-flame-none-empty"))
                 .into_element()
         } else {
             ScrollView::new_controlled(scroll)
@@ -489,7 +486,7 @@ impl Component for FlameGraph {
                     .a11y_alt(
                         self.label
                             .clone()
-                            .unwrap_or_else(|| "Flame graph".to_string()),
+                            .unwrap_or_else(|| crate::tr!("ui-chart-flame")),
                     )
                     .width(Size::fill())
                     .height(Size::flex(1.0))

@@ -45,12 +45,24 @@ impl Component for Display {
         let has_badges = matches!(mode, Mode::Scientific | Mode::Programmer);
         let mut badges = hstack(S2);
         if has_memory && mode == Mode::Scientific {
-            badges = badges.child(CAPTION.in_ink(Ink::Accent).label(&tokens, "M").max_lines(1));
+            badges = badges.child(
+                CAPTION
+                    .in_ink(Ink::Accent)
+                    .label(&tokens, tr!("calculator-memory-badge"))
+                    .max_lines(1),
+            );
         }
         if mode == Mode::Scientific {
             badges = badges.child(
                 CAPTION
-                    .label(&tokens, if radians { "Rad" } else { "Deg" })
+                    .label(
+                        &tokens,
+                        if radians {
+                            tr!("calculator-angle-radians")
+                        } else {
+                            tr!("calculator-angle-degrees")
+                        },
+                    )
                     .max_lines(1),
             );
         }
@@ -62,12 +74,19 @@ impl Component for Display {
                 16 => "HEX",
                 _ => "DEC",
             };
-            let mut text = format!(
-                "{name}  {bits}-bit {}",
-                if signed { "signed" } else { "unsigned" }
+            let mut text = tr!(
+                "calculator-word-status",
+                base = name,
+                bits = bits,
+                signed = if signed { "signed" } else { "unsigned" }
             );
+            // Two facts side by side, apart by a dot: a list, not a sentence.
             if let Some(character) = calc.int_answer().character {
-                text.push_str(&format!("  \u{b7}  Character {character}"));
+                text.push_str("  \u{b7}  ");
+                text.push_str(&tr!(
+                    "calculator-character-status",
+                    char = character.to_string()
+                ));
             }
             badges = badges.child(CAPTION.label(&tokens, text).max_lines(1));
             // The note (a value that wrapped, an error) shares this line, as
@@ -88,7 +107,7 @@ impl Component for Display {
             copy_calc.copy_text(copy_text.clone(), overlays)
         })
         .size(Dim::InlineButton)
-        .tooltip("Copy result")
+        .tooltip(&tr!("calculator-copy-result"))
         .refocus(calc.field_id);
 
         let submit = calc.clone();
@@ -99,11 +118,10 @@ impl Component for Display {
         let hint = match (&echo, typed_empty) {
             (Some(text), true) => format!("{text} ="),
             _ => match mode {
-                Mode::Programmer => "Number or expression",
-                Mode::Convert => "Value to convert",
-                _ => "Expression",
-            }
-            .to_string(),
+                Mode::Programmer => tr!("calculator-entry-programmer.placeholder"),
+                Mode::Convert => tr!("calculator-entry-convert.placeholder"),
+                _ => tr!("calculator-entry.placeholder"),
+            },
         };
         let field = text_field(calc.field, move |_: String| {
             // Enter is the window's: it finishes the entry whether or not the

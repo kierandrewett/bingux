@@ -158,6 +158,14 @@ def migrate_legacy_search_launcher(prefix):
     )
 
 
+def catalogues(source):
+    """Every Fluent catalogue (bingux-ui's and each app's) with its path below
+    share/bingux/locale: `<language>/<domain>.ftl`. The en-GB source is compiled
+    into each program too; installing it lets a translator compare against it."""
+    roots = [source / "crates/ui/locale"] + sorted((source / "apps").glob("*/locale"))
+    return [(path, path.relative_to(root)) for root in roots if root.is_dir() for path in sorted(root.glob("*/*.ftl"))]
+
+
 def build_payload(source, build, prefix, qml, target, managed=False, cargo=None, os_image=False):
     """Install payload files and return their paths relative to prefix.
 
@@ -250,6 +258,8 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         )
     for path in sorted((source / "data/metainfo").glob("*.metainfo.xml")):
         payload[path] = prefix / "share/metainfo" / path.name
+    for path, relative in catalogues(source):
+        payload[path] = prefix / "share/bingux/locale" / relative
     for path in sorted((source / "data/man").glob("*.1")):
         payload[path] = prefix / "share/man/man1" / path.name
     missing = [str(path) for path in payload if not path.is_file()]
@@ -789,6 +799,8 @@ def apps_payload(source, cargo, prefix):
         entries.append(
             (prefix / "share/icons/hicolor/scalable/apps" / (name + ".svg"), directory / (name + ".svg"), 0o644, False)
         )
+    for path, relative in catalogues(source):
+        entries.append((prefix / "share/bingux/locale" / relative, path, 0o644, False))
     # No AppStream metainfo: appstreamcli and software centres index only the
     # system metainfo folders, so a copy below ~/.local would never be read.
     for path in sorted((source / "data/man").glob("*.1")):

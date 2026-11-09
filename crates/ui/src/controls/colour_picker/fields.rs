@@ -74,7 +74,7 @@ impl Component for HexField {
             .component("ColourHex")
             .tw(&tokens, &[w_flex(), flex_col()])
             .a11y_role(AccessibilityRole::Group)
-            .a11y_alt("Hex colour")
+            .a11y_alt(crate::tr!("ui-colour-hex.a11y"))
             .child(
                 text_field(text, move |_: String| {
                     // Enter tidies what was typed into the colour it makes.
@@ -124,7 +124,7 @@ impl Component for HexField {
 #[derive(PartialEq)]
 struct NumberBox {
     /// The box's spoken name.
-    name: &'static str,
+    name: String,
     /// The letter under it.
     letter: &'static str,
     value: i32,
@@ -176,7 +176,7 @@ impl Component for NumberBox {
             .component("ColourNumber")
             .tw(&tokens, &[w_flex(), flex_col()])
             .a11y_role(AccessibilityRole::Group)
-            .a11y_alt(self.name)
+            .a11y_alt(self.name.clone())
             .child(field)
             .child(
                 rect()
@@ -226,7 +226,7 @@ impl Component for Values {
             let link = self.link.clone();
             let edit_link = self.link.clone();
             row = row.child(NumberBox {
-                name: names[index],
+                name: names[index].clone(),
                 letter: letters[index],
                 value: numbers[index],
                 max: maxima[index],
@@ -240,7 +240,7 @@ impl Component for Values {
         if self.link.alpha() {
             let edit_link = self.link.clone();
             row = row.child(NumberBox {
-                name: "Opacity",
+                name: crate::tr!("ui-colour-opacity"),
                 letter: "A %",
                 value: alpha_percent(colour.alpha),
                 max: 100,

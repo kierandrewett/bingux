@@ -591,7 +591,7 @@ fn up_and_down_on_a_focused_grip_slide_the_swap_and_focus_follows_the_item() {
     // The move is announced, politely, to assistive technology.
     let announced: Vec<bool> = shot.runner().find_many(|_, element| {
         let data = element.accessibility();
-        (data.builder.label() == Some("Sound moved to position 2 of 4"))
+        (data.builder.label() == Some("Sound now 2 of 4"))
             .then(|| data.builder.live() == Some(accesskit::Live::Polite))
     });
     assert_eq!(

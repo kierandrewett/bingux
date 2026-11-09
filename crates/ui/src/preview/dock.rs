@@ -24,8 +24,8 @@ use super::mode::Mode;
 use super::pane_state::{self, DEFAULT_WIDTH, STATE_KEY};
 use crate::component::ComponentName;
 use crate::files::{remember, remembered};
-use crate::motion::{MOVE_MS, use_tween};
 use crate::motion::Focusable;
+use crate::motion::{MOVE_MS, use_tween};
 use crate::style::*;
 use crate::surface::use_tokens;
 use bingux_preview_core::PreviewSource;
@@ -47,7 +47,13 @@ pub struct PreviewDock {
 
 impl PreviewDock {
     pub fn new(open: bool, row: Area, source: Option<PreviewSource>, nav: PreviewNav) -> Self {
-        PreviewDock { open, row, source, folder: None, nav }
+        PreviewDock {
+            open,
+            row,
+            source,
+            folder: None,
+            nav,
+        }
     }
 
     /// The source is a folder; see [`PreviewHost::folder`].
@@ -61,7 +67,8 @@ impl Component for PreviewDock {
     fn render(&self) -> impl IntoElement {
         let direction = crate::controls::direction::use_direction();
         let tokens = use_tokens();
-        let mut remembered_width = use_state(|| remembered::<f32>(STATE_KEY).unwrap_or(DEFAULT_WIDTH));
+        let mut remembered_width =
+            use_state(|| remembered::<f32>(STATE_KEY).unwrap_or(DEFAULT_WIDTH));
         let mut dragging = use_state(|| false);
         // The width the content is laid out at: the last one the pane was open
         // at, so a closing pane does not reflow its content as it shrinks.
@@ -90,7 +97,11 @@ impl Component for PreviewDock {
                 return;
             }
             event.prevent_default();
-            remembered_width.set_if_modified(pane_state::drag_width(event.global_location().x as f32, right, available));
+            remembered_width.set_if_modified(pane_state::drag_width(
+                event.global_location().x as f32,
+                right,
+                available,
+            ));
         };
         // A press in the pane takes the pane's keys; one anywhere else gives
         // them back (the list takes the focus itself).
@@ -129,7 +140,9 @@ impl Component for PreviewDock {
                     .width(Size::px((content_width - GRIP).max(0.0)))
                     .height(Size::fill())
                     .child(match self.folder {
-                        Some(folder) => PreviewHost::new(self.source.clone(), Mode::Pane, nav).folder(folder),
+                        Some(folder) => {
+                            PreviewHost::new(self.source.clone(), Mode::Pane, nav).folder(folder)
+                        }
                         None => PreviewHost::new(self.source.clone(), Mode::Pane, nav),
                     }),
             )
@@ -142,7 +155,7 @@ impl Component for PreviewDock {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Splitter)
-            .a11y_alt("Preview pane edge")
+            .a11y_alt(crate::tr!("ui-preview-edge.a11y"))
             .on_key_down(on_key)
             .on_pointer_down(move |event: Event<PointerEventData>| {
                 if event.data().is_primary() {

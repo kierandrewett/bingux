@@ -91,7 +91,7 @@ mod tests {
     fn a_bus_error_names_its_cause() {
         assert_eq!(
             BusError::NoBus.to_string(),
-            "The desktop services are not available."
+            "Could not reach the desktop. Log out and back in, then try again."
         );
     }
 }

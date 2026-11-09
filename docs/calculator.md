@@ -102,6 +102,14 @@ not, as in any text. The entry field holds exactly what was typed, so grouping
 never moves the caret or a selection; the result, the echo and the history show
 grouped digits. Copy puts a plain number on the clipboard.
 
+Every word the window shows is a Fluent message in
+`apps/calculator/locale/en-GB/calculator.ftl` (and bingux-ui's catalogue for the
+shared parts), asked for with `tr!`; a translation goes in
+`apps/calculator/locale/<language>/calculator.ftl`. Key faces (`sin`, `x²`,
+`AND`), the base names `HEX`, `DEC`, `OCT`, `BIN`, and the detail of a syntax,
+domain or unit error (from `bingux_calc`, in English) are not translated.
+Calculator is the reference migration in `docs/bingux-ui.md`, "Localisation".
+
 ## How it is built
 
 - `bingux_ui::controls::keypad` is the grid of keys, general enough for a PIN
