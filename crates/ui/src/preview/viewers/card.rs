@@ -110,9 +110,14 @@ impl Placeholder {
 /// The largest thumbnail the desktop has made for a file, if any.
 fn find_poster(key: (PathBuf, Option<SystemTime>)) -> Result<Option<PathBuf>, String> {
     let (path, modified) = key;
-    Ok([Bucket::XXLarge, Bucket::XLarge, Bucket::Large, Bucket::Normal]
-        .into_iter()
-        .find_map(|bucket| thumbs::lookup(&path, modified, bucket)))
+    Ok([
+        Bucket::XXLarge,
+        Bucket::XLarge,
+        Bucket::Large,
+        Bucket::Normal,
+    ]
+    .into_iter()
+    .find_map(|bucket| thumbs::lookup(&path, modified, bucket)))
 }
 
 #[derive(PartialEq)]
@@ -148,38 +153,63 @@ impl Component for Card {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let _ = Size2D::new(0.0, 0.0);
-        let muted = if self.on_backdrop { Ink::OnFloating } else { Ink::Muted };
+        let muted = if self.on_backdrop {
+            Ink::OnFloating
+        } else {
+            Ink::Muted
+        };
         let face = Element::from(
             rect()
-                .tw(&tokens, &[w_full(), h_full(), flex_col(), center(), gap(S3), p(S4)])
+                .tw(
+                    &tokens,
+                    &[w_full(), h_full(), flex_col(), center(), gap(S3), p(S4)],
+                )
                 .child(file_icon_view(&tokens, &self.icon, stage_size(), false))
                 .child(
                     SECTION
-                        .in_ink(if self.on_backdrop { Ink::OnFloating } else { Ink::Text })
+                        .in_ink(if self.on_backdrop {
+                            Ink::OnFloating
+                        } else {
+                            Ink::Text
+                        })
                         .label(&tokens, self.title.clone())
                         .max_lines(2)
                         .text_align(TextAlign::Center),
                 )
-                .maybe_child(self.subtitle.clone().map(|text| CAPTION.in_ink(muted).label(&tokens, text).max_lines(1)))
+                .maybe_child(
+                    self.subtitle
+                        .clone()
+                        .map(|text| CAPTION.in_ink(muted).label(&tokens, text).max_lines(1)),
+                )
                 .children(self.notes.iter().map(|note| {
-                    Element::from(rect().tw(&tokens, &[w_full(), max_w(Dim::Dialog)]).child(
-                        CAPTION
-                            .in_ink(muted)
-                            .paragraph(&tokens, note.clone())
-                            .width(Size::fill())
-                            .text_align(TextAlign::Center),
-                    ))
-                }))
-                .maybe_child((self.on_open.is_some() || self.on_retry.is_some()).then(|| {
-                    // Open and Try again side by side: stacked under the card, the second would be
-                    // below the stage's edge on a short pane.
                     Element::from(
-                        rect()
-                            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-                            .maybe_child(self.on_open.clone().map(|open| Element::from(primary_button("Open", move |_| open.call(())))))
-                            .maybe_child(self.on_retry.clone().map(|retry| Element::from(action_button("Try again", move |_| retry.call(()))))),
+                        rect().tw(&tokens, &[w_full(), max_w(Dim::Dialog)]).child(
+                            CAPTION
+                                .in_ink(muted)
+                                .paragraph(&tokens, note.clone())
+                                .width(Size::fill())
+                                .text_align(TextAlign::Center),
+                        ),
                     )
-                })),
+                }))
+                .maybe_child(
+                    (self.on_open.is_some() || self.on_retry.is_some()).then(|| {
+                        // Open and Try again side by side: stacked under the card, the second would be
+                        // below the stage's edge on a short pane.
+                        Element::from(
+                            rect()
+                                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
+                                .maybe_child(self.on_open.clone().map(|open| {
+                                    Element::from(primary_button("Open", move |_| open.call(())))
+                                }))
+                                .maybe_child(self.on_retry.clone().map(|retry| {
+                                    Element::from(action_button("Try again", move |_| {
+                                        retry.call(())
+                                    }))
+                                })),
+                        )
+                    }),
+                ),
         );
         let stage = match &self.poster {
             Some(key) => Element::from(Poster {
@@ -188,6 +218,9 @@ impl Component for Card {
             }),
             None => face,
         };
-        rect().component("PreviewCard").tw(&tokens, &[w_full(), h_full()]).child(stage)
+        rect()
+            .component("PreviewCard")
+            .tw(&tokens, &[w_full(), h_full()])
+            .child(stage)
     }
 }
