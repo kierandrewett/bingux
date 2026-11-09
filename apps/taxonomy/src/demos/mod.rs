@@ -14,6 +14,7 @@ pub mod foundations;
 pub mod icon_set;
 pub mod inputs;
 pub mod inspector;
+pub mod media;
 pub mod navigation;
 pub mod platform;
 pub mod transfer;

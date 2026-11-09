@@ -2151,6 +2151,30 @@ the walker has read a folder. The engine is for records an app owns (settings,
 applications, contacts, notes, devices), up to about a million short
 documents.
 
+## Media
+
+`bingux_ui::media` holds the parts a music or film player is made of. None of
+them plays anything: a player (`crates/media`, which drives mpv, or any
+other decoder) owns the sound and the picture, and these draw it and hand back
+what the person asked for. The Media app is built from them; the Files
+preview or a podcast app could use the same parts.
+
+| Part                                      | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `video_surface(VideoFrames)`              | Draws the newest frame a decoder pushed from its own thread. The surface writes the device pixels it covers into `VideoFrames::size()`, so the decoder renders exactly that size (letterboxed, subtitles drawn at screen resolution); `on_resize` tells it to render a paused frame again. A frame is wrapped, not copied. `on_press` and `on_double_press` (play and pause, full screen)                                                                                                     |
+| `timeline(position, duration, on_seek)`   | The seek bar, `SeekSlider.qml` made for time. Buffered stretches, chapter gaps, A-B points, a hover bubble with the time, the chapter and an optional picture (`on_hover` + `preview`). A drag asks for fast seeks (`Seek { done: false }`) and one exact seek on release. `times()` adds the time played and the time left; a press on the time left shows the length. Keys: Left and Right 5 s (Shift 30 s), Page Up and Down a minute, Home, End, `,` and `.` the chapter before and after |
+| `transport(playing, on_action)`           | Shuffle, previous, play or pause, next, repeat (`RepeatMode`), or back and forward 10 s with `skips()`. Always left to right, even in a right-to-left interface                                                                                                                                                                                                                                                                                                                               |
+| `volume_control(level, muted, on_change)` | The speaker shows the level; the wheel over it or the slider steps by 5                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `artwork(path, seed)`                     | Cover art or a film's frame, cropped to fill. Without one, a gradient made from the name with the kind's glyph, so an album keeps its colours everywhere. Artists are round, films 16:9                                                                                                                                                                                                                                                                                                       |
+| `now_playing_bar(title, subtitle)`        | Artwork (or a live `picture`), the transport over the timeline, the volume and the app's buttons. On a phone it is one row under a thin progress line                                                                                                                                                                                                                                                                                                                                         |
+| `format_time(seconds)`                    | `0:07`, `3:45`, `1:02:03`, `-0:42`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+```rust
+let frames = use_hook(VideoFrames::new); // hand a clone to the decoder
+rect().child(video_surface(frames.clone()).on_double_press(go_full_screen))
+    .child(timeline(status.position, status.duration, move |seek: Seek| player.seek(seek.to, seek.done)).times())
+```
+
 ## Charts
 
 `charts` draws sparklines, line and area charts, bar charts, rings and

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Media</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Media</name>
+  <summary>Play music and videos</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Media plays the music and videos in your Music and Videos folders, with
+      nothing to set up. Songs, albums, artists and videos are found and
+      organised as they are added.
+    </p>
+    <ul>
+      <li>Gapless albums, even loudness between songs and accurate seeking</li>
+      <li>Subtitles from the video or a file beside it, audio tracks, chapters and speed</li>
+      <li>Videos start where you left them</li>
+      <li>A queue, shuffle, repeat, a sleep timer and a mini player</li>
+      <li>Works with the desktop's media controls and keys</li>
+      <li>Optional Last.fm scrobbling</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">bingux-media.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-media</binary>
+    <mediatype>audio/mpeg</mediatype>
+    <mediatype>audio/flac</mediatype>
+    <mediatype>audio/ogg</mediatype>
+    <mediatype>video/mp4</mediatype>
+    <mediatype>video/x-matroska</mediatype>
+    <mediatype>video/webm</mediatype>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Player</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-09"/>
+  </releases>
+</component>

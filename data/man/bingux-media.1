@@ -1,0 +1,71 @@
+.TH BINGUX-MEDIA 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-media \- music and video player for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-media
+.RI [ FILE | FOLDER | URI ]...
+.SH DESCRIPTION
+.B bingux-media
+opens the Media window: the songs, albums, artists and videos in the Music and
+Videos folders, a queue and a player.
+With no argument it opens the library, or raises the window when it is already
+open.
+.PP
+Only one Media window runs.
+A second launch hands its files to the running window, which plays them.
+.SH ARGUMENTS
+.TP
+.I FILE
+A song or video to play.
+.TP
+.I FOLDER
+A folder; the songs and videos in it play in name order.
+.TP
+.I URI
+A
+.B file://
+URI, or a
+.B bingux-media://
+address such as
+.BR bingux-media://videos .
+.SH OPTIONS
+.TP
+.BR \-h ", " \-\-help
+Print the usage and exit.
+.TP
+.B \-\-
+End of options, for a name that starts with
+.BR \- .
+.SH ENVIRONMENT
+.TP
+.B BINGUX_MEDIA_RENDER
+.B sw
+draws video with mpv's software renderer;
+.B gl
+uses the GPU renderer even on a software OpenGL driver.
+.TP
+.B BINGUX_MEDIA_AO
+mpv's audio output, such as
+.B pipewire
+or
+.BR null .
+.TP
+.B BINGUX_MEDIA_MPV_LOG
+mpv's log level on standard error, such as
+.BR v .
+.SH FILES
+.TP
+.I ~/.config/bingux-media/settings.json
+Settings.
+.TP
+.I ~/.config/bingux-media/lastfm.json
+The Last.fm key, secret and session, readable by the owner only.
+.TP
+.I ~/.local/share/bingux-media/library.db
+The library index, resume points and play counts.
+.TP
+.I ~/.cache/thumbnails/large/
+Video thumbnails, shared with other programs.
+.SH SEE ALSO
+.BR bingux-files (1),
+.BR mpv (1)

@@ -52,7 +52,8 @@ $(BUILD_DIR)/bingux-frame: native/frame/paint-gtk.c native/frame/build.sh native
 	bash native/frame/build.sh $(BUILD_DIR)
 
 # The Rust programs. Each crate has its own Cargo.lock, so each is built on its own.
-# bingux-settings, bingux-files, bingux-weather and bingux-taxonomy are the Freya applications;
+# bingux-settings, bingux-files, bingux-weather, bingux-media and bingux-taxonomy are the Freya
+# applications (bingux-media links libmpv: libmpv-dev to build);
 # bingux-preview-host is the helper process Files runs to play films and songs and
 # render PDFs (GStreamer and poppler stay out of the application);
 # bingux-effects is the sound-effects engine; it hosts published LV2 and LADSPA plugins and ships none of its own.
@@ -67,6 +68,7 @@ apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/calculator/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/weather/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/text-editor/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/media/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 

@@ -42,6 +42,7 @@ mod loading_shape_tests;
 pub mod locale;
 #[cfg(feature = "location")]
 pub mod location;
+pub mod media;
 pub mod motion;
 #[cfg(all(test, feature = "testing"))]
 mod motion_stress;

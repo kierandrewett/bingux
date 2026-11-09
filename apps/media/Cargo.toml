@@ -1,0 +1,54 @@
+[package]
+name = "bingux-media-app"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Play music and films"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
+
+# The package is `bingux-media-app` because `bingux-media` is the engine
+# (crates/media). The program and its desktop id are `bingux-media`.
+[[bin]]
+name = "bingux-media"
+path = "src/main.rs"
+
+[features]
+default = []
+# `bingux-media --snapshot DIR` renders the window headlessly to PNG.
+snapshot = ["bingux-ui/testing"]
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+bingux-ui = { path = "../../crates/ui" }
+bingux-media = { path = "../../crates/media" }
+bingux-files = { path = "../../crates/files" }
+
+# Desktop scroll feel; see ../../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../../vendor/freya-winit" }
+freya-core = { path = "../../vendor/freya-core" }
+freya-animation = { path = "../../vendor/freya-animation" }
+freya-components = { path = "../../vendor/freya-components" }
+torin = { path = "../../vendor/torin" }
+winit = { path = "../../vendor/winit" }
+
+# As Files: dependencies and bingux-ui optimised, the app at opt-level 0.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# Panics unwind, in dev and in release (see apps/files/Cargo.toml).
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"
