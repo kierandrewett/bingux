@@ -279,17 +279,20 @@ fn decode_mixed(bytes: &[u8]) -> Option<Decoded> {
     if multibyte == 0 || stray.is_empty() || multibyte < stray.len() {
         return None;
     }
-    let mut detector = chardetng::EncodingDetector::new();
-    detector.feed(&stray, true);
-    let legacy = detector.guess(None, true);
-    let legacy = if legacy == UTF_8 {
+    const MIXED_GUESS_MIN: usize = 64;
+    // A handful of stray bytes says too little to tell scripts apart (two
+    // accented letters read as Hebrew as readily as French), and Latin-1 is
+    // by far the commonest stray; a longer run is guessed from its bytes.
+    let legacy = if stray.len() < MIXED_GUESS_MIN {
         WINDOWS_1252
     } else {
-        legacy
+        let mut detector = chardetng::EncodingDetector::new();
+        detector.feed(&stray, true);
+        detector.guess(None, true)
     };
     // Single-byte encodings only: a stray byte of a multi-byte encoding has
     // no meaning on its own.
-    let legacy = if legacy.is_single_byte() {
+    let legacy = if legacy.is_single_byte() && legacy != UTF_8 {
         legacy
     } else {
         WINDOWS_1252
@@ -490,6 +493,18 @@ mod tests {
         assert_eq!(decoded.text, "Café crème brûlée, naïve façade\n");
         assert_eq!(decoded.format.encoding, WINDOWS_1252);
         assert_eq!(encode(&decoded.text, &decoded.format).unwrap(), bytes);
+    }
+
+    #[test]
+    fn a_few_stray_bytes_read_as_latin1() {
+        let bytes = b"caf\xc3\xa9 written as UTF-8\nand caf\xe9 written as Latin-1\nna\xc3\xafve na\xefve\r\nend\n";
+        let decoded = decode(bytes);
+        assert_eq!(
+            decoded.text,
+            "café written as UTF-8\nand café written as Latin-1\nnaïve naïve\nend\n"
+        );
+        assert_eq!(decoded.mixed, Some(WINDOWS_1252));
+        assert!(decoded.mixed_line_endings);
     }
 
     #[test]
