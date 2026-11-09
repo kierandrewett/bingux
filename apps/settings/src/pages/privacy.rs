@@ -17,6 +17,7 @@ use crate::ui::{
     Group, Overlays, PageHead, ResponseKind, Row, Status, choice_row, dialog, icon_button,
     page_column, primary_button, row, status, switch_row, text_row, use_overlays,
 };
+use bingux_ui::prelude::{i18n_id, tr};
 use bingux_ui::shell::{form_dialog, open_form};
 use bingux_ui::style::*;
 
@@ -33,10 +34,18 @@ const DEVICES: [Device; 3] = [Device::Keyboard, Device::Pointer, Device::Touchsc
 
 /// Rule levels: the stored value, its dropdown key and its label.
 const LEVELS: [(Level, &str, &str); 4] = [
-    (Level::Inherit, "inherit", "Use default"),
-    (Level::Ask, "ask", "Ask"),
-    (Level::Allow, "allow", "Allow"),
-    (Level::Deny, "deny", "Deny"),
+    (
+        Level::Inherit,
+        "inherit",
+        i18n_id!("settings-privacy-level-default"),
+    ),
+    (Level::Ask, "ask", i18n_id!("settings-privacy-level-ask")),
+    (
+        Level::Allow,
+        "allow",
+        i18n_id!("settings-privacy-level-allow"),
+    ),
+    (Level::Deny, "deny", i18n_id!("settings-privacy-level-deny")),
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -78,15 +87,14 @@ enum Step {
 }
 
 fn missing_rule() -> String {
-    "Could not find that rule. Reopen the page and try again.".to_owned()
+    tr!("settings-privacy-rule-missing")
 }
 
 /// Checks the store after an edit, so every write passes the schema.
 fn checked(store: Store) -> Result<Store, String> {
     store.validate().map_err(|error| {
         eprintln!("settings: permission store rejected: {error}");
-        "Could not save the rule. Check that its name is not already used, then try again."
-            .to_owned()
+        tr!("settings-privacy-save-error")
     })?;
     Ok(store)
 }
@@ -130,7 +138,7 @@ fn move_rule(store: &Store, index: usize, step: Step) -> Result<Store, String> {
         Step::Up => index.checked_sub(1),
         Step::Down => Some(index + 1).filter(|target| *target < len),
     }
-    .ok_or_else(|| "Could not move the rule. Reopen the page and try again.".to_owned())?;
+    .ok_or_else(|| tr!("settings-privacy-move-error"))?;
     let mut next = store.clone();
     next.rules.swap(index, target);
     checked(next)
@@ -186,7 +194,7 @@ impl Draft {
     fn to_rule(&self) -> Result<Rule, String> {
         let name = self.name.trim();
         if name.is_empty() {
-            return Err("Enter a name for the rule.".to_owned());
+            return Err(tr!("settings-privacy-name-required"));
         }
         let capabilities: Vec<Capability> = CAPABILITIES
             .iter()
@@ -194,19 +202,19 @@ impl Draft {
             .filter(|capability| self.capabilities.contains(capability))
             .collect();
         if capabilities.is_empty() {
-            return Err("Choose at least one capability.".to_owned());
+            return Err(tr!("settings-privacy-capability-required"));
         }
         let app_id = non_empty(&self.app_id);
         let exe = non_empty(&self.exe);
         let pattern = non_empty(&self.pattern);
         if app_id.is_none() && exe.is_none() && pattern.is_none() {
-            return Err("Enter an app ID, a program path or a pattern.".to_owned());
+            return Err(tr!("settings-privacy-selector-required"));
         }
         if exe
             .as_deref()
             .is_some_and(|path| !Path::new(path).is_absolute())
         {
-            return Err("Start the program path with /.".to_owned());
+            return Err(tr!("settings-privacy-path-absolute"));
         }
         let monitors = if capabilities.iter().any(|c| c.supports_monitors()) {
             split_names(&self.monitors)
@@ -265,21 +273,21 @@ fn toggled<T: PartialEq + Clone>(items: &[T], item: T, on: bool) -> Vec<T> {
     next
 }
 
-fn capability_label(capability: Capability) -> &'static str {
+fn capability_label(capability: Capability) -> String {
     match capability {
-        Capability::ScreenCast => "Screen cast",
-        Capability::RemoteDesktop => "Remote desktop",
-        Capability::InputCapture => "Input capture",
-        Capability::Screenshot => "Screenshot",
-        Capability::Access => "Access",
+        Capability::ScreenCast => tr!("settings-privacy-capability-screen-cast"),
+        Capability::RemoteDesktop => tr!("settings-privacy-capability-remote-desktop"),
+        Capability::InputCapture => tr!("settings-privacy-capability-input-capture"),
+        Capability::Screenshot => tr!("settings-privacy-capability-screenshot"),
+        Capability::Access => tr!("settings-privacy-capability-access"),
     }
 }
 
-fn device_label(device: Device) -> &'static str {
+fn device_label(device: Device) -> String {
     match device {
-        Device::Keyboard => "Keyboard",
-        Device::Pointer => "Pointer",
-        Device::Touchscreen => "Touchscreen",
+        Device::Keyboard => tr!("settings-privacy-device-keyboard"),
+        Device::Pointer => tr!("settings-privacy-device-pointer"),
+        Device::Touchscreen => tr!("settings-privacy-device-touchscreen"),
     }
 }
 
@@ -290,11 +298,14 @@ fn level_key(level: Level) -> &'static str {
         .map_or("inherit", |(_, key, _)| key)
 }
 
-fn level_label(level: Level) -> &'static str {
+fn level_label(level: Level) -> String {
     LEVELS
         .iter()
         .find(|(item, _, _)| *item == level)
-        .map_or("Use default", |(_, _, label)| label)
+        .map_or_else(
+            || tr!("settings-privacy-level-default"),
+            |(_, _, label)| bingux_ui::i18n::text(label),
+        )
 }
 
 fn level_from_key(key: &str) -> Level {
@@ -308,24 +319,30 @@ fn level_from_key(key: &str) -> Level {
 fn rule_summary(rule: &Rule) -> String {
     let mut selectors = Vec::new();
     if let Some(app_id) = &rule.app_id {
-        selectors.push(format!("App {app_id}"));
+        selectors.push(tr!("settings-privacy-selector-app", id = app_id.as_str()));
     }
     if let Some(exe) = &rule.exe {
-        selectors.push(format!("Program {exe}"));
+        selectors.push(tr!(
+            "settings-privacy-selector-program",
+            path = exe.as_str()
+        ));
     }
     if let Some(pattern) = &rule.pattern {
-        selectors.push(format!("Pattern {pattern}"));
+        selectors.push(tr!(
+            "settings-privacy-selector-pattern",
+            pattern = pattern.as_str()
+        ));
     }
-    let capabilities: Vec<&str> = rule
+    let capabilities: Vec<String> = rule
         .capabilities
         .iter()
         .map(|capability| capability_label(*capability))
         .collect();
-    format!(
-        "{} · {} · {}",
-        selectors.join(" and "),
-        capabilities.join(", "),
-        level_label(rule.level)
+    tr!(
+        "settings-privacy-rule-summary",
+        selectors = selectors.join(" and "),
+        capabilities = capabilities.join(", "),
+        level = level_label(rule.level)
     )
 }
 
@@ -370,9 +387,9 @@ fn reload(ctx: Ctx) {
 
 fn open_editor(ctx: Ctx, model: &Model, index: Option<usize>, draft: Draft) {
     let title = if index.is_some() {
-        "Edit rule"
+        tr!("settings-privacy-edit-rule")
     } else {
-        "Add rule"
+        tr!("settings-privacy-add-rule")
     };
     open_form(
         ctx.overlays,
@@ -396,13 +413,17 @@ fn confirm_delete(ctx: Ctx, model: &Model, index: usize) {
     let model = model.clone();
     ctx.overlays.show_dialog(
         dialog(
-            format!("Delete “{name}”?"),
-            "Apps that match this rule use the other rules and the default level.",
+            tr!("settings-privacy-delete-title", name = name.as_str()),
+            tr!("settings-privacy-delete-body"),
         )
-        .cancel("Cancel")
-        .response("Delete", ResponseKind::Destructive, move |_| {
-            apply(ctx, &model, |store| delete_rule(store, index));
-        }),
+        .cancel(tr!("settings-privacy-cancel"))
+        .response(
+            tr!("settings-privacy-delete"),
+            ResponseKind::Destructive,
+            move |_| {
+                apply(ctx, &model, |store| delete_rule(store, index));
+            },
+        ),
     );
 }
 
@@ -438,10 +459,11 @@ impl Component for PrivacyPage {
                 );
                 return page_column()
                     .child(PageHead::new())
-                    .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
-                    .child(status(Status::Info(
-                        "Fix or remove the permissions file, then try again.".to_string(),
-                    )))
+                    .child(
+                        status(Status::Error(e.0))
+                            .action(&tr!("settings-privacy-try-again"), move |_| reload(ctx)),
+                    )
+                    .child(status(Status::Info(tr!("settings-privacy-fix-file"))))
                     .into_element();
             }
         };
@@ -469,46 +491,53 @@ fn defaults_group(data: &Model, ctx: Ctx) -> Group {
         "ask"
     };
     let options = vec![
-        ("ask".to_owned(), "Ask".to_owned()),
-        ("deny".to_owned(), "Deny".to_owned()),
+        ("ask".to_owned(), tr!("settings-privacy-level-ask")),
+        ("deny".to_owned(), tr!("settings-privacy-level-deny")),
     ];
-    let mut group = Group::titled("Default").row(
-        choice_row("Default level", options, selected, move |key: String| {
-            let level = if key == "deny" {
-                Level::Deny
-            } else {
-                Level::Ask
-            };
-            apply(ctx, &model, move |store| with_default(store, level));
-        })
-        .subtitle("Used when no rule applies. Deny refuses every request that no rule allows."),
+    let mut group = Group::titled(&tr!("settings-privacy-default-group")).row(
+        choice_row(
+            tr!("settings-privacy-default-level"),
+            options,
+            selected,
+            move |key: String| {
+                let level = if key == "deny" {
+                    Level::Deny
+                } else {
+                    Level::Ask
+                };
+                apply(ctx, &model, move |store| with_default(store, level));
+            },
+        )
+        .subtitle(tr!("settings-privacy-default-help")),
     );
     if !data.exists {
         group = group.row(
-            row("No permission file yet")
-                .subtitle("Requests use the default level. Saving a rule creates the file."),
+            row(tr!("settings-privacy-no-file")).subtitle(tr!("settings-privacy-no-file-help")),
         );
     }
     group
 }
 
 fn rules_group(data: &Model, ctx: Ctx) -> Group {
-    let mut group = Group::titled("Rules");
+    let mut group = Group::titled(&tr!("settings-privacy-rules-group"));
     if data.store.rules.is_empty() {
-        group = group.row(row("No rules").subtitle(
-            "Requests use the default level. Add a rule to allow or deny a specific app.",
-        ));
+        group = group.row(
+            row(tr!("settings-privacy-no-rules")).subtitle(tr!("settings-privacy-no-rules-help")),
+        );
     }
     for index in 0..data.store.rules.len() {
         group = group.row(rule_row(data, index, ctx));
     }
     let model = data.clone();
     group.row(
-        row("New rule")
-            .subtitle("A matching deny always wins. Otherwise the rule listed last wins.")
-            .trailing(primary_button("Add rule", move |_| {
-                open_editor(ctx, &model, None, Draft::new());
-            })),
+        row(tr!("settings-privacy-new-rule"))
+            .subtitle(tr!("settings-privacy-new-rule-help"))
+            .trailing(primary_button(
+                tr!("settings-privacy-add-rule"),
+                move |_| {
+                    open_editor(ctx, &model, None, Draft::new());
+                },
+            )),
     )
 }
 
@@ -522,7 +551,7 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
             icon_button(Icon::PanUp, move |_| {
                 apply(ctx, &model, |store| move_rule(store, index, Step::Up));
             })
-            .tooltip("Move rule up"),
+            .tooltip(&tr!("settings-privacy-move-up")),
         );
     }
     if index < last {
@@ -531,7 +560,7 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
             icon_button(Icon::PanDown, move |_| {
                 apply(ctx, &model, |store| move_rule(store, index, Step::Down));
             })
-            .tooltip("Move rule down"),
+            .tooltip(&tr!("settings-privacy-move-down")),
         );
     }
     let model = data.clone();
@@ -540,12 +569,12 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
         icon_button(Icon::Pencil, move |_| {
             open_editor(ctx, &model, Some(index), Draft::from_rule(&edit_rule));
         })
-        .tooltip("Edit rule"),
+        .tooltip(&tr!("settings-privacy-edit-rule")),
     );
     let model = data.clone();
     actions = actions.child(
         icon_button(Icon::Delete, move |_| confirm_delete(ctx, &model, index))
-            .tooltip("Delete rule"),
+            .tooltip(&tr!("settings-privacy-delete-rule")),
     );
     row(rule.name.clone())
         .subtitle(rule_summary(&rule))
@@ -622,18 +651,26 @@ impl Component for RuleEditor {
         };
 
         let mut fields = Group::new(None::<String>)
-            .row(text_row("Name", name, |_: String| {}))
+            .row(text_row(
+                tr!("settings-privacy-field-name"),
+                name,
+                |_: String| {},
+            ))
             .row(
-                text_row("App ID", app_id, |_: String| {})
-                    .subtitle("The app ID, such as org.example.Viewer."),
+                text_row(tr!("settings-privacy-field-app-id"), app_id, |_: String| {})
+                    .subtitle(tr!("settings-privacy-field-app-id-help")),
             )
             .row(
-                text_row("Program", exe, |_: String| {})
-                    .subtitle("The full path, such as /usr/bin/viewer."),
+                text_row(tr!("settings-privacy-field-program"), exe, |_: String| {})
+                    .subtitle(tr!("settings-privacy-field-program-help")),
             )
             .row(
-                text_row("Pattern", pattern, |_: String| {})
-                    .subtitle("Use * for any text and ? for one character."),
+                text_row(
+                    tr!("settings-privacy-field-pattern"),
+                    pattern,
+                    |_: String| {},
+                )
+                .subtitle(tr!("settings-privacy-field-pattern-help")),
             );
 
         for capability in CAPABILITIES {
@@ -651,8 +688,12 @@ impl Component for RuleEditor {
 
         if monitors_apply {
             fields = fields.row(
-                text_row("Monitors", monitors, |_: String| {})
-                    .subtitle("Monitor names separated by commas, such as DP-1."),
+                text_row(
+                    tr!("settings-privacy-field-monitors"),
+                    monitors,
+                    |_: String| {},
+                )
+                .subtitle(tr!("settings-privacy-field-monitors-help")),
             );
         }
 
@@ -666,20 +707,24 @@ impl Component for RuleEditor {
                 }));
             }
             fields = fields.row(
-                switch_row("Clipboard", current.clipboard, move |next: bool| {
-                    let mut clipboard = clipboard;
-                    clipboard.set(next);
-                })
-                .subtitle("Remote desktop sessions may use the clipboard."),
+                switch_row(
+                    tr!("settings-privacy-field-clipboard"),
+                    current.clipboard,
+                    move |next: bool| {
+                        let mut clipboard = clipboard;
+                        clipboard.set(next);
+                    },
+                )
+                .subtitle(tr!("settings-privacy-field-clipboard-help")),
             );
         }
 
         let options: Vec<(String, String)> = LEVELS
             .iter()
-            .map(|(_, key, label)| (key.to_string(), label.to_string()))
+            .map(|(_, key, label)| (key.to_string(), bingux_ui::i18n::text(label)))
             .collect();
         fields = fields.row(choice_row(
-            "Level",
+            tr!("settings-privacy-field-level"),
             options,
             level_key(current.level),
             move |key: String| {
@@ -692,16 +737,16 @@ impl Component for RuleEditor {
         if let Some(message) = error.read().clone() {
             form = form.child(status(Status::Error(message)));
         }
-        form_dialog(self.title(), form, "Save", save).stays_open()
+        form_dialog(self.title(), form, tr!("settings-privacy-save"), save).stays_open()
     }
 }
 
 impl RuleEditor {
-    fn title(&self) -> &'static str {
+    fn title(&self) -> String {
         if self.index.is_some() {
-            "Edit rule"
+            tr!("settings-privacy-edit-rule")
         } else {
-            "Add rule"
+            tr!("settings-privacy-add-rule")
         }
     }
 }
@@ -709,6 +754,11 @@ impl RuleEditor {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Unit tests run without `main`, so register the catalogue they assert on.
+    fn catalogue() {
+        bingux_ui::i18n::register(bingux_ui::catalogue!("settings"));
+    }
 
     fn rule(name: &str) -> Rule {
         Rule {
@@ -808,6 +858,7 @@ mod tests {
 
     #[test]
     fn draft_needs_a_name_a_capability_and_a_selector() {
+        catalogue();
         let mut no_name = draft("  ", &[Capability::Screenshot]);
         assert!(no_name.to_rule().is_err());
 
@@ -827,6 +878,7 @@ mod tests {
 
     #[test]
     fn draft_requires_an_absolute_program_path() {
+        catalogue();
         let mut relative = draft("ok", &[Capability::Access]);
         relative.exe = "bin/viewer".to_owned();
         assert_eq!(
@@ -923,6 +975,7 @@ mod tests {
 
     #[test]
     fn rule_summary_names_selectors_capabilities_and_level() {
+        catalogue();
         let mut built = rule("viewer");
         built.exe = Some("/usr/bin/viewer".to_owned());
         built.capabilities = vec![Capability::ScreenCast, Capability::Screenshot];
