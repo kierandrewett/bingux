@@ -64,7 +64,15 @@ fn refresh() -> Result<Vec<Account>, CommandError> {
 }
 
 /// Every cached account, the current user first. Runs on a background thread.
+/// A failure becomes one plain message; the tool's own text goes to the log.
 fn load() -> Result<Vec<Account>, CommandError> {
+    read_accounts().map_err(|error| {
+        eprintln!("settings: could not read accounts: {}", error.0);
+        unexpected()
+    })
+}
+
+fn read_accounts() -> Result<Vec<Account>, CommandError> {
     let current = system::run("id", &["-un"], READ_TIMEOUT)?;
     let listed = busctl_json(
         &["call", ACCOUNTS, ACCOUNTS_PATH, ACCOUNTS, "ListCachedUsers"],
