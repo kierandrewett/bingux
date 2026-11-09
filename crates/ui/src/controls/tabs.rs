@@ -1893,10 +1893,11 @@ impl Component for Tab {
                 }
                 // A mouse selects as it goes down, so the tab can be dragged
                 // at once; a finger selects when it lifts, unless it scrolls
-                // the strip or holds for the menu.
+                // the strip or holds for the menu. A pointer leaves the
+                // keyboard where it was, with the page: only keyboard
+                // navigation moves the focus onto a tab.
                 if !matches!(event.data(), PointerEventData::Touch(_)) {
                     on_select.call(id);
-                    a11y_id.request_focus();
                     if let Some(on_arm) = &on_arm {
                         let at = event.global_location();
                         on_arm.call((id, (at.x as f32, at.y as f32)));
@@ -1915,7 +1916,6 @@ impl Component for Tab {
                         return;
                     }
                     on_select.call(id);
-                    a11y_id.request_focus();
                 }
             })
             .maybe_child(pill.map(|(paint, strength)| {
