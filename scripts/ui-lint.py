@@ -80,6 +80,7 @@ SOURCES = [
     ROOT / "crates/ui/examples",
     ROOT / "apps/settings/src",
     ROOT / "apps/files/src",
+    ROOT / "apps/calendar/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -116,6 +117,9 @@ SKIP_FILES = {
     ROOT / "crates/ui/src/contrast.rs",
     ROOT / "crates/ui/src/contrast_matrix.rs",
     ROOT / "crates/ui/src/charts/palette.rs",
+    # Calendar colours are data (a hex colour another program wrote): this is
+    # where they become colours, with the tints an event is drawn in.
+    ROOT / "crates/ui/src/calendar/palette.rs",
     # The tones of the colour file icons are derived from, and checked against,
     # the raw token colours of every ground a row is drawn on.
     ROOT / "crates/ui/src/files/colour.rs",
@@ -455,7 +459,7 @@ def blocking_problems() -> list[str]:
     return found
 
 
-RESILIENT_APPS = ("bingux-ui", "bingux-settings", "bingux-taxonomy", "bingux-files-app")
+RESILIENT_APPS = ("bingux-ui", "bingux-settings", "bingux-taxonomy", "bingux-files-app", "bingux-calendar")
 
 
 def panic_problems() -> list[str]:
@@ -523,6 +527,9 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/files/search.rs": "a whole row is the button: start or stop the deep search",
     "crates/ui/src/files/address_list.rs": "the address bar's completion list rows",
     "crates/ui/src/files/address_crumbs.rs": "path crumbs, which are navigation, not icon buttons",
+    "crates/ui/src/calendar/month_grid.rs": "a day of the month grid: a cell with a round face and the neutral selection fill, which no library button draws",
+    "crates/ui/src/calendar/month_view.rs": "the month view's day cells and event chips: a cell and a chip fill the way an event does and are not buttons",
+    "crates/ui/src/calendar/time_grid.rs": "the time grid's day headers and bars of whole-day events: parts of one grid, not buttons",
     "crates/ui/src/charts/flame.rs": "chart hit areas",
     "crates/ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
 }

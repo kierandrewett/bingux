@@ -122,7 +122,12 @@ impl TextStyle {
 
     /// [`Self::label`] painted with `fill`, a gradient, instead of the ink: a
     /// line whose end fades out ([`fade_text`](crate::controls::fade_text)).
-    pub fn label_filled(self, tokens: &Tokens, text: impl Into<String>, fill: impl Into<Fill>) -> Label {
+    pub fn label_filled(
+        self,
+        tokens: &Tokens,
+        text: impl Into<String>,
+        fill: impl Into<Fill>,
+    ) -> Label {
         self.label(tokens, text).color(fill)
     }
 
@@ -134,7 +139,11 @@ impl TextStyle {
             .font_weight(self.weight)
             .line_height(self.leading)
             .letter_spacing(self.tracking);
-        let label = if self.mono { label.font_family(mono_family()) } else { label };
+        let label = if self.mono {
+            label.font_family(mono_family())
+        } else {
+            label
+        };
         if self.tabular {
             label.font_tabular()
         } else {
@@ -146,16 +155,18 @@ impl TextStyle {
     pub fn paragraph(self, tokens: &Tokens, text: impl Into<String>) -> Paragraph {
         // A span, not a child: paragraph highlights (search marks) are only
         // painted for the paragraph's own spans.
-        self.paragraph_base(tokens).span(crate::stress::localised(text.into()))
+        self.paragraph_base(tokens)
+            .span(crate::stress::localised(text.into()))
     }
 
     /// A paragraph of runs in different inks: a line of code with its
     /// keywords and strings coloured, a sentence with one word in the accent.
     /// Each run is `(ink, text)`; the paragraph's own style is this one.
     pub fn runs(self, tokens: &Tokens, runs: impl IntoIterator<Item = (Ink, String)>) -> Paragraph {
-        runs.into_iter().fold(self.paragraph_base(tokens), |paragraph, (ink, text)| {
-            paragraph.span(self.in_ink(ink).span(tokens, text))
-        })
+        runs.into_iter()
+            .fold(self.paragraph_base(tokens), |paragraph, (ink, text)| {
+                paragraph.span(self.in_ink(ink).span(tokens, text))
+            })
     }
 
     fn paragraph_base(self, tokens: &Tokens) -> Paragraph {
@@ -165,7 +176,11 @@ impl TextStyle {
             .font_weight(self.weight)
             .line_height(self.leading)
             .letter_spacing(self.tracking);
-        let paragraph = if self.mono { paragraph.font_family(mono_family()) } else { paragraph };
+        let paragraph = if self.mono {
+            paragraph.font_family(mono_family())
+        } else {
+            paragraph
+        };
         if self.tabular {
             paragraph.font_tabular()
         } else {
@@ -181,7 +196,12 @@ impl TextStyle {
 
     /// A span in this style, coloured by a surface paint rather than an ink,
     /// as [`Self::label_in_paint`] does for a label.
-    pub fn span_in_paint(self, tokens: &Tokens, text: impl Into<String>, paint: Paint) -> Span<'static> {
+    pub fn span_in_paint(
+        self,
+        tokens: &Tokens,
+        text: impl Into<String>,
+        paint: Paint,
+    ) -> Span<'static> {
         self.span_in_color(paint.color(tokens), text.into())
     }
 
@@ -191,7 +211,11 @@ impl TextStyle {
             .font_size(self.size.px())
             .font_weight(self.weight)
             .letter_spacing(self.tracking);
-        let span = if self.mono { span.font_family(mono_family()) } else { span };
+        let span = if self.mono {
+            span.font_family(mono_family())
+        } else {
+            span
+        };
         if self.tabular {
             span.font_tabular()
         } else {
@@ -329,6 +353,18 @@ pub const BADGE: TextStyle = TextStyle {
     size: TextSize::Xs,
     weight: FontWeight::SEMI_BOLD,
     ink: Ink::Accent,
+    leading: LEADING,
+    tracking: 0.0,
+    tabular: false,
+    mono: false,
+};
+
+/// The title of an event in a calendar grid: small, so a short event still
+/// shows it, and bold, so it stands out of its tinted block.
+pub const EVENT_TITLE: TextStyle = TextStyle {
+    size: TextSize::Sm,
+    weight: FontWeight::SEMI_BOLD,
+    ink: Ink::Text,
     leading: LEADING,
     tracking: 0.0,
     tabular: false,

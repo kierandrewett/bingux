@@ -13,6 +13,8 @@
 //! - [`quickadd`]: "Lunch with Sam tomorrow 1pm" as an event.
 //! - [`alarm`]: reminders, shown once, through the notification service.
 //! - [`prefs`]: preferences and the locale's week and clock.
+//! - [`watch`]: what a running window needs: ordered writes, a minute clock,
+//!   news of changes by other programs, and reminders.
 
 pub mod alarm;
 pub mod event;
@@ -21,6 +23,7 @@ pub mod prefs;
 pub mod quickadd;
 pub mod recur;
 pub mod store;
+pub mod watch;
 pub mod zone;
 
 pub use chrono;

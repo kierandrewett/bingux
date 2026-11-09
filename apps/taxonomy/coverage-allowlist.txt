@@ -68,3 +68,14 @@ file:chat_icons.rs # ChatWeight and the fork's glyph data for choosing icons; an
 file:stage.rs # staged(), provide_page() and after_page(): when each part of a page mounts, so no pixels of their own; a page looks the same once whole, and every Settings page is the demonstration (tests in mount_tests.rs)
 window_size                # the window's size in logical pixels, a number read by layouts; nothing to show (held by the in-motion suite at scale 2)
 window_size_peek           # window_size for a handler; same
+
+# The calendar views. They are shown running by bingux-calendar (apps/calendar); a taxonomy page with
+# specimens of each is still to be written, so these are excused until then.
+file:calendar/date.rs     # civil dates and clock text for the calendar views: data, no appearance
+file:calendar/layout.rs   # overlap columns, lanes and drag maths of the calendar views: data, no appearance
+file:calendar/palette.rs  # calendar colours and the tints events are drawn in
+file:calendar/month_grid.rs # MonthGrid: seen in bingux-calendar's sidebar; taxonomy specimen not yet written
+file:calendar/month_view.rs # MonthView: seen in bingux-calendar's month view; taxonomy specimen not yet written
+file:calendar/time_grid.rs  # TimeGrid: seen in bingux-calendar's week and day views; taxonomy specimen not yet written
+file:calendar/pickers.rs    # DatePicker and TimePicker: seen in bingux-calendar's editor; taxonomy specimen not yet written
+EVENT_TITLE   # the text style of an event title in the calendar grids; shown by bingux-calendar, no taxonomy specimen yet
