@@ -406,9 +406,11 @@ impl Session {
             self.saved.settings.from.clone(),
             self.saved.settings.to.clone(),
         );
-        let to_unit = category
-            .unit(&to)
-            .ok_or_else(|| CalcError::Unit("That unit is not known.".into()))?;
+        let to_unit = category.unit(&to).ok_or_else(|| {
+            CalcError::Unit(
+                "That unit is not known. Check the spelling or pick one from the list.".into(),
+            )
+        })?;
         let value = match preview(text, &mut self.env, &self.locale) {
             Preview::Value(n) => n,
             Preview::Empty => return Err(CalcError::Incomplete),
@@ -466,7 +468,7 @@ impl Session {
     pub fn rates_note(&self) -> String {
         let date = pretty_date(&self.rates.date);
         match self.rates_origin {
-            RatesOrigin::Fresh => format!("Rates from {date}, European Central Bank"),
+            RatesOrigin::Fresh => format!("Rates from {date}, European Central Bank."),
             RatesOrigin::Cached => format!(
                 "Rates from {date}, European Central Bank. Offline: showing the last download."
             ),

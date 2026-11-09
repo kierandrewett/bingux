@@ -1,7 +1,6 @@
-//! What each mode adds around the display and the keys: the bases and the
+//! What each mode adds around the display and the keys: the base, word and
 //! bits of Programmer, the units of Convert.
 
-use bingux_calc::session::IntOutcome;
 use bingux_calc::units;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
@@ -9,7 +8,11 @@ use freya::prelude::*;
 use crate::model::Calc;
 use crate::pads;
 
-/// Bases, word size and bits.
+/// The rows of the bit grid are shorter than a key of the main pads.
+const BIT_HEIGHT: Dim = Dim::Box7;
+
+/// The base and word controls, and the bits. The value in each base is part
+/// of the display above.
 #[derive(PartialEq)]
 pub struct ProgrammerPanel {
     pub calc: Calc,
@@ -20,35 +23,17 @@ impl Component for ProgrammerPanel {
         let tokens = use_tokens();
         let calc = self.calc.clone();
         calc.watch();
-        let text = calc.field.read().clone();
-        let answer = calc.with(|s| match s.int_preview(&text) {
-            IntOutcome::Value(v) => v,
-            _ => s.last_int(),
-        });
+        let answer = calc.int_answer();
         let (word, base) = calc.with(|s| (s.word(), s.base()));
 
-        let bases = [(16u32, "HEX"), (10, "DEC"), (8, "OCT"), (2, "BIN")];
-        let mut rows: Vec<Element> = bases
+        let bases: Vec<(String, String)> = [(16u32, "HEX"), (10, "DEC"), (8, "OCT"), (2, "BIN")]
             .iter()
-            .map(|(value, name)| {
-                let digits = answer
-                    .rows
-                    .iter()
-                    .find(|(b, _)| b == value)
-                    .map(|(_, d)| d.clone())
-                    .unwrap_or_default();
-                let pick = calc.clone();
-                let target = *value;
-                row(*name)
-                    .mono_value(digits)
-                    .selected(base == *value)
-                    .on_press(move |_: ()| pick.set_base(target))
-                    .into()
-            })
+            .map(|(value, name)| (value.to_string(), name.to_string()))
             .collect();
-        if let Some(character) = answer.character {
-            rows.push(row("Character").value(character.to_string()).into());
-        }
+        let base_calc = calc.clone();
+        let base_switch = segmented(bases, &base.to_string(), move |value: String| {
+            base_calc.set_base(value.parse().unwrap_or(10))
+        });
 
         let sizes: Vec<(String, String)> = [8u32, 16, 32, 64]
             .iter()
@@ -57,32 +42,65 @@ impl Component for ProgrammerPanel {
         let size_calc = calc.clone();
         let signed_calc = calc.clone();
         let (bits, signed) = (word.bits, word.signed);
-        let word_rows: Vec<Element> = vec![
-            row("Word size")
-                .trailing(segmented(sizes, &bits.to_string(), move |value: String| {
-                    let bits = value.parse().unwrap_or(64);
-                    size_calc.set_word(bits, signed);
-                }))
-                .into(),
-            switch_row("Signed", signed, move |on: bool| {
+        let word_switch = segmented(sizes, &bits.to_string(), move |value: String| {
+            let bits = value.parse().unwrap_or(64);
+            size_calc.set_word(bits, signed);
+        });
+        let signed_switch = hstack(S2)
+            .child(bingux_ui::typography::BODY.label(&tokens, "Signed"))
+            .child(switch(signed, move |on: bool| {
                 signed_calc.set_word(bits, on)
-            })
-            .into(),
-        ];
+            }));
+
+        let controls = if is_compact() {
+            rect()
+                .width(Size::fill())
+                .tw(&tokens, &[flex_col(), gap(S2)])
+                .child(base_switch.fill())
+                .child(
+                    rect()
+                        .width(Size::fill())
+                        .tw(
+                            &tokens,
+                            &[
+                                flex_row(),
+                                items(Align::Center),
+                                justify(Align::Between),
+                                grow_children(),
+                            ],
+                        )
+                        .child(word_switch)
+                        .child(signed_switch),
+                )
+        } else {
+            rect()
+                .width(Size::fill())
+                .tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        items(Align::Center),
+                        justify(Align::Between),
+                        grow_children(),
+                    ],
+                )
+                .child(base_switch)
+                .child(word_switch)
+                .child(signed_switch)
+        };
 
         let columns = pads::bit_columns(word);
         let rows_of_bits = (word.bits as usize).div_ceil(columns as usize);
         let grid_height =
-            Dim::Box9.px() * rows_of_bits as f32 + S1.px() * (rows_of_bits as f32 - 1.0).max(0.0);
+            BIT_HEIGHT.px() * rows_of_bits as f32 + S1.px() * (rows_of_bits as f32 - 1.0).max(0.0);
         let bit_pad = keypad(columns, pads::bit_keys(&calc, &answer.bits))
             .dense()
             .refocus(calc.field_id);
 
         rect()
             .width(Size::fill())
-            .tw(&tokens, &[flex_col(), gap(S3)])
-            .child(Group::new(None::<String>).rows(rows))
-            .child(Group::new(None::<String>).rows(word_rows))
+            .tw(&tokens, &[flex_col(), gap(S2)])
+            .child(controls)
             .child(
                 rect()
                     .width(Size::fill())
@@ -167,11 +185,13 @@ impl Component for ConvertPanel {
                         keypad(
                             1,
                             vec![
-                                keypad_key("\u{2194}\u{fe0e}", move |_: ()| {
+                                keypad_key("Swap", move |_: ()| {
                                     swap_calc.with(|s| s.swap_units());
                                     swap_calc.changed();
                                 })
+                                .icon(Icon::Swap)
                                 .name("Swap units")
+                                .tooltip("Swap units")
                                 .tone(KeyTone::Plain),
                             ],
                         )

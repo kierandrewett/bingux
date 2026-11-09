@@ -227,7 +227,7 @@ impl Num {
     pub fn from_digits(negative: bool, digits: &str, places: usize, exp10: i64) -> Result<Num> {
         let magnitude = BigInt::parse_bytes(digits.as_bytes(), 10).ok_or(CalcError::Syntax {
             at: 0,
-            message: "That is not a number.".into(),
+            message: "That is not a number. Check the digits.".into(),
         })?;
         let scale = exp10 - places as i64;
         if scale.unsigned_abs() > 200_000 {

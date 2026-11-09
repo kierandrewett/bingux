@@ -186,7 +186,8 @@ impl Calc {
         self.save();
     }
 
-    fn save(&self) {
+    /// Write the saved state in the background.
+    pub fn save(&self) {
         let saved = self.with(|s| s.saved.clone());
         if let Some(path) = store::state_path() {
             background_then(move || store::save_saved(&path, &saved), |_| {});
@@ -407,6 +408,17 @@ impl Calc {
 
     // ---- what is shown -----------------------------------------------------
 
+    /// The value Programmer shows in every base and as bits: what is typed
+    /// when it reads, otherwise the last answer.
+    pub fn int_answer(&self) -> bingux_calc::session::IntAnswer {
+        self.watch();
+        let text = self.field.read().clone();
+        self.with(|s| match s.int_preview(&text) {
+            IntOutcome::Value(v) => v,
+            _ => s.last_int(),
+        })
+    }
+
     /// The readout of Basic and Scientific: the live value of what is typed,
     /// or the last answer when nothing is.
     pub fn shown(&self) -> Shown {
@@ -444,9 +456,10 @@ impl Calc {
                         text: v.display.clone(),
                         copy: v.value.to_string(),
                         spoken: v.display,
-                        note: v
-                            .overflow
-                            .then(|| "The result does not fit the word size.".to_string()),
+                        note: v.overflow.then(|| {
+                            "The result does not fit the word size. Choose a larger size."
+                                .to_string()
+                        }),
                         live: true,
                     },
                     IntOutcome::Empty => self.last_shown(),
