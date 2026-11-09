@@ -21,8 +21,8 @@ use crate::pages::bingux_config;
 use crate::routes;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
-    Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column, row,
-    search_field, skeleton_caption, skeleton_row, status, stepper, styled_label, switch_row,
+    Group, Icon, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
+    row, search_field, skeleton_caption, skeleton_row, status, stepper, styled_label, switch_row,
     typography, use_overlays, use_page_busy,
 };
 use bingux_ui::prelude::use_router;
@@ -696,6 +696,8 @@ impl Component for DateTimePage {
         // Shown only while "Set automatically" is off, so it needs no subtitle
         // or disabled state of its own.
         let time_row = row("Set date and time")
+            .leading(Icon::Clock)
+            .navigates()
             .on_press(move |_| open_date_sheet(form, now))
             .context_menu(vec![menu_item("Set date and time…", move |_| {
                 open_date_sheet(form, now)

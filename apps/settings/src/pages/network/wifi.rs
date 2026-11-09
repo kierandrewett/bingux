@@ -1035,9 +1035,12 @@ impl Component for WifiNetworkPage {
         }
         if let Some(saved) = profile {
             let forget = saved.clone();
-            actions.push(strip_action(Icon::UserTrash, "Forget", move |_| {
-                ui.confirm_forget(&forget, true)
-            }));
+            actions.push(
+                strip_action(Icon::UserTrash, "Forget", move |_| {
+                    ui.confirm_forget(&forget, true)
+                })
+                .destructive(),
+            );
         }
 
         let mut blocks = vec![hero];

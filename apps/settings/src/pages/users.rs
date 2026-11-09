@@ -16,8 +16,9 @@ use crate::system::{
 use crate::theme::Tokens;
 use crate::ui::{
     Group, Overlays, PageHead, PopupAction, PopupActions, Status, Window, action_button, avatar,
-    caption, form_row, heading, menu_item, page_column, popup, popup_column, row, skeleton_rows,
-    skeleton_shape, status, text_field, use_overlays, use_popup_actions, use_tokens, use_window,
+    caption, form_field, form_row, heading, menu_item, page_column, popup, popup_column, row,
+    skeleton_rows, skeleton_shape, status, text_field, use_overlays, use_popup_actions, use_tokens,
+    use_window,
 };
 use bingux_ui::motion::reveal_block_if;
 use bingux_ui::prelude::{Router, Target, use_router};
@@ -514,9 +515,12 @@ impl Component for PasswordBody {
                 on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
             }),
         });
-        let current = text_field(sheet.current, move |_: String| sheet.submit(window)).password();
-        let new = text_field(sheet.new, move |_: String| sheet.submit(window)).password();
-        let confirm = text_field(sheet.confirm, move |_: String| sheet.submit(window)).password();
+        let current = form_field("Current", sheet.current)
+            .password()
+            .on_submit(move |_: ()| sheet.submit(window));
+        let new = form_field("New", sheet.new)
+            .password()
+            .on_submit(move |_: ()| sheet.submit(window));
         let error = sheet.error.read().clone();
         let busy = *sheet.busy.read();
         let mismatch = {
@@ -524,14 +528,15 @@ impl Component for PasswordBody {
             let confirm_text = sheet.confirm.read();
             !confirm_text.is_empty() && *confirm_text != *new_text
         };
-        let mut group = Group::new(None::<String>)
+        let confirm = form_field("Retype", sheet.confirm)
+            .password()
+            .error(mismatch.then(|| "The new passwords do not match.".to_string()))
+            .on_submit(move |_: ()| sheet.submit(window));
+        let group = Group::new(None::<String>)
             .description("Enter your current password, then the new one twice.")
-            .row(form_row("Current", current))
-            .row(form_row("New", new))
-            .row(form_row("Retype", confirm));
-        if mismatch {
-            group = group.footer("The new passwords do not match.");
-        }
+            .row(current)
+            .row(new)
+            .row(confirm);
         popup_column()
             .child(group)
             .child(reveal_block_if(
