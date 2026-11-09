@@ -869,7 +869,7 @@ impl Component for PowerPage {
                 ("nothing", "Do nothing"),
                 ("suspend", "Suspend"),
                 ("hibernate", "Hibernate"),
-                ("interactive", "Show power off dialog"),
+                ("interactive", "Ask what to do"),
                 ("shutdown", "Power off"),
             ]
             .into_iter()
@@ -879,7 +879,7 @@ impl Component for PowerPage {
                 options.push((current.clone(), sentence(&current)));
             }
             page = page.child(Group::titled("Power button").row(choice_row(
-                "When the power button is pressed",
+                "When pressed",
                 options,
                 &picked(picks, "power-button", &current),
                 move |key: String| {
