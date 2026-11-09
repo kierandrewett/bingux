@@ -578,6 +578,45 @@ ui-files-place-remove-bookmark = Remove from bookmarks
 ui-files-place-add-bookmark = Add to bookmarks
 ui-files-place-properties = Properties
 
+# Why a command is greyed out. The reason shows in the status line.
+ui-files-action-nothing-made-in-trash = Nothing can be made in the Trash.
+ui-files-action-nothing-to-paste = There is nothing to paste.
+ui-files-action-paste-in-trash-folder = Nothing can be put inside a folder in the Trash.
+ui-files-action-no-folder = Open a folder first.
+ui-files-action-select-one-to-open = Select one item to open it.
+ui-files-action-select-one-file-to-choose = Select one file to choose how to open it.
+ui-files-action-only-folders-new-tab = Only folders open in a new tab.
+ui-files-action-no-archive-tool = No archive tool is installed.
+ui-files-action-archive-tool-missing = That archive tool is not installed.
+ui-files-action-nothing-to-select = There is nothing to select.
+ui-files-action-trash-empty = The Trash is empty.
+ui-files-action-nothing-to-undo = There is nothing to undo.
+
+# The status line after an action. $app (String) is the app's name, $error (String) why it failed.
+ui-files-action-could-not-start = Could not start { $app }: { $error }.
+# $count (Number) - how many paths were copied
+ui-files-action-copied-paths = { $count ->
+    [one] Path copied.
+   *[other] Paths copied.
+}
+# $count (Number) - how many locations were copied
+ui-files-action-copied-locations = { $count ->
+    [one] Location copied.
+   *[other] Locations copied.
+}
+ui-files-action-clipboard-unreachable = Could not reach the clipboard.
+ui-files-action-bookmarks-failed = Could not change the bookmarks: { $error }.
+ui-files-action-untitled-folder = Untitled folder
+ui-files-action-untitled-file = Untitled file
+ui-files-action-create-failed = Could not create it: { $error }
+# $name (String) - the name of one item, shown in curly quotes
+ui-files-action-quoted-name = “{ $name }”
+# $count (Number) - how many items were picked
+ui-files-action-item-count = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+
 # The Extract dialog: the archive, where its files go, and what happens to a clash.
 # $name (String) - the archive or folder name, shown in curly quotes
 ui-extract-quoted-name = “{ $name }”
