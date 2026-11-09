@@ -49,11 +49,12 @@ struct Row {
 }
 
 /// The rows of every open menu or list in `tree`, in tree order: the text,
-/// whether it can be picked, and its visible box.
+/// whether it can be picked, and its visible box. A menu's rows are `MenuItem`s; a
+/// dropdown's are `ListBoxOption`s, as the WAI-ARIA combo box pattern has them.
 fn listed(tree: &Tree, window: Area) -> Vec<(String, bool, Area)> {
     tree.nodes
         .iter()
-        .filter(|node| node.a11y.role == "MenuItem" && !node.used.hidden)
+        .filter(|node| matches!(node.a11y.role.as_str(), "MenuItem" | "ListBoxOption") && !node.used.hidden)
         .filter(|node| matches!(node.a11y.component.as_deref(), Some("MenuRow" | "DropdownItem")))
         .filter_map(|node| {
             let text = text_in(tree, node)?;
