@@ -218,8 +218,8 @@ impl Component for ColourButton {
                         if !press.tap(&event) {
                             return;
                         }
-                        toggle();
                         press_focus(&core, a11y_id);
+                        toggle();
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {

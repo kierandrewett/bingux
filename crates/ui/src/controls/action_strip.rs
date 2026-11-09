@@ -144,8 +144,8 @@ impl Component for StripCell {
                     .on_pointer_down(move |_: Event<PointerEventData>| pressing.set(true))
                     .on_global_pointer_up(move |_| pressing.set_if_modified(false))
                     .on_press(move |_: Event<PressEventData>| {
-                        on_press.call(());
                         press_focus(&core, a11y_id);
+                        on_press.call(());
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {

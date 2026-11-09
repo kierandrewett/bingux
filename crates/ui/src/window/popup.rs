@@ -22,6 +22,7 @@ use freya::prelude::*;
 use super::{PopupWindow, Window, WindowLike, WindowManager};
 use crate::nav::Location;
 use crate::controls::button::{action_button, icon_button, primary_button};
+use crate::focus::ScopeClosing;
 use crate::icons::Icon;
 use crate::layout::divider;
 use crate::motion::use_presence;
@@ -484,6 +485,8 @@ impl Component for PopupFrame {
         let window = PopupWindow { manager, id };
         use_provide_context(move || Window::Popup(window));
         use_provide_context(move || overlays);
+        let scope_closing = ScopeClosing(entry.closing);
+        use_provide_context(move || scope_closing.clone());
         let a11y_id = use_a11y();
 
         let closing = *entry.closing.read();

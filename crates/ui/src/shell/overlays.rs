@@ -133,6 +133,13 @@ impl Overlays {
         self.dialog.set(Some(dialog));
     }
 
+    /// The `closing` flag of the open dialog: true while it fades out. A focus
+    /// scope in the dialog reads it to tell its own close from focus an app
+    /// moved afterwards.
+    pub(crate) fn dialog_closing_state(self) -> State<bool> {
+        self.dialog_closing
+    }
+
     /// Whether a dialog is open or fading out. A component that floats its
     /// own card over the page, such as a hover card, stays hidden meanwhile.
     pub fn dialog_open(self) -> bool {

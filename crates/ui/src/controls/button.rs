@@ -271,8 +271,8 @@ impl Component for ActionButton {
                         if !press.tap(&event) {
                             return;
                         }
-                        on_press.call(());
                         press_focus(&core, a11y_id);
+                        on_press.call(());
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {
@@ -406,8 +406,8 @@ impl Component for RowButton {
                         if !press.tap(&event) {
                             return;
                         }
-                        on_press.call(());
                         press_focus(&core, a11y_id);
+                        on_press.call(());
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {
@@ -750,8 +750,8 @@ impl Component for IconButton {
                         if hold.fired() || !press.tap(&event) {
                             return;
                         }
-                        on_press.call(());
                         press_focus(&core, focus_after);
+                        on_press.call(());
                     })
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if is_activation_key(&event.key) {
