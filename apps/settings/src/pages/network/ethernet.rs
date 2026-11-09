@@ -28,13 +28,16 @@ use crate::ui::{
     row_button, status, strip_action, switch, use_popup_actions, use_tokens, use_window,
 };
 use bingux_ui::controls::form::validate::Check;
-use bingux_ui::prelude::Target;
+use bingux_ui::prelude::{Target, tr};
 
 /// The title of a wired device's row and page: its profile's name, or `Ethernet (enp42s0)`. A
 /// profile name that two devices share gets the interface too, so no two rows read alike.
 pub fn title_of(ov: &Overview, device: &Device) -> String {
     if !device.has_connection() {
-        return format!("Ethernet ({})", device.name);
+        return tr!(
+            "network-ethernet-title-unnamed",
+            device = device.name.as_str()
+        );
     }
     let shared = ov
         .ethernet_devices()
@@ -42,7 +45,11 @@ pub fn title_of(ov: &Overview, device: &Device) -> String {
         .count()
         > 1;
     if shared {
-        format!("{} ({})", device.connection, device.name)
+        tr!(
+            "network-ethernet-title-shared",
+            connection = device.connection.as_str(),
+            device = device.name.as_str()
+        )
     } else {
         device.connection.clone()
     }
@@ -83,7 +90,12 @@ fn link_line(device: &Device, pending: Option<bool>) -> String {
     let word = link_word(device, pending);
     match device.speed {
         Some(speed) if pending.is_none() && device.connected() && !unplugged(device) => {
-            format!("{word} · {}", speed_text(speed))
+            let speed = speed_text(speed);
+            tr!(
+                "network-link-with-speed",
+                word = word.as_str(),
+                speed = speed.as_str()
+            )
         }
         _ => word,
     }
@@ -92,18 +104,22 @@ fn link_line(device: &Device, pending: Option<bool>) -> String {
 /// What the link is doing, in one word or two: `Connected`, `Cable unplugged`, `Connecting`.
 fn link_word(device: &Device, pending: Option<bool>) -> String {
     if let Some(on) = pending {
-        return if on { "Connecting" } else { "Disconnecting" }.to_string();
+        return if on {
+            tr!("network-link-connecting")
+        } else {
+            tr!("network-link-disconnecting")
+        };
     }
     if device.state.starts_with("connecting") || device.state.starts_with("deactivating") {
         return capitalise(device.state.split(' ').next().unwrap_or(&device.state));
     }
     if unplugged(device) {
-        return "Cable unplugged".to_string();
+        return tr!("network-link-cable-unplugged");
     }
     if device.connected() {
-        return "Connected".to_string();
+        return tr!("network-link-connected");
     }
-    "Not connected".to_string()
+    tr!("network-link-not-connected")
 }
 
 /// A row's line: link state, then the address when there is one.
@@ -115,7 +131,11 @@ fn row_subtitle(device: &Device) -> String {
 fn with_address(device: &Device, state: String) -> String {
     let address = device.address4();
     if device.connected() && !address.is_empty() {
-        format!("{state} · {address}")
+        tr!(
+            "network-link-with-address",
+            state = state.as_str(),
+            address = address.as_str()
+        )
     } else {
         state
     }
@@ -130,10 +150,10 @@ fn set_link(ctx: NetCtx, device: String, on: bool) {
             .map_err(|error| {
                 CommandError(plain(
                     &error.0,
-                    if on {
-                        "Could not connect. Check the cable and try again."
+                    &if on {
+                        tr!("network-ethernet-error-connect")
                     } else {
-                        "Could not disconnect. Try again."
+                        tr!("network-ethernet-error-disconnect")
                     },
                 ))
             })
@@ -199,7 +219,7 @@ pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
                 Element::from(
                     row(title_of(ov, device))
                         .leading(device_icon(device.kind))
-                        .subtitle("Cable unplugged")
+                        .subtitle(tr!("network-link-cable-unplugged"))
                         .navigates()
                         .on_press(move |_| ctx.router.open(route.clone())),
                 )
@@ -208,13 +228,13 @@ pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
         shown.push(Element::from(
             expander_row(
                 if spare.len() == 1 {
-                    "1 other wired adapter".to_string()
+                    tr!("network-ethernet-other-one")
                 } else {
-                    format!("{} other wired adapters", spare.len())
+                    tr!("network-ethernet-other-many", count = spare.len())
                 },
                 children,
             )
-            .subtitle("Cable unplugged"),
+            .subtitle(tr!("network-link-cable-unplugged")),
         ));
     }
     shown
@@ -225,14 +245,22 @@ fn device_menu(ctx: NetCtx, device: &Device, route: Target) -> Vec<MenuItem> {
     let name = device.name.clone();
     let connected = shown_connected(device);
     let toggle = if connected {
-        menu_item("Disconnect", move |_| set_link(ctx, name.clone(), false)).icon(Icon::WindowClose)
+        menu_item(tr!("network-ethernet-menu-disconnect"), move |_| {
+            set_link(ctx, name.clone(), false)
+        })
+        .icon(Icon::WindowClose)
     } else {
-        menu_item("Connect", move |_| set_link(ctx, name.clone(), true)).icon(Icon::NetworkWired)
+        menu_item(tr!("network-ethernet-menu-connect"), move |_| {
+            set_link(ctx, name.clone(), true)
+        })
+        .icon(Icon::NetworkWired)
     };
     vec![
         toggle,
-        menu_item("Settings", move |_| ctx.router.open(route.clone()))
-            .icon(Icon::PreferencesSystem),
+        menu_item(tr!("network-ethernet-menu-settings"), move |_| {
+            ctx.router.open(route.clone())
+        })
+        .icon(Icon::PreferencesSystem),
     ]
 }
 
@@ -512,10 +540,9 @@ fn act(
     background_then(work, move |result| {
         match result {
             Ok(_) => then(),
-            Err(error) => ctx.overlays.toast(plain(
-                &error.0,
-                "Could not change the connection. Try again.",
-            )),
+            Err(error) => ctx
+                .overlays
+                .toast(plain(&error.0, &tr!("network-ethernet-error-change"))),
         }
         ctx.reload();
         reload_profiles(&name, &hwaddr);
@@ -527,27 +554,31 @@ fn act(
 fn confirm_delete(ctx: NetCtx, device: Device, name: String, uuid: Option<String>, leave: bool) {
     ctx.overlays.show_dialog(
         dialog(
-            format!("Delete “{name}”?"),
-            "This removes the profile and its saved settings.",
+            tr!("network-ethernet-delete-title", name = name.as_str()),
+            tr!("network-ethernet-delete-body"),
         )
-        .cancel("Cancel")
+        .cancel(tr!("network-cancel"))
         .default_action(CANCEL_ID)
-        .response("Delete", ResponseKind::Destructive, move |_| {
-            let (kind, target) = match &uuid {
-                Some(uuid) => ("uuid", uuid.clone()),
-                None => ("id", name.clone()),
-            };
-            act(
-                ctx,
-                &device,
-                move || nmcli(&["connection", "delete", kind, &target], CONNECT),
-                move || {
-                    if leave {
-                        ctx.router.pop();
-                    }
-                },
-            );
-        }),
+        .response(
+            tr!("network-delete"),
+            ResponseKind::Destructive,
+            move |_| {
+                let (kind, target) = match &uuid {
+                    Some(uuid) => ("uuid", uuid.clone()),
+                    None => ("id", name.clone()),
+                };
+                act(
+                    ctx,
+                    &device,
+                    move || nmcli(&["connection", "delete", kind, &target], CONNECT),
+                    move || {
+                        if leave {
+                            ctx.router.pop();
+                        }
+                    },
+                );
+            },
+        ),
     );
 }
 
@@ -574,10 +605,10 @@ fn facts_group(ctx: NetCtx, device: &Device, owner: Owner) -> Group {
     if device.connected() && !unplugged(device) {
         let address = device.address4();
         if !address.is_empty() {
-            group = group.row(row("IP address").technical_value(address));
+            group = group.row(row(tr!("network-facts-ip-address")).technical_value(address));
         }
         if let Some(speed) = device.speed {
-            group = group.row(row("Speed").value(speed_text(speed)));
+            group = group.row(row(tr!("network-facts-speed")).value(speed_text(speed)));
         }
     }
     let connection = owner.connection_name().to_string();
@@ -622,23 +653,31 @@ impl Component for EthernetPage {
         let link = {
             let name = device.name.clone();
             if shown_connected(&device) {
-                strip_action(Icon::WindowClose, "Disconnect", move |_| {
-                    set_link(ctx, name.clone(), false)
-                })
+                strip_action(
+                    Icon::WindowClose,
+                    tr!("network-ethernet-disconnect"),
+                    move |_| set_link(ctx, name.clone(), false),
+                )
             } else {
                 let (device, uuid) = (device.clone(), current.uuid.clone());
-                strip_action(Icon::NetworkWired, "Connect", move |_| {
-                    use_profile_now(ctx, &device, "uuid", uuid.clone())
-                })
+                strip_action(
+                    Icon::NetworkWired,
+                    tr!("network-ethernet-connect"),
+                    move |_| use_profile_now(ctx, &device, "uuid", uuid.clone()),
+                )
                 .enabled(usable)
             }
         };
         let mut actions: Vec<StripAction> = vec![link];
         if profiles.len() > 1 {
             let (device, name, uuid) = (device.clone(), current.name.clone(), current.uuid.clone());
-            actions.push(strip_action(Icon::UserTrash, "Delete", move |_| {
-                confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
-            }));
+            actions.push(strip_action(
+                Icon::UserTrash,
+                tr!("network-delete"),
+                move |_| {
+                    confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
+                },
+            ));
         }
 
         let mut blocks = vec![
@@ -686,9 +725,17 @@ fn profile_group(
     let list = routes::ethernet_profiles(&device.name.clone());
     Element::from(
         Group::new(None::<String>)
-            .row(choice_row("Profile", options, &current.name, choose).enabled(!unplugged(device)))
             .row(
-                row("Manage profiles")
+                choice_row(
+                    tr!("network-ethernet-profile"),
+                    options,
+                    &current.name,
+                    choose,
+                )
+                .enabled(!unplugged(device)),
+            )
+            .row(
+                row(tr!("network-ethernet-manage-profiles"))
                     .navigates()
                     .on_press(move |_| ctx.router.open(list.clone())),
             ),
@@ -700,19 +747,21 @@ fn unconfigured_page(ctx: NetCtx, tokens: crate::ui::Tokens, wired: &Wired) -> E
     let device = wired.device.clone();
     let connect = {
         let name = device.name.clone();
-        strip_action(Icon::NetworkWired, "Connect", move |_| {
-            set_link(ctx, name.clone(), true)
-        })
+        strip_action(
+            Icon::NetworkWired,
+            tr!("network-ethernet-connect"),
+            move |_| set_link(ctx, name.clone(), true),
+        )
         .enabled(!unplugged(&device) && !shown_connected(&device))
     };
     let mut facts = Group::new(None::<String>);
     if device.connected() {
         let address = device.address4();
         if !address.is_empty() {
-            facts = facts.row(row("IP address").technical_value(address));
+            facts = facts.row(row(tr!("network-facts-ip-address")).technical_value(address));
         }
         if let Some(speed) = device.speed {
-            facts = facts.row(row("Speed").value(speed_text(speed)));
+            facts = facts.row(row(tr!("network-facts-speed")).value(speed_text(speed)));
         }
     }
     let mut page = page_column()
@@ -746,7 +795,7 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile, in_use: boo
         let mut items = Vec::new();
         if !in_use {
             items.push(
-                menu_item("Use this profile", {
+                menu_item(tr!("network-ethernet-use-profile"), {
                     let connect = connect.clone();
                     move |_| connect(())
                 })
@@ -754,14 +803,16 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile, in_use: boo
             );
             let open = route.clone();
             items.push(
-                menu_item("Open", move |_| ctx.router.open(open.clone()))
-                    .icon(Icon::PreferencesSystem),
+                menu_item(tr!("network-ethernet-open"), move |_| {
+                    ctx.router.open(open.clone())
+                })
+                .icon(Icon::PreferencesSystem),
             );
             items.push(menu_separator());
         }
         let (device, name, uuid) = (device.clone(), profile.name.clone(), profile.uuid.clone());
         items.push(
-            menu_item("Delete", move |_| {
+            menu_item(tr!("network-delete"), move |_| {
                 confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
             })
             .icon(Icon::UserTrash)
@@ -774,13 +825,13 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile, in_use: boo
         .selected(in_use)
         .context_menu(menu);
     if in_use {
-        line = line.subtitle("In use");
+        line = line.subtitle(tr!("network-ethernet-in-use"));
     } else {
         line = line
             .navigates()
             .on_press(move |_| ctx.router.open(route.clone()));
         if usable {
-            line = line.trailing(row_button("Use", connect));
+            line = line.trailing(row_button(tr!("network-ethernet-use"), connect));
         }
     }
     line.into()
@@ -811,7 +862,7 @@ impl Component for ProfilesPage {
                     .child(head)
                     .child(status(Status::Error(plain(
                         &error.0,
-                        "Could not read the connection profiles. Try again.",
+                        &tr!("network-ethernet-profiles-error"),
                     ))))
                     .into();
             }
@@ -865,7 +916,7 @@ impl Component for AddProfileRow {
             Found::Device(device) | Found::Loading(device) => device,
             _ => placeholder_device(&self.device),
         };
-        row("Add profile…")
+        row(tr!("network-ethernet-add-profile"))
             .leading(Icon::ListAdd)
             .on_press(move |_| open_new_profile(ctx, &device, taken.clone(), new_name, new_error))
     }
@@ -884,7 +935,7 @@ fn open_new_profile(
     error.set(None);
     ctx.window.open(
         popup(
-            "New profile",
+            tr!("network-profile-new-title"),
             NewProfileBody {
                 ctx,
                 device: device.clone(),
@@ -915,7 +966,7 @@ impl NewProfileBody {
             return;
         }
         if self.taken.contains(&name) {
-            error.set(Some("Use a name that no other profile has.".to_string()));
+            error.set(Some(tr!("network-profile-name-taken")));
             return;
         }
         window.close();
@@ -955,7 +1006,7 @@ impl Component for NewProfileBody {
         let press = self.clone();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Add".into(),
+                label: tr!("network-add").into(),
                 enabled: !self.name.read().trim().is_empty(),
                 on_press: EventHandler::new(move |_: ()| press.add(window)),
             }),
@@ -963,8 +1014,8 @@ impl Component for NewProfileBody {
         let submit = self.clone();
         popup_column().child(
             Group::new(None::<String>).row(
-                form_field("Name", self.name)
-                    .placeholder("Office")
+                form_field(tr!("network-profile-name-label"), self.name)
+                    .placeholder(tr!("network-profile-name-placeholder"))
                     .error(self.error.read().clone())
                     .validate(name_check)
                     .autofocus()
@@ -976,7 +1027,7 @@ impl Component for NewProfileBody {
 
 fn name_check(text: &str) -> Check {
     if text.trim().is_empty() {
-        Err("Enter a name.".to_string())
+        Err(tr!("network-profile-name-empty"))
     } else {
         Ok(())
     }
@@ -1028,14 +1079,16 @@ impl Component for ProfilePage {
         let usable = !unplugged(&device);
         let use_action = {
             let (device, name) = (device.clone(), name.clone());
-            strip_action(Icon::NetworkWired, "Use this profile", move |_| {
-                use_profile_now(ctx, &device, "id", name.clone())
-            })
+            strip_action(
+                Icon::NetworkWired,
+                tr!("network-ethernet-use-profile"),
+                move |_| use_profile_now(ctx, &device, "id", name.clone()),
+            )
             .enabled(usable)
         };
         let delete = {
             let (device, name, uuid) = (device.clone(), name.clone(), uuid.clone());
-            strip_action(Icon::UserTrash, "Delete", move |_| {
+            strip_action(Icon::UserTrash, tr!("network-delete"), move |_| {
                 confirm_delete(ctx, device.clone(), name.clone(), uuid.clone(), true)
             })
         };
@@ -1045,9 +1098,9 @@ impl Component for ProfilePage {
             in_use: false,
         };
         let state = if usable {
-            "Not in use".to_string()
+            tr!("network-ethernet-not-in-use")
         } else {
-            "Cable unplugged".to_string()
+            tr!("network-link-cable-unplugged")
         };
         let open = routes::section(&owner.clone(), &Section::Usage);
         veiled(
@@ -1126,7 +1179,10 @@ impl Component for WiredSection {
             .into();
         }
         let extra = (section == Section::Advanced).then(|| {
-            Element::from(Group::titled("Profiles").row(Element::from(AddProfileRow { device })))
+            Element::from(
+                Group::titled(&tr!("network-ethernet-profiles-title"))
+                    .row(Element::from(AddProfileRow { device })),
+            )
         });
         SectionPage {
             owner,

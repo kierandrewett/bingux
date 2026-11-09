@@ -542,17 +542,24 @@ fn family_group(title: &str, family: &Family, with_addresses: bool) -> Option<El
         return None;
     }
     let mut rows: Vec<Element> = Vec::new();
-    rows.extend(fact("Method", &family.method));
+    rows.extend(fact(tr!("network-facts-method"), &family.method));
     if with_addresses {
-        list_facts(&mut rows, "Address", &family.addresses);
+        list_facts(&mut rows, &tr!("network-facts-address"), &family.addresses);
     }
-    rows.extend(fact("Gateway", &family.gateway));
-    list_facts(&mut rows, "DNS server", &family.dns);
-    list_facts(&mut rows, "Search domain", &family.domains);
+    rows.extend(fact(tr!("network-facts-gateway"), &family.gateway));
+    list_facts(&mut rows, &tr!("network-facts-dns-server"), &family.dns);
+    list_facts(
+        &mut rows,
+        &tr!("network-facts-search-domain"),
+        &family.domains,
+    );
     for route in &family.routes {
         // The destination is the row's title, how it is reached its value.
         let (destination, how) = route.split_once(' ').unwrap_or((route, ""));
-        rows.extend(fact(format!("Route to {destination}"), how));
+        rows.extend(fact(
+            tr!("network-facts-route-to", destination = destination),
+            how,
+        ));
     }
     if rows.is_empty() {
         return None;
@@ -565,28 +572,26 @@ fn family_group(title: &str, family: &Family, with_addresses: bool) -> Option<El
 fn view(details: &Details) -> Vec<Element> {
     let mut blocks: Vec<Element> = Vec::new();
     if details.state == Live::Saved {
-        blocks.push(
-            status(Status::Info(
-                "This connection is not active. These are its saved settings, not live values."
-                    .into(),
-            ))
-            .into(),
-        );
+        blocks.push(status(Status::Info(tr!("network-facts-not-active"))).into());
     }
 
     let mut general: Vec<Element> = Vec::new();
-    general.extend(fact("Device", &details.device));
-    general.extend(fact("Type", &details.kind_label));
-    general.extend(fact("UUID", &details.uuid));
-    general.extend(fact("MAC address", &details.mac));
-    general.extend(fact("MTU", &details.mtu));
+    general.extend(fact(tr!("network-facts-device"), &details.device));
+    general.extend(fact(tr!("network-facts-type"), &details.kind_label));
+    general.extend(fact(tr!("network-facts-uuid"), &details.uuid));
+    general.extend(fact(tr!("network-facts-mac"), &details.mac));
+    general.extend(fact(tr!("network-facts-mtu"), &details.mtu));
     if let Some(wifi) = &details.wifi {
-        general.extend(fact("Access point", &wifi.bssid));
-        general.extend(fact("Band", &wifi.band));
-        general.extend(fact("Channel", &wifi.channel));
-        general.extend(fact("Security", &wifi.security));
+        general.extend(fact(tr!("network-facts-access-point"), &wifi.bssid));
+        general.extend(fact(tr!("network-facts-band"), &wifi.band));
+        general.extend(fact(tr!("network-facts-channel"), &wifi.channel));
+        general.extend(fact(tr!("network-facts-security"), &wifi.security));
     }
-    blocks.push(Group::titled("Technical details").rows(general).into());
+    blocks.push(
+        Group::titled(&tr!("network-facts-technical-details"))
+            .rows(general)
+            .into(),
+    );
 
     blocks.extend(family_group(
         "IPv4",
@@ -629,9 +634,9 @@ impl Component for TechnicalDetails {
             Some(Err(error)) => column.child(
                 status(Status::Error(super::plain(
                     &error.0,
-                    "Could not read the connection details. Try again.",
+                    &tr!("network-facts-error-details"),
                 )))
-                .action("Try again", {
+                .action(&tr!("network-facts-try-again"), {
                     let name = self.connection.clone();
                     move |_| reload(loaded, name.clone())
                 }),
@@ -674,11 +679,11 @@ impl Component for DetailsPage {
         let page = page_column().child(PageHead::new());
         match found {
             None | Some(Ok(Some(_))) => {
-                page.child(status(Status::Loading("Reading connection…".into())))
+                page.child(status(Status::Loading(tr!("network-facts-reading"))))
             }
             Some(Err(error)) => page.child(status(Status::Error(super::plain(
                 &error.0,
-                "Could not read the connection. Try again.",
+                &tr!("network-facts-error-connection"),
             )))),
             Some(Ok(None)) => page.child(TechnicalDetails {
                 connection: self.connection.clone(),

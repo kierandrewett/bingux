@@ -1065,3 +1065,120 @@ network-connections-empty = No network devices
 network-group-more = More
 # Error when the network settings cannot be read.
 network-read-failed = Could not read the network settings. Try again.
+# Title of a wired device with no profile. $device (String) - the interface name, such as enp42s0.
+network-ethernet-title-unnamed = Ethernet ({ $device })
+# Title of a wired device whose profile name another device shares. $connection (String) - the profile name. $device (String) - the interface name.
+network-ethernet-title-shared = { $connection } ({ $device })
+# Link line with a speed. $word (String) - the link state, such as Connected. $speed (String) - the link speed, such as 1 Gbit/s.
+network-link-with-speed = { $word } · { $speed }
+# Link state while a connection is being made.
+network-link-connecting = Connecting
+# Link state while a connection is being closed.
+network-link-disconnecting = Disconnecting
+# Link state when no cable is plugged in.
+network-link-cable-unplugged = Cable unplugged
+# Link state when the device is connected.
+network-link-connected = Connected
+# Link state when the device is not connected.
+network-link-not-connected = Not connected
+# Link line with an address. $state (String) - the link state. $address (String) - the IP address.
+network-link-with-address = { $state } · { $address }
+# Error when a wired connection cannot be made.
+network-ethernet-error-connect = Could not connect. Check the cable and try again.
+# Error when a wired connection cannot be closed.
+network-ethernet-error-disconnect = Could not disconnect. Try again.
+# Row title of one spare wired adapter in the Connections group.
+network-ethernet-other-one = 1 other wired adapter
+# Row title of spare wired adapters in the Connections group. $count (Number) - how many adapters.
+network-ethernet-other-many = { $count } other wired adapters
+# Right-click menu item to disconnect a wired device.
+network-ethernet-menu-disconnect = Disconnect
+# Right-click menu item to connect a wired device.
+network-ethernet-menu-connect = Connect
+# Right-click menu item to open a wired device's settings.
+network-ethernet-menu-settings = Settings
+# Error when a wired connection change fails.
+network-ethernet-error-change = Could not change the connection. Try again.
+# Title of the dialog that confirms deleting a profile. $name (String) - the profile name.
+network-ethernet-delete-title = Delete “{ $name }”?
+# Body of the dialog that confirms deleting a profile.
+network-ethernet-delete-body = This removes the profile and its saved settings.
+# Button to cancel a dialog.
+network-cancel = Cancel
+# Button to delete a profile.
+network-delete = Delete
+# Label of the IP address fact on a connection page.
+network-facts-ip-address = IP address
+# Label of the speed fact on a connection page.
+network-facts-speed = Speed
+# Strip button to disconnect a wired device.
+network-ethernet-disconnect = Disconnect
+# Strip button to connect a wired device.
+network-ethernet-connect = Connect
+# Label of the profile choice on a wired device's page.
+network-ethernet-profile = Profile
+# Row that opens the list of wired profiles.
+network-ethernet-manage-profiles = Manage profiles
+# Button and menu item to use a wired profile now.
+network-ethernet-use-profile = Use this profile
+# Menu item to open a wired profile's page.
+network-ethernet-open = Open
+# Row button to use a wired profile.
+network-ethernet-use = Use
+# Subtitle of the wired profile that is running.
+network-ethernet-in-use = In use
+# Error shown when wired profiles cannot be read.
+network-ethernet-profiles-error = Could not read the connection profiles. Try again.
+# Row to add a wired profile.
+network-ethernet-add-profile = Add profile…
+# Title of the popup that names a new profile.
+network-profile-new-title = New profile
+# Field error when another profile already has the name.
+network-profile-name-taken = Use a name that no other profile has.
+# Field error when the profile name is empty.
+network-profile-name-empty = Enter a name.
+# Label of the profile name field.
+network-profile-name-label = Name
+# Placeholder of the profile name field, an example name.
+network-profile-name-placeholder = Office
+# Button that creates a new profile.
+network-add = Add
+# Subtitle of a wired profile that is not running.
+network-ethernet-not-in-use = Not in use
+# Title of the Profiles group on a wired device's Advanced page.
+network-ethernet-profiles-title = Profiles
+# Fact row labels on the technical details page.
+network-facts-method = Method
+network-facts-address = Address
+network-facts-gateway = Gateway
+network-facts-dns-server = DNS server
+network-facts-search-domain = Search domain
+# Row label for one route; the destination is the connection's route target.
+# { $destination }: the route destination, such as 192.168.0.0/24.
+network-facts-route-to = Route to { $destination }
+network-facts-technical-details = Technical details
+# Notice on the technical details page when the connection is not active.
+network-facts-not-active = This connection is not active. These are its saved settings, not live values.
+network-facts-device = Device
+network-facts-type = Type
+network-facts-uuid = UUID
+network-facts-mac = MAC address
+network-facts-mtu = MTU
+network-facts-access-point = Access point
+network-facts-band = Band
+network-facts-channel = Channel
+network-facts-security = Security
+network-facts-error-details = Could not read the connection details. Try again.
+network-facts-try-again = Try again
+network-facts-reading = Reading connection…
+network-facts-error-connection = Could not read the connection. Try again.
+# Error when the airplane mode switch fails to turn on.
+network-airplane-on-failed = Could not turn on airplane mode. Try again.
+# Error when the airplane mode switch fails to turn off.
+network-airplane-off-failed = Could not turn off airplane mode. Try again.
+# Error when the Wi-Fi radio fails to turn on.
+network-wifi-on-failed = Could not turn on Wi-Fi. Try again.
+# Error when the Wi-Fi radio fails to turn off.
+network-wifi-off-failed = Could not turn off Wi-Fi. Try again.
+# Error when the network status cannot be read.
+network-status-error-read = Could not read the network status. Try again in a moment.
