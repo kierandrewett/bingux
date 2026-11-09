@@ -1999,7 +1999,7 @@ for the scroll position.
 | They do                                | What happens                                                                                                                                                                |
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Open (`open_dialog`, a recent, a path) | The Bingux file chooser, or the path. The file is read on a worker; the document shows `Phase::Loading` until then. A file already open is shown, not opened twice.         |
-| Edit                                   | `UNSAVED_MARK` (a bullet) goes before the name in the tab (`display_title`) and the window title (`use_document_title`).                                                    |
+| Edit                                   | The tab shows an accent dot (`TabItem::edited`); the window title gets `UNSAVED_MARK` before the name (`use_document_title`).                                               |
 | Save                                   | Atomic: a hidden file in the same folder, flushed, renamed over the old one, which keeps its mode; a link is written through. A document with no file asks where (Save as). |
 | Save as                                | The chooser, then the save; only then does the document belong to the new file (the old one is untouched when the save fails).                                              |
 | Close a document                       | A document with unsaved changes asks: **Save** (default), **Discard**, **Cancel**.                                                                                          |

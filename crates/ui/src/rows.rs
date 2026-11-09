@@ -2423,6 +2423,75 @@ mod phone_fields {
         }
     }
 
+    #[derive(PartialEq)]
+    struct Buttons(&'static str);
+
+    impl Component for Buttons {
+        fn render(&self) -> impl IntoElement {
+            let tokens = crate::theme::provide_tokens();
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
+                    Group::new(None::<String>).rows(vec![
+                        row(self.0)
+                            .trailing_control()
+                            .trailing(
+                                crate::layout::hstack(S2)
+                                    .child(crate::controls::action_button("Type", |_| {}).compact())
+                                    .child(crate::controls::action_button("Save", |_| {}).compact())
+                                    .child(
+                                        crate::controls::action_button("Close", |_| {}).compact(),
+                                    ),
+                            )
+                            .into_element(),
+                    ]),
+                ))
+        }
+    }
+
+    /// Where the title and the last button of a row of buttons are.
+    fn buttons_line(title: &'static str, size: (f32, f32)) -> (Area, Area, Area) {
+        let mut shot = Snapshot::new(move || Buttons(title).into(), size);
+        shot.settle(Duration::from_millis(500));
+        let found = |text: &'static str| {
+            shot.runner()
+                .find_many(|node, element| {
+                    let shown: String = match Label::try_downcast(element) {
+                        Some(label) => label.text.to_string(),
+                        None => Paragraph::try_downcast(element)?
+                            .spans
+                            .iter()
+                            .map(|span| span.text.to_string())
+                            .collect(),
+                    };
+                    (shown == text).then(|| node.layout().area)
+                })
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| panic!("no {text:?} in the row"))
+        };
+        (found(title), found("Close"), found("Type"))
+    }
+
+    /// On a phone a row of buttons is too wide beside its title, so the
+    /// buttons go under the title, not squeeze it into a column of letters.
+    #[test]
+    fn a_row_of_buttons_goes_under_its_title_on_a_phone() {
+        let (title, close, _) = buttons_line("Shopping list.txt", (390.0, 600.0));
+        assert!(
+            close.min_y() >= title.max_y() - 0.5,
+            "the buttons ({}) are not under the title ({})",
+            close.min_y(),
+            title.max_y(),
+        );
+        assert!(
+            title.width() >= 100.0,
+            "the title is {} px wide, squeezed by the buttons",
+            title.width(),
+        );
+    }
+
     /// On a desktop the field keeps its width: nothing changes there.
     #[test]
     fn a_field_on_a_desktop_keeps_its_width() {
