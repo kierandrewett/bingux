@@ -617,6 +617,35 @@ ui-files-action-item-count = { $count ->
    *[other] { $count } items
 }
 
+# The Trash prompts and toasts. $target (String) - what is meant, e.g. “report.txt” or 3 items.
+ui-files-bin-moved = Moved { $target } to Trash
+ui-files-bin-restored = Restored { $target }
+ui-files-bin-delete-title = Delete { $target } permanently?
+# $count (Number) - how many items are being deleted
+ui-files-bin-delete-in-trash = { $count ->
+    [one] It will be deleted permanently. This cannot be undone: nothing can bring it back.
+   *[other] They will be deleted permanently. This cannot be undone: nothing can bring them back.
+}
+# $count (Number) - how many items are being deleted
+ui-files-bin-delete-for-good = { $count ->
+    [one] It will be deleted for good. This cannot be undone: it will not go to the Trash, and Undo cannot bring it back.
+   *[other] They will be deleted for good. This cannot be undone: they will not go to the Trash, and Undo cannot bring them back.
+}
+ui-files-bin-empty-title = Empty the Trash?
+# $count (Number) - how many items are in the Trash; $size (String) - its size in brackets, or empty
+ui-files-bin-empty-warning = { $count ->
+    [one] { $count } item{ $size } in the Trash will be deleted for good. This cannot be undone. It will not be recoverable.
+   *[other] { $count } items{ $size } in the Trash will be deleted for good. This cannot be undone. They will not be recoverable.
+}
+# $count (Number) - how many items the Trash refused
+ui-files-bin-refusal-several = { $count ->
+    [one] It cannot be moved to the Trash.
+   *[other] They cannot be moved to the Trash.
+}
+# $target (String) - what was refused; $reason (String) - the sentence saying why
+ui-files-bin-refused-with-reason = { $target }: { $reason }
+ui-files-bin-refused-all = { $target } cannot be moved to the Trash.
+
 # The Extract dialog: the archive, where its files go, and what happens to a clash.
 # $name (String) - the archive or folder name, shown in curly quotes
 ui-extract-quoted-name = “{ $name }”

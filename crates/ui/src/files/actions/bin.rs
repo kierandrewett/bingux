@@ -45,17 +45,17 @@ fn what(paths: &[PathBuf]) -> String {
 /// The toast after a move to the Trash: `Moved “a.txt” to Trash`, `Moved 3
 /// items to Trash`.
 pub(super) fn moved_text(paths: &[PathBuf]) -> String {
-    format!("Moved {} to Trash", what(paths))
+    crate::tr!("ui-files-bin-moved", target = what(paths))
 }
 
 /// The toast after a restore: `Restored “a.txt”`, `Restored 3 items`.
 pub(super) fn restored_text(paths: &[PathBuf]) -> String {
-    format!("Restored {}", what(paths))
+    crate::tr!("ui-files-bin-restored", target = what(paths))
 }
 
 /// `1 item`, `12 items`.
 fn items_text(count: u64) -> String {
-    format!("{count} {}", if count == 1 { "item" } else { "items" })
+    crate::tr!("ui-files-action-item-count", count = count)
 }
 
 /// The words of a question before deleting for good.
@@ -69,27 +69,19 @@ pub(super) struct Prompt {
 /// was not used; `in_trash` says they are in the Trash already, where there
 /// is no Trash to avoid.
 pub(super) fn delete_prompt(paths: &[PathBuf], reason: Option<&str>, in_trash: bool) -> Prompt {
-    let (it, they, them) = if paths.len() == 1 {
-        ("It", "it", "it")
-    } else {
-        ("They", "they", "them")
-    };
+    let count = paths.len();
     let mut body = String::new();
     if let Some(reason) = reason {
         body.push_str(reason);
         body.push(' ');
     }
     if in_trash {
-        body.push_str(&format!(
-            "{it} will be deleted permanently. This cannot be undone: nothing can bring {them} back."
-        ));
+        body.push_str(&crate::tr!("ui-files-bin-delete-in-trash", count = count));
     } else {
-        body.push_str(&format!(
-            "{it} will be deleted for good. This cannot be undone: {they} will not go to the Trash, and Undo cannot bring {them} back."
-        ));
+        body.push_str(&crate::tr!("ui-files-bin-delete-for-good", count = count));
     }
     Prompt {
-        title: format!("Delete {} permanently?", what(paths)),
+        title: crate::tr!("ui-files-bin-delete-title", target = what(paths)),
         body,
     }
 }
@@ -102,16 +94,12 @@ pub(super) fn empty_prompt(summary: TrashSummary) -> Prompt {
     } else {
         String::new()
     };
-    let (them, are) = if summary.items == 1 {
-        ("It", "will")
-    } else {
-        ("They", "will")
-    };
     Prompt {
-        title: "Empty the Trash?".to_owned(),
-        body: format!(
-            "{}{size} in the Trash {are} be deleted for good. This cannot be undone. {them} will not be recoverable.",
-            items_text(summary.items)
+        title: crate::tr!("ui-files-bin-empty-title"),
+        body: crate::tr!(
+            "ui-files-bin-empty-warning",
+            count = summary.items,
+            size = size
         ),
     }
 }
@@ -157,26 +145,22 @@ fn sort_refusals(refused: Vec<(PathBuf, TrashRefusal)>) -> Refusals {
     out.delete_reason = match delete_reasons.as_slice() {
         [] => None,
         [one] => Some(one.reason(plural_delete)),
-        _ => Some(
-            if plural_delete {
-                "They cannot be moved to the Trash."
-            } else {
-                "It cannot be moved to the Trash."
-            }
-            .to_owned(),
-        ),
+        _ => Some(crate::tr!(
+            "ui-files-bin-refusal-several",
+            count = out.delete.len()
+        )),
     };
     let plural_refused = out.refused.len() > 1;
     out.refused_text = match refused_reasons.as_slice() {
         [] => None,
-        [one] => Some(format!(
-            "{}: {}",
-            what(&out.refused),
-            one.reason(plural_refused)
+        [one] => Some(crate::tr!(
+            "ui-files-bin-refused-with-reason",
+            target = what(&out.refused),
+            reason = one.reason(plural_refused)
         )),
-        _ => Some(format!(
-            "{} cannot be moved to the Trash.",
-            what(&out.refused)
+        _ => Some(crate::tr!(
+            "ui-files-bin-refused-all",
+            target = what(&out.refused)
         )),
     };
     out
