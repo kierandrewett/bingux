@@ -59,13 +59,13 @@ pub(crate) enum Problem {
 
 impl Problem {
     /// What the row says.
-    pub fn text(&self) -> &'static str {
+    pub fn text(&self) -> String {
         match self {
-            Problem::Empty => "A name cannot be empty.",
-            Problem::Slash => "A name cannot contain “/”.",
-            Problem::Dots => "A name cannot be “.” or “..”.",
-            Problem::Twice => "Two items would have this name.",
-            Problem::Taken => "Another item in the folder has this name.",
+            Problem::Empty => crate::tr!("ui-batch-rename-problem-empty"),
+            Problem::Slash => crate::tr!("ui-batch-rename-problem-slash"),
+            Problem::Dots => crate::tr!("ui-batch-rename-problem-dots"),
+            Problem::Twice => crate::tr!("ui-batch-rename-problem-twice"),
+            Problem::Taken => crate::tr!("ui-batch-rename-problem-taken"),
         }
     }
 }
@@ -218,10 +218,10 @@ pub(crate) fn plan(
 /// Why Rename cannot run for `planned`, or `None` when it can.
 pub(crate) fn blocked(planned: &[Planned]) -> Option<String> {
     if let Some(problem) = planned.iter().find_map(|item| item.problem.as_ref()) {
-        return Some(problem.text().to_string());
+        return Some(problem.text());
     }
     if !planned.iter().any(Planned::changes) {
-        return Some("Nothing would change.".to_string());
+        return Some(crate::tr!("ui-batch-rename-nothing-changes"));
     }
     None
 }

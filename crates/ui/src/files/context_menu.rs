@@ -150,7 +150,7 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
         // Nothing opens the file, so there is no row to offer.
         Availability::Enabled if apps.is_empty() => None,
         Availability::Enabled => Some(Row::Sub(
-            "Open with".to_owned(),
+            crate::tr!("ui-files-menu-open-with"),
             apps.iter()
                 .map(|app| {
                     Row::Item(Item {
@@ -169,61 +169,113 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
     };
     let paste_into = folder.and_then(|path| {
         Row::command(
-            "Paste into folder",
+            crate::tr!("ui-files-menu-paste-into-folder"),
             facts,
             Command::PasteInto(path.to_path_buf()),
         )
     });
     join(vec![
         vec![
-            Row::command("Open", facts, Command::Open),
-            Row::command("Open in new tab", facts, Command::OpenInNewTab),
+            Row::command(crate::tr!("ui-files-menu-open"), facts, Command::Open),
+            Row::command(
+                crate::tr!("ui-files-menu-open-in-new-tab"),
+                facts,
+                Command::OpenInNewTab,
+            ),
             open_with,
-            Row::command("Preview", facts, Command::Preview),
+            Row::command(crate::tr!("ui-files-menu-preview"), facts, Command::Preview),
         ],
         vec![
-            Row::command("Cut", facts, Command::Cut),
-            Row::command("Copy", facts, Command::Copy),
-            Row::command("Duplicate", facts, Command::Duplicate),
+            Row::command(crate::tr!("ui-files-menu-cut"), facts, Command::Cut),
+            Row::command(crate::tr!("ui-files-menu-copy"), facts, Command::Copy),
+            Row::command(
+                crate::tr!("ui-files-menu-duplicate"),
+                facts,
+                Command::Duplicate,
+            ),
             paste_into,
         ],
         vec![
-            Row::command("Restore", facts, Command::Restore),
-            Row::command("Restore to…", facts, Command::RestoreTo),
+            Row::command(crate::tr!("ui-files-menu-restore"), facts, Command::Restore),
+            Row::command(
+                crate::tr!("ui-files-menu-restore-to"),
+                facts,
+                Command::RestoreTo,
+            ),
             Row::command(
                 if facts.selected > 1 {
-                    "Rename…"
+                    crate::tr!("ui-files-menu-rename-many")
                 } else {
-                    "Rename"
+                    crate::tr!("ui-files-menu-rename")
                 },
                 facts,
                 Command::Rename,
             ),
-            Row::command("Move to Trash", facts, Command::Trash),
+            Row::command(
+                crate::tr!("ui-files-menu-move-to-trash"),
+                facts,
+                Command::Trash,
+            ),
             // In the Trash it is the only delete there is, so no Shift is
             // needed and the plain Delete key does it.
-            Row::command("Delete permanently", facts, Command::DeletePermanently)
-                .filter(|_| permanent || facts.trash.on())
-                .map(Row::destructive)
-                .map(|row| match row {
-                    Row::Item(item) if facts.trash.on() => Row::Item(Item {
-                        shortcut: Some("Delete"),
-                        ..item
-                    }),
-                    other => other,
+            Row::command(
+                crate::tr!("ui-files-menu-delete-permanently"),
+                facts,
+                Command::DeletePermanently,
+            )
+            .filter(|_| permanent || facts.trash.on())
+            .map(Row::destructive)
+            .map(|row| match row {
+                Row::Item(item) if facts.trash.on() => Row::Item(Item {
+                    shortcut: Some("Delete"),
+                    ..item
                 }),
+                other => other,
+            }),
         ],
         vec![
-            Row::command("Compress…", facts, Command::Compress),
+            Row::command(
+                crate::tr!("ui-files-menu-compress"),
+                facts,
+                Command::Compress,
+            ),
             compress_as(facts),
-            Row::command("Extract Here", facts, Command::Extract),
-            Row::command("Extract to…", facts, Command::ExtractTo),
-            Row::command("Copy path", facts, Command::CopyPath),
-            Row::command("Copy location as URI", facts, Command::CopyUri),
-            Row::command("Add to bookmarks", facts, Command::AddBookmark),
-            Row::command("Remove from bookmarks", facts, Command::RemoveBookmark),
+            Row::command(
+                crate::tr!("ui-files-menu-extract-here"),
+                facts,
+                Command::Extract,
+            ),
+            Row::command(
+                crate::tr!("ui-files-menu-extract-to"),
+                facts,
+                Command::ExtractTo,
+            ),
+            Row::command(
+                crate::tr!("ui-files-menu-copy-path"),
+                facts,
+                Command::CopyPath,
+            ),
+            Row::command(
+                crate::tr!("ui-files-menu-copy-uri"),
+                facts,
+                Command::CopyUri,
+            ),
+            Row::command(
+                crate::tr!("ui-files-menu-add-bookmark"),
+                facts,
+                Command::AddBookmark,
+            ),
+            Row::command(
+                crate::tr!("ui-files-menu-remove-bookmark"),
+                facts,
+                Command::RemoveBookmark,
+            ),
         ],
-        vec![Row::command("Properties", facts, Command::Properties)],
+        vec![Row::command(
+            crate::tr!("ui-files-menu-properties"),
+            facts,
+            Command::Properties,
+        )],
     ])
 }
 
@@ -232,9 +284,13 @@ fn entries_plan(facts: &Facts, folder: Option<&Path>, apps: &[App], permanent: b
 fn compress_as(facts: &Facts) -> Option<Row> {
     use bingux_files::ops::Format;
     let rows: Vec<Row> = [
-        Row::command("Quick .zip", facts, Command::CompressQuick(Format::Zip)),
         Row::command(
-            "Quick .tar.gz",
+            crate::tr!("ui-files-menu-quick-zip"),
+            facts,
+            Command::CompressQuick(Format::Zip),
+        ),
+        Row::command(
+            crate::tr!("ui-files-menu-quick-targz"),
             facts,
             Command::CompressQuick(Format::TarGz),
         ),
@@ -242,7 +298,7 @@ fn compress_as(facts: &Facts) -> Option<Row> {
     .into_iter()
     .flatten()
     .collect();
-    (!rows.is_empty()).then(|| Row::Sub("Compress as".to_owned(), rows))
+    (!rows.is_empty()).then(|| Row::Sub(crate::tr!("ui-files-menu-compress-as"), rows))
 }
 
 /// An application with nothing in it, to ask [`availability`] whether Open
@@ -271,15 +327,27 @@ struct Looks {
 fn sort_rows(sort: Sort) -> Vec<Row> {
     let key = |label: &str, key: SortKey| Row::choice(label, sort.key == key, Act::SortKey(key));
     vec![
-        key("Name", SortKey::Name),
-        key("Size", SortKey::Size),
-        key("Type", SortKey::Kind),
-        key("Modified", SortKey::Modified),
+        key(&crate::tr!("ui-files-sort-name"), SortKey::Name),
+        key(&crate::tr!("ui-files-sort-size"), SortKey::Size),
+        key(&crate::tr!("ui-files-sort-type"), SortKey::Kind),
+        key(&crate::tr!("ui-files-sort-modified"), SortKey::Modified),
         Row::Separator,
-        Row::choice("Ascending", !sort.descending, Act::Descending(false)),
-        Row::choice("Descending", sort.descending, Act::Descending(true)),
+        Row::choice(
+            &crate::tr!("ui-files-sort-ascending"),
+            !sort.descending,
+            Act::Descending(false),
+        ),
+        Row::choice(
+            &crate::tr!("ui-files-sort-descending"),
+            sort.descending,
+            Act::Descending(true),
+        ),
         Row::Separator,
-        Row::choice("Folders first", sort.folders_first, Act::FoldersFirst),
+        Row::choice(
+            &crate::tr!("ui-files-sort-folders-first"),
+            sort.folders_first,
+            Act::FoldersFirst,
+        ),
     ]
 }
 
@@ -301,21 +369,21 @@ fn size_rows(looks: Looks) -> Vec<Row> {
 fn view_rows(looks: Looks) -> Vec<Row> {
     vec![
         Row::choice(
-            "List",
+            &crate::tr!("ui-files-menu-list"),
             looks.kind == ViewKind::List,
             Act::Show(ViewKind::List),
         ),
         Row::choice(
-            "Grid",
+            &crate::tr!("ui-files-menu-grid"),
             looks.kind == ViewKind::Grid,
             Act::Show(ViewKind::Grid),
         ),
         Row::Separator,
-        Row::Sub("Icon size".to_owned(), size_rows(looks)),
-        Row::Sub("Sort by".to_owned(), sort_rows(looks.sort)),
+        Row::Sub(crate::tr!("ui-files-menu-icon-size"), size_rows(looks)),
+        Row::Sub(crate::tr!("ui-files-menu-sort-by"), sort_rows(looks.sort)),
         Row::Separator,
         Row::Item(Item {
-            label: "Show hidden files".to_owned(),
+            label: crate::tr!("ui-files-menu-show-hidden"),
             shortcut: Some("Ctrl+H"),
             enabled: true,
             destructive: false,
@@ -373,9 +441,17 @@ fn user_templates() -> Vec<Template> {
 /// of an empty file and each template.
 fn new_file_row(facts: &Facts, templates: &[Template]) -> Option<Row> {
     if templates.is_empty() {
-        return Row::command("New file", facts, Command::NewFile);
+        return Row::command(
+            crate::tr!("ui-files-menu-new-file"),
+            facts,
+            Command::NewFile,
+        );
     }
-    let empty = Row::command("Empty file", facts, Command::NewFile)?;
+    let empty = Row::command(
+        crate::tr!("ui-files-menu-empty-file"),
+        facts,
+        Command::NewFile,
+    )?;
     let mut rows = vec![empty, Row::Separator];
     rows.extend(templates.iter().filter_map(|template| {
         Row::command(
@@ -384,7 +460,7 @@ fn new_file_row(facts: &Facts, templates: &[Template]) -> Option<Row> {
             Command::NewFromTemplate(template.path.clone()),
         )
     }));
-    Some(Row::Sub("New file".to_owned(), rows))
+    Some(Row::Sub(crate::tr!("ui-files-menu-new-file"), rows))
 }
 
 /// The menu of empty space, grouped by task: make something, paste and take
@@ -400,9 +476,9 @@ fn empty_plan(
 ) -> Vec<Row> {
     // In the Trash a paste moves what was copied to the Trash.
     let paste_label = if facts.trash == TrashView::Root {
-        "Paste into Trash"
+        crate::tr!("ui-files-menu-paste-into-trash")
     } else {
-        "Paste"
+        crate::tr!("ui-files-menu-paste")
     };
     let paste = facts
         .in_folder
@@ -414,20 +490,46 @@ fn empty_plan(
         .and_then(|label| Row::command(label, facts, Command::Undo));
     join(vec![
         vec![
-            Row::command("New folder", facts, Command::NewFolder),
+            Row::command(
+                crate::tr!("ui-files-menu-new-folder"),
+                facts,
+                Command::NewFolder,
+            ),
             new_file_row(facts, templates),
         ],
         vec![paste, undo],
         vec![compress],
         vec![
-            Row::command("Select all", facts, Command::SelectAll),
-            Row::command("Invert selection", facts, Command::InvertSelection),
+            Row::command(
+                crate::tr!("ui-files-menu-select-all"),
+                facts,
+                Command::SelectAll,
+            ),
+            Row::command(
+                crate::tr!("ui-files-menu-invert-selection"),
+                facts,
+                Command::InvertSelection,
+            ),
         ],
-        vec![Some(Row::Sub("View".to_owned(), view_rows(looks)))],
-        vec![Row::command_greyed("Empty Trash", facts, Command::EmptyTrash).map(Row::destructive)],
+        vec![Some(Row::Sub(
+            crate::tr!("ui-files-menu-view"),
+            view_rows(looks),
+        ))],
         vec![
-            Row::command("Refresh", facts, Command::Refresh),
-            Row::command("Properties", facts, Command::Properties),
+            Row::command_greyed(
+                crate::tr!("ui-files-menu-empty-trash"),
+                facts,
+                Command::EmptyTrash,
+            )
+            .map(Row::destructive),
+        ],
+        vec![
+            Row::command(crate::tr!("ui-files-menu-refresh"), facts, Command::Refresh),
+            Row::command(
+                crate::tr!("ui-files-menu-properties"),
+                facts,
+                Command::Properties,
+            ),
         ],
     ])
 }
@@ -571,7 +673,13 @@ pub(super) fn menu_for_empty(env: &Env) -> Vec<MenuItem> {
     let held = super::actions::held_entries(env);
     let compress = (!held.is_empty())
         .then(|| Facts::of(env, &held, false))
-        .and_then(|with| Row::command("Compress selection…", &with, Command::CompressSelection));
+        .and_then(|with| {
+            Row::command(
+                crate::tr!("ui-files-menu-compress-selection"),
+                &with,
+                Command::CompressSelection,
+            )
+        });
     realise(
         &target,
         empty_plan(&facts, looks_of(env), &user_templates(), compress),
@@ -587,7 +695,7 @@ pub(super) fn menu_for_header(env: &Env) -> Vec<MenuItem> {
     let mut items = columns_menu_items(env.view.layout, env.folder.is_none());
     items.push(menu_separator());
     items.push(submenu(
-        "Sort by",
+        crate::tr!("ui-files-menu-sort-by"),
         realise(&target, sort_rows(env.view.sort)),
     ));
     items

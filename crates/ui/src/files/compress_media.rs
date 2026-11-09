@@ -56,7 +56,7 @@ fn keyed<T: Copy>(
 fn missing(kind: MediaKind, reason: String) -> Element {
     Group::titled(kind.label())
         .row(
-            row(format!("{} cannot be made smaller", kind.label()))
+            row(crate::tr!("ui-compress-media-cannot", kind = kind.label()))
                 .subtitle(reason)
                 .enabled(false),
         )
@@ -68,8 +68,8 @@ pub(super) fn media_groups(m: &Media<'_>) -> Vec<Element> {
     let Some(tools) = m.tools else {
         // Still looking: the card is already the right size.
         groups.push(
-            Group::titled("Checking")
-                .row(row("Looking for the tools that shrink media…").enabled(false))
+            Group::titled(&crate::tr!("ui-compress-checking"))
+                .row(row(crate::tr!("ui-compress-tools-busy")).enabled(false))
                 .into(),
         );
         return groups;
@@ -105,30 +105,34 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
         |f| f.label().to_string(),
     );
     let format_row = form_row(
-        "Format",
+        crate::tr!("ui-compress-format"),
         dropdown(formats, options.format.key(), move |key: String| {
             if let Some(format) = ImageFormat::from_key(&key) {
                 state.write().reduce.image.format = format;
             }
         })
         .unavailable(image_formats_unavailable(tools))
-        .title("Format"),
+        .title(crate::tr!("ui-compress-format")),
     );
     // PNG has no quality: it is lossless, and the slider says so.
     let lossless = matches!(options.format, ImageFormat::Png);
-    let quality = slider_row("Quality", f64::from(options.quality), move |value: f64| {
-        state.write().reduce.image.quality = value.round().clamp(1.0, 100.0) as u8;
-    })
+    let quality = slider_row(
+        crate::tr!("ui-compress-quality"),
+        f64::from(options.quality),
+        move |value: f64| {
+            state.write().reduce.image.quality = value.round().clamp(1.0, 100.0) as u8;
+        },
+    )
     .max(100.0)
     .value_text(if lossless {
-        "Lossless".to_string()
+        crate::tr!("ui-compress-lossless")
     } else {
         options.quality.to_string()
     })
     .subtitle(if lossless {
-        "PNG keeps every pixel; only the packing changes."
+        crate::tr!("ui-compress-png-hint")
     } else {
-        "Lower is smaller."
+        crate::tr!("ui-compress-lower-hint")
     })
     .enabled(!lossless);
     let mut sizes = vec![("original".to_string(), dimension_label(None))];
@@ -137,7 +141,7 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
         |px| px.to_string(),
         |px| dimension_label(Some(px)),
     ));
-    sizes.push(("custom".to_string(), "Other…".to_string()));
+    sizes.push(("custom".to_string(), crate::tr!("ui-compress-other")));
     let selected = if m.draft.custom_dimension {
         "custom".to_string()
     } else {
@@ -146,40 +150,38 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
             .map_or_else(|| "original".to_string(), |px| px.to_string())
     };
     let cap_row = form_row(
-        "Longest side",
+        crate::tr!("ui-compress-longest-side"),
         dropdown(sizes, &selected, move |key: String| {
             let mut draft = state.write();
             draft.custom_dimension = key == "custom";
             draft.reduce.image.max_dimension = key.parse().ok();
         })
-        .title("Longest side"),
+        .title(crate::tr!("ui-compress-longest-side")),
     );
     let custom = reveal_block(
         m.draft.custom_dimension,
         S0,
         rect().child(Element::from(
-            form_field("Pixels", m.fields.dimension)
+            form_field(crate::tr!("ui-compress-pixels"), m.fields.dimension)
                 .suffix("px")
                 .error(m.check.dimension.clone()),
         )),
     )
     .lazy();
-    Group::titled("Pictures")
+    Group::titled(&crate::tr!("ui-compress-pictures"))
         .row(format_row)
         .row(quality)
         .row(cap_row)
         .row(custom)
         .row(
             switch_row(
-                "Remove location and camera data",
+                crate::tr!("ui-compress-remove-location"),
                 options.strip_metadata,
                 move |on: bool| {
                     state.write().reduce.image.strip_metadata = on;
                 },
             )
-            .subtitle(
-                "Takes out the EXIF, including where and with what it was taken. The colours stay.",
-            ),
+            .subtitle(crate::tr!("ui-compress-exif-hint")),
         )
         .into()
 }
@@ -193,23 +195,23 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         |c| c.label().to_string(),
     );
     let codec_row = form_row(
-        "Format",
+        crate::tr!("ui-compress-format"),
         dropdown(codecs, options.codec.key(), move |key: String| {
             if let Some(codec) = VideoCodec::from_key(&key) {
                 state.write().reduce.video.codec = codec;
             }
         })
         .unavailable(video_codecs_unavailable(tools))
-        .title("Film format"),
+        .title(crate::tr!("ui-compress-film-format")),
     );
     let levels = vec![
-        ("fastest".to_string(), "Fastest".to_string()),
-        ("balanced".to_string(), "Balanced".to_string()),
-        ("smallest".to_string(), "Smallest".to_string()),
-        ("custom".to_string(), "Custom".to_string()),
+        ("fastest".to_string(), crate::tr!("ui-compress-fastest")),
+        ("balanced".to_string(), crate::tr!("ui-compress-balanced")),
+        ("smallest".to_string(), crate::tr!("ui-compress-smallest")),
+        ("custom".to_string(), crate::tr!("ui-compress-custom")),
     ];
     let quality_row = form_row(
-        "Quality",
+        crate::tr!("ui-compress-quality"),
         segmented(levels, quality_key(options.quality), move |key: String| {
             let mut draft = state.write();
             let codec = draft.reduce.video.codec;
@@ -234,7 +236,7 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         S0,
         rect().child(Element::from(
             slider_row(
-                "Constant rate factor",
+                crate::tr!("ui-compress-crf"),
                 f64::from(high - crf) / f64::from(high - low) * 100.0,
                 move |value: f64| {
                     let mut draft = state.write();
@@ -244,8 +246,8 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
                         VideoQuality::Crf(crf.round().clamp(f64::from(low), f64::from(high)) as u8);
                 },
             )
-            .value_text(format!("CRF {crf}"))
-            .subtitle("Higher quality on the right: a bigger file"),
+            .value_text(crate::tr!("ui-compress-crf-value", crf = crf.to_string()))
+            .subtitle(crate::tr!("ui-compress-crf-hint")),
         )),
     )
     .lazy();
@@ -256,7 +258,7 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         |px| height_label(Some(px)),
     ));
     let height_row = form_row(
-        "Resolution",
+        crate::tr!("ui-compress-resolution"),
         dropdown(
             heights,
             &options
@@ -264,7 +266,7 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
                 .map_or_else(|| "original".to_string(), |px| px.to_string()),
             move |key: String| state.write().reduce.video.max_height = key.parse().ok(),
         )
-        .title("Resolution"),
+        .title(crate::tr!("ui-compress-resolution")),
     );
     let mut rates = vec![("original".to_string(), rate_label(None))];
     rates.extend(keyed(
@@ -273,7 +275,7 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         |fps| rate_label(Some(fps)),
     ));
     let rate_row = form_row(
-        "Frame rate",
+        crate::tr!("ui-compress-frame-rate"),
         dropdown(
             rates,
             &options
@@ -281,16 +283,16 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
                 .map_or_else(|| "original".to_string(), |fps| fps.to_string()),
             move |key: String| state.write().reduce.video.max_fps = key.parse().ok(),
         )
-        .title("Frame rate"),
+        .title(crate::tr!("ui-compress-frame-rate")),
     );
-    let mut sounds = vec![("remove".to_string(), "Remove sound".to_string())];
+    let mut sounds = vec![("remove".to_string(), crate::tr!("ui-compress-remove-sound"))];
     sounds.extend(keyed(
         &SOUND_KBPS,
         |kbps| kbps.to_string(),
-        |kbps| format!("{kbps} kbit/s"),
+        |kbps| crate::tr!("ui-compress-kbps", kbps = kbps.to_string()),
     ));
     let sound_row = form_row(
-        "Sound",
+        crate::tr!("ui-compress-sound"),
         dropdown(
             sounds,
             &match options.sound {
@@ -301,9 +303,9 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
                 state.write().reduce.video.sound = key.parse().map_or(Sound::Remove, Sound::Kbps);
             },
         )
-        .title("Sound"),
+        .title(crate::tr!("ui-compress-sound")),
     );
-    Group::titled("Films")
+    Group::titled(&crate::tr!("ui-compress-films"))
         .row(codec_row)
         .row(quality_row)
         .row(crf_row)
@@ -312,13 +314,13 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         .row(sound_row)
         .row(
             switch_row(
-                "Remove location and other tags",
+                crate::tr!("ui-compress-remove-tags"),
                 options.strip_metadata,
                 move |on: bool| {
                     state.write().reduce.video.strip_metadata = on;
                 },
             )
-            .subtitle("Takes out the title, the place and the other tags"),
+            .subtitle(crate::tr!("ui-compress-remove-tags-film-hint")),
         )
         .into()
 }
@@ -332,26 +334,26 @@ fn songs(m: &Media<'_>, tools: &Tools) -> Element {
         |c| c.label().to_string(),
     );
     let codec_row = form_row(
-        "Format",
+        crate::tr!("ui-compress-format"),
         dropdown(codecs, options.codec.key(), move |key: String| {
             if let Some(codec) = AudioCodec::from_key(&key) {
                 state.write().reduce.audio.codec = codec;
             }
         })
         .unavailable(audio_codecs_unavailable(tools))
-        .title("Song format"),
+        .title(crate::tr!("ui-compress-song-format")),
     );
     let rates = keyed(
         &AUDIO_KBPS,
         |kbps| kbps.to_string(),
-        |kbps| format!("{kbps} kbit/s"),
+        |kbps| crate::tr!("ui-compress-kbps", kbps = kbps.to_string()),
     );
     let lossless = !options.codec.has_bitrate();
-    let rate_row = row("Bitrate")
+    let rate_row = row(crate::tr!("ui-compress-bitrate"))
         .subtitle(if lossless {
-            "FLAC keeps every sample; only the packing changes."
+            crate::tr!("ui-compress-flac-hint")
         } else {
-            "Opus sounds fine at 96; MP3 wants 128 or more."
+            crate::tr!("ui-compress-lossy-hint")
         })
         .trailing(
             dropdown(rates, &options.kbps.to_string(), move |key: String| {
@@ -360,20 +362,20 @@ fn songs(m: &Media<'_>, tools: &Tools) -> Element {
                 }
             })
             .enabled(!lossless)
-            .title("Bitrate"),
+            .title(crate::tr!("ui-compress-bitrate")),
         );
-    Group::titled("Songs")
+    Group::titled(&crate::tr!("ui-compress-songs"))
         .row(codec_row)
         .row(rate_row)
         .row(
             switch_row(
-                "Remove tags and cover",
+                crate::tr!("ui-compress-remove-song-tags"),
                 options.strip_metadata,
                 move |on: bool| {
                     state.write().reduce.audio.strip_metadata = on;
                 },
             )
-            .subtitle("Takes out the artist, the title and the picture"),
+            .subtitle(crate::tr!("ui-compress-remove-song-tags-hint")),
         )
         .into()
 }
@@ -392,17 +394,28 @@ fn result(m: &Media<'_>) -> Element {
     let estimated = m.estimate.map(|estimate| estimate.estimated);
     let summary_line = match (m.estimate_error, estimated) {
         (Some(error), _) if !error.is_empty() && !error.contains("cancelled") => {
-            format!("Original {}, no estimate: {error}", size(original))
+            crate::tr!(
+                "ui-compress-no-estimate",
+                size = size(original),
+                error = error
+            )
         }
         (_, Some(estimated)) if !m.estimating => summary(original, Some(estimated)),
         _ => summary(original, None),
     };
-    let mut group = Group::titled("Result").row(row("Size").subtitle(summary_line));
+    let mut group = Group::titled(&crate::tr!("ui-compress-result"))
+        .row(row(crate::tr!("ui-compress-size")).subtitle(summary_line));
     // Each file's own estimate, for a handful of them.
     const LISTED: usize = 6;
     for (shown, &index) in reducible.iter().enumerate() {
         if shown == LISTED {
-            group = group.row(row(format!("and {} more", reducible.len() - LISTED)).enabled(false));
+            group = group.row(
+                row(crate::tr!(
+                    "ui-compress-and-more",
+                    count = reducible.len() - LISTED
+                ))
+                .enabled(false),
+            );
             break;
         }
         let was = m.subject.sizes[index];
@@ -413,9 +426,9 @@ fn result(m: &Media<'_>) -> Element {
                 || "…".to_string(),
                 |bytes| {
                     if bytes >= was {
-                        "kept as it is".to_string()
+                        crate::tr!("ui-compress-kept")
                     } else {
-                        format!("about {}", size(bytes))
+                        crate::tr!("ui-compress-about", size = size(bytes))
                     }
                 },
             );
@@ -428,13 +441,17 @@ fn result(m: &Media<'_>) -> Element {
     group = group
         .row(location_row(m.destination, m.choose.clone()))
         .row(
-            switch_row("Replace the originals", m.draft.reduce.replace_original && beside, move |on: bool| {
-                state.write().reduce.replace_original = on;
-            })
+            switch_row(
+                crate::tr!("ui-compress-replace-originals"),
+                m.draft.reduce.replace_original && beside,
+                move |on: bool| {
+                    state.write().reduce.replace_original = on;
+                },
+            )
             .subtitle(if beside {
-                "The originals go to the Trash once the smaller files are made and checked. You will be asked."
+                crate::tr!("ui-compress-originals-trash-hint")
             } else {
-                "Replacing needs the result to sit beside the original."
+                crate::tr!("ui-compress-replace-needs-beside")
             })
             .enabled(beside),
         );

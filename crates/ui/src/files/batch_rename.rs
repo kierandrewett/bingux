@@ -59,7 +59,7 @@ pub(super) fn show_batch_rename(env: &Env, selected: &[Entry]) {
             folder: entry.is_dir(),
         })
         .collect();
-    let title = format!("Rename {} items", items.len());
+    let title = crate::tr!("ui-batch-rename-title", count = items.len());
     let focus = env.focus;
     open_form(
         env.overlays,
@@ -137,22 +137,32 @@ impl Component for BatchRename {
             })
         };
 
-        let words = Group::titled("Find and replace")
-            .row(form_field("Find", find).autofocus().on_submit(go.clone()))
-            .row(form_field("Replace with", replace).on_submit(go.clone()))
+        let words = Group::titled(&crate::tr!("ui-batch-rename-find-replace"))
+            .row(
+                form_field(crate::tr!("ui-batch-rename-find"), find)
+                    .autofocus()
+                    .on_submit(go.clone()),
+            )
+            .row(
+                form_field(crate::tr!("ui-batch-rename-replace-with"), replace)
+                    .on_submit(go.clone()),
+            )
             .row(crate::rows::switch_row(
-                "Match case",
+                crate::tr!("ui-batch-rename-match-case"),
                 *match_case.read(),
                 move |on: bool| match_case.set(on),
             ));
-        let letters = Group::titled("Case").row(form_row(
-            "Change to",
+        let letters = Group::titled(&crate::tr!("ui-batch-rename-case")).row(form_row(
+            crate::tr!("ui-batch-rename-change-to"),
             dropdown(
                 vec![
-                    ("keep".to_string(), "Keep as it is".to_string()),
-                    ("lower".to_string(), "lowercase".to_string()),
-                    ("upper".to_string(), "UPPERCASE".to_string()),
-                    ("title".to_string(), "Title Case".to_string()),
+                    ("keep".to_string(), crate::tr!("ui-batch-rename-keep-case")),
+                    ("lower".to_string(), crate::tr!("ui-batch-rename-lowercase")),
+                    ("upper".to_string(), crate::tr!("ui-batch-rename-uppercase")),
+                    (
+                        "title".to_string(),
+                        crate::tr!("ui-batch-rename-title-case"),
+                    ),
                 ],
                 match *case.read() {
                     CaseChange::Keep => "keep",
@@ -169,16 +179,22 @@ impl Component for BatchRename {
                     });
                 },
             )
-            .title("Change to"),
+            .title(crate::tr!("ui-batch-rename-change-to")),
         ));
         let numbered = *numbering.read() != Numbering::Off;
-        let number = Group::titled("Number").row(form_row(
-            "Add a number",
+        let number = Group::titled(&crate::tr!("ui-batch-rename-number")).row(form_row(
+            crate::tr!("ui-batch-rename-add-number"),
             dropdown(
                 vec![
-                    ("off".to_string(), "No number".to_string()),
-                    ("after".to_string(), "After the name".to_string()),
-                    ("before".to_string(), "Before the name".to_string()),
+                    ("off".to_string(), crate::tr!("ui-batch-rename-no-number")),
+                    (
+                        "after".to_string(),
+                        crate::tr!("ui-batch-rename-after-name"),
+                    ),
+                    (
+                        "before".to_string(),
+                        crate::tr!("ui-batch-rename-before-name"),
+                    ),
                 ],
                 match *numbering.read() {
                     Numbering::Off => "off",
@@ -193,17 +209,17 @@ impl Component for BatchRename {
                     });
                 },
             )
-            .title("Add a number"),
+            .title(crate::tr!("ui-batch-rename-add-number")),
         ));
         let first = Group::new(None).row(form_row(
-            "Start at",
+            crate::tr!("ui-batch-rename-start-at"),
             stepper(i64::from(*start.read()), move |value: i64| {
                 start.set(u32::try_from(value).unwrap_or(0));
             })
             .range(0, 99_999),
         ));
 
-        let mut preview = Group::titled("New names");
+        let mut preview = Group::titled(&crate::tr!("ui-batch-rename-new-names"));
         for planned in planned.iter().take(PREVIEW_ROWS) {
             preview = preview.row(
                 row(planned.from.clone())
@@ -217,13 +233,8 @@ impl Component for BatchRename {
             );
         }
         let more = planned.len().saturating_sub(PREVIEW_ROWS);
-        let preview_note = (more > 0).then(|| {
-            caption(if more == 1 {
-                "1 more item is not shown.".to_string()
-            } else {
-                format!("{more} more items are not shown.")
-            })
-        });
+        let preview_note =
+            (more > 0).then(|| caption(crate::tr!("ui-batch-rename-more", count = more)));
 
         let body = rect()
             .tw(&tokens, &[flex_col(), w_full(), gap(S4)])
@@ -234,9 +245,9 @@ impl Component for BatchRename {
             .child(Element::from(preview))
             .maybe_child(preview_note);
         form_dialog(
-            format!("Rename {} items", launch.items.len()),
+            crate::tr!("ui-batch-rename-title", count = launch.items.len()),
             body,
-            "Rename",
+            crate::tr!("ui-batch-rename-action"),
             go,
         )
         .blocked(reason)

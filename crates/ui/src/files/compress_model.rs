@@ -424,7 +424,7 @@ pub fn summary(original: u64, estimated: Option<u64>) -> String {
 
 /// How a finished archive reads in a toast: `Created “Photos.zip”`.
 pub fn created_text(name: &str) -> String {
-    format!("Created “{name}”")
+    crate::tr!("ui-run-created", name = name)
 }
 
 /// How a finished reduction reads in a toast.
@@ -432,27 +432,31 @@ pub fn reduced_text(reduced: usize, kept: usize, failed: usize, from: u64, to: u
     use crate::files::display::size;
     let mut parts = Vec::new();
     if reduced == 1 && kept == 0 && failed == 0 {
-        parts.push(format!("Reduced from {} to {}", size(from), size(to)));
+        parts.push(crate::tr!(
+            "ui-reduce-one",
+            from = size(from).as_str(),
+            to = size(to).as_str()
+        ));
     } else if reduced > 0 {
-        parts.push(format!(
-            "Reduced {reduced} file{} from {} to {}",
-            if reduced == 1 { "" } else { "s" },
-            size(from),
-            size(to)
+        parts.push(crate::tr!(
+            "ui-reduce-many",
+            count = reduced,
+            from = size(from).as_str(),
+            to = size(to).as_str()
         ));
     }
     if kept > 0 {
         parts.push(if reduced == 0 && kept == 1 {
-            "Already small: kept original".to_string()
+            crate::tr!("ui-reduce-kept-one")
         } else {
-            format!("{kept} already small: kept")
+            crate::tr!("ui-reduce-kept-many", count = kept)
         });
     }
     if failed > 0 {
-        parts.push(format!("{failed} could not be reduced"));
+        parts.push(crate::tr!("ui-reduce-failed", count = failed));
     }
     if parts.is_empty() {
-        "Nothing was reduced".to_string()
+        crate::tr!("ui-reduce-nothing")
     } else {
         parts.join(". ")
     }

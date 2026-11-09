@@ -129,7 +129,7 @@ pub(super) enum PlaceCmd {
 /// One row of the menu.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct PlaceRow {
-    pub label: &'static str,
+    pub label: String,
     pub shortcut: Option<&'static str>,
     pub enabled: bool,
     pub destructive: bool,
@@ -137,9 +137,9 @@ pub(super) struct PlaceRow {
 }
 
 impl PlaceRow {
-    fn new(label: &'static str, cmd: PlaceCmd) -> PlaceRow {
+    fn new(label: impl Into<String>, cmd: PlaceCmd) -> PlaceRow {
         PlaceRow {
-            label,
+            label: label.into(),
             shortcut: shortcut(cmd),
             enabled: true,
             destructive: false,
@@ -171,52 +171,90 @@ pub(super) fn place_plan(facts: &PlaceFacts) -> Vec<Option<PlaceRow>> {
     let has_folder = subject.has_folder();
 
     let open = vec![
-        Some(PlaceRow::new(
-            if subject == Subject::Unmounted { "Mount" } else { "Open" },
-            PlaceCmd::Open,
-        )
-        .enabled(!(subject == Subject::Unmounted && facts.busy))),
-        (facts.new_tab && has_folder).then(|| PlaceRow::new("Open in new tab", PlaceCmd::OpenInNewTab)),
+        Some(
+            PlaceRow::new(
+                if subject == Subject::Unmounted {
+                    crate::tr!("ui-files-place-mount")
+                } else {
+                    crate::tr!("ui-files-place-open")
+                },
+                PlaceCmd::Open,
+            )
+            .enabled(!(subject == Subject::Unmounted && facts.busy)),
+        ),
+        (facts.new_tab && has_folder).then(|| {
+            PlaceRow::new(
+                crate::tr!("ui-files-place-open-new-tab"),
+                PlaceCmd::OpenInNewTab,
+            )
+        }),
     ];
 
     let mut change = Vec::new();
     if subject == Subject::Bookmark {
-        change.push(Some(PlaceRow::new("Rename…", PlaceCmd::Rename)));
+        change.push(Some(PlaceRow::new(
+            crate::tr!("ui-files-place-rename"),
+            PlaceCmd::Rename,
+        )));
     }
-    if let Some(release) = facts.release.filter(|_| matches!(subject, Subject::Drive | Subject::Computer)) {
+    if let Some(release) = facts
+        .release
+        .filter(|_| matches!(subject, Subject::Drive | Subject::Computer))
+    {
         change.push(Some(
             PlaceRow::new(release.label(), PlaceCmd::Release(release)).enabled(!facts.busy),
         ));
         if release == Release::Eject {
             change.push(Some(
-                PlaceRow::new(Release::Unmount.label(), PlaceCmd::Release(Release::Unmount))
-                    .enabled(!facts.busy),
+                PlaceRow::new(
+                    Release::Unmount.label(),
+                    PlaceCmd::Release(Release::Unmount),
+                )
+                .enabled(!facts.busy),
             ));
         }
     }
     if subject == Subject::Trash && facts.can_empty_trash {
-        let mut row = PlaceRow::new("Empty Trash", PlaceCmd::EmptyTrash).enabled(facts.trash_full);
+        let mut row = PlaceRow::new(
+            crate::tr!("ui-files-place-empty-trash"),
+            PlaceCmd::EmptyTrash,
+        )
+        .enabled(facts.trash_full);
         row.destructive = facts.trash_full;
         change.push(Some(row));
     }
 
     let mut path = Vec::new();
     if has_folder && subject != Subject::Trash {
-        path.push(Some(PlaceRow::new("Copy path", PlaceCmd::CopyPath)));
+        path.push(Some(PlaceRow::new(
+            crate::tr!("ui-files-place-copy-path"),
+            PlaceCmd::CopyPath,
+        )));
     }
     // A user folder is in the list already, the model hides a bookmark of
     // it, and a bookmark of the root would not show either.
     match subject {
         Subject::Bookmark | Subject::Drive | Subject::Computer if facts.bookmarked => {
-            path.push(Some(PlaceRow::new("Remove from bookmarks", PlaceCmd::RemoveBookmark)));
+            path.push(Some(PlaceRow::new(
+                crate::tr!("ui-files-place-remove-bookmark"),
+                PlaceCmd::RemoveBookmark,
+            )));
         }
         Subject::Drive => {
-            path.push(Some(PlaceRow::new("Add to bookmarks", PlaceCmd::AddBookmark)));
+            path.push(Some(PlaceRow::new(
+                crate::tr!("ui-files-place-add-bookmark"),
+                PlaceCmd::AddBookmark,
+            )));
         }
         _ => {}
     }
 
-    let properties = vec![has_folder.then(|| PlaceRow::new("Properties", PlaceCmd::Properties))];
+    let properties = vec![has_folder.then(|| {
+        PlaceRow::new(
+            crate::tr!("ui-files-place-properties"),
+            PlaceCmd::Properties,
+        )
+    })];
 
     let mut rows = Vec::new();
     for group in [open, change, path, properties] {
@@ -275,7 +313,7 @@ pub(super) fn place_menu(env: PlaceEnv) -> Vec<MenuItem> {
             };
             let act = env.act.clone();
             let cmd = row.cmd;
-            let mut entry = menu_item(row.label, move |_: ()| act.call(cmd));
+            let mut entry = menu_item(row.label.clone(), move |_: ()| act.call(cmd));
             if let Some(shortcut) = row.shortcut {
                 entry = entry.shortcut(shortcut);
             }
@@ -327,15 +365,33 @@ mod tests {
     fn home_and_user_folders_open_copy_and_have_properties() {
         assert_eq!(
             shown(&facts(Subject::Folder)),
-            ["Open", "Open in new tab", "---", "Copy path", "---", "Properties"]
+            [
+                "Open",
+                "Open in new tab",
+                "---",
+                "Copy path",
+                "---",
+                "Properties"
+            ]
         );
     }
 
     #[test]
     fn a_window_without_tabs_has_no_open_in_new_tab() {
-        for subject in [Subject::Folder, Subject::Bookmark, Subject::Trash, Subject::Drive] {
-            let rows = shown(&PlaceFacts { new_tab: false, ..facts(subject) });
-            assert!(!rows.iter().any(|row| row == "Open in new tab"), "{subject:?}: {rows:?}");
+        for subject in [
+            Subject::Folder,
+            Subject::Bookmark,
+            Subject::Trash,
+            Subject::Drive,
+        ] {
+            let rows = shown(&PlaceFacts {
+                new_tab: false,
+                ..facts(subject)
+            });
+            assert!(
+                !rows.iter().any(|row| row == "Open in new tab"),
+                "{subject:?}: {rows:?}"
+            );
         }
     }
 
@@ -343,24 +399,54 @@ mod tests {
     fn the_trash_empties_while_it_is_full_and_is_greyed_when_it_is_not() {
         assert_eq!(
             shown(&facts(Subject::Trash)),
-            ["Open", "Open in new tab", "---", "Empty Trash", "---", "Properties"]
+            [
+                "Open",
+                "Open in new tab",
+                "---",
+                "Empty Trash",
+                "---",
+                "Properties"
+            ]
         );
-        let empty = PlaceFacts { trash_full: false, ..facts(Subject::Trash) };
+        let empty = PlaceFacts {
+            trash_full: false,
+            ..facts(Subject::Trash)
+        };
         assert_eq!(
             shown(&empty),
-            ["Open", "Open in new tab", "---", "~Empty Trash", "---", "Properties"]
+            [
+                "Open",
+                "Open in new tab",
+                "---",
+                "~Empty Trash",
+                "---",
+                "Properties"
+            ]
         );
-        let row = place_plan(&facts(Subject::Trash)).into_iter().flatten().nth(2).unwrap();
+        let row = place_plan(&facts(Subject::Trash))
+            .into_iter()
+            .flatten()
+            .nth(2)
+            .unwrap();
         assert!(row.destructive && row.enabled);
         assert!(!offered(&empty, PlaceCmd::EmptyTrash));
         // Without a handler to empty it, the row is not there.
-        let owner = PlaceFacts { can_empty_trash: false, ..facts(Subject::Trash) };
-        assert_eq!(shown(&owner), ["Open", "Open in new tab", "---", "Properties"]);
+        let owner = PlaceFacts {
+            can_empty_trash: false,
+            ..facts(Subject::Trash)
+        };
+        assert_eq!(
+            shown(&owner),
+            ["Open", "Open in new tab", "---", "Properties"]
+        );
     }
 
     #[test]
     fn a_bookmark_renames_removes_and_has_properties() {
-        let bookmark = PlaceFacts { bookmarked: true, ..facts(Subject::Bookmark) };
+        let bookmark = PlaceFacts {
+            bookmarked: true,
+            ..facts(Subject::Bookmark)
+        };
         assert_eq!(
             shown(&bookmark),
             [
@@ -379,7 +465,10 @@ mod tests {
 
     #[test]
     fn a_mounted_drive_lets_go_by_what_it_is() {
-        let eject = PlaceFacts { release: Some(Release::Eject), ..facts(Subject::Drive) };
+        let eject = PlaceFacts {
+            release: Some(Release::Eject),
+            ..facts(Subject::Drive)
+        };
         assert_eq!(
             shown(&eject),
             [
@@ -395,7 +484,10 @@ mod tests {
                 "Properties"
             ]
         );
-        let unmount = PlaceFacts { release: Some(Release::Unmount), ..facts(Subject::Drive) };
+        let unmount = PlaceFacts {
+            release: Some(Release::Unmount),
+            ..facts(Subject::Drive)
+        };
         assert_eq!(
             shown(&unmount),
             [
@@ -411,7 +503,10 @@ mod tests {
             ]
         );
         // In use, they are greyed rather than gone.
-        let busy = PlaceFacts { busy: true, ..eject };
+        let busy = PlaceFacts {
+            busy: true,
+            ..eject
+        };
         assert!(shown(&busy).contains(&"~Eject".to_owned()));
         assert!(shown(&busy).contains(&"~Unmount".to_owned()));
         assert!(!offered(&busy, PlaceCmd::Release(Release::Eject)));
@@ -420,26 +515,43 @@ mod tests {
     #[test]
     fn a_drive_the_system_lives_on_has_nothing_to_let_go_of() {
         let system = facts(Subject::Drive);
-        assert!(!shown(&system).iter().any(|row| row.contains("ject") || row.contains("Unmount")));
+        assert!(
+            !shown(&system)
+                .iter()
+                .any(|row| row.contains("ject") || row.contains("Unmount"))
+        );
     }
 
     #[test]
     fn a_bookmarked_drive_offers_remove_and_computer_never_offers_add() {
-        let drive = PlaceFacts { bookmarked: true, ..facts(Subject::Drive) };
+        let drive = PlaceFacts {
+            bookmarked: true,
+            ..facts(Subject::Drive)
+        };
         assert!(offered(&drive, PlaceCmd::RemoveBookmark));
         assert!(!offered(&drive, PlaceCmd::AddBookmark));
         // A bookmark of the root is hidden by the model, so it cannot be made.
         assert!(!offered(&facts(Subject::Computer), PlaceCmd::AddBookmark));
         assert_eq!(
             shown(&facts(Subject::Computer)),
-            ["Open", "Open in new tab", "---", "Copy path", "---", "Properties"]
+            [
+                "Open",
+                "Open in new tab",
+                "---",
+                "Copy path",
+                "---",
+                "Properties"
+            ]
         );
     }
 
     #[test]
     fn a_drive_that_is_not_mounted_only_mounts() {
         assert_eq!(shown(&facts(Subject::Unmounted)), ["Mount"]);
-        let busy = PlaceFacts { busy: true, ..facts(Subject::Unmounted) };
+        let busy = PlaceFacts {
+            busy: true,
+            ..facts(Subject::Unmounted)
+        };
         assert_eq!(shown(&busy), ["~Mount"]);
     }
 
@@ -454,8 +566,14 @@ mod tests {
         ] {
             let rows = place_plan(&facts(subject));
             let last = rows.last().unwrap().as_ref().unwrap();
-            assert_eq!((last.cmd, last.shortcut), (PlaceCmd::Properties, Some("Alt+Enter")));
-            assert!(rows[rows.len() - 2].is_none(), "{subject:?}: a separator before Properties");
+            assert_eq!(
+                (last.cmd, last.shortcut),
+                (PlaceCmd::Properties, Some("Alt+Enter"))
+            );
+            assert!(
+                rows[rows.len() - 2].is_none(),
+                "{subject:?}: a separator before Properties"
+            );
         }
         for subject in [Subject::Recent, Subject::Unmounted] {
             assert!(!offered(&facts(subject), PlaceCmd::Properties));
@@ -474,9 +592,15 @@ mod tests {
             Subject::Unmounted,
         ] {
             for release in [None, Some(Release::Eject), Some(Release::Unmount)] {
-                let rows = place_plan(&PlaceFacts { release, ..facts(subject) });
+                let rows = place_plan(&PlaceFacts {
+                    release,
+                    ..facts(subject)
+                });
                 assert!(rows.first().unwrap().is_some() && rows.last().unwrap().is_some());
-                assert!(rows.windows(2).all(|pair| pair[0].is_some() || pair[1].is_some()));
+                assert!(
+                    rows.windows(2)
+                        .all(|pair| pair[0].is_some() || pair[1].is_some())
+                );
             }
         }
     }
@@ -501,7 +625,11 @@ mod tests {
             Subject::Computer,
             Subject::Drive,
         ] {
-            let facts = PlaceFacts { release, bookmarked: true, ..facts(subject) };
+            let facts = PlaceFacts {
+                release,
+                bookmarked: true,
+                ..facts(subject)
+            };
             for row in place_plan(&facts).into_iter().flatten() {
                 let Some(hint) = row.shortcut.filter(|hint| *hint != "Enter") else {
                     continue;
@@ -511,7 +639,10 @@ mod tests {
             }
         }
         // Alt+Enter is Properties, not Open.
-        assert_eq!(key_command(&Key::Named(NamedKey::Enter), Modifiers::empty()), None);
+        assert_eq!(
+            key_command(&Key::Named(NamedKey::Enter), Modifiers::empty()),
+            None
+        );
     }
 
     #[test]
@@ -526,7 +657,14 @@ mod tests {
             .filter(|item| !item.separator)
             .map(|item| item.label.as_str())
             .collect();
-        assert_eq!(labels, ["Open", "Open in new tab", "Copy path", "Properties"]);
-        assert!(items.iter().any(|item| item.shortcut.as_deref() == Some("Alt+Enter")));
+        assert_eq!(
+            labels,
+            ["Open", "Open in new tab", "Copy path", "Properties"]
+        );
+        assert!(
+            items
+                .iter()
+                .any(|item| item.shortcut.as_deref() == Some("Alt+Enter"))
+        );
     }
 }

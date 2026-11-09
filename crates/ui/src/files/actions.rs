@@ -425,16 +425,16 @@ fn in_trash(facts: &Facts, command: &Command) -> Option<Availability> {
     use Availability::{Disabled, Enabled, Hidden};
     Some(match command {
         Command::NewFolder | Command::NewFile | Command::NewFromTemplate(_) => {
-            Disabled("Nothing can be made in the Trash.")
+            Disabled(crate::i18n_id!("ui-files-action-nothing-made-in-trash"))
         }
         Command::Paste if facts.trash == TrashView::Root => {
             if facts.can_paste {
                 Enabled
             } else {
-                Disabled("There is nothing to paste.")
+                Disabled(crate::i18n_id!("ui-files-action-nothing-to-paste"))
             }
         }
-        Command::Paste => Disabled("Nothing can be put inside a folder in the Trash."),
+        Command::Paste => Disabled(crate::i18n_id!("ui-files-action-paste-in-trash-folder")),
         Command::Cut
         | Command::Duplicate
         | Command::PasteInto(_)
@@ -458,7 +458,7 @@ fn in_trash(facts: &Facts, command: &Command) -> Option<Availability> {
     })
 }
 
-const NO_FOLDER: &str = "Open a folder first.";
+const NO_FOLDER: &str = crate::i18n_id!("ui-files-action-no-folder");
 
 /// The rules: what is on offer for this summary of the selection.
 pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
@@ -480,7 +480,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             0 => Hidden,
             1 => Enabled,
             _ if caps.open_with => Enabled,
-            _ => Disabled("Select one item to open it."),
+            _ => Disabled(crate::i18n_id!("ui-files-action-select-one-to-open")),
         },
         Command::Preview => {
             if some {
@@ -495,7 +495,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             } else if one {
                 Enabled
             } else {
-                Disabled("Select one file to choose how to open it.")
+                Disabled(crate::i18n_id!("ui-files-action-select-one-file-to-choose"))
             }
         }
         Command::OpenInNewTab => {
@@ -504,7 +504,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             } else if all_folders {
                 Enabled
             } else {
-                Disabled("Only folders open in a new tab.")
+                Disabled(crate::i18n_id!("ui-files-action-only-folders-new-tab"))
             }
         }
         Command::Cut
@@ -524,7 +524,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             if !facts.in_folder {
                 Disabled(NO_FOLDER)
             } else if !facts.can_paste {
-                Disabled("There is nothing to paste.")
+                Disabled(crate::i18n_id!("ui-files-action-nothing-to-paste"))
             } else {
                 Enabled
             }
@@ -533,7 +533,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             if facts.can_paste {
                 Enabled
             } else {
-                Disabled("There is nothing to paste.")
+                Disabled(crate::i18n_id!("ui-files-action-nothing-to-paste"))
             }
         }
         // One item is renamed in place; several in the Rename sheet.
@@ -571,14 +571,14 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             } else if facts.can_compress {
                 Enabled
             } else {
-                Disabled("No archive tool is installed.")
+                Disabled(crate::i18n_id!("ui-files-action-no-archive-tool"))
             }
         }
         Command::CompressSelection => {
             if facts.can_compress {
                 Enabled
             } else {
-                Disabled("No archive tool is installed.")
+                Disabled(crate::i18n_id!("ui-files-action-no-archive-tool"))
             }
         }
         Command::CompressQuick(format) => {
@@ -587,7 +587,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             } else if format.is_available() {
                 Enabled
             } else {
-                Disabled("That archive tool is not installed.")
+                Disabled(crate::i18n_id!("ui-files-action-archive-tool-missing"))
             }
         }
         Command::Extract | Command::ExtractTo => {
@@ -610,14 +610,14 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             if facts.shown > 0 {
                 Enabled
             } else {
-                Disabled("There is nothing to select.")
+                Disabled(crate::i18n_id!("ui-files-action-nothing-to-select"))
             }
         }
         Command::InvertSelection => {
             if facts.shown > 0 {
                 Enabled
             } else {
-                Disabled("There is nothing to select.")
+                Disabled(crate::i18n_id!("ui-files-action-nothing-to-select"))
             }
         }
         Command::Refresh => Enabled,
@@ -625,7 +625,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             if !facts.trash.on() {
                 Hidden
             } else if facts.shown == 0 {
-                Disabled("The Trash is empty.")
+                Disabled(crate::i18n_id!("ui-files-action-trash-empty"))
             } else {
                 Enabled
             }
@@ -643,7 +643,7 @@ pub(super) fn availability(facts: &Facts, command: &Command) -> Availability {
             if facts.undo.is_some() {
                 Enabled
             } else {
-                Disabled("There is nothing to undo.")
+                Disabled(crate::i18n_id!("ui-files-action-nothing-to-undo"))
             }
         }
         Command::MoveInto { .. } => Enabled,
@@ -706,12 +706,13 @@ fn paths_of(selected: &[Entry]) -> Vec<PathBuf> {
 /// What to call `paths` in a sentence: the name, or the count.
 pub(super) fn describe(paths: &[PathBuf]) -> String {
     match paths {
-        [only] => format!(
-            "“{}”",
-            only.file_name()
+        [only] => crate::tr!(
+            "ui-files-action-quoted-name",
+            name = only
+                .file_name()
                 .map_or_else(|| only.to_string_lossy(), |name| name.to_string_lossy())
         ),
-        many => format!("{} items", many.len()),
+        many => crate::tr!("ui-files-action-item-count", count = many.len()),
     }
 }
 
@@ -729,7 +730,11 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
             {
                 notify(
                     env.ui,
-                    format!("Could not start {}: {error}.", app.name),
+                    crate::tr!(
+                        "ui-files-action-could-not-start",
+                        app = app.name.to_string(),
+                        error = error.to_string()
+                    ),
                     true,
                 );
             }
@@ -772,7 +777,11 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
                 .map(|entry| entry.path.to_string_lossy().into_owned())
                 .collect::<Vec<_>>()
                 .join("\n");
-            copy_text(env, text, "Path copied.", "Paths copied.", selected.len());
+            copy_text(
+                env,
+                text,
+                crate::tr!("ui-files-action-copied-paths", count = selected.len()),
+            );
         }
         Command::CopyUri => {
             let text = selected
@@ -783,9 +792,7 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
             copy_text(
                 env,
                 text,
-                "Location copied.",
-                "Locations copied.",
-                selected.len(),
+                crate::tr!("ui-files-action-copied-locations", count = selected.len()),
             );
         }
         Command::AddBookmark => bookmark(env, selected, true),
@@ -867,10 +874,14 @@ fn open(env: &Env, selected: &[Entry]) {
     }
 }
 
-fn copy_text(env: &Env, text: String, one: &str, many: &str, count: usize) {
+fn copy_text(env: &Env, text: String, message: String) {
     match freya::clipboard::Clipboard::set(text) {
-        Ok(()) => notify(env.ui, if count == 1 { one } else { many }, false),
-        Err(_) => notify(env.ui, "Could not reach the clipboard.", true),
+        Ok(()) => notify(env.ui, message, false),
+        Err(_) => notify(
+            env.ui,
+            crate::tr!("ui-files-action-clipboard-unreachable"),
+            true,
+        ),
     }
 }
 
@@ -894,7 +905,10 @@ fn bookmark(env: &Env, selected: &[Entry], add: bool) {
             Ok(()) => reload.call(()),
             Err(error) => notify(
                 ui,
-                format!("Could not change the bookmarks: {error}."),
+                crate::tr!(
+                    "ui-files-action-bookmarks-failed",
+                    error = error.to_string()
+                ),
                 true,
             ),
         }
@@ -909,9 +923,9 @@ fn create(env: &Env, folder: bool) {
     };
     let env = env.clone();
     let base = if folder {
-        "Untitled folder"
+        crate::tr!("ui-files-action-untitled-folder")
     } else {
-        "Untitled file"
+        crate::tr!("ui-files-action-untitled-file")
     };
     let mut taken: Vec<String> = env
         .listing
@@ -923,7 +937,7 @@ fn create(env: &Env, folder: bool) {
         let outcome = spawn_blocking(move || {
             // Another program may have made the name since the folder was
             // listed, so try the next one when this one is taken.
-            let mut name = names::unused_name(base, |name| taken.iter().any(|t| t == name));
+            let mut name = names::unused_name(&base, |name| taken.iter().any(|t| t == name));
             loop {
                 let made = if folder {
                     backend::create_dir(&parent, &name)
@@ -933,7 +947,7 @@ fn create(env: &Env, folder: bool) {
                 match made {
                     Err(backend::OpError::Exists) => {
                         taken.push(name);
-                        name = names::unused_name(base, |name| taken.iter().any(|t| t == name));
+                        name = names::unused_name(&base, |name| taken.iter().any(|t| t == name));
                     }
                     other => return other,
                 }
@@ -960,7 +974,11 @@ fn create(env: &Env, folder: bool) {
                 );
                 env.reload.call(());
             }
-            Err(error) => notify(env.ui, format!("Could not create it: {error}"), true),
+            Err(error) => notify(
+                env.ui,
+                crate::tr!("ui-files-action-create-failed", error = error.to_string()),
+                true,
+            ),
         }
     });
 }
@@ -1039,7 +1057,11 @@ fn create_from_template(env: &Env, template: PathBuf) {
                 );
                 env.reload.call(());
             }
-            Err(error) => notify(env.ui, format!("Could not create it: {error}"), true),
+            Err(error) => notify(
+                env.ui,
+                crate::tr!("ui-files-action-create-failed", error = error.to_string()),
+                true,
+            ),
         }
     });
 }

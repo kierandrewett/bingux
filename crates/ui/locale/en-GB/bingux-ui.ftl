@@ -669,3 +669,546 @@ ui-files-address-problem-not-responding = Not responding
 ui-files-reload-stop = Stop (Esc)
 ui-files-reload-refresh = Refresh (F5)
 ui-files-launch-not-responding = not responding
+
+
+## Files: actions and menus
+
+# The menus of the Files app: the entry, empty-space and header menus.
+ui-files-menu-open-with = Open with
+ui-files-menu-paste-into-folder = Paste into folder
+ui-files-menu-open = Open
+ui-files-menu-open-in-new-tab = Open in new tab
+ui-files-menu-preview = Preview
+ui-files-menu-cut = Cut
+ui-files-menu-copy = Copy
+ui-files-menu-duplicate = Duplicate
+ui-files-menu-restore = Restore
+ui-files-menu-restore-to = Restore to…
+ui-files-menu-rename = Rename
+ui-files-menu-rename-many = Rename…
+ui-files-menu-move-to-trash = Move to Trash
+ui-files-menu-delete-permanently = Delete permanently
+ui-files-menu-compress = Compress…
+ui-files-menu-extract-here = Extract Here
+ui-files-menu-extract-to = Extract to…
+ui-files-menu-copy-path = Copy path
+ui-files-menu-copy-uri = Copy location as URI
+ui-files-menu-add-bookmark = Add to bookmarks
+ui-files-menu-remove-bookmark = Remove from bookmarks
+ui-files-menu-properties = Properties
+ui-files-menu-compress-as = Compress as
+ui-files-menu-quick-zip = Quick .zip
+ui-files-menu-quick-targz = Quick .tar.gz
+ui-files-menu-compress-selection = Compress selection…
+ui-files-menu-sort-by = Sort by
+ui-files-menu-list = List
+ui-files-menu-grid = Grid
+ui-files-menu-icon-size = Icon size
+ui-files-menu-show-hidden = Show hidden files
+ui-files-menu-new-file = New file
+ui-files-menu-empty-file = Empty file
+ui-files-menu-paste-into-trash = Paste into Trash
+ui-files-menu-paste = Paste
+ui-files-menu-new-folder = New folder
+ui-files-menu-select-all = Select all
+ui-files-menu-invert-selection = Invert selection
+ui-files-menu-view = View
+ui-files-menu-empty-trash = Empty Trash
+ui-files-menu-refresh = Refresh
+
+# The sort choices of the Sort by menu.
+ui-files-sort-name = Name
+ui-files-sort-size = Size
+ui-files-sort-type = Type
+ui-files-sort-modified = Modified
+ui-files-sort-ascending = Ascending
+ui-files-sort-descending = Descending
+ui-files-sort-folders-first = Folders first
+
+# The places sidebar menu: the rows for a bookmark, drive, computer, trash or folder.
+ui-files-place-mount = Mount
+ui-files-place-open = Open
+ui-files-place-open-new-tab = Open in new tab
+ui-files-place-rename = Rename…
+ui-files-place-eject = Eject
+ui-files-place-unmount = Unmount
+ui-files-place-empty-trash = Empty Trash
+ui-files-place-copy-path = Copy path
+ui-files-place-remove-bookmark = Remove from bookmarks
+ui-files-place-add-bookmark = Add to bookmarks
+ui-files-place-properties = Properties
+
+# Why a command is greyed out. The reason shows in the status line.
+ui-files-action-nothing-made-in-trash = Nothing can be made in the Trash.
+ui-files-action-nothing-to-paste = There is nothing to paste.
+ui-files-action-paste-in-trash-folder = Nothing can be put inside a folder in the Trash.
+ui-files-action-no-folder = Open a folder first.
+ui-files-action-select-one-to-open = Select one item to open it.
+ui-files-action-select-one-file-to-choose = Select one file to choose how to open it.
+ui-files-action-only-folders-new-tab = Only folders open in a new tab.
+ui-files-action-no-archive-tool = No archive tool is installed.
+ui-files-action-archive-tool-missing = That archive tool is not installed.
+ui-files-action-nothing-to-select = There is nothing to select.
+ui-files-action-trash-empty = The Trash is empty.
+ui-files-action-nothing-to-undo = There is nothing to undo.
+
+# Names of undoable changes, as Edit > Undo shows them.
+ui-files-undo-name-change = Change
+ui-files-undo-name-rename = Rename
+ui-files-undo-name-trash = Move to Trash
+ui-files-undo-name-new-folder = New folder
+ui-files-undo-name-new-file = New file
+ui-files-undo-name-move = Move
+ui-files-undo-name-duplicate = Duplicate
+# Status after an undo or redo.
+ui-files-undo-undone = Undone.
+ui-files-undo-redone = Redone.
+# $what (String) - the action that failed, such as "copy"
+ui-files-transfer-what-undo = undo that
+ui-files-transfer-what-redo = redo that
+ui-files-transfer-what-move = move
+ui-files-transfer-what-copy = copy
+ui-files-transfer-what-rename = rename these items
+ui-files-transfer-what-duplicate = duplicate
+# $what (String) - what failed, $error (String) - why
+ui-files-transfer-error = Could not { $what }: { $error }
+ui-files-transfer-wait-busy = Wait for the current operation to finish.
+ui-files-transfer-inside-itself = A folder cannot go inside itself.
+ui-files-transfer-verb-moving = Moving
+ui-files-transfer-verb-copying = Copying
+ui-files-transfer-verb-duplicating = Duplicating
+ui-files-transfer-past-moved = Moved
+ui-files-transfer-past-copied = Copied
+ui-files-transfer-renaming = Renaming…
+ui-files-transfer-duplicated = Duplicated { $whole }.
+ui-files-transfer-duplicating-stopped = Duplicating stopped.
+# $verb (String) - the action in progress, $whole (String) - what it acts on
+ui-files-transfer-busy-whole = { $verb } { $whole }
+# $verb (String), $done (Number) - the item now on, $total (Number) - how many
+ui-files-transfer-busy-count = { $verb } { $done } of { $total }
+# $drive (String) - the drive being written
+ui-files-transfer-finishing = Finishing… writing to { $drive }
+# $past (String) - the finished action, $whole (String) - what it acted on
+ui-files-transfer-done = { $past } { $whole }.
+ui-files-transfer-done-flushed = { $past } { $whole }. Everything is written to { $drive }.
+# $verb (String) - the stopped action
+ui-files-transfer-stopped = { $verb } stopped.
+# $count (Number) - how many items were renamed
+ui-files-transfer-renamed = Renamed { $count ->
+    [one] 1 item
+   *[other] { $count } items
+}.
+# The conflict question. $name (String) - the clashing name, $place (String) - the folder it clashes in, already quoted.
+ui-files-transfer-conflict-title = “{ $name }” already exists
+ui-files-transfer-conflict-place = Something with this name is already in { $place }.
+ui-files-transfer-conflict-the-destination = the destination
+ui-files-transfer-apply-all = Do this for all conflicts
+ui-files-transfer-skip = Skip
+ui-files-transfer-keep-both = Keep both
+ui-files-transfer-replace = Replace
+
+# The status line after an action. $app (String) is the app's name, $error (String) why it failed.
+ui-files-action-could-not-start = Could not start { $app }: { $error }.
+# $count (Number) - how many paths were copied
+ui-files-action-copied-paths = { $count ->
+    [one] Path copied.
+   *[other] Paths copied.
+}
+# $count (Number) - how many locations were copied
+ui-files-action-copied-locations = { $count ->
+    [one] Location copied.
+   *[other] Locations copied.
+}
+ui-files-action-clipboard-unreachable = Could not reach the clipboard.
+ui-files-action-bookmarks-failed = Could not change the bookmarks: { $error }.
+ui-files-action-untitled-folder = Untitled folder
+ui-files-action-untitled-file = Untitled file
+ui-files-action-create-failed = Could not create it: { $error }
+# $name (String) - the name of one item, shown in curly quotes
+ui-files-action-quoted-name = “{ $name }”
+# $count (Number) - how many items were picked
+ui-files-action-item-count = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+
+# The Trash prompts and toasts. $target (String) - what is meant, e.g. “report.txt” or 3 items.
+ui-files-bin-moved = Moved { $target } to Trash
+ui-files-bin-restored = Restored { $target }
+ui-files-bin-delete-title = Delete { $target } permanently?
+# $count (Number) - how many items are being deleted
+ui-files-bin-delete-in-trash = { $count ->
+    [one] It will be deleted permanently. This cannot be undone: nothing can bring it back.
+   *[other] They will be deleted permanently. This cannot be undone: nothing can bring them back.
+}
+# $count (Number) - how many items are being deleted
+ui-files-bin-delete-for-good = { $count ->
+    [one] It will be deleted for good. This cannot be undone: it will not go to the Trash, and Undo cannot bring it back.
+   *[other] They will be deleted for good. This cannot be undone: they will not go to the Trash, and Undo cannot bring them back.
+}
+ui-files-bin-empty-title = Empty the Trash?
+# $count (Number) - how many items are in the Trash; $size (String) - its size in brackets, or empty
+ui-files-bin-empty-warning = { $count ->
+    [one] { $count } item{ $size } in the Trash will be deleted for good. This cannot be undone. It will not be recoverable.
+   *[other] { $count } items{ $size } in the Trash will be deleted for good. This cannot be undone. They will not be recoverable.
+}
+# $count (Number) - how many items the Trash refused
+ui-files-bin-refusal-several = { $count ->
+    [one] It cannot be moved to the Trash.
+   *[other] They cannot be moved to the Trash.
+}
+# $target (String) - what was refused; $reason (String) - the sentence saying why
+ui-files-bin-refused-with-reason = { $target }: { $reason }
+ui-files-bin-refused-all = { $target } cannot be moved to the Trash.
+# One reason the Trash refused an item. $count (Number) - 1 for one item, 2 for several; $name (String) - a user folder's name.
+ui-files-bin-refusal-not-absolute = The path must be absolute.
+ui-files-bin-refusal-root = The root folder cannot be moved to the Trash.
+ui-files-bin-refusal-trash-itself = The Trash itself cannot be moved to the Trash.
+ui-files-bin-refusal-in-trash = { $count ->
+    [one] It is in the Trash already.
+   *[other] They are in the Trash already.
+}
+ui-files-bin-refusal-home = Your home folder cannot be moved to the Trash.
+ui-files-bin-refusal-holds-home = { $count ->
+    [one] It holds your home folder, so it cannot be moved to the Trash.
+   *[other] They hold your home folder, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-holds-trash = { $count ->
+    [one] It holds the Trash, so it cannot be moved to the Trash.
+   *[other] They hold the Trash, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-user-folder = { $count ->
+    [one] It is your { $name } folder, so it cannot be moved to the Trash.
+   *[other] They are your { $name } folder, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-read-only = { $count ->
+    [one] It is on a read-only drive, so it cannot be moved to the Trash.
+   *[other] They are on a read-only drive, so they cannot be moved to the Trash.
+}
+ui-files-bin-refusal-no-bin = { $count ->
+    [one] Its drive has no Trash and one cannot be made there, so it cannot be moved to the Trash.
+   *[other] Their drive has no Trash and one cannot be made there, so they cannot be moved to the Trash.
+}
+# $count (Number) - how many items are being copied to the Trash; picks “it” or “them”
+ui-files-bin-copy-title = Copy { $target } to the Trash?
+# $count (Number) - how many items are being copied to the Trash
+ui-files-bin-copy-body = { $count ->
+    [one] Moving it to the Trash means copying it to another drive first, which can take a long time and uses space there. To remove it without that, cancel and use Delete permanently from the menu opened with Shift.
+   *[other] Moving them to the Trash means copying them to another drive first, which can take a long time and uses space there. To remove them without that, cancel and use Delete permanently from the menu opened with Shift.
+}
+ui-files-bin-copy-action = Copy to Trash
+ui-files-bin-copying-busy = Copying { $target } to Trash
+# $error (String) - why the move failed
+ui-files-bin-move-failed = Could not move to the Trash: { $error }
+ui-files-bin-deleting-busy = Deleting { $target }
+ui-files-bin-deleted = Deleted { $target }.
+ui-files-bin-delete-stopped = Deleting stopped.
+# $error (String) - why the delete failed
+ui-files-bin-delete-failed = Could not delete: { $error }
+ui-files-bin-counting-busy = Counting what is in the Trash
+ui-files-bin-already-empty = The Trash is already empty.
+ui-files-bin-count-stopped = Counting stopped.
+# $error (String) - why the count failed
+ui-files-bin-count-failed = Could not count the Trash: { $error }
+ui-files-bin-emptying-busy = Emptying the Trash
+ui-files-bin-emptied = Emptied the Trash.
+ui-files-bin-empty-stopped = Emptying stopped.
+ui-files-bin-restore-to-title = Restore to
+ui-files-bin-no-window = There is no window to choose a folder in.
+# $count (Number) - how many items have no record; $target (String) - what is meant
+ui-files-bin-no-record = { $count ->
+    [one] { $target } has no record of where it came from. Use Restore to… to choose a folder.
+   *[other] { $target } have no record of where they came from. Use Restore to… to choose a folder.
+}
+# $target (String) - what is meant, e.g. “report.txt” or 3 items.
+ui-files-bin-make-folder-title = Make the folder again to restore { $target }?
+# $count (Number) - how many folders are gone; $folder (String) - the first missing folder's path
+ui-files-bin-make-folder-body = { $count ->
+    [one] The folder { $folder } is no longer there. Restoring will make it again.
+   *[other] { $count } folders, such as { $folder }, are no longer there. Restoring will make them again.
+}
+ui-files-bin-restoring-busy = Restoring { $target }
+ui-files-bin-restore-stopped = Restoring stopped.
+ui-files-bin-nothing-restored = Nothing was restored.
+ui-files-bin-refuse-inside = Nothing can be put inside a folder in the Trash. Drop it on the Trash itself to move it there.
+# The Extract dialog: the archive, where its files go, and what happens to a clash.
+# $name (String) - the archive or folder name, shown in curly quotes
+ui-extract-quoted-name = “{ $name }”
+# $name (String) - the archive name
+ui-extract-title = Extract “{ $name }”
+ui-extract-needs-seven-zip = Opening a locked archive needs 7-Zip, which is not installed.
+ui-extract-enter-password = Enter the password.
+ui-extract-reading-archive = Reading the archive…
+ui-extract-wrong-password = That password is not right.
+ui-extract-to = Extract to
+ui-extract-choose = Choose
+ui-extract-names-hidden = Locked: the names are hidden too
+# $count (Number) - how many items the archive holds
+ui-extract-items-locked = { $count ->
+    [one] { $count } item, locked
+   *[other] { $count } items, locked
+}
+# $count (Number) - how many items the archive holds
+ui-extract-items = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+ui-extract-reading = Reading…
+ui-extract-group-archive = Archive
+ui-extract-row-name = Name
+ui-extract-row-contents = Contents
+ui-extract-new-folder = Put the files in a new folder
+ui-extract-folder-after-archive = A folder named after the archive.
+ui-extract-files-loose = The files land loose in the folder.
+ui-extract-if-taken = If a name is taken
+ui-extract-then = Then
+ui-extract-keep-both = Keep both
+ui-extract-replace = Replace (the old one goes to the Trash)
+ui-extract-skip = Skip it
+ui-extract-password = Password
+ui-extract-password-label = Password
+ui-extract-action = Extract
+ui-extract-checking-password = Checking the password…
+
+# Shown under a name field when the name cannot be used.
+ui-files-name-empty = Enter a name.
+ui-files-name-reserved = A name cannot be . or ..
+ui-files-name-slash = A name cannot contain a slash.
+ui-files-name-too-long = The name is longer than 255 bytes.
+ui-files-name-invalid = The name contains a character that is not allowed.
+ui-files-name-exists = A file or folder with this name already exists.
+
+# Batch rename dialog: title, form fields and preview rows.
+# $count (Number) - how many items are being renamed
+ui-batch-rename-title = { $count ->
+    [one] Rename { $count } item
+   *[other] Rename { $count } items
+}
+ui-batch-rename-action = Rename
+ui-batch-rename-find-replace = Find and replace
+ui-batch-rename-find = Find
+ui-batch-rename-replace-with = Replace with
+ui-batch-rename-match-case = Match case
+ui-batch-rename-case = Case
+ui-batch-rename-change-to = Change to
+ui-batch-rename-keep-case = Keep as it is
+ui-batch-rename-lowercase = lowercase
+ui-batch-rename-uppercase = UPPERCASE
+ui-batch-rename-title-case = Title Case
+ui-batch-rename-number = Number
+ui-batch-rename-add-number = Add a number
+ui-batch-rename-no-number = No number
+ui-batch-rename-after-name = After the name
+ui-batch-rename-before-name = Before the name
+ui-batch-rename-start-at = Start at
+ui-batch-rename-new-names = New names
+# $count (Number) - how many preview rows are hidden
+ui-batch-rename-more = { $count ->
+    [one] { $count } more item is not shown.
+   *[other] { $count } more items are not shown.
+}
+# Row subtitles explaining why a new name cannot be used.
+ui-batch-rename-problem-empty = A name cannot be empty.
+ui-batch-rename-problem-slash = A name cannot contain “/”.
+ui-batch-rename-problem-dots = A name cannot be “.” or “..”.
+ui-batch-rename-problem-twice = Two items would have this name.
+ui-batch-rename-problem-taken = Another item in the folder has this name.
+ui-batch-rename-nothing-changes = Nothing would change.
+
+# Compressing, reducing and extracting: the busy line, its toasts and the
+# one-click archive names. $whole is a quoted name ("Photos") or a count.
+ui-run-compress-busy = Compressing { $whole }
+ui-run-reduce-busy = Reducing { $whole }
+ui-run-extract-busy = Extracting { $whole }
+ui-run-compress-counting = Compressing { $whole }: counting
+ui-run-reduce-counting = Reducing { $whole }: counting
+ui-run-extract-counting = Extracting { $whole }: counting
+ui-run-compress-items = Compressing { $whole }, { $done } of { $total }
+ui-run-reduce-items = Reducing { $whole }, { $done } of { $total }
+ui-run-extract-items = Extracting { $whole }, { $done } of { $total }
+# $index (Number) - the file being worked on; $total (Number) - how many files
+ui-run-compress-file = Compressing { $index } of { $total }: { $name }
+ui-run-reduce-file = Reducing { $index } of { $total }: { $name }
+ui-run-extract-file = Extracting { $index } of { $total }: { $name }
+# $percent (Number) - how far the file is, in whole per cent
+ui-run-compress-file-percent = Compressing { $index } of { $total }: { $name }, { $percent }%
+ui-run-reduce-file-percent = Reducing { $index } of { $total }: { $name }, { $percent }%
+ui-run-extract-file-percent = Extracting { $index } of { $total }: { $name }, { $percent }%
+# $drive (String) - the drive the archive is being written to
+ui-run-finishing = Finishing, writing to { $drive }
+
+ui-run-busy-wait = Wait for the current operation to finish.
+ui-run-undone = Undone.
+# $error (String) - the program's own message for the failed undo
+ui-run-undo-failed = Could not undo that: { $error }
+ui-run-show = Show
+ui-run-undo = Undo
+ui-run-compress-stopped = Compression stopped.
+ui-run-reduce-stopped = Reducing stopped.
+ui-run-extract-stopped = Extracting stopped.
+# $error (String) - the program's own message
+ui-run-compress-failed = Could not compress: { $error }
+ui-run-reduce-failed = Could not reduce: { $error }
+ui-run-extract-failed = Could not extract: { $error }
+
+# $name (String) - the archive's file name, such as "Photos.zip"
+ui-run-created = Created “{ $name }”
+# $text (String) - the sentence before it; $count (Number) - the volumes made
+ui-run-volumes = { $text } in { $count ->
+    [one] 1 volume
+   *[other] { $count } volumes
+}
+# $text (String) - the sentence before it; $problem (String) - the Trash error
+ui-run-trash-failed = { $text }. The originals were not moved to the Trash: { $problem }
+ui-run-trashed = { $text }. The originals are in the Trash
+# $text (String) and $detail (String) - two sentences joined with a full stop
+ui-run-with-detail = { $text }. { $detail }
+
+# $name (String) - the extracted item's name
+ui-run-extracted-to = Extracted to “{ $name }”
+# $count (Number) - how many items were extracted
+ui-run-extracted-items = { $count ->
+    [one] Extracted 1 item
+   *[other] Extracted { $count } items
+}
+# $count (Number) - how many were extracted; $skipped (Number) - how many were skipped
+ui-run-extracted-items-skipped = { $count ->
+    [one] Extracted 1 item, { $skipped } skipped because the name was taken
+   *[other] Extracted { $count } items, { $skipped } skipped because the name was taken
+}
+ui-run-extract-nothing-taken = Nothing was extracted: every name was taken
+
+# $name (String) - the one item's name, already quoted in the toast
+ui-run-whole-name = “{ $name }”
+# $count (Number) - how many items were selected
+ui-run-whole-items = { $count ->
+    [one] 1 item
+   *[other] { $count } items
+}
+
+# How a finished reduction reads in a toast. $from and $to are sizes ("4.2 MB").
+ui-reduce-one = Reduced from { $from } to { $to }
+ui-reduce-many = { $count ->
+    [one] Reduced 1 file from { $from } to { $to }
+   *[other] Reduced { $count } files from { $from } to { $to }
+}
+ui-reduce-kept-one = Already small: kept original
+ui-reduce-kept-many = { $count } already small: kept
+ui-reduce-failed = { $count ->
+    [one] 1 could not be reduced
+   *[other] { $count } could not be reduced
+}
+ui-reduce-nothing = Nothing was reduced
+
+# The Compress dialog. $count is the number of items; $size, $kbps, $crf and $kind are shown as given.
+# $count (Number) - how many originals will be moved to the Trash after packing
+ui-compress-confirm-pack-title = Move the originals to the Trash?
+ui-compress-confirm-pack-body = { $count ->
+    [one] Once the archive is made and checked, the original will be moved to the Trash. You can bring them back from there, or with Undo.
+   *[other] Once the archive is made and checked, the { $count } originals will be moved to the Trash. You can bring them back from there, or with Undo.
+}
+ui-compress-confirm-pack-go = Move to Trash
+# $count (Number) - how many originals will be replaced by smaller copies
+ui-compress-confirm-reduce-title = Replace the originals?
+ui-compress-confirm-reduce-body = { $count ->
+    [one] Each smaller copy takes its original's place. Once it is made and checked, the original will be moved to the Trash. You can bring them back from there, or with Undo.
+   *[other] Each smaller copy takes its original's place. Once they are made and checked, the { $count } originals will be moved to the Trash. You can bring them back from there, or with Undo.
+}
+ui-compress-confirm-reduce-go = Replace
+ui-compress-save-in = Save in
+ui-compress-choose = Choose
+ui-compress-type = Type
+ui-compress-archive = Archive
+ui-compress-reduce-size = Reduce size
+ui-compress-tools-busy = Looking for the tools that shrink media…
+ui-compress-create = Create
+ui-compress-name = Name
+ui-compress-name-placeholder = Archive
+ui-compress-conflict = Already exists
+# $taken (String) - the name already in use here; $shown (String) - the name the new file will get
+ui-compress-conflict-keep-body = “{ $taken }” is taken here, so this one will be “{ $shown }”.
+# $shown (String) - the name of the file that will be replaced
+ui-compress-conflict-replace-body = “{ $shown }” will be replaced. The old file goes to the Trash.
+ui-compress-conflict-keep = Keep both
+ui-compress-conflict-replace = Replace
+ui-compress-format = Format
+ui-compress-song-format = Song format
+ui-compress-film-format = Film format
+ui-compress-compression = Compression
+ui-compress-level = Level
+ui-compress-password = Password
+ui-compress-lock = Ask for a password
+ui-compress-lock-zip-only = Only .zip and .7z can be locked.
+ui-compress-lock-aes = Encrypted with AES-256.
+ui-compress-password-choose = Choose a password
+ui-compress-password-field = Password
+ui-compress-confirm-field = Confirm
+ui-compress-hide-names = Encrypt file names
+ui-compress-hide-names-hint = Nobody can even list what is inside without the password
+ui-compress-split-one = One file
+# $size (String) - the size of each volume, such as "700 MB"
+ui-compress-split-each = { $size } each
+ui-compress-volumes = Volumes
+ui-compress-split = Split into volumes
+ui-compress-split-hint = Cut a big archive into pieces, as for a disc or an email.
+ui-compress-options = Options
+ui-compress-hidden = Include hidden files
+ui-compress-links = Keep links as links
+ui-compress-links-hint = Off stores what each link points to instead
+ui-compress-owners = Keep permissions and owners
+ui-compress-owners-hint = Who may read each file, and who owns it.
+ui-compress-owners-tar-only = Only .tar formats record who owns a file.
+ui-compress-excludes = Leave out
+ui-compress-excludes-placeholder = *.tmp, node_modules
+ui-compress-excludes-hint = Comma separated. A name matches at any depth; a / makes it a path.
+ui-compress-after = When it is done
+ui-compress-trash-originals = Move the originals to the Trash
+ui-compress-trash-originals-hint = Only after the archive is made and checked. You will be asked.
+ui-compress-fastest = Fastest
+ui-compress-balanced = Balanced
+ui-compress-smallest = Smallest
+ui-compress-custom = Custom
+ui-compress-quality = Quality
+ui-compress-crf = Constant rate factor
+# $crf (Number) - the constant rate factor, a lower number is better quality
+ui-compress-crf-value = CRF { $crf }
+ui-compress-crf-hint = Higher quality on the right: a bigger file
+ui-compress-resolution = Resolution
+ui-compress-frame-rate = Frame rate
+ui-compress-remove-sound = Remove sound
+# $kbps (Number) - audio bitrate in kbit/s
+ui-compress-kbps = { $kbps } kbit/s
+ui-compress-sound = Sound
+ui-compress-films = Films
+ui-compress-remove-tags = Remove location and other tags
+ui-compress-remove-tags-film-hint = Takes out the title, the place and the other tags
+ui-compress-bitrate = Bitrate
+ui-compress-flac-hint = FLAC keeps every sample; only the packing changes.
+ui-compress-lossy-hint = Opus sounds fine at 96; MP3 wants 128 or more.
+ui-compress-songs = Songs
+ui-compress-remove-song-tags = Remove tags and cover
+ui-compress-remove-song-tags-hint = Takes out the artist, the title and the picture
+ui-compress-lossless = Lossless
+ui-compress-png-hint = PNG keeps every pixel; only the packing changes.
+ui-compress-lower-hint = Lower is smaller.
+ui-compress-other = Other…
+ui-compress-longest-side = Longest side
+ui-compress-pixels = Pixels
+ui-compress-pictures = Pictures
+ui-compress-remove-location = Remove location and camera data
+ui-compress-exif-hint = Takes out the EXIF, including where and with what it was taken. The colours stay.
+ui-compress-checking = Checking
+# $kind (String) - the kind of media, such as "Pictures"
+ui-compress-media-cannot = { $kind } cannot be made smaller
+# $size (String) - the total size now, such as "4.2 MB"; $error (String) - why no estimate could be made
+ui-compress-no-estimate = Original { $size }, no estimate: { $error }
+ui-compress-result = Result
+ui-compress-size = Size
+# $count (Number) - how many more files are not listed
+ui-compress-and-more = and { $count } more
+ui-compress-kept = kept as it is
+# $size (String) - the estimated size, such as "2.1 MB"
+ui-compress-about = about { $size }
+ui-compress-replace-originals = Replace the originals
+ui-compress-originals-trash-hint = The originals go to the Trash once the smaller files are made and checked. You will be asked.
+ui-compress-replace-needs-beside = Replacing needs the result to sit beside the original.

@@ -2039,7 +2039,9 @@ fn view_commands(shared: &Shared) -> Vec<crate::commands::Command> {
                 actions::Availability::Enabled => {
                     actions::run(&ctx.env, &selected, command.clone())
                 }
-                actions::Availability::Disabled(why) => actions::notify(ctx.env.ui, why, false),
+                actions::Availability::Disabled(why) => {
+                    actions::notify(ctx.env.ui, crate::i18n::text(why), false)
+                }
                 actions::Availability::Hidden => {}
             }
         })

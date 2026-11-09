@@ -76,8 +76,16 @@ pub(super) struct Launch {
 
 #[derive(Clone)]
 enum Request {
-    Pack { job: PackJob, whole: String, prefs: Prefs },
-    Reduce { job: ReduceJob, whole: String, prefs: Prefs },
+    Pack {
+        job: PackJob,
+        whole: String,
+        prefs: Prefs,
+    },
+    Reduce {
+        job: ReduceJob,
+        whole: String,
+        prefs: Prefs,
+    },
 }
 
 impl Request {
@@ -193,7 +201,9 @@ pub fn compress_preview(preview: CompressPreview) -> Element {
             custom_dimension: preview.custom_dimension,
         }),
     };
-    Element::from(CompressDialog { launch: Shared(Rc::new(launch)) })
+    Element::from(CompressDialog {
+        launch: Shared(Rc::new(launch)),
+    })
 }
 
 /// A `Rc` that is equal to itself only, so a component that holds shared
@@ -241,7 +251,11 @@ pub(super) fn show_compress(env: &Env, selected: &[Entry]) {
     }
     let subject = Subject::of(selected);
     let view_names = if env.folder.as_deref() == Some(subject.folder.as_path()) {
-        env.listing.entries.iter().map(|entry| entry.name.clone()).collect()
+        env.listing
+            .entries
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect()
     } else {
         HashSet::new()
     };
@@ -268,7 +282,9 @@ pub(super) fn show_compress(env: &Env, selected: &[Entry]) {
     open_form(
         env.overlays,
         title,
-        Element::from(CompressDialog { launch: Shared(launch) }),
+        Element::from(CompressDialog {
+            launch: Shared(launch),
+        }),
         Some(closed),
     );
 }
@@ -283,29 +299,27 @@ fn start(env: &Env, request: Request) {
 /// Ask before anything is taken out of its place. Enter keeps the originals.
 fn confirm(env: &Env, request: Request) {
     let (title, body, go) = match &request {
-        Request::Pack { job, .. } => {
-            let what = if job.roots.len() == 1 { "the original".to_string() } else { format!("the {} originals", job.roots.len()) };
-            (
-                "Move the originals to the Trash?".to_string(),
-                format!("Once the archive is made and checked, {what} will be moved to the Trash. You can bring them back from there, or with Undo."),
-                "Move to Trash",
-            )
-        }
-        Request::Reduce { job, .. } => {
-            let what = if job.files.len() == 1 { "the original".to_string() } else { format!("the {} originals", job.files.len()) };
-            (
-                "Replace the originals?".to_string(),
-                format!("Each smaller copy takes its original's place. Once it is made and checked, {what} will be moved to the Trash. You can bring them back from there, or with Undo."),
-                "Replace",
-            )
-        }
+        Request::Pack { job, .. } => (
+            crate::tr!("ui-compress-confirm-pack-title"),
+            crate::tr!("ui-compress-confirm-pack-body", count = job.roots.len()),
+            crate::tr!("ui-compress-confirm-pack-go"),
+        ),
+        Request::Reduce { job, .. } => (
+            crate::tr!("ui-compress-confirm-reduce-title"),
+            crate::tr!("ui-compress-confirm-reduce-body", count = job.files.len()),
+            crate::tr!("ui-compress-confirm-reduce-go"),
+        ),
     };
     let overlays = env.overlays;
     let env = env.clone();
     overlays.show_dialog(
         dialog(title, body)
-            .cancel("Cancel")
-            .response(go, ResponseKind::Destructive, EventHandler::new(move |()| start(&env, request.clone())))
+            .cancel(crate::tr!("ui-dialog-cancel"))
+            .response(
+                go,
+                ResponseKind::Destructive,
+                EventHandler::new(move |()| start(&env, request.clone())),
+            )
             .default_action(crate::shell::CANCEL_ID)
             .icon(crate::shell::DialogIcon::Warning),
     );
@@ -322,7 +336,10 @@ fn load_tools(_: ()) -> Result<Tools, String> {
 /// The file names in a folder.
 fn load_names(dir: PathBuf) -> Result<HashSet<String>, String> {
     let entries = std::fs::read_dir(&dir).map_err(|error| error.to_string())?;
-    Ok(entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect())
+    Ok(entries
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect())
 }
 
 /// What an estimate is asked for. The quality is rounded, so a drag of the
@@ -342,7 +359,11 @@ fn load_estimate(key: EstimateKey) -> Result<Option<Estimate>, String> {
         return Ok(None);
     }
     let cancel = Cancel::new();
-    if let Some(older) = RUNNING.lock().unwrap_or_else(PoisonError::into_inner).replace(cancel.clone()) {
+    if let Some(older) = RUNNING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .replace(cancel.clone())
+    {
         older.cancel();
     }
     estimate(&key.files, &key.options, &cancel)
@@ -386,7 +407,11 @@ impl Component for CompressDialog {
         let subject = &launch.subject;
         let fields = Fields {
             draft: use_state({
-                let (subject, prefs, preview) = (subject.clone(), launch.prefs.clone(), launch.preview.clone());
+                let (subject, prefs, preview) = (
+                    subject.clone(),
+                    launch.prefs.clone(),
+                    launch.preview.clone(),
+                );
                 move || {
                     let mut draft = Draft::new(&subject, prefs);
                     draft.pack.format = usable_format(draft.pack.format);
@@ -397,19 +422,34 @@ impl Component for CompressDialog {
                 }
             }),
             name: use_state({
-                let base = launch.preview.as_ref().and_then(|p| p.name.clone()).unwrap_or_else(|| subject.default_base());
+                let base = launch
+                    .preview
+                    .as_ref()
+                    .and_then(|p| p.name.clone())
+                    .unwrap_or_else(|| subject.default_base());
                 move || base
             }),
             excludes: use_state({
-                let text = launch.preview.as_ref().map_or_else(|| launch.prefs.pack.excludes.text(), |p| p.excludes.clone());
+                let text = launch
+                    .preview
+                    .as_ref()
+                    .map_or_else(|| launch.prefs.pack.excludes.text(), |p| p.excludes.clone());
                 move || text
             }),
             password: use_state({
-                let text = launch.preview.as_ref().map(|p| p.password.clone()).unwrap_or_default();
+                let text = launch
+                    .preview
+                    .as_ref()
+                    .map(|p| p.password.clone())
+                    .unwrap_or_default();
                 move || text
             }),
             confirm: use_state({
-                let text = launch.preview.as_ref().map(|p| p.confirm.clone()).unwrap_or_default();
+                let text = launch
+                    .preview
+                    .as_ref()
+                    .map(|p| p.confirm.clone())
+                    .unwrap_or_default();
                 move || text
             }),
             dimension: use_state(|| "1600".to_string()),
@@ -429,14 +469,23 @@ impl Component for CompressDialog {
             Some(prepared) => Some(prepared.tools.clone()),
             None => tools.with(|tools| tools.value().cloned()),
         };
-        let destination = draft.location.clone().unwrap_or_else(|| subject.folder.clone());
+        let destination = draft
+            .location
+            .clone()
+            .unwrap_or_else(|| subject.folder.clone());
         let names = use_resource(destination.clone(), load_names);
         let same_folder = destination == subject.folder;
         let existing: HashSet<String> = match &launch.preview {
             Some(prepared) => prepared.taken.clone(),
             None => names
                 .with(|names| names.value().cloned())
-                .unwrap_or_else(|| if same_folder { launch.view_names.clone() } else { HashSet::new() }),
+                .unwrap_or_else(|| {
+                    if same_folder {
+                        launch.view_names.clone()
+                    } else {
+                        HashSet::new()
+                    }
+                }),
         };
         let media_files: Vec<PathBuf> = subject
             .paths
@@ -447,7 +496,11 @@ impl Component for CompressDialog {
         let estimating = draft.mode == Mode::Reduce && tools_now.is_some();
         let reduce_now = reduce_options(&draft, &typed);
         let estimate_now = use_resource(
-            EstimateKey { files: media_files.clone(), options: round_quality(&reduce_now), on: estimating && launch.preview.is_none() },
+            EstimateKey {
+                files: media_files.clone(),
+                options: round_quality(&reduce_now),
+                on: estimating && launch.preview.is_none(),
+            },
             load_estimate,
         );
         let (estimated, estimate_busy, estimate_error) = match &launch.preview {
@@ -455,14 +508,21 @@ impl Component for CompressDialog {
             None => estimate_now.with(|estimate| {
                 (
                     estimate.value().cloned().flatten(),
-                    matches!(estimate, crate::task::Resource::Loading | crate::task::Resource::Refreshing(_)) && estimating,
+                    matches!(
+                        estimate,
+                        crate::task::Resource::Loading | crate::task::Resource::Refreshing(_)
+                    ) && estimating,
                     estimate.error().map(str::to_owned),
                 )
             }),
         };
 
         // ---- what is valid ---------------------------------------------------
-        let world = World { subject, existing: &existing, tools: tools_now.as_ref() };
+        let world = World {
+            subject,
+            existing: &existing,
+            tools: tools_now.as_ref(),
+        };
         let verdict = check(&draft, &typed, &world);
 
         // ---- Create ----------------------------------------------------------
@@ -476,13 +536,21 @@ impl Component for CompressDialog {
                     return;
                 }
                 let subject = &launch.subject;
-                let mut prefs = Prefs { pack: draft.pack.clone(), reduce: draft.reduce.clone() };
+                let mut prefs = Prefs {
+                    pack: draft.pack.clone(),
+                    reduce: draft.reduce.clone(),
+                };
                 prefs.pack.password = None;
                 let request = match draft.mode {
                     Mode::Archive => {
-                        let Ok(options) = pack_options(&draft, &typed) else { return };
+                        let Ok(options) = pack_options(&draft, &typed) else {
+                            return;
+                        };
                         prefs.pack.excludes = options.excludes.clone();
-                        let dest_dir = draft.location.clone().unwrap_or_else(|| subject.folder.clone());
+                        let dest_dir = draft
+                            .location
+                            .clone()
+                            .unwrap_or_else(|| subject.folder.clone());
                         let whole = match subject.names.as_slice() {
                             [only] => format!("“{only}”"),
                             many => format!("{} items", many.len()),
@@ -505,7 +573,12 @@ impl Component for CompressDialog {
                         prefs.reduce = options.clone();
                         prefs.reduce.replace_original = false;
                         let whole = match media_files.as_slice() {
-                            [only] => format!("“{}”", only.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
+                            [only] => format!(
+                                "“{}”",
+                                only.file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .unwrap_or_default()
+                            ),
                             many => format!("{} files", many.len()),
                         };
                         Request::Reduce {
@@ -533,11 +606,13 @@ impl Component for CompressDialog {
                 choose(
                     window,
                     ChooserRequest::select_folder()
-                        .title("Save in")
-                        .accept_label("Choose")
+                        .title(crate::tr!("ui-compress-save-in"))
+                        .accept_label(crate::tr!("ui-compress-choose"))
                         .current_folder(start.clone()),
                     move |chosen| {
-                        if let Some(folder) = chosen.and_then(|chosen| chosen.paths.into_iter().next()) {
+                        if let Some(folder) =
+                            chosen.and_then(|chosen| chosen.paths.into_iter().next())
+                        {
                             draft_state.write().location = Some(folder);
                         }
                     },
@@ -550,12 +625,23 @@ impl Component for CompressDialog {
             body.push(
                 Group::new(None)
                     .row(form_row(
-                        "Type",
+                        crate::tr!("ui-compress-type"),
                         segmented(
-                            vec![("archive".into(), "Archive".into()), ("reduce".into(), "Reduce size".into())],
-                            if draft.mode == Mode::Reduce { "reduce" } else { "archive" },
+                            vec![
+                                ("archive".into(), crate::tr!("ui-compress-archive")),
+                                ("reduce".into(), crate::tr!("ui-compress-reduce-size")),
+                            ],
+                            if draft.mode == Mode::Reduce {
+                                "reduce"
+                            } else {
+                                "archive"
+                            },
                             move |key: String| {
-                                state.write().mode = if key == "reduce" { Mode::Reduce } else { Mode::Archive };
+                                state.write().mode = if key == "reduce" {
+                                    Mode::Reduce
+                                } else {
+                                    Mode::Archive
+                                };
                             },
                         )
                         .fill(),
@@ -564,7 +650,18 @@ impl Component for CompressDialog {
             );
         }
         let archive = draft.mode == Mode::Archive;
-        let archive_groups = archive_groups(&tokens, &fields, &draft, &typed, &verdict, &existing, subject, &destination, choose_where.clone(), create.clone());
+        let archive_groups = archive_groups(
+            &tokens,
+            &fields,
+            &draft,
+            &typed,
+            &verdict,
+            &existing,
+            subject,
+            &destination,
+            choose_where.clone(),
+            create.clone(),
+        );
         let media = Media {
             fields,
             draft: &draft,
@@ -580,15 +677,39 @@ impl Component for CompressDialog {
         let reduce_groups = media_groups(&media);
         // Both bodies exist at all times and one is open, so the card never
         // changes size and what is closed cannot take focus.
-        body.push(reveal_block(archive, S4, rect().tw(&tokens, &[flex_col(), w_full(), gap(S4)]).children(archive_groups)).lazy().into());
-        body.push(reveal_block(!archive, S4, rect().tw(&tokens, &[flex_col(), w_full(), gap(S4)]).children(reduce_groups)).lazy().into());
+        body.push(
+            reveal_block(
+                archive,
+                S4,
+                rect()
+                    .tw(&tokens, &[flex_col(), w_full(), gap(S4)])
+                    .children(archive_groups),
+            )
+            .lazy()
+            .into(),
+        );
+        body.push(
+            reveal_block(
+                !archive,
+                S4,
+                rect()
+                    .tw(&tokens, &[flex_col(), w_full(), gap(S4)])
+                    .children(reduce_groups),
+            )
+            .lazy()
+            .into(),
+        );
 
-        let busy = (draft.mode == Mode::Reduce && launch.preview.is_none() && tools.with(|tools| tools.is_loading()))
-            .then(|| "Looking for the tools that shrink media…".to_string());
+        let busy = (draft.mode == Mode::Reduce
+            && launch.preview.is_none()
+            && tools.with(|tools| tools.is_loading()))
+        .then(|| crate::tr!("ui-compress-tools-busy"));
         form_dialog(
             subject.title(),
-            rect().tw(&tokens, &[flex_col(), w_full(), gap(S4)]).children(body),
-            "Create",
+            rect()
+                .tw(&tokens, &[flex_col(), w_full(), gap(S4)])
+                .children(body),
+            crate::tr!("ui-compress-create"),
             create,
         )
         .blocked(verdict.blocked.clone())
@@ -599,7 +720,7 @@ impl Component for CompressDialog {
 /// The Save in row: the folder, shortened by what matters least, and a press
 /// anywhere on the row opens the folder chooser.
 pub(super) fn location_row(folder: &std::path::Path, choose: EventHandler<()>) -> crate::rows::Row {
-    row("Save in")
+    row(crate::tr!("ui-compress-save-in"))
         .path_value(folder.to_string_lossy().into_owned())
         .navigates()
         .on_press(choose)
@@ -612,7 +733,12 @@ pub(super) fn location_row(folder: &std::path::Path, choose: EventHandler<()>) -
 fn format_options() -> Vec<(String, String)> {
     Format::ALL
         .into_iter()
-        .map(|format| (format.label().to_string(), format!("{}, {}", format.label(), format.note().to_lowercase())))
+        .map(|format| {
+            (
+                format.label().to_string(),
+                format!("{}, {}", format.label(), format.note().to_lowercase()),
+            )
+        })
         .collect()
 }
 
@@ -639,36 +765,59 @@ fn archive_groups(
     let shown_name = result_name(draft, typed, existing);
 
     // ---- the archive -------------------------------------------------------
-    let name_field = form_field("Name", fields.name)
-        .placeholder("Archive")
+    let name_field = form_field(crate::tr!("ui-compress-name"), fields.name)
+        .placeholder(crate::tr!("ui-compress-name-placeholder"))
         .error(verdict.name.clone())
         .on_submit(create)
         .wide()
         .autofocus();
-    let conflict = row("Already exists")
+    let conflict = row(crate::tr!("ui-compress-conflict"))
         .subtitle(if draft.conflict == OnConflict::KeepBoth {
-            format!("“{}” is taken here, so this one will be “{shown_name}”.", bingux_files::ops::file_name(&typed.name, format))
+            crate::tr!(
+                "ui-compress-conflict-keep-body",
+                taken = bingux_files::ops::file_name(&typed.name, format),
+                shown = shown_name.clone()
+            )
         } else {
-            format!("“{shown_name}” will be replaced. The old file goes to the Trash.")
+            crate::tr!(
+                "ui-compress-conflict-replace-body",
+                shown = shown_name.clone()
+            )
         })
         .trailing(segmented(
-            vec![("keep".into(), "Keep both".into()), ("replace".into(), "Replace".into())],
-            if draft.conflict == OnConflict::KeepBoth { "keep" } else { "replace" },
+            vec![
+                ("keep".into(), crate::tr!("ui-compress-conflict-keep")),
+                ("replace".into(), crate::tr!("ui-compress-conflict-replace")),
+            ],
+            if draft.conflict == OnConflict::KeepBoth {
+                "keep"
+            } else {
+                "replace"
+            },
             move |key: String| {
-                state.write().conflict = if key == "replace" { OnConflict::Replace } else { OnConflict::KeepBoth };
+                state.write().conflict = if key == "replace" {
+                    OnConflict::Replace
+                } else {
+                    OnConflict::KeepBoth
+                };
             },
         ));
     let format_row = form_row(
-        "Format",
+        crate::tr!("ui-compress-format"),
         dropdown(format_options(), format.label(), move |key: String| {
             if let Some(chosen) = format_from_key(&key) {
                 state.write().pack.format = chosen;
             }
         })
-        .unavailable(unavailable_formats().into_iter().map(|(key, why)| (key, why)).collect())
-        .title("Format"),
+        .unavailable(
+            unavailable_formats()
+                .into_iter()
+                .map(|(key, why)| (key, why))
+                .collect(),
+        )
+        .title(crate::tr!("ui-compress-format")),
     );
-    let archive = Group::titled("Archive")
+    let archive = Group::titled(&crate::tr!("ui-compress-archive"))
         .row(name_field)
         .row(reveal_block(taken, S0, rect().child(Element::from(conflict))).lazy())
         .row(format_row)
@@ -676,13 +825,19 @@ fn archive_groups(
     let _ = subject;
 
     // ---- how hard ----------------------------------------------------------
-    let level = Group::titled("Compression").row(form_row(
-        "Level",
+    let level = Group::titled(&crate::tr!("ui-compress-compression")).row(form_row(
+        crate::tr!("ui-compress-level"),
         segmented(
-            Level::ALL.into_iter().map(|level| (level_key(level).to_string(), level.label().to_string())).collect(),
+            Level::ALL
+                .into_iter()
+                .map(|level| (level_key(level).to_string(), level.label().to_string()))
+                .collect(),
             level_key(draft.pack.level),
             move |key: String| {
-                if let Some(level) = Level::ALL.into_iter().find(|level| level_key(*level) == key) {
+                if let Some(level) = Level::ALL
+                    .into_iter()
+                    .find(|level| level_key(*level) == key)
+                {
                     state.write().pack.level = level;
                 }
             },
@@ -692,77 +847,138 @@ fn archive_groups(
     // ---- the password ------------------------------------------------------
     let lock_reason = format.lock_unavailable();
     let can_lock = format.can_lock() && lock_reason.is_none();
-    let mut lock = Group::titled("Password");
+    let mut lock = Group::titled(&crate::tr!("ui-compress-password"));
     lock = lock.row(
-        switch_row("Ask for a password", draft.locked && can_lock, move |on: bool| state.write().locked = on)
-            .subtitle(match (&lock_reason, format) {
-                (Some(reason), Format::Zip | Format::SevenZip) => reason.clone(),
-                (Some(_), _) => "Only .zip and .7z can be locked.".to_string(),
-                (None, _) => "Encrypted with AES-256.".to_string(),
-            })
-            .enabled(can_lock),
+        switch_row(
+            crate::tr!("ui-compress-lock"),
+            draft.locked && can_lock,
+            move |on: bool| state.write().locked = on,
+        )
+        .subtitle(match (&lock_reason, format) {
+            (Some(reason), Format::Zip | Format::SevenZip) => reason.clone(),
+            (Some(_), _) => crate::tr!("ui-compress-lock-zip-only"),
+            (None, _) => crate::tr!("ui-compress-lock-aes"),
+        })
+        .enabled(can_lock),
     );
     let locked_open = can_lock && draft.locked;
-    let fields_group = Group::titled("Choose a password")
-        .row(form_field("Password", fields.password).password().error(verdict.password.clone()))
-        .row(form_field("Confirm", fields.confirm).password().error(verdict.confirm.clone()))
+    let fields_group = Group::titled(&crate::tr!("ui-compress-password-choose"))
+        .row(
+            form_field(crate::tr!("ui-compress-password-field"), fields.password)
+                .password()
+                .error(verdict.password.clone()),
+        )
+        .row(
+            form_field(crate::tr!("ui-compress-confirm-field"), fields.confirm)
+                .password()
+                .error(verdict.confirm.clone()),
+        )
         .row(reveal_block(
             format.can_hide_names(),
             S0,
             rect().child(Element::from(
-                switch_row("Encrypt file names", draft.pack.hide_names, move |on: bool| state.write().pack.hide_names = on)
-                    .subtitle("Nobody can even list what is inside without the password"),
+                switch_row(
+                    crate::tr!("ui-compress-hide-names"),
+                    draft.pack.hide_names,
+                    move |on: bool| state.write().pack.hide_names = on,
+                )
+                .subtitle(crate::tr!("ui-compress-hide-names-hint")),
             )),
         ));
 
     // ---- volumes -----------------------------------------------------------
     let split_reason = format.split_unavailable();
-    let mut split_options: Vec<(String, String)> = vec![("none".into(), "One file".into())];
-    split_options.extend(SPLIT_SIZES_MIB.iter().map(|mib| (mib.to_string(), format!("{} each", split_label(*mib)))));
-    let volumes = Group::titled("Volumes").row(
-        row("Split into volumes")
-            .subtitle(split_reason.clone().unwrap_or_else(|| "Cut a big archive into pieces, as for a disc or an email.".into()))
+    let mut split_options: Vec<(String, String)> =
+        vec![("none".into(), crate::tr!("ui-compress-split-one"))];
+    split_options.extend(SPLIT_SIZES_MIB.iter().map(|mib| {
+        (
+            mib.to_string(),
+            crate::tr!("ui-compress-split-each", size = split_label(*mib)),
+        )
+    }));
+    let volumes = Group::titled(&crate::tr!("ui-compress-volumes")).row(
+        row(crate::tr!("ui-compress-split"))
+            .subtitle(
+                split_reason
+                    .clone()
+                    .unwrap_or_else(|| crate::tr!("ui-compress-split-hint")),
+            )
             .trailing(
                 dropdown(
                     split_options,
-                    draft.pack.split_mib.map_or_else(|| "none".to_string(), |mib| mib.to_string()).as_str(),
+                    draft
+                        .pack
+                        .split_mib
+                        .map_or_else(|| "none".to_string(), |mib| mib.to_string())
+                        .as_str(),
                     move |key: String| state.write().pack.split_mib = key.parse::<u64>().ok(),
                 )
                 .enabled(split_reason.is_none())
-                .title("Volumes"),
+                .title(crate::tr!("ui-compress-volumes")),
             ),
     );
 
     // ---- what goes in ------------------------------------------------------
     let is_tar = format.is_tar();
-    let options = Group::titled("Options")
-        .row(switch_row("Include hidden files", draft.pack.include_hidden, move |on: bool| state.write().pack.include_hidden = on))
+    let options = Group::titled(&crate::tr!("ui-compress-options"))
+        .row(switch_row(
+            crate::tr!("ui-compress-hidden"),
+            draft.pack.include_hidden,
+            move |on: bool| state.write().pack.include_hidden = on,
+        ))
         .row(
-            switch_row("Keep links as links", !draft.pack.follow_links, move |on: bool| state.write().pack.follow_links = !on)
-                .subtitle("Off stores what each link points to instead"),
+            switch_row(
+                crate::tr!("ui-compress-links"),
+                !draft.pack.follow_links,
+                move |on: bool| state.write().pack.follow_links = !on,
+            )
+            .subtitle(crate::tr!("ui-compress-links-hint")),
         )
         .row(
-            switch_row("Keep permissions and owners", draft.pack.keep_owner && is_tar, move |on: bool| state.write().pack.keep_owner = on)
-                .subtitle(if is_tar { "Who may read each file, and who owns it." } else { "Only .tar formats record who owns a file." })
-                .enabled(is_tar),
+            switch_row(
+                crate::tr!("ui-compress-owners"),
+                draft.pack.keep_owner && is_tar,
+                move |on: bool| state.write().pack.keep_owner = on,
+            )
+            .subtitle(if is_tar {
+                crate::tr!("ui-compress-owners-hint")
+            } else {
+                crate::tr!("ui-compress-owners-tar-only")
+            })
+            .enabled(is_tar),
         )
         .row(
-            form_field("Leave out", fields.excludes)
-                .placeholder("*.tmp, node_modules")
-                .hint("Comma separated. A name matches at any depth; a / makes it a path.")
+            form_field(crate::tr!("ui-compress-excludes"), fields.excludes)
+                .placeholder(crate::tr!("ui-compress-excludes-placeholder"))
+                .hint(crate::tr!("ui-compress-excludes-hint"))
                 .error(verdict.excludes.clone()),
         );
-    let after = Group::titled("When it is done").row(
-        switch_row("Move the originals to the Trash", draft.pack.delete_originals, move |on: bool| state.write().pack.delete_originals = on)
-            .subtitle("Only after the archive is made and checked. You will be asked."),
+    let after = Group::titled(&crate::tr!("ui-compress-after")).row(
+        switch_row(
+            crate::tr!("ui-compress-trash-originals"),
+            draft.pack.delete_originals,
+            move |on: bool| state.write().pack.delete_originals = on,
+        )
+        .subtitle(crate::tr!("ui-compress-trash-originals-hint")),
     );
     vec![
         archive.into(),
-        reveal_block(format.has_levels(), S4, Element::from(level)).lazy().into(),
-        reveal_block(format.can_lock(), S4, rect().tw(tokens, &[flex_col(), w_full(), gap(S4)]).child(Element::from(lock)).child(reveal_block(locked_open, S4, Element::from(fields_group)).lazy()))
+        reveal_block(format.has_levels(), S4, Element::from(level))
             .lazy()
             .into(),
-        reveal_block(format.can_split(), S4, Element::from(volumes)).lazy().into(),
+        reveal_block(
+            format.can_lock(),
+            S4,
+            rect()
+                .tw(tokens, &[flex_col(), w_full(), gap(S4)])
+                .child(Element::from(lock))
+                .child(reveal_block(locked_open, S4, Element::from(fields_group)).lazy()),
+        )
+        .lazy()
+        .into(),
+        reveal_block(format.can_split(), S4, Element::from(volumes))
+            .lazy()
+            .into(),
         options.into(),
         after.into(),
     ]

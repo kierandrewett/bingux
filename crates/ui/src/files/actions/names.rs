@@ -20,14 +20,14 @@ pub(in crate::files) enum NameProblem {
 
 impl NameProblem {
     /// One plain sentence, shown under the field.
-    pub(in crate::files) fn message(self) -> &'static str {
+    pub(in crate::files) fn message(self) -> String {
         match self {
-            NameProblem::Empty => "Enter a name.",
-            NameProblem::Reserved => "A name cannot be . or ..",
-            NameProblem::Slash => "A name cannot contain a slash.",
-            NameProblem::TooLong => "The name is longer than 255 bytes.",
-            NameProblem::Invalid => "The name contains a character that is not allowed.",
-            NameProblem::Exists => "A file or folder with this name already exists.",
+            NameProblem::Empty => crate::tr!("ui-files-name-empty"),
+            NameProblem::Reserved => crate::tr!("ui-files-name-reserved"),
+            NameProblem::Slash => crate::tr!("ui-files-name-slash"),
+            NameProblem::TooLong => crate::tr!("ui-files-name-too-long"),
+            NameProblem::Invalid => crate::tr!("ui-files-name-invalid"),
+            NameProblem::Exists => crate::tr!("ui-files-name-exists"),
         }
     }
 }
