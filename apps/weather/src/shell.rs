@@ -429,43 +429,43 @@ impl Component for Shell {
             } => Some(HereView::source_text(here).to_string()),
             _ => None,
         };
-        let page: Element =
-            match &now_showing {
-                Current::Nothing if ask_network => {
-                    let stack = if compact { flex_col() } else { flex_row() };
-                    status_page(Icon::LocationArrow, tr!("weather-ask-location-title"))
-                    .description(
-                        "Find the nearest town from this computer's network address. The address \
-                         goes to ipwho.is, GeoJS or ipapi.co.",
-                    )
+        let page: Element = match &now_showing {
+            Current::Nothing if ask_network => {
+                let stack = if compact { flex_col() } else { flex_row() };
+                status_page(Icon::LocationArrow, tr!("weather-ask-location-title"))
+                    .description(tr!("weather-ask-location-description"))
                     .child(
                         rect()
                             .tw(&tokens, &[stack, gap(S3), mt(S3)])
-                            .child(primary_button(tr!("weather-ask-location-allow"), move |_| {
-                                hub.set_network(true)
-                            }))
-                            .child(action_button(tr!("weather-ask-location-search"), move |_| {
-                                hub.change(|settings| settings.network_lookup = Some(false));
-                                search::open(overlays, hub);
-                            })),
+                            .child(primary_button(
+                                tr!("weather-ask-location-allow"),
+                                move |_| hub.set_network(true),
+                            ))
+                            .child(action_button(
+                                tr!("weather-ask-location-search"),
+                                move |_| {
+                                    hub.change(|settings| settings.network_lookup = Some(false));
+                                    search::open(overlays, hub);
+                                },
+                            )),
                     )
                     .into()
-                }
-                Current::Nothing => status_page(Icon::LocationArrow, tr!("weather-add-city"))
-                    .description(tr!("weather-location-unavailable"))
-                    .action(tr!("weather-add-location"), move |_| {
-                        search::open(overlays, hub)
-                    })
-                    .into(),
-                _ => Page {
-                    place: place.clone().unwrap_or_else(|| Place::new("", 0.0, 0.0)),
-                    here: here_text,
-                    units,
-                    load,
-                    retry,
-                }
+            }
+            Current::Nothing => status_page(Icon::LocationArrow, tr!("weather-add-city"))
+                .description(tr!("weather-location-unavailable"))
+                .action(tr!("weather-add-location"), move |_| {
+                    search::open(overlays, hub)
+                })
                 .into(),
-            };
+            _ => Page {
+                place: place.clone().unwrap_or_else(|| Place::new("", 0.0, 0.0)),
+                here: here_text,
+                units,
+                load,
+                retry,
+            }
+            .into(),
+        };
 
         let body: Element = if compact {
             if showing_list {

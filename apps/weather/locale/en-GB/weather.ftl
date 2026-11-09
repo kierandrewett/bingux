@@ -118,6 +118,7 @@ weather-tooltip-add-location = Add location (Ctrl+N)
 weather-tooltip-refresh = Refresh (Ctrl+R)
 weather-places = Places
 weather-ask-location-title = Use your approximate location?
+weather-ask-location-description = Find the nearest town from this computer's network address. The address goes to ipwho.is, GeoJS or ipapi.co.
 weather-ask-location-allow = Use approximate location
 weather-ask-location-search = Search by city
 weather-add-city = Add a city
