@@ -562,7 +562,10 @@ fn the_rings_of_both_modes_are_around_their_boxes() {
             shot.ring_mismatches().is_empty(),
             "{case:?}: a ring is off its box in crumbs mode"
         );
-        enter(&mut shot, case);
+        // A click keeps the caret and draws no ring (focus-visible); Ctrl+L is
+        // the keyboard way into the field, and that draws its ring.
+        shot.key_with(Key::Character("l".into()), Modifiers::CONTROL);
+        shot.settle(Duration::from_millis(300));
         assert!(
             !shot.focus_rings().is_empty(),
             "{case:?}: the field has a ring"
