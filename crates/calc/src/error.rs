@@ -34,17 +34,29 @@ pub enum CalcError {
 impl fmt::Display for CalcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CalcError::DivideByZero => f.write_str("Cannot divide by zero."),
-            CalcError::NotReal => f.write_str("The result is not a real number."),
-            CalcError::Undefined(what) => write!(f, "{what} is undefined."),
+            CalcError::DivideByZero => f.write_str("Cannot divide by zero. Change the divisor."),
+            CalcError::NotReal => f.write_str("The result is not a real number. Check the values."),
+            CalcError::Undefined(what) => write!(f, "{what} has no value. Change the value."),
             CalcError::Syntax { message, .. } => f.write_str(message),
-            CalcError::Incomplete => f.write_str("The expression is not finished."),
-            CalcError::TooLarge => f.write_str("The result has too many digits."),
-            CalcError::Unknown(name) => write!(f, "{name} is not a known name."),
-            CalcError::NeedsInteger(what) => write!(f, "{what} needs a whole number."),
+            CalcError::Incomplete => {
+                f.write_str("The expression is not finished. Complete it, then try again.")
+            }
+            CalcError::TooLarge => {
+                f.write_str("The result has too many digits. Use smaller numbers.")
+            }
+            CalcError::Unknown(name) => write!(
+                f,
+                "\u{201c}{name}\u{201d} is not a known name. Check the spelling."
+            ),
+            CalcError::NeedsInteger(what) => {
+                write!(f, "{what} needs a whole number. Change the value.")
+            }
             CalcError::Domain(what) => f.write_str(what),
             CalcError::Unit(message) => f.write_str(message),
-            CalcError::NoRate(code) => write!(f, "No exchange rate for {code} yet."),
+            CalcError::NoRate(code) => write!(
+                f,
+                "No exchange rate for {code} yet. Connect to the internet to update the rates."
+            ),
         }
     }
 }

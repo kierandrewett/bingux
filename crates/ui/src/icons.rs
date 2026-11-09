@@ -44,6 +44,8 @@ pub enum Icon {
     Check,
     ListAdd,
     ListRemove,
+    /// Two arrows, one each way: swap two values (the units of a converter).
+    Swap,
     PanDown,
     PanUp,
     PanEnd,
@@ -240,7 +242,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 179] = [
+    pub const ALL: [Icon; 180] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -271,6 +273,7 @@ impl Icon {
         Self::Check,
         Self::ListAdd,
         Self::ListRemove,
+        Self::Swap,
         Self::PanDown,
         Self::PanUp,
         Self::PanEnd,
@@ -457,6 +460,7 @@ impl Icon {
             Self::Check => include_bytes!("../icons/object-select-symbolic.svg"),
             Self::ListAdd => include_bytes!("../icons/list-add-symbolic.svg"),
             Self::ListRemove => include_bytes!("../icons/list-remove-symbolic.svg"),
+            Self::Swap => include_bytes!("../icons/swap-horizontal-symbolic.svg"),
             Self::PanDown => include_bytes!("../icons/pan-down-symbolic.svg"),
             Self::PanUp => include_bytes!("../icons/pan-up-symbolic.svg"),
             Self::PanEnd => include_bytes!("../icons/pan-end-symbolic.svg"),

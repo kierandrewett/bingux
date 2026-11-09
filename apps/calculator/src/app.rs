@@ -1,7 +1,10 @@
 //! The window: a header bar with the mode, the display and keys of that
 //! mode, and the history beside them (a screen of its own on a narrow window).
 
+use std::time::Duration;
+
 use bingux_calc::store::Mode;
+use bingux_ui::nav::{RouteTable, use_try_location};
 use bingux_ui::prelude::*;
 use bingux_ui::shell::MenuItem;
 use bingux_ui::theme::Tokens;
@@ -21,7 +24,7 @@ Backspace  Delete the last character\n\
 Ctrl+Shift+C  Copy the result\n\
 Ctrl+H  Show or hide the history\n\
 Ctrl+1 to 4  Basic, Scientific, Programmer, Convert\n\
-+ - * / x ^  Operators; x and * both multiply\n\
++ \u{2212} \u{d7} \u{f7} ^  Operators. Type x or * to multiply\n\
 %  Percent: 200 + 10% is 220\n\
 Ctrl+Shift+?  About Calculator";
 
@@ -42,6 +45,40 @@ impl Component for App {
 
 #[derive(PartialEq)]
 struct Content;
+
+/// The address a mode has: `bingux-calculator://scientific`. A launch with a
+/// mode (`bingux-calculator --mode convert`, or the desktop entry's actions)
+/// opens it, in a new window or the one that is open.
+fn slug(mode: Mode) -> String {
+    mode.name().to_lowercase()
+}
+
+/// The modes as places, so a second launch reaches the open window.
+pub fn routes() -> RouteTable {
+    let mut table = RouteTable::new("bingux-calculator")
+        .mode(bingux_ui::nav::Mode::Linear)
+        .index("Calculator", |_| rect().into());
+    for mode in Mode::ALL {
+        table = table.root(&slug(mode)).title("Calculator");
+    }
+    table
+}
+
+/// The mode a location names, if it names one.
+fn mode_at(location: &Location) -> Option<Mode> {
+    let first = location.segments().first()?;
+    Mode::ALL
+        .iter()
+        .copied()
+        .find(|mode| slug(*mode) == first.to_lowercase())
+}
+
+/// Shows `mode` and records it as the window's place, so the same address
+/// opened again (from the desktop entry) is a change and not a no-op.
+fn switch_mode(calc: &Calc, mode: Mode) {
+    calc.set_mode(mode);
+    bingux_ui::nav::navigate(&slug(mode));
+}
 
 fn mode_key(mode: Mode) -> String {
     mode.name().to_string()
@@ -71,7 +108,39 @@ impl Component for Content {
             .collect();
         let pick = calc.clone();
         let switch = segmented(options, &mode_key(mode), move |key: String| {
-            pick.set_mode(mode_of(&key))
+            switch_mode(&pick, mode_of(&key))
+        });
+
+        // A launch that names a mode (`--mode convert`) puts it here.
+        let wanted = use_try_location().as_ref().and_then(mode_at);
+        let routed = calc.clone();
+        use_side_effect_with_deps(&wanted, move |wanted| {
+            if let Some(mode) = wanted {
+                routed.set_mode(*mode);
+            }
+        });
+
+        // The window remembers its size once a resize has stood still.
+        let size = bingux_ui::surface::window_size();
+        let size = (size.width.round() as u32, size.height.round() as u32);
+        let remember = calc.clone();
+        let mut pending = use_state::<Option<TaskHandle>>(|| None);
+        use_side_effect_with_deps(&size, move |&(width, height)| {
+            if remember.with(|s| s.saved.settings.window) == Some((width, height))
+                || width < 200
+                || height < 200
+            {
+                return;
+            }
+            if let Some(task) = pending.take() {
+                task.cancel();
+            }
+            let remember = remember.clone();
+            pending.set(Some(spawn(async move {
+                timer(Duration::from_millis(600)).await;
+                remember.with(|s| s.saved.settings.window = Some((width, height)));
+                remember.save();
+            })));
         });
 
         let toggle = calc.clone();
@@ -81,14 +150,18 @@ impl Component for Content {
                 "Hide history (Ctrl+H)"
             } else {
                 "Show history (Ctrl+H)"
-            })
-            .active(showing_history);
+            });
 
-        let header = HeaderBar::new("Calculator")
-            .title_slot(switch)
-            .leading(history_button)
-            .trailing(menu_button("Main menu", main_menu(&calc, overlays)).icon(Icon::OpenMenu))
-            .trailing(WindowControls);
+        // The history button sits beside the menu on a desktop. A phone's
+        // header has no room for a third button there, so it goes first.
+        let menu = menu_button("Main menu", main_menu(&calc, overlays)).icon(Icon::OpenMenu);
+        let header = HeaderBar::new("Calculator").title_slot(switch);
+        let header = if compact {
+            header.leading(history_button)
+        } else {
+            header.trailing(history_button)
+        };
+        let header = header.trailing(menu).trailing(WindowControls);
 
         let key_calc = calc.clone();
         let copy_calc = calc.clone();
@@ -98,7 +171,12 @@ impl Component for Content {
                 .child(HistoryPanel { calc: calc.clone() })
                 .into_element()
         } else {
-            let main = calculator(&calc, mode, &tokens);
+            // The calculator takes the width the history leaves. A box that is
+            // full width would push the history out of the window.
+            let main = rect()
+                .width(Size::flex(1.0))
+                .height(Size::fill())
+                .child(calculator(&calc, mode, &tokens));
             let mut row_el = rect()
                 .tw(&tokens, &[w_full(), h_flex(), flex_row(), grow_children()])
                 .child(main);
@@ -171,7 +249,7 @@ fn shortcut(calc: &Calc, overlays: Overlays, event: &Event<KeyboardEventData>) -
         }
         Key::Character(text) if ctrl && !alt && matches!(text.as_str(), "1" | "2" | "3" | "4") => {
             let index = text.parse::<usize>().unwrap_or(1) - 1;
-            calc.set_mode(Mode::ALL[index]);
+            switch_mode(calc, Mode::ALL[index]);
             true
         }
         Key::Character(text) if !ctrl && !alt && text.chars().count() == 1 && text != " " => {
@@ -214,10 +292,11 @@ fn calculator(calc: &Calc, mode: Mode, tokens: &Tokens) -> Element {
             column = column.child(paired(tokens, compact, functions, numbers, 6.0, 4.0));
         }
         Mode::Programmer => {
-            // Programmer has more than a window's height of controls, so it
+            // Programmer has more than a phone's height of controls, so it
             // scrolls, and its keypads have a height of their own.
             let rows = 5.0;
-            let height = Dim::Button.px() * rows + S2.px() * (rows - 1.0);
+            let key = if compact { Dim::Button } else { Dim::Control };
+            let height = key.px() * rows + S2.px() * (rows - 1.0);
             let functions = keypad(4, pads::programmer_function_keys(calc)).refocus(id);
             let numbers = keypad(4, pads::programmer_keys(calc)).refocus(id);
             let pads = if compact {
@@ -254,8 +333,18 @@ fn calculator(calc: &Calc, mode: Mode, tokens: &Tokens) -> Element {
                             .child(numbers),
                     )
             };
+            // The window's common size shows all of it: a tighter rhythm than
+            // the other modes, and it scrolls only below that.
             let inner = rect()
-                .tw(tokens, &[w_full(), flex_col(), gap(S3), p(S4)])
+                .tw(
+                    tokens,
+                    &[
+                        w_full(),
+                        flex_col(),
+                        gap(if compact { S3 } else { S2 }),
+                        p(if compact { S4 } else { S3 }),
+                    ],
+                )
                 .child(Display { calc: calc.clone() })
                 .child(ProgrammerPanel { calc: calc.clone() })
                 .child(pads);
@@ -351,4 +440,39 @@ fn main_menu(calc: &Calc, overlays: Overlays) -> Vec<MenuItem> {
     }));
     items.extend(bingux_ui::about::app_menu_items(overlays));
     items
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(text: &str) -> Option<Mode> {
+        Location::parse_in("bingux-calculator", text)
+            .as_ref()
+            .and_then(mode_at)
+    }
+
+    #[test]
+    fn a_launch_names_a_mode_by_its_address() {
+        assert_eq!(at("convert"), Some(Mode::Convert));
+        assert_eq!(at("bingux-calculator://programmer"), Some(Mode::Programmer));
+        assert_eq!(at("Scientific"), Some(Mode::Scientific));
+    }
+
+    #[test]
+    fn an_unknown_or_missing_mode_changes_nothing() {
+        assert_eq!(at("graphing"), None);
+        assert_eq!(at(""), None);
+    }
+
+    #[test]
+    fn every_mode_has_a_route_and_the_route_names_it() {
+        let table = routes();
+        for mode in Mode::ALL {
+            let location =
+                Location::parse_in("bingux-calculator", &slug(mode)).expect("an address");
+            assert!(table.resolve(&location).is_some(), "{mode:?} has a route");
+            assert_eq!(mode_at(&location), Some(mode));
+        }
+    }
 }

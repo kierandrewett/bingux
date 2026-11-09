@@ -95,6 +95,9 @@ pub struct Settings {
     pub to: String,
     /// The window's history panel is open.
     pub history_open: bool,
+    /// The window's width and height in logical pixels when it was last
+    /// resized, so the next launch opens at the same size.
+    pub window: Option<(u32, u32)>,
 }
 
 impl Default for Settings {
@@ -112,6 +115,7 @@ impl Default for Settings {
             from: "km".to_string(),
             to: "mi".to_string(),
             history_open: true,
+            window: None,
         }
     }
 }
@@ -280,6 +284,40 @@ mod tests {
         let loaded = load_saved(&path);
         assert_eq!(loaded.history.len(), 1);
         assert_eq!(loaded.settings, Settings::default());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_window_size_is_kept_and_a_file_without_it_means_the_default_size() {
+        let dir = temp("window");
+        let path = dir.join("state.json");
+        let mut saved = Saved::default();
+        assert_eq!(saved.settings.window, None);
+        saved.settings.window = Some((640, 480));
+        save_saved(&path, &saved).unwrap();
+        assert_eq!(load_saved(&path).settings.window, Some((640, 480)));
+        std::fs::write(&path, r#"{"settings":{"mode":"Convert"}}"#).unwrap();
+        let older = load_saved(&path);
+        assert_eq!(older.settings.mode, Mode::Convert);
+        assert_eq!(older.settings.window, None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_save_leaves_no_temporary_file_and_replaces_the_old_one_whole() {
+        let dir = temp("atomic");
+        let path = dir.join("state.json");
+        let mut saved = Saved::default();
+        saved.push(entry("1+1", "2"));
+        save_saved(&path, &saved).unwrap();
+        saved.push(entry("2+2", "4"));
+        save_saved(&path, &saved).unwrap();
+        assert_eq!(load_saved(&path).history.len(), 2);
+        let names: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .collect();
+        assert_eq!(names, ["state.json"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

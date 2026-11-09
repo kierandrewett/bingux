@@ -163,6 +163,7 @@ var names = {
     "send-to-symbolic": true,
     "sidebar-show-symbolic": true,
     "starred-symbolic": true,
+    "swap-horizontal-symbolic": true,
     "system-log-out-symbolic": true,
     "system-reboot-symbolic": true,
     "system-run-symbolic": true,

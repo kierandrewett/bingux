@@ -212,7 +212,7 @@ pub fn log10(x: &Num) -> Result<Num> {
 pub fn log_base(x: &Num, base: &Num) -> Result<Num> {
     if *base.rat() == Rat::one() || !base.rat().is_positive() {
         return Err(CalcError::Domain(
-            "A logarithm needs a base above 0 that is not 1.",
+            "A logarithm needs a base above 0 that is not 1. Change the base.",
         ));
     }
     if *x.rat() == Rat::one() {
@@ -482,7 +482,9 @@ pub fn atan(x: &Num) -> Result<Num> {
 pub fn asin(x: &Num) -> Result<Num> {
     let one = Num::one();
     if x.rat().abs() > Rat::one() {
-        return Err(CalcError::Domain("The arcsine needs a value from -1 to 1."));
+        return Err(CalcError::Domain(
+            "The arcsine needs a value from -1 to 1. Change the value.",
+        ));
     }
     if x.is_zero() {
         return Ok(Num::zero());
@@ -502,7 +504,7 @@ pub fn asin(x: &Num) -> Result<Num> {
 pub fn acos(x: &Num) -> Result<Num> {
     if x.rat().abs() > Rat::one() {
         return Err(CalcError::Domain(
-            "The arccosine needs a value from -1 to 1.",
+            "The arccosine needs a value from -1 to 1. Change the value.",
         ));
     }
     if *x.rat() == Rat::one() {
@@ -543,7 +545,7 @@ pub fn asinh(x: &Num) -> Result<Num> {
 pub fn acosh(x: &Num) -> Result<Num> {
     if x.rat() < &Rat::one() {
         return Err(CalcError::Domain(
-            "The inverse hyperbolic cosine needs a value of 1 or more.",
+            "The inverse hyperbolic cosine needs a value of 1 or more. Change the value.",
         ));
     }
     ln(&x.add(&sqrt(&x.mul(x)?.sub(&Num::one())?)?)?)
@@ -552,7 +554,7 @@ pub fn acosh(x: &Num) -> Result<Num> {
 pub fn atanh(x: &Num) -> Result<Num> {
     if x.rat().abs() >= Rat::one() {
         return Err(CalcError::Domain(
-            "The inverse hyperbolic tangent needs a value between -1 and 1.",
+            "The inverse hyperbolic tangent needs a value between -1 and 1. Change the value.",
         ));
     }
     let one = Num::one();
@@ -574,7 +576,9 @@ fn product(lo: u64, hi: u64) -> BigInt {
 fn whole(x: &Num, what: &'static str) -> Result<u64> {
     let n = x.to_big().ok_or(CalcError::NeedsInteger(what))?;
     if n.is_negative() {
-        return Err(CalcError::Domain("That needs a number of 0 or more."));
+        return Err(CalcError::Domain(
+            "That needs 0 or more. Enter a larger number.",
+        ));
     }
     n.to_u64()
         .filter(|n| *n <= MAX_FACTORIAL)
@@ -812,7 +816,7 @@ mod tests {
         );
         assert_eq!(
             factorial(&int(-1)).unwrap_err(),
-            CalcError::Domain("That needs a number of 0 or more.")
+            CalcError::Domain("That needs 0 or more. Enter a larger number.")
         );
         assert!(matches!(
             factorial(&Num::from_ratio(1.into(), 2.into()).unwrap()),

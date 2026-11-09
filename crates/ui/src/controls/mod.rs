@@ -109,6 +109,6 @@ pub use switch::{Switch, switch};
 pub use tab_tear::{Detach, StripLayout, StripProbe};
 pub use tabs::{TabItem, TabStrip, tab_strip};
 pub use text_field::{FieldEdit, TextField, text_field};
-pub use tooltip::{hover_tip, tooltip_icon};
+pub use tooltip::{hover_tip, hover_tip_sized, tooltip_icon};
 pub use tree_view::{TreeNode, TreeView, tree_view};
 pub use usage_bar::{USAGE_WARN, UsageBar, usage_bar};

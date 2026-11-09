@@ -26,7 +26,7 @@ use crate::shell::overlays::Overlays;
 use crate::shell::panel::{Panel, PanelRect, PanelTrigger, text_bar_rect};
 use crate::style::*;
 use crate::surface::{surface_color, use_enabled, use_tokens};
-use crate::typography::{BODY, CAPTION, Ink, mono_family};
+use crate::typography::{BODY, CAPTION, Ink, TextStyle, mono_family};
 
 /// What a password field shows for each character: a bullet, as the system's
 /// password fields do. Freya's own default is an asterisk.
@@ -57,6 +57,7 @@ pub struct TextField {
     well: bool,
     dense: bool,
     flat: bool,
+    display: Option<(TextStyle, TextAlign)>,
     password: bool,
     multiline: bool,
     /// How many control heights a multiline field is tall.
@@ -113,6 +114,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         fill: false,
         well: false,
         flat: false,
+        display: None,
         dense: false,
         password: false,
         multiline: false,
@@ -192,6 +194,16 @@ impl TextField {
     /// strip docked in a pane such as a find bar.
     pub fn flat(mut self) -> Self {
         self.flat = true;
+        self
+    }
+
+    /// An editable line that reads as text, not as a box: no fill, edge,
+    /// inset or focus ring (the caret and the selection show where the
+    /// keyboard is), drawn in `style` and `align`ed in its width. For a line
+    /// that is part of a display, such as a calculator's expression above its
+    /// result. Caret, selection, Copy and Paste work as in any field.
+    pub fn display(mut self, style: TextStyle, align: TextAlign) -> Self {
+        self.display = Some((style, align));
         self
     }
 
@@ -434,6 +446,8 @@ impl Component for TextField {
         // A form line that is too narrow for the field's width asks it to
         // fill what it has instead.
         let fills = self.fill || crate::controls::adaptive::use_line_fill();
+        // A display field is a flat one that also draws no ring and no inset.
+        let flat = self.flat || self.display.is_some();
         let mut value = self.value;
         let on_submit = self.on_submit.clone();
         let on_change = self.on_change.clone();
@@ -497,7 +511,7 @@ impl Component for TextField {
         // the tokens are resolved here: the CONTROL recipe's radius and
         // inset, the control or well fill, and the danger edge when invalid.
         let paint = |paint: Paint| Preference::Specific(paint.color(&tokens));
-        let fill = if self.flat {
+        let fill = if flat {
             Paint::Transparent
         } else if self.well {
             Paint::Card
@@ -510,12 +524,12 @@ impl Component for TextField {
         // source of truth for "is this focused".
         // A field under the pointer takes the control's hover layer, as every
         // other control does; a focused one keeps its focus fill under the ring.
-        let rest = if self.flat {
+        let rest = if flat {
             Paint::Transparent.color(&tokens)
         } else {
             fill.color(&tokens)
         };
-        let hover = if self.flat || self.read_only {
+        let hover = if flat || self.read_only {
             rest
         } else {
             surface_color(&tokens, rest, true, false, false)
@@ -525,11 +539,16 @@ impl Component for TextField {
             focus_background: Some(paint(fill)),
             border_fill: Some(paint(Paint::Transparent)),
             focus_border_fill: Some(paint(Paint::Transparent)),
-            color: Some(paint(Paint::Text)),
+            color: Some(match self.display {
+                Some((style, _)) => Preference::Specific(style.ink.color(&tokens)),
+                None => paint(Paint::Text),
+            }),
             placeholder_color: Some(paint(Paint::Muted)),
         };
         // The inset: S2 above and below and S3 across, or S0_5 and S2 when dense.
-        let (pad_vertical, pad_horizontal) = if self.flat {
+        let (pad_vertical, pad_horizontal) = if self.display.is_some() {
+            (S0, S0)
+        } else if flat {
             (S0, S2)
         } else if self.dense {
             (S0_5, S2)
@@ -543,7 +562,7 @@ impl Component for TextField {
         } else {
             pad_horizontal
         };
-        let radius = if self.flat { 0.0 } else { Radius::Control.px() };
+        let radius = if flat { 0.0 } else { Radius::Control.px() };
         let layout = InputLayoutThemePartial {
             corner_radius: Some(Preference::Specific(CornerRadius::new_all(radius))),
             padding: Some(Preference::Specific(Gaps::new(
@@ -554,7 +573,7 @@ impl Component for TextField {
             ))),
         };
         let width = self.width.px();
-        let control_height = if self.flat {
+        let control_height = if flat {
             Dim::FlatField.px()
         } else if self.dense {
             Dim::DenseControl.px()
@@ -623,6 +642,10 @@ impl Component for TextField {
             .enabled(enabled)
             .theme_colors(colors)
             .theme_layout(layout)
+            .text_align(
+                self.display
+                    .map_or(TextAlign::default(), |(_, align)| align),
+            )
             .hover_background(hover)
             .mode(mode)
             .focus_within(visual.within_owner)
@@ -847,7 +870,7 @@ impl Component for TextField {
             // tall: the inset is half of what the button leaves of the
             // height, so it is the same on the cross axis and from the end.
             // Its corner is the field's less the inset.
-            let small = self.flat || self.dense;
+            let small = flat || self.dense;
             let (button, nested) = if small {
                 (Dim::Box5, Radius::Mark)
             } else {
@@ -1032,7 +1055,7 @@ impl Component for TextField {
                 &tokens,
                 &[rounded_on(
                     Radius::Control,
-                    if self.flat { Corners::None } else { Corners::All },
+                    if flat { Corners::None } else { Corners::All },
                     0.0,
                 )],
             )
@@ -1129,7 +1152,7 @@ impl Component for TextField {
             .focusable_invalid(
                 // A text field shows its ring for any focus, pointer or key, and
                 // while its own menu is open (the owner keeps the focus look).
-                if visual.is_focused() {
+                if visual.is_focused() && self.display.is_none() {
                     Focus::Keyboard
                 } else {
                     Focus::Not
@@ -1140,7 +1163,14 @@ impl Component for TextField {
 
         rect()
             .component("TextField")
-            .tw(&tokens, &[flex_col(), gap(S1), font(BODY)])
+            .tw(
+                &tokens,
+                &[
+                    flex_col(),
+                    gap(S1),
+                    font(self.display.map_or(BODY, |(style, _)| style)),
+                ],
+            )
             .child(field)
             .maybe(self.validates, |column| {
                 column.child(

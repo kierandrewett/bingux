@@ -559,6 +559,47 @@ mod tests {
         assert_eq!(run(""), Err(CalcError::Incomplete));
     }
 
+    /// App-copy rule: an error says what failed and what to do next, in two
+    /// sentences or more, and shows no system name or raw debug text.
+    #[test]
+    fn every_error_says_what_to_do_next() {
+        for expression in [
+            "1/0",
+            "5 mod 0",
+            "\u{221a}-1",
+            "ln(0)",
+            "ln(-1)",
+            "asin(2)",
+            "acos(2)",
+            "acosh(0)",
+            "atanh(2)",
+            "3.5!",
+            "(-3)!",
+            "10^1000000",
+            "5+",
+            "5+*2",
+            "hello",
+            "1 2",
+            "((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((1",
+            "5)",
+            "log(10;1)",
+            "1e999999999",
+        ] {
+            let Err(error) = run(expression) else {
+                continue;
+            };
+            let message = error.to_string();
+            assert!(
+                message.matches(". ").count() >= 1 && message.ends_with('.'),
+                "{expression}: {message:?} names no next step"
+            );
+            assert!(
+                !message.contains("Err(") && !message.contains("::"),
+                "{message:?}"
+            );
+        }
+    }
+
     #[test]
     fn ans_and_memory() {
         let mut env = Env::seeded(1);
