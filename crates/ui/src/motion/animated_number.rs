@@ -85,32 +85,32 @@ impl NumberFormat {
         decimal: '.',
     };
 
-    /// The format of a locale such as `en_GB`, `de-DE.UTF-8` or `fr`. Only
-    /// the language (and, for Swiss German, the country) is read. A
-    /// language not known here is written as English.
+    /// The format of a locale such as `en_GB`, `de-DE.UTF-8` or `fr`: the
+    /// marks the locale's own data (see [`crate::format::Number`]) writes in
+    /// `1234567.5`, beside Latin digits. A tag that names no language is
+    /// written as English.
     pub fn for_locale(locale: &str) -> Self {
-        let tag = locale.split(['.', '@']).next().unwrap_or("");
-        let mut parts = tag.split(['_', '-']);
-        let language = parts.next().unwrap_or("").to_ascii_lowercase();
-        let country = parts.next().unwrap_or("").to_ascii_uppercase();
-        match (language.as_str(), country.as_str()) {
-            ("de", "CH") | ("it", "CH") | ("fr", "CH") => Self {
-                group: Some('\u{2019}'),
-                decimal: '.',
+        let Some(locale) = crate::locale::Locale::parse(locale) else {
+            return Self::ENGLISH;
+        };
+        let sample = crate::format::Number::new(1_234_567.5)
+            .fraction_digits(1, 1)
+            .locale(&locale.latin_digits())
+            .format();
+        let marks: Vec<char> = sample
+            .chars()
+            .filter(|c| !c.is_ascii_digit() && !matches!(c, '\u{200e}' | '\u{200f}' | '\u{61c}'))
+            .collect();
+        match marks.as_slice() {
+            [] => Self::PLAIN,
+            [decimal] => Self {
+                group: None,
+                decimal: *decimal,
             },
-            ("de" | "es" | "it" | "nl" | "pt" | "tr" | "id" | "da" | "el" | "ro" | "hr" | "sl", _) => Self {
-                group: Some('.'),
-                decimal: ',',
+            [group, .., decimal] => Self {
+                group: Some(*group),
+                decimal: *decimal,
             },
-            ("fr", _) => Self {
-                group: Some('\u{202f}'),
-                decimal: ',',
-            },
-            ("ru" | "uk" | "pl" | "cs" | "sk" | "sv" | "nb" | "no" | "fi" | "bg" | "hu" | "lt" | "lv", _) => Self {
-                group: Some('\u{a0}'),
-                decimal: ',',
-            },
-            _ => Self::ENGLISH,
         }
     }
 }
@@ -118,7 +118,12 @@ impl NumberFormat {
 /// `value` written with `decimals` digits after the point, as the number
 /// shows it: a sign only when the shown value is not zero, the integer digits
 /// padded with zeros to `min_digits`, in groups, then the decimals.
-pub(crate) fn format_number(value: f64, decimals: usize, min_digits: usize, format: NumberFormat) -> String {
+pub(crate) fn format_number(
+    value: f64,
+    decimals: usize,
+    min_digits: usize,
+    format: NumberFormat,
+) -> String {
     if !value.is_finite() {
         return NOT_A_NUMBER.to_string();
     }
@@ -191,7 +196,10 @@ impl Strip {
     }
 
     fn glyph(&self, slot: i64) -> Option<Glyph> {
-        self.slots.iter().find(|(at, _)| *at == slot).map(|(_, glyph)| *glyph)
+        self.slots
+            .iter()
+            .find(|(at, _)| *at == slot)
+            .map(|(_, glyph)| *glyph)
     }
 
     /// The glyph the strip is heading for.
@@ -217,9 +225,21 @@ impl Strip {
         // The next slot holds something else, so the roll goes past it to
         // a free one: the glyphs in between pass by.
         let free = if step > 0 {
-            self.slots.iter().map(|(slot, _)| *slot).max().unwrap_or(0).max(self.target) + 1
+            self.slots
+                .iter()
+                .map(|(slot, _)| *slot)
+                .max()
+                .unwrap_or(0)
+                .max(self.target)
+                + 1
         } else {
-            self.slots.iter().map(|(slot, _)| *slot).min().unwrap_or(0).min(self.target) - 1
+            self.slots
+                .iter()
+                .map(|(slot, _)| *slot)
+                .min()
+                .unwrap_or(0)
+                .min(self.target)
+                - 1
         };
         self.slots.push((free, glyph));
         self.target = free;
@@ -487,7 +507,11 @@ impl Component for DigitColumn {
         let tokens = use_tokens();
         let ms = tokens.motion(ROLL_MS);
         let strip = use_hook(|| {
-            Rc::new(RefCell::new(Strip::at(if self.appear { None } else { self.glyph })))
+            Rc::new(RefCell::new(Strip::at(if self.appear {
+                None
+            } else {
+                self.glyph
+            })))
         });
         strip.borrow_mut().retarget(self.glyph, self.step);
         let target = strip.borrow().target as f32;
@@ -496,8 +520,17 @@ impl Component for DigitColumn {
         // Both begin at rest on the first glyph, so only a column that
         // appears (empty at first) has anywhere to go when it mounts.
         let position = use_tween_with(0.0, target, ms, Function::Cubic);
-        let width = use_tween_with(if self.appear { 0.0 } else { wanted }, wanted, ms, Function::Cubic);
-        let (position, width) = if ms == 0 { (target, wanted) } else { (position, width) };
+        let width = use_tween_with(
+            if self.appear { 0.0 } else { wanted },
+            wanted,
+            ms,
+            Function::Cubic,
+        );
+        let (position, width) = if ms == 0 {
+            (target, wanted)
+        } else {
+            (position, width)
+        };
 
         let mut strip = strip.borrow_mut();
         strip.prune(position);
@@ -548,26 +581,45 @@ mod math {
         let plain = NumberFormat::PLAIN;
         assert_eq!(format_number(0.0, 0, 1, plain), "0");
         assert_eq!(format_number(1234.5, 1, 1, plain), "1234.5");
-        assert_eq!(format_number(1234.5, 1, 1, NumberFormat::ENGLISH), "1,234.5");
+        assert_eq!(
+            format_number(1234.5, 1, 1, NumberFormat::ENGLISH),
+            "1,234.5"
+        );
         assert_eq!(format_number(999.0, 0, 1, NumberFormat::ENGLISH), "999");
-        assert_eq!(format_number(1_000_000.0, 0, 1, NumberFormat::ENGLISH), "1,000,000");
+        assert_eq!(
+            format_number(1_000_000.0, 0, 1, NumberFormat::ENGLISH),
+            "1,000,000"
+        );
         assert_eq!(format_number(5.0, 0, 2, plain), "05");
         assert_eq!(format_number(5.25, 2, 3, plain), "005.25");
         // The grouping runs over the digits of the integer part only.
-        assert_eq!(format_number(1234.5678, 3, 1, NumberFormat::ENGLISH), "1,234.568");
+        assert_eq!(
+            format_number(1234.5678, 3, 1, NumberFormat::ENGLISH),
+            "1,234.568"
+        );
         // Rounding carries into a new digit.
-        assert_eq!(format_number(999.96, 1, 1, NumberFormat::ENGLISH), "1,000.0");
+        assert_eq!(
+            format_number(999.96, 1, 1, NumberFormat::ENGLISH),
+            "1,000.0"
+        );
     }
 
     #[test]
     fn a_sign_shows_only_for_a_value_that_is_not_zero_as_written() {
         let plain = NumberFormat::PLAIN;
         assert_eq!(format_number(-5.0, 0, 1, plain), "\u{2212}5");
-        assert_eq!(format_number(-0.4, 0, 1, plain), "0", "rounds to zero: no sign");
+        assert_eq!(
+            format_number(-0.4, 0, 1, plain),
+            "0",
+            "rounds to zero: no sign"
+        );
         assert_eq!(format_number(-0.0, 1, 1, plain), "0.0");
         assert_eq!(format_number(-0.04, 1, 1, plain), "0.0");
         assert_eq!(format_number(-0.06, 1, 1, plain), "\u{2212}0.1");
-        assert_eq!(format_number(-1234.0, 0, 1, NumberFormat::ENGLISH), "\u{2212}1,234");
+        assert_eq!(
+            format_number(-1234.0, 0, 1, NumberFormat::ENGLISH),
+            "\u{2212}1,234"
+        );
         assert_eq!(format_number(f64::NAN, 1, 1, plain), "\u{2014}");
         assert_eq!(format_number(f64::INFINITY, 0, 1, plain), "\u{2014}");
     }
@@ -579,7 +631,13 @@ mod math {
         let german = NumberFormat::for_locale("de_DE");
         assert_eq!(format_number(1234567.5, 1, 1, german), "1.234.567,5");
         let swiss = NumberFormat::for_locale("de-CH");
-        assert_eq!(format_number(1234.5, 1, 1, swiss), "1\u{2019}234.5");
+        assert_eq!(format_number(1234.5, 1, 1, swiss), "1'234.5");
+        // Languages that are not in a table: the data decides, with Latin digits.
+        // Arabic with Latin digits uses the Latin marks, as the data says.
+        let arabic = NumberFormat::for_locale("ar-EG");
+        assert_eq!(format_number(1234.5, 1, 1, arabic), "1,234.5");
+        let spanish = NumberFormat::for_locale("es_ES");
+        assert_eq!(format_number(1234567.5, 1, 1, spanish), "1.234.567,5");
         let french = NumberFormat::for_locale("fr_FR");
         assert_eq!(format_number(1234.5, 1, 1, french), "1\u{202f}234,5");
         let russian = NumberFormat::for_locale("ru");
@@ -624,11 +682,21 @@ mod math {
         let mut strip = Strip::at(Some('5'));
         assert!(strip.retarget(Some('6'), 1));
         let at = |position: f32| visible(&strip, position);
-        assert_eq!(at(0.0), vec![('5', 0.0)], "the new digit is a line below, out of the window");
+        assert_eq!(
+            at(0.0),
+            vec![('5', 0.0)],
+            "the new digit is a line below, out of the window"
+        );
         let middle = at(0.5);
         assert_eq!(middle.len(), 2);
-        assert!(middle.contains(&('5', -0.5)), "the old digit is half a line up: {middle:?}");
-        assert!(middle.contains(&('6', 0.5)), "the new digit is half a line below: {middle:?}");
+        assert!(
+            middle.contains(&('5', -0.5)),
+            "the old digit is half a line up: {middle:?}"
+        );
+        assert!(
+            middle.contains(&('6', 0.5)),
+            "the new digit is half a line below: {middle:?}"
+        );
         assert_eq!(at(1.0), vec![('6', 0.0)]);
     }
 
@@ -637,8 +705,14 @@ mod math {
         let mut strip = Strip::at(Some('5'));
         assert!(strip.retarget(Some('4'), -1));
         let middle = visible(&strip, -0.25);
-        assert!(middle.contains(&('5', 0.25)), "the old digit sinks: {middle:?}");
-        assert!(middle.contains(&('4', -0.75)), "the new digit comes from above: {middle:?}");
+        assert!(
+            middle.contains(&('5', 0.25)),
+            "the old digit sinks: {middle:?}"
+        );
+        assert!(
+            middle.contains(&('4', -0.75)),
+            "the new digit comes from above: {middle:?}"
+        );
         assert_eq!(visible(&strip, -1.0), vec![('4', 0.0)]);
     }
 
@@ -648,7 +722,10 @@ mod math {
         strip.retarget(Some('0'), 1);
         let middle = visible(&strip, 0.5);
         assert!(middle.contains(&('9', -0.5)));
-        assert!(middle.contains(&('0', 0.5)), "zero comes up from below, not down from above: {middle:?}");
+        assert!(
+            middle.contains(&('0', 0.5)),
+            "zero comes up from below, not down from above: {middle:?}"
+        );
         // 59 to 00 is two such rolls at once, each in its own strip.
         let mut tens = Strip::at(Some('5'));
         tens.retarget(Some('0'), 1);
@@ -671,11 +748,17 @@ mod math {
         let before = visible(&strip, 0.4);
         assert!(strip.retarget(Some('7'), 1));
         let after = visible(&strip, 0.4);
-        assert_eq!(before, after, "nothing on screen moves when the target does");
+        assert_eq!(
+            before, after,
+            "nothing on screen moves when the target does"
+        );
         // The roll carries on from there, through six, to seven.
         assert_eq!(strip.target, 2);
         let later = visible(&strip, 1.5);
-        assert!(later.contains(&('6', -0.5)) && later.contains(&('7', 0.5)), "{later:?}");
+        assert!(
+            later.contains(&('6', -0.5)) && later.contains(&('7', 0.5)),
+            "{later:?}"
+        );
         assert_eq!(visible(&strip, 2.0), vec![('7', 0.0)]);
     }
 
@@ -685,7 +768,10 @@ mod math {
         strip.retarget(Some('6'), 1);
         let before = visible(&strip, 0.7);
         assert!(strip.retarget(Some('5'), -1));
-        assert_eq!(strip.target, 0, "the five that is still there is the target: no new slot");
+        assert_eq!(
+            strip.target, 0,
+            "the five that is still there is the target: no new slot"
+        );
         assert_eq!(strip.slots.len(), 2);
         assert_eq!(visible(&strip, 0.7), before);
         assert_eq!(visible(&strip, 0.0), vec![('5', 0.0)]);
@@ -716,7 +802,10 @@ mod math {
             strip.prune(position);
             most = most.max(strip.slots.len());
         }
-        assert!(most <= 6, "the strip keeps what is near the position, not the history: {most}");
+        assert!(
+            most <= 6,
+            "the strip keeps what is near the position, not the history: {most}"
+        );
         // Let it settle: one slot is left, at rest.
         position = strip.target as f32;
         strip.prune(position);
@@ -732,7 +821,10 @@ mod math {
             let now = visible(&strip, step as f32 / 100.0);
             for (glyph, distance) in &now {
                 if let Some((_, before)) = previous.iter().find(|(g, _)| g == glyph) {
-                    assert!((distance - before).abs() < 0.02, "{glyph}: {before} to {distance}");
+                    assert!(
+                        (distance - before).abs() < 0.02,
+                        "{glyph}: {before} to {distance}"
+                    );
                 }
             }
             previous = now;

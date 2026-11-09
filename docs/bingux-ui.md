@@ -3745,3 +3745,191 @@ Environment variables for tests and screenshots:
 ### Form dialogs
 
 `open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).
+
+## Locale and formats
+
+Text that holds a number, a date, a size or a list is written for the person's
+language and region, not for the programmer's. `bingux_ui::locale::Locale` says
+which, and `bingux_ui::format` writes the values. Nothing here reaches for the
+system: the data (Unicode CLDR through ICU4X, Unicode licence) and the time
+zone database (the IANA one, through `jiff`) are compiled in, so an app formats
+the same on every host and needs no file from the distribution.
+
+Do not format by hand. `format!("{:.1} MB", bytes / 1e6)`, a month table in the
+app or a comparison with `== 1` for a plural each say "English" in a place
+where the person may not read it. The last table of the section lists the
+hand-rolled formatters that were replaced and the ones that remain.
+
+### Locale
+
+A `Locale` is a language with its region and script (`en-GB`, `de-CH`,
+`sr-Latn-RS`). `Locale::parse` reads a BCP 47 tag or a POSIX one
+(`de_DE.UTF-8@euro`); `Locale::current()` is the locale of the running
+process.
+
+POSIX has one variable for each family of conventions, and a program reads the
+one that matches what it writes. `Locale::for_category(Category)` does:
+
+| Category   | Variables read, first one set wins                                | Used by                                   |
+| ---------- | ----------------------------------------------------------------- | ----------------------------------------- |
+| `Messages` | `LC_ALL`, `LC_MESSAGES`, `LANG`; `LANGUAGE` ranks languages first | Language, plurals, lists, time unit names |
+| `Numeric`  | `LC_ALL`, `LC_NUMERIC`, `LANG`                                    | Numbers, percentages, sizes, units        |
+| `Time`     | `LC_ALL`, `LC_TIME`, `LANG`                                       | Dates, times, relative times              |
+| `Monetary` | `LC_ALL`, `LC_MONETARY`, `LANG`                                   | Currency                                  |
+
+`C`, `POSIX` and `C.UTF-8` name no language, so they read as `Locale::fallback()`,
+British English (the language the Bingux apps are written in); `LANGUAGE` is
+ignored under them, as `gettext` ignores it. The codeset (`.UTF-8`) is dropped
+and `@latin` and `@cyrillic` set the script. A tag the data does not cover
+(`xx-YY`) is not an error: formatters use the root locale's conventions.
+
+`Locale::preferred()` is every language the person asked for, most wanted
+first, for matching against the languages an app is translated into (a
+message catalogue negotiates over it). `Locale::set_current(Some(locale))`
+makes every default answer `locale` (the taxonomy's locale switch, tests;
+`None` reads the environment again) and `Locale::revision()` changes when it
+is called, so what was built from the locale can tell it must be built again.
+
+### Numbers and money
+
+```rust
+use bingux_ui::format::{Compact, Currency, Number, Percent, Quantity};
+
+Number::new(1234567.891).to_string();                       // 1,234,567.891 (de-DE: 1.234.567,891)
+Number::new(0.125).max_fraction_digits(2).to_string();      // 0.13
+Number::new(1_234_567).compact(Compact::Short).to_string(); // 1.2M
+Percent::new(0.256).to_string();                            // 26%
+Currency::new(1234.5, "GBP").to_string();                   // £1,234.50
+Number::new(Quantity::parse("12.50").unwrap()).fraction_digits(2, 2); // exact decimals keep every digit
+```
+
+Every formatter is a builder over one value, is `Display`, reads the person's
+locale unless given `.locale(&Locale)`, and has `.format()` for a `String`.
+
+- **Rounding is half away from zero on the decimal text**, as people round:
+  `1.005` to two digits is `1.01` and `-2.5` to none is `-3`. A float is read
+  by its shortest decimal text, so `0.1 + 0.2` is `0.3` and `0.1f32` is `0.1`,
+  never `0.10000000149`. A negative that rounds to nothing is `0`, not `-0`.
+- **Digits.** An integer is whole; a float or an exact decimal shows up to three
+  fraction digits. `fraction_digits(least, most)`, `max_fraction_digits(n)` and
+  `significant_digits(n)` change that. `Grouping::{Auto, Never, Min2}` (Auto
+  follows the language: Spanish groups from five digits, Hindi groups the last
+  three then twos) and `Sign::{Minus, Always, ExceptZero, Never}`.
+- **NaN and infinity** are written (`NaN`, `∞`), never an empty string.
+- **Money** uses the currency's own digits (two for pounds, none for yen) and
+  symbols. `CurrencyDisplay::{Symbol, Narrow, Code, Name}`, and `.accounting()`
+  for `($12.50)`. A code that is not a currency is written after the number.
+  Amounts that must not touch binary floating point (a price) pass
+  `Quantity::parse("12.50")`.
+
+### Sizes, units and time spans
+
+```rust
+use bingux_ui::format::{Bytes, Measure, Timespan, Unit};
+
+Bytes::new(2_400_000).to_string();                 // 2.4 MB
+Bytes::new(2_400_000).binary().to_string();        // 2.3 MiB
+Measure::new(21.5, Unit::Celsius).to_string();     // 21.5°C (de-DE: 21,5 °C)
+Timespan::new(Duration::from_secs(3825)).to_string(); // 1 hr, 3 min
+Timespan::new(Duration::from_secs(3825)).digital().to_string(); // 1:03:45
+```
+
+- **`Bytes`** picks the largest unit that keeps the value at 1 or more, one
+  decimal under 10 and none above (`2.4 MB`, `19 kB`, `340 kB`), without a
+  trailing `.0`, a no-break space between number and unit, and carries
+  correctly: 999 500 bytes is `1 MB`, not `1000 kB`. `.binary()` counts in
+  1024 (`KiB`). French writes octets (`2,4 Mo`); English alone has `.words()`
+  (`512 bytes`, `1 byte`).
+- **`Measure`** writes a number with a unit: temperature, length, mass, volume,
+  speed, pressure, power, energy, frequency, angle, a percentage and the units
+  of time. Time units and the percentage come from the language's data (words,
+  plurals, spacing). The others use the international symbol, which every
+  language writes, a no-break space from the number (`12 km/h`), except
+  degrees, which touch the number in English and East Asian languages. ICU4X
+  has no data for these units yet; the language-specific names (`12 kilometres
+per hour`) are not offered rather than guessed.
+- **`Timespan`** writes a length of time to the nearest second: worded
+  (`1 hr, 3 min`, `Width::Long` `1 hour, 3 minutes`, `Width::Narrow` `1h 3m`)
+  with at most `max_units` units (two by default, zero units left out), or as
+  a clock (`.digital()`: `3:45`, `1:03:45`, `25:00:00`). 59.6 seconds is
+  `1 min`.
+
+### Dates, times and zones
+
+A `Moment` is a point in time with no zone (`Moment::now()`,
+`Moment::from_unix(secs)`, `Moment::from(SystemTime)`). A `Zone` reads it as a
+wall clock: `Zone::Local` (the system's, with its daylight saving rules; the
+default), `Zone::Utc`, `Zone::Offset(seconds)` or `Zone::named("Europe/Paris")`
+(`None` for a zone that does not exist). `zone.civil(moment)` is the reading
+(`Civil`), `zone.moment_of(civil)` the other way (the first reading of a repeated
+hour, the moment after the gap in a skipped one) and `zone.offset_at(moment)` the
+offset then.
+
+```rust
+use bingux_ui::format::{Date, DatePart, Moment, Time, TimePrecision, YearDisplay};
+
+Date::new(moment).to_string();                              // 9 Nov 2025 (en-US: Nov 9, 2025)
+Date::new(moment).long().weekday().to_string();             // Sunday, 9 November 2025
+Date::new(moment).with_time(TimePrecision::Minutes);        // 9 Nov 2025, 14:53
+Date::new(moment).year(YearDisplay::IfNotCurrent);          // 9 Nov, then 9 Nov 2024 last year
+Date::new(moment).part(DatePart::MonthYear);                // Nov 2025
+Date::civil(2025, 4, 30);                                   // an all day event: no time, no zone
+Time::new(moment).hour_cycle(HourCycle::Hours24);           // 14:53
+```
+
+The order of day, month and year, the month and weekday names, the
+calendar (Thai years are 2568, Persian ones 1404) and the 12 or 24 hour clock
+come from the locale; `HourCycle` overrides the clock. A date that does not
+exist (`Date::civil(2025, 2, 29)`) is written `Invalid date`, never a wrong
+one. A moment beyond the years -9999 to 9999 is clamped to the edge.
+
+### Relative times
+
+`Relative::new(moment)` tells a time from now: `2 minutes ago`, `in 2 hours`,
+`yesterday`, `2 weeks ago`, `in 3 months`, `now` for under five seconds. The
+unit is the largest whole one; from a day on, days, weeks and months are
+calendar ones on the wall clock of `.zone(..)`, so "yesterday" is decided by
+the calendar and not by 24 hours. `.width(Width::Short | Narrow)` (`2 min. ago`,
+`2m ago`) and `.numeric()` (`1 day ago`, never `yesterday`). Pass the same
+`.now(moment)` for every row of a list so they agree.
+
+`Recent::new(moment)` is the cell of a list of files or messages: `Now` under a
+minute, the time (`14:03`) earlier today, `Yesterday` (`Tomorrow`), then the
+date without the current year (`12 Oct`) and with it for another (`12 Oct 2024`).
+
+### Lists and counts
+
+`List::and(items)`, `List::or(items)` and `List::units(items)` join with the
+language's own separators and conjunction: `A, B and C`, `A, B, and C`
+(`en-US`), `x e Ibiza` (Spanish before an `i`), `A、B、C`.
+
+`plural_category(count, PluralKind::Cardinal | Ordinal, locale)` is the class of
+a count in the language: English has `One` and `Other`; Russian `One`, `Few`,
+`Many` and `Other`; Arabic all six; Japanese only `Other`. `Plural::new(n,
+"{n} files").none("No files").one("{n} file")` picks the wording by that class
+and writes the count in. **Text that is translated does not use this**:
+messages with counts and dates inside live in the app's Fluent catalogue, where
+each language writes its own forms; `format` writes the values that go into
+them.
+
+### Where hand-rolled formatting was replaced, and where it stays
+
+| Was                                                      | Is                                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NumberFormat::for_locale` (a table of twenty languages) | The marks `Number` writes for the locale, with Latin digits (`Locale::latin_digits`): every language CLDR has |
+| Settings: `applications::size_text`, `about::size_text`  | `Bytes`                                                                                                       |
+| Settings: `about::uptime`                                | `Timespan` (`3 days, 4 hours`, in the person's language)                                                      |
+| Settings: `power::duration_label` (`5 minutes`)          | `Measure` with a `TimeUnit`                                                                                   |
+
+These are still their own, for a reason each. The Network usage page keeps a
+fixed English format so that a screenshot reads the same everywhere
+(`pages/network/usage/format.rs`). The chart axes (`charts/format.rs`) pick
+their decimals from the spacing of the ticks and have their own `Unit`; they
+move to `format` with the chart work that needs a unit it does not have. Files'
+columns and the file sizes in `bingux_files::display` belong to the Files
+app, which adopts `Bytes` and `Recent` (`bingux_files` cannot depend on
+bingux-ui).
+
+The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and
+times, Relative times, Lists and counts and Locale pages show every formatter
+in ten languages.
