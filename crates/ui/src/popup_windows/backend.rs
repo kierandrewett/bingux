@@ -77,7 +77,10 @@ struct Ready<T: Copy> {
 
 impl<T: Copy> Ready<T> {
     fn new() -> Self {
-        Self { value: Cell::new(None), wakers: RefCell::new(Vec::new()) }
+        Self {
+            value: Cell::new(None),
+            wakers: RefCell::new(Vec::new()),
+        }
     }
 
     fn set(&self, value: T) {
@@ -159,11 +162,22 @@ impl PopupBackend for WaylandBackend {
             Parent::Popup(parent) => Some(parent),
             Parent::Window(_) => None,
         };
-        let entry = Rc::new(Entry { window: window.clone(), parent: parent_token, closed: Cell::new(false) });
+        let entry = Rc::new(Entry {
+            window: window.clone(),
+            parent: parent_token,
+            closed: Cell::new(false),
+        });
         self.entries.borrow_mut().insert(token, entry.clone());
         register(token, request.parent);
         let entries = self.entries.clone();
-        let OpenRequest { placement, parent, content, contexts, origin, on_event } = request;
+        let OpenRequest {
+            placement,
+            parent,
+            content,
+            contexts,
+            origin,
+            on_event,
+        } = request;
 
         // A popup is made by the event loop, a moment after it is asked for. The task is not
         // tied to the component that asked: the window is made either way, and the task is what
@@ -172,7 +186,10 @@ impl PopupBackend for WaylandBackend {
             let parent_window = match parent {
                 Parent::Window(id) => Some(id),
                 Parent::Popup(parent) => {
-                    let waiting = entries.borrow().get(&parent).map(|entry| entry.window.clone());
+                    let waiting = entries
+                        .borrow()
+                        .get(&parent)
+                        .map(|entry| entry.window.clone());
                     match waiting {
                         Some(ready) => ready.wait().await,
                         None => None,
@@ -186,7 +203,10 @@ impl PopupBackend for WaylandBackend {
                 return;
             };
 
-            let size = (placement.size.0.round().max(1.0) as u32, placement.size.1.round().max(1.0) as u32);
+            let size = (
+                placement.size.0.round().max(1.0) as u32,
+                placement.size.1.round().max(1.0) as u32,
+            );
             let attributes = popup::PopupAttributes {
                 parent: parent_window,
                 anchor_rect: (
@@ -206,19 +226,17 @@ impl PopupBackend for WaylandBackend {
             };
             let dismissed = on_event.clone();
             let entry_for_close = entry.clone();
-            let config = WindowConfig::new(move || {
-                portal_root(&content, &contexts, origin, token)
-            })
-            .with_popup(attributes)
-            // ui-lint: allow(the window itself must be fully transparent: the popup's card is drawn inside it)
-            .with_background(Color::TRANSPARENT)
-            .with_title("")
-            .with_on_close(move |_, _| {
-                // The compositor is done with it; the window goes.
-                entry_for_close.closed.set(true);
-                dismissed(PopupEvent::Dismissed);
-                CloseDecision::Close
-            });
+            let config = WindowConfig::new(move || portal_root(&content, &contexts, origin, token))
+                .with_popup(attributes)
+                // ui-lint: allow(the window itself must be fully transparent: the popup's card is drawn inside it)
+                .with_background(Color::TRANSPARENT)
+                .with_title("")
+                .with_on_close(move |_, _| {
+                    // The compositor is done with it; the window goes.
+                    entry_for_close.closed.set(true);
+                    dismissed(PopupEvent::Dismissed);
+                    CloseDecision::Close
+                });
 
             match Platform::get().try_launch_window(config).await {
                 Some(id) if !entry.closed.get() => {
@@ -269,7 +287,10 @@ impl PopupBackend for WaylandBackend {
     }
 
     fn window(&self, token: Token) -> Option<WindowId> {
-        self.entries.borrow().get(&token).and_then(|entry| entry.window.get())
+        self.entries
+            .borrow()
+            .get(&token)
+            .and_then(|entry| entry.window.get())
     }
 }
 
@@ -280,13 +301,25 @@ fn register(token: Token, parent: Parent) {
             Parent::Window(window) => {
                 let id = u64::from(window);
                 if !stack.contains(id) {
-                    stack.open(id, crate::layers::WindowKind::Toplevel, None, false, "window");
+                    stack.open(
+                        id,
+                        crate::layers::WindowKind::Toplevel,
+                        None,
+                        false,
+                        "window",
+                    );
                 }
                 id
             }
             Parent::Popup(parent) => stack_id(parent),
         };
-        stack.open(stack_id(token), crate::layers::WindowKind::Popup, Some(parent_id), false, "popup");
+        stack.open(
+            stack_id(token),
+            crate::layers::WindowKind::Popup,
+            Some(parent_id),
+            false,
+            "popup",
+        );
     });
 }
 
@@ -337,9 +370,18 @@ fn winit_adjust(adjust: Adjust) -> popup::PopupAdjust {
 /// What a [`FakeBackend`] was asked, in order.
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) enum Call {
-    Open { token: Token, placement: PopupRequest, parent: Parent },
-    Resize { token: Token, size: (f32, f32) },
-    Close { token: Token },
+    Open {
+        token: Token,
+        placement: PopupRequest,
+        parent: Parent,
+    },
+    Resize {
+        token: Token,
+        size: (f32, f32),
+    },
+    Close {
+        token: Token,
+    },
 }
 
 /// A backend with no windows: it records what it is asked and answers `Ready` at once, or
@@ -408,7 +450,9 @@ impl PopupBackend for FakeBackend {
         if self.refuse.get() {
             (request.on_event)(PopupEvent::Refused);
         } else {
-            self.handlers.borrow_mut().insert(token, request.on_event.clone());
+            self.handlers
+                .borrow_mut()
+                .insert(token, request.on_event.clone());
             (request.on_event)(PopupEvent::Ready);
         }
         token
