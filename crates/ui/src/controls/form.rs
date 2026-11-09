@@ -262,7 +262,10 @@ impl Component for FormField {
         let mut title_facts = LabelFacts::measure(&self.title, BODY);
         title_facts.natural += optional_width;
         let field_natural = if wide { Dim::FieldWide } else { Dim::Field }.px()
-            + self.trailing.as_ref().map_or(0.0, |_| S2.px() + Dim::Control.px());
+            + self
+                .trailing
+                .as_ref()
+                .map_or(0.0, |_| S2.px() + Dim::Control.px());
         let mode = if is_compact() {
             LineMode::Stacked
         } else {
@@ -343,10 +346,18 @@ impl Component for FormField {
         let error_line = message.map(|message| error_line(&tokens, message));
         let outer = rect()
             .component("FormField")
-            .on_sized(move |event: Event<SizedEventData>| line_width.set_if_modified(event.area.width()))
+            .on_sized(move |event: Event<SizedEventData>| {
+                line_width.set_if_modified(event.area.width())
+            })
             .tw(
                 &tokens,
-                &[flex_col(), w_full(), px(GUTTER), py(FIELD_ROW_INSET), gap(S1)],
+                &[
+                    flex_col(),
+                    w_full(),
+                    px(GUTTER),
+                    py(FIELD_ROW_INSET),
+                    gap(S1),
+                ],
             );
 
         if compact {

@@ -64,6 +64,7 @@ apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/settings/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/files/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/calculator/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 
@@ -210,6 +211,7 @@ check: doctor-build native daemons
 	$(CARGO) test --locked --manifest-path services/helper/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path services/searchd/Cargo.toml --lib
 	$(CARGO) test --locked --manifest-path crates/files/Cargo.toml
+	$(CARGO) test --locked --manifest-path crates/calc/Cargo.toml
 	$(CARGO) test --locked --manifest-path crates/preview-core/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path crates/search/Cargo.toml

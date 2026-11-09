@@ -22,7 +22,11 @@ pub fn colour_chip(tokens: Tokens, colour: Color, size: f32) -> impl IntoElement
             .width(Size::px(size))
             .height(Size::px(size))
             .tw(&tokens, &[rounded(Radius::Pill), clip()]),
-        checker(Paint::Knob.color(&tokens), Paint::Control.color(&tokens), cell),
+        checker(
+            Paint::Knob.color(&tokens),
+            Paint::Control.color(&tokens),
+            cell,
+        ),
     );
     chip.child(
         rect()
@@ -75,10 +79,7 @@ impl Component for Preview {
             link.set_colour(old);
             link.settle();
         });
-        let half = |colour: Color| {
-            rect()
-                .tw(&tokens, &[w_flex(), h_full(), fill(colour)])
-        };
+        let half = |colour: Color| rect().tw(&tokens, &[w_flex(), h_full(), fill(colour)]);
         let old_half = focus_stop_with(
             use_a11y(),
             half(old).component("ColourOld"),
@@ -97,7 +98,13 @@ impl Component for Preview {
                 .a11y_alt(preview_label(old, new))
                 .tw(
                     &tokens,
-                    &[w(Dim::Box24), h(Dim::Control), flex_row(), rounded(Radius::Control), clip()],
+                    &[
+                        w(Dim::Box24),
+                        h(Dim::Control),
+                        flex_row(),
+                        rounded(Radius::Control),
+                        clip(),
+                    ],
                 ),
             checker(
                 Paint::Knob.color(&tokens),
@@ -114,7 +121,12 @@ impl Component for Preview {
                 .interactive(false)
                 .tw(
                     &tokens,
-                    &[w(Dim::Box24), h(Dim::Control), rounded(Radius::Control), border(Line::Hairline)],
+                    &[
+                        w(Dim::Box24),
+                        h(Dim::Control),
+                        rounded(Radius::Control),
+                        border(Line::Hairline),
+                    ],
                 ),
         );
         card

@@ -156,7 +156,11 @@ fn route_key(segment: Segment, key: &Key, has_menu: bool) -> Option<KeyAction> {
 /// The corners the primary segment rounds: all of them when it stands alone,
 /// only the outer ones when the chevron segment sits flush against it.
 fn primary_corners(has_menu: bool) -> Corners {
-    if has_menu { Corners::Left } else { Corners::All }
+    if has_menu {
+        Corners::Left
+    } else {
+        Corners::All
+    }
 }
 
 /// The top of a hairline of `line` pixels centred in a segment of `control`.
@@ -573,9 +577,15 @@ mod tests {
             .iter()
             .find(|b| near(width(b), chevron))
             .expect("the chevron segment is its token wide");
-        assert!(near(primary.0, outer.0), "the primary starts at the box's edge");
+        assert!(
+            near(primary.0, outer.0),
+            "the primary starts at the box's edge"
+        );
         assert!(near(primary.1, menu.0), "the segments meet on the seam");
         assert!(near(menu.1, outer.1), "the chevron ends at the box's edge");
-        assert!(near(primary.2, outer.2) && near(menu.2, outer.2), "no inset above");
+        assert!(
+            near(primary.2, outer.2) && near(menu.2, outer.2),
+            "no inset above"
+        );
     }
 }

@@ -138,13 +138,19 @@ impl Component for SplitPane {
             rect()
                 .width(Size::fill())
                 .height(Size::px(HIT_PX))
-                .tw(&tokens, &[items(Align::Center), justify(Align::Center), lit])
+                .tw(
+                    &tokens,
+                    &[items(Align::Center), justify(Align::Center), lit],
+                )
                 .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
         } else {
             rect()
                 .width(Size::px(HIT_PX))
                 .height(Size::fill())
-                .tw(&tokens, &[items(Align::Center), justify(Align::Center), lit])
+                .tw(
+                    &tokens,
+                    &[items(Align::Center), justify(Align::Center), lit],
+                )
                 .child(rect().tw(&tokens, &[h_full(), w(Dim::Hairline), bg(Paint::Separator)]))
         };
         let divider = hit

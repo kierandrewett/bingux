@@ -41,8 +41,12 @@ impl Component for Page {
 
 /// The accessibility id that has the keyboard focus.
 fn focused(shot: &mut Snapshot) -> AccessibilityId {
-    shot.runner()
-        .run_in(|| *Platform::get().current_window().focused_accessibility_id.peek())
+    shot.runner().run_in(|| {
+        *Platform::get()
+            .current_window()
+            .focused_accessibility_id
+            .peek()
+    })
 }
 
 const FIELD: (f32, f32) = (120.0, 40.0);
@@ -106,5 +110,9 @@ fn a_click_on_the_page_with_no_menu_still_blurs_the_field() {
     shot.settle(Duration::from_millis(200));
     shot.click(OUTSIDE.0, OUTSIDE.1);
     shot.settle(Duration::from_millis(400));
-    assert_ne!(focused(&mut shot), field, "a click on empty page is a click outside");
+    assert_ne!(
+        focused(&mut shot),
+        field,
+        "a click on empty page is a click outside"
+    );
 }

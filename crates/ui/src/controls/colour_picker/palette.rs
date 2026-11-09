@@ -12,9 +12,9 @@ use freya::prelude::*;
 
 use super::core::{Link, RECENT_MAX};
 use super::geometry::{COLUMNS, Geometry};
+use crate::component::ComponentName;
 use crate::controls::focus_stop::focus_stop;
 use crate::controls::tooltip::hover_tip;
-use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -84,33 +84,39 @@ impl Component for Swatch {
         let selected = self.selected;
         let label = self.entry.label();
         let disc = (Dim::PickerSwatch.px() - 2.0 * S1.px()).max(0.0);
-        let face = rect()
-            .component("ColourSwatch")
-            .a11y_builder(move |builder| builder.set_selected(selected))
-            .tw(
-                &tokens,
-                &[
-                    w(Dim::PickerSwatch),
-                    h(Dim::PickerSwatch),
-                    center(),
-                    rounded(Radius::Pill),
-                ],
-            )
-            .maybe(selected, |face| {
-                face.tw(&tokens, &[border(Line::Ring(Paint::Text))])
-            })
-            .child(
-                rect()
-                    .width(Size::px(disc))
-                    .height(Size::px(disc))
-                    .tw(
-                        &tokens,
-                        &[center(), rounded(Radius::Pill), fill(colour), border(Line::Hairline)],
-                    )
-                    .maybe_child(selected.then(|| {
-                        icons::icon(Icon::Check, IconSize::Control, on_colour(colour))
-                    })),
-            );
+        let face =
+            rect()
+                .component("ColourSwatch")
+                .a11y_builder(move |builder| builder.set_selected(selected))
+                .tw(
+                    &tokens,
+                    &[
+                        w(Dim::PickerSwatch),
+                        h(Dim::PickerSwatch),
+                        center(),
+                        rounded(Radius::Pill),
+                    ],
+                )
+                .maybe(selected, |face| {
+                    face.tw(&tokens, &[border(Line::Ring(Paint::Text))])
+                })
+                .child(
+                    rect()
+                        .width(Size::px(disc))
+                        .height(Size::px(disc))
+                        .tw(
+                            &tokens,
+                            &[
+                                center(),
+                                rounded(Radius::Pill),
+                                fill(colour),
+                                border(Line::Hairline),
+                            ],
+                        )
+                        .maybe_child(selected.then(|| {
+                            icons::icon(Icon::Check, IconSize::Control, on_colour(colour))
+                        })),
+                );
         let stop = focus_stop(
             face,
             format!("Colour {label}"),
@@ -119,7 +125,11 @@ impl Component for Swatch {
             Radius::Pill,
             EventHandler::new(move |_: ()| {
                 let keep = link.current().alpha;
-                link.set_colour(if link.alpha() { colour.with_a(keep) } else { colour });
+                link.set_colour(if link.alpha() {
+                    colour.with_a(keep)
+                } else {
+                    colour
+                });
                 link.settle();
             }),
         );
@@ -153,8 +163,7 @@ fn grid(
     editing: Color,
     link: &Link,
 ) -> Rect {
-    let mut column = rect()
-        .tw(tokens, &[w_full(), flex_col(), gap(S1)]);
+    let mut column = rect().tw(tokens, &[w_full(), flex_col(), gap(S1)]);
     let total = slots.max(entries.len());
     for row in 0..total.div_ceil(COLUMNS) {
         let mut line = rect().tw(tokens, &[w_full(), flex_row(), grow_children()]);
@@ -219,10 +228,24 @@ impl Component for Recent {
             .tw(&tokens, &[w_full(), flex_col()])
             .child(
                 rect()
-                    .tw(&tokens, &[w_full(), h(Dim::CaptionLine), flex_row(), items(Align::Center)])
+                    .tw(
+                        &tokens,
+                        &[
+                            w_full(),
+                            h(Dim::CaptionLine),
+                            flex_row(),
+                            items(Align::Center),
+                        ],
+                    )
                     .child(CAPTION.in_ink(Ink::Muted).label(&tokens, "Recent")),
             )
-            .child(grid(&tokens, &entries, RECENT_MAX, self.editing, &self.link))
+            .child(grid(
+                &tokens,
+                &entries,
+                RECENT_MAX,
+                self.editing,
+                &self.link,
+            ))
     }
 }
 
@@ -240,14 +263,26 @@ mod tests {
         let white = argb(255, 255, 255, 255);
         assert_eq!(on_colour(white), black);
         assert_eq!(on_colour(black), white);
-        assert_eq!(on_colour(argb(255, 0xff, 0xe6, 0x00)), black, "yellow takes black");
-        assert_eq!(on_colour(argb(255, 0x1c, 0x71, 0xd8)), white, "a blue takes white");
+        assert_eq!(
+            on_colour(argb(255, 0xff, 0xe6, 0x00)),
+            black,
+            "yellow takes black"
+        );
+        assert_eq!(
+            on_colour(argb(255, 0x1c, 0x71, 0xd8)),
+            white,
+            "a blue takes white"
+        );
         // Whichever it picks has the larger contrast, over the whole grid.
         let ratio = |a: Color, b: Color| {
             let l = |c: Color| {
                 let f = |v: u8| {
                     let v = v as f32 / 255.0;
-                    if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+                    if v <= 0.04045 {
+                        v / 12.92
+                    } else {
+                        ((v + 0.055) / 1.055).powf(2.4)
+                    }
                 };
                 0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
             };
@@ -261,7 +296,10 @@ mod tests {
                     let picked = on_colour(colour);
                     let other = if picked == black { white } else { black };
                     assert!(ratio(colour, picked) >= ratio(colour, other), "{r},{g},{b}");
-                    assert!(ratio(colour, picked) >= 4.5, "{r},{g},{b}: a check must be legible");
+                    assert!(
+                        ratio(colour, picked) >= 4.5,
+                        "{r},{g},{b}: a check must be legible"
+                    );
                 }
             }
         }
@@ -282,7 +320,10 @@ mod tests {
             name: Some("Blue".to_string()),
         };
         assert_eq!(entry.label(), "Blue, #3584e4");
-        let plain = Entry { colour: entry.colour, name: None };
+        let plain = Entry {
+            colour: entry.colour,
+            name: None,
+        };
         assert_eq!(plain.label(), "#3584e4");
     }
 

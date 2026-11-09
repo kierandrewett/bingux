@@ -98,7 +98,15 @@ impl Component for HexField {
             .child(
                 rect()
                     .component("ColourHexMessage")
-                    .tw(&tokens, &[w_full(), h(Dim::CaptionLine), flex_row(), items(Align::Center)])
+                    .tw(
+                        &tokens,
+                        &[
+                            w_full(),
+                            h(Dim::CaptionLine),
+                            flex_row(),
+                            items(Align::Center),
+                        ],
+                    )
                     .a11y_role(AccessibilityRole::Status)
                     .a11y_alt(message.clone().unwrap_or_default())
                     .maybe_child(message.map(|message| {
@@ -211,10 +219,9 @@ impl Component for Values {
             },
         )
         .fill();
-        let mut row = rect().component("ColourNumbers").tw(
-            &tokens,
-            &[w_full(), flex_row(), grow_children(), gap(S2)],
-        );
+        let mut row = rect()
+            .component("ColourNumbers")
+            .tw(&tokens, &[w_full(), flex_row(), grow_children(), gap(S2)]);
         for index in 0..3 {
             let link = self.link.clone();
             let edit_link = self.link.clone();

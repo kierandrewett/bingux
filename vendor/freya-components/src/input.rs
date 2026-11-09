@@ -210,7 +210,9 @@ pub struct InputProbe {
 }
 
 /// An edit the surrounding UI asks of an [`Input`] through [`Input::request`]. The input clears it after running it.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// `Type` and `Backspace` edit the text at the caret without taking the keyboard focus (an on-screen keypad
+/// types this way); the others place the caret or the selection, and take it.
+#[derive(Clone, Debug, PartialEq)]
 pub enum InputRequest {
     /// Select the word under this window point.
     SelectWordAt { x: f32, y: f32 },
@@ -220,6 +222,10 @@ pub enum InputRequest {
     DragSelectionEnd { start: bool },
     /// Select the characters from `start` to `end` (character positions, not bytes), such as a file name without its extension.
     SelectRange { start: usize, end: usize },
+    /// Type this text at the caret, replacing the selection, as the keyboard would.
+    Type(String),
+    /// Delete the selection, or the character before the caret, as Backspace would.
+    Backspace,
 }
 
 /// Runs one key edit on `editable` and writes the text to `value`, unless
@@ -764,6 +770,8 @@ impl Component for Input {
         });
         let mut value_for_command = value.clone();
         let on_validate_for_command = on_validate.clone();
+        let value_for_request = value.clone();
+        let on_validate_for_request = on_validate.clone();
 
         let on_key_down = move |e: Event<KeyboardEventData>| {
             let key = e.key.clone();
@@ -851,11 +859,11 @@ impl Component for Input {
         // Runs a request set by the surrounding UI, such as selecting the word under a touch.
         let request_state = self.request;
         let pending_request = match self.request {
-            Some(request) => *request.read(),
+            Some(request) => request.read().clone(),
             None => None,
         };
         use_side_effect_with_deps(&pending_request, move |pending| {
-            let Some(request) = *pending else {
+            let Some(request) = pending.clone() else {
                 return;
             };
             if let Some(mut state) = request_state {
@@ -863,8 +871,12 @@ impl Component for Input {
             }
             // The edit runs in its own task: reads in it must not subscribe this
             // effect, or the writes it makes would rerun the effect for ever.
+            let mut value_for_request = value_for_request.clone();
+            let on_validate_for_request = on_validate_for_request.clone();
             spawn(async move {
-                a11y_id.request_focus();
+                if !matches!(request, InputRequest::Type(_) | InputRequest::Backspace) {
+                    a11y_id.request_focus();
+                }
                 let mut editable = editable;
                 match request {
                     InputRequest::SelectWordAt { x, y } => {
@@ -914,6 +926,32 @@ impl Component for Input {
                             .write()
                             .set_selection((start.min(length), end.min(length)));
                         follow_cursor();
+                    }
+                    InputRequest::Type(text) => {
+                        let changed = apply_key_edit(
+                            &mut editable,
+                            &mut value_for_request,
+                            on_validate_for_request.as_ref(),
+                            &Key::Character(text),
+                            Modifiers::empty(),
+                            &holder.peek(),
+                        );
+                        if !changed {
+                            follow_cursor();
+                        }
+                    }
+                    InputRequest::Backspace => {
+                        let changed = apply_key_edit(
+                            &mut editable,
+                            &mut value_for_request,
+                            on_validate_for_request.as_ref(),
+                            &Key::Named(NamedKey::Backspace),
+                            Modifiers::empty(),
+                            &holder.peek(),
+                        );
+                        if !changed {
+                            follow_cursor();
+                        }
                     }
                 }
             });

@@ -8,6 +8,7 @@ examples. Cargo package names keep the `bingux-` prefix.
 | --------------- | --------------------- | ------------------------------------------------------------------------------------------ |
 | `ui/`           | `bingux-ui`           | The Bingux design system for Freya applications. See `docs/bingux-ui.md`.                  |
 | `config/`       | `bingux-config`       | The declared configuration schema, the TOML store and the `bingux-config` command.         |
+| `calc/`         | `bingux-calc`         | The calculator engine: exact arithmetic, units, rates, history. See `docs/calculator.md`.  |
 | `files/`        | `bingux-files`        | The filesystem model and file chooser logic shared by Files and the chooser.               |
 | `preview-core/` | `bingux-preview-core` | What a file is and which viewer opens it. The host process is `services/preview-host`.     |
 | `search/`       | `bingux-search`       | The search engine: documents, schema and inverted index. The daemon is `services/searchd`. |

@@ -80,6 +80,7 @@ SOURCES = [
     ROOT / "crates/ui/examples",
     ROOT / "apps/settings/src",
     ROOT / "apps/files/src",
+    ROOT / "apps/calculator/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -455,7 +456,7 @@ def blocking_problems() -> list[str]:
     return found
 
 
-RESILIENT_APPS = ("bingux-ui", "bingux-settings", "bingux-taxonomy", "bingux-files-app")
+RESILIENT_APPS = ("bingux-ui", "bingux-settings", "bingux-taxonomy", "bingux-files-app", "bingux-calculator-app")
 
 
 def panic_problems() -> list[str]:

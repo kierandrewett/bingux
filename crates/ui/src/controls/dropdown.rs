@@ -12,8 +12,9 @@ use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
-use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
+use crate::rows::RowTitle;
 use crate::shell::menu_query::{Candidate, Mark, Reaction};
+use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::type_ahead::{dimmed, marked_label, use_list_query};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
@@ -116,7 +117,10 @@ pub fn app_dropdown(
     selected: impl Into<String>,
     on_select: impl Into<EventHandler<String>>,
 ) -> Dropdown {
-    let icons = apps.iter().map(|app| OptionIcon::App(app.icon.clone())).collect();
+    let icons = apps
+        .iter()
+        .map(|app| OptionIcon::App(app.icon.clone()))
+        .collect();
     let options = apps.into_iter().map(|app| (app.key, app.label)).collect();
     Dropdown {
         icons,
@@ -192,7 +196,11 @@ impl Component for Dropdown {
         } else {
             Dim::Control
         };
-        let button_radius = if fitted { Radius::Inner } else { Radius::Control };
+        let button_radius = if fitted {
+            Radius::Inner
+        } else {
+            Radius::Control
+        };
         let mut hovering = use_state(|| false);
         let mut pressing = use_state(|| false);
         let mut open = use_state(|| false);
@@ -245,7 +253,11 @@ impl Component for Dropdown {
         // the text; an application icon is one step larger so it stays legible.
         let icon_space = if self.icons.is_empty() {
             0.0
-        } else if self.icons.iter().all(|icon| matches!(icon, OptionIcon::Symbol(_))) {
+        } else if self
+            .icons
+            .iter()
+            .all(|icon| matches!(icon, OptionIcon::Symbol(_)))
+        {
             IconSize::Row.px() + S2.px()
         } else {
             IconSize::AppSmall.px() + S2.px()
@@ -312,10 +324,7 @@ impl Component for Dropdown {
                 }
                 // A query typed on the shut button has no pill, so Escape
                 // takes it back here; the open list's Escape is the panel's.
-                if !open()
-                    && event.key == Key::Named(NamedKey::Escape)
-                    && ahead.escape()
-                {
+                if !open() && event.key == Key::Named(NamedKey::Escape) && ahead.escape() {
                     event.stop_propagation();
                     return;
                 }
@@ -432,10 +441,10 @@ impl Component for Dropdown {
             .a11y_builder({
                 // Named by its title or its row's ("Theme"), its value the
                 // choice shown ("Dark"), as GTK's drop-downs read.
-                let named = self.title.clone().map(|title| crate::a11y::FieldLabel {
-                    title,
-                    hint: None,
-                });
+                let named = self
+                    .title
+                    .clone()
+                    .map(|title| crate::a11y::FieldLabel { title, hint: None });
                 let field = named.or_else(|| field.clone());
                 let current = current.clone();
                 move |builder| {
@@ -508,31 +517,40 @@ impl Component for Dropdown {
                     })
                     .on_key_down(on_key_down)
             })
-            .maybe_child(current_icon.map(|icon| option_icon(icon, Paint::Text.color(&tokens), tokens)))
+            .maybe_child(
+                current_icon.map(|icon| option_icon(icon, Paint::Text.color(&tokens), tokens)),
+            )
             .child(
-                rect().tw(&tokens, &[w_flex()]).min_width(Size::px(0.0)).child({
-                    let label = BODY
-                        .in_ink(Ink::Text)
-                        .label(&tokens, current.clone())
-                        .width(Size::fill())
-                        .max_lines(1)
-                        .text_overflow(TextOverflow::Ellipsis);
-                    // A label that does not fit the button ends in an ellipsis
-                    // and is the tooltip in full, which the Layout checks read
-                    // as "cut on purpose" (the whole list is one press away).
-                    let room = button_width()
-                        - button_chrome()
-                        - if current_icon_shown { IconSize::Text.px() + S2.px() } else { 0.0 };
-                    if button_width() > 0.0 && text_width(&current, BODY) > room + 0.5 {
-                        rect()
-                            .component("Elided")
+                rect()
+                    .tw(&tokens, &[w_flex()])
+                    .min_width(Size::px(0.0))
+                    .child({
+                        let label = BODY
+                            .in_ink(Ink::Text)
+                            .label(&tokens, current.clone())
                             .width(Size::fill())
-                            .child(crate::controls::hover_tip(label, current.clone()))
-                            .into_element()
-                    } else {
-                        label.into_element()
-                    }
-                }),
+                            .max_lines(1)
+                            .text_overflow(TextOverflow::Ellipsis);
+                        // A label that does not fit the button ends in an ellipsis
+                        // and is the tooltip in full, which the Layout checks read
+                        // as "cut on purpose" (the whole list is one press away).
+                        let room = button_width()
+                            - button_chrome()
+                            - if current_icon_shown {
+                                IconSize::Text.px() + S2.px()
+                            } else {
+                                0.0
+                            };
+                        if button_width() > 0.0 && text_width(&current, BODY) > room + 0.5 {
+                            rect()
+                                .component("Elided")
+                                .width(Size::fill())
+                                .child(crate::controls::hover_tip(label, current.clone()))
+                                .into_element()
+                        } else {
+                            label.into_element()
+                        }
+                    }),
             )
             .child(
                 rect()
@@ -554,7 +572,10 @@ impl Component for Dropdown {
             .enumerate()
             .map(|(index, (key, text))| {
                 let choose = choose.clone();
-                let reason = unavailable.iter().find(|(off, _)| off == key).map(|(_, why)| why);
+                let reason = unavailable
+                    .iter()
+                    .find(|(off, _)| off == key)
+                    .map(|(_, why)| why);
                 Element::from(DropdownItem {
                     icon: option_icons.get(index).cloned(),
                     text: match reason {
@@ -771,10 +792,7 @@ mod geometry_tests {
             if self.icon {
                 dropdown = dropdown.icons(vec![Icon::Bluetooth, Icon::Bluetooth]);
             }
-            rect()
-                .expanded()
-                .tw(&tokens, &[p(S4)])
-                .child(dropdown)
+            rect().expanded().tw(&tokens, &[p(S4)]).child(dropdown)
         }
     }
 
@@ -827,8 +845,10 @@ mod geometry_tests {
                     .class_name()
                     .is_some_and(|name| name.contains("FocusRing") || name.contains("FocusBand"));
             let area = node.layout().area;
-            (svg && area.min_x() >= button.min_x() - 40.0 && area.max_x() <= button.max_x() + 40.0
-                && area.min_y() >= button.min_y() && area.max_y() <= button.max_y())
+            (svg && area.min_x() >= button.min_x() - 40.0
+                && area.max_x() <= button.max_x() + 40.0
+                && area.min_y() >= button.min_y()
+                && area.max_y() <= button.max_y())
             .then_some(area)
         });
         glyphs.sort_by(|a, b| a.min_x().total_cmp(&b.min_x()));
@@ -839,16 +859,21 @@ mod geometry_tests {
     fn icon_label_and_chevron_lie_inside_the_button_without_overlap() {
         for phone in [false, true] {
             for (icon, long) in [(false, false), (true, false), (false, true), (true, true)] {
-                let (button, label, glyphs, (inset_start, inset_end, gap)) = boxes(icon, long, phone);
+                let (button, label, glyphs, (inset_start, inset_end, gap)) =
+                    boxes(icon, long, phone);
                 let case = format!("phone {phone}, icon {icon}, long {long}");
                 let chevron = glyphs.last().copied().expect("a chevron");
                 for glyph in &glyphs {
                     assert!(
-                        glyph.min_x() >= button.min_x() - 0.5 && glyph.max_x() <= button.max_x() + 0.5,
+                        glyph.min_x() >= button.min_x() - 0.5
+                            && glyph.max_x() <= button.max_x() + 0.5,
                         "{case}: a glyph at {glyph:?} is outside the button {button:?}"
                     );
                 }
-                assert!(label.min_x() >= button.min_x() + inset_start - 0.5, "{case}: the label starts inside the inset");
+                assert!(
+                    label.min_x() >= button.min_x() + inset_start - 0.5,
+                    "{case}: the label starts inside the inset"
+                );
                 assert!(
                     chevron.max_x() <= button.max_x() - inset_end + 0.5,
                     "{case}: the chevron keeps the end inset"
@@ -861,7 +886,10 @@ mod geometry_tests {
                 );
                 if icon {
                     let symbol = glyphs.first().copied().expect("the icon");
-                    assert!(symbol.min_x() < label.min_x(), "{case}: the icon comes first");
+                    assert!(
+                        symbol.min_x() < label.min_x(),
+                        "{case}: the icon comes first"
+                    );
                     assert!(
                         symbol.max_x() + gap <= label.min_x() + 0.5,
                         "{case}: the label starts after the icon and its gap"
@@ -906,7 +934,9 @@ mod value_tests {
                 .iter()
                 .map(|size| (size.to_string(), size.to_string()))
                 .collect();
-            rect().expanded().child(dropdown(options, "24", |_: String| {}))
+            rect()
+                .expanded()
+                .child(dropdown(options, "24", |_: String| {}))
         }
     }
 

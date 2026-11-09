@@ -49,7 +49,11 @@ struct Root(Case);
 
 impl Component for Root {
     fn render(&self) -> impl IntoElement {
-        let scheme = if self.0.dark { Scheme::PreferDark } else { Scheme::PreferLight };
+        let scheme = if self.0.dark {
+            Scheme::PreferDark
+        } else {
+            Scheme::PreferLight
+        };
         let tokens = Tokens::new(DEFAULT_ACCENT, scheme, false);
         let shared = use_hook(move || SharedTokens(State::create(tokens)));
         use_provide_root_context(move || shared);
@@ -73,7 +77,9 @@ fn label(index: usize) -> String {
 }
 
 fn options(count: usize) -> Vec<(String, String)> {
-    (0..count).map(|index| (index.to_string(), label(index))).collect()
+    (0..count)
+        .map(|index| (index.to_string(), label(index)))
+        .collect()
 }
 
 impl Component for Host {
@@ -178,7 +184,12 @@ struct Frame2 {
 impl Frame2 {
     fn of(shot: &mut Snapshot) -> Self {
         let tree = Tree::capture_headless(shot.runner(), 1.0);
-        let by_id = tree.nodes.iter().enumerate().map(|(at, node)| (node.id, at)).collect();
+        let by_id = tree
+            .nodes
+            .iter()
+            .enumerate()
+            .map(|(at, node)| (node.id, at))
+            .collect();
         Self { tree, by_id }
     }
 
@@ -192,7 +203,9 @@ impl Frame2 {
         if matches!(node.kind, Kind::Label | Kind::Paragraph) && node.text.is_some() {
             return Some(node);
         }
-        node.children.iter().find_map(|child| self.text_under(*child))
+        node.children
+            .iter()
+            .find_map(|child| self.text_under(*child))
     }
 
     /// The part of the window the node can be seen in: the window itself
@@ -218,7 +231,11 @@ impl Frame2 {
         let mut at = Some(id);
         while let Some(id) = at {
             let node = self.node(id);
-            product *= node.props.as_ref().and_then(|props| props.opacity).unwrap_or(1.0);
+            product *= node
+                .props
+                .as_ref()
+                .and_then(|props| props.opacity)
+                .unwrap_or(1.0);
             at = node.parent;
         }
         product
@@ -259,12 +276,21 @@ const PIXEL_FLOOR: f32 = 3.0;
 
 /// Checks every `DropdownItem` fully on screen. Returns what it found wrong
 /// and the indices (into `expect.labels`) of the rows it looked at.
-fn check_rows(shot: &mut Snapshot, window: Area, expect: &Expect) -> (Vec<String>, BTreeSet<usize>) {
+fn check_rows(
+    shot: &mut Snapshot,
+    window: Area,
+    expect: &Expect,
+) -> (Vec<String>, BTreeSet<usize>) {
     let tree = Frame2::of(shot);
     let frame = Frame::of(shot);
     let mut problems = Vec::new();
     let mut seen = BTreeSet::new();
-    for node in tree.tree.nodes.iter().filter(|node| node.a11y.component.as_deref() == Some("DropdownItem")) {
+    for node in tree
+        .tree
+        .nodes
+        .iter()
+        .filter(|node| node.a11y.component.as_deref() == Some("DropdownItem"))
+    {
         let Some(row) = node.area else { continue };
         let Some(text) = tree.text_under(node.id) else {
             problems.push(format!("a row at {row:?} has no text node"));
@@ -284,14 +310,18 @@ fn check_rows(shot: &mut Snapshot, window: Area, expect: &Expect) -> (Vec<String
         }
         let name = text.text.clone().unwrap_or_default();
         let Some(index) = expect.labels.iter().position(|label| *label == name) else {
-            problems.push(format!("a row at {row:?} shows {name:?}, which is no option"));
+            problems.push(format!(
+                "a row at {row:?} shows {name:?}, which is no option"
+            ));
             continue;
         };
         seen.insert(index);
         let dim = (expect.dim)(index);
         let at = format!("row {index} ({name:?}) at {row:?}");
         if name.trim().is_empty() || label.width() < 4.0 || label.height() < 4.0 {
-            problems.push(format!("{at}: the label is empty or has no size ({label:?})"));
+            problems.push(format!(
+                "{at}: the label is empty or has no size ({label:?})"
+            ));
             continue;
         }
         if tree.hidden(text.id) {
@@ -305,9 +335,15 @@ fn check_rows(shot: &mut Snapshot, window: Area, expect: &Expect) -> (Vec<String
         }
         // A dimmed row is faint by the type-ahead's own rule (0.4), no more:
         // anything fainter is a row that has gone.
-        let opacity_ok = if dim { (0.35..=0.45).contains(&opacity) } else { opacity >= 0.99 };
+        let opacity_ok = if dim {
+            (0.35..=0.45).contains(&opacity)
+        } else {
+            opacity >= 0.99
+        };
         if !opacity_ok {
-            problems.push(format!("{at}: the label's opacity is {opacity:.2} (dim {dim})"));
+            problems.push(format!(
+                "{at}: the label's opacity is {opacity:.2} (dim {dim})"
+            ));
         }
         // The row's fill, beside the label: the row is rounded, so a pixel
         // a few points in from its start edge at mid height.
@@ -315,12 +351,8 @@ fn check_rows(shot: &mut Snapshot, window: Area, expect: &Expect) -> (Vec<String
         let ink = text.props.as_ref().and_then(|props| props.text_color);
         match ink {
             Some(ink) => {
-                let ink = colour_from_argb(
-                    (ink.a() as f32 * opacity) as u8,
-                    ink.r(),
-                    ink.g(),
-                    ink.b(),
-                );
+                let ink =
+                    colour_from_argb((ink.a() as f32 * opacity) as u8, ink.r(), ink.g(), ink.b());
                 let nominal = ratio(ink, fill);
                 let floor = if dim { DIM_FLOOR } else { AA_TEXT };
                 if nominal < floor {
@@ -363,7 +395,10 @@ fn rows_whole(shot: &mut Snapshot) -> bool {
         .nodes
         .iter()
         .filter(|node| node.a11y.component.as_deref() == Some("DropdownItem"))
-        .all(|node| tree.text_under(node.id).is_none_or(|text| tree.opacity(text.id) >= 0.99))
+        .all(|node| {
+            tree.text_under(node.id)
+                .is_none_or(|text| tree.opacity(text.id) >= 0.99)
+        })
 }
 
 struct Rig {
@@ -378,11 +413,21 @@ struct Rig {
 
 impl Rig {
     fn new(case: Case, phone: bool) -> Self {
-        let size = if phone { (390.0, 800.0) } else { (800.0, 700.0) };
+        let size = if phone {
+            (390.0, 800.0)
+        } else {
+            (800.0, 700.0)
+        };
         let mut shot = Snapshot::with_scale(move || Root(case).into_element(), size, 1.0);
         shot.settle(Duration::from_millis(300));
         let window = Area::new((0.0, 0.0).into(), size.into());
-        Self { shot, window, phone, case, queried: false }
+        Self {
+            shot,
+            window,
+            phone,
+            case,
+            queried: false,
+        }
     }
 
     /// The button's centre: the dropdown component's box starts at it.
@@ -395,7 +440,10 @@ impl Rig {
             .find(|node| node.a11y.role == "ComboBox")
             .expect("the dropdown's button");
         let area = node.area.expect("the button has an area");
-        (area.min_x() + area.width() / 2.0, area.min_y() + area.height() / 2.0)
+        (
+            area.min_x() + area.width() / 2.0,
+            area.min_y() + area.height() / 2.0,
+        )
     }
 
     /// Opens the list with a click on the button, or from the keyboard: Tab
@@ -414,9 +462,18 @@ impl Rig {
         self.shot.settle_until(WAIT, rows_whole);
         let tree = Frame2::of(&mut self.shot);
         let named = |name: &str| {
-            tree.tree.nodes.iter().filter(|node| node.a11y.component.as_deref() == Some(name)).count()
+            tree.tree
+                .nodes
+                .iter()
+                .filter(|node| node.a11y.component.as_deref() == Some(name))
+                .count()
         };
-        assert_eq!(named("DropdownItem"), self.case.count, "{:?}: the open list mounts every option", self.case);
+        assert_eq!(
+            named("DropdownItem"),
+            self.case.count,
+            "{:?}: the open list mounts every option",
+            self.case
+        );
         assert_eq!(
             named("Sheet"),
             usize::from(self.phone),
@@ -436,7 +493,8 @@ impl Rig {
     fn close(&mut self) {
         self.shot.key(Key::Named(NamedKey::Escape));
         self.shot.settle(self.motion_wait());
-        self.shot.settle_until(WAIT, |shot| rows_on_screen(shot) == 0);
+        self.shot
+            .settle_until(WAIT, |shot| rows_on_screen(shot) == 0);
         let rows = rows_on_screen(&mut self.shot);
         assert_eq!(rows, 0, "{:?}: the list closed", self.case);
     }
@@ -468,38 +526,60 @@ impl Rig {
         let mut covered = BTreeSet::new();
         let list = self.list();
         // The list opens on the current choice: it is on screen, and drawn.
-        let selected = if self.case.last { self.case.count - 1 } else { 0 };
+        let selected = if self.case.last {
+            self.case.count - 1
+        } else {
+            0
+        };
         {
-            let expect = Expect { labels: &labels, dim, fade: self.fade(), fading_in: false };
+            let expect = Expect {
+                labels: &labels,
+                dim,
+                fade: self.fade(),
+                fading_in: false,
+            };
             let (found, seen) = check_rows(&mut self.shot, self.window, &expect);
             problems.extend(found);
             if !self.queried && !seen.contains(&selected) {
-                problems.push(format!("the list opened without the choice (row {selected}) in view; it shows {seen:?}"));
+                problems.push(format!(
+                    "the list opened without the choice (row {selected}) in view; it shows {seen:?}"
+                ));
             }
         }
         let row = self.shot.runner().run_in(|| Dim::MenuItem.px());
         let step = (list.height() - 2.0 * row - self.fade()).max(40.0);
         // Back to the top first: the list opens on the selection.
         for _ in 0..200 {
-            self.shot.scroll(list.min_x() + 20.0, list.min_y() + 20.0, step);
+            self.shot
+                .scroll(list.min_x() + 20.0, list.min_y() + 20.0, step);
             if self.at_top() {
                 break;
             }
         }
         for _ in 0..400 {
-            let expect = Expect { labels: &labels, dim, fade: self.fade(), fading_in: false };
+            let expect = Expect {
+                labels: &labels,
+                dim,
+                fade: self.fade(),
+                fading_in: false,
+            };
             let (found, seen) = check_rows(&mut self.shot, self.window, &expect);
             problems.extend(found);
             covered.extend(seen);
             if covered.len() == self.case.count {
                 break;
             }
-            self.shot.scroll(list.min_x() + 20.0, list.min_y() + 20.0, -step);
+            self.shot
+                .scroll(list.min_x() + 20.0, list.min_y() + 20.0, -step);
             self.shot.settle(Duration::from_millis(32));
         }
-        let missing: Vec<usize> = (0..self.case.count).filter(|index| !covered.contains(index)).collect();
+        let missing: Vec<usize> = (0..self.case.count)
+            .filter(|index| !covered.contains(index))
+            .collect();
         if !missing.is_empty() {
-            problems.push(format!("rows {missing:?} never came on screen to be checked"));
+            problems.push(format!(
+                "rows {missing:?} never came on screen to be checked"
+            ));
         }
         problems.sort();
         problems.dedup();
@@ -513,8 +593,9 @@ impl Rig {
         tree.tree.nodes.iter().any(|node| {
             node.text.as_deref() == Some(first.as_str())
                 && node.area.is_some_and(|area| {
-                    tree.visible(node.id, self.window)
-                        .is_some_and(|shown| area.min_y() >= shown.min_y() - 0.5 && area.max_y() <= shown.max_y() + 0.5)
+                    tree.visible(node.id, self.window).is_some_and(|shown| {
+                        area.min_y() >= shown.min_y() - 0.5 && area.max_y() <= shown.max_y() + 0.5
+                    })
                 })
         })
     }
@@ -525,7 +606,12 @@ fn report(case: Case, phone: bool, what: &str, problems: &[String]) {
         problems.is_empty(),
         "{what} ({case:?}, phone {phone}): {} problems, the first:\n{}",
         problems.len(),
-        problems.iter().take(6).cloned().collect::<Vec<_>>().join("\n")
+        problems
+            .iter()
+            .take(6)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join("\n")
     );
 }
 
@@ -534,7 +620,12 @@ fn dropdown_rows_show_their_labels_in_a_short_list() {
     for phone in [false, true] {
         for dark in [true, false] {
             for icons in [false, true] {
-                let case = Case { count: 4, icons, last: false, dark };
+                let case = Case {
+                    count: 4,
+                    icons,
+                    last: false,
+                    dark,
+                };
                 let mut rig = Rig::new(case, phone);
                 rig.open(false);
                 let problems = rig.check_every_row(&|_| false);
@@ -549,7 +640,12 @@ fn dropdown_rows_show_their_labels_in_a_long_list() {
     for phone in [false, true] {
         for dark in [true, false] {
             for (icons, last) in [(false, false), (true, true)] {
-                let case = Case { count: 200, icons, last, dark };
+                let case = Case {
+                    count: 200,
+                    icons,
+                    last,
+                    dark,
+                };
                 let mut rig = Rig::new(case, phone);
                 rig.open(false);
                 let problems = rig.check_every_row(&|_| false);
@@ -566,7 +662,12 @@ fn dropdown_rows_show_their_labels_while_a_query_is_typed() {
     let query = "Setting 0";
     for phone in [false, true] {
         for dark in [true, false] {
-            let case = Case { count: 200, icons: false, last: true, dark };
+            let case = Case {
+                count: 200,
+                icons: false,
+                last: true,
+                dark,
+            };
             let mut rig = Rig::new(case, phone);
             rig.open(false);
             for letter in query.chars() {
@@ -574,7 +675,11 @@ fn dropdown_rows_show_their_labels_while_a_query_is_typed() {
             }
             rig.queried = true;
             rig.shot.settle(Duration::from_millis(300));
-            let matches = |index: usize| label(index).to_lowercase().starts_with(&query.to_lowercase());
+            let matches = |index: usize| {
+                label(index)
+                    .to_lowercase()
+                    .starts_with(&query.to_lowercase())
+            };
             let problems = rig.check_every_row(&|index| !matches(index));
             report(case, phone, "list with a query", &problems);
         }
@@ -585,10 +690,20 @@ fn dropdown_rows_show_their_labels_while_a_query_is_typed() {
 fn dropdown_rows_show_their_labels_when_opened_from_the_keyboard_and_again() {
     for phone in [false, true] {
         for last in [false, true] {
-            let case = Case { count: 200, icons: true, last, dark: true };
+            let case = Case {
+                count: 200,
+                icons: true,
+                last,
+                dark: true,
+            };
             let mut rig = Rig::new(case, phone);
             rig.open(true);
-            report(case, phone, "keyboard open", &rig.check_every_row(&|_| false));
+            report(
+                case,
+                phone,
+                "keyboard open",
+                &rig.check_every_row(&|_| false),
+            );
             rig.close();
             rig.open(false);
             report(case, phone, "second open", &rig.check_every_row(&|_| false));
@@ -603,7 +718,12 @@ fn dropdown_rows_are_never_drawn_without_their_labels_while_opening() {
     for phone in [false, true] {
         for dark in [true, false] {
             for count in [4, 200] {
-                let case = Case { count, icons: false, last: true, dark };
+                let case = Case {
+                    count,
+                    icons: false,
+                    last: true,
+                    dark,
+                };
                 let mut rig = Rig::new(case, phone);
                 let labels: Vec<String> = (0..count).map(label).collect();
                 let (x, y) = rig.button();
@@ -612,12 +732,24 @@ fn dropdown_rows_are_never_drawn_without_their_labels_while_opening() {
                 let mut frames_with_rows = 0;
                 for frame in 0..45 {
                     rig.shot.settle(Duration::from_millis(16));
-                    let expect = Expect { labels: &labels, dim: &|_| false, fade: rig.fade(), fading_in: true };
+                    let expect = Expect {
+                        labels: &labels,
+                        dim: &|_| false,
+                        fade: rig.fade(),
+                        fading_in: true,
+                    };
                     let (found, seen) = check_rows(&mut rig.shot, rig.window, &expect);
                     frames_with_rows += usize::from(!seen.is_empty());
-                    problems.extend(found.into_iter().map(|found| format!("frame {frame}: {found}")));
+                    problems.extend(
+                        found
+                            .into_iter()
+                            .map(|found| format!("frame {frame}: {found}")),
+                    );
                 }
-                assert!(frames_with_rows > 10, "{case:?}: only {frames_with_rows} frames had rows to check");
+                assert!(
+                    frames_with_rows > 10,
+                    "{case:?}: only {frames_with_rows} frames had rows to check"
+                );
                 report(case, phone, "opening frames", &problems);
             }
         }
@@ -632,15 +764,24 @@ fn the_dropdown_row_check_flags_a_label_that_cannot_be_seen() {
     shot.settle(Duration::from_millis(300));
     let labels = vec!["Invisible".to_string()];
     let window = Area::new((0.0, 0.0).into(), (390.0, 200.0).into());
-    let expect = Expect { labels: &labels, dim: &|_| false, fade: 0.0, fading_in: false };
+    let expect = Expect {
+        labels: &labels,
+        dim: &|_| false,
+        fade: 0.0,
+        fading_in: false,
+    };
     let (problems, seen) = check_rows(&mut shot, window, &expect);
     assert!(seen.contains(&0), "the row is on screen to be checked");
     assert!(
-        problems.iter().any(|problem| problem.contains("nothing is drawn")),
+        problems
+            .iter()
+            .any(|problem| problem.contains("nothing is drawn")),
         "the pixel check found {problems:?}"
     );
     assert!(
-        problems.iter().any(|problem| problem.contains("against the row's fill")),
+        problems
+            .iter()
+            .any(|problem| problem.contains("against the row's fill")),
         "the ink check found {problems:?}"
     );
 }
@@ -652,7 +793,12 @@ struct PreviewRoot(Case);
 
 impl Component for PreviewRoot {
     fn render(&self) -> impl IntoElement {
-        use_hook(|| force_density(Platform::get().current_window().id, Some((SizeClass::Compact, PointerKind::Touch))));
+        use_hook(|| {
+            force_density(
+                Platform::get().current_window().id,
+                Some((SizeClass::Compact, PointerKind::Touch)),
+            )
+        });
         Root(self.0)
     }
 }
@@ -661,7 +807,12 @@ impl Component for PreviewRoot {
 /// column, not across the whole window.
 #[test]
 fn a_dropdown_sheet_in_a_device_preview_is_as_wide_as_the_phone_column() {
-    let case = Case { count: 4, icons: false, last: false, dark: true };
+    let case = Case {
+        count: 4,
+        icons: false,
+        last: false,
+        dark: true,
+    };
     let size = (800.0, 700.0);
     let mut shot = Snapshot::with_scale(move || PreviewRoot(case).into_element(), size, 1.0);
     shot.settle(Duration::from_millis(300));
@@ -673,7 +824,10 @@ fn a_dropdown_sheet_in_a_device_preview_is_as_wide_as_the_phone_column() {
         .find(|node| node.a11y.role == "ComboBox")
         .and_then(|node| node.area)
         .expect("the dropdown's button");
-    shot.click(button.min_x() + button.width() / 2.0, button.min_y() + button.height() / 2.0);
+    shot.click(
+        button.min_x() + button.width() / 2.0,
+        button.min_y() + button.height() / 2.0,
+    );
     shot.settle(Duration::from_millis(500));
     let tree = Frame2::of(&mut shot);
     let slot = tree
@@ -684,7 +838,11 @@ fn a_dropdown_sheet_in_a_device_preview_is_as_wide_as_the_phone_column() {
         .and_then(|node| node.area)
         .expect("the sheet opened");
     let column = crate::theme::PHONE_PREVIEW_SIZE.0;
-    assert!((slot.width() - column).abs() < 0.5, "the sheet is {} px wide, not the {column} px column", slot.width());
+    assert!(
+        (slot.width() - column).abs() < 0.5,
+        "the sheet is {} px wide, not the {column} px column",
+        slot.width()
+    );
     assert!(
         (slot.min_x() - (size.0 - column) / 2.0).abs() < 0.5,
         "the sheet starts at {}, not at the column's edge",

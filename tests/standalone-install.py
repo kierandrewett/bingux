@@ -28,6 +28,7 @@ BUILD_OUTPUTS = (
     "cargo/release/bingux-helper",
     "cargo/release/bingux-settings",
     "cargo/release/bingux-files",
+    "cargo/release/bingux-calculator",
     "cargo/release/bingux-taxonomy",
     "cargo/release/bingux-preview-host",
     "cargo/release/bingux-effects",
@@ -263,6 +264,7 @@ class InstallTest(unittest.TestCase):
             for path in (
                 "usr/bin/bingux-settings",
                 "usr/bin/bingux-files",
+                "usr/bin/bingux-calculator",
                 "usr/bin/bingux-taxonomy",
                 "usr/bin/bingux-preview-host",
                 "usr/bin/bingux-effects",
@@ -271,6 +273,7 @@ class InstallTest(unittest.TestCase):
                 "usr/lib/systemd/user-preset/90-bingux.preset",
                 "usr/share/man/man1/bingux-settings.1",
                 "usr/share/man/man1/bingux-files.1",
+                "usr/share/man/man1/bingux-calculator.1",
                 "usr/share/man/man1/bingux-config.1",
                 "usr/share/man/man1/bingux-effects.1",
                 "usr/share/man/man1/bingux-taxonomy.1",

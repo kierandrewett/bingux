@@ -39,7 +39,10 @@ pub const BUTTON: &[Spec] = &[
         let mut on = use_state(|| true);
         rows(vec![
             with("Default", action_button("Action", |_| {}).compact()),
-            with("Icon button", icon_button(Icon::Refresh, |_| {}).tooltip("Refresh")),
+            with(
+                "Icon button",
+                icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"),
+            ),
             with(
                 "Segmented",
                 segmented(
@@ -95,7 +98,11 @@ pub const ICON_BUTTON: &[Spec] = &[
         let mut stopping = use_state(|| false);
         icon_button(Icon::Refresh, move |_| stopping.set(!stopping()))
             .morph(Icon::MediaPlaybackStop, stopping())
-            .tooltip(if stopping() { "Stop (Esc)" } else { "Refresh (F5)" })
+            .tooltip(if stopping() {
+                "Stop (Esc)"
+            } else {
+                "Refresh (F5)"
+            })
             .into_element()
     }),
     Spec::forced("Morph, stopped", || {
@@ -316,5 +323,107 @@ pub const SCRUB: &[Spec] = &[
     }),
     Spec::forced("Disabled", || {
         scrub("50", |_| {}).enabled(false).into_element()
+    }),
+];
+
+// ---- Keypad ------------------------------------------------------------------
+
+/// The height of `rows` rows of keys and the gaps between them.
+fn pad_height(rows: usize) -> f32 {
+    Dim::Button.px() * rows as f32 + S2.px() * (rows as f32 - 1.0)
+}
+
+pub const KEYPAD: &[Spec] = &[
+    Spec::live("A PIN pad that types into a field", || {
+        let value = use_state(String::new);
+        let edits = use_state(|| None::<FieldEdit>);
+        let id = use_a11y();
+        let digit = move |text: &'static str| {
+            keypad_key(text, move |_: ()| {
+                let mut edits = edits;
+                edits.set(Some(FieldEdit::Type(text.to_string())));
+            })
+        };
+        let delete = keypad_key("Delete", move |_: ()| {
+            let mut edits = edits;
+            edits.set(Some(FieldEdit::Backspace));
+        })
+        .icon(Icon::EditClear)
+        .name("Delete the last digit")
+        .tone(KeyTone::Plain);
+        let height = pad_height(4);
+        vstack(S3)
+            .child(
+                text_field(value, |_| {})
+                    .edits(edits)
+                    .a11y_id(id)
+                    .placeholder("PIN")
+                    .fill_width(),
+            )
+            .child(
+                rect().width(Size::fill()).height(Size::px(height)).child(
+                    keypad(
+                        3,
+                        vec![
+                            digit("1"),
+                            digit("2"),
+                            digit("3"),
+                            digit("4"),
+                            digit("5"),
+                            digit("6"),
+                            digit("7"),
+                            digit("8"),
+                            digit("9"),
+                            delete,
+                            digit("0"),
+                            keypad_key("Unlock", |_| {}).tone(KeyTone::Suggested),
+                        ],
+                    )
+                    .refocus(id),
+                ),
+            )
+            .into_element()
+    }),
+    Spec::forced(
+        "Tones: digit, plain, operator, suggested, destructive",
+        || {
+            let height = pad_height(1);
+            rect()
+                .width(Size::fill())
+                .height(Size::px(height))
+                .child(keypad(
+                    5,
+                    vec![
+                        keypad_key("7", |_| {}),
+                        keypad_key("sin", |_| {}).tone(KeyTone::Plain),
+                        keypad_key("\u{f7}", |_| {})
+                            .tone(KeyTone::Operator)
+                            .name("Divide"),
+                        keypad_key("=", |_| {})
+                            .tone(KeyTone::Suggested)
+                            .name("Equals"),
+                        keypad_key("AC", |_| {}).tone(KeyTone::Destructive),
+                    ],
+                ))
+                .into_element()
+        },
+    ),
+    Spec::forced("A toggle that is on, a key that is off, a wide key", || {
+        let height = pad_height(2);
+        rect()
+            .width(Size::fill())
+            .height(Size::px(height))
+            .child(keypad(
+                4,
+                vec![
+                    keypad_key("2nd", |_| {}).tone(KeyTone::Plain).active(true),
+                    keypad_key("Rad", |_| {}).tone(KeyTone::Plain),
+                    keypad_key("9", |_| {}).enabled(false),
+                    keypad_key("8", |_| {}),
+                    keypad_key("0", |_| {}).span(2),
+                    keypad_key(".", |_| {}),
+                ],
+            ))
+            .into_element()
     }),
 ];

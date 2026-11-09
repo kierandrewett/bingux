@@ -32,6 +32,15 @@ use crate::typography::{BODY, CAPTION, Ink, mono_family};
 /// password fields do. Freya's own default is an asterisk.
 const MASK: char = '\u{2022}';
 
+/// An edit that something outside a [`TextField`] asks of it, through
+/// [`TextField::edits`]: `FieldEdit::Type(text)` types at the caret (replacing
+/// the selection), `FieldEdit::Backspace` deletes, and
+/// `FieldEdit::SelectRange { start, end }` puts the caret or the selection
+/// where you say. `Type` and `Backspace` do not take the keyboard focus, so a
+/// keypad on screen can type into a field the person has focus on, or into one
+/// they have not touched, without a keyboard appearing on a touch screen.
+pub type FieldEdit = InputRequest;
+
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
 
@@ -91,6 +100,8 @@ pub struct TextField {
     /// Apps' own entries, appended to the full edit menu after the general ones.
     edit_extra: Vec<MenuItem>,
     semantics: Option<crate::a11y::Semantics>,
+    /// The state an outside control writes its edits to, in place of the field's own.
+    edits: Option<State<Option<FieldEdit>>>,
 }
 
 /// `value` is the live draft; `on_submit` fires on Enter with the text.
@@ -131,6 +142,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         alt_digit: None,
         edit_extra: Vec::new(),
         semantics: None,
+        edits: None,
     }
 }
 
@@ -393,6 +405,15 @@ impl TextField {
         self.edit_extra = items;
         self
     }
+
+    /// Let an outside control edit the field: write `Some(FieldEdit::Type("7".into()))`
+    /// to `edits` and the field types it at the caret, then clears it. A
+    /// [`Keypad`](crate::controls::keypad::Keypad) or a picker of emoji types
+    /// this way.
+    pub fn edits(mut self, edits: State<Option<FieldEdit>>) -> Self {
+        self.edits = Some(edits);
+        self
+    }
 }
 
 /// Whether the clipboard holds text, so the touch bar offers Paste.
@@ -436,7 +457,11 @@ impl Component for TextField {
             .and_then(|semantics| semantics.hint.clone())
             .or_else(|| field.and_then(|field| field.hint))
             .or_else(|| self.invalid.clone());
-        let a11y_invalid = invalid || self.semantics.as_ref().is_some_and(|semantics| semantics.invalid);
+        let a11y_invalid = invalid
+            || self
+                .semantics
+                .as_ref()
+                .is_some_and(|semantics| semantics.invalid);
         let own_id = use_a11y();
         let input_id = self.a11y_id.unwrap_or(own_id);
         let visual = use_visual_focus(input_id);
@@ -453,9 +478,10 @@ impl Component for TextField {
             }
         });
         let select_range = self.select_range;
-        let mut request = use_state::<Option<InputRequest>>(|| {
+        let own_requests = use_state::<Option<InputRequest>>(|| {
             select_range.map(|(start, end)| InputRequest::SelectRange { start, end })
         });
+        let mut request = self.edits.unwrap_or(own_requests);
         let mut bar_open = use_state(|| false);
         let bar_size = use_state::<Option<(f32, f32)>>(|| None);
         let mut field_origin = use_state(|| (0.0_f32, 0.0_f32));
@@ -604,8 +630,12 @@ impl Component for TextField {
             .probe(probe)
             .request(request)
             .a11y_id(input_id)
-            .maybe(a11y_label.is_some(), |input| input.a11y_label(a11y_label.unwrap_or_default()))
-            .maybe(a11y_hint.is_some(), |input| input.a11y_description(a11y_hint.unwrap_or_default()))
+            .maybe(a11y_label.is_some(), |input| {
+                input.a11y_label(a11y_label.unwrap_or_default())
+            })
+            .maybe(a11y_hint.is_some(), |input| {
+                input.a11y_description(a11y_hint.unwrap_or_default())
+            })
             .a11y_invalid(a11y_invalid)
             .on_submit(move |text: String| on_submit.call(text))
             .auto_focus(self.autofocus)
