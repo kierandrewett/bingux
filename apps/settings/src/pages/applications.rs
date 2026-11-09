@@ -950,7 +950,7 @@ impl Component for AppPage {
                             .map_or_else(|| "Unknown".to_string(), size_text),
                     ),
                     row("Installed from").value(unknown_if_empty(&details.origin)),
-                    row("Location").value(unknown_if_empty(&details.location)),
+                    row("Location").path_value(unknown_if_empty(&details.location)),
                     row("Category").value(unknown_if_empty(&app.category)),
                 ];
                 Group::titled("Details").rows(rows.into_iter().map(Element::from))
@@ -1023,7 +1023,7 @@ impl Component for AppPage {
                         })
                         .destructive()
                         .compact()
-                        .enabled(removable),
+                        .enabled(removable && !*busy.read()),
                     ),
                 )
             }

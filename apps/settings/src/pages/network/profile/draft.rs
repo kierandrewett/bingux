@@ -287,6 +287,7 @@ impl Component for EntryRow {
         let mut field = form_field(self.title.clone(), text)
             .placeholder(self.look.placeholder)
             .validate(self.look.check)
+            .wide()
             .trailing(icon_button(Icon::ListRemove, move |_| list.remove(id)).tooltip("Remove"));
         if self.look.monospace {
             field = field.monospace();

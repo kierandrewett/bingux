@@ -246,6 +246,7 @@ impl Component for IpBody {
                         .placeholder(gateway_placeholder)
                         .optional()
                         .monospace()
+                        .wide()
                         .trailing(remove_slot())
                         .validate(gateway_check),
                 ),

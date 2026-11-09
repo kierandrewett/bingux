@@ -403,7 +403,7 @@ impl Component for RenameBody {
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
                 label: "Rename".into(),
-                enabled: true,
+                enabled: !sheet.draft.read().trim().is_empty(),
                 on_press: EventHandler::new(move |_: ()| sheet.submit(window)),
             }),
         });
@@ -564,11 +564,12 @@ impl Component for AboutPage {
                     })]);
             rect()
                 .tw(&tokens, &[flex_col(), gap(GUTTER)])
-                .child(
+                // A disk that could not be read has no bar to draw.
+                .maybe_child((!(arrived && total.is_empty())).then(|| {
                     rect()
                         .tw(&tokens, BOX)
-                        .child(usage_meter(value, unit, total, fraction)),
-                )
+                        .child(usage_meter(value, unit, total, fraction))
+                }))
                 .child(Group::new(None).rows(std::iter::once(capacity_row.into())))
         };
 

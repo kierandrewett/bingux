@@ -543,7 +543,8 @@ fn monitor_label(index: usize, monitor: &Monitor) -> String {
 
 /// A scaled monitor shows its scale, so the size on screen is not a surprise.
 fn monitor_caption(monitor: &Monitor) -> String {
-    let resolution = monitor.selected().resolution();
+    let mode = monitor.selected();
+    let resolution = format!("{} × {}", mode.width, mode.height);
     match (monitor.scale * 100.0).round() as u32 {
         100 => resolution,
         percent => format!("{resolution}, {percent}%"),
@@ -1794,7 +1795,16 @@ impl Component for Tile {
             .child(
                 typography::EMPHASIS
                     .in_ink(ink)
-                    .label(&tokens, monitor_label(self.index, monitor))
+                    // A small tile keeps the number alone rather than a few
+                    // letters of the name; the details sit under it.
+                    .label(
+                        &tokens,
+                        if content_width - star_px < 72.0 {
+                            (self.index + 1).to_string()
+                        } else {
+                            monitor_label(self.index, monitor)
+                        },
+                    )
                     .width(Size::px((content_width - star_px).max(0.0)))
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
@@ -1918,7 +1928,8 @@ fn monitor_group(
     let mode = monitor.selected();
     // The subpage header already names the display, so its group is untitled.
     Group::new(None::<String>)
-        .description(monitor_state(monitor))
+        // The Primary switch below says the rest; only "Off" adds something.
+        .description(if enabled { "" } else { "Off" })
         .row(row("Port").value(monitor.connector.clone()))
         .row(
             switch_row("Use this display", enabled, move |on: bool| {

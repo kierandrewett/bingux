@@ -39,7 +39,7 @@ impl PinTask {
     fn action(self) -> &'static str {
         match self {
             Self::Unlock | Self::Puk => "Unlock",
-            Self::Enable => "Turn on",
+            Self::Enable => "Lock SIM",
             Self::Disable => "Turn off",
             Self::Change => "Change",
         }
