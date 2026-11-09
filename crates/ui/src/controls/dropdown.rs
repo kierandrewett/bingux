@@ -12,7 +12,6 @@ use crate::app_icon::{AppChoice, app_icon};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
-use crate::rows::RowTitle;
 use crate::shell::menu_query::{Candidate, Mark, Reaction};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
 use crate::shell::type_ahead::{dimmed, marked_label, use_list_query};
@@ -221,7 +220,8 @@ impl Component for Dropdown {
         // One id per option, for the combo box's active descendant: the focus
         // stays on the button while the arrows move through the list (WAI-ARIA
         // combobox), and a screen reader reads the option they reach.
-        let option_ids = use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Vec::<AccessibilityId>::new())));
+        let option_ids =
+            use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Vec::<AccessibilityId>::new())));
         let option_ids: Vec<AccessibilityId> = {
             let mut ids = option_ids.borrow_mut();
             while ids.len() < self.options.len() {

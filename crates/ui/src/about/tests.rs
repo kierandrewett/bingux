@@ -234,16 +234,3 @@ fn escape_closes_the_window_from_any_page() {
         assert!(card(&mut shot).is_none(), "Escape closed {page:?}");
     }
 }
-
-#[test]
-fn the_shortcut_is_ctrl_shift_question_mark_and_nothing_nearby() {
-    let event = |key: Key, modifiers: Modifiers| KeyboardEventData::new(key, Code::Slash, modifiers);
-    let character = |text: &str| Key::Character(text.to_owned());
-    let both = Modifiers::CONTROL | Modifiers::SHIFT;
-    assert!(super::is_shortcut(&event(character("?"), both)));
-    assert!(super::is_shortcut(&event(character("/"), both)));
-    assert!(!super::is_shortcut(&event(character("?"), Modifiers::SHIFT)), "Shift alone types a question mark");
-    assert!(!super::is_shortcut(&event(character("?"), Modifiers::CONTROL)));
-    assert!(!super::is_shortcut(&event(character("?"), both | Modifiers::ALT)));
-    assert!(!super::is_shortcut(&event(character("a"), both)));
-}

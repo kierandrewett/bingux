@@ -29,13 +29,18 @@ pub mod elide;
 mod expander_tests;
 pub mod files;
 pub mod focus;
+pub mod format;
 pub mod group;
 pub mod icons;
 pub(crate) mod inspector;
 pub mod layers;
 pub mod layout;
+pub mod list;
 #[cfg(all(test, feature = "testing"))]
 mod loading_shape_tests;
+pub mod locale;
+#[cfg(feature = "location")]
+pub mod location;
 pub mod motion;
 #[cfg(all(test, feature = "testing"))]
 mod motion_stress;
@@ -49,8 +54,10 @@ pub mod reorder;
 pub mod resilience;
 pub mod rows;
 pub mod runtime;
+pub mod saved;
 pub mod search;
 pub mod search_highlight;
+pub mod selection;
 pub mod shell;
 #[cfg(feature = "testing")]
 pub mod snapshot;
@@ -58,13 +65,24 @@ pub mod stage;
 pub mod stress;
 pub mod style;
 pub mod surface;
+pub mod table;
 pub mod tabs;
 pub mod task;
 pub mod theme;
+pub mod toolbar;
 pub mod typography;
 mod warm;
 pub mod window;
 pub mod zoom_view;
+
+// Drag and drop between windows and with other programs, and the typed
+// clipboard. Not in the prelude: `Clipboard` would clash with Freya's.
+pub mod clipboard;
+pub mod dnd;
+// Commands, shortcuts, menus from commands, the shortcuts sheet, the
+// command palette, and undo (UiCommands).
+pub mod commands;
+pub mod undo;
 
 /// Everything an application window normally needs.
 pub mod prelude {
@@ -75,7 +93,11 @@ pub mod prelude {
     pub use crate::app::Application;
     pub use crate::app_icon::{AppChoice, AppIcon, app_icon};
     pub use crate::charts::{
-        Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
+        Curve, Segment, Series, Unit, bar_chart, compass, day_arc, donut, line_chart, range_bar,
+        ring, sparkline,
+    };
+    pub use crate::commands::{
+        Command, CommandGroup, Commands, Shortcut, command_scope, use_commands, use_window_commands,
     };
     pub use crate::controls::*;
     pub use crate::files::{self, ChooserRequest, Chosen};
@@ -88,6 +110,7 @@ pub mod prelude {
     pub use crate::layout::{
         boxed, clamp, divider, hstack, page_column, popup_column, spacer, tile_rows, vstack,
     };
+    pub use crate::list::{ListRow, ListView, SwipeAction, list_row, list_view, swipe_action};
     pub use crate::motion::{
         AnimatedNumber, Crossfade, NumberFormat, Presence, Reveal, RevealBlock, animated_number,
         crossfade, presence, reveal, reveal_block, use_presence, use_tween,
@@ -106,6 +129,7 @@ pub mod prelude {
         text_row,
     };
     pub use crate::search::{SearchState, use_search};
+    pub use crate::selection::{Gesture, Selection, SelectionMode};
     pub use crate::shell::{
         BackButton, Banner, BannerKind, CANCEL_ID, Dialog, DialogIcon, ForwardButton, HeaderBar,
         MenuButton, MenuItem, NavigationSplitView, OverlayHost, Overlays, PageAction, PageHead,
@@ -115,8 +139,17 @@ pub mod prelude {
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;
+    pub use crate::table::{
+        BatchAction, CellEdit, Column, Columns, DataTable, RowDensity, RowSource, Rows,
+        SortDirection, SortOrder, TableFailure, TableStatus, batch_action, data_table,
+    };
     pub use crate::theme::{Scheme, SharedTokens, Tokens, provide_tokens};
+    pub use crate::toolbar::{
+        ButtonGroup, GroupButton, Placement, Toolbar, ToolbarGroup, ToolbarItem, button_group,
+        group_button, toolbar, toolbar_element, toolbar_group, toolbar_item, toolbar_menu,
+    };
     pub use crate::typography::{self, Ink, TextStyle, styled_label, styled_paragraph};
+    pub use crate::undo::{UndoStack, UndoStep, use_undo};
     pub use crate::window::{
         Popup, PopupAction, PopupActions, PopupFlags, Window, WindowHost, WindowLike, WindowParent,
         popup, use_main_window, use_popup_actions, use_window,

@@ -25,6 +25,7 @@ publishes.
 | `bingux`          | The whole desktop: the shell and every core service, and the system integration around them |
 | `bingux-settings` | The Settings app                                                                            |
 | `bingux-files`    | The Files app                                                                               |
+| `bingux-weather`  | The Weather app                                                                             |
 | `bingux-taxonomy` | The Taxonomy app (a reference window for the UI library, a development tool)                |
 
 **Why this split.** The desktop does not work without its services, so they are one
@@ -131,7 +132,7 @@ family:
 | Script                 | Writes                                                                             |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | `pkgsmith/bingux.star` | `bingux`                                                                           |
-| `pkgsmith/apps.star`   | `bingux-settings`, `bingux-files`, `bingux-taxonomy`                               |
+| `pkgsmith/apps.star`   | `bingux-settings`, `bingux-files`, `bingux-weather`, `bingux-taxonomy`             |
 | `pkgsmith/common.star` | Shared by both: versions, licences, dependency helpers, the file lists of the apps |
 
 Each script writes `rpm`, `deb`, `archlinux` and `tar`; `FORMATS` (or `-F` of

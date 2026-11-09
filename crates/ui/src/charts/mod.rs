@@ -40,12 +40,18 @@
 //! where the ring is as wide as the card up to 200 px, centred. Its centre text
 //! is fitted to the hole. Hover or tap a segment or a legend row to read it.
 //!
+//! A [`range_bar`] puts a span (a day's low and high) and a marker (now) on a
+//! scale, with colours that belong to the scale, so a column of bars reads as
+//! one picture. A [`compass`] points at a bearing with a value in the middle,
+//! and a [`day_arc`] puts the sun on its path between sunrise and sunset.
+//!
 //! Two charts are not about series: [`timeline_chart`] places bars along a time
 //! axis with a limit line and a draggable range (frame times, round trips),
 //! and [`flame_graph`] draws a tree of weighted parts as stacked bars (where
 //! CPU time goes, which folders hold the bytes).
 
 mod data;
+mod dial;
 mod donut;
 #[cfg(all(test, feature = "testing"))]
 mod donut_tests;
@@ -54,14 +60,17 @@ mod format;
 mod geometry;
 mod palette;
 mod path;
+mod range;
 mod scale;
 mod svg;
 mod timeline;
 mod view;
 
 pub use data::{Point, Segment, Series, SeriesColour};
+pub use dial::{Compass, DayArc, compass, day_arc};
 pub use flame::{FlameGraph, FlameTree, flame_graph};
 pub use format::Unit;
+pub use range::{RangeBar, range_bar};
 pub use timeline::{Bar, TimelineChart, timeline_chart};
 pub use view::{
     BarChart, Curve, Donut, LineChart, Ring, Sparkline, bar_chart, donut, line_chart, ring,

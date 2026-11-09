@@ -360,6 +360,10 @@ impl Blueprint {
                     start_forwarding(inbox, router);
                 }
             });
+            // The window's commands and undo stack, here so the app's root
+            // component can declare window commands above its overlay host.
+            crate::commands::provide_commands();
+            crate::undo::provide_undo();
             // A relaunch after an unrecoverable failure opens this location.
             crate::resilience::note_location(&crate::nav::use_location().to_string());
             crate::resilience::use_window_notices();

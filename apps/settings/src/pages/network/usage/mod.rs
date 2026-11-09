@@ -2,6 +2,7 @@
 
 use bingux_ui::prelude::Location;
 
+mod breakdown;
 mod chart;
 mod format;
 mod limits;

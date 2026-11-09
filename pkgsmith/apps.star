@@ -1,4 +1,4 @@
-# The application packages of Bingux: Settings, Files and Taxonomy. Each is its own package, holds the files
+# The application packages of Bingux: Settings, Files, Weather and Taxonomy. Each is its own package, holds the files
 # listed for it in common.star (APPS) and depends on `bingux`, which has the core services the apps talk to:
 # the configuration command, the sound effects engine, the preview helper and the search daemon.
 #
@@ -19,6 +19,10 @@ the history is kept. It converts units and currencies, with exchange rates cache
     "bingux-files": """File manager for the Bingux desktop
 Files is the Bingux desktop's file manager. It has tabs, a places sidebar, list and grid views, previews, search and
 file operations with undo. It opens folders and bingux-files:// addresses.""",
+    "bingux-weather": """Weather for the Bingux desktop
+Weather shows the conditions now, the next 24 hours and ten days for where the computer is and for the cities you add:
+UV index, wind, sunrise and sunset, the moon, humidity, pressure, visibility and the air quality. Data is by Open-Meteo.com
+(CC BY 4.0); it needs no account and no key.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
@@ -44,6 +48,7 @@ DEPENDS = {
         "deb": ["shared-mime-info", "xdg-utils", "libglib2.0-bin"],
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2"],
     },
+    "bingux-weather": {"rpm": ["xdg-utils"], "deb": ["xdg-utils"], "archlinux": ["xdg-utils"]},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
 
@@ -94,6 +99,16 @@ RECOMMENDS = {
             "unzip: open zip archives",
         ],
     },
+    # The location service answers "where am I" when there is one; without it the window uses the network address.
+    "bingux-weather": {
+        "rpm": ["adwaita-sans-fonts", "geoclue2", "xdg-desktop-portal"],
+        "deb": ["geoclue-2.0", "xdg-desktop-portal"],
+        "archlinux": [
+            "adwaita-fonts: the Adwaita Sans interface font",
+            "geoclue: the position from the location service",
+            "xdg-desktop-portal: the portal that asks for the position",
+        ],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
@@ -106,6 +121,7 @@ SUGGESTS = {
     "bingux-settings": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-calculator": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
+    "bingux-weather": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
 

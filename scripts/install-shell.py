@@ -199,6 +199,9 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         source / "apps/calculator/bingux-calculator.desktop": prefix / "share/applications/bingux-calculator.desktop",
         source / "apps/calculator/bingux-calculator.svg": prefix
         / "share/icons/hicolor/scalable/apps/bingux-calculator.svg",
+        cargo / "release/bingux-weather": prefix / "bin/bingux-weather",
+        source / "apps/weather/bingux-weather.desktop": prefix / "share/applications/bingux-weather.desktop",
+        source / "apps/weather/bingux-weather.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-weather.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
         # The helper Files runs for films, songs and PDFs; found beside bingux-files.
         cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
@@ -713,6 +716,7 @@ APPS_PROGRAMS = (
     "bingux-settings",
     "bingux-files",
     "bingux-calculator",
+    "bingux-weather",
     "bingux-preview-host",
     "bingux-taxonomy",
     "bingux-effects",
@@ -746,6 +750,7 @@ def apps_payload(source, cargo, prefix):
         ("apps/settings", "bingux-settings"),
         ("apps/files", "bingux-files"),
         ("apps/calculator", "bingux-calculator"),
+        ("apps/weather", "bingux-weather"),
         ("apps/taxonomy", "bingux-taxonomy"),
     ):
         directory = source / package
@@ -913,7 +918,7 @@ def install_apps(source, prefix, cargo, strip=True, update_caches=True):
                 pass
         raise
     print(f"Installed the Bingux apps under {prefix}")
-    for name in ("bingux-settings", "bingux-files", "bingux-calculator", "bingux-taxonomy"):
+    for name in ("bingux-settings", "bingux-files", "bingux-weather", "bingux-calculator", "bingux-taxonomy"):
         print(f"  {prefix / 'bin' / name}")
     if update_caches:
         refresh_desktop_caches(prefix)
