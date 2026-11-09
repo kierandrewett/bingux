@@ -462,12 +462,12 @@ fn editing_marks_the_title_and_saving_writes_the_file_clears_the_mark_and_remove
     let document = session.open(&path);
     session.set_text(document, "hello world");
     assert!(document.is_unsaved());
-    assert_eq!(document.display_title(), "• a.txt");
+    assert_eq!(document.display_title(), "a.txt");
     assert_eq!(
         document.window_title("Test App"),
-        "• a.txt \u{2013} Test App"
+        "\u{2022} a.txt \u{2013} Test App"
     );
-    session.wait_for("• a.txt");
+    session.wait_for("a.txt");
     // A few moments after the edit the draft is on disk.
     session.wait_drafts(2);
     assert_eq!(
@@ -744,7 +744,7 @@ fn work_a_crash_left_is_offered_and_recovering_brings_it_back_unsaved() {
         text_of(document) == "typed but never saved"
     });
     assert!(document.is_unsaved(), "recovered work is still unsaved");
-    assert_eq!(document.display_title(), "• notes.txt");
+    assert_eq!(document.display_title(), "notes.txt");
     assert_eq!(
         document.app_value(),
         serde_json::json!({"caret": 4}),
