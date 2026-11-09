@@ -27,11 +27,11 @@ use crate::style::Dim;
 
 /// The name and tooltip of the button in a state: `stopping` is whether the
 /// Stop state shows.
-pub(super) fn label(stopping: bool) -> &'static str {
+pub(super) fn label(stopping: bool) -> String {
     if stopping {
-        "Stop (Esc)"
+        crate::tr!("ui-files-reload-stop")
     } else {
-        "Refresh (F5)"
+        crate::tr!("ui-files-reload-refresh")
     }
 }
 
