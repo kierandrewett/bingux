@@ -337,28 +337,32 @@ fn trash_failed(env: &Env, paths: Vec<PathBuf>, error: OpError) {
 /// Moving to the Trash would copy a big tree between drives. Ask, and say it
 /// can be left alone.
 fn ask_copy(env: &Env, paths: Vec<PathBuf>) {
-    let it = if paths.len() == 1 { "it" } else { "them" };
     let env = env.clone();
-    let title = format!("Copy {} to the Trash?", what(&paths));
     env.overlays.show_dialog(
         dialog(
-            title,
-            format!(
-                "Moving {it} to the Trash means copying {it} to another drive first, which can take a long time and uses space there. To remove {it} without that, cancel and use Delete permanently from the menu opened with Shift."
-            ),
+            crate::tr!("ui-files-bin-copy-title", target = what(&paths)),
+            crate::tr!("ui-files-bin-copy-body", count = paths.len()),
         )
-        .cancel("Cancel")
+        .cancel(crate::tr!("ui-dialog-cancel"))
         .default_action(CANCEL_ID)
         .icon(DialogIcon::Warning)
-        .response("Copy to Trash", ResponseKind::Suggested, {
-            let env = env.clone();
-            move |_: ()| move_copying(&env, paths.clone())
-        }),
+        .response(
+            crate::tr!("ui-files-bin-copy-action"),
+            ResponseKind::Suggested,
+            {
+                let env = env.clone();
+                move |_: ()| move_copying(&env, paths.clone())
+            },
+        ),
     );
 }
 
 fn move_copying(env: &Env, paths: Vec<PathBuf>) {
-    if !begin(env, format!("Copying {} to Trash", what(&paths)), None) {
+    if !begin(
+        env,
+        crate::tr!("ui-files-bin-copying-busy", target = what(&paths)),
+        None,
+    ) {
         return;
     }
     let env = env.clone();
@@ -371,12 +375,17 @@ fn move_copying(env: &Env, paths: Vec<PathBuf>) {
                     trashed.iter().map(|item| item.original.clone()).collect();
                 undo::push(&env, Step::Trash(trashed));
                 let again = env.clone();
-                env.overlays
-                    .toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
-                        super::transfer::undo(&again)
-                    });
+                env.overlays.toast_with_action(
+                    moved_text(&moved),
+                    crate::tr!("ui-undo"),
+                    move |_: ()| super::transfer::undo(&again),
+                );
             }
-            Err(error) => notify(env.ui, error_text("move to the Trash", &error), true),
+            Err(error) => notify(
+                env.ui,
+                crate::tr!("ui-files-bin-move-failed", error = error.to_string()),
+                true,
+            ),
         }
         env.reload.call(());
     });
@@ -402,13 +411,17 @@ pub(super) fn ask_delete(env: &Env, paths: Vec<PathBuf>, reason: Option<&str>) {
     let env = env.clone();
     env.overlays.show_dialog(
         dialog(prompt.title, prompt.body)
-            .cancel("Cancel")
+            .cancel(crate::tr!("ui-dialog-cancel"))
             .default_action(CANCEL_ID)
             .icon(DialogIcon::Warning)
-            .response("Delete permanently", ResponseKind::Destructive, {
-                let env = env.clone();
-                move |_: ()| delete(&env, paths.clone())
-            }),
+            .response(
+                crate::tr!("ui-files-menu-delete-permanently"),
+                ResponseKind::Destructive,
+                {
+                    let env = env.clone();
+                    move |_: ()| delete(&env, paths.clone())
+                },
+            ),
     );
 }
 
@@ -418,7 +431,9 @@ fn delete(env: &Env, paths: Vec<PathBuf>) {
         env,
         "Deleting",
         whole.clone(),
-        format!("Deleted {whole}."),
+        crate::tr!("ui-files-bin-deleting-busy", target = whole.clone()),
+        crate::tr!("ui-files-bin-deleted", target = whole),
+        crate::tr!("ui-files-bin-delete-stopped"),
         // An item of the Trash takes its info file and its size line with it.
         move |progress, cancel| backend::delete_trashed(&paths, progress, cancel),
     );
@@ -434,7 +449,7 @@ pub(super) fn confirm_empty_trash(env: &Env) {
     let cancel = Cancel::new();
     if !begin(
         env,
-        "Counting what is in the Trash".to_owned(),
+        crate::tr!("ui-files-bin-counting-busy"),
         Some(cancel.clone()),
     ) {
         return;
@@ -445,23 +460,33 @@ pub(super) fn confirm_empty_trash(env: &Env) {
         finish(&env);
         match outcome {
             Ok(summary) if summary.items == 0 => {
-                notify(env.ui, "The Trash is already empty.", false)
+                notify(env.ui, crate::tr!("ui-files-bin-already-empty"), false)
             }
             Ok(summary) => {
                 let prompt = empty_prompt(summary);
                 env.overlays.show_dialog(
                     dialog(prompt.title, prompt.body)
-                        .cancel("Cancel")
+                        .cancel(crate::tr!("ui-dialog-cancel"))
                         .default_action(CANCEL_ID)
                         .icon(DialogIcon::Warning)
-                        .response("Empty Trash", ResponseKind::Destructive, {
-                            let env = env.clone();
-                            move |_: ()| empty_trash(&env)
-                        }),
+                        .response(
+                            crate::tr!("ui-files-menu-empty-trash"),
+                            ResponseKind::Destructive,
+                            {
+                                let env = env.clone();
+                                move |_: ()| empty_trash(&env)
+                            },
+                        ),
                 );
             }
-            Err(OpError::Cancelled) => notify(env.ui, "Counting stopped.", false),
-            Err(error) => notify(env.ui, error_text("count the Trash", &error), true),
+            Err(OpError::Cancelled) => {
+                notify(env.ui, crate::tr!("ui-files-bin-count-stopped"), false)
+            }
+            Err(error) => notify(
+                env.ui,
+                crate::tr!("ui-files-bin-count-failed", error = error.to_string()),
+                true,
+            ),
         }
     });
 }
@@ -471,7 +496,9 @@ fn empty_trash(env: &Env) {
         env,
         "Emptying",
         "the Trash".to_owned(),
-        "Emptied the Trash.".to_owned(),
+        crate::tr!("ui-files-bin-emptying-busy"),
+        crate::tr!("ui-files-bin-emptied"),
+        crate::tr!("ui-files-bin-empty-stopped"),
         backend::empty_trash,
     );
 }
@@ -482,11 +509,13 @@ fn run_permanent(
     env: &Env,
     verb: &'static str,
     whole: String,
+    busy: String,
     done_text: String,
+    stopped: String,
     job: impl FnOnce(&Progress, &Cancel) -> Result<(), OpError> + Send + 'static,
 ) {
     let cancel = Cancel::new();
-    if !begin(env, format!("{verb} {whole}"), Some(cancel.clone())) {
+    if !begin(env, busy, Some(cancel.clone())) {
         return;
     }
     let progress = Progress::new();
@@ -507,8 +536,12 @@ fn run_permanent(
         finish(&env);
         match outcome {
             Ok(()) => notify(env.ui, done_text, false),
-            Err(OpError::Cancelled) => notify(env.ui, format!("{verb} stopped."), false),
-            Err(error) => notify(env.ui, error_text("delete", &error), true),
+            Err(OpError::Cancelled) => notify(env.ui, stopped, false),
+            Err(error) => notify(
+                env.ui,
+                crate::tr!("ui-files-bin-delete-failed", error = error.to_string()),
+                true,
+            ),
         }
         env.reload.call(());
     });
@@ -527,7 +560,7 @@ pub(super) fn restore(env: &Env, paths: Vec<PathBuf>) {
 /// Restore to…: put `paths` into a folder the person chooses.
 pub(super) fn restore_to(env: &Env, paths: Vec<PathBuf>) {
     let Some(window) = env.window else {
-        notify(env.ui, "There is no window to choose a folder in.", true);
+        notify(env.ui, crate::tr!("ui-files-bin-no-window"), true);
         return;
     };
     let start = backend::trash_items(&paths)
@@ -542,8 +575,8 @@ pub(super) fn restore_to(env: &Env, paths: Vec<PathBuf>) {
     choose(
         window,
         ChooserRequest::select_folder()
-            .title("Restore to")
-            .accept_label("Restore")
+            .title(crate::tr!("ui-files-bin-restore-to-title"))
+            .accept_label(crate::tr!("ui-files-menu-restore"))
             .current_folder(start),
         move |chosen| {
             if let Some(folder) = chosen.and_then(|chosen| chosen.paths.into_iter().next()) {
@@ -591,11 +624,10 @@ fn plan_then(env: &Env, paths: Vec<PathBuf>, into: Option<PathBuf>) {
 /// `“a” has no record of where it came from. Use Restore to… to choose a
 /// folder.`
 fn no_record_text(paths: &[PathBuf]) -> String {
-    let has = if paths.len() == 1 { "has" } else { "have" };
-    format!(
-        "{} {has} no record of where {} came from. Use Restore to… to choose a folder.",
-        what(paths),
-        if paths.len() == 1 { "it" } else { "they" }
+    crate::tr!(
+        "ui-files-bin-no-record",
+        count = paths.len(),
+        target = what(paths)
     )
 }
 
@@ -606,28 +638,26 @@ fn ask_to_make_folders(env: &Env, plan: RestorePlan, missing: Vec<PathBuf>) {
         .iter()
         .map(|entry| entry.item.in_trash.clone())
         .collect();
-    let (folders, verb) = match missing.as_slice() {
-        [only] => (format!("The folder {}", only.display()), "is"),
-        many => (
-            format!("{} folders, such as {},", many.len(), many[0].display()),
-            "are",
-        ),
-    };
     let env = env.clone();
     env.overlays.show_dialog(
         dialog(
-            format!("Make the folder again to restore {}?", what(&whole)),
-            format!(
-                "{folders} {verb} no longer there. Restoring will make {} again.",
-                if missing.len() == 1 { "it" } else { "them" }
+            crate::tr!("ui-files-bin-make-folder-title", target = what(&whole)),
+            crate::tr!(
+                "ui-files-bin-make-folder-body",
+                count = missing.len(),
+                folder = missing[0].display().to_string()
             ),
         )
-        .cancel("Cancel")
+        .cancel(crate::tr!("ui-dialog-cancel"))
         .default_action("restore")
-        .response("Restore", ResponseKind::Suggested, {
-            let env = env.clone();
-            move |_: ()| run_restore(&env, plan.clone(), true)
-        }),
+        .response(
+            crate::tr!("ui-files-menu-restore"),
+            ResponseKind::Suggested,
+            {
+                let env = env.clone();
+                move |_: ()| run_restore(&env, plan.clone(), true)
+            },
+        ),
     );
 }
 
@@ -642,7 +672,11 @@ fn run_restore(env: &Env, plan: RestorePlan, create_missing: bool) {
             .collect::<Vec<_>>(),
     );
     let cancel = Cancel::new();
-    if !begin(env, format!("Restoring {whole}"), Some(cancel.clone())) {
+    if !begin(
+        env,
+        crate::tr!("ui-files-bin-restoring-busy", target = whole.clone()),
+        Some(cancel.clone()),
+    ) {
         return;
     }
     let progress = Progress::new();
@@ -678,7 +712,9 @@ fn run_restore(env: &Env, plan: RestorePlan, create_missing: bool) {
                     select_back(&env, &done);
                 }
                 match error {
-                    OpError::Cancelled => notify(env.ui, "Restoring stopped.", false),
+                    OpError::Cancelled => {
+                        notify(env.ui, crate::tr!("ui-files-bin-restore-stopped"), false)
+                    }
                     other => notify(env.ui, error_text_plain(&other), true),
                 }
             }
@@ -696,17 +732,18 @@ fn error_text_plain(error: &OpError) -> String {
 /// Remember the restore for Undo and tell about it with a toast.
 fn restored_done(env: &Env, restored: Vec<Restored>) {
     if restored.is_empty() {
-        notify(env.ui, "Nothing was restored.", false);
+        notify(env.ui, crate::tr!("ui-files-bin-nothing-restored"), false);
         return;
     }
     let paths: Vec<PathBuf> = restored.iter().map(|item| item.to.clone()).collect();
     select_back(env, &restored);
     undo::push(env, Step::Restore(restored));
     let again = env.clone();
-    env.overlays
-        .toast_with_action(restored_text(&paths), "Undo", move |_: ()| {
-            super::transfer::undo(&again)
-        });
+    env.overlays.toast_with_action(
+        restored_text(&paths),
+        crate::tr!("ui-undo"),
+        move |_: ()| super::transfer::undo(&again),
+    );
 }
 
 /// A restore into the folder on show selects what came back; elsewhere the
@@ -786,11 +823,7 @@ pub(super) fn redirect(env: &Env, paths: &[PathBuf], dest: &Path, copy: bool) ->
             true
         }
         Route::Refuse => {
-            notify(
-                env.ui,
-                "Nothing can be put inside a folder in the Trash. Drop it on the Trash itself to move it there.",
-                true,
-            );
+            notify(env.ui, crate::tr!("ui-files-bin-refuse-inside"), true);
             true
         }
         Route::OutOfTrash => {

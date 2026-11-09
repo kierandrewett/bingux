@@ -674,6 +674,48 @@ ui-files-bin-refusal-no-bin = { $count ->
     [one] Its drive has no Trash and one cannot be made there, so it cannot be moved to the Trash.
    *[other] Their drive has no Trash and one cannot be made there, so they cannot be moved to the Trash.
 }
+# $count (Number) - how many items are being copied to the Trash; picks “it” or “them”
+ui-files-bin-copy-title = Copy { $target } to the Trash?
+# $count (Number) - how many items are being copied to the Trash
+ui-files-bin-copy-body = { $count ->
+    [one] Moving it to the Trash means copying it to another drive first, which can take a long time and uses space there. To remove it without that, cancel and use Delete permanently from the menu opened with Shift.
+   *[other] Moving them to the Trash means copying them to another drive first, which can take a long time and uses space there. To remove them without that, cancel and use Delete permanently from the menu opened with Shift.
+}
+ui-files-bin-copy-action = Copy to Trash
+ui-files-bin-copying-busy = Copying { $target } to Trash
+# $error (String) - why the move failed
+ui-files-bin-move-failed = Could not move to the Trash: { $error }
+ui-files-bin-deleting-busy = Deleting { $target }
+ui-files-bin-deleted = Deleted { $target }.
+ui-files-bin-delete-stopped = Deleting stopped.
+# $error (String) - why the delete failed
+ui-files-bin-delete-failed = Could not delete: { $error }
+ui-files-bin-counting-busy = Counting what is in the Trash
+ui-files-bin-already-empty = The Trash is already empty.
+ui-files-bin-count-stopped = Counting stopped.
+# $error (String) - why the count failed
+ui-files-bin-count-failed = Could not count the Trash: { $error }
+ui-files-bin-emptying-busy = Emptying the Trash
+ui-files-bin-emptied = Emptied the Trash.
+ui-files-bin-empty-stopped = Emptying stopped.
+ui-files-bin-restore-to-title = Restore to
+ui-files-bin-no-window = There is no window to choose a folder in.
+# $count (Number) - how many items have no record; $target (String) - what is meant
+ui-files-bin-no-record = { $count ->
+    [one] { $target } has no record of where it came from. Use Restore to… to choose a folder.
+   *[other] { $target } have no record of where they came from. Use Restore to… to choose a folder.
+}
+# $target (String) - what is meant, e.g. “report.txt” or 3 items.
+ui-files-bin-make-folder-title = Make the folder again to restore { $target }?
+# $count (Number) - how many folders are gone; $folder (String) - the first missing folder's path
+ui-files-bin-make-folder-body = { $count ->
+    [one] The folder { $folder } is no longer there. Restoring will make it again.
+   *[other] { $count } folders, such as { $folder }, are no longer there. Restoring will make them again.
+}
+ui-files-bin-restoring-busy = Restoring { $target }
+ui-files-bin-restore-stopped = Restoring stopped.
+ui-files-bin-nothing-restored = Nothing was restored.
+ui-files-bin-refuse-inside = Nothing can be put inside a folder in the Trash. Drop it on the Trash itself to move it there.
 # The Extract dialog: the archive, where its files go, and what happens to a clash.
 # $name (String) - the archive or folder name, shown in curly quotes
 ui-extract-quoted-name = “{ $name }”
