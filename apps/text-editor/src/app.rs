@@ -21,7 +21,7 @@ use bingux_ui::commands::{
     Command, CommandGroup, command_scope, use_commands, use_window_commands,
 };
 use bingux_ui::dnd::{DragActions, DropTarget, Dropped, Format, use_drop_target};
-use bingux_ui::document::{DocumentId, Documents, DocumentsConfig, use_documents};
+use bingux_ui::document::{DocumentEvent, DocumentId, Documents, DocumentsConfig, use_documents};
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::prelude::*;
 use bingux_ui::tabs::{Birth, Tab, TabContent, TabSet, Tabs, tab_items, use_tab_window};
@@ -804,7 +804,7 @@ fn suggested_name(doc: &document::Doc) -> String {
 }
 
 fn unsaved(tab: &DocTab) -> bool {
-    document::with(tab.doc, |doc| doc.is_modified()).unwrap_or(false)
+    tab.shared.is_some() || document::with(tab.doc, |doc| doc.is_modified()).unwrap_or(false)
 }
 
 #[derive(PartialEq)]
@@ -828,6 +828,7 @@ impl Component for Content {
                     .unwrap_or_else(prefs_now)
             }
         });
+        let closed_docs = use_state(Vec::<DocumentId>::new);
         let documents = use_documents(
             DocumentsConfig::new("bingux-text-editor", "Text Editor")
                 .mime("text/plain")
@@ -835,7 +836,12 @@ impl Component for Content {
                 .sandboxed(session::folder().join("shared"))
                 .restore(false),
             |_| Rc::new(EditorContent::new(Editor::new(""))),
-            |_| {},
+            move |event| {
+                if let DocumentEvent::Closed(id) = event {
+                    let mut closed = closed_docs;
+                    closed.write().push(id);
+                }
+            },
         );
         let set = use_state({
             let start = start.clone();
@@ -917,6 +923,27 @@ impl Component for Content {
             spawn(async move {
                 asks.write().retain(|id| *id != tab_id);
                 ask_to_close(actions, tab_id);
+            });
+        }
+
+        // A shared document the manager closed: its tabs close too.
+        let closed = closed_docs.read().first().copied();
+        if let Some(doc) = closed {
+            let mut closed_docs = closed_docs;
+            spawn(async move {
+                closed_docs.write().retain(|id| *id != doc);
+                let tab_ids: Vec<u64> = actions
+                    .tabs
+                    .set()
+                    .peek()
+                    .tabs()
+                    .iter()
+                    .filter(|tab| tab.content.shared == Some(doc))
+                    .map(|tab| tab.id)
+                    .collect();
+                for tab_id in tab_ids {
+                    close_tab(actions, tab_id);
+                }
             });
         }
 
@@ -1387,20 +1414,41 @@ fn check_disk(actions: Actions, id: u64, path: PathBuf) {
     });
 }
 
-/// The question before a tab with unsaved changes closes.
-fn ask_to_close(actions: Actions, tab_id: u64) {
+/// Closes tab `tab_id` and drops its editor draft. The shared manager, not
+/// this module, closes the document of a file tab.
+fn close_tab(actions: Actions, tab_id: u64) {
     let Some(doc_id) = actions.tabs.set().peek().content(tab_id).map(|tab| tab.doc) else {
         return;
     };
+    if let Some(draft) = document::with(doc_id, |doc| doc.draft.clone()) {
+        session::remove_draft(draft);
+    }
+    actions.tabs.close_now(tab_id);
+}
+
+/// The question before a tab with unsaved changes closes.
+fn ask_to_close(actions: Actions, tab_id: u64) {
+    let Some((doc_id, shared)) = actions
+        .tabs
+        .set()
+        .peek()
+        .content(tab_id)
+        .map(|tab| (tab.doc, tab.shared))
+    else {
+        return;
+    };
+    if let Some(shared) = shared {
+        // The manager asks about unsaved changes and closes the document;
+        // its Closed event closes this tab.
+        if let Some(document) = actions.documents.get(shared) {
+            document.close();
+        }
+        return;
+    }
     let Some(name) = document::with(doc_id, |doc| doc.title()) else {
         return;
     };
-    let close = move || {
-        if let Some(draft) = document::with(doc_id, |doc| doc.draft.clone()) {
-            session::remove_draft(draft);
-        }
-        actions.tabs.close_now(tab_id);
-    };
+    let close = move || close_tab(actions, tab_id);
     let save_close: Rc<dyn Fn()> = Rc::new(close.clone());
     actions.overlays.show_dialog(
         dialog(
