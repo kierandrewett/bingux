@@ -102,8 +102,14 @@ enum Complaint {
 impl Complaint {
     fn text(&self) -> String {
         match self {
-            Complaint::File => "That is a file, not a folder.".to_string(),
-            Complaint::Path { problem, shown } => format!("{}: {shown}", problem.reason()),
+            Complaint::File => crate::tr!("ui-files-omni-not-a-folder"),
+            Complaint::Path { problem, shown } => {
+                crate::tr!(
+                    "ui-files-omni-problem-shown",
+                    problem = problem.reason(),
+                    shown = shown.as_str()
+                )
+            }
         }
     }
 }
@@ -559,7 +565,7 @@ impl Component for LocationField {
 
         if checking() {
             cards.push(OmniItem::Notice {
-                text: "Checking…".into(),
+                text: crate::tr!("ui-files-omni-checking").into(),
                 kind: OmniNotice::Busy,
             });
         } else if let Some(complaint) = complaint.read().clone() {
@@ -611,14 +617,14 @@ impl Component for LocationField {
             if complaint.read().is_none() && !checking() {
                 if slow() {
                     cards.push(OmniItem::Notice {
-                        text: "Searching…".into(),
+                        text: crate::tr!("ui-files-omni-searching").into(),
                         kind: OmniNotice::Busy,
                     });
                 } else if let Some(answer) = &answer {
                     cards.extend(completion_rows(answer, SUGGESTIONS));
                     if answer.truncated {
                         cards.push(OmniItem::Notice {
-                            text: "More matches. Keep typing to narrow them.".into(),
+                            text: crate::tr!("ui-files-omni-more-matches").into(),
                             kind: OmniNotice::Quiet,
                         });
                     }
@@ -649,7 +655,7 @@ impl Component for LocationField {
                                 Scope::Place(_) => {
                                     place_phrase(&find_now.scope, &here_name, &choices)
                                 }
-                                _ => "Folder…".to_string(),
+                                _ => crate::tr!("ui-files-omni-folder-ellipsis").to_string(),
                             },
                             matches!(find_now.scope, Scope::Place(_)),
                             move |_: ()| {
@@ -757,7 +763,7 @@ impl Component for LocationField {
                 .unwrap_or_default();
             if !here.is_empty() {
                 cards.push(OmniItem::Heading {
-                    text: "In this folder".into(),
+                    text: crate::tr!("ui-files-omni-in-this-folder").into(),
                     detail: Some(here_name.clone()),
                     busy: false,
                 });
@@ -767,7 +773,7 @@ impl Component for LocationField {
             let named = places_matching(&text, &self.places, &self.recent);
             if !named.is_empty() {
                 cards.push(OmniItem::Heading {
-                    text: "Places".into(),
+                    text: crate::tr!("ui-files-omni-places").into(),
                     detail: None,
                     busy: false,
                 });
@@ -786,7 +792,12 @@ impl Component for LocationField {
                         parts: OmniPart::matched(&name, matched, ""),
                         detail: Some(shown_path(&path, &roots_of)),
                         chip: bookmark
-                            .then(|| ("Bookmark".to_string(), EventHandler::new(|_: ()| {})))
+                            .then(|| {
+                                (
+                                    crate::tr!("ui-files-omni-bookmark").to_string(),
+                                    EventHandler::new(|_: ()| {}),
+                                )
+                            })
                             .filter(|_| false),
                         on_press: EventHandler::new(move |_: ()| open(target.clone(), true, false)),
                         fill: None,
@@ -814,14 +825,14 @@ impl Component for LocationField {
                     lead: icons::icon(Icon::Clock, IconSize::Control, Paint::Muted.color(&tokens))
                         .into(),
                     parts: OmniPart::matched(&search, range, ""),
-                    detail: Some("Recent search".into()),
+                    detail: Some(crate::tr!("ui-files-omni-recent-search").into()),
                     chip: None,
                     on_press: EventHandler::new(move |_: ()| {
                         let mut draft = draft;
                         draft.set(fill.clone());
                     }),
                     fill: Some(search.clone()),
-                    name: format!("Search for {search}"),
+                    name: crate::tr!("ui-files-omni-search-for", search = &search),
                 }));
             }
             // The search itself.
@@ -855,7 +866,7 @@ impl Component for LocationField {
                     unreadable: results.as_ref().map_or(0, |results| results.unreadable),
                 };
                 cards.push(OmniItem::Heading {
-                    text: format!("Search in {phrase}"),
+                    text: crate::tr!("ui-files-omni-search-in", phrase = &phrase).into(),
                     detail: Some(status_text(&status)),
                     busy: running,
                 });
@@ -883,7 +894,7 @@ impl Component for LocationField {
                     });
                 } else if let Some(folder) = missing {
                     cards.push(OmniItem::Notice {
-                        text: format!("There is no folder “{folder}” to look in"),
+                        text: crate::tr!("ui-files-omni-no-folder", folder = &folder).into(),
                         kind: OmniNotice::Danger,
                     });
                 }
@@ -913,7 +924,7 @@ impl Component for LocationField {
                         parts: OmniPart::highlighted(&entry.name, &ranges),
                         detail: Some(detail),
                         chip: Some((
-                            "Show in folder".into(),
+                            crate::tr!("ui-files-omni-show-in-folder").into(),
                             EventHandler::new(move |_: ()| show(again.clone())),
                         )),
                         on_press: EventHandler::new(move |_: ()| open(go.clone(), dir, true)),
@@ -924,9 +935,9 @@ impl Component for LocationField {
                 if found.is_empty() && here_paths.is_empty() && !running {
                     cards.push(OmniItem::Notice {
                         text: if query.filters.count() > 0 {
-                            "No results. Try fewer filters.".into()
+                            crate::tr!("ui-files-omni-no-results-filters").into()
                         } else {
-                            "No results".into()
+                            crate::tr!("ui-files-omni-no-results").into()
                         },
                         kind: OmniNotice::Quiet,
                     });
@@ -949,13 +960,13 @@ impl Component for LocationField {
         let phone = is_compact();
         let mut field = Omnibox::new(draft, submit, finish.clone())
             .items(cards)
-            .placeholder("Type a path or search")
+            .placeholder(&crate::tr!("ui-files-omni-placeholder"))
             .leading(if path_mode {
                 Icon::Folder
             } else {
                 Icon::Search
             })
-            .label("Location and search")
+            .label(&crate::tr!("ui-files-omni-label"))
             .danger(complaint.read().is_some())
             .initial(initial.clone())
             .select_all(draft.text() == initial)
@@ -964,7 +975,8 @@ impl Component for LocationField {
             .alt_digit(scopes().len(), on_digit)
             .on_change(on_change);
         if phone {
-            field = field.close_action(Icon::WindowClose, "Show the path as folders");
+            field =
+                field.close_action(Icon::WindowClose, &crate::tr!("ui-files-omni-close-action"));
         }
         let _ = (
             step as fn(Option<usize>, usize, bool) -> Option<usize>,

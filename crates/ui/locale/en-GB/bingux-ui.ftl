@@ -605,3 +605,26 @@ ui-files-chooser-sort-modified = Sort by modified
 ui-files-chooser-reverse-order = Reverse order
 ui-files-chooser-file-name = File name
 ui-files-chooser-file-type = File type
+ui-files-omni-not-a-folder = That is a file, not a folder.
+# $problem (String) - why the path cannot be used, $shown (String) - the path as typed
+ui-files-omni-problem-shown = { $problem }: { $shown }
+ui-files-omni-checking = Checking…
+ui-files-omni-searching = Searching…
+ui-files-omni-more-matches = More matches. Keep typing to narrow them.
+ui-files-omni-folder-ellipsis = Folder…
+ui-files-omni-in-this-folder = In this folder
+ui-files-omni-places = Places
+ui-files-omni-bookmark = Bookmark
+ui-files-omni-recent-search = Recent search
+# $search (String) - the search text
+ui-files-omni-search-for = Search for { $search }
+# $phrase (String) - the search text in the folder heading
+ui-files-omni-search-in = Search in { $phrase }
+# $folder (String) - the folder that cannot be searched
+ui-files-omni-no-folder = There is no folder “{ $folder }” to look in
+ui-files-omni-show-in-folder = Show in folder
+ui-files-omni-no-results-filters = No results. Try fewer filters.
+ui-files-omni-no-results = No results
+ui-files-omni-placeholder = Type a path or search
+ui-files-omni-label = Location and search
+ui-files-omni-close-action = Show the path as folders
