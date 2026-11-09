@@ -245,7 +245,7 @@ pub fn run(dir: &str, mode: Option<&str>) {
             ("week", ""),
             ("month", "key 3; wait 600"),
             ("agenda", "key 5; wait 600"),
-            ("quick", "key 2; wait 400; key n; wait 700"),
+            ("new-event", "key 2; wait 400; key n; wait 700"),
         ]
     } else {
         &[
@@ -254,10 +254,7 @@ pub fn run(dir: &str, mode: Option<&str>) {
             ("month", "key 3; wait 600"),
             ("year", "key 4; wait 600"),
             ("agenda", "key 5; wait 600"),
-            (
-                "quick",
-                "key 2; wait 400; key n; wait 700; type Lunch with Sam at Nando's tomorrow 1pm; wait 500",
-            ),
+            ("new-event", "key 2; wait 400; key n; wait 700"),
         ]
     };
     for (name, script) in frames {

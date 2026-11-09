@@ -178,7 +178,6 @@ calendar-change = Change
 calendar-delete-ellipsis = Delete…
 calendar-rename-ellipsis = Rename…
 calendar-export-ellipsis = Export…
-calendar-new-event-title = New event
 calendar-close = Close
 # Import and read errors, with the file name.
 calendar-read-failed = Could not read { $name }. Check that you can open the file.
@@ -187,9 +186,6 @@ calendar-no-events-to-import = { $name } has no events to import.
 calendar-imported-one = Imported 1 event.
 calendar-imported-many = Imported { $count } events.
 calendar-no-calendar-to-add = There is no calendar to add the event to.
-# Quick add placeholder and hint.
-calendar-quick-hint = Say what, when and where. For example: Lunch with Sam at Nando’s tomorrow 1pm.
-calendar-quick-placeholder = Lunch with Sam tomorrow 1pm
 calendar-more-options = More Options
 # Agenda day headings.
 calendar-yesterday = Yesterday

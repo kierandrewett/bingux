@@ -20,7 +20,6 @@ use crate::calendars;
 use crate::editor::{self, Seed};
 use crate::header::Header;
 use crate::model::{Clock, EventRef, Message, Model};
-use crate::quick;
 use crate::sidebar::Sidebar;
 use crate::views::agenda::{AgendaView, SearchResults};
 use crate::views::grid::{GridView, Span3, first_day};
@@ -141,7 +140,7 @@ impl Component for Content {
                 .title(tr!("calendar-empty-title"))
                 .icon(Icon::XOfficeCalendar)
                 .action(tr!("calendar-empty-add"), move |_| {
-                    quick::open(model, window, overlays)
+                    editor::new_event(model, window, overlays)
                 })
                 .action(tr!("calendar-import"), move |_| {
                     calendars::import(model, window, overlays)
@@ -283,7 +282,7 @@ fn keys(
             true
         }
         "n" => {
-            quick::open(model, window, overlays);
+            editor::new_event(model, window, overlays);
             true
         }
         "/" => {

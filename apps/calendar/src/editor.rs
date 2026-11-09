@@ -87,6 +87,13 @@ pub fn open(model: Model, window: Window, overlays: Overlays, seed: Seed) {
     );
 }
 
+/// Opens the editor on a new event today, at the next hour. The New event
+/// button, N and the empty calendar's Add use it.
+pub fn new_event(model: Model, window: Window, overlays: Overlays) {
+    let today = model.clock.read().today;
+    open(model, window, overlays, Seed::at_day(&model, today));
+}
+
 /// Asks which of a repeating event's occurrences a change is for, then calls
 /// `then` with the answer.
 pub fn ask_scope(

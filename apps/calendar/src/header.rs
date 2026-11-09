@@ -9,8 +9,8 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::calendars;
+use crate::editor;
 use crate::model::Model;
-use crate::quick;
 use crate::sidebar::Sidebar;
 
 /// What the bar says about the time on show.
@@ -193,9 +193,11 @@ impl Component for Header {
         }
         bar = bar
             .trailing(
-                icon_button(Icon::ListAdd, move |_| quick::open(model, window, overlays))
-                    .tooltip(&tr!("calendar-new-event"))
-                    .filled(),
+                icon_button(Icon::ListAdd, move |_| {
+                    editor::new_event(model, window, overlays)
+                })
+                .tooltip(&tr!("calendar-new-event"))
+                .filled(),
             )
             .trailing(
                 menu_button(
@@ -305,7 +307,7 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
 
     let mut items = vec![
         menu_item(tr!("calendar-new-event"), move |_| {
-            quick::open(model, window, overlays)
+            editor::new_event(model, window, overlays)
         })
         .shortcut("N"),
         menu_item("New calendar\u{2026}", move |_| {
