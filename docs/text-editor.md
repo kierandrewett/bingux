@@ -94,6 +94,22 @@ indentation and indents after an opening bracket. Copy and Cut with nothing
 selected take the whole line, and pasting it puts it above the caret's line.
 Main menu ▸ Text has sort lines, change case and remove trailing spaces.
 
+Every action is a command, so the main menu, the command palette and the
+shortcuts sheet are one list: Ctrl+Shift+P finds any of them by name
+("sort", "wrap", "save as"), and Ctrl+? shows each with its keys. Edit ▸ Undo
+and Redo say what they take back ("Undo typing", "Redo duplicate line"), and
+Undo keeps working through a save: the history is per document.
+
+## Drag and drop
+
+- **Files** dragged into the window from the file manager or another program
+  open in tabs.
+- **Selected text** can be dragged: press on it and drag. Dropped in the same
+  document it moves, as one undo step (hold Ctrl to copy); dropped in another
+  program it is typed there. A click on selected text puts the caret there.
+- **Text from another program** dropped on the editor lands at the pointer,
+  with a caret marking the place, and is selected.
+
 ## Find and replace
 
 | Keys                                     | Do                                                       |
@@ -136,7 +152,7 @@ Main menu ▸ View and ▸ Editing hold the preferences, kept in
 | Markdown preview          | On      |
 | Close brackets and quotes | On      |
 | Trim spaces on save       | Off     |
-| End with a new line       | On      |
+| Add final new line        | On      |
 
 ## Make it the default text editor
 
