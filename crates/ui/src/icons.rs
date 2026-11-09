@@ -233,6 +233,16 @@ pub enum Icon {
     FormatQuote,
     /// A link, written as a chain.
     InsertLink,
+    /// Shuffle the queue (Media).
+    MediaPlaylistShuffle,
+    /// Repeat the queue (Media).
+    MediaPlaylistRepeat,
+    /// Repeat the item playing (Media).
+    MediaPlaylistRepeatSong,
+    /// The mini player, picture in picture (Media).
+    ViewPip,
+    /// The volume near its top: a speaker with two waves (the Sound page's glyph).
+    AudioVolumeHigh,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -240,7 +250,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 179] = [
+    pub const ALL: [Icon; 184] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -420,6 +430,11 @@ impl Icon {
         Self::FormatCode,
         Self::FormatQuote,
         Self::InsertLink,
+        Self::MediaPlaylistShuffle,
+        Self::MediaPlaylistRepeat,
+        Self::MediaPlaylistRepeatSong,
+        Self::ViewPip,
+        Self::AudioVolumeHigh,
     ];
 
     /// The embedded SVG source for this icon.
@@ -655,6 +670,17 @@ impl Icon {
             Self::FormatCode => include_bytes!("../icons/format-code-symbolic.svg"),
             Self::FormatQuote => include_bytes!("../icons/format-quote-symbolic.svg"),
             Self::InsertLink => include_bytes!("../icons/insert-link-symbolic.svg"),
+            Self::MediaPlaylistShuffle => {
+                include_bytes!("../icons/media-playlist-shuffle-symbolic.svg")
+            }
+            Self::MediaPlaylistRepeat => {
+                include_bytes!("../icons/media-playlist-repeat-symbolic.svg")
+            }
+            Self::MediaPlaylistRepeatSong => {
+                include_bytes!("../icons/media-playlist-repeat-song-symbolic.svg")
+            }
+            Self::ViewPip => include_bytes!("../icons/view-pip-symbolic.svg"),
+            Self::AudioVolumeHigh => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon
