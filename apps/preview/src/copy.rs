@@ -16,7 +16,7 @@ pub const MENU_OPEN_WITH: &str = "Open with";
 pub const MENU_SHOW_IN_FILES: &str = "Show in Files";
 pub const MENU_COPY_PICTURE: &str = "Copy picture";
 pub const MENU_SAVE_COPY: &str = "Save a copy…";
-pub const MENU_CROP: &str = "Crop…";
+pub const MENU_CROP: &str = "Crop";
 pub const MENU_TURN_LEFT: &str = "Turn left";
 pub const MENU_TURN_RIGHT: &str = "Turn right";
 pub const MENU_FLIP_HORIZONTALLY: &str = "Flip horizontally";
@@ -83,6 +83,8 @@ pub fn saved_copy(name: &str) -> String {
 pub fn saved_crop(name: &str) -> String {
     format!("Cropped copy saved as {}", quoted(name))
 }
+
+pub const CROP_UNDONE: &str = "Cropped copy moved to the Trash";
 
 pub fn app_failed(app: &str) -> String {
     format!(

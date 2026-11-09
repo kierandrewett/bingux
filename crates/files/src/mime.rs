@@ -71,6 +71,8 @@ const TABLE: &[(&str, &str, &str, Category)] = &[
     ("jxl", "image/jxl", "JPEG XL image", Image),
     ("heic heif", "image/heif", "HEIF image", Image),
     ("tif tiff", "image/tiff", "TIFF image", Image),
+    ("exr", "image/x-exr", "OpenEXR image", Image),
+    ("hdr", "image/vnd.radiance", "Radiance HDR image", Image),
     ("ico", "image/vnd.microsoft.icon", "Icon", Image),
     ("xcf", "image/x-xcf", "GIMP image", Image),
     ("mp3", "audio/mpeg", "MP3 audio", Audio),
