@@ -1,7 +1,6 @@
 //! The library's pages: songs, albums, artists, videos, the queue, search
 //! results and the empty library.
 
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use bingux_media::library::{Album, Snapshot, Track, Video};
@@ -15,6 +14,7 @@ use freya::prelude::*;
 
 use crate::SCHEME;
 use crate::engine::{engine, use_media};
+use crate::song_list::{Lead, SongList};
 use crate::strings as text;
 
 /// Whether the full player is open, and how the window is shown.
@@ -29,7 +29,7 @@ pub fn use_ui() -> Ui {
     use_consume::<Ui>()
 }
 
-fn location(parts: &[&str]) -> Location {
+pub(crate) fn location(parts: &[&str]) -> Location {
     parts
         .iter()
         .fold(Location::new(SCHEME), |location, part| location.join(*part))
@@ -45,49 +45,6 @@ pub fn play(items: Vec<Item>, start: usize, ui: Ui) {
         let mut stage = ui.stage;
         stage.set(true);
     }
-}
-
-/// The menu of a song: play next, play later, the album and the artist.
-fn song_menu(track: &Track, router: Router) -> Vec<MenuItem> {
-    let next = track.item();
-    let later = track.item();
-    let album = location(&["albums", &track.album_key()]);
-    let artist = location(&["artists", track.filed_artist()]);
-    vec![
-        menu_item(text::PLAY_NEXT, move |_| {
-            engine().player.enqueue(vec![next.clone()], true)
-        }),
-        menu_item(text::PLAY_LATER, move |_| {
-            engine().player.enqueue(vec![later.clone()], false)
-        }),
-        menu_separator(),
-        menu_item(text::SHOW_ALBUM, move |_| router.push(&album)),
-        menu_item(text::SHOW_ARTIST, move |_| router.push(&artist)),
-    ]
-}
-
-/// One song row; `list` is what plays from it.
-fn song_row(
-    track: &Track,
-    list: &Arc<Vec<Track>>,
-    index: usize,
-    current: Option<&PathBuf>,
-    ui: Ui,
-    router: Router,
-) -> Row {
-    let list = list.clone();
-    let subtitle = match (track.artist.is_empty(), track.album.is_empty()) {
-        (false, false) => format!("{}, {}", track.artist, track.album),
-        (false, true) => track.artist.clone(),
-        (true, false) => track.album.clone(),
-        (true, true) => String::new(),
-    };
-    row(track.title.clone())
-        .maybe_subtitle((!subtitle.is_empty()).then_some(subtitle))
-        .value(track.duration.map(format_time).unwrap_or_default())
-        .selected(current == Some(&track.path))
-        .context_menu(song_menu(track, router))
-        .on_press(move |_| play(list.iter().map(Track::item).collect(), index, ui))
 }
 
 fn page(tokens: &Tokens) -> Rect {
@@ -183,41 +140,44 @@ impl Component for SongsPage {
             .into_element();
         }
         let total: f64 = songs.iter().filter_map(|song| song.duration).sum();
-        let play_all = {
-            let songs = songs.clone();
-            move |_| play(songs.iter().map(Track::item).collect(), 0, ui)
-        };
-        let shuffle_all = {
-            let songs = songs.clone();
-            move |_| {
-                engine().player.set_shuffle(true);
-                play(songs.iter().map(Track::item).collect(), 0, ui);
-            }
-        };
-        let mut group = Group::new(None::<String>);
-        for (index, track) in songs.iter().enumerate() {
-            group = group.row(song_row(track, &songs, index, current.as_ref(), ui, router));
-        }
         page(&tokens)
-            .child(
-                PageHead::new()
-                    .subtitle(format!(
-                        "{}, {}",
-                        text::songs(songs.len()),
-                        text::length(total)
-                    ))
-                    .action(text::SHUFFLE, shuffle_all),
-            )
-            .child(
-                hstack(S2).child(
-                    action_button(text::PLAY, play_all)
-                        .suggested()
-                        .icon(Icon::MediaPlaybackStart),
-                ),
-            )
-            .child(group)
+            .child(PageHead::new().subtitle(format!(
+                "{}, {}",
+                text::songs(songs.len()),
+                text::length(total)
+            )))
+            .child(play_pair(songs.clone(), ui))
+            .child(SongList {
+                songs,
+                current,
+                lead: Lead::Artwork,
+                album: true,
+            })
             .into_element()
     }
+}
+
+/// Play and Shuffle side by side: the primary and the secondary action of a list.
+fn play_pair(songs: Arc<Vec<Track>>, ui: Ui) -> Element {
+    let play_all = {
+        let songs = songs.clone();
+        move |_| {
+            engine().player.set_shuffle(false);
+            play(songs.iter().map(Track::item).collect(), 0, ui)
+        }
+    };
+    let shuffle = move |_| {
+        engine().player.set_shuffle(true);
+        play(songs.iter().map(Track::item).collect(), 0, ui);
+    };
+    hstack(S2)
+        .child(
+            action_button(text::PLAY, play_all)
+                .suggested()
+                .icon(Icon::MediaPlaybackStart),
+        )
+        .child(action_button(text::SHUFFLE, shuffle).icon(Icon::MediaPlaylistShuffle))
+        .into_element()
 }
 
 pub fn albums() -> Element {
@@ -374,17 +334,6 @@ impl Component for AlbumPage {
             None => format!("{}, {}", text::songs(tracks.len()), text::length(duration)),
         };
         let artist_target = location(&["artists", &album.artist]);
-        let play_all = {
-            let tracks = tracks.clone();
-            move |_| play(tracks.iter().map(Track::item).collect(), 0, ui)
-        };
-        let shuffle = {
-            let tracks = tracks.clone();
-            move |_| {
-                engine().player.set_shuffle(true);
-                play(tracks.iter().map(Track::item).collect(), 0, ui);
-            }
-        };
         let side = if is_compact() { 140.0 } else { 200.0 };
         let head = rect()
             .width(Size::fill())
@@ -392,6 +341,7 @@ impl Component for AlbumPage {
                 &tokens,
                 &[
                     if is_compact() { flex_col() } else { flex_row() },
+                    grow_children(),
                     gap(S6),
                     items(Align::End),
                 ],
@@ -417,38 +367,17 @@ impl Component for AlbumPage {
                             ),
                     )
                     .child(CAPTION.in_ink(Ink::Muted).label(&tokens, details))
-                    .child(
-                        hstack(S2)
-                            .child(
-                                action_button(text::PLAY, play_all)
-                                    .suggested()
-                                    .icon(Icon::MediaPlaybackStart),
-                            )
-                            .child(
-                                action_button(text::SHUFFLE, shuffle)
-                                    .icon(Icon::MediaPlaylistShuffle),
-                            ),
-                    ),
+                    .child(play_pair(tracks.clone(), ui)),
             );
-        let mut group = Group::new(None::<String>);
-        for (index, track) in tracks.iter().enumerate() {
-            let list = tracks.clone();
-            let title = match track.track {
-                Some(number) => format!("{number}. {}", track.title),
-                None => track.title.clone(),
-            };
-            let artist = (track.artist != album.artist && !track.artist.is_empty())
-                .then(|| track.artist.clone());
-            group = group.row(
-                row(title)
-                    .maybe_subtitle(artist)
-                    .value(track.duration.map(format_time).unwrap_or_default())
-                    .selected(current.as_ref() == Some(&track.path))
-                    .context_menu(song_menu(track, router))
-                    .on_press(move |_| play(list.iter().map(Track::item).collect(), index, ui)),
-            );
-        }
-        page(&tokens).child(head).child(group).into_element()
+        page(&tokens)
+            .child(head)
+            .child(SongList {
+                songs: tracks,
+                current,
+                lead: Lead::Number,
+                album: false,
+            })
+            .into_element()
     }
 }
 
@@ -800,11 +729,14 @@ impl Component for SearchResults {
         let songs = Arc::new(songs);
         let mut column = page(&tokens);
         if !songs.is_empty() {
-            let mut group = Group::new(Some(text::SONGS.to_owned()));
-            for (index, track) in songs.iter().enumerate().take(50) {
-                group = group.row(song_row(track, &songs, index, current.as_ref(), ui, router));
-            }
-            column = column.child(group);
+            column = column
+                .child(group_head(text::SONGS, rect()))
+                .child(SongList {
+                    songs: songs.clone(),
+                    current: current.clone(),
+                    lead: Lead::Artwork,
+                    album: true,
+                });
         }
         if !videos.is_empty() {
             let mut group = Group::new(Some(text::VIDEOS.to_owned()));
@@ -823,37 +755,10 @@ impl Component for SearchResults {
     }
 }
 
-/// `bingux-media://open?path=…`: plays the file or folder, then shows it.
-pub fn open(path: String) -> Element {
-    OpenPage { path }.into_element()
-}
-
-#[derive(PartialEq)]
-struct OpenPage {
-    path: String,
-}
-
-impl Component for OpenPage {
-    fn render(&self) -> impl IntoElement {
-        let router = use_router();
-        let ui = use_ui();
-        let path = PathBuf::from(self.path.clone());
-        use_hook(move || {
-            if path.as_os_str().is_empty() {
-                return;
-            }
-            // Reading a folder waits on the disk: a worker does it.
-            let _ = std::thread::Builder::new()
-                .name("media-open".into())
-                .spawn(move || {
-                    engine().play_paths(&[path]);
-                });
-            let mut stage = ui.stage;
-            stage.set(true);
-            router.replace(&location(&["queue"]));
-        });
-        rect().into_element()
-    }
+/// `bingux-media://open?path=…` is handled by the window's root, which
+/// plays the file and moves on; the route's page is never seen.
+pub fn open(_path: String) -> Element {
+    rect().into_element()
 }
 
 #[cfg(test)]

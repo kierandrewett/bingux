@@ -5,7 +5,7 @@
 pub const EMPTY_TITLE: &str = "No music or videos";
 pub const EMPTY_BODY: &str =
     "Add files to your Music or Videos folder, or drag them into this window.";
-pub const EMPTY_ACTION: &str = "Add Folder…";
+pub const EMPTY_ACTION: &str = "Add folder…";
 pub const EMPTY_SECTION_SONGS: &str = "No songs";
 pub const EMPTY_SECTION_SONGS_BODY: &str = "Songs in your Music folder appear here.";
 pub const EMPTY_SECTION_VIDEOS: &str = "No videos";
@@ -20,7 +20,7 @@ pub const CANNOT_PLAY: &str =
     "Could not play this file. It may be damaged or in a format Media cannot read.";
 
 pub const PLAY: &str = "Play";
-pub const SHUFFLE: &str = "Shuffle";
+pub const SHUFFLE: &str = "Play shuffled";
 pub const PLAY_NEXT: &str = "Play next";
 pub const PLAY_LATER: &str = "Play later";
 pub const REMOVE_FROM_QUEUE: &str = "Remove from queue";
@@ -34,12 +34,17 @@ pub const UP_NEXT: &str = "Up next";
 pub const SONGS: &str = "Songs";
 pub const VIDEOS: &str = "Videos";
 pub const ALBUMS: &str = "Albums";
+pub const COLUMN_TITLE: &str = "Title";
+pub const COLUMN_ARTIST: &str = "Artist";
+pub const COLUMN_ALBUM: &str = "Album";
+pub const COLUMN_TIME: &str = "Time";
+pub const MORE: &str = "More";
 
-pub const MENU_OPEN: &str = "Open File…";
-pub const MENU_ADD_FOLDER: &str = "Add Folder…";
-pub const MENU_SCAN: &str = "Update Library";
+pub const MENU_OPEN: &str = "Open file…";
+pub const MENU_ADD_FOLDER: &str = "Add folder…";
+pub const MENU_SCAN: &str = "Update library";
 pub const MENU_SETTINGS: &str = "Settings";
-pub const MENU_MINI: &str = "Mini Player";
+pub const MENU_MINI: &str = "Mini player";
 
 pub const CLOSE_PLAYER: &str = "Close player (Esc)";
 pub const FULL_SCREEN: &str = "Full screen (F)";
@@ -53,7 +58,7 @@ pub const SLEEP_TIMER: &str = "Sleep timer";
 pub const QUEUE: &str = "Up next";
 pub const OFF: &str = "Off";
 pub const END_OF_ITEM: &str = "End of song or video";
-pub const ADD_SUBTITLE_FILE: &str = "Add Subtitle File…";
+pub const ADD_SUBTITLE_FILE: &str = "Add subtitle file…";
 pub const CHAPTERS: &str = "Chapters";
 
 pub const SETTINGS_TITLE: &str = "Settings";
@@ -73,9 +78,9 @@ pub const SCROBBLE: &str = "Scrobble to Last.fm";
 pub const API_KEY: &str = "API key";
 pub const API_SECRET: &str = "Shared secret";
 pub const API_HELP: &str = "Create an API account on Last.fm, then enter its key and secret.";
-pub const SIGN_IN: &str = "Sign In…";
-pub const FINISH_SIGN_IN: &str = "Finish Signing In";
-pub const SIGN_OUT: &str = "Sign Out";
+pub const SIGN_IN: &str = "Sign in…";
+pub const FINISH_SIGN_IN: &str = "Finish signing in";
+pub const SIGN_OUT: &str = "Sign out";
 pub const SIGNED_IN_AS: &str = "Signed in as";
 pub const LASTFM_UNREACHABLE: &str =
     "Could not reach Last.fm. Check your connection, then try again.";

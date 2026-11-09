@@ -187,7 +187,13 @@ impl Component for NowPlayingBar {
                 ))
                 .tw(
                     &tokens,
-                    &[flex_row(), items(Align::Center), gap(S3), min_w(Dim::Box5)],
+                    &[
+                        flex_row(),
+                        grow_children(),
+                        items(Align::Center),
+                        gap(S3),
+                        min_w(Dim::Box5),
+                    ],
                 )
                 .width(Size::flex(1.0))
                 .maybe(open.is_some(), |element| {
@@ -261,7 +267,14 @@ impl Component for NowPlayingBar {
                         .width(Size::fill())
                         .tw(
                             &tokens,
-                            &[flex_row(), items(Align::Center), gap(S2), px(S3), py(S2)],
+                            &[
+                                flex_row(),
+                                grow_children(),
+                                items(Align::Center),
+                                gap(S2),
+                                px(S3),
+                                py(S2),
+                            ],
                         )
                         .child(identity(Dim::Box11))
                         .child(
@@ -315,6 +328,7 @@ impl Component for NowPlayingBar {
                 &tokens,
                 &[
                     flex_row(),
+                    grow_children(),
                     items(Align::Center),
                     gap(S4),
                     px(S4),

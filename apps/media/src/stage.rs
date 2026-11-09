@@ -374,7 +374,10 @@ impl Component for FilmStage {
         .child(
             rect()
                 .width(Size::fill())
-                .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
+                .tw(
+                    &tokens,
+                    &[flex_row(), grow_children(), items(Align::Center), gap(S2)],
+                )
                 .child(
                     transport(playing, action)
                         .skips()
@@ -427,7 +430,7 @@ impl Component for FilmStage {
                     .position(Position::new_absolute().top(0.0).left(0.0))
                     .expanded()
                     .opacity(fade)
-                    .tw(&tokens, &[flex_col(), p(margin)])
+                    .tw(&tokens, &[flex_col(), grow_children(), p(margin)])
                     .child(rect().tw(&tokens, &[flex_row()]).child(top))
                     .child(rect().width(Size::fill()).height(Size::flex(1.0)))
                     .child(
@@ -497,6 +500,7 @@ impl Component for SongStage {
                 &[
                     bg(Paint::Bg),
                     flex_col(),
+                    grow_children(),
                     items(Align::Center),
                     p(if mini { S3 } else { S6 }),
                     gap(S3),
@@ -508,7 +512,10 @@ impl Component for SongStage {
             .child(
                 rect()
                     .width(Size::fill())
-                    .tw(&tokens, &[flex_row(), items(Align::Center)])
+                    .tw(
+                        &tokens,
+                        &[flex_row(), grow_children(), items(Align::Center)],
+                    )
                     .child(icon_button(Icon::PanDown, close).tooltip(text::CLOSE_PLAYER))
                     .child(rect().width(Size::flex(1.0)))
                     .maybe_child(

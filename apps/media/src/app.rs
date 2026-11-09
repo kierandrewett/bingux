@@ -98,6 +98,24 @@ impl Component for Content {
         let status = live.status.read().clone();
         let queue = live.queue.read().clone();
         let stage_open = *ui.stage.read();
+        // A launch or a second launch with a file: play it, show the player,
+        // and leave the address for the queue.
+        let location = use_location();
+        let router = use_router();
+        use_side_effect_with_deps(&location, move |location| {
+            if location.segments().first().map(String::as_str) != Some("open") {
+                return;
+            }
+            if let Some(path) = location.query("path").filter(|path| !path.is_empty()) {
+                let path = PathBuf::from(path);
+                let _ = std::thread::Builder::new()
+                    .name("media-open".into())
+                    .spawn(move || engine().play_paths(&[path]));
+                let mut stage = ui.stage;
+                stage.set(true);
+            }
+            router.replace(&crate::pages::location(&["queue"]));
+        });
 
         let on_key = move |event: Event<KeyboardEventData>| {
             let status = engine().player.status();
@@ -247,7 +265,7 @@ impl Component for Content {
                 bar
             });
             rect()
-                .tw(&tokens, &[w_full(), h_full(), flex_col()])
+                .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
                 .child(
                     rect()
                         .width(Size::fill())
@@ -259,7 +277,7 @@ impl Component for Content {
         };
         rect()
             .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
-            .on_key_down(on_key)
+            .on_global_key_down(on_key)
             .on_file_drop(on_drop)
             .child(body)
     }

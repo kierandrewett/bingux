@@ -13,6 +13,7 @@ mod pages;
 mod settings_page;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
+mod song_list;
 mod stage;
 mod strings;
 

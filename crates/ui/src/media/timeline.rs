@@ -503,7 +503,10 @@ impl Component for Timeline {
             .component("Timeline")
             .text_direction(TextDirection::Ltr)
             .width(Size::fill())
-            .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
+            .tw(
+                &tokens,
+                &[flex_row(), grow_children(), items(Align::Center), gap(S2)],
+            )
             .child(
                 rect()
                     .tw(&tokens, &[w(label_width), flex_row(), justify(Align::End)])
