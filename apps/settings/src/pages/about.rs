@@ -286,7 +286,7 @@ fn summary(facts: &Facts, name: &str) -> String {
 fn copy(text: String, overlays: Overlays) {
     match freya::clipboard::Clipboard::set(text) {
         Ok(()) => overlays.toast("Copied"),
-        Err(_) => overlays.toast("Could not copy the text. Try again."),
+        Err(_) => overlays.toast("Could not copy to the clipboard. Try again."),
     }
 }
 
