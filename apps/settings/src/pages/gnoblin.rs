@@ -9,7 +9,7 @@ use crate::system::{self, CommandError, CommandResult};
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Shown when the desktop session is not running, so nothing can be read.
-pub const NOT_RUNNING: &str = "The desktop is not running, so this cannot be read.";
+pub const NOT_RUNNING: &str = "Could not reach the desktop. Sign out and sign in again.";
 
 /// Shown beside a setting that the desktop configuration controls.
 pub const MANAGED: &str = "Managed by your desktop configuration";
@@ -267,8 +267,9 @@ impl Parser<'_> {
     }
 }
 
-fn parse_error(_error: String) -> CommandError {
-    CommandError("The desktop's reply could not be read.".to_string())
+fn parse_error(error: String) -> CommandError {
+    eprintln!("[gnoblin] reply could not be parsed: {error}");
+    CommandError("Could not read the desktop settings. Restart Settings and try again.".to_string())
 }
 
 /// Runs `gnoblinctl args`. A missing compositor socket becomes the short
