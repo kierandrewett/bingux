@@ -12,6 +12,13 @@ use std::{
     },
     path::PathBuf,
     rc::Rc,
+    sync::{
+        Arc,
+        atomic::{
+            AtomicBool,
+            Ordering,
+        },
+    },
     time::Duration,
 };
 
@@ -188,6 +195,7 @@ impl GifSource {
 pub struct GifViewer {
     source: GifSource,
     asset_age: AssetAge,
+    pause: GifPause,
 
     layout: LayoutData,
     image_data: ImageData,
@@ -196,11 +204,43 @@ pub struct GifViewer {
     key: DiffKey,
 }
 
+/// A flag that holds a [`GifViewer`] on the frame it shows while it is set, and lets it
+/// go on from there when it is cleared (bingux: the Preview app's Pause).
+#[derive(Clone, Default)]
+pub struct GifPause(Arc<AtomicBool>);
+
+impl GifPause {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set(&self, paused: bool) {
+        self.0.store(paused, Ordering::Relaxed);
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+impl PartialEq for GifPause {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 impl GifViewer {
+    /// Hold the GIF on its current frame while `pause` is set.
+    pub fn pause(mut self, pause: GifPause) -> Self {
+        self.pause = pause;
+        self
+    }
+
     pub fn new(source: impl Into<GifSource>) -> Self {
         GifViewer {
             source: source.into(),
             asset_age: AssetAge::default(),
+            pause: GifPause::default(),
             layout: LayoutData::default(),
             image_data: ImageData::default(),
             accessibility: AccessibilityData::default(),
@@ -258,8 +298,8 @@ impl Component for GifViewer {
         let mut cached_frames = use_state::<Option<Rc<CachedGifFrames>>>(|| None);
         let mut asset_cacher = use_hook(AssetCacher::get);
         let mut assets_tasks = use_state::<Vec<TaskHandle>>(Vec::new);
-
-        let mut stream_gif = async move |bytes: Bytes| -> anyhow::Result<()> {
+        let pause = self.pause.clone();
+        let mut stream_gif = async move |bytes: Bytes, pause: GifPause| -> anyhow::Result<()> {
             // Decode and pre-composite all frames upfront
             let frames_data = thread(move || -> anyhow::Result<Vec<CachedFrame>> {
                 let mut decoder_options = gif::DecodeOptions::new();
@@ -339,6 +379,9 @@ impl Component for GifViewer {
                 for (i, frame) in frames.frames.iter().enumerate() {
                     *status.write() = Status::Playing(i);
                     timer(frame.delay).await;
+                    while pause.is_paused() {
+                        timer(Duration::from_millis(40)).await;
+                    }
                 }
             }
         };
@@ -385,8 +428,9 @@ impl Component for GifViewer {
             move || {
                 if let Some(Asset::Cached(asset)) = asset_cacher.subscribe_asset(&asset_config) {
                     if let Some(bytes) = asset.downcast_ref::<Bytes>().cloned() {
+                        let pause = pause.clone();
                         let asset_task = spawn(async move {
-                            if let Err(err) = stream_gif(bytes).await {
+                            if let Err(err) = stream_gif(bytes, pause).await {
                                 *status.write() = Status::Errored(err.to_string());
                                 #[cfg(debug_assertions)]
                                 tracing::error!(

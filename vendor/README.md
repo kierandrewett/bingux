@@ -2,7 +2,7 @@
 
 Copies of `freya-core`, `freya-winit`, `freya-components` and `freya-animation` 0.5.0-rc.10, used
 through `[patch.crates-io]` in `crates/ui`, `apps/settings`,
-`apps/taxonomy` and `apps/files`. Every app lists all four, so the whole
+`apps/taxonomy`, `apps/files` and `apps/preview`. Every app lists all four, so the whole
 Freya stack resolves one `freya-core`; a manifest that patches only some of them fails to build.
 The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel for a desktop:
 
@@ -125,6 +125,9 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   it; it clears after `SCROLL_STILL` (200 ms) without a pulse. Bingux tooltips
   and the file view's detail card stay down while it is set. A view with no
   provider above it does nothing (upstream has no such signal).
+- `freya-components/src/gif_viewer.rs`: `GifViewer::pause(GifPause)` holds an animated GIF on the
+  frame it shows while the flag is set and lets it go on from there when it is cleared (upstream
+  has no pause). The Preview app's Play and Pause use it.
 - `freya-components/src/input.rs`: the text field reports its caret and
   selection to the app. `Input::probe(State<InputProbe>)` writes the focus,
   the field's window area, the caret rectangle and the selection ends on each

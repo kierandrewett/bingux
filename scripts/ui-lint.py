@@ -330,6 +330,7 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "apps/settings/src/pages/sound/meter.rs": "the level meter's pw-record process and its reader thread",
     "apps/settings/src/pages/sound/effects/mod.rs": "the live-parameter writer's pacing sleep, on a thread of its own",
     "crates/ui/src/app_icon.rs": "the icon-theme name, asked from the icon lookup worker (guarded)",
+    "crates/ui/src/files/open_with_menu.rs": "starts bingux-files or xdg-open from a menu press handler and reaps the child on a thread of its own; never in render",
     "crates/ui/src/files/actions/open_with.rs": "desktop-entry scan and launch, run by the file actions' workers (FilesSearch to review)",
     "crates/ui/src/files/actions/transfer.rs": "file operations of the transfer worker",
     "crates/ui/src/files/actions.rs": "file operations of the transfer worker",

@@ -10,6 +10,7 @@ mod archive;
 mod card;
 mod folder;
 mod image;
+mod image_helper;
 mod media;
 mod media_controls;
 mod media_logic;
@@ -33,7 +34,7 @@ use super::subject::Resolved;
 /// The viewer for `resolved`.
 pub(super) fn viewer(resolved: Arc<Resolved>, nav: &PreviewNav, mode: Mode) -> Element {
     match resolved.viewer {
-        ViewerId::Image => image::ImageView { resolved }.into(),
+        ViewerId::Image => image::ImageView { resolved, nav: nav.clone() }.into(),
         ViewerId::Text => text::TextView { resolved }.into(),
         ViewerId::Folder => folder::FolderView { resolved }.into(),
         ViewerId::Archive => archive::ArchiveView { resolved }.into(),

@@ -4011,3 +4011,22 @@ Environment variables for tests and screenshots:
 ### Form dialogs
 
 `open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).
+
+### Zoomable view
+
+`ZoomView::new(natural, draw)` places any content in a box and lets the person zoom, pan, turn and flip it. `natural` is the content's size in its own pixels (`None` when it fits itself) and `draw(width, height)` makes the content at the size the view chose. The picture viewer of Quick Look and the Preview app use it; a map, a page or album artwork can too.
+
+| Input              | Effect                                                           |
+| ------------------ | ---------------------------------------------------------------- |
+| `+`, `-`           | zoom a quarter step about the middle                             |
+| `0`, `1`           | fit the box, actual size (one picture pixel on one device pixel) |
+| `R`, `Shift+R`     | turn a quarter right, left                                       |
+| `H`, `V`           | flip left to right, top to bottom, as seen                       |
+| Shift and an arrow | pan a zoomed view; a bare arrow is the owner's                   |
+| Ctrl and wheel     | zoom about the pointer                                           |
+| wheel, touchpad    | pan a zoomed view                                                |
+| drag               | pan; letting go while moving glides on and slows down            |
+| double click       | actual size at the pointer, then back to fit                     |
+| two fingers        | zoom about their middle and pan with it                          |
+
+Zooming, turning and flipping animate; reduced motion makes every move instant and turns the glide off. A resize keeps what was last asked for: fitted content stays fitted and content at actual size stays at actual size. `.start(FitMode)` says how content opens, `.orientation(turns, mirrored)` how it comes (a photograph stored on its side), and `.on_mode(f)` reports when the person chooses fit or actual size so an owner can remember it per kind of content. `use_zoom_handle()` returns a `ZoomHandle` that a toolbar, a menu or a Save a copy command drives and reads (`rotate`, `flip_horizontal`, `fit`, `turns`, `mirrored`, `percent`). The arithmetic is `View`, tested without a window.

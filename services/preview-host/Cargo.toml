@@ -26,6 +26,16 @@ gstreamer-video = "0.24"
 poppler-rs = { version = "0.25", features = ["v21_12"] }
 glib = "0.21"
 cairo-rs = "0.21"
+# A PDF's outline: `poppler-rs` has no safe reader for an outline entry's
+# action, so `outline.rs` walks the index iterator through the C interface.
+poppler-sys-rs = "0.25"
+# Pictures a viewer's own codecs do not read: TIFF, Radiance HDR, OpenEXR, and
+# the JPEG a camera RAW file carries. Only the decoders that are used.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif", "webp", "tiff", "bmp", "ico", "hdr", "exr"] }
+# The orientation of a camera RAW file (a TIFF-structured container).
+kamadak-exif = "0.6"
+# HEIF and AVIF. LGPL libheif, linked here and nowhere else.
+libheif-rs = { version = "2", default-features = false, features = ["v1_17"] }
 
 [profile.dev.package."*"]
 opt-level = 2

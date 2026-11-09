@@ -64,6 +64,7 @@ pub mod theme;
 pub mod typography;
 mod warm;
 pub mod window;
+pub mod zoom_view;
 
 /// Everything an application window normally needs.
 pub mod prelude {

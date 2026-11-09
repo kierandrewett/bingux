@@ -36,7 +36,7 @@ fn apps() -> &'static [App] {
 
 /// Read the desktop entries on a thread now, so the first menu does not wait
 /// for the disk.
-pub(super) fn warm() {
+pub(in crate::files) fn warm() {
     if APPS.get().is_none() {
         std::thread::spawn(|| {
             apps();

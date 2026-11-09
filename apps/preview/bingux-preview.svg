@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#99c1f1"/>
+            <stop offset="1" stop-color="#62a0ea"/>
+        </linearGradient>
+        <linearGradient id="paper" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#ebeae8"/>
+        </linearGradient>
+    </defs>
+    <!-- A sheet standing behind: the document. -->
+    <rect fill="#9a9996" height="92" rx="8" width="72" x="40" y="14"/>
+    <rect fill="url(#paper)" height="92" rx="8" width="72" x="40" y="11"/>
+    <g fill="#c0bfbc">
+        <rect height="5" rx="2.5" width="44" x="54" y="26"/>
+        <rect height="5" rx="2.5" width="32" x="54" y="38"/>
+    </g>
+    <!-- A picture in front: the sky, a sun and two hills. -->
+    <rect fill="#1a5fb4" height="76" rx="10" width="92" x="12" y="40"/>
+    <rect fill="url(#sky)" height="70" rx="7" width="86" x="15" y="43"/>
+    <circle cx="82" cy="66" fill="#f9f06b" r="9"/>
+    <path d="M15 113V92l22-18 24 22 14-12 26 20v9a7 7 0 0 1-7 7H22a7 7 0 0 1-7-7z" fill="#26a269"/>
+</svg>

@@ -38,7 +38,7 @@ use crate::window::Window;
 use crate::task::spawn_blocking;
 
 pub(super) use names::{check_name, stem_chars};
-pub(super) use open_with::{App, apps_for, launch, open_default};
+pub(super) use open_with::{App, apps_for, launch, open_default, warm as warm_open_with};
 pub(super) use clipboard::is_cut;
 
 /// The sidebar's Empty Trash asks the file view beside it to empty the Trash:

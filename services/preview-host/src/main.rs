@@ -23,6 +23,10 @@ mod frames;
 mod limits;
 mod link;
 mod media;
+mod outline;
+mod picture;
+mod raw;
+mod tonemap;
 
 use std::os::fd::OwnedFd;
 use std::sync::Arc;
@@ -77,6 +81,7 @@ fn check() -> bool {
         println!("{name}: {}", if present { "yes" } else { "no" });
     }
     println!("document: yes");
+    println!("picture: yes");
     player
 }
 
@@ -114,7 +119,7 @@ fn main() {
         Ok(Received { packet, .. }) if matches!(packet.message, Message::Hello { version } if version == VERSION) => {}
         Ok(_) | Err(_) => std::process::exit(2),
     }
-    link.send(0, Message::Ready { version: VERSION, features: feature::MEDIA | feature::DOCUMENT });
+    link.send(0, Message::Ready { version: VERSION, features: feature::MEDIA | feature::DOCUMENT | feature::IMAGE });
 
     let mut session = Session::None;
     loop {
@@ -174,7 +179,18 @@ fn handle(link: &Arc<Link>, watchdog: &Arc<Watchdog>, options: &Options, session
                 Err(error) => link.error(request, ErrorCode::Internal, &format!("The document worker did not start: {error}.")),
             }
         }
-        (Message::OpenMedia { .. } | Message::OpenDocument, _) => {
+        (Message::OpenImage { raw }, Session::None) => {
+            let Some(file) = take_fd(link, request, &mut fds) else { return };
+            limits::limit_document();
+            match Worker::start(Arc::clone(link), Arc::clone(watchdog)) {
+                Ok(worker) => {
+                    worker.submit(Job::OpenImage { request, file, raw });
+                    *session = Session::Document(worker);
+                }
+                Err(error) => link.error(request, ErrorCode::Internal, &format!("The picture worker did not start: {error}.")),
+            }
+        }
+        (Message::OpenMedia { .. } | Message::OpenDocument | Message::OpenImage { .. }, _) => {
             link.error(request, ErrorCode::Internal, "A host serves one file.");
         }
         (Message::Play, Session::Media(media)) => media.play(),
@@ -189,6 +205,7 @@ fn handle(link: &Arc<Link>, watchdog: &Arc<Watchdog>, options: &Options, session
         (Message::RenderPage { page, scale_milli, max_w, max_h }, Session::Document(worker)) => {
             worker.submit(Job::Render { request, page, scale_milli, max_w, max_h });
         }
+        (Message::Outline, Session::Document(worker)) => worker.submit(Job::Outline { request }),
         (Message::PageText { page }, Session::Document(worker)) => worker.submit(Job::Text { request, page }),
         (Message::Search { query }, Session::Document(worker)) => worker.submit(Job::Search { request, query }),
         (Message::Cancel { target }, Session::Document(worker)) => worker.cancel(target),
