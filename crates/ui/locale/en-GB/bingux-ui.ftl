@@ -592,6 +592,61 @@ ui-files-action-nothing-to-select = There is nothing to select.
 ui-files-action-trash-empty = The Trash is empty.
 ui-files-action-nothing-to-undo = There is nothing to undo.
 
+# Names of undoable changes, as Edit > Undo shows them.
+ui-files-undo-name-change = Change
+ui-files-undo-name-rename = Rename
+ui-files-undo-name-trash = Move to Trash
+ui-files-undo-name-new-folder = New folder
+ui-files-undo-name-new-file = New file
+ui-files-undo-name-move = Move
+ui-files-undo-name-duplicate = Duplicate
+# Status after an undo or redo.
+ui-files-undo-undone = Undone.
+ui-files-undo-redone = Redone.
+# $what (String) - the action that failed, such as "copy"
+ui-files-transfer-what-undo = undo that
+ui-files-transfer-what-redo = redo that
+ui-files-transfer-what-move = move
+ui-files-transfer-what-copy = copy
+ui-files-transfer-what-rename = rename these items
+ui-files-transfer-what-duplicate = duplicate
+# $what (String) - what failed, $error (String) - why
+ui-files-transfer-error = Could not { $what }: { $error }
+ui-files-transfer-wait-busy = Wait for the current operation to finish.
+ui-files-transfer-inside-itself = A folder cannot go inside itself.
+ui-files-transfer-verb-moving = Moving
+ui-files-transfer-verb-copying = Copying
+ui-files-transfer-verb-duplicating = Duplicating
+ui-files-transfer-past-moved = Moved
+ui-files-transfer-past-copied = Copied
+ui-files-transfer-renaming = Renaming…
+ui-files-transfer-duplicated = Duplicated { $whole }.
+ui-files-transfer-duplicating-stopped = Duplicating stopped.
+# $verb (String) - the action in progress, $whole (String) - what it acts on
+ui-files-transfer-busy-whole = { $verb } { $whole }
+# $verb (String), $done (Number) - the item now on, $total (Number) - how many
+ui-files-transfer-busy-count = { $verb } { $done } of { $total }
+# $drive (String) - the drive being written
+ui-files-transfer-finishing = Finishing… writing to { $drive }
+# $past (String) - the finished action, $whole (String) - what it acted on
+ui-files-transfer-done = { $past } { $whole }.
+ui-files-transfer-done-flushed = { $past } { $whole }. Everything is written to { $drive }.
+# $verb (String) - the stopped action
+ui-files-transfer-stopped = { $verb } stopped.
+# $count (Number) - how many items were renamed
+ui-files-transfer-renamed = Renamed { $count ->
+    [one] 1 item
+   *[other] { $count } items
+}.
+# The conflict question. $name (String) - the clashing name, $place (String) - the folder it clashes in, already quoted.
+ui-files-transfer-conflict-title = “{ $name }” already exists
+ui-files-transfer-conflict-place = Something with this name is already in { $place }.
+ui-files-transfer-conflict-the-destination = the destination
+ui-files-transfer-apply-all = Do this for all conflicts
+ui-files-transfer-skip = Skip
+ui-files-transfer-keep-both = Keep both
+ui-files-transfer-replace = Replace
+
 # The status line after an action. $app (String) is the app's name, $error (String) why it failed.
 ui-files-action-could-not-start = Could not start { $app }: { $error }.
 # $count (Number) - how many paths were copied

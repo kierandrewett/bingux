@@ -29,7 +29,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// status line and over each other's files.
 pub(super) fn begin(env: &Env, label: String, cancel: Option<Cancel>) -> bool {
     if env.ui.busy.peek().is_some() {
-        notify(env.ui, "Wait for the current operation to finish.", true);
+        notify(env.ui, crate::tr!("ui-files-transfer-wait-busy"), true);
         return false;
     }
     set(
@@ -66,7 +66,11 @@ pub(super) fn select_in(mut selection: State<super::Selection>, paths: &[PathBuf
 }
 
 pub(super) fn error_text(what: &str, error: &OpError) -> String {
-    format!("Could not {what}: {error}")
+    crate::tr!(
+        "ui-files-transfer-error",
+        what = what,
+        error = error.to_string()
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -76,7 +80,11 @@ pub(super) fn error_text(what: &str, error: &OpError) -> String {
 /// Paste the held files into `dest`.
 pub(super) fn paste(env: &Env, dest: PathBuf) {
     let Some(held) = clipboard::take() else {
-        notify(env.ui, "There is nothing to paste.", false);
+        notify(
+            env.ui,
+            crate::tr!("ui-files-action-nothing-to-paste"),
+            false,
+        );
         return;
     };
     transfer(env, held.paths, dest, held.cut, held.cut);
@@ -151,7 +159,7 @@ impl Component for ApplyToAll {
             flag.store(next, Ordering::Relaxed);
             on.set(next);
         })
-        .text("Do this for all conflicts")
+        .text(crate::tr!("ui-files-transfer-apply-all"))
     }
 }
 
@@ -173,8 +181,8 @@ fn ask_about(overlays: Overlays, ask: Ask) {
         .parent()
         .and_then(Path::file_name)
         .map_or_else(
-            || "the destination".to_owned(),
-            |name| format!("“{}”", name.to_string_lossy()),
+            || crate::tr!("ui-files-transfer-conflict-the-destination"),
+            |name| crate::tr!("ui-files-action-quoted-name", name = name.to_string_lossy()),
         );
     let answer = |resolution: Resolution| {
         let reply = reply.clone();
@@ -184,19 +192,23 @@ fn ask_about(overlays: Overlays, ask: Ask) {
     };
     overlays.show_dialog(
         dialog(
-            format!("“{name}” already exists"),
-            format!("Something with this name is already in {place}."),
+            crate::tr!("ui-files-transfer-conflict-title", name = name),
+            crate::tr!("ui-files-transfer-conflict-place", place = place),
         )
         .content(Element::from(ApplyToAll(remember)))
-        .cancel("Cancel")
-        .response("Skip", ResponseKind::Default, answer(Resolution::Skip))
+        .cancel(crate::tr!("ui-dialog-cancel"))
         .response(
-            "Keep both",
+            crate::tr!("ui-files-transfer-skip"),
+            ResponseKind::Default,
+            answer(Resolution::Skip),
+        )
+        .response(
+            crate::tr!("ui-files-transfer-keep-both"),
             ResponseKind::Default,
             answer(Resolution::KeepBoth),
         )
         .response(
-            "Replace",
+            crate::tr!("ui-files-transfer-replace"),
             ResponseKind::Destructive,
             answer(Resolution::Replace),
         )
@@ -217,12 +229,17 @@ fn busy_text(
     if let Some(drive) = finishing {
         // "Done" only once the drive has the data: a stick pulled out before
         // this is over loses files.
-        return format!("Finishing… writing to {drive}");
+        return crate::tr!("ui-files-transfer-finishing", drive = drive);
     }
     if scanning || total <= 1 {
-        format!("{verb} {whole}")
+        crate::tr!("ui-files-transfer-busy-whole", verb = verb, whole = whole)
     } else {
-        format!("{verb} {} of {total}", (done + 1).min(total))
+        crate::tr!(
+            "ui-files-transfer-busy-count",
+            verb = verb,
+            done = (done + 1).min(total),
+            total = total
+        )
     }
 }
 
@@ -241,21 +258,27 @@ fn busy_label(verb: &str, progress: &Progress, whole: &str) -> String {
 /// for good (removable media, a share) says so.
 fn done_text(past: &str, whole: &str, flushed_to: Option<&str>) -> String {
     match flushed_to {
-        Some(drive) => format!("{past} {whole}. Everything is written to {drive}."),
-        None => format!("{past} {whole}."),
+        Some(drive) => crate::tr!(
+            "ui-files-transfer-done-flushed",
+            past = past,
+            whole = whole,
+            drive = drive
+        ),
+        None => crate::tr!("ui-files-transfer-done", past = past, whole = whole),
     }
 }
 
 /// Keep the busy line and the conflict question current until `done`.
 pub(super) async fn follow(
     env: Env,
-    verb: &'static str,
+    verb: impl Into<String>,
     whole: String,
     progress: Progress,
     cancel: Cancel,
     asker: Arc<Asker>,
     done: Arc<AtomicBool>,
 ) {
+    let verb = verb.into();
     while !done.load(Ordering::Acquire) {
         if let Some(ask) = lock(&asker.pending).take() {
             ask_about(env.overlays, ask);
@@ -264,7 +287,7 @@ pub(super) async fn follow(
         set(
             env.ui.busy,
             Some(Busy {
-                label: busy_label(verb, &progress, &whole),
+                label: busy_label(&verb, &progress, &whole),
                 // The drive says nothing about how far it is: a bar that
                 // keeps still says "wait".
                 fraction: if finishing { None } else { progress.fraction() },
@@ -289,17 +312,31 @@ fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held
         .iter()
         .any(|path| path.is_dir() && dest.starts_with(path))
     {
-        notify(env.ui, "A folder cannot go inside itself.", true);
+        notify(env.ui, crate::tr!("ui-files-transfer-inside-itself"), true);
         return;
     }
     let (verb, past) = if cut {
-        ("Moving", "Moved")
+        (
+            crate::tr!("ui-files-transfer-verb-moving"),
+            crate::tr!("ui-files-transfer-past-moved"),
+        )
     } else {
-        ("Copying", "Copied")
+        (
+            crate::tr!("ui-files-transfer-verb-copying"),
+            crate::tr!("ui-files-transfer-past-copied"),
+        )
     };
     let whole = describe(&paths);
     let cancel = Cancel::new();
-    if !begin(env, format!("{verb} {whole}"), Some(cancel.clone())) {
+    if !begin(
+        env,
+        crate::tr!(
+            "ui-files-transfer-busy-whole",
+            verb = verb.clone(),
+            whole = whole.clone()
+        ),
+        Some(cancel.clone()),
+    ) {
         return;
     }
     let progress = Progress::new();
@@ -308,7 +345,7 @@ fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held
     let done = Arc::new(AtomicBool::new(false));
     spawn_in_window(follow(
         env.clone(),
-        verb,
+        verb.clone(),
         whole.clone(),
         progress.clone(),
         cancel.clone(),
@@ -348,15 +385,26 @@ fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held
                 }
                 notify(
                     env.ui,
-                    done_text(past, &whole, report.flushed_to().as_deref()),
+                    done_text(&past, &whole, report.flushed_to().as_deref()),
                     false,
                 );
                 select_paths(&env, &made);
             }
-            Err(OpError::Cancelled) => notify(env.ui, format!("{verb} stopped."), false),
+            Err(OpError::Cancelled) => notify(
+                env.ui,
+                crate::tr!("ui-files-transfer-stopped", verb = verb.clone()),
+                false,
+            ),
             Err(error) => notify(
                 env.ui,
-                error_text(if cut { "move" } else { "copy" }, &error),
+                error_text(
+                    &if cut {
+                        crate::tr!("ui-files-transfer-what-move")
+                    } else {
+                        crate::tr!("ui-files-transfer-what-copy")
+                    },
+                    &error,
+                ),
                 true,
             ),
         }
@@ -423,7 +471,7 @@ pub(super) fn rename_many(env: &Env, pairs: Vec<(PathBuf, String)>) {
         return;
     }
     let count = pairs.len();
-    if !begin(env, "Renaming…".to_string(), None) {
+    if !begin(env, crate::tr!("ui-files-transfer-renaming"), None) {
         return;
     }
     let env = env.clone();
@@ -436,15 +484,18 @@ pub(super) fn rename_many(env: &Env, pairs: Vec<(PathBuf, String)>) {
                 if !done.is_empty() {
                     undo::push(&env, Step::Renames(done));
                 }
-                let text = if count == 1 {
-                    "Renamed 1 item.".to_string()
-                } else {
-                    format!("Renamed {count} items.")
-                };
-                notify(env.ui, text, false);
+                notify(
+                    env.ui,
+                    crate::tr!("ui-files-transfer-renamed", count = count),
+                    false,
+                );
                 select_paths(&env, &now);
             }
-            Err(error) => notify(env.ui, error_text("rename these items", &error), true),
+            Err(error) => notify(
+                env.ui,
+                error_text(&crate::tr!("ui-files-transfer-what-rename"), &error),
+                true,
+            ),
         }
         env.reload.call(());
     });
@@ -474,14 +525,23 @@ pub(super) fn duplicate(env: &Env, paths: Vec<PathBuf>) {
         .collect();
     let whole = describe(&all);
     let cancel = Cancel::new();
-    if !begin(env, format!("Duplicating {whole}"), Some(cancel.clone())) {
+    let duplicating = crate::tr!("ui-files-transfer-verb-duplicating");
+    if !begin(
+        env,
+        crate::tr!(
+            "ui-files-transfer-busy-whole",
+            verb = duplicating.clone(),
+            whole = whole.clone()
+        ),
+        Some(cancel.clone()),
+    ) {
         return;
     }
     let progress = Progress::new();
     let done = Arc::new(AtomicBool::new(false));
     spawn_in_window(follow(
         env.clone(),
-        "Duplicating",
+        duplicating.clone(),
         whole.clone(),
         progress.clone(),
         cancel.clone(),
@@ -515,11 +575,23 @@ pub(super) fn duplicate(env: &Env, paths: Vec<PathBuf>) {
                 if !made.is_empty() {
                     undo::push(&env, Step::Duplicate(made));
                 }
-                notify(env.ui, format!("Duplicated {whole}."), false);
+                notify(
+                    env.ui,
+                    crate::tr!("ui-files-transfer-duplicated", whole = whole.clone()),
+                    false,
+                );
                 select_paths(&env, &copies);
             }
-            Err(OpError::Cancelled) => notify(env.ui, "Duplicating stopped.", false),
-            Err(error) => notify(env.ui, error_text("duplicate", &error), true),
+            Err(OpError::Cancelled) => notify(
+                env.ui,
+                crate::tr!("ui-files-transfer-duplicating-stopped"),
+                false,
+            ),
+            Err(error) => notify(
+                env.ui,
+                error_text(&crate::tr!("ui-files-transfer-what-duplicate"), &error),
+                true,
+            ),
         }
         env.reload.call(());
     });
@@ -558,7 +630,7 @@ pub(super) fn pair_moves(originals: &[PathBuf], arrived: &[PathBuf]) -> Vec<(Pat
 /// and Ctrl+Z in a file view reach too.
 pub(super) fn undo(env: &Env) {
     if env.undo.undo().is_none() {
-        notify(env.ui, "There is nothing to undo.", false);
+        notify(env.ui, crate::tr!("ui-files-action-nothing-to-undo"), false);
     }
 }
 

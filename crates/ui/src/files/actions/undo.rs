@@ -41,15 +41,15 @@ pub(super) enum Step {
 
 impl Step {
     /// The change's name, as Edit > Undo shows it: "Undo rename".
-    pub(super) fn name(&self) -> &'static str {
+    pub(super) fn name(&self) -> String {
         match self {
-            Step::Rename { .. } | Step::Renames(_) => "Rename",
-            Step::Trash(_) => "Move to Trash",
-            Step::Restore(_) => "Restore",
-            Step::Create { folder: true, .. } => "New folder",
-            Step::Create { folder: false, .. } => "New file",
-            Step::Move(_) => "Move",
-            Step::Duplicate(_) => "Duplicate",
+            Step::Rename { .. } | Step::Renames(_) => crate::tr!("ui-files-undo-name-rename"),
+            Step::Trash(_) => crate::tr!("ui-files-undo-name-trash"),
+            Step::Restore(_) => crate::tr!("ui-files-menu-restore"),
+            Step::Create { folder: true, .. } => crate::tr!("ui-files-undo-name-new-folder"),
+            Step::Create { folder: false, .. } => crate::tr!("ui-files-undo-name-new-file"),
+            Step::Move(_) => crate::tr!("ui-files-undo-name-move"),
+            Step::Duplicate(_) => crate::tr!("ui-files-undo-name-duplicate"),
         }
     }
 
@@ -98,7 +98,7 @@ pub(super) fn push(env: &Env, step: Step) {
 fn undo_step(with: Undoing, phase: Shared) -> UndoStep {
     let (name, redoable) = match &*phase.borrow() {
         Phase::Done(step) | Phase::Undone(step, _) => (step.name(), step.redoable()),
-        Phase::Busy => ("Change", false),
+        Phase::Busy => (crate::tr!("ui-files-undo-name-change"), false),
     };
     let undo = {
         let (with, phase) = (with.clone(), phase.clone());
@@ -125,7 +125,7 @@ fn start_undo(with: &Undoing, phase: &Shared) {
         let reversing = step.clone();
         match spawn_blocking(move || reverse(&reversing)).await {
             Ok(back) => {
-                notify(with.ui, "Undone.", false);
+                notify(with.ui, crate::tr!("ui-files-undo-undone"), false);
                 select_in(with.selection, &back);
                 *phase.borrow_mut() = Phase::Undone(step, back);
             }
@@ -133,7 +133,11 @@ fn start_undo(with: &Undoing, phase: &Shared) {
                 // Still the newest change: try again once the cause is gone.
                 *phase.borrow_mut() = Phase::Done(step);
                 with.undo.push(undo_step(with.clone(), phase.clone()));
-                notify(with.ui, error_text("undo that", &error), true);
+                notify(
+                    with.ui,
+                    error_text(&crate::tr!("ui-files-transfer-what-undo"), &error),
+                    true,
+                );
             }
         }
         with.reload.call(());
@@ -153,13 +157,17 @@ fn start_redo(with: &Undoing, phase: &Shared) {
         let (again, came_back) = (step.clone(), back.clone());
         match spawn_blocking(move || redo_step(&again, &came_back)).await {
             Ok((now, shown)) => {
-                notify(with.ui, "Redone.", false);
+                notify(with.ui, crate::tr!("ui-files-undo-redone"), false);
                 select_in(with.selection, &shown);
                 *phase.borrow_mut() = Phase::Done(now);
             }
             Err(error) => {
                 *phase.borrow_mut() = Phase::Undone(step, back);
-                notify(with.ui, error_text("redo that", &error), true);
+                notify(
+                    with.ui,
+                    error_text(&crate::tr!("ui-files-transfer-what-redo"), &error),
+                    true,
+                );
             }
         }
         with.reload.call(());
