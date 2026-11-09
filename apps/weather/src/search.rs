@@ -7,6 +7,7 @@
 
 use std::time::Duration;
 
+use crate::words;
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use bingux_ui::shell::{FORM_HEIGHT, FORM_WIDTH};
@@ -58,11 +59,14 @@ impl Component for Sheet {
             });
         };
 
-        let header = HeaderBar::new("Add location").draggable(false).trailing(
-            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog()).tooltip("Close"),
-        );
+        let header = HeaderBar::new(tr!("weather-add-title"))
+            .draggable(false)
+            .trailing(
+                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                    .tooltip(&tr!("weather-add-close")),
+            );
         let field = search_field(query, on_change)
-            .placeholder("Search for a city")
+            .placeholder(tr!("weather-add-placeholder"))
             .fill_width()
             .autofocus();
 
@@ -71,8 +75,8 @@ impl Component for Sheet {
         let mut results = rect().tw(&tokens, &[w_full(), flex_col(), gap(S3)]);
         if typed.trim().chars().count() < 2 {
             results = results.child(
-                status_page(Icon::Search, "Search for a city")
-                    .description("Type the name of a city or town."),
+                status_page(Icon::Search, tr!("weather-add-hint-title"))
+                    .description(tr!("weather-add-hint-body")),
             );
         } else {
             match found.with(|state| match state {
@@ -83,7 +87,7 @@ impl Component for Sheet {
                     let rows = places.into_iter().map(|place| {
                         let chosen = place.clone();
                         row(place.name.clone())
-                            .subtitle(place.detail.clone())
+                            .subtitle(words::join_list(&place.detail))
                             .on_press(move |_| {
                                 hub.add(chosen.clone());
                                 overlays.dismiss_dialog();
@@ -94,26 +98,28 @@ impl Component for Sheet {
                 }
                 Some(_) if settled => {
                     results = results.child(
-                        status_page(Icon::Search, format!("No results for “{typed}”"))
-                            .description("Check the spelling, or try a larger city nearby."),
+                        status_page(
+                            Icon::Search,
+                            tr!("weather-add-no-results-title", query = typed.clone()),
+                        )
+                        .description(tr!("weather-add-no-results-body")),
                     );
                 }
                 _ => {
                     let failed = found.with(|state| state.error().map(str::to_string));
                     results = results.child(match failed {
-                        Some(code) if code == load::OFFLINE => banner(
-                            "Searching needs the internet. Check the connection, then try again.",
-                        )
-                        .title("No connection")
-                        .kind(BannerKind::Warning)
-                        .into_element(),
-                        Some(_) => {
-                            banner("The search service did not answer. Try again in a moment.")
-                                .title("Search not available")
+                        Some(code) if code == load::OFFLINE => {
+                            banner(tr!("weather-add-offline-body"))
+                                .title(tr!("weather-add-offline-title"))
                                 .kind(BannerKind::Warning)
                                 .into_element()
                         }
-                        None => status(Status::Loading("Searching…".into())).into_element(),
+                        Some(_) => banner(tr!("weather-add-failed-body"))
+                            .title(tr!("weather-add-failed-title"))
+                            .kind(BannerKind::Warning)
+                            .into_element(),
+                        None => status(Status::Loading(tr!("weather-add-searching").into()))
+                            .into_element(),
                     });
                 }
             }

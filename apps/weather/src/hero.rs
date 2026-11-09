@@ -12,14 +12,15 @@
 use bingux_ui::component::ComponentName;
 use bingux_ui::motion::use_ambient_cycle;
 use bingux_ui::prelude::*;
-use bingux_weather::codes::{self, Sky};
-use bingux_weather::{Forecast, Units, text};
+use bingux_weather::codes::{Condition, Sky};
+use bingux_weather::{Forecast, Units};
 use bytes::Bytes;
 use freya::prelude::*;
 
 use crate::format::{self, light_of, rain_outlook};
 use crate::glyph;
 use crate::sky;
+use crate::words;
 
 /// How tall the temperature is set, as a multiple of the hero style's size.
 const TEMPERATURE_SCALE: f32 = 2.5;
@@ -43,7 +44,7 @@ impl Hero {
     /// What a screen reader says for the whole card.
     fn spoken(&self) -> String {
         let place = bingux_weather::Place::new(self.name.clone(), 0.0, 0.0);
-        text::conditions(&place, &self.forecast, &self.units)
+        words::conditions(&place, &self.forecast, &self.units)
     }
 }
 
@@ -83,7 +84,10 @@ impl Component for Atmosphere {
         let layer = |depth: sky::Depth, along: f32| {
             sky::clouds(self.sky, self.light, depth).map(|svg| {
                 let (left, across) = if width > 0.0 {
-                    (-width * sky::DRIFT * along, Size::px(width * (1.0 + sky::DRIFT)))
+                    (
+                        -width * sky::DRIFT * along,
+                        Size::px(width * (1.0 + sky::DRIFT)),
+                    )
                 } else {
                     (0.0, Size::fill())
                 };
@@ -100,7 +104,11 @@ impl Component for Atmosphere {
                     *hero.write() = width;
                 }
             })
-            .child(Self::layer(sky::still(self.sky, self.light), Size::fill(), 0.0))
+            .child(Self::layer(
+                sky::still(self.sky, self.light),
+                Size::fill(),
+                0.0,
+            ))
             .maybe_child(layer(sky::Depth::Far, swing))
             .maybe_child(layer(sky::Depth::Near, 1.0 - swing))
     }
@@ -124,11 +132,11 @@ impl Component for Backdrop {
                 .width(Size::fill())
                 .height(Size::fill()),
             {
-            // Top to bottom is angle 0 in this engine.
-            LinearGradient::new()
-                .angle(0.0)
-                .stop(GradientStop::new(gradient.top, 0.0))
-                .stop(GradientStop::new(gradient.bottom, 100.0))
+                // Top to bottom is angle 0 in this engine.
+                LinearGradient::new()
+                    .angle(0.0)
+                    .stop(GradientStop::new(gradient.top, 0.0))
+                    .stop(GradientStop::new(gradient.bottom, 100.0))
             },
         );
         rect()
@@ -165,19 +173,22 @@ impl Component for Hero {
         // children between two renders of the card.
         let blank = || " ".to_string();
         let caption = match &self.here {
-            Some(_) => "My location".to_string(),
+            Some(_) => tr!("weather-hero-here"),
             None => blank(),
         };
         let range = match day {
-            Some(day) => format!(
-                "High {}, low {}",
-                format::temperature(&self.units, day.high),
-                format::temperature(&self.units, day.low)
+            Some(day) => tr!(
+                "weather-hero-range",
+                high = format::temperature(&self.units, day.high),
+                low = format::temperature(&self.units, day.low)
             ),
             None => blank(),
         };
         let feels = match current.apparent {
-            Some(apparent) => format!("Feels like {}", self.units.temperature(apparent)),
+            Some(apparent) => tr!(
+                "weather-hero-feels",
+                temperature = self.units.temperature(apparent)
+            ),
             None => blank(),
         };
         let outlook = rain_outlook(forecast, self.local).unwrap_or_else(blank);
@@ -220,7 +231,10 @@ impl Component for Hero {
                 hstack(S2)
                     .key("condition")
                     .child(glyph::view(sky, current.is_day, CONDITION_ICON))
-                    .child(on_sky(typography::HEADING).label(&tokens, codes::describe(code))),
+                    .child(
+                        on_sky(typography::HEADING)
+                            .label(&tokens, words::condition(Condition::of(code))),
+                    ),
             )
             .child(
                 on_sky(typography::BODY)

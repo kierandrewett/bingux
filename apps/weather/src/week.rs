@@ -9,13 +9,14 @@
 use bingux_ui::component::ComponentName;
 use bingux_ui::controls::focus_stop;
 use bingux_ui::prelude::*;
-use bingux_weather::codes::{self, Sky};
+use bingux_weather::codes::{Condition, Sky};
 use bingux_weather::{Day, Forecast, Units};
 use freya::prelude::*;
 
 use crate::format;
 use crate::glyph;
 use crate::sky;
+use crate::words;
 
 const ICON: f32 = 28.0;
 /// The chance of rain below which a day says nothing about it.
@@ -33,21 +34,21 @@ impl Week {
     fn detail(&self, day: &Day) -> String {
         let mut parts = vec![format::day_long(day.time, self.local)];
         if let Some(code) = day.code {
-            parts.push(codes::describe(code).to_string());
+            parts.push(words::condition(Condition::of(code)));
         }
         if let Some(chance) = day.precip_chance.filter(|c| *c >= CHANCE_SHOWN) {
-            parts.push(format!("{} chance of rain", format::percent(chance)));
+            parts.push(tr!("weather-week-chance", chance = format::percent(chance)));
         }
         if let Some(rain) = day.precipitation.filter(|rain| *rain >= 0.1) {
             parts.push(self.units.rain(rain));
         }
         if let Some(wind) = day.wind_max {
-            parts.push(format!("wind up to {}", self.units.speed(wind)));
+            parts.push(tr!("weather-week-wind", speed = self.units.speed(wind)));
         }
         if let Some(uv) = day.uv_max.filter(|uv| *uv >= 3.0) {
-            parts.push(format!("UV {}", uv.round() as i64));
+            parts.push(tr!("weather-week-uv", index = uv.round() as i64));
         }
-        parts.join(", ")
+        words::join_list(&parts)
     }
 }
 
@@ -95,10 +96,10 @@ impl Component for Week {
             let today = index == 0;
             let mut bar = range_bar(range.0, range.1)
                 .colours(stops.clone())
-                .label(format!(
-                    "Low {}, high {}",
-                    format::temperature(&units, day.low),
-                    format::temperature(&units, day.high)
+                .label(tr!(
+                    "weather-week-low-high",
+                    low = format::temperature(&units, day.low),
+                    high = format::temperature(&units, day.high)
                 ));
             if let (Some(low), Some(high)) = (day.low, day.high) {
                 bar = bar.span(low, high);
@@ -196,12 +197,12 @@ impl Component for Week {
                 lows.iter().copied().reduce(f64::min),
                 lows.iter().copied().reduce(f64::max),
             ) {
-                (Some(high_low), Some(high_high), Some(low_low), Some(low_high)) => format!(
-                    "Highs from {} to {}, lows from {} to {}",
-                    units.temperature(high_low),
-                    units.temperature(high_high),
-                    units.temperature(low_low),
-                    units.temperature(low_high)
+                (Some(high_low), Some(high_high), Some(low_low), Some(low_high)) => tr!(
+                    "weather-week-highs-lows",
+                    high_low = units.temperature(high_low),
+                    high_high = units.temperature(high_high),
+                    low_low = units.temperature(low_low),
+                    low_high = units.temperature(low_high)
                 ),
                 _ => String::new(),
             }
@@ -209,7 +210,7 @@ impl Component for Week {
         let line = selected.map_or(summary, |index| self.detail(&days[index]));
         let stop = focus_stop(
             rect().width(Size::fill()).child(rows),
-            "Daily forecast",
+            &tr!("weather-week-title"),
             AccessibilityRole::List,
             count > 0,
             Radius::Control,

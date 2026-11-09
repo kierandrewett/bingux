@@ -166,7 +166,13 @@ pub const DRIFT: f32 = 0.08;
 /// How a soft shape fades from its middle to its rim: (distance from the
 /// middle as a part of the radius, opacity as a part of the peak). The same
 /// stops are in the SVG's gradient and in the test that measures it.
-const FALLOFF: [(f32, f32); 5] = [(0.0, 1.0), (0.35, 0.72), (0.6, 0.32), (0.85, 0.07), (1.0, 0.0)];
+const FALLOFF: [(f32, f32); 5] = [
+    (0.0, 1.0),
+    (0.35, 0.72),
+    (0.6, 0.32),
+    (0.85, 0.07),
+    (1.0, 0.0),
+];
 
 /// The opacity of a soft shape at `radius` (0 at the middle, 1 at the rim), as
 /// a part of its peak.
@@ -218,7 +224,13 @@ struct Bank {
 }
 
 const fn bank(x: f32, y: f32, rx: f32, ry: f32, depth: Depth) -> Bank {
-    Bank { x, y, rx, ry, depth }
+    Bank {
+        x,
+        y,
+        rx,
+        ry,
+        depth,
+    }
 }
 
 /// Where a cloud may be: in the corners and along the top and bottom edges,
@@ -315,14 +327,16 @@ fn blobs(sky: Sky, light: Light) -> Vec<Blob> {
     banks(sky)
         .iter()
         .flat_map(|bank| {
-            LOBES.iter().map(move |&(dx, dy, width, height, weight)| Blob {
-                x: bank.x + dx * bank.rx,
-                y: bank.y + dy * bank.ry,
-                rx: bank.rx * width,
-                ry: bank.ry * height,
-                opacity: opacity * weight,
-                depth: bank.depth,
-            })
+            LOBES
+                .iter()
+                .map(move |&(dx, dy, width, height, weight)| Blob {
+                    x: bank.x + dx * bank.rx,
+                    y: bank.y + dy * bank.ry,
+                    rx: bank.rx * width,
+                    ry: bank.ry * height,
+                    opacity: opacity * weight,
+                    depth: bank.depth,
+                })
         })
         .collect()
 }

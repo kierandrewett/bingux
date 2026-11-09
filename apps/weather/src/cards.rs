@@ -10,7 +10,7 @@ use bingux_ui::charts::{SeriesColour, bar_chart, line_chart, sparkline};
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use bingux_weather::astro::{self, Moon};
-use bingux_weather::time::{HOUR, day_month, unix_now};
+use bingux_weather::time::{HOUR, unix_now};
 use bingux_weather::{AirQuality, Forecast, Hour, Units, text};
 use freya::prelude::*;
 
@@ -18,6 +18,7 @@ use crate::format;
 use crate::glyph;
 use crate::hourly::HOURS;
 use crate::sky;
+use crate::words::{self, ClockText};
 
 /// How many hours before now the temperature chart starts. The forecast keeps
 /// that many (`bingux-weather`'s `PAST_HOURS` in the request).
@@ -120,23 +121,23 @@ impl Details {
         let uv = hour.and_then(|hour| hour.uv).unwrap_or(0.0);
         card(
             tokens,
-            "UV index",
+            &tr!("weather-card-uv"),
             vec![
                 figure(tokens, format!("{}", uv.round() as i64)),
                 typography::HEADING
-                    .label(tokens, text::uv_category(uv))
+                    .label(tokens, words::uv_category(text::uv_level(uv)))
                     .max_lines(1)
                     .into(),
                 range_bar(0.0, 11.0)
                     .colours(sky::uv_stops())
                     .marker(uv.min(11.0))
-                    .label(format!(
-                        "UV index {}, {}",
-                        uv.round() as i64,
-                        text::uv_category(uv).to_lowercase()
+                    .label(tr!(
+                        "weather-card-uv-label",
+                        index = uv.round() as i64,
+                        level = words::uv_inline(text::uv_level(uv))
                     ))
                     .into(),
-                note(tokens, text::uv_advice(uv)),
+                note(tokens, words::uv_advice(text::uv_level(uv))),
             ],
         )
     }
@@ -154,11 +155,13 @@ impl Details {
             .centre(shown, self.units.speed_unit())
             .label(match current.wind_direction {
                 Some(degrees) => {
-                    let mut point = text::cardinal_long(degrees);
-                    point[..1].make_ascii_uppercase();
-                    format!("{point} wind, {}", self.units.speed(speed))
+                    tr!(
+                        "weather-card-wind-with-direction",
+                        direction = words::point_title(text::point(degrees)),
+                        speed = self.units.speed(speed)
+                    )
                 }
-                None => format!("Wind, {}", self.units.speed(speed)),
+                None => tr!("weather-card-wind-speed", speed = self.units.speed(speed)),
             });
         body.push(
             rect()
@@ -173,15 +176,15 @@ impl Details {
                     tokens,
                     match current.wind_gusts {
                         Some(gusts) if gusts > speed + 5.0 => {
-                            format!("Gusts up to {}", self.units.speed(gusts))
+                            tr!("weather-card-gusts", speed = self.units.speed(gusts))
                         }
-                        _ => text::wind_force(speed).to_string(),
+                        _ => words::wind_force(text::wind_force(speed)),
                     },
                 )
                 .max_lines(1)
                 .into(),
         );
-        card(tokens, "Wind", body)
+        card(tokens, &tr!("weather-card-wind"), body)
     }
 
     fn sun(&self, tokens: &Tokens) -> Element {
@@ -194,17 +197,21 @@ impl Details {
         };
         let mut arc = day_arc(progress);
         if let (Some(rise), Some(set)) = (rise, set) {
-            arc = arc.times(clock.time(rise), clock.time(set)).label(format!(
-                "Sunrise {}, sunset {}",
-                clock.time(rise),
-                clock.time(set)
+            arc = arc.times(clock.time(rise), clock.time(set)).label(tr!(
+                "weather-card-sun-range",
+                rise = clock.time(rise),
+                set = clock.time(set)
             ));
         }
         let headline = match (rise, set) {
-            (Some(rise), Some(_)) if self.local < rise => format!("Sunrise {}", clock.time(rise)),
-            (Some(_), Some(set)) if self.local < set => format!("Sunset {}", clock.time(set)),
-            (Some(rise), Some(_)) => format!("Sunrise {} tomorrow", clock.time(rise)),
-            _ => "No sunrise or sunset".to_string(),
+            (Some(rise), Some(_)) if self.local < rise => {
+                tr!("weather-card-sunrise-next", time = clock.time(rise))
+            }
+            (Some(_), Some(set)) if self.local < set => {
+                tr!("weather-card-sunset-next", time = clock.time(set))
+            }
+            (Some(rise), Some(_)) => tr!("weather-card-sunrise-tomorrow", time = clock.time(rise)),
+            _ => tr!("weather-card-no-sun"),
         };
         let headline: Element = typography::HEADING
             .label(tokens, headline)
@@ -214,10 +221,13 @@ impl Details {
         if let (Some(rise), Some(set)) = (rise, set) {
             body.push(note(
                 tokens,
-                format!("Daylight {}", astro::day_length(rise, set)),
+                tr!(
+                    "weather-card-daylight",
+                    length = astro::day_length(rise, set)
+                ),
             ));
         }
-        card(tokens, "Sun", body)
+        card(tokens, &tr!("weather-card-sun"), body)
     }
 
     fn moon(&self, tokens: &Tokens) -> Element {
@@ -226,28 +236,29 @@ impl Details {
         let full = Moon::next_full(unix) + i64::from(self.forecast.utc_offset);
         let new = Moon::next_new(unix) + i64::from(self.forecast.utc_offset);
         let (word, at) = if moon.phase < 0.5 {
-            ("Full moon", full)
+            (tr!("weather-card-full-moon"), full)
         } else {
-            ("New moon", new)
+            (tr!("weather-card-new-moon"), new)
         };
         card(
             tokens,
-            "Moon",
+            &tr!("weather-card-moon"),
             vec![
                 rect()
                     .tw(tokens, &[w_full(), items(Align::Center)])
                     .child(glyph::moon_view(moon.phase, MOON_SIZE))
                     .into(),
                 typography::HEADING
-                    .label(tokens, moon.name())
+                    .label(tokens, words::moon_phase(moon.kind()))
                     .max_lines(1)
                     .into(),
                 note(
                     tokens,
-                    format!(
-                        "{}% lit. {word} on {}.",
-                        (moon.illumination * 100.0).round() as i64,
-                        day_month(at)
+                    tr!(
+                        "weather-moon-note",
+                        percent = (moon.illumination * 100.0).round() as i64,
+                        phase = word,
+                        date = words::day_month(at)
                     ),
                 ),
             ],
@@ -284,12 +295,12 @@ impl Details {
         if let Some(dew) = dew {
             body.push(say(
                 tokens,
-                format!(
-                    "The dew point is {} right now.",
-                    self.units.temperature(dew)
+                tr!(
+                    "weather-card-dew-point",
+                    temperature = self.units.temperature(dew)
                 ),
             ));
-            body.push(note(tokens, text::dew_comfort(dew)));
+            body.push(note(tokens, words::dew_comfort(text::dew_comfort(dew))));
         }
         card(tokens, "Humidity", body)
     }
@@ -301,7 +312,7 @@ impl Details {
             metres.map_or_else(|| "–".to_string(), |metres| self.units.distance(metres)),
         )];
         if let Some(metres) = metres {
-            body.push(say(tokens, text::visibility_note(metres)));
+            body.push(say(tokens, words::visibility(text::visibility(metres))));
         }
         card(tokens, "Visibility", body)
     }
@@ -314,7 +325,7 @@ impl Details {
             pressure.map_or_else(|| "–".to_string(), |hpa| units.pressure(hpa)),
         )];
         if let Some(trend) = text::pressure_trend(&self.forecast, self.local) {
-            body.push(say(tokens, trend));
+            body.push(say(tokens, words::pressure_trend(trend)));
         }
         // The pressure round now: three hours back and a day ahead.
         let values: Vec<f64> = self
@@ -345,20 +356,20 @@ impl Details {
                 .child(figure(tokens, format!("{}", aqi.round() as i64)))
                 .child(
                     typography::HEADING
-                        .label(tokens, text::aqi_category(aqi))
+                        .label(tokens, words::aqi_category(text::aqi_band(aqi)))
                         .max_lines(1),
                 )
                 .into(),
             range_bar(0.0, 300.0)
                 .colours(sky::aqi_stops())
                 .marker(aqi.min(300.0))
-                .label(format!(
-                    "Air quality index {}, {}",
-                    aqi.round() as i64,
-                    text::aqi_category(aqi).to_lowercase()
+                .label(tr!(
+                    "weather-card-aqi-label",
+                    index = aqi.round() as i64,
+                    level = words::aqi_inline(text::aqi_band(aqi))
                 ))
                 .into(),
-            say(tokens, text::aqi_advice(aqi)),
+            say(tokens, words::aqi_advice(text::aqi_band(aqi))),
         ];
         let pollutants = [
             ("PM2.5", air.pm2_5),

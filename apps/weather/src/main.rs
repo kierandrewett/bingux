@@ -22,6 +22,7 @@ mod sky;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod week;
+mod words;
 
 use bingux_ui::prelude::Application;
 
@@ -33,6 +34,7 @@ that, the network address, and for the cities that were added. The data is\n\
 Open-Meteo's (https://open-meteo.com), licensed CC BY 4.0.\n";
 
 fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("weather"));
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
         let dir = std::env::args()
@@ -50,13 +52,24 @@ fn main() {
         return;
     }
     Application::new("bingux-weather")
-        .title("Weather")
+        .title(bingux_ui::prelude::tr!("weather-title"))
         .size(980.0, 760.0)
         .borderless()
         .about(bingux_ui::app_info!(
-            description = "Forecasts for where you are and the cities you add.",
+            description = bingux_ui::prelude::tr!("weather-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
         .run(|| app::App);
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "weather")
+            .assert_clean();
+    }
 }

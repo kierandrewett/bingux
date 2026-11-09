@@ -7,7 +7,7 @@ use std::time::Duration;
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use bingux_weather::notices::{self, Severity};
-use bingux_weather::time::{ago, unix_now};
+use bingux_weather::time::{self, unix_now};
 use bingux_weather::{Failure, Loaded, Place, Units};
 use freya::prelude::*;
 
@@ -15,6 +15,7 @@ use crate::cards::{Details, Trends, section};
 use crate::hero::Hero;
 use crate::hourly::HourStrip;
 use crate::week::Week;
+use crate::words;
 
 /// The most notices shown above the hero.
 const NOTICES_SHOWN: usize = 3;
@@ -61,9 +62,9 @@ impl Component for Page {
         match &self.load {
             Load::Loading | Load::Locating => {
                 let words = if matches!(self.load, Load::Locating) {
-                    "Finding your location…"
+                    tr!("weather-finding-location")
                 } else {
-                    "Loading the forecast…"
+                    tr!("weather-loading")
                 };
                 return rect()
                     .component("Page")
@@ -78,16 +79,18 @@ impl Component for Page {
             }
             Load::Failed(failure) => {
                 let page = match failure {
-                    Failure::Offline => status_page(Icon::NetworkOffline, "No connection")
-                        .description(
-                            "Weather needs the internet. Check the connection, then try again.",
-                        ),
-                    Failure::Service => status_page(Icon::NetworkError, "Forecast not available")
-                        .description("The forecast service did not answer. Try again in a moment."),
+                    Failure::Offline => {
+                        status_page(Icon::NetworkOffline, tr!("weather-no-connection"))
+                            .description(tr!("weather-offline-description"))
+                    }
+                    Failure::Service => {
+                        status_page(Icon::NetworkError, tr!("weather-service-title"))
+                            .description(tr!("weather-service-description"))
+                    }
                 };
                 let retry = self.retry.clone();
                 return page
-                    .action("Try again", move |_| retry.call(()))
+                    .action(tr!("weather-stale-retry"), move |_| retry.call(()))
                     .into_element();
             }
             Load::Ready(_) => {}
@@ -104,26 +107,27 @@ impl Component for Page {
             let retry = self.retry.clone();
             column = column.child(
                 banner(match failure {
-                    Failure::Offline => {
-                        "Showing the last forecast. Connect to the internet to update it."
-                    }
-                    Failure::Service => "Showing the last forecast. The service did not answer.",
+                    Failure::Offline => tr!("weather-stale-offline"),
+                    Failure::Service => tr!("weather-stale-service"),
                 })
-                .title(format!("Updated {}", ago(now - forecast.fetched_at)))
+                .title(tr!(
+                    "weather-stale-title",
+                    ago = words::ago(time::ago(now - forecast.fetched_at))
+                ))
                 .kind(BannerKind::Warning)
-                .action("Try again", move |_| retry.call(())),
+                .action(tr!("weather-stale-retry"), move |_| retry.call(())),
             );
         }
-        for notice in notices::notices(forecast, &self.units, local)
+        for notice in notices::notices(forecast, local)
             .into_iter()
             .take(NOTICES_SHOWN)
         {
-            column = column.child(banner(notice.detail).title(notice.title).kind(
-                match notice.severity {
-                    Severity::Warning => BannerKind::Warning,
-                    Severity::Advisory => BannerKind::Info,
-                },
-            ));
+            let title = words::notice_title(notice.kind);
+            let detail = words::notice_detail(notice.kind, notice.span, &self.units, local);
+            column = column.child(banner(detail).title(title).kind(match notice.severity {
+                Severity::Warning => BannerKind::Warning,
+                Severity::Advisory => BannerKind::Info,
+            }));
         }
 
         column = column
@@ -136,7 +140,7 @@ impl Component for Page {
             })
             .child(section(
                 &tokens,
-                "Hourly forecast",
+                &tr!("weather-hourly-forecast"),
                 vec![
                     HourStrip {
                         forecast: forecast.clone(),
@@ -170,15 +174,17 @@ impl Component for Page {
             });
 
         let mut about = Group::new(None::<String>)
-            .row(row("Updated").value(ago(now - forecast.fetched_at)))
-            .row(row("Place").value(self.place.coordinates()));
+            .row(
+                row(tr!("weather-updated")).value(words::ago(time::ago(now - forecast.fetched_at))),
+            )
+            .row(row(tr!("weather-place")).value(self.place.coordinates()));
         if let Some(how) = &self.here {
-            about = about.row(row("Position").value(how.clone()));
+            about = about.row(row(tr!("weather-position")).value(how.clone()));
         }
         column = column.child(
             about.row(
-                row("Weather data by Open-Meteo.com")
-                    .subtitle("Licensed CC BY 4.0")
+                row(tr!("weather-data-credit"))
+                    .subtitle(tr!("weather-data-licence"))
                     .navigates()
                     .on_press(|_| open_data_source()),
             ),

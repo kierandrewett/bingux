@@ -57,38 +57,75 @@ impl Sky {
     }
 }
 
-/// The condition in words: `Light rain`. Sentence case, for a line of its own.
-pub fn describe(code: u8) -> &'static str {
-    match code {
-        0 => "Clear",
-        1 => "Mostly clear",
-        2 => "Partly cloudy",
-        3 => "Overcast",
-        45 => "Fog",
-        48 => "Freezing fog",
-        51 => "Light drizzle",
-        53 => "Drizzle",
-        55 => "Heavy drizzle",
-        56 => "Light freezing drizzle",
-        57 => "Freezing drizzle",
-        61 => "Light rain",
-        63 => "Rain",
-        65 => "Heavy rain",
-        66 => "Light freezing rain",
-        67 => "Freezing rain",
-        71 => "Light snow",
-        73 => "Snow",
-        75 => "Heavy snow",
-        77 => "Snow grains",
-        80 => "Light showers",
-        81 => "Showers",
-        82 => "Heavy showers",
-        85 => "Light snow showers",
-        86 => "Snow showers",
-        95 => "Thunderstorm",
-        96 => "Thunderstorm with hail",
-        99 => "Severe thunderstorm with hail",
-        _ => "Cloudy",
+/// The condition a WMO code names, for its words in the app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Condition {
+    Clear,
+    MostlyClear,
+    PartlyCloudy,
+    Overcast,
+    Fog,
+    FreezingFog,
+    LightDrizzle,
+    Drizzle,
+    HeavyDrizzle,
+    LightFreezingDrizzle,
+    FreezingDrizzle,
+    LightRain,
+    Rain,
+    HeavyRain,
+    LightFreezingRain,
+    FreezingRain,
+    LightSnow,
+    Snow,
+    HeavySnow,
+    SnowGrains,
+    LightShowers,
+    Showers,
+    HeavyShowers,
+    LightSnowShowers,
+    SnowShowers,
+    Thunderstorm,
+    ThunderstormHail,
+    SevereThunderstormHail,
+    /// Any code not listed.
+    Cloudy,
+}
+
+impl Condition {
+    /// The condition for a WMO weather code.
+    pub fn of(code: u8) -> Self {
+        match code {
+            0 => Self::Clear,
+            1 => Self::MostlyClear,
+            2 => Self::PartlyCloudy,
+            3 => Self::Overcast,
+            45 => Self::Fog,
+            48 => Self::FreezingFog,
+            51 => Self::LightDrizzle,
+            53 => Self::Drizzle,
+            55 => Self::HeavyDrizzle,
+            56 => Self::LightFreezingDrizzle,
+            57 => Self::FreezingDrizzle,
+            61 => Self::LightRain,
+            63 => Self::Rain,
+            65 => Self::HeavyRain,
+            66 => Self::LightFreezingRain,
+            67 => Self::FreezingRain,
+            71 => Self::LightSnow,
+            73 => Self::Snow,
+            75 => Self::HeavySnow,
+            77 => Self::SnowGrains,
+            80 => Self::LightShowers,
+            81 => Self::Showers,
+            82 => Self::HeavyShowers,
+            85 => Self::LightSnowShowers,
+            86 => Self::SnowShowers,
+            95 => Self::Thunderstorm,
+            96 => Self::ThunderstormHail,
+            99 => Self::SevereThunderstormHail,
+            _ => Self::Cloudy,
+        }
     }
 }
 
@@ -113,7 +150,7 @@ mod tests {
             0, 1, 2, 3, 45, 48, 51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 71, 73, 75, 77, 80, 81, 82,
             85, 86, 95, 96, 99,
         ] {
-            assert_ne!(describe(code), "Cloudy", "code {code}");
+            assert_ne!(Condition::of(code), Condition::Cloudy, "code {code}");
         }
     }
 }

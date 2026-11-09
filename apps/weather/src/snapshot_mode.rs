@@ -19,8 +19,8 @@
 use std::time::Duration;
 
 use bingux_ui::prelude::*;
-use bingux_ui::style::*;
 use bingux_ui::snapshot::Snapshot;
+use bingux_ui::style::*;
 use freya::prelude::*;
 
 use crate::app;
@@ -133,7 +133,10 @@ impl Component for Cell {
                     rect()
                         .width(Size::px(self.size.0))
                         .height(Size::px(self.size.1))
-                        .tw(&tokens, &[flex_col(), items(Align::Center), justify(Align::Center)])
+                        .tw(
+                            &tokens,
+                            &[flex_col(), items(Align::Center), justify(Align::Center)],
+                        )
                         .child(on_sky(typography::TITLE).label(&tokens, "Tokyo"))
                         .child(on_sky(typography::HERO).label_scaled(&tokens, "9°", 1.0))
                         .child(on_sky(typography::HEADING).label(&tokens, self.name))
@@ -156,7 +159,14 @@ impl Component for Sheet {
         let tokens = provide_tokens();
         let mut grid = rect().tw(
             &tokens,
-            &[w_full(), h_full(), bg(Paint::Bg), flex_col(), gap(S2), p(S2)],
+            &[
+                w_full(),
+                h_full(),
+                bg(Paint::Bg),
+                flex_col(),
+                gap(S2),
+                p(S2),
+            ],
         );
         for row in SKIES.chunks(COLUMNS) {
             let mut line = rect().tw(&tokens, &[flex_row(), gap(S2)]);

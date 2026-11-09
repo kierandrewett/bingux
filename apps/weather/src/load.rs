@@ -3,6 +3,7 @@
 //! is a plain function of its key, for `bingux_ui::task::use_resource`.
 
 use bingux_ui::location::{Fix, LocateError, Locator, Source};
+use bingux_ui::prelude::tr;
 use bingux_weather::time::unix_now;
 use bingux_weather::{Failure, Here, Loaded, Place, Settings, Store, units};
 
@@ -126,18 +127,19 @@ pub fn forget_network_here() {
 }
 
 fn here_of(fix: &Fix) -> Here {
-    let detail: Vec<&str> = [fix.region.as_deref(), fix.country.as_deref()]
+    let detail: Vec<String> = [fix.region.as_deref(), fix.country.as_deref()]
         .into_iter()
         .flatten()
+        .map(str::to_string)
         .collect();
     let mut place = Place::new(
         fix.name
             .clone()
-            .unwrap_or_else(|| "My location".to_string()),
+            .unwrap_or_else(|| tr!("weather-my-location")),
         fix.latitude,
         fix.longitude,
     );
-    place.detail = detail.join(", ");
+    place.detail = detail;
     place.timezone = fix.timezone.clone();
     Here {
         place,

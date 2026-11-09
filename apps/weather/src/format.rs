@@ -2,10 +2,13 @@
 //! starts and stops, what a day is called, and how long a stretch of minutes
 //! reads.
 
-use bingux_weather::time::{day_of, weekday_name, weekday_short};
+use bingux_weather::time::{day_of, weekday};
 use bingux_weather::{Forecast, Units};
 
+use bingux_ui::prelude::tr;
+
 use crate::sky::Light;
+use crate::words;
 
 /// How near the sun's rising or setting is still twilight, in seconds.
 const TWILIGHT: i64 = 40 * 60;
@@ -29,9 +32,13 @@ pub fn light_of(forecast: &Forecast, local: i64, is_day: bool) -> Light {
 pub fn duration(minutes: i64) -> String {
     let (hours, minutes) = (minutes / 60, minutes % 60);
     match (hours, minutes) {
-        (0, minutes) => format!("{minutes} min"),
-        (hours, 0) => format!("{hours} h"),
-        (hours, minutes) => format!("{hours} h {minutes} min"),
+        (0, minutes) => tr!("weather-duration-minutes", minutes = minutes),
+        (hours, 0) => tr!("weather-duration-hours", hours = hours),
+        (hours, minutes) => tr!(
+            "weather-duration-hours-minutes",
+            hours = hours,
+            minutes = minutes
+        ),
     }
 }
 
@@ -48,9 +55,9 @@ pub fn rain_outlook(forecast: &Forecast, local: i64) -> Option<String> {
         .collect();
     let now_wet = steps.first().map(|step| step.1)?;
     let word = if forecast.current.temperature.unwrap_or(10.0) <= 0.5 {
-        "Snow"
+        tr!("weather-word-snow")
     } else {
-        "Rain"
+        tr!("weather-word-rain")
     };
     let after = |wet: bool| {
         steps
@@ -60,32 +67,43 @@ pub fn rain_outlook(forecast: &Forecast, local: i64) -> Option<String> {
     };
     if now_wet {
         match after(false) {
-            Some(minutes) => Some(format!("{word} stops in {}", duration(minutes))),
-            None => Some(format!(
-                "{word} for the next {}",
-                duration(steps.len() as i64 * 15)
+            Some(minutes) => Some(tr!(
+                "weather-outlook-stops",
+                word = word,
+                duration = duration(minutes)
+            )),
+            None => Some(tr!(
+                "weather-outlook-for-next",
+                word = word,
+                duration = duration(steps.len() as i64 * 15)
             )),
         }
     } else {
-        after(true).map(|minutes| format!("{word} starts in {}", duration(minutes)))
+        after(true).map(|minutes| {
+            tr!(
+                "weather-outlook-starts",
+                word = word,
+                duration = duration(minutes)
+            )
+        })
     }
 }
 
 /// `Today` for the day that holds `now`, else the weekday: `Tue`.
 pub fn day_short(day: i64, now: i64) -> String {
     if day_of(day) == day_of(now) {
-        "Today".to_string()
+        tr!("weather-today")
     } else {
-        weekday_short(day).to_string()
+        words::weekday_short(weekday(day))
     }
 }
 
 /// `Today`, `Tomorrow`, or the weekday in full, for a spoken label.
 pub fn day_long(day: i64, now: i64) -> String {
     match day_of(day) - day_of(now) {
-        0 => "Today".to_string(),
-        1 => "Tomorrow".to_string(),
-        _ => weekday_name(day).to_string(),
+        0 => tr!("weather-today"),
+        1 => tr!("weather-tomorrow"),
+        _ => words::weekday_name(weekday(day)),
     }
 }
 
@@ -105,6 +123,12 @@ mod tests {
     use bingux_weather::Minute;
     use bingux_weather::time::parse_local;
 
+    /// The app's messages, for the `tr!` the formatters call.
+    fn catalogue() {
+        static ONCE: std::sync::Once = std::sync::Once::new();
+        ONCE.call_once(|| bingux_ui::i18n::register(bingux_ui::catalogue!("weather")));
+    }
+
     fn forecast(steps: &[(&str, f64)]) -> Forecast {
         Forecast {
             minutely: steps
@@ -120,6 +144,7 @@ mod tests {
 
     #[test]
     fn durations_read_plainly() {
+        catalogue();
         assert_eq!(duration(20), "20 min");
         assert_eq!(duration(60), "1 h");
         assert_eq!(duration(75), "1 h 15 min");
@@ -127,6 +152,7 @@ mod tests {
 
     #[test]
     fn rain_is_announced_before_and_after() {
+        catalogue();
         let now = parse_local("2026-11-09T12:05").unwrap();
         let coming = forecast(&[
             ("2026-11-09T12:00", 0.0),
@@ -153,6 +179,7 @@ mod tests {
 
     #[test]
     fn days_are_named_from_today() {
+        catalogue();
         let now = parse_local("2026-11-09T12:00").unwrap();
         let tomorrow = parse_local("2026-11-10").unwrap();
         assert_eq!(day_short(parse_local("2026-11-09").unwrap(), now), "Today");

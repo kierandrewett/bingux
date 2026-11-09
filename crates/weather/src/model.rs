@@ -7,13 +7,33 @@ use serde::{Deserialize, Serialize};
 
 use crate::time::{DAY, HOUR};
 
+/// Reads the detail as parts, or as the one joined string of older saves.
+fn detail_parts<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Saved {
+        Joined(String),
+        Parts(Vec<String>),
+    }
+    Ok(match Saved::deserialize(deserializer)? {
+        Saved::Joined(text) if text.is_empty() => Vec::new(),
+        Saved::Joined(text) => vec![text],
+        Saved::Parts(parts) => parts,
+    })
+}
+
 /// A place to ask about.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Place {
     pub name: String,
     /// The region and country, for telling two cities of one name apart.
-    #[serde(default)]
-    pub detail: String,
+    /// Parts, not a joined line: the app joins them in its own language. A
+    /// place saved before this was a single string still loads.
+    #[serde(default, deserialize_with = "detail_parts")]
+    pub detail: Vec<String>,
     pub latitude: f64,
     pub longitude: f64,
     #[serde(default)]
@@ -24,7 +44,7 @@ impl Place {
     pub fn new(name: impl Into<String>, latitude: f64, longitude: f64) -> Self {
         Self {
             name: name.into(),
-            detail: String::new(),
+            detail: Vec::new(),
             latitude,
             longitude,
             timezone: None,
@@ -35,15 +55,6 @@ impl Place {
     /// same city found twice is one place.
     pub fn key(&self) -> String {
         format!("{:.2},{:.2}", self.latitude, self.longitude)
-    }
-
-    /// `Hammersmith, England, United Kingdom` for a long line, or just the name.
-    pub fn full_name(&self) -> String {
-        if self.detail.is_empty() {
-            self.name.clone()
-        } else {
-            format!("{}, {}", self.name, self.detail)
-        }
     }
 
     /// `51.51° N, 0.13° W`.

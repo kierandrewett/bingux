@@ -9,13 +9,14 @@
 use bingux_ui::component::ComponentName;
 use bingux_ui::controls::focus_stop;
 use bingux_ui::prelude::*;
-use bingux_weather::codes::{self, Sky};
+use bingux_weather::codes::{Condition, Sky};
 use bingux_weather::time::HOUR;
 use bingux_weather::{Forecast, Hour, Units, text};
 use freya::prelude::*;
 
 use crate::format;
 use crate::glyph;
+use crate::words::{self, ClockText};
 
 /// How many hours the strip shows, the current one included.
 pub const HOURS: usize = 25;
@@ -68,31 +69,40 @@ impl HourStrip {
     fn detail(&self, hours: &[Hour], tile: Tile) -> String {
         let clock = self.units.clock;
         match tile {
-            Tile::Sun { rise, at } => format!(
-                "{} at {}",
-                if rise { "Sunrise" } else { "Sunset" },
-                clock.time(at)
-            ),
+            Tile::Sun { rise, at } => {
+                let time = clock.time(at);
+                if rise {
+                    tr!("weather-hourly-sunrise", time = time)
+                } else {
+                    tr!("weather-hourly-sunset", time = time)
+                }
+            }
             Tile::Hour(index) => {
                 let hour = &hours[index];
                 let mut parts = vec![clock.time(hour.time)];
                 if let Some(code) = hour.code {
-                    parts.push(codes::describe(code).to_string());
+                    parts.push(words::condition(Condition::of(code)));
                 }
                 if let Some(temperature) = hour.temperature {
                     parts.push(self.units.temperature(temperature));
                 }
                 if let Some(chance) = hour.precip_chance.filter(|c| *c >= CHANCE_SHOWN) {
-                    parts.push(format!("{} chance of rain", format::percent(chance)));
+                    parts.push(tr!(
+                        "weather-hourly-chance",
+                        chance = format::percent(chance)
+                    ));
                 }
                 if let Some(speed) = hour.wind_speed {
-                    let from = hour
-                        .wind_direction
-                        .map(|degrees| format!(" {}", text::cardinal(degrees)))
-                        .unwrap_or_default();
-                    parts.push(format!("Wind {}{from}", self.units.speed(speed)));
+                    parts.push(match hour.wind_direction {
+                        Some(degrees) => tr!(
+                            "weather-hourly-wind-from",
+                            speed = self.units.speed(speed),
+                            point = words::point_short(text::point(degrees))
+                        ),
+                        None => tr!("weather-hourly-wind", speed = self.units.speed(speed)),
+                    });
                 }
-                parts.join(", ")
+                words::join_list(&parts)
             }
         }
     }
@@ -103,10 +113,10 @@ impl HourStrip {
         let low = temperatures.iter().copied().reduce(f64::min);
         let high = temperatures.iter().copied().reduce(f64::max);
         match (low, high) {
-            (Some(low), Some(high)) => format!(
-                "Next 24 hours: low {}, high {}.",
-                self.units.temperature(low),
-                self.units.temperature(high)
+            (Some(low), Some(high)) => tr!(
+                "weather-hourly-range",
+                low = self.units.temperature(low),
+                high = self.units.temperature(high)
             ),
             _ => String::new(),
         }
@@ -188,7 +198,7 @@ impl Component for HourStrip {
                             .filter(|chance| *chance >= CHANCE_SHOWN && sky.is_wet())
                             .map(format::percent);
                         let label = if index == 0 {
-                            "Now".to_string()
+                            tr!("weather-hourly-now")
                         } else {
                             units.clock.hour(hour.time)
                         };
@@ -203,7 +213,11 @@ impl Component for HourStrip {
                         units.clock.time(at),
                         glyph::view(Sky::Clear, true, TILE_ICON),
                         None,
-                        if rise { "Sunrise" } else { "Sunset" }.to_string(),
+                        if rise {
+                            tr!("weather-hourly-sunrise-short")
+                        } else {
+                            tr!("weather-hourly-sunset-short")
+                        },
                     ),
                 };
             let top_style = if index == 0 {
@@ -268,7 +282,7 @@ impl Component for HourStrip {
             .child(row);
         let stop = focus_stop(
             rect().width(Size::fill()).child(strip),
-            "Hourly forecast",
+            &tr!("weather-hourly-title"),
             AccessibilityRole::List,
             count > 0,
             Radius::Control,

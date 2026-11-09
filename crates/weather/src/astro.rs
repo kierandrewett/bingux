@@ -7,6 +7,19 @@ const SYNODIC: f64 = 29.530_588_853;
 /// A new moon: 2000-01-06 18:14 UTC.
 const NEW_MOON: f64 = 947_182_440.0;
 
+/// The eight named phases of the moon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum MoonPhase {
+    New,
+    WaxingCrescent,
+    FirstQuarter,
+    WaxingGibbous,
+    Full,
+    WaningGibbous,
+    LastQuarter,
+    WaningCrescent,
+}
+
 /// The moon at one instant.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Moon {
@@ -31,17 +44,17 @@ impl Moon {
         }
     }
 
-    /// `Waxing gibbous`.
-    pub fn name(&self) -> &'static str {
+    /// The phase name, for the app's words: `WaxingGibbous`.
+    pub fn kind(&self) -> MoonPhase {
         match ((self.phase * 8.0) + 0.5).floor() as u32 % 8 {
-            0 => "New moon",
-            1 => "Waxing crescent",
-            2 => "First quarter",
-            3 => "Waxing gibbous",
-            4 => "Full moon",
-            5 => "Waning gibbous",
-            6 => "Last quarter",
-            _ => "Waning crescent",
+            0 => MoonPhase::New,
+            1 => MoonPhase::WaxingCrescent,
+            2 => MoonPhase::FirstQuarter,
+            3 => MoonPhase::WaxingGibbous,
+            4 => MoonPhase::Full,
+            5 => MoonPhase::WaningGibbous,
+            6 => MoonPhase::LastQuarter,
+            _ => MoonPhase::WaningCrescent,
         }
     }
 
@@ -96,10 +109,10 @@ mod tests {
         // A full moon was on 2024-12-15 (09:02 UTC); a new moon on 2025-01-29.
         let full = Moon::at(parse_local("2024-12-15T09:00").unwrap());
         assert!(full.illumination > 0.98, "{}", full.illumination);
-        assert_eq!(full.name(), "Full moon");
+        assert_eq!(full.kind(), MoonPhase::Full);
         let new = Moon::at(parse_local("2025-01-29T12:36").unwrap());
         assert!(new.illumination < 0.02, "{}", new.illumination);
-        assert_eq!(new.name(), "New moon");
+        assert_eq!(new.kind(), MoonPhase::New);
         let waxing = Moon::at(parse_local("2024-12-08T00:00").unwrap());
         assert!(waxing.is_waxing());
     }
