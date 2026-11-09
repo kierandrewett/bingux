@@ -18,6 +18,7 @@ use crate::ui::{
     Group, Overlays, PageHead, Row, Status, caption, choice_row, focus_stop, level_row,
     page_column, row, status, switch_row, use_overlays, use_tokens,
 };
+use bingux_ui::prelude::{i18n_id, tr};
 use bingux_ui::style::*;
 
 const MOUSE: &str = "org.gnome.desktop.peripherals.mouse";
@@ -67,11 +68,9 @@ fn get_bool(schema: &str, key: &str) -> Result<bool, CommandError> {
 
 fn get_speed(schema: &str) -> Result<f64, CommandError> {
     let raw = system::gsettings_get(schema, "speed")?;
-    raw.trim().parse::<f64>().map_err(|_| {
-        CommandError(
-            "Could not read the pointer speed. Restart Settings and try again.".to_string(),
-        )
-    })
+    raw.trim()
+        .parse::<f64>()
+        .map_err(|_| CommandError(tr!("settings-mouse-speed-read-error")))
 }
 
 fn get_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
@@ -81,9 +80,7 @@ fn get_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
         .and_then(|word| word.parse::<u32>().ok())
         .ok_or_else(|| {
             eprintln!("settings: could not parse {schema} {key}");
-            CommandError(
-                "Could not read the mouse settings. Restart Settings and try again.".to_string(),
-            )
+            CommandError(tr!("settings-mouse-read-error"))
         })
 }
 
@@ -264,11 +261,11 @@ fn speed_from_percent(percent: f64) -> f64 {
 /// The pointer speed as shown to the user: a word, not the -1 to 1 value.
 fn speed_label(speed: f64) -> String {
     match speed_percent(speed) {
-        percent if percent < 25.0 => "Slow",
-        percent if percent < 45.0 => "Slower than normal",
-        percent if percent <= 55.0 => "Normal",
-        percent if percent <= 75.0 => "Faster than normal",
-        _ => "Fast",
+        percent if percent < 25.0 => tr!("settings-mouse-speed-slow"),
+        percent if percent < 45.0 => tr!("settings-mouse-speed-slower"),
+        percent if percent <= 55.0 => tr!("settings-mouse-speed-normal"),
+        percent if percent <= 75.0 => tr!("settings-mouse-speed-faster"),
+        _ => tr!("settings-mouse-speed-fast"),
     }
     .to_string()
 }
@@ -292,10 +289,10 @@ fn bool_value(value: bool) -> &'static str {
 
 /// The label for a stored option value, or the value itself when unknown.
 fn option_label(options: &[(&str, &str)], value: &str) -> String {
-    options
-        .iter()
-        .find(|(key, _)| *key == value)
-        .map_or_else(|| value.to_string(), |(_, label)| label.to_string())
+    options.iter().find(|(key, _)| *key == value).map_or_else(
+        || value.to_string(),
+        |(_, label)| bingux_ui::i18n::text(label),
+    )
 }
 
 /// A Lua choice key such as `disabled-on-external-mouse` in words, for a
@@ -313,7 +310,7 @@ fn option_label_any(value: &str) -> String {
 /// is the current value, the change it makes to the touchpad, and the
 /// touchpad keys it writes.
 struct MethodCard {
-    label: &'static str,
+    label: String,
     picture: fn(&Tokens) -> Element,
     selected: bool,
     apply: fn(&mut Touchpad),
@@ -326,7 +323,7 @@ struct Setting<'a> {
     schema: &'static str,
     key: &'static str,
     group: &'static str,
-    title: &'static str,
+    title: String,
     overrides: &'a Json,
     loaded: State<Option<Result<Model, CommandError>>>,
     overlays: Overlays,
@@ -340,11 +337,11 @@ impl Setting<'_> {
 
     fn switch(&self, on: bool, apply: fn(&mut Model, bool)) -> Row {
         match self.lua() {
-            Some(value) => gnoblin::managed_row(self.title, gnoblin::on_off(&value)),
+            Some(value) => gnoblin::managed_row(&self.title, gnoblin::on_off(&value)),
             None => {
                 let (schema, key, loaded, overlays) =
                     (self.schema, self.key, self.loaded, self.overlays);
-                switch_row(self.title, on, move |next: bool| {
+                switch_row(self.title.clone(), on, move |next: bool| {
                     commit(
                         loaded,
                         overlays,
@@ -361,23 +358,27 @@ impl Setting<'_> {
     fn speed(&self, speed: f64, apply: fn(&mut Model, f64)) -> Element {
         match self.lua() {
             Some(value) => {
-                gnoblin::managed_row(self.title, value.parse::<f64>().map_or(value, speed_label))
+                gnoblin::managed_row(&self.title, value.parse::<f64>().map_or(value, speed_label))
                     .into()
             }
             None => {
                 let (schema, loaded, overlays) = (self.schema, self.loaded, self.overlays);
-                level_row(self.title, speed_percent(speed), move |percent: f64| {
-                    let next = speed_from_percent(percent);
-                    commit_level(
-                        &format!("{schema}.speed"),
-                        loaded,
-                        overlays,
-                        move |model| apply(model, next),
-                        move || system::gsettings_set(schema, "speed", &format!("{next:.3}")),
-                    )
-                })
+                level_row(
+                    self.title.clone(),
+                    speed_percent(speed),
+                    move |percent: f64| {
+                        let next = speed_from_percent(percent);
+                        commit_level(
+                            &format!("{schema}.speed"),
+                            loaded,
+                            overlays,
+                            move |model| apply(model, next),
+                            move || system::gsettings_set(schema, "speed", &format!("{next:.3}")),
+                        )
+                    },
+                )
                 .value_text(speed_label(speed))
-                .widest_value("Faster than normal")
+                .widest_value(tr!("settings-mouse-speed-faster"))
                 .into()
             }
         }
@@ -386,20 +387,24 @@ impl Setting<'_> {
     /// The double-click time as a slider, shown in milliseconds.
     fn double_click(&self, ms: u32, apply: fn(&mut Model, u32)) -> Element {
         match self.lua() {
-            Some(value) => gnoblin::managed_row(self.title, gnoblin::millis(&value)).into(),
+            Some(value) => gnoblin::managed_row(&self.title, gnoblin::millis(&value)).into(),
             None => {
                 let (loaded, overlays) = (self.loaded, self.overlays);
-                level_row(self.title, double_click_percent(ms), move |percent: f64| {
-                    let next = double_click_from_percent(percent);
-                    commit_level(
-                        "double-click",
-                        loaded,
-                        overlays,
-                        move |model| apply(model, next),
-                        move || system::gsettings_set(MOUSE, "double-click", &next.to_string()),
-                    )
-                })
-                .value_text(format!("{ms} ms"))
+                level_row(
+                    self.title.clone(),
+                    double_click_percent(ms),
+                    move |percent: f64| {
+                        let next = double_click_from_percent(percent);
+                        commit_level(
+                            "double-click",
+                            loaded,
+                            overlays,
+                            move |model| apply(model, next),
+                            move || system::gsettings_set(MOUSE, "double-click", &next.to_string()),
+                        )
+                    },
+                )
+                .value_text(tr!("settings-mouse-millis", ms = ms))
                 .into()
             }
         }
@@ -412,15 +417,15 @@ impl Setting<'_> {
         apply: fn(&mut Model, String),
     ) -> Row {
         match self.lua() {
-            Some(value) => gnoblin::managed_row(self.title, option_label(options, &value)),
+            Some(value) => gnoblin::managed_row(&self.title, option_label(options, &value)),
             None => {
                 let (schema, key, loaded, overlays) =
                     (self.schema, self.key, self.loaded, self.overlays);
                 choice_row(
-                    self.title,
+                    self.title.clone(),
                     options
                         .iter()
-                        .map(|(k, label)| (k.to_string(), label.to_string()))
+                        .map(|(k, label)| (k.to_string(), bingux_ui::i18n::text(label)))
                         .collect(),
                     selected,
                     move |choice: String| {
@@ -478,7 +483,7 @@ impl Setting<'_> {
             .child(EMPHASIS.label(&tokens, title))
             .child(grid);
         if !any_selected {
-            column = column.child(caption(format!("Set to {current}.")));
+            column = column.child(caption(tr!("settings-mouse-set-to", value = &current)));
         }
         column.into()
     }
@@ -489,7 +494,7 @@ impl Setting<'_> {
 /// cards on the Appearance page. A component of its own: the focus stop is a
 /// hook, and the number of cards changes when the data lands.
 struct MethodCardView {
-    label: &'static str,
+    label: String,
     picture: fn(&Tokens) -> Element,
     selected: bool,
     on_press: EventHandler<()>,
@@ -548,7 +553,7 @@ impl Component for MethodCardView {
                 ],
             )
             .child(frame)
-            .child(label_style.label(tokens, card.label));
+            .child(label_style.label(tokens, card.label.as_str()));
         focus_stop(
             card_box,
             card.label.to_string(),
@@ -624,31 +629,34 @@ fn picture_edge(tokens: &Tokens) -> Element {
 }
 
 const ACCEL_PROFILES: [(&str, &str); 3] = [
-    ("default", "Default"),
-    ("flat", "Flat"),
-    ("adaptive", "Adaptive"),
+    ("default", i18n_id!("settings-mouse-accel-default")),
+    ("flat", i18n_id!("settings-mouse-accel-flat")),
+    ("adaptive", i18n_id!("settings-mouse-accel-adaptive")),
 ];
 const SEND_EVENTS: [(&str, &str); 3] = [
-    ("enabled", "Always on"),
+    ("enabled", i18n_id!("settings-mouse-send-always")),
     (
         "disabled-on-external-mouse",
-        "Off when a mouse is connected",
+        i18n_id!("settings-mouse-send-external"),
     ),
-    ("disabled", "Off"),
+    ("disabled", i18n_id!("settings-mouse-off")),
 ];
 
 /// Touchpad primary button choices. `mouse` maps the touchpad's buttons like a
 /// mouse's, with the same primary button.
-const PRIMARY_BUTTON: [(&str, &str); 3] =
-    [("right", "Right"), ("left", "Left"), ("mouse", "Mouse")];
+const PRIMARY_BUTTON: [(&str, &str); 3] = [
+    ("right", i18n_id!("settings-mouse-primary-right")),
+    ("left", i18n_id!("settings-mouse-primary-left")),
+    ("mouse", i18n_id!("settings-mouse-primary-mouse")),
+];
 
 /// How a touchpad click is told apart: by fingers, by the bottom corners, or
 /// not at all.
 const CLICK_METHOD: [(&str, &str); 4] = [
-    ("default", "Automatic"),
-    ("fingers", "Two fingers"),
-    ("areas", "Bottom corners"),
-    ("none", "Off"),
+    ("default", i18n_id!("settings-mouse-click-automatic")),
+    ("fingers", i18n_id!("settings-mouse-click-fingers")),
+    ("areas", i18n_id!("settings-mouse-click-areas")),
+    ("none", i18n_id!("settings-mouse-off")),
 ];
 
 /// A box that answers a double-click made within the configured double-click
@@ -678,9 +686,12 @@ impl Component for ClickTest {
         };
         let on = *hit.read();
         let (text, fill) = if on {
-            ("Double-click detected", Paint::AccentSoft)
+            (
+                tr!("settings-mouse-double-click-detected"),
+                Paint::AccentSoft,
+            )
         } else {
-            ("Double-click this box", Paint::Control)
+            (tr!("settings-mouse-double-click-try"), Paint::Control)
         };
         focus_stop(
             rect()
@@ -695,7 +706,7 @@ impl Component for ClickTest {
                         border(Line::Hairline),
                     ],
                 )
-                .child(EMPHASIS.label(&tokens, text)),
+                .child(EMPHASIS.label(&tokens, &text)),
             text.to_string(),
             AccessibilityRole::Button,
             true,
@@ -715,7 +726,7 @@ impl Component for ScrollTest {
         let tokens = use_tokens();
         let mut lines = rect().tw(&tokens, &[flex_col(), w_full(), p(S3), gap(S2)]);
         for n in 1..=20 {
-            lines = lines.child(BODY.label(&tokens, format!("Line {n}")));
+            lines = lines.child(BODY.label(&tokens, tr!("settings-mouse-scroll-line", n = n)));
         }
         rect()
             .tw(
@@ -748,7 +759,9 @@ impl Component for MousePage {
             Err(e) => {
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(e.0))
-                        .action("Try again", move |_| background(loaded, refresh)),
+                        .action(&tr!("settings-mouse-try-again"), move |_| {
+                            background(loaded, refresh)
+                        }),
                 );
             }
         };
@@ -763,40 +776,59 @@ impl Component for MousePage {
             tokens,
         };
         let mouse = &model.mouse;
-        let mouse_group = Group::titled("Mouse")
+        let mouse_group = Group::titled(&tr!("settings-mouse-group"))
             .row(
-                setting(MOUSE, "mouse", "natural-scroll", "Natural scrolling")
-                    .switch(mouse.natural_scroll, |model, on| {
-                        model.mouse.natural_scroll = on
-                    }),
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "natural-scroll",
+                    tr!("settings-mouse-natural-scroll"),
+                )
+                .switch(mouse.natural_scroll, |model, on| {
+                    model.mouse.natural_scroll = on
+                }),
             )
             .row(
-                setting(MOUSE, "mouse", "speed", "Pointer speed")
+                setting(MOUSE, "mouse", "speed", tr!("settings-mouse-pointer-speed"))
                     .speed(mouse.speed, |model, speed| model.mouse.speed = speed),
             )
             .row(
-                setting(MOUSE, "mouse", "left-handed", "Left-handed buttons")
-                    .switch(mouse.left_handed, |model, on| model.mouse.left_handed = on),
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "left-handed",
+                    tr!("settings-mouse-left-handed"),
+                )
+                .switch(mouse.left_handed, |model, on| model.mouse.left_handed = on),
             )
             .row(
-                setting(MOUSE, "mouse", "accel-profile", "Pointer acceleration").choice(
-                    &ACCEL_PROFILES,
-                    &mouse.accel_profile,
-                    |model, value| model.mouse.accel_profile = value,
-                ),
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "accel-profile",
+                    tr!("settings-mouse-pointer-acceleration"),
+                )
+                .choice(&ACCEL_PROFILES, &mouse.accel_profile, |model, value| {
+                    model.mouse.accel_profile = value
+                }),
             )
             .row(
-                setting(MOUSE, "mouse", "double-click", "Double-click speed")
-                    .double_click(mouse.double_click, |model, ms| {
-                        model.mouse.double_click = ms
-                    }),
+                setting(
+                    MOUSE,
+                    "mouse",
+                    "double-click",
+                    tr!("settings-mouse-double-click-speed"),
+                )
+                .double_click(mouse.double_click, |model, ms| {
+                    model.mouse.double_click = ms
+                }),
             )
             .row(
                 setting(
                     INTERFACE,
                     "mouse",
                     "gtk-enable-primary-paste",
-                    "Middle click paste",
+                    tr!("settings-mouse-middle-click-paste"),
                 )
                 .switch(mouse.primary_paste, |model, on| {
                     model.mouse.primary_paste = on
@@ -805,21 +837,21 @@ impl Component for MousePage {
 
         let touchpad_group = model.touchpad.as_ref().map(|pad| {
             let touchpad = |key, title| setting(TOUCHPAD, "touchpad", key, title);
-            let send_events = touchpad("send-events", "Use touchpad");
+            let send_events = touchpad("send-events", tr!("settings-mouse-use-touchpad"));
             let effective = send_events.lua().unwrap_or_else(|| pad.send_events.clone());
             let head = send_events.choice(&SEND_EVENTS, &pad.send_events, |model, value| {
                 with_touchpad(model, |tp| tp.send_events = value)
             });
             let click_cards = vec![
                 MethodCard {
-                    label: "Bottom corners",
+                    label: tr!("settings-mouse-click-areas"),
                     picture: picture_areas,
                     selected: pad.click_method == "areas",
                     apply: |tp| tp.click_method = "areas".to_string(),
                     writes: &[("click-method", "'areas'")],
                 },
                 MethodCard {
-                    label: "Two fingers",
+                    label: tr!("settings-mouse-click-fingers"),
                     picture: picture_fingers,
                     selected: pad.click_method == "fingers",
                     apply: |tp| tp.click_method = "fingers".to_string(),
@@ -828,7 +860,7 @@ impl Component for MousePage {
             ];
             let scroll_cards = vec![
                 MethodCard {
-                    label: "Two-finger",
+                    label: tr!("settings-mouse-two-finger"),
                     picture: picture_two_finger,
                     selected: pad.two_finger_scrolling && !pad.edge_scrolling,
                     apply: |tp| {
@@ -841,7 +873,7 @@ impl Component for MousePage {
                     ],
                 },
                 MethodCard {
-                    label: "Edge",
+                    label: tr!("settings-mouse-edge"),
                     picture: picture_edge,
                     selected: pad.edge_scrolling && !pad.two_finger_scrolling,
                     apply: |tp| {
@@ -857,57 +889,61 @@ impl Component for MousePage {
             // With the touchpad off, its other settings have no effect, so
             // they slide away.
             let dependent: Vec<Element> = vec![
-                touchpad("tap-to-click", "Tap to click")
+                touchpad("tap-to-click", tr!("settings-mouse-tap-to-click"))
                     .switch(pad.tap_to_click, |model, on| {
                         with_touchpad(model, |tp| tp.tap_to_click = on)
                     })
                     .into(),
-                touchpad("natural-scroll", "Natural scrolling")
+                touchpad("natural-scroll", tr!("settings-mouse-natural-scroll"))
                     .switch(pad.natural_scroll, |model, on| {
                         with_touchpad(model, |tp| tp.natural_scroll = on)
                     })
                     .into(),
-                touchpad("click-method", "Secondary click")
+                touchpad("click-method", tr!("settings-mouse-secondary-click"))
                     .cards(
-                        "Secondary click",
+                        &tr!("settings-mouse-secondary-click"),
                         &["click-method"],
                         option_label(&CLICK_METHOD, &pad.click_method),
                         click_cards,
                     )
                     .into(),
-                touchpad("two-finger-scrolling-enabled", "Scrolling")
-                    .cards(
-                        "Scrolling",
-                        &["two-finger-scrolling-enabled", "edge-scrolling-enabled"],
-                        "Off".to_string(),
-                        scroll_cards,
-                    )
-                    .into(),
-                touchpad("speed", "Pointer speed")
+                touchpad(
+                    "two-finger-scrolling-enabled",
+                    tr!("settings-mouse-scrolling"),
+                )
+                .cards(
+                    &tr!("settings-mouse-scrolling"),
+                    &["two-finger-scrolling-enabled", "edge-scrolling-enabled"],
+                    tr!("settings-mouse-off"),
+                    scroll_cards,
+                )
+                .into(),
+                touchpad("speed", tr!("settings-mouse-pointer-speed"))
                     .speed(pad.speed, |model, speed| {
                         with_touchpad(model, |tp| tp.speed = speed)
                     })
                     .into(),
-                touchpad("accel-profile", "Pointer acceleration")
+                touchpad("accel-profile", tr!("settings-mouse-pointer-acceleration"))
                     .choice(&ACCEL_PROFILES, &pad.accel_profile, |model, value| {
                         with_touchpad(model, |tp| tp.accel_profile = value)
                     })
                     .into(),
-                touchpad("left-handed", "Primary button")
+                touchpad("left-handed", tr!("settings-mouse-primary-button"))
                     .choice(&PRIMARY_BUTTON, &pad.left_handed, |model, value| {
                         with_touchpad(model, |tp| tp.left_handed = value)
                     })
                     .into(),
-                touchpad("disable-while-typing", "Ignore touchpad while typing")
+                touchpad("disable-while-typing", tr!("settings-mouse-ignore-typing"))
                     .switch(pad.disable_while_typing, |model, on| {
                         with_touchpad(model, |tp| tp.disable_while_typing = on)
                     })
                     .into(),
             ];
-            Group::titled("Touchpad").row(head.nested(effective != "disabled", dependent))
+            Group::titled(&tr!("settings-mouse-touchpad-group"))
+                .row(head.nested(effective != "disabled", dependent))
         });
 
-        let test_group = Group::titled("Test your settings")
+        let test_group = Group::titled(&tr!("settings-mouse-test-group"))
             .row(
                 ClickTest {
                     within_ms: mouse.double_click,
