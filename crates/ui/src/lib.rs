@@ -42,6 +42,7 @@ mod motion_stress;
 #[cfg(all(test, feature = "testing"))]
 mod mount_tests;
 pub mod nav;
+pub mod platform;
 pub(crate) mod popup_windows;
 pub mod preview;
 pub mod reorder;

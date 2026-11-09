@@ -584,8 +584,10 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
+ "toml",
  "torin",
  "unicode-segmentation",
+ "zbus",
 ]
 
 [[package]]

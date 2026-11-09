@@ -27,8 +27,8 @@ file:focus.rs     # focus regions, traps and the Tab walk: behaviour without pix
 file:component.rs # inspector wiring (component names, prop overrides): the Inspector page covers the tool
 
 # Theme plumbing that reads the desktop.
-read_gsettings    # reads one GNOME interface key with gsettings: no pixels
-watch_appearance  # follows `gsettings monitor` for accent and scheme changes: no pixels
+read_gsettings    # reads one GNOME interface key with gsettings, for Settings' own pages: no pixels
+watch_appearance  # follows the portal, bingux.toml and gsettings for appearance changes: no pixels
 
 # Hook helpers for a custom control; the controls built on them are shown.
 Interaction       # hover and press tracker a custom control embeds; every control shows its result
@@ -49,8 +49,10 @@ file:stress.rs   # debug/testing-only switches; seen through the header switcher
 file:focus/ring_check.rs # ring-versus-face check, tooling
 file:focus/owner.rs      # focus-owner rules: behaviour, seen as the focus ring
 
-# The owner of the `gsettings monitor` child that `watch_appearance` starts.
-AppearanceMonitor # kills and reaps the monitor process on drop: lifetime handle, no pixels
+# Installed applications as the XDG specifications describe them: desktop entries,
+# `mimeapps.list`, `Exec` field codes. Files in, a command line out; "Open, notify,
+# inhibit" shows the result of opening a link.
+file:platform/apps.rs # desktop entry and MIME default lookup, Exec expansion, spawning: reads files, no pixels
 
 # Hand-reorder and drag arithmetic. `sortable` (covered) feeds it measured
 # heights and pointer distances and draws what it says.

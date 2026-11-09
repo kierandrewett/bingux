@@ -391,9 +391,9 @@ impl Session {
             Host::Dialog(_) => self.finish(vec![path]),
             Host::Browser(_) => {
                 let mut problem = self.nav.problem;
-                if let Err(error) = open_default(&path) {
-                    problem.set(Some(format!("Could not open the file: {error}.")));
-                }
+                open_default(&path, move |why| {
+                    problem.set(Some(format!("Could not open the file. {why}")));
+                });
             }
         }
     }

@@ -30,6 +30,11 @@ const RENAMES: &[(&str, &str)] = &[
     ("max_megabytes", "maxMegabytes"),
     ("public_ip_lookup", "publicIpLookup"),
     ("font_family", "fontFamily"),
+    ("color_scheme", "colorScheme"),
+    ("high_contrast", "highContrast"),
+    ("reduced_motion", "reducedMotion"),
+    ("text_scale", "textScale"),
+    ("icon_theme", "iconTheme"),
     ("show_personal_images", "showPersonalImages"),
 ];
 
