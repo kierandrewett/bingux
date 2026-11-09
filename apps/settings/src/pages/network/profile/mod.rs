@@ -465,6 +465,7 @@ mod tests {
 
     #[test]
     fn the_advanced_row_names_only_what_is_not_default() {
+        crate::register_catalogue_for_tests();
         let plain = ProfileData::parse(
             "connection.type:802-3-ethernet\nipv4.method:auto\nipv6.method:auto\n802-3-ethernet.mtu:auto\n",
         );
