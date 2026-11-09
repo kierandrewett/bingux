@@ -158,6 +158,9 @@ pub struct TabItem {
     pub id: u64,
     pub title: String,
     pub icon: Option<Icon>,
+    /// The document in the tab has changes that are not in its file: a dot
+    /// before the title. Pass `Document::is_unsaved()`.
+    pub edited: bool,
 }
 
 impl TabItem {
@@ -166,12 +169,20 @@ impl TabItem {
             id,
             title: title.into(),
             icon: None,
+            edited: false,
         }
     }
 
     /// An icon before the title.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// The unsaved dot before the title, for a document with changes that are
+    /// not in its file. The title itself stays plain.
+    pub fn edited(mut self, edited: bool) -> Self {
+        self.edited = edited;
         self
     }
 }
@@ -1974,6 +1985,22 @@ impl Component for Tab {
         if let Some(icon) = self.item.icon {
             parts.push(icons::icon(icon, IconSize::Control, ink.color(&tokens)).into_element());
         }
+        if self.item.edited {
+            parts.push(
+                rect()
+                    .a11y_hidden()
+                    .tw(
+                        &tokens,
+                        &[
+                            w(Dim::Dot),
+                            h(Dim::Dot),
+                            rounded(Radius::Pill),
+                            bg(Paint::Accent),
+                        ],
+                    )
+                    .into_element(),
+            );
+        }
         parts.push(Element::from(
             fade_text(self.item.title.clone())
                 .style(CAPTION.in_ink(ink))
@@ -1995,7 +2022,11 @@ impl Component for Tab {
             .a11y_id(a11y_id)
             .a11y_focusable(self.selected)
             .a11y_role(AccessibilityRole::Tab)
-            .a11y_alt(self.item.title.clone())
+            .a11y_alt(if self.item.edited {
+                format!("{}, unsaved changes", self.item.title)
+            } else {
+                self.item.title.clone()
+            })
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .tw(
                 &tokens,
