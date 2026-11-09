@@ -166,7 +166,6 @@ impl Component for Content {
         let showing_history = if compact { history_page } else { history_open };
         // The window's commands: the palette, the shortcuts sheet and the
         // main menu list them with their keys.
-        let commands = use_commands();
         use_window_commands(window_commands(&calc, overlays, showing_history));
         let history_button = icon_button(Icon::Clock, move |_: ()| toggle_history(&toggle))
             .tooltip(&if showing_history {
@@ -177,8 +176,7 @@ impl Component for Content {
 
         // The history button sits beside the menu on a desktop. A phone's
         // header has no room for a third button there, so it goes first.
-        let menu = menu_button(tr!("ui-main-menu"), main_menu(&calc, overlays, commands))
-            .icon(Icon::OpenMenu);
+        let menu = app_menu(main_menu(&calc));
         let header = HeaderBar::new(tr!("calculator-title")).title_slot(switch);
         let header = if compact {
             header.leading(history_button)
@@ -467,7 +465,7 @@ fn paired(
     }
 }
 
-fn main_menu(calc: &Calc, overlays: Overlays, commands: Commands) -> Vec<MenuItem> {
+fn main_menu(calc: &Calc) -> Vec<MenuItem> {
     let (group, precision) = calc.with(|s| (s.saved.settings.group, s.saved.settings.precision));
     let group_calc = calc.clone();
     let mut items = vec![
@@ -498,11 +496,6 @@ fn main_menu(calc: &Calc, overlays: Overlays, commands: Commands) -> Vec<MenuIte
         })
         .destructive(),
     );
-    items.push(menu_separator());
-    items.push(menu_item(tr!("ui-command-shortcuts"), move |_| {
-        commands.show_shortcuts()
-    }));
-    items.extend(bingux_ui::about::app_menu_items(overlays));
     items
 }
 

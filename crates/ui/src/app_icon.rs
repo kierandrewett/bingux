@@ -523,8 +523,7 @@ mod slot_tests {
 /// the source of the whole workspace for the ways around it.
 #[cfg(test)]
 mod enforcement_tests {
-    use std::fs;
-    use std::path::{Path, PathBuf};
+    use crate::source_scan::workspace_code;
 
     /// Where a list of applications comes from.
     const APP_SOURCES: &[&str] = &[
@@ -552,51 +551,11 @@ mod enforcement_tests {
         ),
     ];
 
-    fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let name = entry.file_name();
-            if path.is_dir() {
-                if name != "target" && name != "vendor" {
-                    sources(&path, out);
-                }
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                out.push(path);
-            }
-        }
-    }
-
-    /// The code of a file, without its test module (the first `#[cfg(test)]`
-    /// or `#[cfg(all(test`).
-    fn code(text: &str) -> &str {
-        let cut = ["#[cfg(test)]", "#[cfg(all(test"]
-            .iter()
-            .filter_map(|marker| text.find(marker))
-            .min()
-            .unwrap_or(text.len());
-        &text[..cut]
-    }
-
     #[test]
     fn every_list_of_applications_carries_icons() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let mut files = Vec::new();
-        for domain in ["apps", "crates", "services", "bsm", "tools"] {
-            sources(&root.join(domain), &mut files);
-        }
-        assert!(files.len() > 100, "the workspace sources were found");
         let mut problems = Vec::new();
-        for path in files {
-            let relative = path
-                .strip_prefix(&root)
-                .unwrap_or(&path)
-                .to_string_lossy()
-                .into_owned();
-            let text = fs::read_to_string(&path).unwrap_or_default();
-            let code = code(&text);
+        for (relative, code) in workspace_code() {
+            let code = code.as_str();
             if !relative.ends_with("controls/dropdown.rs") && code.contains("OptionIcon::App(") {
                 problems.push(format!(
                     "{relative}: OptionIcon::App outside the dropdown; use app_dropdown"

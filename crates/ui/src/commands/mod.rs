@@ -1093,3 +1093,6 @@ pub(crate) fn attach_router(host: Rect, commands: Commands, overlays: Overlays, 
         }
     })
 }
+
+#[cfg(test)]
+mod conventions_tests;
