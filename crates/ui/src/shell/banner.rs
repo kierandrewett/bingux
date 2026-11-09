@@ -325,7 +325,7 @@ impl Component for Banner {
                 .radius(button_radius)
                 .ink(ink)
                 .layers(hover, pressed)
-                .tooltip("Dismiss");
+                .tooltip(&crate::tr!("ui-notice-dismiss"));
             match self.button_ids.get(self.actions.len()) {
                 Some(id) => button.a11y_id(*id),
                 None => button,

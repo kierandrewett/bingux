@@ -65,7 +65,7 @@ impl std::fmt::Display for OpenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Invalid(why) | Self::Failed(why) => f.write_str(why),
-            Self::NoApplication => f.write_str("No application is set up to open this."),
+            Self::NoApplication => f.write_str(&crate::tr!("ui-open-no-app-error")),
         }
     }
 }
@@ -78,9 +78,8 @@ pub fn open_uri(uri: &str) -> Result<Via, OpenError> {
     crate::runtime::assert_off_ui_thread("platform::open::open_uri");
     let scheme = scheme_of(uri)?;
     if scheme == "file" {
-        let path = apps::path_of_file_uri(uri).ok_or_else(|| {
-            OpenError::Invalid("That file address is not on this computer.".into())
-        })?;
+        let path = apps::path_of_file_uri(uri)
+            .ok_or_else(|| OpenError::Invalid(crate::tr!("ui-open-not-local-error")))?;
         return open_file(&path);
     }
     if portal_open_uri(uri) {
@@ -108,7 +107,7 @@ pub fn open_uri(uri: &str) -> Result<Via, OpenError> {
 pub fn open_file(path: &Path) -> Result<Via, OpenError> {
     crate::runtime::assert_off_ui_thread("platform::open::open_file");
     let metadata = std::fs::metadata(path)
-        .map_err(|_| OpenError::Invalid("That file no longer exists.".into()))?;
+        .map_err(|_| OpenError::Invalid(crate::tr!("ui-open-gone-error")))?;
     let folder = metadata.is_dir();
     if !folder && portal_open_file(path) {
         return Ok(Via::Portal);
@@ -149,7 +148,7 @@ pub fn open_file_then(
 /// digits, `+`, `-` and `.`. Control characters and spaces are not allowed
 /// anywhere, so a string cannot smuggle a second argument or a line break.
 fn scheme_of(uri: &str) -> Result<String, OpenError> {
-    let invalid = || OpenError::Invalid("That address cannot be opened.".into());
+    let invalid = || OpenError::Invalid(crate::tr!("ui-open-bad-address-error"));
     if uri.chars().any(|c| c.is_control() || c == ' ') {
         return Err(invalid());
     }
@@ -201,8 +200,12 @@ fn launch(entry: &DesktopEntry, arguments: &Arguments<'_>) -> Result<(), OpenErr
         return Err(OpenError::NoApplication);
     }
     let line = apps::command_line(entry, arguments);
-    apps::spawn(&line, entry.working_directory.as_deref())
-        .map_err(|_| OpenError::Failed(format!("{} could not be started.", entry.name)))
+    apps::spawn(&line, entry.working_directory.as_deref()).map_err(|_| {
+        OpenError::Failed(crate::tr!(
+            "ui-open-app-not-started-error",
+            app = &entry.name
+        ))
+    })
 }
 
 fn xdg_open(target: &str) -> Result<Via, OpenError> {
@@ -216,7 +219,7 @@ fn xdg_open(target: &str) -> Result<Via, OpenError> {
         .spawn()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => OpenError::NoApplication,
-            _ => OpenError::Failed("The application could not be started.".into()),
+            _ => OpenError::Failed(crate::tr!("ui-open-not-started-error")),
         })?;
     std::thread::spawn(move || {
         let _ = child.wait();
@@ -307,7 +310,7 @@ mod tests {
     fn a_file_that_is_gone_says_so() {
         assert_eq!(
             open_file(Path::new("/nonexistent/bingux-ui-test")),
-            Err(OpenError::Invalid("That file no longer exists.".into()))
+            Err(OpenError::Invalid(crate::tr!("ui-open-gone-error")))
         );
     }
 

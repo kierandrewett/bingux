@@ -18,6 +18,7 @@ use bingux_calc::store::{self, Entry, Mode, Saved};
 use bingux_calc::{Angle, Locale, format};
 use bingux_ui::controls::FieldEdit;
 use bingux_ui::runtime::background_then;
+use bingux_ui::tr;
 use freya::prelude::*;
 use num_bigint::BigInt;
 
@@ -364,7 +365,7 @@ impl Calc {
                         error.set(None);
                         self.changed();
                     }
-                    Outcome::Error(e) => error.set(Some(e.to_string())),
+                    Outcome::Error(e) => error.set(Some(crate::app::error_text(&e))),
                     Outcome::Empty => {}
                 }
             }
@@ -382,7 +383,7 @@ impl Calc {
                         self.set_field("");
                         self.changed();
                     }
-                    IntOutcome::Error(e) => error.set(Some(e.to_string())),
+                    IntOutcome::Error(e) => error.set(Some(crate::app::error_text(&e))),
                     IntOutcome::Empty => {}
                 }
             }
@@ -401,7 +402,7 @@ impl Calc {
                 self.set_field("");
                 self.changed();
             }
-            Outcome::Error(e) => error.set(Some(e.to_string())),
+            Outcome::Error(e) => error.set(Some(crate::app::error_text(&e))),
             Outcome::Empty => {}
         }
     }
@@ -456,16 +457,13 @@ impl Calc {
                         text: v.display.clone(),
                         copy: v.value.to_string(),
                         spoken: v.display,
-                        note: v.overflow.then(|| {
-                            "The result does not fit the word size. Choose a larger size."
-                                .to_string()
-                        }),
+                        note: v.overflow.then(|| tr!("calculator-overflow-error")),
                         live: true,
                     },
                     IntOutcome::Empty => self.last_shown(),
                     IntOutcome::Error(e) => {
                         let mut shown = self.last_shown();
-                        shown.note = Some(e.to_string());
+                        shown.note = Some(crate::app::error_text(&e));
                         shown
                     }
                 }
@@ -475,7 +473,7 @@ impl Calc {
                 Outcome::Empty => self.last_shown(),
                 Outcome::Error(e) => {
                     let mut shown = self.last_shown();
-                    shown.note = Some(e.to_string());
+                    shown.note = Some(crate::app::error_text(&e));
                     shown
                 }
             },
@@ -486,7 +484,7 @@ impl Calc {
                     Outcome::Empty => self.last_shown(),
                     Outcome::Error(e) => {
                         let mut shown = self.last_shown();
-                        shown.note = Some(e.to_string());
+                        shown.note = Some(crate::app::error_text(&e));
                         shown
                     }
                 }
@@ -700,8 +698,8 @@ impl Calc {
 
     pub fn copy_text(&self, text: String, overlays: bingux_ui::prelude::Overlays) {
         match freya::clipboard::Clipboard::set(text) {
-            Ok(()) => overlays.toast("Copied"),
-            Err(_) => overlays.toast("Could not copy. Try again."),
+            Ok(()) => overlays.toast(tr!("ui-copy-done-status")),
+            Err(_) => overlays.toast(tr!("ui-copy-failed-error")),
         }
     }
 

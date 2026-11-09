@@ -113,7 +113,7 @@ fn here_of(fix: &Fix) -> Here {
     let mut place = Place::new(
         fix.name
             .clone()
-            .unwrap_or_else(|| "My Location".to_string()),
+            .unwrap_or_else(|| "My location".to_string()),
         fix.latitude,
         fix.longitude,
     );

@@ -174,6 +174,27 @@ impl Playlist {
         self.index = at;
     }
 
+    /// A new file made from the current one (a cropped copy): put it right
+    /// after the current file and show it.
+    pub fn put_after_current(&mut self, file: PathBuf) {
+        let at = if self.files.is_empty() { 0 } else { self.index + 1 };
+        self.files.insert(at, file);
+        self.index = at;
+    }
+
+    /// Take `file` out of the list wherever it is (a copy that was undone).
+    /// When it was the one on show, the file before it is shown, else the one
+    /// after. Returns the place it had.
+    pub fn take_out(&mut self, file: &Path) -> Option<usize> {
+        let at = self.files.iter().position(|path| path == file)?;
+        self.files.remove(at);
+        if at < self.index || (at == self.index && self.index > 0) {
+            self.index -= 1;
+        }
+        self.index = self.index.min(self.files.len().saturating_sub(1));
+        Some(at)
+    }
+
     /// Show `file` if it is in the list; true when it was.
     pub fn show(&mut self, file: &Path) -> bool {
         match self.files.iter().position(|path| path == file) {
@@ -338,5 +359,31 @@ mod tests {
             "in the order given; a missing file is left out"
         );
         assert!(Playlist::of_launch(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_copy_goes_after_the_file_it_came_from_and_comes_out_again() {
+        let dir = folder(&["a.png", "b.png", "c.png"]);
+        let mut list = Playlist::beside(&dir.join("b.png"));
+        let copy = dir.join("b edited.png");
+        list.put_after_current(copy.clone());
+        assert_eq!(names(&list), ["a.png", "b.png", "b edited.png", "c.png"]);
+        assert_eq!(list.current(), Some(copy.as_path()), "the copy is shown");
+        assert_eq!(list.take_out(&copy), Some(2));
+        assert_eq!(list.current(), Some(dir.join("b.png").as_path()), "back on the original");
+        assert_eq!(list.take_out(&copy), None, "a file that is not there changes nothing");
+        // Taking out a file before the one on show keeps the one on show.
+        list.last();
+        assert_eq!(list.take_out(&dir.join("a.png")), Some(0));
+        assert_eq!(list.current(), Some(dir.join("c.png").as_path()));
+        // The first file taken out while on show leaves the next one.
+        let mut first = Playlist::beside(&dir.join("b.png"));
+        first.first();
+        let on_show = first.current().unwrap().to_path_buf();
+        first.take_out(&on_show);
+        assert_eq!(first.current(), Some(dir.join("b.png").as_path()));
+        let mut empty = Playlist::empty();
+        empty.put_after_current(dir.join("x.png"));
+        assert_eq!(empty.current(), Some(dir.join("x.png").as_path()));
     }
 }

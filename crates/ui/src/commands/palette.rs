@@ -52,7 +52,7 @@ pub fn open_palette(overlays: Overlays, commands: Commands) {
     let after = chosen.clone();
     overlays.show_dialog(
         framed_dialog(
-            "Commands",
+            crate::tr!("ui-palette-title"),
             Element::from(CommandPalette {
                 commands,
                 overlays,
@@ -108,11 +108,12 @@ pub(crate) fn picks(resolved: &[Resolved], recent: &[String], query: &str) -> Ve
                 None => {
                     // A keyword or the group name finds it too, ranked below
                     // any title match and with no letters to mark.
+                    let title = command.group.title();
                     let best = command
                         .keywords
                         .iter()
                         .map(String::as_str)
-                        .chain([command.group.title()])
+                        .chain([title.as_str()])
                         .filter_map(|word| fuzzy(query, word))
                         .map(|found| found.score)
                         .max()?;
@@ -181,9 +182,10 @@ impl Component for CommandPalette {
         // arrows reach. Each command keeps one id while the palette is open.
         let list_id = use_hook(AccessibilityId::new_unique);
         let row_ids = use_hook(|| {
-            std::rc::Rc::new(std::cell::RefCell::new(
-                std::collections::HashMap::<String, AccessibilityId>::new(),
-            ))
+            std::rc::Rc::new(std::cell::RefCell::new(std::collections::HashMap::<
+                String,
+                AccessibilityId,
+            >::new()))
         });
         let ids: Vec<AccessibilityId> = rows
             .iter()
@@ -206,11 +208,7 @@ impl Component for CommandPalette {
             spawn(async move {
                 timer(ANNOUNCE_PAUSE).await;
                 if query.peek().trim() == typed {
-                    announcer.announce(match count {
-                        0 => "No commands match".to_string(),
-                        1 => "1 command matches".to_string(),
-                        count => format!("{count} commands match"),
-                    });
+                    announcer.announce(crate::tr!("ui-palette-matches-status", count = count));
                 }
             });
         });
@@ -249,14 +247,14 @@ impl Component for CommandPalette {
             highlight.set(0);
             scroll.scroll_to_y(0);
         })
-        .placeholder("Search commands")
+        .placeholder(crate::tr!("ui-palette-search.placeholder"))
         .fill_width()
         .autofocus()
         .on_submit(submit)
         .on_arrow(step)
         .semantics(
             crate::a11y::Semantics::new()
-                .label("Search commands")
+                .label(crate::tr!("ui-palette-search.a11y"))
                 .controls(list_id)
                 .active_descendant(active),
         )
@@ -267,7 +265,7 @@ impl Component for CommandPalette {
                 .tw(&tokens, &[w_full(), h_full(), center(), p(S6)])
                 .child(BODY.in_ink(Ink::Muted).label(
                     &tokens,
-                    format!("No commands match “{}”.", query.read().trim()),
+                    crate::tr!("ui-palette-no-match-empty", query = query.read().trim()),
                 ))
                 .into_element()
         } else {
@@ -276,19 +274,19 @@ impl Component for CommandPalette {
                     rect()
                         .a11y_id(list_id)
                         .a11y_role(AccessibilityRole::ListBox)
-                        .a11y_alt("Commands")
+                        .a11y_alt(crate::tr!("ui-palette-list.a11y"))
                         .tw(&tokens, &[flex_col(), w_full(), p(S2)])
                         .children(rows.iter().enumerate().map(|(index, row)| {
-                        let choose = choose.clone();
-                        PaletteRow {
-                            id: ids[index],
-                            pick: row.clone(),
-                            highlighted: index == at,
-                            on_hover: EventHandler::new(move |_: ()| highlight.set(index)),
-                            on_press: EventHandler::new(move |_: ()| choose(index)),
-                        }
-                        .into_element()
-                    })),
+                            let choose = choose.clone();
+                            PaletteRow {
+                                id: ids[index],
+                                pick: row.clone(),
+                                highlighted: index == at,
+                                on_hover: EventHandler::new(move |_: ()| highlight.set(index)),
+                                on_press: EventHandler::new(move |_: ()| choose(index)),
+                            }
+                            .into_element()
+                        })),
                 )
                 .into_element()
         };
@@ -376,8 +374,8 @@ impl Component for PaletteRow {
                 // Named by its title; the shortcut is its keyboard shortcut and
                 // the group its description, never part of the name.
                 let keys = self.pick.shortcut.as_ref().map(|shortcut| shortcut.label());
-                let group = (command.group != super::CommandGroup::App)
-                    .then(|| command.group.title().to_string());
+                let group =
+                    (command.group != super::CommandGroup::App).then(|| command.group.title());
                 move |node| {
                     node.set_selected(selected);
                     if let Some(keys) = keys {

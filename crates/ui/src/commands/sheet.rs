@@ -27,7 +27,7 @@ use crate::typography::{CAPTION, Ink};
 /// Open the shortcuts sheet of `commands` in the window `overlays` belongs to.
 pub fn open_shortcuts(overlays: Overlays, commands: Commands) {
     overlays.show_dialog(framed_dialog(
-        "Keyboard shortcuts",
+        crate::tr!("ui-shortcuts-title"),
         Element::from(ShortcutsSheet { commands, overlays }),
         Dim::PopupWidth.px(),
         Dim::PopupHeight.px(),
@@ -159,15 +159,15 @@ impl Component for ShortcutsSheet {
         }
         let content: Vec<Element> = if all.is_empty() {
             vec![caption(if query.read().trim().is_empty() {
-                "This window has no keyboard shortcuts.".to_owned()
+                crate::tr!("ui-shortcuts-none-empty")
             } else {
-                format!("No shortcuts match “{}”.", query.read().trim())
+                crate::tr!("ui-shortcuts-no-match-empty", query = query.read().trim())
             })]
         } else {
             groups
                 .iter()
                 .map(|group| {
-                    Group::new(Some(group.title().to_owned()))
+                    Group::new(Some(group.title()))
                         .rows(all.iter().filter(|line| line.group == *group).map(|line| {
                             let keys: Element = match (line.shortcuts.first(), &line.keys_text) {
                                 (Some(_), _) => rect()
@@ -197,7 +197,7 @@ impl Component for ShortcutsSheet {
                                 .collect();
                             let mut semantics = crate::a11y::Semantics::new()
                                 .role(AccessibilityRole::ListItem)
-                                .hint(spoken.join(" or "));
+                                .hint(crate::format::List::or(spoken).format());
                             if let Some(first) = line.shortcuts.first() {
                                 semantics = semantics.shortcut(first.label());
                             }
@@ -217,10 +217,11 @@ impl Component for ShortcutsSheet {
                 .collect()
         };
 
-        let header = HeaderBar::new("Keyboard shortcuts")
+        let header = HeaderBar::new(crate::tr!("ui-shortcuts-title"))
             .draggable(false)
             .trailing(
-                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog()).tooltip("Close"),
+                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                    .tooltip(&crate::tr!("ui-dialog-close")),
             );
         rect()
             .component("ShortcutsSheet")
@@ -229,7 +230,7 @@ impl Component for ShortcutsSheet {
             .child(
                 rect().tw(&tokens, &[w_full(), px(S4), pb(S3)]).child(
                     search_field(query, |_: String| {})
-                        .placeholder("Search shortcuts")
+                        .placeholder(crate::tr!("ui-shortcuts-search.placeholder"))
                         .fill_width()
                         .autofocus()
                         .on_escape(move |_| overlays.dismiss_dialog()),

@@ -1027,6 +1027,7 @@ impl Component for NavigationSplitView {
         };
         let can_back = model.can_go_back();
         let window_title = model.window_title(&self.app_title);
+        crate::app::claim_window_title();
         use_side_effect_with_deps(&window_title, |title| {
             let title = title.clone();
             crate::shell::window::with_window(move |window| window.set_title(&title));
@@ -1080,7 +1081,7 @@ impl Component for NavigationSplitView {
             entry: current.id,
             place: shown_location.path_text(),
             title: if searching {
-                "Search results".to_string()
+                crate::tr!("ui-search-results")
             } else {
                 title.clone()
             },
@@ -1441,7 +1442,7 @@ impl Component for NavigationSplitView {
                         ScrolledTitle {
                             scroll,
                             title: if searching {
-                                "Search results".to_string()
+                                crate::tr!("ui-search-results")
                             } else {
                                 title.clone()
                             },
@@ -1525,13 +1526,19 @@ impl Component for NavigationSplitView {
                     // right from where it was, over the screen beneath it.
                     let x = slide.at(time);
                     memory.borrow_mut().shown = Some((slide.motion, x));
-                    let outgoing = slide.outgoing_screen.clone().unwrap_or_else(|| rect().into());
+                    let outgoing = slide
+                        .outgoing_screen
+                        .clone()
+                        .unwrap_or_else(|| rect().into());
                     stage.child(at_rest(screen)).child(slide_frame(
                         x * width,
                         1.0,
                         Some(card_amount(x)),
                         &tokens,
-                        rect().width(Size::fill()).height(Size::fill()).child(outgoing),
+                        rect()
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .child(outgoing),
                     ))
                 }
                 Some(slide) => {
@@ -1629,7 +1636,7 @@ impl Component for NavigationSplitView {
             entry: current.id,
             scroll,
             title: if searching {
-                "Search results".to_string()
+                crate::tr!("ui-search-results")
             } else {
                 title.clone()
             },
@@ -1689,7 +1696,7 @@ impl Component for NavigationSplitView {
                     }
                     search_id.request_focus();
                 } else if control && (letter == "q" || letter == "w") {
-                    Platform::get().close_window(Platform::window_id());
+                    crate::document::guard::request_close(Platform::window_id());
                 } else if event.key == Key::Named(NamedKey::Enter)
                     && searching
                     && search_focus.read().is_focused()
@@ -1989,18 +1996,23 @@ impl Component for Sidebar {
                         .tw(&tokens, SIDEBAR_LIST)
                         .tw(&tokens, &[pt(S2)])
                         .a11y_role(AccessibilityRole::ListBox)
-                        .a11y_alt(if typing { "Results" } else { "Pages" })
+                        .a11y_alt(if typing {
+                            crate::tr!("ui-sidebar-results")
+                        } else {
+                            crate::tr!("ui-sidebar-pages")
+                        })
                         .children(entries)
                         .maybe_child(no_matches.then(|| {
-                            rect()
-                                .tw(&tokens, &[pt(S3), px(S3)])
-                                .child(BODY.in_ink(Ink::Muted).label(&tokens, "Nothing matches."))
+                            rect().tw(&tokens, &[pt(S3), px(S3)]).child(
+                                BODY.in_ink(Ink::Muted)
+                                    .label(&tokens, crate::tr!("ui-search-no-matches")),
+                            )
                         })),
                 ),
             );
         shell
             .a11y_role(AccessibilityRole::Navigation)
-            .a11y_alt("Sidebar")
+            .a11y_alt(crate::tr!("ui-sidebar"))
             .on_press({
                 let press = region.clone();
                 move |event: Event<PressEventData>| press.press(&event)

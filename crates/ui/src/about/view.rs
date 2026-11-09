@@ -40,12 +40,12 @@ pub enum Page {
 }
 
 impl Page {
-    fn title(self) -> &'static str {
+    fn title(self) -> String {
         match self {
-            Page::Main => "About",
-            Page::Licence => "Licence",
-            Page::Credits => "Credits",
-            Page::Legal => "Legal",
+            Page::Main => crate::tr!("ui-about-page-main"),
+            Page::Licence => crate::tr!("ui-about-licence"),
+            Page::Credits => crate::tr!("ui-about-credits"),
+            Page::Legal => crate::tr!("ui-about-legal"),
         }
     }
 }
@@ -60,7 +60,7 @@ pub fn open_with(overlays: Overlays, info: AppInfo) {
 /// without clicking to it.
 pub fn open_at(overlays: Overlays, info: AppInfo, page: Page) {
     overlays.show_dialog(framed_dialog(
-        format!("About {}", info.name),
+        crate::tr!("ui-about-title", app = info.name.as_str()),
         Element::from(AboutBody {
             info,
             overlays,
@@ -79,7 +79,9 @@ pub struct AboutBody {
     pub start: Page,
 }
 
-/// The facts the details block carries that depend on this window.
+/// The facts the details block carries that depend on this window. The block
+/// is copied into bug reports, so it stays in English, like the labels of
+/// `details::details_text`.
 fn environment(tokens: &Tokens) -> Environment {
     Environment {
         facts: details::facts(),
@@ -145,11 +147,13 @@ impl Component for AboutBody {
         };
 
         let mut header = HeaderBar::new(current.title()).draggable(false).trailing(
-            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog()).tooltip("Close"),
+            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                .tooltip(&crate::tr!("ui-dialog-close")),
         );
         if current != Page::Main {
             header = header.leading(
-                icon_button(Icon::GoPrevious, move |_| page.set(Page::Main)).tooltip("Back"),
+                icon_button(Icon::GoPrevious, move |_| page.set(Page::Main))
+                    .tooltip(&crate::tr!("ui-nav-back")),
             );
         }
         let scroll = scrolls[match current {
@@ -195,13 +199,13 @@ impl Component for AboutBody {
 
 /// A link row: the title, the address it opens as its value, and the whole row
 /// pressable. A link that cannot start says so in a toast.
-fn link_row(title: &str, url: &str, overlays: Overlays) -> Element {
+fn link_row(title: String, url: &str, overlays: Overlays) -> Element {
     let url_owned = url.to_owned();
     row(title)
         .value(link::shown(url))
         .on_press(move |_| {
             link::open(&url_owned, move || {
-                overlays.toast("The link could not be opened.");
+                overlays.toast(crate::tr!("ui-about-link-failed"));
             });
         })
         .into()
@@ -241,11 +245,11 @@ fn main_page(
     let mut links = Group::new(None::<String>);
     let mut any_link = false;
     if link::is_openable(&info.website) {
-        links = links.row(link_row("Website", &info.website, overlays));
+        links = links.row(link_row(crate::tr!("ui-about-website"), &info.website, overlays));
         any_link = true;
     }
     if link::is_openable(&info.issues) {
-        links = links.row(link_row("Report an issue", &info.issues, overlays));
+        links = links.row(link_row(crate::tr!("ui-about-report-issue"), &info.issues, overlays));
         any_link = true;
     }
     if any_link {
@@ -254,27 +258,27 @@ fn main_page(
 
     let mut doors = Group::new(None::<String>);
     doors = doors.row(
-        row("Licence")
+        row(crate::tr!("ui-about-licence"))
             .value(info.licence.clone())
             .navigates()
             .on_press(move |_| page.set(Page::Licence)),
     );
     doors = doors.row(
-        row("Credits")
+        row(crate::tr!("ui-about-credits"))
             .navigates()
             .on_press(move |_| page.set(Page::Credits)),
     );
     doors = doors.row(
-        row("Legal")
+        row(crate::tr!("ui-about-legal"))
             .navigates()
             .on_press(move |_| page.set(Page::Legal)),
     );
     elements.push(doors.into());
 
-    let mut facts = Group::new(Some("Details".to_owned()));
+    let mut facts = Group::new(Some(crate::tr!("ui-about-details")));
     let mut any_fact = false;
     if !info.id.is_empty() {
-        facts = facts.row(row("App ID").mono_value(info.id.clone()));
+        facts = facts.row(row(crate::tr!("ui-about-app-id")).mono_value(info.id.clone()));
         any_fact = true;
     }
     let build = [super::info::short_commit(&info.commit), info.built.as_str()]
@@ -283,7 +287,7 @@ fn main_page(
         .collect::<Vec<_>>()
         .join(", ");
     if !build.is_empty() {
-        facts = facts.row(row("Build").mono_value(build));
+        facts = facts.row(row(crate::tr!("ui-about-build")).mono_value(build));
         any_fact = true;
     }
     if any_fact {
@@ -296,10 +300,10 @@ fn main_page(
             .tw(tokens, &[flex_row(), justify(Align::Center), w_full()])
             .child(
                 action_button(
-                    "Copy details",
+                    crate::tr!("ui-error-copy-details"),
                     move |_| match freya::clipboard::Clipboard::set(text.clone()) {
-                        Ok(()) => overlays.toast("Details copied."),
-                        Err(_) => overlays.toast("The details could not be copied."),
+                        Ok(()) => overlays.toast(crate::tr!("ui-error-details-copied")),
+                        Err(_) => overlays.toast(crate::tr!("ui-error-details-not-copied")),
                     },
                 )
                 .icon(Icon::EditCopy),
@@ -321,11 +325,12 @@ fn licence_page(tokens: &Tokens, info: &AppInfo) -> Vec<Element> {
     }
     if info.licence_text.trim().is_empty() {
         let note = if info.licence.is_empty() {
-            format!("{} does not say which licence it is under.", info.name)
+            crate::tr!("ui-about-no-licence", app = info.name.as_str())
         } else {
-            format!(
-                "{} is licensed under {}. It did not include the text of the licence.",
-                info.name, info.licence
+            crate::tr!(
+                "ui-about-licence-without-text",
+                app = info.name.as_str(),
+                licence = info.licence.as_str()
             )
         };
         elements.push(caption(note));
@@ -344,15 +349,15 @@ fn licence_page(tokens: &Tokens, info: &AppInfo) -> Vec<Element> {
 fn credits_page(info: &AppInfo) -> Vec<Element> {
     let mut elements: Vec<Element> = Vec::new();
     if info.authors.is_empty() {
-        elements.push(caption(format!("{} does not list its authors.", info.name)));
+        elements.push(caption(crate::tr!("ui-about-no-authors", app = info.name.as_str())));
     } else {
-        let mut authors = Group::new(Some("Written by".to_owned()));
+        let mut authors = Group::new(Some(crate::tr!("ui-about-written-by")));
         for author in &info.authors {
             authors = authors.row(row(author.clone()));
         }
         elements.push(authors.into());
     }
-    let mut built = Group::new(Some("Built with".to_owned()));
+    let mut built = Group::new(Some(crate::tr!("ui-about-built-with")));
     built = built.row(row("bingux-ui").value(details::BINGUX_UI));
     if !details::FREYA.is_empty() {
         built = built.row(row("Freya").value(details::FREYA));
@@ -368,25 +373,25 @@ fn credits_page(info: &AppInfo) -> Vec<Element> {
 fn legal_page(tokens: &Tokens, info: &AppInfo, legal: Option<Legal>) -> Vec<Element> {
     let mut elements: Vec<Element> = Vec::new();
     elements.push(
-        Group::new(Some("Interface library".to_owned()))
+        Group::new(Some(crate::tr!("ui-about-interface-library")))
             .row(row("bingux-ui").value(details::BINGUX_UI))
-            .row(row("Licence").value("GPL-3.0-or-later"))
+            .row(row(crate::tr!("ui-about-licence")).value("GPL-3.0-or-later"))
             .into(),
     );
     let Some(legal) = legal else {
         // Nothing is read before the page is open, and the read is quick: the
         // note holds the place until it lands.
-        elements.push(caption(format!(
-            "The licences of the libraries {} is built from are not listed in this build.",
-            info.name
+        elements.push(caption(crate::tr!(
+            "ui-about-no-library-licences",
+            app = info.name.as_str()
         )));
         return elements;
     };
     let (summary, crates) = details::dependency_list(&legal.text);
     if !summary.is_empty() {
         elements.push(
-            Group::new(Some("Libraries".to_owned()))
-                .row(row("Licences").value(summary))
+            Group::new(Some(crate::tr!("ui-about-libraries")))
+                .row(row(crate::tr!("ui-about-licences")).value(summary))
                 .into(),
         );
     }
@@ -403,14 +408,14 @@ fn legal_page(tokens: &Tokens, info: &AppInfo, legal: Option<Legal>) -> Vec<Elem
             .map(|lines| lines.join("\n"))
             .collect();
         elements.push(text_card(
-            Some("Licences of each library"),
+            Some(&crate::tr!("ui-about-licences-each")),
             tokens,
             LISTING,
             &blocks,
         ));
     }
     if let Some(path) = legal.path {
-        elements.push(caption(format!("The full licence texts are in {path}.")));
+        elements.push(caption(crate::tr!("ui-about-licence-files", path = path.as_str())));
     }
     elements
 }

@@ -79,7 +79,10 @@ pub fn open(overlays: Overlays) {
 pub fn app_menu_items(overlays: Overlays) -> Vec<MenuItem> {
     vec![
         menu_separator(),
-        menu_item(format!("About {}", info().name), move |_: ()| open(overlays)),
+        menu_item(
+            crate::tr!("ui-about-title", app = info().name),
+            move |_: ()| open(overlays),
+        ),
     ]
 }
 
@@ -104,7 +107,7 @@ impl Component for AppMenu {
         let own = self.items.clone();
         // The window's commands are read when the menu opens, so a title
         // such as "Undo rename" is the one that applies then.
-        menu_button("Main menu", Vec::new())
+        menu_button(crate::tr!("ui-main-menu"), Vec::new())
             .icon(Icon::OpenMenu)
             .items_on_open(move || main_menu(own.clone(), commands.main_menu_items(), overlays))
     }

@@ -17,6 +17,6 @@ repository does.
 | `os/`          | Bingux OS only: the greetd configuration, the greeter's polkit rules and directories, the login-screen wallpaper units |
 | `bsm/`         | Bingux OS only: bsm units, sysusers, tmpfiles, D-Bus and polkit policy, PAM services, scripts; `image/` is image-only  |
 | `portal/`      | The portal backend registration and the D-Bus activation files                                                         |
-| `metainfo/`    | AppStream files of Settings, Files and Taxonomy                                                                        |
-| `man/`         | Man pages: `bingux-settings`, `bingux-files`, `bingux-config`, `bingux-effects`, `bingux-taxonomy`                     |
+| `metainfo/`    | AppStream files of Settings, Files, Preview and Taxonomy                                                               |
+| `man/`         | Man pages: `bingux-settings`, `bingux-files`, `bingux-preview`, `bingux-config`, `bingux-effects`, `bingux-taxonomy`   |
 | `search-apps/` | Search-app manifests that `bingux-searchd` reads                                                                       |

@@ -5,8 +5,8 @@
 //! source; when it cannot, the next is tried, and the reasons are kept so the
 //! card can say why the better viewer did not show the file.
 
-use std::sync::LazyLock;
 use std::sync::Arc;
+use std::sync::LazyLock;
 
 use bingux_preview_core::{Cancel, FileFacts, Loaded, PreviewSource, Registry, Sniffed, ViewerId};
 
@@ -31,7 +31,10 @@ pub fn resolve(source: PreviewSource) -> Result<Arc<Resolved>, String> {
     resolve_with(&REGISTRY, source)
 }
 
-pub(crate) fn resolve_with(registry: &Registry, source: PreviewSource) -> Result<Arc<Resolved>, String> {
+pub(crate) fn resolve_with(
+    registry: &Registry,
+    source: PreviewSource,
+) -> Result<Arc<Resolved>, String> {
     let sniffed = Sniffed::of(&source).map_err(|error| bingux_preview_core::text::plain(&error))?;
     let facts = FileFacts::of(&source, &sniffed);
     let cancel = Cancel::new();
@@ -51,7 +54,7 @@ pub(crate) fn resolve_with(registry: &Registry, source: PreviewSource) -> Result
             Err(error) => notes.push(error.message().to_owned()),
         }
     }
-    Err("There is no preview for this file.".to_owned())
+    Err(crate::tr!("ui-preview-none-empty"))
 }
 
 #[cfg(test)]
@@ -76,7 +79,11 @@ mod tests {
         let resolved = resolve_bytes("a.zip", b"PK\x03\x04 not really");
         assert_eq!(resolved.viewer, ViewerId::Card);
         assert_eq!(resolved.notes.len(), 1);
-        assert!(resolved.notes[0].contains("damaged"), "{:?}", resolved.notes);
+        assert!(
+            resolved.notes[0].contains("damaged"),
+            "{:?}",
+            resolved.notes
+        );
     }
 
     #[test]
@@ -89,7 +96,10 @@ mod tests {
     #[test]
     fn a_missing_file_is_an_error_in_words() {
         let missing = PreviewSource::path("/var/tmp/PreviewKit/not-here.png");
-        assert_eq!(resolve(missing).err(), Some("This file no longer exists.".to_owned()));
+        assert_eq!(
+            resolve(missing).err(),
+            Some("This file no longer exists.".to_owned())
+        );
     }
 
     #[test]

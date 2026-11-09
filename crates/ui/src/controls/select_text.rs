@@ -125,8 +125,8 @@ impl From<SelectText> for Element {
 /// Copies `text` to the clipboard and says so, or says that it could not.
 pub(crate) fn copy_text(overlays: Overlays, text: String) {
     match freya::clipboard::Clipboard::set(text) {
-        Ok(()) => overlays.toast("Copied."),
-        Err(_) => overlays.toast("The text could not be copied."),
+        Ok(()) => overlays.toast(crate::tr!("ui-copy-done-status")),
+        Err(_) => overlays.toast(crate::tr!("ui-copy-failed-error")),
     }
 }
 

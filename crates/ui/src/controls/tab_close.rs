@@ -70,16 +70,16 @@ pub(crate) enum Act {
 }
 
 impl Act {
-    pub(crate) fn label(self) -> &'static str {
+    pub(crate) fn label(self) -> String {
         match self {
-            Act::Close => "Close tab",
-            Act::CloseOthers => "Close other tabs",
-            Act::CloseToTheLeft => "Close tabs to the left",
-            Act::CloseToTheRight => "Close tabs to the right",
-            Act::Duplicate => "Duplicate tab",
-            Act::Reopen => "Reopen closed tab",
-            Act::MoveLeft => "Move left",
-            Act::MoveRight => "Move right",
+            Act::Close => crate::tr!("ui-tab-close"),
+            Act::CloseOthers => crate::tr!("ui-tab-close-others"),
+            Act::CloseToTheLeft => crate::tr!("ui-tab-close-to-start"),
+            Act::CloseToTheRight => crate::tr!("ui-tab-close-to-end"),
+            Act::Duplicate => crate::tr!("ui-tab-duplicate"),
+            Act::Reopen => crate::tr!("ui-tab-reopen"),
+            Act::MoveLeft => crate::tr!("ui-tab-move-to-start"),
+            Act::MoveRight => crate::tr!("ui-tab-move-to-end"),
         }
     }
 

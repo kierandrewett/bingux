@@ -67,7 +67,7 @@ impl Component for BackButton {
         let router = use_router();
         let items = history_menu(router.back_menu(), move |entry| router.pop_to(entry));
         icon_button(Icon::GoPrevious, move |_| router.back())
-            .tooltip("Back")
+            .tooltip(&crate::tr!("ui-nav-back"))
             .context_menu(items)
     }
 }
@@ -82,7 +82,7 @@ impl Component for ForwardButton {
         let router = use_router();
         let items = history_menu(router.forward_menu(), move |entry| router.forward_to(entry));
         let button: IconButton = icon_button(Icon::GoNext, move |_| router.forward())
-            .tooltip("Forward")
+            .tooltip(&crate::tr!("ui-nav-forward"))
             .enabled(router.can_forward())
             .context_menu(items);
         button

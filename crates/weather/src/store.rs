@@ -48,7 +48,7 @@ pub struct Settings {
     /// The units the person chose; none follows the locale.
     #[serde(default)]
     pub units: Option<Units>,
-    /// Whether "My Location" is a place in the list.
+    /// Whether "My location" is a place in the list.
     #[serde(default = "yes")]
     pub use_location: bool,
     /// The saved places, in the order the person put them.

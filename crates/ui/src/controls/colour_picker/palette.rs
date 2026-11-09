@@ -36,7 +36,7 @@ impl Entry {
     pub(super) fn label(&self) -> String {
         let hex = colour_to_hex(self.colour);
         match &self.name {
-            Some(name) => format!("{name}, {hex}"),
+            Some(name) => crate::tr!("ui-colour-named", name = name, hex = hex),
             None => hex,
         }
     }
@@ -119,7 +119,7 @@ impl Component for Swatch {
                 );
         let stop = focus_stop(
             face,
-            format!("Colour {label}"),
+            crate::tr!("ui-colour-swatch.a11y", colour = &label),
             AccessibilityRole::Button,
             true,
             Radius::Pill,
@@ -237,7 +237,11 @@ impl Component for Recent {
                             items(Align::Center),
                         ],
                     )
-                    .child(CAPTION.in_ink(Ink::Muted).label(&tokens, "Recent")),
+                    .child(
+                        CAPTION
+                            .in_ink(Ink::Muted)
+                            .label(&tokens, crate::tr!("ui-colour-recent")),
+                    ),
             )
             .child(grid(
                 &tokens,

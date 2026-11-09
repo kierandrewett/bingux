@@ -5,7 +5,7 @@ This page is for maintainers. To install Bingux, see
 the open packaging decisions are in [Bingux userspace](../design/userspace.md).
 
 A release is one version number, one source archive and the same version in
-every package: `bingux`, `bingux-settings`, `bingux-files` and `bingux-taxonomy`.
+every package: `bingux`, `bingux-settings`, `bingux-files`, `bingux-preview`, `bingux-calendar` and `bingux-taxonomy`.
 How the packages are made is in [packaging](packaging.md).
 
 ## Cut a release

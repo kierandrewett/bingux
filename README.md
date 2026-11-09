@@ -49,7 +49,7 @@ and a `nightly` channel, are described in
 
 The packages are `bingux` (the desktop and every core service, including the
 sound effects engine and the configuration command) and the apps `bingux-settings`,
-`bingux-files` and `bingux-taxonomy`. They are written with pkgsmith for Fedora 43,
+`bingux-files`, `bingux-calendar`, `bingux-preview` and `bingux-taxonomy`. They are written with pkgsmith for Fedora 43,
 Debian 13 and Arch Linux (`make prefix`, then `make packages`) and published at
 `repo.gnoblin.org`; see [package management](docs/package-management.md) and
 [packaging](docs/packaging.md). The repository does not publish a ready package
@@ -80,7 +80,7 @@ and the same file view as the file chooser.
 
 | Directory                       | What lives there                                                                                                                                                                          |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `apps/`                         | Programs you launch: Settings (`apps/settings`), Files (`apps/files`) and the component catalogue (`apps/taxonomy`).                                                                      |
+| `apps/`                         | Programs you launch: Settings (`apps/settings`), Files (`apps/files`), Preview (`apps/preview`) and the component catalogue (`apps/taxonomy`).                                            |
 | `crates/`                       | Rust libraries the apps and services share: the design system (`crates/ui`), the configuration store (`crates/config`), the file model, search, previews, data usage and the DSP plugins. |
 | `services/`                     | Background programs and helpers: search and status daemons, the portal backend, the session and shell helpers, the preview host and the sound effects engine.                             |
 | `bsm/`                          | The Bingux Session Manager: one directory per crate (`core`, `manager`, `compositor`, `host`, `helper`, `appearance`, `proto`).                                                           |

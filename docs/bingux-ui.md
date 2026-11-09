@@ -563,6 +563,13 @@ code on the UI thread can use `bingux_ui::nav::router()`, or `nav::navigate(uri)
 to open a URI. From another thread (a socket, a D-Bus call) use
 `bingux_ui::app::open_uri(uri)`, which queues it as a second launch would.
 
+A window-level key handler (an app's `T` for today, `N` for a new item) must
+not fire under a menu, choice, dialog or sheet. `nav::modal_open()` says
+whether one is open, without subscribing, so an event handler can call it and
+return early (`Router::modal_open_now()` is the same on a router you hold).
+A key typed in a text field never reaches the window's handler, because the
+field takes it.
+
 | Call                                                               | Does                                                                                                                                                                                                                                             |
 | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `push(&location)`, `push_titled(&location, title)`, `open(Target)` | Open a subpage. A row that already knows the name passes it with `push_titled`                                                                                                                                                                   |
@@ -985,7 +992,10 @@ sortable(
 )
 .labels(names)          // grips are named "Reorder <label>"; moves are announced
 .drop_indicator()       // long lists: a line instead of sliding rows
+.selected(Some(index))  // the item whose row says .selected(true): see below
 ```
+
+A row draws its selection (and its hover) under itself, and the grip is outside the row, so the row's fill alone would stop short of the grip and the end inset. `.selected(index)` makes the list fill that tail (a `SortableTail`, the grip and the inset after it) with the same selection fill, so the selection covers the whole row to the card's edge. A row that is only hovered still lights over the row alone. `controls/sortable_tests.rs` measures it.
 
 `on_reorder(from, to)` is called **once**, after the move has settled, with indexes into the list _before_ the move: remove the item at `from`, insert it at `to`. It is never called with `from == to`, with an index out of range, or after Escape. The pure rules live in `reorder.rs` (`Stack::landing`, `Stack::offsets`, `key_target`, the `Reorder` state machine) and are unit-tested; the pointer capture is `drag.rs` (`PointerDrag`, `Frames`), shared with anything else that carries an item.
 
@@ -1921,6 +1931,175 @@ must not key the body by tab. The contract:
 - Tests: `files::tab_tests` (pass-by-pass) and `scripts/files-shift.py` (real
   window, every frame).
 
+## Documents
+
+`bingux_ui::document` is what an app that opens, edits and saves files shares:
+open, save and save as, the unsaved mark, closing with unsaved work, drafts
+and recovery after a crash, a file that another program changes, the recent
+documents, and the scene the app comes back to. The app holds the content (a
+rope, a picture, a table); the document holds the file. The taxonomy shows it
+under Files > Documents, with every dialog live.
+
+### Make the manager
+
+Call `use_documents` once in the window root, inside the `OverlayHost`. Say how
+to make the content of a document, and how to keep tabs in step with the list:
+
+```rust
+let documents = use_documents(
+    DocumentsConfig::new("bingux-text-editor", "Text Editor")
+        .mime("text/plain")
+        .filter(Filter::new("Text files").mime("text/*")),
+    |init| Rc::new(EditorContent::new(init)),   // init.title, .path, .app_value, .origin
+    move |event| match event {
+        DocumentEvent::Opened(document) => open_tab(document.id()),
+        DocumentEvent::Reveal(document) => select_tab(document.id()),
+        DocumentEvent::Closed(id) => close_tab(id),
+    },
+);
+use_document_title(documents, "Text Editor");     // "• notes.txt – Text Editor"
+```
+
+`Documents` and `Document` are `Copy`: put them in closures. `documents.list()`
+is the open documents in order and a read of it redraws when it changes, so a
+tab strip can be drawn from it. Tell it which one is showing with
+`documents.set_current(Some(document))`: the window title and the scene follow.
+
+The app's side of one document is `DocumentContent`:
+
+```rust
+impl DocumentContent for EditorContent {
+    // UI thread: copy, and put the encoding in the closure, which runs on a worker.
+    fn snapshot(&self) -> DocumentSnapshot {
+        let text = self.rope.borrow().clone();
+        DocumentSnapshot::encode(move || encode(&text).map_err(|e| e.advice()))
+    }
+    // UI thread: show the file's bytes. Not an edit: mark_edited in here is ignored.
+    fn load(&self, bytes: Vec<u8>, reason: LoadReason) { /* Open, Reload, Recover */ }
+    // The handle, once it exists: call document.mark_edited() when the content changes.
+    fn attached(&self, document: Document) { *self.document.borrow_mut() = Some(document); }
+}
+```
+
+Reads and writes are owned bytes handed to and from a worker: **nothing here
+blocks the UI thread**, and an app never reads or writes the file itself.
+`Document::mark_edited()` is cheap (it counts the edit and schedules a draft),
+so call it for every edit. `set_edited(false)` is for an undo that went back to
+the saved point. `set_app_value(&value)` stores one JSON value of the app's per
+document (a caret, a language, a zoom) that is kept in drafts and in the scene
+and comes back in `DocumentInit::app_value`. `set_scroll(x, y)` does the same
+for the scroll position.
+
+### What a person gets
+
+| They do                                | What happens                                                                                                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Open (`open_dialog`, a recent, a path) | The Bingux file chooser, or the path. The file is read on a worker; the document shows `Phase::Loading` until then. A file already open is shown, not opened twice.         |
+| Edit                                   | `UNSAVED_MARK` (a bullet) goes before the name in the tab (`display_title`) and the window title (`use_document_title`).                                                    |
+| Save                                   | Atomic: a hidden file in the same folder, flushed, renamed over the old one, which keeps its mode; a link is written through. A document with no file asks where (Save as). |
+| Save as                                | The chooser, then the save; only then does the document belong to the new file (the old one is untouched when the save fails).                                              |
+| Close a document                       | A document with unsaved changes asks: **Save** (default), **Discard**, **Cancel**.                                                                                          |
+| Close the window                       | The same question for all unsaved documents ("Save changes to 3 documents?"), whichever way the window closes (below).                                                      |
+| Start the app after a crash            | "Recover unsaved work?": **Recover** (default), **Discard**, **Not now** (Escape; deletes nothing).                                                                         |
+| Another program changes the file       | Unedited: read again, with a toast. Edited: "changed on disk": **Keep my version** (default) or **Reload**.                                                                 |
+| The file is deleted or moved           | The document stays open and becomes unsaved, so closing it asks; saving writes the file again.                                                                              |
+
+A save that fails says why and offers what can work: the drive is full (Try
+again, Save as), no permission, the folder gone or the drive read-only (Save
+as). A save that finds the file changed since it was read (a program wrote
+between the watch and the save) asks before replacing it. Saves that follow
+each other never share a temporary file, and an edit made while the bytes are
+being written leaves the document unsaved (the document compares the revision
+it saved with the revision it has).
+
+### The dialogs
+
+They are in `document::dialogs`, each a function that builds a `Dialog` and
+tells one callback which response was chosen, so an app with a flow of its own
+can show the same dialogs. The rules they keep: a dialog that can lose work
+defaults to the answer that keeps it; Escape is the answer that changes
+nothing; a response that loses work is destructive and never focused; the
+buttons say what happens (never Yes, No, OK). `Documents` shows them one at a
+time (a dialog that finds another open waits for it), and one about a document
+that closed meanwhile is not asked.
+
+### Drafts
+
+A document with unsaved changes writes a draft three seconds after the last
+edit (`autosave_after`): the content (`<id>.draft`) and a record
+(`<id>.json`: title, path, the file's stamp, the app's value, the scroll), both
+written atomically, in `$XDG_STATE_HOME/<app-id>/drafts/`. Saving, discarding
+and reloading delete it, and a draft that is being written when that happens
+gives up. A record names the process that wrote it (its id and start time, so a
+reused id is not taken for it), so a second window or copy never offers the
+draft its sibling is using. A draft with no record or a record with no content
+is a torn write and is removed; so are those older than 30 days. Recovering
+brings the document back **unsaved**, with the app's value, and compares the
+file with the stamp it had: if it changed meanwhile, the "changed on disk"
+question follows.
+
+### Files that change under a document
+
+`FileWatch` watches the **folder** (inotify through `notify`), because most
+programs save by renaming a new file over the old one. A burst of events is
+waited out (120 ms of quiet), then the file's `Stamp` (modification time to the
+nanosecond, size, inode) is compared with what the document knows, so an event
+that changed nothing reports nothing, and the document's own saves are
+acknowledged and not reported. Where inotify cannot be used (the watch limit,
+a network share) the document compares stamps when the window is focused
+again (`documents.check_changes()`, which an app may call itself).
+
+### Recent documents
+
+Every open and save is added to `recently-used.xbel`, the list Files, the
+Bingux file chooser and GTK and Qt programs share. The file is read, one
+bookmark changed and the whole replaced atomically, so other programs'
+bookmarks, their application entries and the time a file was first added are
+kept. A list cut off in the middle of a bookmark keeps its whole bookmarks; a
+stray byte does not cost the list; a list that cannot be read is not written
+over. `documents.recent_menu()` is the "Open Recent" menu: the documents **this
+app** registered, newest first, that still exist (a file that was opened and is
+gone is forgotten). `document::recents` has the functions for an app that wants
+the list itself.
+
+### The scene
+
+`use_scene_state()` (which `use_documents` calls) keeps what an app comes back
+to in `$XDG_STATE_HOME/<app-id>/scene.json` (`BINGUX_SCENE_FILE` names another
+file): the window's size, the documents that were open (path, the one that was
+showing, scroll, the app's value, the draft if it had unsaved work) and values
+of the app's own by name (`scene.set_value("zoom", &1.25)`). It is read by
+`Application::run` before the window exists, and written by a worker half a
+second after the last change and once more when the window closes. Only the
+first window of the process keeps it. `Application::remember_window()` opens
+the window at its old size. After a crash the plan merges the scene and the
+drafts: each scene document that had a draft comes back from the draft, the
+others from their files, in order, and drafts the scene did not mention follow.
+A file that was open and is gone is left out without a dialog.
+
+### The close guard
+
+Every way a window closes goes through one question first: the compositor's
+close button and Alt+F4 (winit's close request), the window's Close button and
+Ctrl+W (`MainWindow::close`). `use_documents` registers a guard for its window
+(`document::guard`); the window stays open while the person answers, and the
+guard closes it itself afterwards. A Cancel forgets the request: the next close
+asks again. An app's File > Quit calls `documents.request_close()`.
+
+### Tests and captures
+
+`DocumentsConfig::sandboxed(dir)` keeps drafts and recents under `dir`, so a
+test or a documentation capture touches nothing of the person's. The scene is
+per thread, and `BINGUX_DRAFTS_DIR`, `BINGUX_SCENE_FILE` name other files for a
+whole process. `document::documents_tests` drives the manager in the headless
+runner (open, edit, save, an edit that races a save, close and each answer,
+another program changing, deleting or replacing a file, recovery of each
+kind, the scene, the close guard); the building blocks have tests of the
+failures: a drive that fills half way, a permission error, a folder that
+vanishes between the write and the rename, a file replaced during a save,
+eight saves of one file at once, a recents list that is cut off, has garbage
+around it or a byte that is not text, and torn or corrupt drafts.
+
 ## Search
 
 `bingux_ui::search` is the search every Bingux app shares. An app describes
@@ -2175,6 +2354,29 @@ rect().child(video_surface(frames.clone()).on_double_press(go_full_screen))
     .child(timeline(status.position, status.duration, move |seek: Seek| player.seek(seek.to, seek.done)).times())
 ```
 
+## Calendar views
+
+`calendar` draws a calendar and reports what a person did; it does not know
+what an event is, where it is kept or how it repeats. Dates are civil dates
+(`Date`, `Weekday`) and times are minutes after midnight. The taxonomy's
+Calendar page shows each piece; `apps/calendar` is the app that uses them.
+
+| Component                             | Use                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `time_grid(days, today)`              | The hours of a day, three days or a week. `.blocks(Vec<Block>)` are timed events and `.banners(Vec<Banner>)` run across days at the top. Overlapping blocks are packed side by side (`layout::pack`), and a block that has free columns to its right widens into them. `.now(minutes)` draws the time-now line in today's column. Press and drag over empty time (`on_create(SlotRange)`), drag a block to move it or its top or bottom edge to resize it (`on_edit(BlockEdit)`, snapped to `.step(minutes)`), press a block twice or press Enter to open it (`on_open(id)`). Up and Down walk the blocks and call `on_select(id)`; `.selected(id)` draws the chosen one with an outline. A block whose event is read-only has `editable: false`. `.scroll_to(minutes, nonce)` scrolls once per nonce. |
+| `month_view(month, today, on_select)` | A month the size of its window. `.items(Vec<MonthItem>)` are events: a bar for a whole-day or multi-day event, a line of text for a timed one, ordered by `MonthItem::minutes` within a day. A day with more than fit shows "+N more" (`on_activate(Date)`). Arrows, Page Up and Page Down and Home and End move the chosen day; Enter on a day with events chooses the first (`on_pick(Some(id))`), Up and Down walk that day's events, Enter opens one (`on_open(id)`), and Escape or a move to another day lets go (`on_pick(None)`). `.selected_item(id)` draws the chosen event. A day pressed twice asks for a new event (`on_create`).                                                                                                                                                          |
+| `month_grid(month, today, on_select)` | A small month for a sidebar or a popover: days with `.marked(days)` get a dot, `.week_numbers(true)`, `.bare()` for a caller that draws its own header, `.on_page(delta)` for the arrows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `date_picker`, `time_picker`          | A button that opens a month, and a dropdown of quarter hours. `time_picker(..).after(start)` adds how long after the start each time is, as an event's end does.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+
+Colours are data (a calendar's colour is a hex string another program may have
+written), so `calendar::palette` turns them into the tints blocks are drawn in
+(`event_colours`), lightened in the dark scheme and with text that stays above
+the contrast floor. Event titles use `EVENT_TITLE`.
+
+Keyboard: the grids are focusable and own Up, Down, Enter and Home and End as
+above. A window that wants more (Delete on the chosen event, `T` for today)
+puts its handler on its root and ignores keys under `nav::modal_open()`.
+
 ## Charts
 
 `charts` draws sparklines, line and area charts, bar charts, rings and
@@ -2200,21 +2402,28 @@ line_chart([Series::new("Charge", points)])
     .label("Battery charge over the last day")
 ```
 
-| Builder                | Use                                                                                             |
-| ---------------------- | ----------------------------------------------------------------------------------------------- |
-| `sparkline(values)`    | A small trend with no axes. `colour`, `unit`, `format`, `area`, `label`.                        |
-| `line_chart(series)`   | Several series over x. `y_unit`, `y_format`, `x_unit`, `curve`, `area`, `label`, `height`.      |
-| `bar_chart(series)`    | Grouped bars, or `stacked()`. `categories`, `details`, `y_unit`, `y_format`, `label`, `height`. |
-| `ring(value)`          | A 0 to 1 gauge with a centre caption. `caption`, `colour`, `label`.                             |
-| `donut(segments)`      | A share of a whole, with a legend. `unit`, `caption`, `label`.                                  |
-| `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range.                                     |
-| `flame_graph(tree)`    | Weighted calls as stacked bars, widest first.                                                   |
-| `range_bar(from, to)`  | A span on a scale, with a marker. `span`, `marker`, `colours`, `label`.                         |
-| `compass(bearing)`     | A rose with a pointer and a value in the middle. `centre`, `label`.                             |
-| `day_arc(progress)`    | The sun's path from sunrise to sunset. `times`, `label`.                                        |
+| Builder                | Use                                                                                                           |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `sparkline(values)`    | A small trend with no axes. `colour`, `unit`, `format`, `area`, `label`.                                      |
+| `line_chart(series)`   | Several series over x. `y_unit`, `y_format`, `x_unit`, `curve`, `area`, `marker(x, name)`, `label`, `height`. |
+| `bar_chart(series)`    | Grouped bars, or `stacked()`. `categories`, `details`, `y_unit`, `y_format`, `label`, `height`.               |
+| `ring(value)`          | A 0 to 1 gauge with a centre caption. `caption`, `colour`, `label`.                                           |
+| `donut(segments)`      | A share of a whole, with a legend. `unit`, `caption`, `label`.                                                |
+| `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range.                                                   |
+| `flame_graph(tree)`    | Weighted calls as stacked bars, widest first.                                                                 |
+| `range_bar(from, to)`  | A span on a scale, with a marker. `span`, `marker`, `colours`, `label`.                                       |
+| `compass(bearing)`     | A rose with a pointer and a value in the middle. `centre`, `label`.                                           |
+| `day_arc(progress)`    | The sun's path from sunrise to sunset. `times`, `label`.                                                      |
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
+
+A `line_chart` of more than one series shows a legend (a swatch and a name a
+series) under the plot, and a pointer or a touch on a point shows a tooltip
+with each series' value. `marker(x, name)` adds a hairline across the plot at
+`x`, the name at its top and a dot where the rule meets each line: a chart of
+the day marks "Now" with it. It draws nothing when `x` is not one of the
+chart's own x values.
 
 **Donut.** Unlike the other charts a donut has no fixed height: it is its ring
 and its legend rows, so it depends on the width it is given. The ring is
@@ -2938,7 +3147,13 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   that wraps to three lines and trailing content. A row with a subtitle grows to
   fit it. `subtitle_one_line()` keeps the subtitle to one line, so the row has
   its natural height, `Dim::RowSubtitle` (63 px at mouse density). A list that
-  mounts rows lazily sizes its slots with that token.
+  mounts rows lazily sizes its slots with that token. `second_line(text)` adds a
+  second caption line under the subtitle for a row that says two things that
+  must not run together (a place, then its conditions): the subtitle and the
+  second line are each held to one line and cut with their own ellipsis.
+  `selection_fill_only()` makes a selected row show the fill and no checkmark,
+  for a list whose selection is the place on show (a sidebar), so the trailing
+  content of every row ends at the same edge.
 - **Row hover.** Only an activatable row shows a hover fill and a pointer: one
   that navigates (a chevron), has `on_press`, or opens something. A switch,
   slider, dropdown, segmented, value-only or entry row shows neither. A switch
@@ -3758,6 +3973,11 @@ animation so motion never shifts the layout around it. Each keeps layout stable:
   progress indicator that stood still looks frozen); the caller picks a
   longer, gentler cycle instead. The spinner and the indeterminate bar are
   built on it (see Progress bars and spinners).
+- `use_ambient_cycle(ms)` is the same clock for decoration (a drift of cloud, a
+  slow shimmer): anything that is there to be pleasant and that nothing depends
+  on. Under reduced motion it does not run: the phase is 0 and no animation
+  task is started, so the picture stands still and draws no frames. A loop
+  that is not a progress indicator uses this, not `use_cycle`.
 
 Durations go through `tokens.motion(MOVE_MS)`, so reduced motion makes every
 motion an instant change. `use_presence` is the hook under `presence`; overlays,
@@ -4291,7 +4511,25 @@ Environment variables for tests and screenshots:
 | double click       | actual size at the pointer, then back to fit                     |
 | two fingers        | zoom about their middle and pan with it                          |
 
-Zooming, turning and flipping animate; reduced motion makes every move instant and turns the glide off. A resize keeps what was last asked for: fitted content stays fitted and content at actual size stays at actual size. `.start(FitMode)` says how content opens, `.orientation(turns, mirrored)` how it comes (a photograph stored on its side), and `.on_mode(f)` reports when the person chooses fit or actual size so an owner can remember it per kind of content. `use_zoom_handle()` returns a `ZoomHandle` that a toolbar, a menu or a Save a copy command drives and reads (`rotate`, `flip_horizontal`, `fit`, `turns`, `mirrored`, `percent`). The arithmetic is `View`, tested without a window.
+Zooming, turning and flipping animate; reduced motion makes every move instant and turns the glide off. A resize keeps what was last asked for: fitted content stays fitted and content at actual size stays at actual size. `.start(FitMode)` says how content opens, `.orientation(turns, mirrored)` how it comes (content that is drawn unturned but should start turned; Skia already turns a photograph stored on its side upright, so a picture viewer gives the size it is shown and no turn), and `.on_mode(f)` reports when the person chooses fit or actual size so an owner can remember it per kind of content. `use_zoom_handle()` returns a `ZoomHandle` that a toolbar, a menu or a Save a copy command drives and reads (`rotate`, `flip_horizontal`, `fit`, `turns`, `mirrored`, `percent`). The arithmetic is `View`, tested without a window.
+
+### Crop view
+
+`use_crop((width, height))` makes a `CropHandle` for content of that many pixels, and `CropOverlay::new(crop).content(picture)` draws the content with a crop box over it: eight handles, a rule-of-thirds grid while the box is held, and everything outside the box dimmed. The overlay fills its parent and fits the content inside a margin that leaves room for the handles, the way a `ZoomView` at fit (`.controls(false).keys_when(|| false)`) fits it, so the two agree about where the picture is. The Preview app crops a picture with it, an avatar picker crops a square with it (`.guide(Guide::Circle)` draws the round shape inside the box, and `CropBar::aspects([Aspect::SQUARE])` leaves the shape list out) and Media can crop a cover or a frame.
+
+| Input                           | Effect                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------- |
+| drag inside the box             | move it                                                                                   |
+| drag a corner or an edge handle | resize it, keeping the shape when one is chosen (a corner grows from the opposite corner) |
+| arrows                          | move the box a pixel of the screen (a pixel of the content when it is shown larger)       |
+| Shift and arrows                | move ten times as far                                                                     |
+| Alt and arrows                  | resize from the bottom right corner: Right and Down grow it, Left and Up shrink it        |
+| Ctrl+A, Home                    | the whole content again                                                                   |
+| Enter, Escape                   | the owner's `on_commit` and `on_cancel`                                                   |
+
+The box is one Tab stop with the library's focus ring, and takes the keyboard when it appears (`.autofocus(false)` turns that off). The handles are for a pointer or a finger: their targets are `Dim::PickerHandle` (44 px at compact density), edge handles are left out of a side too short to hold one, and each has a key equivalent above. `CropBar::new(crop)` is the card that goes with it: a shape list (Free, Original, 1:1, 4:3, 3:2, 16:9, 5:4, 21:9; a dropdown, a sheet on a phone), a button that turns the shape on its side, the size of the box in pixels, and the owner's Cancel and confirming buttons (`.commit_label("Save a copy")`). Choosing a shape reshapes the box at once with the same area and middle, as far as the content allows.
+
+The owner reads the result from the handle: `pixels()` is left, top, width and height in whole pixels of the content, `fractions()` the same as fractions of its width and height (for an owner whose decode may differ a pixel from the size it gave), `is_full()` says whether anything is cut off. `use_crop` starts again from the whole content when the size it is given changes (another picture, a turned one). The arithmetic is `CropRect`, `Aspect` and the functions `drag`, `nudge`, `resize` and `fit_ratio`; `crop/geometry.rs` lists what can go wrong with a crop box and names the test that holds each.
 
 ## Drag and drop
 
@@ -4627,6 +4865,156 @@ bingux-ui).
 The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and
 times, Relative times, Lists and counts and Locale pages show every formatter
 in ten languages.
+
+## Localisation
+
+Every string a person reads comes from a [Project Fluent](https://projectfluent.org)
+catalogue, through `bingux_ui::i18n`. Fluent is the one localisation system of
+bingux-ui apps: no gettext, no hand-made string tables. British English
+(`en-GB`) is the source language.
+
+```rust
+use bingux_ui::prelude::*; // brings `tr!`, `i18n_id!`, `Message`, `Title`
+
+fn main() {
+    bingux_ui::i18n::register(bingux_ui::catalogue!("calculator"));
+    Application::new("bingux-calculator")
+        .title(Message::new(i18n_id!("calculator-title")))
+        .run(|| app::App);
+}
+
+let empty = tr!("calculator-history-empty-title");
+let count = tr!("calculator-history-count", count = entries.len());
+let tip = tr!("calculator-mode.tooltip");
+```
+
+| API                                               | What it does                                                                                                      |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `tr!("id")`, `tr!("id.attr")`, `tr!("id", n = 3)` | The message as a `String` in the language shown. The ID is a literal, so the checks see it                        |
+| `i18n_id!("id")`                                  | An ID kept in a table and asked for later with `i18n::text(id)` or `Message::new(id)`                             |
+| `Message::new(id).arg("name", value).format()`    | A message whose ID is chosen at run time                                                                          |
+| `Arg::text(x)`, `Arg::number(x, least, most)`     | A variable's value: text, a number with fixed decimals; integers, floats and `format::Moment` convert by `Into`   |
+| `catalogue!("domain")`, `i18n::register(..)`      | The app's `locale/en-GB/<domain>.ftl`, compiled in; register it before `Application::run`                         |
+| `i18n::text(id)`, `i18n::has(id)`                 | A message with no variables; whether a message exists                                                             |
+| `i18n::set_locale(Some(locale))`                  | Shows every window in another language, now. `None` goes back to the environment's                                |
+| `i18n::language()`, `languages()`, `direction()`  | The language shown, the fallback chain (`de`, `en-GB`), and its reading direction                                 |
+| `i18n::set_pseudo(Some(Pseudo::Accented \| Rtl))` | A pseudo-locale, as `BINGUX_PSEUDO_LOCALE=accented\|rtl` sets it                                                  |
+| `i18n::use_language()`, `revision()`              | A number that changes with the language; window roots are keyed on it, so nothing else has to                     |
+| `i18n::check::crate_catalogue(dir, domain)`       | A test: every `tr!` ID exists with the variables it passes, and the catalogue has no unused message (`Report`)    |
+| `Application::title(impl Into<Title>)`            | `Title::Text` stays as written; `Title::Message` (from a `Message`) follows the language, in the window title too |
+
+A language switch rebuilds each window's content under its router, so the
+location, scroll and open tabs stay. Shortcut labels (`Ctrl+Shift+P` is
+`Strg+Umschalt+P` in German), the command groups, the palette, the shortcuts
+sheet, undo titles, the About window, previews, charts and the colour picker
+all come from the `bingux-ui` catalogue (`crates/ui/locale/en-GB/bingux-ui.ftl`).
+
+### Where catalogues live
+
+An app's catalogues sit next to its crate: `apps/calculator/locale/en-GB/calculator.ftl`
+is the source, `apps/calculator/locale/de/calculator.ftl` a translation. At
+run time a translation is found, first match wins, in each directory of
+`BINGUX_LOCALE_DIR`, the crate's own `locale/` (debug builds), then
+`$XDG_DATA_HOME/bingux/locale/` and `<each $XDG_DATA_DIRS>/bingux/locale/`.
+`make install` (and `scripts/install-shell.py`, `scripts/build-prefix.sh`, the
+RPM and Arch packages) installs every `.ftl` to `<prefix>/share/bingux/locale/<language>/`.
+A message a translation lacks falls back to `en-GB`, never to its ID.
+
+### Conventions
+
+- **IDs.** Lower case words joined by `-`, starting with the catalogue's
+  prefix: `ui-` in bingux-ui, `<app>-` in an app (`files-`, `settings-`,
+  `calculator-`). Then the place, then the thing: `files-trash-empty-title`.
+- **The last word says the kind** when it is one of `title`, `subtitle`,
+  `label`, `description` (or `hint`, `caption`, `body`), `tooltip`,
+  `placeholder`, `empty`, `error`, `confirm`, `notification`, `status`,
+  `a11y`, `onboarding`, `button`, `menu`. `scripts/ftl-to-strings.py` reads it,
+  so the copy linter judges each string by the right rules. Anything else is
+  plain text (a button or menu label usually needs no suffix).
+- **Attributes for the parts of one control.** A control's tooltip, screen
+  reader name, placeholder and search keywords are attributes of its message,
+  named for their kind: `.tooltip`, `.a11y`, `.placeholder`, `.description`,
+  `.keywords`. `tr!("files-new-folder.tooltip")`. A message may be only
+  attributes (`ui-palette-search =` then `.placeholder = ..`).
+- **Translator comments.** A `#` comment directly above a message says where
+  it shows and what each variable holds: `# $count (Number) - how many files`.
+  `##` starts a group, `###` describes the file. A comment can never sit
+  between a message and its attributes: Fluent reads it as text
+  (`ftl-check.py` reports it).
+- **Variables, never sentence building.** Pass the parts as variables and let
+  the whole sentence live in the catalogue: `tr!("files-moved", name = name)`
+  with `files-moved = Moved “{ $name }” to Trash`, never
+  `format!("{} {}", tr!("moved"), name)`. Word order differs between languages,
+  and a translator can only reorder what is in one message.
+- **Plurals.** A count is a number variable and the message selects on it:
+  `{ $count -> [one] { $count } file *[other] { $count } files }`. Each
+  language uses its own CLDR categories (`few`, `many`) and may add an exact
+  `[0]`. Never pick between two messages in Rust by `count == 1`.
+- **Numbers and dates.** A number variable is written in the language shown
+  (`1,234.5`, `1.234,5`); `NUMBER($size, maximumFractionDigits: 1)` sets
+  decimals and `DATETIME($when, timeStyle: "short")` writes a `format::Moment`.
+  For a size, a duration or a relative time, format it with `bingux_ui::format`
+  first and pass the text.
+- **Terms.** A name used in many messages is a term (`-brand-name = Bingux`),
+  referred to as `{ -brand-name }`, so it is translated, or kept, once.
+- **Bidirectional text.** Placeables are wrapped in Unicode isolation marks in
+  a right-to-left catalogue and around right-to-left values in a left-to-right
+  one; do not add marks by hand.
+- **Copy.** Every message follows the app-copy voice (sentence case, errors
+  say what failed and what to do next). Lint a catalogue with
+  `scripts/ftl-to-strings.py <file>.ftl | node ~/dev/myvoice/dist/index.js strings - --profile app-copy`.
+- **Not translated.** Logs, `eprintln!`, panics, the Copy details text of the
+  About window and error reports (they are read by developers), protocol and
+  file names, and the technical examples inside a message (`192.168.1.10`).
+
+### Checks
+
+- `scripts/ftl-check.py` (in `make check-static`) parses every catalogue under
+  `crates/ui/locale` and `apps/*/locale`: syntax, unbalanced braces, duplicate
+  messages and attributes, comments inside a message, and in each translation
+  an ID, attribute or variable the source does not have, or a file with no
+  source. It prints, per language, how many messages still fall back
+  (`--missing` lists them).
+- `i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "calculator").assert_clean()`
+  in a crate's tests fails on a `tr!` ID the source lacks, wrong variables, or
+  a message nothing uses (`i18n_id!` counts as a use).
+- `BINGUX_PSEUDO_LOCALE=accented` writes every catalogue message with accents
+  and padding ([Ĉàñçéļ]), so a string that is not localised stands out as
+  plain English; `rtl` writes it right to left and turns the window. These
+  differ from the stress modes `expand`, `ar` and `he` (`stress.rs`), which
+  rewrite every string at draw time, localised or not.
+- `BINGUX_LOCALE_DIR=/tmp/try LANGUAGE=de bingux-calculator` tries a
+  translation without installing it.
+
+The taxonomy's Foundations > Localisation page switches the language of the
+whole window (English, the `de` stub, both pseudo-locales) and shows plurals,
+attributes, a fallback and isolation in a right-to-left sentence.
+
+### Migrating an app
+
+1. Make `apps/<app>/locale/en-GB/<app>.ftl` starting with a `###` comment that
+   names the app, and register it first thing in `main`:
+   `bingux_ui::i18n::register(bingux_ui::catalogue!("<app>"));`.
+2. Give the app's name a message (`<app>-title = Calculator`) and pass
+   `.title(Message::new(i18n_id!("<app>-title")))`; use `tr!("<app>-title")`
+   wherever the name is shown (a `NavigationSplitView`, the About info).
+3. Move each visible string, one view at a time, to a message and replace the
+   literal with `tr!`. Join the sentence parts of every `format!` into one
+   message with variables; turn each `if n == 1` into a plural; turn tooltips,
+   placeholders and screen reader names into attributes. A table of labels in
+   a `const` keeps `i18n_id!` IDs and calls `i18n::text` when drawn.
+4. Strings in a `const`, a `static` or a `&'static str` field become `String`
+   or an ID; anything built once at start-up and shown later must be built
+   where it is drawn, so a language switch reaches it.
+5. Add the catalogue test to the crate:
+   `#[test] fn the_catalogue_is_clean() { bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "<app>").assert_clean(); }`.
+6. Run `python3 scripts/ftl-check.py` and the copy lint above; fix every
+   finding. Install rules pick the new catalogue up by themselves.
+7. Look at the app with `BINGUX_PSEUDO_LOCALE=accented` (anything plain is
+   still a literal) and `rtl`, at desktop width and 390x800.
+
+Calculator is the reference: `apps/calculator/src` and
+`apps/calculator/locale/en-GB/calculator.ftl`.
 
 ## Commands
 

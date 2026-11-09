@@ -36,8 +36,14 @@ pub struct ZoomMemory {
 }
 
 impl ZoomMemory {
-    pub fn new(recall: impl Fn(&str) -> Option<FitMode> + 'static, remember: impl Into<EventHandler<(String, FitMode)>>) -> Self {
-        ZoomMemory { recall: Rc::new(recall), remember: remember.into() }
+    pub fn new(
+        recall: impl Fn(&str) -> Option<FitMode> + 'static,
+        remember: impl Into<EventHandler<(String, FitMode)>>,
+    ) -> Self {
+        ZoomMemory {
+            recall: Rc::new(recall),
+            remember: remember.into(),
+        }
     }
 
     pub(super) fn recall(&self, mime: &str) -> Option<FitMode> {
@@ -218,7 +224,9 @@ impl PreviewNav {
 /// shares.
 pub(super) fn icon_of(source: &PreviewSource, folder: bool) -> FileIcon {
     match source {
-        PreviewSource::Path(path) => FileIcon::for_path(path, if folder { Kind::Directory } else { Kind::File }),
+        PreviewSource::Path(path) => {
+            FileIcon::for_path(path, if folder { Kind::Directory } else { Kind::File })
+        }
         PreviewSource::Bytes { name, .. } => FileIcon::for_name(name),
     }
 }
@@ -244,24 +252,47 @@ pub(super) fn header(
     // counter. Without it the name takes the whole row and pushes the counter
     // out from under its room, over the buttons.
     let title: Element = rect()
-        .tw(tokens, &[flex_row(), grow_children(), items(Align::Center), gap(S3), w_full()])
-        .maybe_child(source.map(|source| file_icon_view(tokens, &icon_of(source, folder), IconSize::Row, false)))
-        .child(
-            rect().tw(tokens, &[w_flex()]).child(
-                path_label(source.map_or_else(|| "Nothing to preview".to_owned(), PreviewSource::name))
-                    .name()
-                    .style(SECTION),
-            ),
+        .tw(
+            tokens,
+            &[
+                flex_row(),
+                grow_children(),
+                items(Align::Center),
+                gap(S3),
+                w_full(),
+            ],
         )
         .maybe_child(
-            nav.position
-                .map(|position| CAPTION.in_ink(Ink::Muted).label(tokens, position_text(position)).max_lines(1)),
+            source.map(|source| {
+                file_icon_view(tokens, &icon_of(source, folder), IconSize::Row, false)
+            }),
         )
+        .child(
+            rect().tw(tokens, &[w_flex()]).child(
+                path_label(
+                    source.map_or_else(|| crate::tr!("ui-preview-nothing"), PreviewSource::name),
+                )
+                .name()
+                .style(SECTION),
+            ),
+        )
+        .maybe_child(nav.position.map(|position| {
+            CAPTION
+                .in_ink(Ink::Muted)
+                .label(tokens, position_text(position))
+                .max_lines(1)
+        }))
         .into();
-    let mut bar = HeaderBar::new("").draggable(false).title_start(true).title_slot(title);
+    let mut bar = HeaderBar::new("")
+        .draggable(false)
+        .title_start(true)
+        .title_slot(title);
     let show_info = *info.read();
     if let Some(open) = nav.on_open.clone() {
-        bar = bar.trailing(icon_button(Icon::DocumentOpen, move |_| open.call(())).tooltip("Open (Enter)"));
+        bar = bar.trailing(
+            icon_button(Icon::DocumentOpen, move |_| open.call(()))
+                .tooltip(&crate::tr!("ui-preview-open.tooltip")),
+        );
     }
     bar = bar.trailing(
         icon_button(Icon::DialogInformation, move |_| {
@@ -270,18 +301,30 @@ pub(super) fn header(
             info.set(!shown);
         })
         .active(show_info)
-        .tooltip("Info (I)"),
+        .tooltip(&crate::tr!("ui-preview-info.tooltip")),
     );
     if let Some(switch) = nav.on_mode.clone().filter(|_| !compact && nav.dock) {
         let (icon, tip, to) = match mode {
-            Mode::Pane => (Icon::WindowNew, "Open as a popup (Alt+P)", Mode::Popup),
-            Mode::Popup | Mode::Fullscreen | Mode::Window => (Icon::SidebarShow, "Dock to the side (Alt+P)", Mode::Pane),
+            Mode::Pane => (
+                Icon::WindowNew,
+                crate::tr!("ui-preview-popup.tooltip"),
+                Mode::Popup,
+            ),
+            Mode::Popup | Mode::Fullscreen | Mode::Window => (
+                Icon::SidebarShow,
+                crate::tr!("ui-preview-dock.tooltip"),
+                Mode::Pane,
+            ),
         };
-        bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(tip));
+        bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(&tip));
     }
     let close = nav.on_close.clone();
     bar.trailing(
-        icon_button(Icon::WindowClose, move |_| close.call(())).tooltip(if mode == Mode::Pane { "Hide the preview" } else { "Close (Space)" }),
+        icon_button(Icon::WindowClose, move |_| close.call(())).tooltip(&if mode == Mode::Pane {
+            crate::tr!("ui-preview-hide.tooltip")
+        } else {
+            crate::tr!("ui-preview-close.tooltip")
+        }),
     )
 }
 
@@ -300,20 +343,31 @@ impl Component for InfoPanel {
             Element::from(
                 rect()
                     .tw(&tokens, &[flex_col(), w_full(), gap(S1)])
-                    .child(CAPTION.in_ink(Ink::Muted).label(&tokens, row.label).max_lines(1))
+                    .child(
+                        CAPTION
+                            .in_ink(Ink::Muted)
+                            .label(&tokens, row.label.clone())
+                            .max_lines(1),
+                    )
                     .child(BODY.selectable(&tokens, row.value.clone())),
             )
         });
         rect()
             .component("PreviewInfo")
-            .tw(&tokens, &[flex_col(), w_full(), h_full(), bg(Paint::Surface)])
+            .tw(
+                &tokens,
+                &[flex_col(), w_full(), h_full(), bg(Paint::Surface)],
+            )
             .child(
                 ScrollView::new().child(
                     rect()
                         .tw(&tokens, &[flex_col(), w_full(), p(S4), gap(S3)])
                         .children(rows)
                         .maybe_child(self.on_properties.clone().map(|show| {
-                            Element::from(action_button("Properties…", move |_| show.call(())))
+                            Element::from(action_button(
+                                crate::tr!("ui-preview-properties"),
+                                move |_| show.call(()),
+                            ))
                         })),
                 ),
             )

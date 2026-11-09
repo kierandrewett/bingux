@@ -86,12 +86,40 @@ const NAMED: &[(NamedKey, &[&str])] = &[
 /// seen.
 const CHAR_NAMES: &[(char, &str)] = &[('+', "Plus"), ('-', "Minus"), (' ', "Space")];
 
-/// The order modifiers are written in, as GNOME writes them.
+/// The order modifiers are written in, as GNOME writes them, with the
+/// message that names each on a key cap.
 const MODIFIER_ORDER: [(Modifiers, &str); 4] = [
-    (Modifiers::CONTROL, "Ctrl"),
-    (Modifiers::ALT, "Alt"),
-    (Modifiers::SHIFT, "Shift"),
-    (Modifiers::META, "Super"),
+    (Modifiers::CONTROL, crate::i18n_id!("ui-key-ctrl")),
+    (Modifiers::ALT, crate::i18n_id!("ui-key-alt")),
+    (Modifiers::SHIFT, crate::i18n_id!("ui-key-shift")),
+    (Modifiers::META, crate::i18n_id!("ui-key-super")),
+];
+
+/// The message that names a key on a key cap, for the keys whose name is a
+/// word (a letter, a digit, a symbol and F1 to F12 are shown as they are).
+const KEY_LABELS: &[(NamedKey, &str)] = &[
+    (NamedKey::Enter, crate::i18n_id!("ui-key-enter")),
+    (NamedKey::Escape, crate::i18n_id!("ui-key-escape")),
+    (NamedKey::Tab, crate::i18n_id!("ui-key-tab")),
+    (NamedKey::Backspace, crate::i18n_id!("ui-key-backspace")),
+    (NamedKey::Delete, crate::i18n_id!("ui-key-delete")),
+    (NamedKey::Insert, crate::i18n_id!("ui-key-insert")),
+    (NamedKey::Home, crate::i18n_id!("ui-key-home")),
+    (NamedKey::End, crate::i18n_id!("ui-key-end")),
+    (NamedKey::PageUp, crate::i18n_id!("ui-key-page-up")),
+    (NamedKey::PageDown, crate::i18n_id!("ui-key-page-down")),
+    (NamedKey::ArrowUp, crate::i18n_id!("ui-key-up")),
+    (NamedKey::ArrowDown, crate::i18n_id!("ui-key-down")),
+    (NamedKey::ArrowLeft, crate::i18n_id!("ui-key-left")),
+    (NamedKey::ArrowRight, crate::i18n_id!("ui-key-right")),
+    (NamedKey::ContextMenu, crate::i18n_id!("ui-key-menu")),
+];
+
+/// The message that names a character key with no visible face.
+const CHAR_LABELS: &[(char, &str)] = &[
+    ('+', crate::i18n_id!("ui-key-plus")),
+    ('-', crate::i18n_id!("ui-key-minus")),
+    (' ', crate::i18n_id!("ui-key-space")),
 ];
 
 fn modifier_named(name: &str) -> Option<Modifiers> {
@@ -251,19 +279,25 @@ impl Shortcut {
         }
     }
 
-    /// The key's name as shown: `P`, `F2`, `Page Up`, `?`, `Plus`.
+    /// The key's name as shown, in the language shown: `P`, `F2`,
+    /// `Page Up`, `?`, `Plus`.
     pub fn key_label(&self) -> String {
         match &self.key {
-            Key::Named(named) => NAMED
-                .iter()
-                .find(|(candidate, _)| candidate == named)
-                .map_or_else(|| format!("{named:?}"), |(_, names)| names[0].to_owned()),
+            Key::Named(named) => {
+                if let Some((_, id)) = KEY_LABELS.iter().find(|(candidate, _)| candidate == named) {
+                    return crate::i18n::text(id);
+                }
+                NAMED
+                    .iter()
+                    .find(|(candidate, _)| candidate == named)
+                    .map_or_else(|| format!("{named:?}"), |(_, names)| names[0].to_owned())
+            }
             Key::Character(text) => {
-                if let Some((_, name)) = CHAR_NAMES
+                if let Some((_, id)) = CHAR_LABELS
                     .iter()
                     .find(|(c, _)| text.starts_with(*c) && text.len() == 1)
                 {
-                    (*name).to_owned()
+                    crate::i18n::text(id)
                 } else {
                     text.to_uppercase()
                 }
@@ -271,18 +305,20 @@ impl Shortcut {
         }
     }
 
-    /// The parts as key caps, modifiers first: `["Ctrl", "Shift", "P"]`.
+    /// The parts as key caps, modifiers first, in the language shown:
+    /// `["Ctrl", "Shift", "P"]`.
     pub fn caps(&self) -> Vec<String> {
         let mut caps: Vec<String> = MODIFIER_ORDER
             .iter()
             .filter(|(modifier, _)| self.modifiers.contains(*modifier))
-            .map(|(_, name)| (*name).to_owned())
+            .map(|(_, id)| crate::i18n::text(id))
             .collect();
         caps.push(self.key_label());
         caps
     }
 
-    /// The shortcut as one line of text: `Ctrl+Shift+P`.
+    /// The shortcut as one line of text in the language shown: `Ctrl+Shift+P`
+    /// (`Strg+Umschalt+P` in German).
     pub fn label(&self) -> String {
         self.caps().join("+")
     }

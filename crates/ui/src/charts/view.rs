@@ -29,7 +29,10 @@ use std::f32::consts::TAU;
 
 /// Width used before the chart has been measured.
 const DEFAULT_WIDTH: f32 = 480.0;
-const EMPTY_TEXT: &str = "No data yet";
+/// What a chart with no data says.
+fn empty_text() -> String {
+    crate::tr!("ui-chart-no-data-empty")
+}
 /// The band behind the hovered bar.
 const BAND_OPACITY: f32 = 0.10;
 /// Bars other than the hovered one fade to this share of their colour.
@@ -91,6 +94,8 @@ pub struct LineChart {
     area: bool,
     label: Option<String>,
     height: f32,
+    /// A rule at an x value, with a name beside it. See [`LineChart::marker`].
+    marker: Option<(f64, String)>,
 }
 
 /// Bars over the distinct x values of its series. Several series are drawn
@@ -146,6 +151,7 @@ pub fn line_chart(series: impl IntoIterator<Item = Series>) -> LineChart {
         area: false,
         label: None,
         height: DEFAULT_HEIGHT,
+        marker: None,
     }
 }
 
@@ -243,6 +249,14 @@ impl LineChart {
 
     pub fn curve(mut self, curve: Curve) -> Self {
         self.curve = curve;
+        self
+    }
+
+    /// A rule across the plot at the x value `at`, named `label` at its top
+    /// (a chart of the day marks "Now"), and a dot on each line where it
+    /// crosses one. Nothing is drawn when `at` is outside the data.
+    pub fn marker(mut self, at: f64, label: impl Into<String>) -> Self {
+        self.marker = Some((at, label.into()));
         self
     }
 
@@ -424,13 +438,13 @@ impl Spec {
     /// The accessible name, the caller's label or a default.
     fn alt(&self) -> String {
         let (label, default) = match self {
-            Spec::Sparkline(chart) => (&chart.label, "Sparkline"),
-            Spec::Line(chart) => (&chart.label, "Line chart"),
-            Spec::Bars(chart) => (&chart.label, "Bar chart"),
-            Spec::Ring(chart) => (&chart.label, "Gauge"),
-            Spec::Donut(chart) => (&chart.label, "Donut chart"),
+            Spec::Sparkline(chart) => (&chart.label, crate::i18n_id!("ui-chart-sparkline")),
+            Spec::Line(chart) => (&chart.label, crate::i18n_id!("ui-chart-line")),
+            Spec::Bars(chart) => (&chart.label, crate::i18n_id!("ui-chart-bars")),
+            Spec::Ring(chart) => (&chart.label, crate::i18n_id!("ui-chart-gauge")),
+            Spec::Donut(chart) => (&chart.label, crate::i18n_id!("ui-chart-donut")),
         };
-        label.clone().unwrap_or_else(|| default.to_string())
+        label.clone().unwrap_or_else(|| crate::i18n::text(default))
     }
 }
 
@@ -592,12 +606,15 @@ impl Component for Chart {
 /// Where a label sits: `Centre` and `Right` name the edge at `x`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Align {
+    /// The text starts at `x`.
+    Left,
     Centre,
     Right,
 }
 
 fn text_align(align: Align) -> TextAlign {
     match align {
+        Align::Left => TextAlign::Left,
         Align::Centre => TextAlign::Center,
         Align::Right => TextAlign::Right,
     }
@@ -654,6 +671,7 @@ pub(super) fn anchored(
     bounds: f32,
 ) -> Text {
     let left = match align {
+        Align::Left => x,
         Align::Centre => x - width / 2.0,
         Align::Right => x - width,
     };
@@ -971,12 +989,13 @@ fn empty(tokens: &Tokens, width: f32, height: f32) -> Scene {
     ));
     let centre = (plot.left + plot.right) / 2.0;
     let middle = (plot.top + plot.bottom) / 2.0 - LABEL_HEIGHT / 2.0;
+    let empty = empty_text();
     let texts = vec![anchored(
         CAPTION,
-        EMPTY_TEXT,
+        &empty,
         centre,
         middle,
-        text_width(EMPTY_TEXT, TextSize::Sm.px()) + LABEL_PAD,
+        text_width(&empty, TextSize::Sm.px()) + LABEL_PAD,
         Align::Centre,
         width,
     )];
@@ -1212,10 +1231,13 @@ fn sparkline_scene(
             anchor: cx,
             reach: ACTIVE_RADIUS,
             top: 0.0,
-            title: format!("Point {} of {}", index + 1, points.len()),
+            title: crate::tr!("ui-chart-point", position = index + 1, count = points.len()),
             rows: vec![TipRow {
                 colour,
-                name: spark.label.clone().unwrap_or_else(|| "Value".to_string()),
+                name: spark
+                    .label
+                    .clone()
+                    .unwrap_or_else(|| crate::tr!("ui-chart-value")),
                 value: spark.value.value(point.y),
             }],
             total: None,
@@ -1302,6 +1324,32 @@ fn line_scene(
             .collect(),
     );
 
+    // The marker is read only where it falls inside the plot.
+    let marker = chart
+        .marker
+        .as_ref()
+        .filter(|(at, _)| (x_domain.lo..=x_domain.hi).contains(at))
+        .map(|(at, name)| (*at, name, crisp(x.map(*at))));
+    if let Some((_, name, mx)) = marker {
+        svg.push(svg::stroke_line(
+            mx,
+            plot.top,
+            mx,
+            plot.bottom,
+            Paint::Muted.color(tokens).with_af32(CROSSHAIR_OPACITY),
+            HAIRLINE,
+        ));
+        texts.push(anchored(
+            CAPTION,
+            name.clone(),
+            mx + S1.px(),
+            plot.top,
+            POINT_LABEL_WIDTH,
+            Align::Left,
+            width,
+        ));
+    }
+
     let reveal = svg.id("reveal");
     svg.def(clip_rect(&reveal, width * progress, height));
     svg.push(format!(r#"<g clip-path="url(#{reveal})">"#));
@@ -1338,6 +1386,19 @@ fn line_scene(
                     cx,
                     cy,
                     radius,
+                    colour,
+                    Some((Paint::Card.color(tokens), LINE_WIDTH)),
+                ));
+            }
+        }
+    }
+    if let Some((at, _, mx)) = marker {
+        for (points, &colour) in cleaned.iter().zip(&colours) {
+            if let Some(reading) = data::value_at(points, at) {
+                svg.push(svg::dot(
+                    mx,
+                    y.map(reading),
+                    ACTIVE_RADIUS,
                     colour,
                     Some((Paint::Card.color(tokens), LINE_WIDTH)),
                 ));
@@ -1642,7 +1703,7 @@ fn bars_scene(
             title: chart.details.get(index).unwrap_or(&names[index].1).clone(),
             rows,
             total: (chart.stacked && chart.series.len() > 1)
-                .then(|| ("Total".to_string(), chart.y.value(stacks[index]))),
+                .then(|| (crate::tr!("ui-chart-total"), chart.y.value(stacks[index]))),
         }
     });
 
@@ -1748,7 +1809,10 @@ fn ring_scene(ring: &Ring, tokens: &Tokens, progress: f32) -> Scene {
 
 fn ring_element(tokens: &Tokens, ring: &Ring, progress: f32) -> Element {
     let scene = ring_scene(ring, tokens, progress);
-    let alt = ring.label.clone().unwrap_or_else(|| "Gauge".to_string());
+    let alt = ring
+        .label
+        .clone()
+        .unwrap_or_else(|| crate::tr!("ui-chart-gauge"));
     drawing(scene, tokens, RING_SIZE, RING_SIZE)
         .a11y_alt(alt)
         .into_element()
@@ -1913,7 +1977,7 @@ fn donut_scene(
             caption.map(|caption| (CAPTION, caption)),
         )
     } else {
-        centre_texts(size, hole, (CAPTION, EMPTY_TEXT.to_string()), None)
+        centre_texts(size, hole, (CAPTION, empty_text()), None)
     };
     Scene {
         svg: svg.finish(),
@@ -2002,7 +2066,7 @@ fn donut_element(
     let alt = donut
         .label
         .clone()
-        .unwrap_or_else(|| "Donut chart".to_string());
+        .unwrap_or_else(|| crate::tr!("ui-chart-donut"));
     let row_height = if compact { TOUCH_MIN } else { DONUT_ROW };
     // The legend is as wide as the donut, below the ring, or what is left
     // of it beside the ring.

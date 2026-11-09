@@ -51,10 +51,10 @@ pub fn colour_chip(tokens: Tokens, colour: Color, size: f32) -> impl IntoElement
 
 /// What the preview says about the two colours, for assistive technology.
 pub(super) fn preview_label(old: Color, new: Color) -> String {
-    format!(
-        "Colour, was {}, now {}",
-        colour_to_hex(old),
-        colour_to_hex(new)
+    crate::tr!(
+        "ui-colour-preview.a11y",
+        old = colour_to_hex(old),
+        new = colour_to_hex(new)
     )
 }
 
@@ -83,7 +83,7 @@ impl Component for Preview {
         let old_half = focus_stop_with(
             use_a11y(),
             half(old).component("ColourOld"),
-            format!("Old colour {}. Press to restore it.", colour_to_hex(old)),
+            crate::tr!("ui-colour-old.a11y", colour = colour_to_hex(old)),
             AccessibilityRole::Button,
             changed,
             Radius::Control,

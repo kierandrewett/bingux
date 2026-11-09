@@ -69,16 +69,18 @@ pub(crate) fn use_window_notices() {
     use_hook(|| {
         let restarted = relaunch::take_restart_reason();
         spawn(async move {
-            if let Some(reason) = restarted {
+            if restarted.is_some() {
                 // The window must have drawn once to have somewhere to toast.
+                // The reason (the panic's first line) stays in the failure
+                // log; the person is told what happened in their words.
                 timer(std::time::Duration::from_millis(700)).await;
-                toast(reason);
+                toast(crate::tr!("ui-error-restarted"));
             }
             while let Some(record) = log::next_thread_failure().await {
-                toast(format!(
-                    "Something went wrong in the background ({}): {}",
-                    record.component,
-                    record.message.lines().next().unwrap_or("")
+                // The panic message is in the failure log, not in the toast.
+                toast(crate::tr!(
+                    "ui-error-background",
+                    what = log::short_name(&record.component)
                 ));
             }
         });

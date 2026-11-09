@@ -452,9 +452,9 @@ impl Component for PathLabel {
                 child: body.into(),
                 text: self.text.clone(),
                 label: match self.cut {
-                    Cut::Path => "Copy path",
-                    Cut::Name => "Copy name",
-                    Cut::Middle => "Copy",
+                    Cut::Path => crate::tr!("ui-path-copy-path"),
+                    Cut::Name => crate::tr!("ui-path-copy-name"),
+                    Cut::Middle => crate::tr!("ui-edit-copy"),
                 },
             })
         } else {
@@ -469,7 +469,7 @@ impl Component for PathLabel {
 struct CopyMenu {
     child: Element,
     text: String,
-    label: &'static str,
+    label: String,
 }
 
 impl Component for CopyMenu {
@@ -479,10 +479,10 @@ impl Component for CopyMenu {
         let items = overlays.map(|overlays| {
             let text = self.text.clone();
             vec![menu_item(
-                self.label,
+                self.label.clone(),
                 move |_| match freya::clipboard::Clipboard::set(text.clone()) {
-                    Ok(()) => overlays.toast("Copied."),
-                    Err(_) => overlays.toast("The text could not be copied."),
+                    Ok(()) => overlays.toast(crate::tr!("ui-copy-done-status")),
+                    Err(_) => overlays.toast(crate::tr!("ui-copy-failed-error")),
                 },
             )]
         });

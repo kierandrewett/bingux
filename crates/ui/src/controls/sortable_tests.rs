@@ -45,6 +45,8 @@ struct Page {
     log: Log,
     line: bool,
     count: usize,
+    /// The index of the row that says it is selected, and the list's own.
+    selected: Option<usize>,
 }
 
 impl Component for Page {
@@ -62,12 +64,15 @@ impl Component for Page {
         let names = order.read().clone();
         let pressed = self.log.pressed.clone();
         let moves = self.log.moves.clone();
+        let selected = self.selected;
         let rows = names
             .iter()
-            .map(|name| {
+            .enumerate()
+            .map(|(index, name)| {
                 let pressed = pressed.clone();
                 let title = name.clone();
                 row(name.clone())
+                    .selected(selected == Some(index))
                     .on_press(move |_| pressed.borrow_mut().push(title.clone()))
                     .into()
             })
@@ -82,6 +87,7 @@ impl Component for Page {
         if self.line {
             list = list.drop_indicator();
         }
+        list = list.selected(selected);
         rect()
             .expanded()
             .tw(&tokens, &[flex_col(), p(S4), gap(S4)])
@@ -109,6 +115,16 @@ fn styled_after(_tokens: &crate::theme::Tokens) -> Element {
 }
 
 fn app(log: Log, line: bool, count: usize, size: (f32, f32)) -> Snapshot {
+    app_selecting(log, line, count, None, size)
+}
+
+fn app_selecting(
+    log: Log,
+    line: bool,
+    count: usize,
+    selected: Option<usize>,
+    size: (f32, f32),
+) -> Snapshot {
     Snapshot::new(
         move || {
             Root {
@@ -116,6 +132,7 @@ fn app(log: Log, line: bool, count: usize, size: (f32, f32)) -> Snapshot {
                     log: log.clone(),
                     line,
                     count,
+                    selected,
                 },
             }
             .into_element()
@@ -312,6 +329,44 @@ fn the_grip_is_a_small_icon_in_a_row_button_slot_at_the_end_of_a_standard_row() 
             lefts[0]
         );
     }
+}
+
+/// The box of every part of the list called `class`, top to bottom.
+fn areas_of(shot: &mut Snapshot, class: &'static str) -> Vec<Area> {
+    let mut found: Vec<Area> = shot.runner().find_many(|node, element| {
+        (element.accessibility().builder.class_name() == Some(class)).then(|| node.layout().area)
+    });
+    found.sort_by(|a, b| a.min_y().total_cmp(&b.min_y()));
+    found
+}
+
+/// The row's selection stops at the row, and the grip is outside it: the list
+/// gives the grip's place (its tail) the row's own height and position, runs it
+/// to the card's edge, and fills it with the selection of the selected row.
+#[test]
+fn a_selected_row_is_selected_to_the_card_s_edge_grip_included() {
+    let mut shot = app_selecting(Log::default(), false, 4, Some(1), DESKTOP);
+    shot.settle(Duration::from_millis(400));
+    let card = areas_of(&mut shot, "Sortable").pop().expect("the list is on screen");
+    let tails = areas_of(&mut shot, "SortableTail");
+    let rows = areas_of(&mut shot, "Row");
+    assert_eq!(rows.len(), 4, "a row for each item");
+    assert_eq!(tails.len(), 1, "only the selected row has its tail filled");
+    let (tail, row) = (tails[0], rows[1]);
+    assert!(
+        (tail.min_y() - row.min_y()).abs() < 1.5 && (tail.height() - row.height()).abs() < 1.5,
+        "the tail sits beside the selected row and is as tall: {tail:?} and {row:?}"
+    );
+    assert!(
+        (tail.min_x() - row.max_x()).abs() < 1.5 || tail.min_x() < row.max_x() + 1.5,
+        "it starts where the row ends: {tail:?} and {row:?}"
+    );
+    assert!(
+        (tail.max_x() - (card.max_x() - 1.0)).abs() < 2.5,
+        "and it runs to the card's edge: {} in {}",
+        tail.max_x(),
+        card.max_x()
+    );
 }
 
 #[test]
@@ -536,7 +591,7 @@ fn up_and_down_on_a_focused_grip_slide_the_swap_and_focus_follows_the_item() {
     // The move is announced, politely, to assistive technology.
     let announced: Vec<bool> = shot.runner().find_many(|_, element| {
         let data = element.accessibility();
-        (data.builder.label() == Some("Sound moved to position 2 of 4"))
+        (data.builder.label() == Some("Sound now 2 of 4"))
             .then(|| data.builder.live() == Some(accesskit::Live::Polite))
     });
     assert_eq!(

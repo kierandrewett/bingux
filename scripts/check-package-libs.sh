@@ -4,7 +4,7 @@
 # is the check that they are complete: install the packages in a clean container of the distribution,
 # then run
 #
-#   scripts/check-package-libs.sh bingux bingux-settings bingux-files bingux-weather bingux-taxonomy
+#   scripts/check-package-libs.sh bingux bingux-settings bingux-files bingux-preview bingux-weather bingux-taxonomy
 #
 # It lists the ELF files of each package with the package manager of the system (rpm, dpkg or
 # pacman), runs ldd on them and fails when a library is "not found". Libraries a program opens with

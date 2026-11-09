@@ -9,6 +9,7 @@ Bingux is four packages: the desktop, and the three apps that go with it.
 | `bingux`          | The whole desktop: the shell, every core service (search, status, the lock screen, the portal backend, the sound effects engine, the preview helper Files runs, the `bingux-config` command), `binguxctl` and the user units | You want the Bingux desktop                                |
 | `bingux-settings` | Settings                                                                                                                                                                                                                     | You want to change Bingux and system settings in one place |
 | `bingux-files`    | Files, the file manager                                                                                                                                                                                                      | You want a file manager that matches the shell             |
+| `bingux-calendar` | Calendar: events, reminders and imports of .ics files, kept in plain files                                                                                                                                                   | You want a calendar that matches the shell                 |
 | `bingux-taxonomy` | A window that shows every Bingux UI component                                                                                                                                                                                | You build Bingux apps. Ordinary desktops do not need it    |
 
 Installing `bingux` also installs Gnoblin, the compositor it runs on. The apps need `bingux` at the same version.
@@ -95,11 +96,11 @@ directory, so you add nothing to your Gnoblin configuration.
 
 ```sh
 # Fedora
-sudo dnf remove bingux bingux-settings bingux-files bingux-taxonomy
+sudo dnf remove bingux bingux-settings bingux-files bingux-calendar bingux-taxonomy
 # Debian
-sudo apt remove bingux bingux-settings bingux-files bingux-taxonomy
+sudo apt remove bingux bingux-settings bingux-files bingux-calendar bingux-taxonomy
 # Arch Linux
-sudo pacman -Rns bingux bingux-settings bingux-files bingux-taxonomy
+sudo pacman -Rns bingux bingux-settings bingux-files bingux-calendar bingux-taxonomy
 ```
 
 Removing the packages does not delete your data. See [Runtime state](#runtime-state).

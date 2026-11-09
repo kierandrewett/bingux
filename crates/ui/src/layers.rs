@@ -66,6 +66,8 @@ pub(crate) const STATUS_PILL: Layer = Layer::Overlay;
 pub(crate) const VIEW_CARD: Layer = Layer::Overlay;
 /// The controls a viewer floats over its picture or player.
 pub(crate) const VIEWER_CONTROLS: Layer = Layer::Overlay;
+/// The crop box and its handles over the picture they cut.
+pub(crate) const CROP_BOX: Layer = Layer::Overlay;
 /// What a drag carries: above the list it is dragged over.
 pub(crate) const DRAG_CARRY: Layer = Layer::Overlay;
 /// The sheet that slides over the window header.

@@ -77,7 +77,7 @@ impl Hub {
         });
     }
 
-    /// Whether "My Location" is a place of the list.
+    /// Whether "My location" is a place of the list.
     pub fn use_location(self, on: bool) {
         self.change(move |settings| {
             settings.use_location = on;
