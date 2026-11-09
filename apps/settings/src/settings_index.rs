@@ -708,7 +708,7 @@ fn uri(page: PageId, title: &str) -> String {
 
 fn page_document(page: PageId) -> Document {
     Document::new(page.panel_name())
-        .title(page.title())
+        .title(&page.title())
         .keywords(page.keywords())
         .breadcrumb([page.title()])
         .category(page.group())

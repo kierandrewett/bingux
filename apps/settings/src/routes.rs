@@ -343,7 +343,7 @@ pub fn table() -> RouteTable {
 fn root(table: RouteTable, page: PageId) -> RouteTable {
     table
         .root(page.panel_name())
-        .title(page.title())
+        .title_with(move |_| page.title())
         .icon(page.icon())
         .group(page.group())
         .keywords(page.keywords())
