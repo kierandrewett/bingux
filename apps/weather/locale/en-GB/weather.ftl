@@ -30,3 +30,45 @@ weather-add-offline-body = Searching needs the internet. Check the connection, t
 weather-add-failed-title = Search not available
 weather-add-failed-body = The search service did not answer. Try again in a moment.
 weather-add-searching = Searching…
+
+## The hero card
+
+weather-hero-here = My location
+weather-hero-range = High { $high }, low { $low }
+weather-hero-feels = Feels like { $temperature }
+
+## The week and the hourly strip
+
+weather-week-title = Daily forecast
+weather-week-wind = wind up to { $speed }
+weather-week-uv = UV { $index }
+weather-week-low-high = Low { $low }, high { $high }
+weather-week-highs-lows = Highs from { $high_low } to { $high_high }, lows from { $low_low } to { $low_high }
+weather-hourly-title = Hourly forecast
+weather-hourly-now = Now
+weather-hourly-sunrise = Sunrise at { $time }
+weather-hourly-sunset = Sunset at { $time }
+weather-hourly-wind = Wind { $speed }{ $from }
+weather-hourly-chance = { $chance } chance of rain
+weather-hourly-range = Next 24 hours: low { $low }, high { $high }.
+weather-hourly-sunrise-short = Sunrise
+weather-hourly-sunset-short = Sunset
+
+## The cards
+
+weather-card-uv = UV index
+weather-card-uv-label = UV index { $index }, { $level }
+weather-card-wind = Wind
+weather-card-wind-with-direction = { $direction } wind, { $speed }
+weather-card-wind-speed = Wind, { $speed }
+weather-card-gusts = Gusts up to { $speed }
+weather-card-sun = Sun
+weather-card-sun-range = Sunrise { $rise }, sunset { $set }
+weather-card-sunrise-next = Sunrise { $time }
+weather-card-sunset-next = Sunset { $time }
+weather-card-sunrise-tomorrow = Sunrise { $time } tomorrow
+weather-card-no-sun = No sunrise or sunset
+weather-card-daylight = Daylight { $length }
+weather-card-moon = Moon
+weather-card-full-moon = Full moon
+weather-card-new-moon = New moon

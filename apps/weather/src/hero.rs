@@ -172,19 +172,22 @@ impl Component for Hero {
         // children between two renders of the card.
         let blank = || " ".to_string();
         let caption = match &self.here {
-            Some(_) => "My location".to_string(),
+            Some(_) => tr!("weather-hero-here"),
             None => blank(),
         };
         let range = match day {
-            Some(day) => format!(
-                "High {}, low {}",
-                format::temperature(&self.units, day.high),
-                format::temperature(&self.units, day.low)
+            Some(day) => tr!(
+                "weather-hero-range",
+                high = format::temperature(&self.units, day.high),
+                low = format::temperature(&self.units, day.low)
             ),
             None => blank(),
         };
         let feels = match current.apparent {
-            Some(apparent) => format!("Feels like {}", self.units.temperature(apparent)),
+            Some(apparent) => tr!(
+                "weather-hero-feels",
+                temperature = self.units.temperature(apparent)
+            ),
             None => blank(),
         };
         let outlook = rain_outlook(forecast, self.local).unwrap_or_else(blank);

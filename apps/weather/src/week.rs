@@ -42,10 +42,10 @@ impl Week {
             parts.push(self.units.rain(rain));
         }
         if let Some(wind) = day.wind_max {
-            parts.push(format!("wind up to {}", self.units.speed(wind)));
+            parts.push(tr!("weather-week-wind", speed = self.units.speed(wind)));
         }
         if let Some(uv) = day.uv_max.filter(|uv| *uv >= 3.0) {
-            parts.push(format!("UV {}", uv.round() as i64));
+            parts.push(tr!("weather-week-uv", index = uv.round() as i64));
         }
         parts.join(", ")
     }
@@ -95,10 +95,10 @@ impl Component for Week {
             let today = index == 0;
             let mut bar = range_bar(range.0, range.1)
                 .colours(stops.clone())
-                .label(format!(
-                    "Low {}, high {}",
-                    format::temperature(&units, day.low),
-                    format::temperature(&units, day.high)
+                .label(tr!(
+                    "weather-week-low-high",
+                    low = format::temperature(&units, day.low),
+                    high = format::temperature(&units, day.high)
                 ));
             if let (Some(low), Some(high)) = (day.low, day.high) {
                 bar = bar.span(low, high);
@@ -196,12 +196,12 @@ impl Component for Week {
                 lows.iter().copied().reduce(f64::min),
                 lows.iter().copied().reduce(f64::max),
             ) {
-                (Some(high_low), Some(high_high), Some(low_low), Some(low_high)) => format!(
-                    "Highs from {} to {}, lows from {} to {}",
-                    units.temperature(high_low),
-                    units.temperature(high_high),
-                    units.temperature(low_low),
-                    units.temperature(low_high)
+                (Some(high_low), Some(high_high), Some(low_low), Some(low_high)) => tr!(
+                    "weather-week-highs-lows",
+                    high_low = units.temperature(high_low),
+                    high_high = units.temperature(high_high),
+                    low_low = units.temperature(low_low),
+                    low_high = units.temperature(low_high)
                 ),
                 _ => String::new(),
             }
@@ -209,7 +209,7 @@ impl Component for Week {
         let line = selected.map_or(summary, |index| self.detail(&days[index]));
         let stop = focus_stop(
             rect().width(Size::fill()).child(rows),
-            "Daily forecast",
+            &tr!("weather-week-title"),
             AccessibilityRole::List,
             count > 0,
             Radius::Control,

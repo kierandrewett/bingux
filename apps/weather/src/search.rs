@@ -62,7 +62,7 @@ impl Component for Sheet {
             .draggable(false)
             .trailing(
                 icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
-                    .tooltip(tr!("weather-add-close")),
+                    .tooltip(&tr!("weather-add-close")),
             );
         let field = search_field(query, on_change)
             .placeholder(tr!("weather-add-placeholder"))
