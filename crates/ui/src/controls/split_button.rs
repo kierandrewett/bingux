@@ -325,6 +325,7 @@ impl Component for SplitButton {
                 .a11y_alt(self.menu_label.clone())
                 .a11y_builder(move |builder| {
                     if has_items {
+                        builder.set_has_popup(accesskit::HasPopup::Menu);
                         builder.set_expanded(open);
                     }
                 })
