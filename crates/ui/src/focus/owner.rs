@@ -151,7 +151,10 @@ impl<Id: Copy + PartialEq> ScopeStack<Id> {
     /// focus goes: the closed scope's opener when it was the live one, and
     /// `None` when a scope below it is still live and keeps its own focus.
     pub fn remove(&mut self, container: Id) -> Option<Id> {
-        let at = self.scopes.iter().position(|scope| scope.container == container)?;
+        let at = self
+            .scopes
+            .iter()
+            .position(|scope| scope.container == container)?;
         let was_top = at + 1 == self.scopes.len();
         let scope = self.scopes.remove(at);
         if was_top { scope.opener } else { None }
@@ -245,9 +248,15 @@ mod tests {
 
     #[test]
     fn visual_focus_reports_focus_as_drawn() {
-        let owner = VisualFocus { focus: Focus::Pointer, within_owner: true };
+        let owner = VisualFocus {
+            focus: Focus::Pointer,
+            within_owner: true,
+        };
         assert!(owner.is_focused());
-        let plain = VisualFocus { focus: Focus::Not, within_owner: false };
+        let plain = VisualFocus {
+            focus: Focus::Not,
+            within_owner: false,
+        };
         assert!(!plain.is_focused());
     }
 

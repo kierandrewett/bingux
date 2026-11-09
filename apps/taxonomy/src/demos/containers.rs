@@ -127,6 +127,35 @@ pub const ROW: &[Spec] = &[
                 .into_element(),
         ])
     }),
+    Spec::forced("Long title beside status (phone stacks it)", || {
+        let tokens = use_tokens();
+        rows(vec![
+            row("Xbox Wireless Controller")
+                .leading(Icon::Gamepad)
+                .trailing(Element::from(
+                    hstack(S2)
+                        .child(icon(
+                            Icon::battery_level(80),
+                            IconSize::Control,
+                            Paint::Muted.color(&tokens),
+                        ))
+                        .child(caption("80%"))
+                        .child(caption("Not connected")),
+                ))
+                .navigates()
+                .on_press(|_| {})
+                .into_element(),
+            row("Remote Support")
+                .subtitle("Allow · Any application · Screen sharing")
+                .trailing(
+                    hstack(S2)
+                        .child(icon_button(Icon::PanUp, |_| {}).tooltip("Move rule up"))
+                        .child(icon_button(Icon::Pencil, |_| {}).tooltip("Edit rule"))
+                        .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete rule")),
+                )
+                .into_element(),
+        ])
+    }),
     Spec::live("Button, dropdown and chevron", || {
         rows(vec![
             row("Wi-Fi network")
@@ -137,7 +166,10 @@ pub const ROW: &[Spec] = &[
                 .into_element(),
             row("Language")
                 .trailing(dropdown(
-                    vec![("en".into(), "English".into()), ("fr".into(), "Français".into())],
+                    vec![
+                        ("en".into(), "English".into()),
+                        ("fr".into(), "Français".into()),
+                    ],
                     "en",
                     |_| {},
                 ))
@@ -155,6 +187,44 @@ pub const ROW: &[Spec] = &[
                 .subtitle("The button keeps its inset above and below")
                 .trailing(action_button("Action", |_| {}).compact())
                 .into_element(),
+        ])
+    }),
+    Spec::forced("Technical values in monospace", || {
+        rows(vec![
+            row("Access point")
+                .technical_value("3C:22:FB:9A:10:4E")
+                .into_element(),
+            row("IP address")
+                .technical_value("192.168.1.20/24")
+                .into_element(),
+            row("Public key")
+                .technical_value("kQ2Vx7sGm1Lw0bR9tYc3NfHjUe8dZpAo4iIrWqCyTgE=")
+                .into_element(),
+            row("Network name")
+                .technical_value("Home network")
+                .into_element(),
+            row("Device").technical_value("wlan0").into_element(),
+        ])
+    }),
+    Spec::live("Choice pinned to a dropdown", || {
+        rows(vec![
+            choice_row(
+                "Default engine",
+                vec![
+                    ("ddg".into(), "DuckDuckGo".into()),
+                    ("web".into(), "Web".into()),
+                ],
+                "ddg",
+                |_| {},
+            )
+            .dropdown()
+            .into_element(),
+        ])
+    }),
+    Spec::forced("Provisional value while it loads", || {
+        rows(vec![
+            row("Address").provisional_value().into_element(),
+            row("Signal").provisional_value().into_element(),
         ])
     }),
     Spec::forced("Long text and wide script", || {
@@ -264,7 +334,9 @@ fn expander_children() -> Vec<Element> {
     vec![
         switch_row("Connect automatically", true, |_| {}).into_element(),
         row("Address").value("02:1A:2B:3C:4D:5E").into_element(),
-        row("Metric").subtitle("A lower metric is preferred").into_element(),
+        row("Metric")
+            .subtitle("A lower metric is preferred")
+            .into_element(),
     ]
 }
 
@@ -558,7 +630,6 @@ pub const DIALOG: &[Spec] = &[
     .script("click-text Open framed dialog; wait 500; save {out}"),
 ];
 
-
 // ---- Form dialog (Compress) ------------------------------------------------
 
 /// A file for the Compress dialog's states.
@@ -580,9 +651,21 @@ fn tools_all() -> bingux_ui::files::model::ops::Tools {
         ffmpeg: Some("/usr/bin/ffmpeg".into()),
         ffprobe: Some("/usr/bin/ffprobe".into()),
         magick: Some("/usr/bin/magick".into()),
-        encoders: ["libx264", "libx265", "libsvtav1", "libvpx-vp9", "aac", "libopus", "libmp3lame", "flac", "libwebp", "mjpeg", "png"]
-            .map(String::from)
-            .to_vec(),
+        encoders: [
+            "libx264",
+            "libx265",
+            "libsvtav1",
+            "libvpx-vp9",
+            "aac",
+            "libopus",
+            "libmp3lame",
+            "flac",
+            "libwebp",
+            "mjpeg",
+            "png",
+        ]
+        .map(String::from)
+        .to_vec(),
         magick_formats: ["JPEG", "PNG", "WEBP"].map(String::from).to_vec(),
     }
 }
@@ -594,7 +677,12 @@ macro_rules! compress_state {
         Spec::live($label, || {
             let overlays = use_overlays();
             action_button("Open Compress", move |_| {
-                bingux_ui::shell::open_form(overlays, "Compress", bingux_ui::files::compress_preview($state), None);
+                bingux_ui::shell::open_form(
+                    overlays,
+                    "Compress",
+                    bingux_ui::files::compress_preview($state),
+                    None,
+                );
             })
             .into_element()
         })
@@ -602,8 +690,14 @@ macro_rules! compress_state {
     };
 }
 
-fn estimate(entries: &[bingux_ui::files::model::Entry], ratio: f64) -> bingux_ui::files::model::ops::Estimate {
-    let per_file: Vec<Option<u64>> = entries.iter().map(|e| Some((e.size as f64 * ratio) as u64)).collect();
+fn estimate(
+    entries: &[bingux_ui::files::model::Entry],
+    ratio: f64,
+) -> bingux_ui::files::model::ops::Estimate {
+    let per_file: Vec<Option<u64>> = entries
+        .iter()
+        .map(|e| Some((e.size as f64 * ratio) as u64))
+        .collect();
     bingux_ui::files::model::ops::Estimate {
         original: entries.iter().map(|e| e.size).sum(),
         estimated: per_file.iter().flatten().sum(),
@@ -613,24 +707,34 @@ fn estimate(entries: &[bingux_ui::files::model::Entry], ratio: f64) -> bingux_ui
 
 pub const FORM_DIALOG: &[Spec] = &[
     compress_state!("Archive: valid", {
-        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("notes.txt", 1200), pic("report.pdf", 90_000)], tools_all());
+        let mut p = bingux_ui::files::CompressPreview::new(
+            vec![pic("notes.txt", 1200), pic("report.pdf", 90_000)],
+            tools_all(),
+        );
         p.format = Some(bingux_ui::files::model::ops::Format::Zip);
         p
     }),
     compress_state!("Archive: name taken (keep both)", {
-        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("Holiday.txt", 10)], tools_all());
+        let mut p =
+            bingux_ui::files::CompressPreview::new(vec![pic("Holiday.txt", 10)], tools_all());
         p.name = Some("Holiday".into());
         p.taken = vec!["Holiday.zip".into()];
         p
     }),
     compress_state!("Archive: invalid name and pattern", {
-        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("a.txt", 10), pic("b.txt", 10)], tools_all());
+        let mut p = bingux_ui::files::CompressPreview::new(
+            vec![pic("a.txt", 10), pic("b.txt", 10)],
+            tools_all(),
+        );
         p.name = Some("a/b".into());
         p.excludes = "a[bc".into();
         p
     }),
     compress_state!("Archive: password does not match", {
-        let mut p = bingux_ui::files::CompressPreview::new(vec![pic("a.txt", 10), pic("b.txt", 10)], tools_all());
+        let mut p = bingux_ui::files::CompressPreview::new(
+            vec![pic("a.txt", 10), pic("b.txt", 10)],
+            tools_all(),
+        );
         p.locked = true;
         p.password = "secret".into();
         p.confirm = "secre".into();
@@ -655,7 +759,10 @@ pub const FORM_DIALOG: &[Spec] = &[
         p
     }),
     compress_state!("Reduce size: tool missing", {
-        bingux_ui::files::CompressPreview::new(vec![pic("clip.mp4", 1_000_000), pic("a.jpg", 2000)], Default::default())
+        bingux_ui::files::CompressPreview::new(
+            vec![pic("clip.mp4", 1_000_000), pic("a.jpg", 2000)],
+            Default::default(),
+        )
     }),
 ];
 
@@ -694,7 +801,10 @@ fn about_minimal() -> AppInfo {
 /// A button that opens the About window of `make()` on `page`.
 fn about_button(make: fn() -> AppInfo, page: bingux_ui::about::Page) -> Element {
     let overlays = use_overlays();
-    action_button("Open About", move |_| bingux_ui::about::open_at(overlays, make(), page)).into_element()
+    action_button("Open About", move |_| {
+        bingux_ui::about::open_at(overlays, make(), page)
+    })
+    .into_element()
 }
 
 const OPEN_ABOUT: &str = "click-text Open About; wait 700; save {out}";
@@ -908,7 +1018,11 @@ pub const MENU: &[Spec] = &[
 fn sample_apps() -> Vec<AppChoice> {
     vec![
         AppChoice::new("org.gnome.Nautilus", "Files", "org.gnome.Nautilus"),
-        AppChoice::new("org.gnome.TextEditor", "Text Editor", "org.gnome.TextEditor"),
+        AppChoice::new(
+            "org.gnome.TextEditor",
+            "Text Editor",
+            "org.gnome.TextEditor",
+        ),
         AppChoice::new("org.gnome.Totem", "Videos", "org.gnome.Totem"),
         AppChoice::new("no-icon", "Unpackaged tool", "no-such-icon-in-any-theme"),
     ]
@@ -926,7 +1040,9 @@ fn open_with_items() -> Vec<MenuItem> {
 
 /// A column of banners as a page would hold them: the same width, spaced.
 fn banners(items: Vec<Banner>) -> Element {
-    vstack(S2).children(items.into_iter().map(|item| item.into_element())).into_element()
+    vstack(S2)
+        .children(items.into_iter().map(|item| item.into_element()))
+        .into_element()
 }
 
 pub const BANNER: &[Spec] = &[
@@ -952,21 +1068,33 @@ pub const BANNER: &[Spec] = &[
                 (BannerKind::Error, "Could not reach the network."),
             ]
             .into_iter()
-            .map(|(kind, text)| banner(text).kind(kind).action("Open", |_| {}).dismissible(|_| {}))
+            .map(|(kind, text)| {
+                banner(text)
+                    .kind(kind)
+                    .action("Open", |_| {})
+                    .dismissible(|_| {})
+            })
             .collect(),
         )
     }),
     Spec::forced("Message only", || {
         banners(
-            [BannerKind::Info, BannerKind::Success, BannerKind::Warning, BannerKind::Error]
-                .into_iter()
-                .map(|kind| banner("Nothing needs doing.").kind(kind))
-                .collect(),
+            [
+                BannerKind::Info,
+                BannerKind::Success,
+                BannerKind::Warning,
+                BannerKind::Error,
+            ]
+            .into_iter()
+            .map(|kind| banner("Nothing needs doing.").kind(kind))
+            .collect(),
         )
     }),
     Spec::forced("Dismiss only", || {
         banners(vec![
-            banner("The battery is low.").kind(BannerKind::Warning).dismissible(|_| {}),
+            banner("The battery is low.")
+                .kind(BannerKind::Warning)
+                .dismissible(|_| {}),
         ])
     }),
     Spec::forced("Title and message", || {
@@ -991,14 +1119,19 @@ pub const BANNER: &[Spec] = &[
     }),
     Spec::forced("Custom icon, no icon", || {
         banners(vec![
-            banner("Connected to HomeNet.").kind(BannerKind::Success).icon(Icon::Bluetooth),
+            banner("Connected to HomeNet.")
+                .kind(BannerKind::Success)
+                .icon(Icon::Bluetooth),
             banner("Plain, with no glyph.").without_icon(),
         ])
     }),
     Spec::forced("Long text", || {
         banners(vec![
             banner(LONG).action("Open", |_| {}).dismissible(|_| {}),
-            banner(LONG).kind(BannerKind::Error).title("Could not apply").action("Retry", |_| {}),
+            banner(LONG)
+                .kind(BannerKind::Error)
+                .title("Could not apply")
+                .action("Retry", |_| {}),
         ])
     }),
 ];
@@ -1046,10 +1179,7 @@ pub const STATUS_PAGE: &[Spec] = &[
         let tokens = use_tokens();
         // No fixed height: the page is the icon, the title and its padding.
         rect()
-            .tw(
-                &tokens,
-                &[w_full(), rounded(Radius::Card), bg(Paint::Card)],
-            )
+            .tw(&tokens, &[w_full(), rounded(Radius::Card), bg(Paint::Card)])
             .child(status_page(Icon::Folder, "This folder is empty"))
             .into_element()
     }),

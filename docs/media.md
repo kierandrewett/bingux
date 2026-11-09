@@ -15,9 +15,9 @@ folders. There is nothing to set up: open it and the library is there.
 
 - **Where it looks.** The XDG Music and Videos folders (`~/Music`, `~/Videos`,
   or what `~/.config/user-dirs.dirs` names), plus folders added with
-  **Add Folder…** in the main menu or Settings. Hidden folders are skipped.
+  **Add folder…** in the main menu or Settings. Hidden folders are skipped.
 - **Keeping up.** Media checks the folders each time it starts and with
-  **Update Library**. Only new and changed files are read again, so a large
+  **Update library**. Only new and changed files are read again, so a large
   library that has not changed takes a moment.
 - **Tags and covers.** Title, artist, album, album artist, track and disc
   numbers, year and genre come from the file's tags. The cover is the picture
@@ -26,7 +26,7 @@ folders. There is nothing to set up: open it and the library is there.
   (`01 First Light.flac` is track 1, "First Light").
 - **Search.** Type in the sidebar's search field (Ctrl+F). Every word must
   match a title, artist, album or genre.
-- **Nothing found.** The window says so and offers **Add Folder…**. Files and
+- **Nothing found.** The window says so and offers **Add folder…**. Files and
   folders can also be dragged into the window, or opened from Files with
   **Open With**: Media handles audio and video types.
 

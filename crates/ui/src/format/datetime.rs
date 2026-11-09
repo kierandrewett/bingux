@@ -225,6 +225,12 @@ impl Date {
 
     /// The text.
     pub fn format(&self) -> String {
+        super::isolate(self.compose())
+    }
+
+    /// The text without the isolate [`format`](Self::format) adds in a
+    /// right-to-left interface: for a formatter that writes it into its own.
+    pub(super) fn compose(&self) -> String {
         let locale = self
             .locale
             .clone()
@@ -341,6 +347,12 @@ impl Time {
 
     /// The text.
     pub fn format(&self) -> String {
+        super::isolate(self.compose())
+    }
+
+    /// The text without the isolate [`format`](Self::format) adds in a
+    /// right-to-left interface: for a formatter that writes it into its own.
+    pub(super) fn compose(&self) -> String {
         let locale = self
             .locale
             .clone()

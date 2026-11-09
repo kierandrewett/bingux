@@ -160,10 +160,17 @@ impl Component for ActionButton {
         let usable = use_enabled(self.enabled);
         let enabled = usable && !self.loading;
         let filled = self.accent || self.destructive;
+        // A destructive button is a danger fill, unless the accent is the same
+        // hue (a red or orange accent): then a filled one would look like the
+        // primary button beside it, so it is tinted instead, danger ink on a
+        // danger-tinted fill. It stays a destructive button for every accent.
+        let tinted = self.destructive && tokens.danger_near_accent;
         // The fill is a paint; the state layer on top comes from `surface`.
         // No idle outline: the shell's buttons are filled or flat. Only the
         // keyboard focus ring draws a border.
-        let base = if self.destructive {
+        let base = if tinted {
+            Paint::DangerSoft
+        } else if self.destructive {
             Paint::Danger
         } else if filled {
             Paint::Accent
@@ -174,6 +181,8 @@ impl Component for ActionButton {
         };
         let ink = if !usable {
             Ink::Muted
+        } else if tinted {
+            Ink::Danger
         } else if self.destructive {
             Ink::OnDanger
         } else if filled {
@@ -184,6 +193,8 @@ impl Component for ActionButton {
         let color = ink.color(&tokens);
         let ink_paint = if !usable {
             Paint::Muted
+        } else if tinted {
+            Paint::Danger
         } else if self.destructive {
             Paint::OnDanger
         } else if filled {
@@ -191,7 +202,9 @@ impl Component for ActionButton {
         } else {
             Paint::Text
         };
-        let face = if self.destructive {
+        let face = if tinted {
+            Face::Plain
+        } else if self.destructive {
             Face::Danger
         } else if self.accent {
             Face::Accent

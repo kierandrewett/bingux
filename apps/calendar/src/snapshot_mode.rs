@@ -204,6 +204,7 @@ pub fn run(dir: &str, mode: Option<&str>) {
         std::env::set_var("XDG_CONFIG_HOME", scratch.join("config"));
         std::env::set_var("XDG_STATE_HOME", scratch.join("state"));
     }
+    bingux_ui::i18n::register(bingux_ui::catalogue!("calendar"));
     fs::create_dir_all(dir).expect("the snapshot folder");
 
     let size = std::env::var("BINGUX_CALENDAR_SNAPSHOT_SIZE")

@@ -21,8 +21,8 @@
 //!   written, is saved with **Save As**, which asks where. A save never leaves
 //!   half a file (see [`write_atomic`](super::write_atomic)), and one that
 //!   fails says why and offers what can work ([`dialogs::save_failed`](super::dialogs::save_failed)).
-//! - **Unsaved changes** are marked in the tab and the window title with a
-//!   bullet ([`UNSAVED_MARK`]). Closing a document or the window asks first.
+//! - **Unsaved changes** are marked by a dot on the tab and a bullet in the
+//!   window title ([`UNSAVED_MARK`]). Closing a document or the window asks first.
 //! - **Drafts**: a few seconds after the last edit, the unsaved content is
 //!   written to `$XDG_STATE_HOME/<app-id>/drafts/`. After a crash the next
 //!   start offers it back ([`dialogs::recover_work`](super::dialogs::recover_work)).
@@ -68,8 +68,8 @@ use crate::shell::{Dialog, MenuItem, Overlays, menu_item, use_overlays};
 use crate::task::{Feed, spawn_blocking, spawn_detached};
 use crate::window::{Window, WindowLike, use_window};
 
-/// What a title starts with while a document has unsaved changes. In the
-/// window title and in the tab.
+/// What the window title starts with while a document has unsaved changes.
+/// The tab shows its own dot instead.
 pub const UNSAVED_MARK: &str = "\u{2022} ";
 
 /// Drafts older than this, whose process is gone, are deleted at start.
@@ -1976,22 +1976,18 @@ impl Document {
         self.read(|store, entry| store.title_of(entry))
     }
 
-    /// The title for a tab or a list: the name, with [`UNSAVED_MARK`] before
-    /// it while there are unsaved changes.
+    /// The name of the document for a tab or a list. Unsaved changes are shown
+    /// by the tab's dot, not here.
     pub fn display_title(self) -> String {
-        self.read(|store, entry| {
-            let name = store.title_of(entry);
-            if entry.edited {
-                format!("{UNSAVED_MARK}{name}")
-            } else {
-                name
-            }
-        })
+        self.read(|store, entry| store.title_of(entry))
     }
 
-    /// The title for the window: `name – app_name`, with the mark.
+    /// The title for the window: `name – app_name`, with [`UNSAVED_MARK`]
+    /// before the name while there are unsaved changes.
     pub fn window_title(self, app_name: &str) -> String {
-        format!("{} \u{2013} {app_name}", self.display_title())
+        let name = self.display_title();
+        let mark = if self.is_unsaved() { UNSAVED_MARK } else { "" };
+        format!("{mark}{name} \u{2013} {app_name}")
     }
 
     /// Whether the document has changes that are not in its file.

@@ -70,8 +70,8 @@ impl Seed {
 /// Opens the editor.
 pub fn open(model: Model, window: Window, overlays: Overlays, seed: Seed) {
     let title = match &seed {
-        Seed::Existing(_) => "Event",
-        Seed::New(_) => "New event",
+        Seed::Existing(_) => tr!("calendar-event-title"),
+        Seed::New(_) => tr!("calendar-new-event"),
     };
     window.open(
         popup(
@@ -94,9 +94,9 @@ pub fn ask_scope(
     title: &str,
     message: &str,
     verb: &str,
+    destructive: bool,
     then: impl Fn(Scope) + Clone + 'static,
 ) {
-    let destructive = verb == "Delete";
     let kind = if destructive {
         ResponseKind::Destructive
     } else {
@@ -105,16 +105,16 @@ pub fn ask_scope(
     let (first, second, third) = (then.clone(), then.clone(), then);
     overlays.show_dialog(
         dialog(title, message)
-            .cancel("Cancel")
-            .response(format!("{verb} this event only"), kind, move |_| {
+            .cancel(tr!("calendar-cancel"))
+            .response(tr!("calendar-scope-this", verb = verb), kind, move |_| {
                 first(Scope::This)
             })
             .response(
-                format!("{verb} this and following events"),
+                tr!("calendar-scope-following", verb = verb),
                 kind,
                 move |_| second(Scope::Following),
             )
-            .response(format!("{verb} all events"), kind, move |_| {
+            .response(tr!("calendar-scope-all", verb = verb), kind, move |_| {
                 third(Scope::All)
             })
             .default_action(CANCEL_ID),
@@ -124,38 +124,11 @@ pub fn ask_scope(
 /// The words for a reminder of `minutes` before the start.
 fn reminder_label(minutes: i64) -> String {
     match minutes {
-        0 => "At the time of the event".to_string(),
-        m if m % 10_080 == 0 => {
-            let n = m / 10_080;
-            if n == 1 {
-                "1 week before".to_string()
-            } else {
-                format!("{n} weeks before")
-            }
-        }
-        m if m % 1_440 == 0 => {
-            let n = m / 1_440;
-            if n == 1 {
-                "1 day before".to_string()
-            } else {
-                format!("{n} days before")
-            }
-        }
-        m if m % 60 == 0 => {
-            let n = m / 60;
-            if n == 1 {
-                "1 hour before".to_string()
-            } else {
-                format!("{n} hours before")
-            }
-        }
-        m => {
-            if m == 1 {
-                "1 minute before".to_string()
-            } else {
-                format!("{m} minutes before")
-            }
-        }
+        0 => tr!("calendar-reminder-at-time"),
+        m if m % 10_080 == 0 => tr!("calendar-reminder-weeks", count = m / 10_080),
+        m if m % 1_440 == 0 => tr!("calendar-reminder-days", count = m / 1_440),
+        m if m % 60 == 0 => tr!("calendar-reminder-hours", count = m / 60),
+        m => tr!("calendar-reminder-minutes", count = m),
     }
 }
 
@@ -467,9 +440,10 @@ impl Component for Editor {
                         } else {
                             ask_scope(
                                 overlays,
-                                "Save changes?",
-                                "This event repeats.",
-                                "Save",
+                                &tr!("calendar-save-changes-title"),
+                                &tr!("calendar-repeats-note"),
+                                &tr!("calendar-save"),
+                                false,
                                 finish,
                             );
                         }
@@ -480,7 +454,7 @@ impl Component for Editor {
         let save_press = save.clone();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Save".into(),
+                label: tr!("calendar-save").into(),
                 enabled: valid,
                 on_press: EventHandler::new(move |_: ()| save_press()),
             }),
@@ -490,8 +464,8 @@ impl Component for Editor {
         // The fields.
         let heading = Group::new(None::<String>)
             .row(
-                form_field("Title", title)
-                    .placeholder("New event")
+                form_field(tr!("calendar-title-field"), title)
+                    .placeholder(tr!("calendar-new-event"))
                     .autofocus()
                     .on_submit(move |_: ()| {
                         if valid {
@@ -500,8 +474,8 @@ impl Component for Editor {
                     }),
             )
             .row(
-                form_field("Location", location)
-                    .placeholder("Add a place")
+                form_field(tr!("calendar-location-field"), location)
+                    .placeholder(tr!("calendar-location-placeholder"))
                     .optional(),
             );
 
@@ -516,7 +490,9 @@ impl Component for Editor {
                     move_start(*start_date.peek(), minutes);
                 }));
             }
-            row("Starts").trailing(line).trailing_control()
+            row(tr!("calendar-starts"))
+                .trailing(line)
+                .trailing_control()
         };
         let end_row = {
             let picker = date_picker(ed, clock.today, move |date: Date| end_date.set(date))
@@ -531,17 +507,21 @@ impl Component for Editor {
                 }
                 line = line.child(picker);
             }
-            row("Ends")
+            row(tr!("calendar-ends"))
                 .trailing(line)
                 .trailing_control()
                 .subtitle(if ends_after {
-                    ""
+                    String::new()
                 } else {
-                    "The event ends before it starts."
+                    tr!("calendar-ends-before-starts")
                 })
         };
         let mut when = Group::new(None::<String>)
-            .row(switch_row("All-day", all, move |on: bool| all_day.set(on)))
+            .row(switch_row(
+                tr!("calendar-all-day-switch"),
+                all,
+                move |on: bool| all_day.set(on),
+            ))
             .row(start_row)
             .row(end_row);
         if !all {
@@ -579,7 +559,7 @@ impl Component for Editor {
                 String::new()
             };
             when = when.row(
-                row("Time zone").subtitle(note).trailing(
+                row(tr!("calendar-time-zone")).subtitle(note).trailing(
                     dropdown(options, current.tzid(), move |key: String| {
                         if let Some(next) = Zone::from_tzid(&key) {
                             zone.set(next);
@@ -592,13 +572,16 @@ impl Component for Editor {
 
         let repeat_options: Vec<(String, String)> = {
             let mut options = vec![
-                ("never".to_string(), "Never".to_string()),
-                ("daily".to_string(), "Every day".to_string()),
-                ("weekdays".to_string(), "Every weekday".to_string()),
-                ("weekly".to_string(), "Every week".to_string()),
-                ("fortnightly".to_string(), "Every 2 weeks".to_string()),
-                ("monthly".to_string(), "Every month".to_string()),
-                ("yearly".to_string(), "Every year".to_string()),
+                ("never".to_string(), tr!("calendar-never")),
+                ("daily".to_string(), tr!("calendar-repeat-daily")),
+                ("weekdays".to_string(), tr!("calendar-repeat-weekdays")),
+                ("weekly".to_string(), tr!("calendar-repeat-weekly")),
+                (
+                    "fortnightly".to_string(),
+                    tr!("calendar-repeat-fortnightly"),
+                ),
+                ("monthly".to_string(), tr!("calendar-repeat-monthly")),
+                ("yearly".to_string(), tr!("calendar-repeat-yearly")),
             ];
             if let Some(rule) = &draft.custom_rule {
                 options.push(("custom".to_string(), recur::describe(rule)));
@@ -606,11 +589,11 @@ impl Component for Editor {
             options
         };
         let repeating = *repeat.read() != "never";
-        let mut repeats = Group::new(None::<String>).row(row("Repeat").trailing(dropdown(
-            repeat_options,
-            repeat.read().clone(),
-            move |key: String| repeat.set(key),
-        )));
+        let mut repeats = Group::new(None::<String>).row(row(tr!("calendar-repeat")).trailing(
+            dropdown(repeat_options, repeat.read().clone(), move |key: String| {
+                repeat.set(key)
+            }),
+        ));
         if repeating && *repeat.read() != "custom" {
             let end_key = match &*repeat_end.read() {
                 RepeatEnd::Never => "never",
@@ -618,12 +601,9 @@ impl Component for Editor {
                 RepeatEnd::After(_) => "after",
             };
             let end_options = vec![
-                ("never".to_string(), "Never".to_string()),
-                ("on".to_string(), "On a date".to_string()),
-                (
-                    "after".to_string(),
-                    "After a set number of times".to_string(),
-                ),
+                ("never".to_string(), tr!("calendar-never")),
+                ("on".to_string(), tr!("calendar-repeat-end-on")),
+                ("after".to_string(), tr!("calendar-repeat-end-after")),
             ];
             let mut line = hstack(S2);
             match repeat_end.read().clone() {
@@ -656,7 +636,11 @@ impl Component for Editor {
                 })
                 .width(Dim::DropdownMenu),
             );
-            repeats = repeats.row(row("Ends repeating").trailing(line).trailing_control());
+            repeats = repeats.row(
+                row(tr!("calendar-repeat-ends"))
+                    .trailing(line)
+                    .trailing_control(),
+            );
         }
         if let Some(rule) = draft
             .custom_rule
@@ -679,7 +663,7 @@ impl Component for Editor {
                 .filter(|(_, c)| !c.read_only)
                 .map(|(index, c)| convert::colour_of(Some(c), index, &tokens))
                 .collect::<Vec<_>>();
-            row("Calendar").trailing(
+            row(tr!("calendar-calendar-field")).trailing(
                 dropdown(options, calendar.read().clone(), move |id: String| {
                     calendar.set(id)
                 })
@@ -694,30 +678,38 @@ impl Component for Editor {
                     minutes.sort_unstable();
                 }
             }
-            let mut options = vec![("none".to_string(), "None".to_string())];
+            let mut options = vec![("none".to_string(), tr!("calendar-none"))];
             options.extend(minutes.iter().map(|m| (m.to_string(), reminder_label(*m))));
             let selected = reminder
                 .read()
                 .map_or("none".to_string(), |m| m.to_string());
-            row("Reminder").trailing(dropdown(options, selected, move |key: String| {
-                reminder.set(key.parse::<i64>().ok());
-            }))
+            row(tr!("calendar-reminder")).trailing(dropdown(
+                options,
+                selected,
+                move |key: String| {
+                    reminder.set(key.parse::<i64>().ok());
+                },
+            ))
         };
         let details = Group::new(None::<String>)
             .row(calendar_row)
             .row(reminder_row)
             .row(choice_row(
-                "Show as",
+                tr!("calendar-show-as"),
                 vec![
-                    ("busy".to_string(), "Busy".to_string()),
-                    ("free".to_string(), "Free".to_string()),
+                    ("busy".to_string(), tr!("calendar-busy")),
+                    ("free".to_string(), tr!("calendar-free")),
                 ],
                 if *busy.read() { "busy" } else { "free" },
                 move |key: String| busy.set(key == "busy"),
             ));
         let more = Group::new(None::<String>)
-            .row(form_field("Notes", notes).multiline(4).optional())
-            .row(form_field("URL", url).optional());
+            .row(
+                form_field(tr!("calendar-notes"), notes)
+                    .multiline(4)
+                    .optional(),
+            )
+            .row(form_field(tr!("calendar-url"), url).optional());
 
         let mut column = popup_column()
             .child(heading)
@@ -726,11 +718,15 @@ impl Component for Editor {
             .child(details)
             .child(more);
         if let Some(existing_item) = item.clone().filter(|_| existing) {
-            column = column.child(Group::new(None::<String>).row(
-                row("Delete event").destructive().on_press(move |_| {
-                    delete_event(model, overlays, existing_item.clone(), key, Some(window));
-                }),
-            ));
+            column = column.child(
+                Group::new(None::<String>).row(
+                    row(tr!("calendar-delete-event"))
+                        .destructive()
+                        .on_press(move |_| {
+                            delete_event(model, overlays, existing_item.clone(), key, Some(window));
+                        }),
+                ),
+            );
         }
         column
     }
@@ -752,17 +748,22 @@ pub fn delete_event(
             if let Some(window) = editor {
                 window.close();
             }
-            overlays.toast_with_action("Event deleted", "Undo", move |_| {
-                model.apply(undo.clone());
-            });
+            overlays.toast_with_action(
+                tr!("calendar-event-deleted"),
+                tr!("calendar-undo"),
+                move |_| {
+                    model.apply(undo.clone());
+                },
+            );
         }
     };
     if item.series.is_some() {
         ask_scope(
             overlays,
-            "Delete this event?",
-            "This event repeats.",
-            "Delete",
+            &tr!("calendar-delete-this-title"),
+            &tr!("calendar-repeats-note"),
+            &tr!("calendar-delete"),
+            true,
             delete,
         );
     } else {

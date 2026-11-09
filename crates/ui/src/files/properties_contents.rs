@@ -37,7 +37,7 @@ pub(super) fn contents_tab(page: &Page) -> Vec<Element> {
     let mut largest = Group::titled("Largest items");
     let found = &page.largest;
     for child in found {
-        largest = largest.row(property_row(child.name.clone(), child_line(child)));
+        largest = largest.row(property_row(child.name.clone(), child_line(child)).title_middle());
     }
     if !page.totals.done {
         for _ in found.len()..LARGEST {

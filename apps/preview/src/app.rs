@@ -238,6 +238,7 @@ impl Component for Content {
                 },
                 Done::Copied { copy: made } => match ops::trash(std::slice::from_ref(&made)) {
                     Ok(_) => {
+                        overlays.toast(copy::CROP_UNDONE);
                         playlist.write().take_out(&made);
                         done.set(None);
                     }
@@ -514,7 +515,7 @@ impl Component for Content {
             .leading(
                 icon_button(Icon::DocumentOpen, move |_| open(())).tooltip(copy::OPEN_TOOLTIP),
             );
-        if document && !compact {
+        if document {
             let mut sidebar_state = sidebar;
             header = header.leading(
                 icon_button(Icon::SidebarShow, move |_| {

@@ -274,7 +274,7 @@ impl Component for WgTunnel {
         };
 
         let public_row = if has_wg {
-            row("Public key").mono_value(public.read().clone().unwrap_or_default())
+            row("Public key").technical_value(public.read().clone().unwrap_or_default())
         } else {
             row("Public key").subtitle("Not available")
         };

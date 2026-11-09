@@ -1188,6 +1188,7 @@ fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
                 },
             )
             .max(200.0)
+            .origin(100.0)
             .mark(100.0)
             .value_text(side_text(shape.balance, "Left", "Right"))
             .into(),
@@ -1200,6 +1201,7 @@ fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
                 update_mix(ctx, move |shape| shape.fade = fade);
             })
             .max(100.0)
+            .origin(50.0)
             .mark(50.0)
             .value_text(side_text(shape.fade, "Rear", "Front"))
             .into(),

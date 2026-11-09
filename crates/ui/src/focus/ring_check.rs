@@ -85,7 +85,12 @@ pub fn expected_ring(face: Box4, progress: f32, inside: bool) -> Box4 {
         return face;
     }
     let out = outset(progress);
-    [face[0] - out, face[1] - out, face[2] + 2.0 * out, face[3] + 2.0 * out]
+    [
+        face[0] - out,
+        face[1] - out,
+        face[2] + 2.0 * out,
+        face[3] + 2.0 * out,
+    ]
 }
 
 /// Whether two boxes are the same within `tolerance`.
@@ -133,7 +138,12 @@ pub fn check(probes: &[RingProbe]) -> Vec<Mismatch> {
             } else {
                 "the ring's corner radius does not follow the face's"
             };
-            found.push(Mismatch { label: probe.label.clone(), what, expected: radii, found: probe.ring_radii });
+            found.push(Mismatch {
+                label: probe.label.clone(),
+                what,
+                expected: radii,
+                found: probe.ring_radii,
+            });
             break;
         }
     }
@@ -174,8 +184,15 @@ pub fn probes(snapshot: &Snapshot) -> Vec<(u64, RingProbe)> {
         if face_box[2] <= 0.0 || face_box[3] <= 0.0 || face.used.hidden {
             continue;
         }
-        let ring_radii = ring.props.as_ref().map_or([0.0; 4], |props| props.corner_radii);
-        let progress = ring.props.as_ref().and_then(|props| props.opacity).unwrap_or(1.0);
+        let ring_radii = ring
+            .props
+            .as_ref()
+            .map_or([0.0; 4], |props| props.corner_radii);
+        let progress = ring
+            .props
+            .as_ref()
+            .and_then(|props| props.opacity)
+            .unwrap_or(1.0);
         let painter = painted(snapshot, face, face_box);
         found.push((
             ring.id,
@@ -191,7 +208,10 @@ pub fn probes(snapshot: &Snapshot) -> Vec<(u64, RingProbe)> {
                 progress,
                 ring_radii,
                 inside,
-                blurred: ring.props.as_ref().is_some_and(|props| !props.shadows.is_empty()),
+                blurred: ring
+                    .props
+                    .as_ref()
+                    .is_some_and(|props| !props.shadows.is_empty()),
             },
         ));
     }
@@ -281,8 +301,17 @@ mod tests {
     fn settled(face_radii: [f32; 4], ring_radii: [f32; 4]) -> RingProbe {
         let face = [20.0, 20.0, 100.0, 40.0];
         let out = outset(1.0);
-        let ring = [face[0] - out, face[1] - out, face[2] + 2.0 * out, face[3] + 2.0 * out];
-        RingProbe { face_radii, ring_radii, ..probe(face, ring, 1.0) }
+        let ring = [
+            face[0] - out,
+            face[1] - out,
+            face[2] + 2.0 * out,
+            face[3] + 2.0 * out,
+        ];
+        RingProbe {
+            face_radii,
+            ring_radii,
+            ..probe(face, ring, 1.0)
+        }
     }
 
     #[test]
@@ -299,7 +328,12 @@ mod tests {
         // box, so it started a padding in and ended a padding short.
         let face = [108.0, 60.0, 320.0, 44.0];
         let out = FOCUS_GAP + FOCUS_WIDTH;
-        let ring = [108.0 + 12.0 - out, 60.0 - out, 320.0 - 20.0 + 2.0 * out, 44.0 + 2.0 * out];
+        let ring = [
+            108.0 + 12.0 - out,
+            60.0 - out,
+            320.0 - 20.0 + 2.0 * out,
+            44.0 + 2.0 * out,
+        ];
         let found = check(&[probe(face, ring, 1.0)]);
         assert_eq!(found.len(), 1, "{found:?}");
         assert_eq!(found[0].expected[0], 108.0 - out);
@@ -336,7 +370,10 @@ mod tests {
         row.face_radii = [0.0; 4];
         let found = check(&[row]);
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].what, "a rounded ring corner around a square face corner");
+        assert_eq!(
+            found[0].what,
+            "a rounded ring corner around a square face corner"
+        );
     }
 
     #[test]
@@ -345,7 +382,10 @@ mod tests {
         assert!(check(&[settled([0.0; 4], [0.0; 4])]).is_empty());
         let found = check(&[settled([0.0; 4], [12.0; 4])]);
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].what, "a rounded ring corner around a square face corner");
+        assert_eq!(
+            found[0].what,
+            "a rounded ring corner around a square face corner"
+        );
         assert_eq!(found[0].expected, [0.0; 4], "{out}");
     }
 
@@ -355,9 +395,15 @@ mod tests {
         assert!(check(&[settled([8.0; 4], [8.0 + out; 4])]).is_empty());
         let found = check(&[settled([8.0; 4], [0.0; 4])]);
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].what, "a square ring corner around a rounded face corner");
+        assert_eq!(
+            found[0].what,
+            "a square ring corner around a rounded face corner"
+        );
         let found = check(&[settled([8.0; 4], [8.0; 4])]);
-        assert_eq!(found[0].what, "the ring's corner radius does not follow the face's");
+        assert_eq!(
+            found[0].what,
+            "the ring's corner radius does not follow the face's"
+        );
     }
 
     #[test]
@@ -373,7 +419,10 @@ mod tests {
         // One corner off in an otherwise exact ring.
         let found = check(&[settled(tab, [10.0 + out, 0.0, 0.0, 0.0])]);
         assert_eq!(found.len(), 1, "{found:?}");
-        assert_eq!(found[0].what, "a square ring corner around a rounded face corner");
+        assert_eq!(
+            found[0].what,
+            "a square ring corner around a rounded face corner"
+        );
     }
 
     #[test]
@@ -391,7 +440,10 @@ mod tests {
         let out = FOCUS_GAP + FOCUS_WIDTH;
         assert_eq!(expected_radii([8.0; 4], 1.0, false), [8.0 + out; 4]);
         assert_eq!(expected_radii([0.0; 4], 1.0, false), [0.0; 4]);
-        assert_eq!(expected_radii([8.0, 0.0, 4.0, 0.0], 1.0, false), [8.0 + out, 0.0, 4.0 + out, 0.0]);
+        assert_eq!(
+            expected_radii([8.0, 0.0, 4.0, 0.0], 1.0, false),
+            [8.0 + out, 0.0, 4.0 + out, 0.0]
+        );
         assert_eq!(expected_radii([8.0; 4], 1.0, true), [8.0; 4]);
     }
 }

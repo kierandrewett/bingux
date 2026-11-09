@@ -6,11 +6,37 @@
 //! guess to the system. When the data lands the same rows keep their places
 //! and only their values change.
 
+use bingux_ui::controls::{SpinnerSize, spinner};
 use bingux_ui::style::*;
 use freya::prelude::*;
 
 /// How strongly the placeholder rows are dimmed.
 const LOADING_OPACITY: f32 = 0.55;
+
+/// How long a page loads before its spinner appears, so a read that lands
+/// quickly shows no spinner at all.
+const SPINNER_DELAY: std::time::Duration = std::time::Duration::from_millis(300);
+
+/// A spinner centred on the veil that appears once `SPINNER_DELAY` has passed
+/// while the page is still loading.
+#[derive(PartialEq)]
+struct DelayedSpinner;
+
+impl Component for DelayedSpinner {
+    fn render(&self) -> impl IntoElement {
+        let tokens = bingux_ui::surface::tokens_now();
+        let mut due = use_state(|| false);
+        use_hook(move || {
+            spawn(async move {
+                timer(SPINNER_DELAY).await;
+                due.set(true);
+            });
+        });
+        rect()
+            .tw(&tokens, &[w_full(), h_full(), center()])
+            .maybe_child(due().then(|| spinner(SpinnerSize::Large)))
+    }
+}
 
 /// `page` as it is while loading: dimmed, with a pane over it that takes every
 /// press. Returns `page` untouched once `loading` is false.
@@ -27,7 +53,8 @@ pub fn veiled(page: Rect, loading: bool) -> Rect {
     page.opacity(LOADING_OPACITY).child(
         rect()
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .tw(&tokens, &[w_full(), h_full()]),
+            .tw(&tokens, &[w_full(), h_full()])
+            .child(DelayedSpinner),
     )
 }
 
@@ -69,6 +96,7 @@ impl Component for Revealed {
                 rect()
                     .position(Position::new_absolute().top(0.0).left(0.0))
                     .tw(&tokens, &[w_full(), h_full()])
+                    .child(DelayedSpinner)
             }))
     }
 }

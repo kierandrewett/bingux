@@ -22,11 +22,11 @@
 //! [`WindowHost`]: crate::window::WindowHost
 
 pub mod owner;
+#[cfg(all(test, feature = "testing"))]
+mod ring_anim_tests;
 pub mod ring_check;
 #[cfg(all(test, feature = "testing"))]
 mod ring_layout_tests;
-#[cfg(all(test, feature = "testing"))]
-mod ring_anim_tests;
 
 use std::{cell::RefCell, rc::Rc};
 
@@ -218,6 +218,23 @@ pub fn step_focus(back: bool) {
 pub fn focus_node(id: AccessibilityId) {
     set_keyboard_mode();
     spawn(async move { send(AccessibilityFocusStrategy::Node(id)) });
+}
+
+/// Whether the focused control is a text entry (a text field, a multiline
+/// editor or a search box). A window's own single-letter shortcuts must stand
+/// aside then, so typing `3` or `t` into a field does not run a command. Reads
+/// the focused node's accessibility role, the same one screen readers see.
+pub fn text_entry_focused() -> bool {
+    matches!(
+        Platform::get()
+            .current_window()
+            .focused_accessibility_node
+            .peek()
+            .role(),
+        accesskit::Role::TextInput
+            | accesskit::Role::MultilineTextInput
+            | accesskit::Role::SearchInput
+    )
 }
 
 impl FocusCore {
@@ -666,7 +683,9 @@ impl Component for Trap {
             // The scope is modal: assistive technology treats the page behind
             // as inert, and the inspector marks it so.
             .a11y_builder(|builder| builder.set_modal())
-            .maybe(self.fill, |root| root.width(Size::fill()).height(Size::fill()))
+            .maybe(self.fill, |root| {
+                root.width(Size::fill()).height(Size::fill())
+            })
             .child(Sentinel {
                 id: start,
                 edge: Edge::TrapStart(end),
@@ -706,12 +725,18 @@ mod edge_tests {
 
     #[test]
     fn tab_off_a_traps_last_control_wraps_to_its_start() {
-        assert_eq!(edge_step(Edge::TrapEnd(START), Dir::Forward), Step::Enter(START));
+        assert_eq!(
+            edge_step(Edge::TrapEnd(START), Dir::Forward),
+            Step::Enter(START)
+        );
     }
 
     #[test]
     fn shift_tab_off_a_traps_first_control_wraps_to_its_end() {
-        assert_eq!(edge_step(Edge::TrapStart(END), Dir::Backward), Step::Enter(END));
+        assert_eq!(
+            edge_step(Edge::TrapStart(END), Dir::Backward),
+            Step::Enter(END)
+        );
     }
 
     #[test]
@@ -781,16 +806,17 @@ mod tab_tests {
     }
 
     fn focused(shot: &mut Snapshot) -> AccessibilityId {
-        shot.runner()
-            .run_in(|| *Platform::get().current_window().focused_accessibility_id.peek())
+        shot.runner().run_in(|| {
+            *Platform::get()
+                .current_window()
+                .focused_accessibility_id
+                .peek()
+        })
     }
 
     #[test]
     fn each_tab_press_moves_focus_one_control_and_shift_tab_walks_back() {
-        let mut shot = Snapshot::new(
-            || Root.into_element(),
-            (520.0, 520.0),
-        );
+        let mut shot = Snapshot::new(|| Root.into_element(), (520.0, 520.0));
         shot.settle(Duration::from_millis(300));
         let tab = || Key::Named(NamedKey::Tab);
 
@@ -808,7 +834,12 @@ mod tab_tests {
             walk.push(now);
         }
         shot.key(tab());
-        assert_eq!(focused(&mut shot), walk[0], "Tab {} wraps to the first control", STOPS + 1);
+        assert_eq!(
+            focused(&mut shot),
+            walk[0],
+            "Tab {} wraps to the first control",
+            STOPS + 1
+        );
 
         // Shift+Tab retraces the lap one control per press.
         for (back, want) in walk.iter().rev().enumerate() {
