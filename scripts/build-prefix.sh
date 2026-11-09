@@ -91,8 +91,9 @@ install -Dm644 README.md "$PREFIX_DIR/usr/share/doc/bingux/README.md"
 for page in extensions.md locking.md login-screen.md configuration.md audio-effects.md; do doc bingux "$page"; done
 doc bingux-settings settings.md
 doc bingux-files files.md
+doc bingux-preview preview-app.md
 doc bingux-taxonomy bingux-ui.md
-for package in bingux bingux-settings bingux-files bingux-taxonomy; do
+for package in bingux bingux-settings bingux-files bingux-preview bingux-taxonomy; do
     install -Dm644 COPYING "$PREFIX_DIR/usr/share/licenses/$package/COPYING"
 done
 # Quickshell is inside the bingux-shell binary; its licence is LGPL.

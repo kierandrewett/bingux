@@ -52,9 +52,9 @@ $(BUILD_DIR)/bingux-frame: native/frame/paint-gtk.c native/frame/build.sh native
 	bash native/frame/build.sh $(BUILD_DIR)
 
 # The Rust programs. Each crate has its own Cargo.lock, so each is built on its own.
-# bingux-settings, bingux-files and bingux-taxonomy are the Freya applications;
-# bingux-preview-host is the helper process Files runs to play films and songs and
-# render PDFs (GStreamer and poppler stay out of the application);
+# bingux-settings, bingux-files, bingux-preview and bingux-taxonomy are the Freya applications;
+# bingux-preview-host is the helper process Files and Preview run to play films and songs, render PDFs
+# and decode HEIF, AVIF and camera pictures (GStreamer, poppler and libheif stay out of the applications);
 # bingux-effects is the sound-effects engine; it hosts published LV2 and LADSPA plugins and ships none of its own.
 # `apps` builds the applications and what Settings runs (bingux-config, the effects
 # engine); `daemons` adds the search and status daemons, the privileged helper, the
@@ -64,6 +64,7 @@ apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/audio-effects/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/settings/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/files/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/preview/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 
@@ -212,6 +213,7 @@ check: doctor-build native daemons
 	$(CARGO) test --locked --manifest-path crates/files/Cargo.toml
 	$(CARGO) test --locked --manifest-path crates/preview-core/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path apps/preview/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path crates/search/Cargo.toml
 	$(CARGO) test --locked --manifest-path crates/data-usage/Cargo.toml
 	$(CARGO) test --locked --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
@@ -284,7 +286,7 @@ install-user: doctor all
 uninstall-user:
 	python3 scripts/install-shell.py --user --uninstall --prefix '$(USER_PREFIX)'
 
-# Settings, Files and Taxonomy only, for your user: no shell, no session change.
+# Settings, Files, Preview and Taxonomy only, for your user: no shell, no session change.
 # APPS_PREFIX is the folder that gets bin/, share/ and lib/ (default ~/.local).
 APPS_PREFIX ?= $(HOME)/.local
 install-apps: apps

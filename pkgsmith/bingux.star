@@ -70,10 +70,12 @@ DEPENDS = {
         # dconf keeps them across logins.
         "dconf",
         "/usr/bin/gsettings",
-        # Preview helper: it plays media with GStreamer and renders PDFs with poppler.
+        # Preview helper: it plays media with GStreamer, renders PDFs with poppler and reads HEIF and
+        # AVIF pictures with libheif (Fedora's libheif decodes AVIF; HEIC needs the HEVC decoder of RPM Fusion).
         "gstreamer1-plugins-base",
         "gstreamer1-plugins-good",
         "poppler-glib",
+        "libheif",
         # Libraries of the programs; scripts/check-package-libs.sh finds a missing one.
         "fontconfig",
         "mesa-libEGL",
@@ -139,6 +141,7 @@ DEPENDS = {
         "libpipewire-0.3-0t64",
         "libpolkit-agent-1-0",
         "libpoppler-glib8t64",
+        "libheif1",
         "libqt6widgets6",
         "libadwaita-1-0",
     ],
@@ -175,6 +178,7 @@ DEPENDS = {
         "gst-plugins-base",
         "gst-plugins-good",
         "poppler-glib",
+        "libheif",
         "fontconfig",
         "libglvnd",
         "mesa",
@@ -195,6 +199,7 @@ RECOMMENDS = {
         # the folder handler it expects. A minimal install can drop them.
         "bingux-settings",
         "bingux-files",
+        "bingux-preview",
         # The sound effects engine runs the published plugins that Easy Effects uses.
         "lsp-plugins-lv2",
         "lv2-calf-plugins",
@@ -203,7 +208,7 @@ RECOMMENDS = {
         "lv2-x42-plugins",
         "ladspa-rubberband-plugins",
         "pipewire-utils",
-        # Film decoders for the Files preview.
+        # Film decoders for the Files and Preview windows.
         "gstreamer1-plugin-libav",
         "gstreamer1-plugins-bad-free",
         "gstreamer1-plugin-openh264",
@@ -218,6 +223,7 @@ RECOMMENDS = {
     "deb": [
         "bingux-settings",
         "bingux-files",
+        "bingux-preview",
         "lsp-plugins-lv2",
         "calf-plugins",
         "zam-plugins",
@@ -238,6 +244,7 @@ RECOMMENDS = {
     "archlinux": [
         "bingux-settings: Settings, opened from the Control Centre and the dock",
         "bingux-files: file manager",
+        "bingux-preview: picture and document viewer",
         "lsp-plugins: sound effects",
         "calf: sound effects: bass enhancer, exciter, crusher, de-esser, reverb and stereo tools",
         "zam-plugins: sound effects: maximizer",

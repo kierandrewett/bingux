@@ -44,6 +44,7 @@ version = "0.1.0"
 dependencies = [
  "bingux-files",
  "flate2",
+ "kamadak-exif",
  "libc",
  "ttf-parser",
 ]

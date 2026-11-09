@@ -1,4 +1,4 @@
-# The application packages of Bingux: Settings, Files and Taxonomy. Each is its own package, holds the files
+# The application packages of Bingux: Settings, Files, Preview and Taxonomy. Each is its own package, holds the files
 # listed for it in common.star (APPS) and depends on `bingux`, which has the core services the apps talk to:
 # the configuration command, the sound effects engine, the preview helper and the search daemon.
 #
@@ -16,6 +16,10 @@ It opens the page named in a bingux-settings:// address, so links and the shell'
     "bingux-files": """File manager for the Bingux desktop
 Files is the Bingux desktop's file manager. It has tabs, a places sidebar, list and grid views, previews, search and
 file operations with undo. It opens folders and bingux-files:// addresses.""",
+    "bingux-preview": """Picture and document viewer for the Bingux desktop
+Preview shows pictures and PDF documents, with the other files of the folder one arrow key away. It zooms, turns and
+crops pictures, plays animated GIFs, runs a slideshow and shows a document's pages and outline. HEIF, AVIF, TIFF,
+HDR, OpenEXR and camera pictures and PDFs are read by the preview helper in the bingux package.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
@@ -39,6 +43,11 @@ DEPENDS = {
         "rpm": ["shared-mime-info", "xdg-utils", "/usr/bin/gio"],
         "deb": ["shared-mime-info", "xdg-utils", "libglib2.0-bin"],
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2"],
+    },
+    "bingux-preview": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
     },
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
@@ -85,6 +94,11 @@ RECOMMENDS = {
             "unzip: open zip archives",
         ],
     },
+    "bingux-preview": {
+        "rpm": ["adwaita-sans-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
@@ -96,6 +110,7 @@ RECOMMENDS = {
 SUGGESTS = {
     "bingux-settings": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
+    "bingux-preview": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
 

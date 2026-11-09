@@ -25,13 +25,14 @@ publishes.
 | `bingux`          | The whole desktop: the shell and every core service, and the system integration around them |
 | `bingux-settings` | The Settings app                                                                            |
 | `bingux-files`    | The Files app                                                                               |
+| `bingux-preview`  | The Preview app (pictures and PDF documents)                                                |
 | `bingux-taxonomy` | The Taxonomy app (a reference window for the UI library, a development tool)                |
 
 **Why this split.** The desktop does not work without its services, so they are one
 package: the shell (`bingux-shell`, Quickshell with the Bingux patches, and its QML
 plugins), the search and status daemons, the privileged helper, the portal backend
 and global shortcuts, the lock screen program, `bingux-config`, the
-sound effects engine and the preview helper Files runs. Each of those is started by the shell, by a
+sound effects engine and the preview helper that Files and Preview run (it links poppler and libheif, so `bingux` depends on them). Each of those is started by the shell, by a
 systemd unit of `bingux`, or by D-Bus activation, and the shell cannot be installed
 without them. Settings, Files and Taxonomy are applications: a user can run a
 desktop without any of them, each has a desktop entry, an icon and AppStream
@@ -89,7 +90,7 @@ Before 0.1.0 the desktop was `bingux`, `bingux-config`, `bingux-audio-effects` a
 | `archlinux` | `replaces`, `conflicts` and `provides` of each old name    |
 
 `scripts/verify-packages.sh` installs stand-ins for the old names first and checks
-that installing the new packages removes them. `bingux-settings`, `bingux-files` and
+that installing the new packages removes them. `bingux-settings`, `bingux-files`, `bingux-preview` and
 `bingux-taxonomy` keep their names, so they upgrade in place.
 
 ## Build a prefix
@@ -131,7 +132,7 @@ family:
 | Script                 | Writes                                                                             |
 | ---------------------- | ---------------------------------------------------------------------------------- |
 | `pkgsmith/bingux.star` | `bingux`                                                                           |
-| `pkgsmith/apps.star`   | `bingux-settings`, `bingux-files`, `bingux-taxonomy`                               |
+| `pkgsmith/apps.star`   | `bingux-settings`, `bingux-files`, `bingux-preview`, `bingux-taxonomy`             |
 | `pkgsmith/common.star` | Shared by both: versions, licences, dependency helpers, the file lists of the apps |
 
 Each script writes `rpm`, `deb`, `archlinux` and `tar`; `FORMATS` (or `-F` of

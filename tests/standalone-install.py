@@ -28,6 +28,7 @@ BUILD_OUTPUTS = (
     "cargo/release/bingux-helper",
     "cargo/release/bingux-settings",
     "cargo/release/bingux-files",
+    "cargo/release/bingux-preview",
     "cargo/release/bingux-taxonomy",
     "cargo/release/bingux-preview-host",
     "cargo/release/bingux-effects",
@@ -263,6 +264,7 @@ class InstallTest(unittest.TestCase):
             for path in (
                 "usr/bin/bingux-settings",
                 "usr/bin/bingux-files",
+                "usr/bin/bingux-preview",
                 "usr/bin/bingux-taxonomy",
                 "usr/bin/bingux-preview-host",
                 "usr/bin/bingux-effects",
@@ -271,11 +273,13 @@ class InstallTest(unittest.TestCase):
                 "usr/lib/systemd/user-preset/90-bingux.preset",
                 "usr/share/man/man1/bingux-settings.1",
                 "usr/share/man/man1/bingux-files.1",
+                "usr/share/man/man1/bingux-preview.1",
                 "usr/share/man/man1/bingux-config.1",
                 "usr/share/man/man1/bingux-effects.1",
                 "usr/share/man/man1/bingux-taxonomy.1",
                 "usr/share/metainfo/dev.drewett.bingux.Settings.metainfo.xml",
                 "usr/share/metainfo/dev.drewett.bingux.Files.metainfo.xml",
+                "usr/share/metainfo/dev.drewett.bingux.Preview.metainfo.xml",
                 "usr/share/metainfo/dev.drewett.bingux.Taxonomy.metainfo.xml",
                 "usr/share/applications/bingux-files.desktop",
                 "usr/share/icons/hicolor/scalable/apps/bingux-files.svg",
@@ -619,6 +623,7 @@ class InstallTest(unittest.TestCase):
                 "bingux-config",
                 "bingux-settings",
                 "bingux-files",
+                "bingux-preview",
                 "bingux-preview-host",
                 "bingux-taxonomy",
                 "bingux-effects",
@@ -635,6 +640,12 @@ class InstallTest(unittest.TestCase):
                 self.assertIn(f"Exec={prefix}/bin/{app} ", desktop.split("[Desktop Action", 1)[1])
                 self.assertIn("MimeType=" + mime, desktop)
                 self.assertTrue((prefix / "share/icons/hicolor/scalable/apps" / (app + ".svg")).is_file())
+            # Preview has no desktop actions: its entry is a viewer for pictures and documents.
+            preview = (prefix / "share/applications/bingux-preview.desktop").read_text()
+            self.assertIn(f"Exec={prefix}/bin/bingux-preview %U", preview)
+            self.assertIn("MimeType=image/png;", preview)
+            self.assertIn("application/pdf;", preview)
+            self.assertTrue((prefix / "share/icons/hicolor/scalable/apps/bingux-preview.svg").is_file())
             self.assertFalse((prefix / "share/metainfo").exists())
             self.assertTrue((prefix / "share/man/man1/bingux-settings.1").is_file())
             search = json.loads((prefix / "share/bingux/search-apps/bingux-settings.json").read_text())

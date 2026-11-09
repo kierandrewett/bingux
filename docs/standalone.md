@@ -198,13 +198,14 @@ make install-apps
 `scripts/install-shell.py --apps --prefix ~/.local` (change the folder with
 `APPS_PREFIX`). It installs, below the prefix:
 
-- `bin`: `bingux-settings`, `bingux-files`, `bingux-taxonomy`, and the two
+- `bin`: `bingux-settings`, `bingux-files`, `bingux-preview`, `bingux-taxonomy`, and the two
   programs Settings runs, `bingux-config` and `bingux-effects`. They are
   stripped.
 - `share/applications` and `share/icons/hicolor/scalable/apps`: the desktop
   entries, with `Exec` pointing at the installed programs, and the icons. Files
   is registered for `inode/directory` and `x-scheme-handler/bingux-files`,
-  Settings for `x-scheme-handler/bingux-settings`. Nothing becomes the default.
+  Settings for `x-scheme-handler/bingux-settings`, Preview for pictures, PDF documents and
+  `x-scheme-handler/bingux-preview`. Nothing becomes the default.
 - `share/man/man1`: the manual pages.
 - `share/bingux/search-apps/bingux-settings.json`: tells `bingux-searchd` that
   Settings can be searched. The installer does not start the daemon.
