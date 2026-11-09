@@ -6,6 +6,7 @@
 
 use std::collections::BTreeMap;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::runtime::{optimistic, optimistic_then};
 use freya::prelude::*;
 
@@ -186,7 +187,7 @@ fn cursor_row(
         .map(|size| (size.to_string(), size.to_string()))
         .collect();
     Some(
-        row("Cursor size")
+        row(&tr!("settings-accessibility-cursor-size"))
             .trailing(segmented(
                 options,
                 &current.to_string(),
@@ -221,13 +222,13 @@ impl Component for AccessibilityPage {
             .or(model.cursor_size);
 
         let seeing = section(
-            "Seeing",
+            &tr!("settings-accessibility-seeing"),
             vec![
                 flag_row(
                     pending,
                     overlays,
                     "screen-reader",
-                    "Screen reader",
+                    &tr!("settings-accessibility-screen-reader"),
                     model.screen_reader,
                     |on| {
                         system::gsettings_set(APPLICATIONS, "screen-reader-enabled", flag_text(on))
@@ -237,7 +238,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "large-text",
-                    "Large text",
+                    &tr!("settings-accessibility-large-text"),
                     model.large_text,
                     |on| {
                         let scale = if on { LARGE_TEXT } else { 1.0 };
@@ -252,7 +253,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "high-contrast",
-                    "High contrast",
+                    &tr!("settings-accessibility-high-contrast"),
                     model.high_contrast,
                     |on| system::gsettings_set(A11Y_INTERFACE, "high-contrast", flag_text(on)),
                 ),
@@ -260,7 +261,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "reduce-animations",
-                    "Reduce animations",
+                    &tr!("settings-accessibility-reduce-animations"),
                     model.reduce_animations,
                     |on| system::gsettings_set(INTERFACE, "enable-animations", flag_text(!on)),
                 ),
@@ -269,7 +270,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "overlay-scrollbars",
-                    "Overlay scrollbars",
+                    &tr!("settings-accessibility-overlay-scrollbars"),
                     model.overlay_scrollbars,
                     |on| system::gsettings_set(INTERFACE, "overlay-scrolling", flag_text(on)),
                 ),
@@ -277,13 +278,13 @@ impl Component for AccessibilityPage {
         );
 
         let typing = section(
-            "Typing",
+            &tr!("settings-accessibility-typing"),
             vec![
                 flag_row(
                     pending,
                     overlays,
                     "on-screen-keyboard",
-                    "On-screen keyboard",
+                    &tr!("settings-accessibility-on-screen-keyboard"),
                     model.screen_keyboard,
                     |on| {
                         system::gsettings_set(
@@ -297,7 +298,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "sticky-keys",
-                    "Sticky keys",
+                    &tr!("settings-accessibility-sticky-keys"),
                     model.sticky_keys,
                     |on| system::gsettings_set(KEYBOARD, "stickykeys-enable", flag_text(on)),
                 ),
@@ -305,7 +306,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "slow-keys",
-                    "Slow keys",
+                    &tr!("settings-accessibility-slow-keys"),
                     model.slow_keys,
                     |on| system::gsettings_set(KEYBOARD, "slowkeys-enable", flag_text(on)),
                 ),
@@ -313,7 +314,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "bounce-keys",
-                    "Bounce keys",
+                    &tr!("settings-accessibility-bounce-keys"),
                     model.bounce_keys,
                     |on| system::gsettings_set(KEYBOARD, "bouncekeys-enable", flag_text(on)),
                 ),
@@ -321,13 +322,13 @@ impl Component for AccessibilityPage {
         );
 
         let pointing = section(
-            "Pointing",
+            &tr!("settings-accessibility-pointing"),
             vec![
                 flag_row(
                     pending,
                     overlays,
                     "mouse-keys",
-                    "Mouse keys",
+                    &tr!("settings-accessibility-mouse-keys"),
                     model.mouse_keys,
                     |on| system::gsettings_set(KEYBOARD, "mousekeys-enable", flag_text(on)),
                 ),
@@ -335,7 +336,7 @@ impl Component for AccessibilityPage {
                     pending,
                     overlays,
                     "locate-pointer",
-                    "Locate pointer",
+                    &tr!("settings-accessibility-locate-pointer"),
                     model.locate_pointer,
                     |on| system::gsettings_set(INTERFACE, "locate-pointer", flag_text(on)),
                 ),

@@ -85,3 +85,22 @@ settings-about-capacity = Capacity
 settings-about-copy = Copy
 settings-about-copy-system-info = Copy system info
 settings-about-system-details = System details
+
+## Accessibility
+
+# The groups of switches on the Accessibility page, and their labels.
+settings-accessibility-seeing = Seeing
+settings-accessibility-screen-reader = Screen reader
+settings-accessibility-large-text = Large text
+settings-accessibility-high-contrast = High contrast
+settings-accessibility-reduce-animations = Reduce animations
+settings-accessibility-cursor-size = Cursor size
+settings-accessibility-overlay-scrollbars = Overlay scrollbars
+settings-accessibility-typing = Typing
+settings-accessibility-on-screen-keyboard = On-screen keyboard
+settings-accessibility-sticky-keys = Sticky keys
+settings-accessibility-slow-keys = Slow keys
+settings-accessibility-bounce-keys = Bounce keys
+settings-accessibility-pointing = Pointing
+settings-accessibility-mouse-keys = Mouse keys
+settings-accessibility-locate-pointer = Locate pointer
