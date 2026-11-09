@@ -26,6 +26,7 @@ use super::chooser::browse_body;
 use super::directory::Where;
 use super::folder_table::{folder_table, location_of};
 use crate::nav::NavModel;
+use crate::shell::MenuItem;
 use crate::tabs::TabContent;
 
 /// The number the next [`TabMemory`] takes.
@@ -203,13 +204,22 @@ impl TabContent for FileTab {
     }
 }
 
-/// What a host gives the file view in a window: its tab's memory and what to
-/// do with the things the view cannot do itself.
+/// What a host gives the file view in a window: its tab's memory, what to
+/// do with the things the view cannot do itself, and the window's own parts
+/// that the view's header bar carries.
+///
+/// The view is the whole window: the places sidebar runs its full height on
+/// the sidebar surface, as in Settings, and the content pane beside it has
+/// the window's header bar (Back, Forward, the address bar, the view's
+/// buttons, the host's menu and the window buttons), then the host's tab bar
+/// when it has more than one tab, then the files.
 #[derive(Clone, PartialEq)]
 pub struct Browse {
     pub(super) memory: TabMemory,
     pub(super) on_location: EventHandler<Where>,
     pub(super) on_new_tab: EventHandler<PathBuf>,
+    pub(super) menu: Vec<MenuItem>,
+    pub(super) tab_bar: Option<Element>,
 }
 
 impl Browse {
@@ -218,6 +228,8 @@ impl Browse {
             memory,
             on_location: EventHandler::new(|_: Where| {}),
             on_new_tab: EventHandler::new(|_: PathBuf| {}),
+            menu: Vec::new(),
+            tab_bar: None,
         }
     }
 
@@ -231,6 +243,23 @@ impl Browse {
     /// "Open in new tab" in a menu.
     pub fn on_new_tab(mut self, handler: impl Into<EventHandler<PathBuf>>) -> Self {
         self.on_new_tab = handler.into();
+        self
+    }
+
+    /// The window's main menu, the last button before the window buttons.
+    /// On a phone the view adds its own choices (new folder, list or grid,
+    /// sort, hidden files) to the top of it, as the header has no room for
+    /// their buttons.
+    pub fn menu(mut self, items: Vec<MenuItem>) -> Self {
+        self.menu = items;
+        self
+    }
+
+    /// The window's tab bar, drawn across the content pane under the header
+    /// bar. Pass `None` while the window has one tab, as Finder and Safari
+    /// do: a lone tab is the window, and needs no strip to say so.
+    pub fn tab_bar(mut self, strip: Option<Element>) -> Self {
+        self.tab_bar = strip;
         self
     }
 }

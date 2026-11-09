@@ -905,6 +905,17 @@ fn remember(mount_point: &Path, usage: Usage) {
     );
 }
 
+/// The bytes free to an unprivileged writer on the drive `path` is on, for a
+/// status bar. Blocks as long as the drive does: call it on a worker, and
+/// only for a folder on a drive that answers at once
+/// ([`MountKind::thumbnails`]).
+pub fn free_space(path: &Path) -> Option<u64> {
+    match statvfs(path) {
+        Usage::Known { free, .. } => Some(free),
+        _ => None,
+    }
+}
+
 /// `statvfs` on `path`. Blocks as long as the mount does.
 fn statvfs(path: &Path) -> Usage {
     let Ok(c_path) = CString::new(path.as_os_str().as_bytes()) else {

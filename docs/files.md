@@ -42,21 +42,42 @@ their own sort and icon size, and the cached listing of their parent keeps both.
 ## The window
 
 ```text
-+-------------------------------------------------------------+
-| +   [ Documents ][ Downloads ]  +                  ≡  _ □ x |  tabs, menu, window buttons
-| <  >  ^  ⟳  [ Home > Documents >            ]  +folder  ▦ v |  toolbar
-| Places   |  Name            Size    Modified                 |
-| Recent   |  Notes                   27 Oct                   |  file view
-| Home     |  Budget.xlsx     88 kB   15 Oct                   |
-| Drives   |  ...                                              |
-+-------------------------------------------------------------+
++-----------+-------------------------------------------------------------+
+|           | <  >  [ Home > Documents >        ]   Q  +folder  ▦ v  ≡ _ □ x |  header bar
+| Recent    | [ Documents                 ][ Downloads                 ]   |  tabs (two or more)
+| Home      |  Name               Size     Modified                       |
+| Documents |  Notes                       27 Oct                         |  file view
+| Trash     |  Budget.xlsx        88 kB    15 Oct                         |
+| Drives    |                                                             |
+| fsociety  |              2 items, 96 GB free                            |  status bar
++-----------+-------------------------------------------------------------+
 ```
 
-- The **tabs** are the title bar: separate rounded tabs, the selected one with
-  the fill of a selected sidebar row, the others quiet until the pointer is
-  over them, a New tab button after the last. The bar is the page's colour and
-  the file view under it runs square to the window's edges; nothing joins a tab
-  to it (`design/tabs.md`).
+The window is laid out as Settings is: the **sidebar** runs the window's full
+height on the sidebar's own colour, with a band at the top that drags the
+window, and the content pane beside it has the header bar, the tab bar and the
+files on the page colour.
+
+- The **header bar** is the toolbar, grouped by what a person reaches for:
+  Back and Forward at the start (hold or right-click either for its history),
+  the address bar, then Search, New folder (Empty Trash while the Trash is on
+  show), the view switch with its menu, the main menu and the window buttons.
+  The parent folder is Alt+Up or a crumb; Reload is F5, Ctrl+R or the view
+  menu, and turns into a Stop button at the start of the bar while a slow
+  folder is read; the preview pane is Alt+P or the view menu.
+- The **tabs** appear once the window has a second tab (Ctrl+T, a middle
+  click on a folder, Open in new tab), as in Finder: a bar across the content
+  pane under the header, its tabs sharing the width, the selected one with the
+  fill of a selected sidebar row. A lone tab is the window, so there is no
+  strip. Closing the second-last tab hides the bar again (`design/tabs.md`).
+- The **status bar** along the bottom says how many items there are, what is
+  selected with its size, and how much room the drive has (`5 items, 96 GB
+free`; a network share or a disc is not asked). A copy, a move or a
+  compression shows its progress and a Cancel button there.
+- **On a phone** the sidebar becomes a button at the start of the header that
+  opens the places in a sheet, the folder's name is the header's title (press
+  it for the folders above and **Type a path**), and New folder, the other
+  kind of view and the view's choices are at the top of the main menu.
 - The **sidebar** lists Recent, Home, your folders, the Trash (once something
   has been trashed; the icon is faint while it is empty), your bookmarks and
   your drives with free space. Every row has a context menu (right click,
@@ -139,13 +160,13 @@ their own sort and icon size, and the cached listing of their parent keeps both.
     place (a network place, a drive by its label) is one more `Root` there.
 
 - The **view button** switches between a list and a grid; the arrow beside it
-  opens sort and hidden-file choices. Text never changes size with zoom; zoom
-  changes the icons, and large sizes show thumbnails.
-- The **status pill** floats at the bottom right of the list, on an opaque
-  surface, and says how many items there are (`95 items`), what is selected
-  (`1 of 95 selected (19 kB)`), how a search is going and what an operation is
-  doing. It slides to the other corner when the pointer comes near it, and
-  never counts hidden files.
+  opens the sort choices, hidden files (Ctrl+H), the preview pane (Alt+P) and
+  Reload (F5). Text never changes size with zoom; zoom changes the icons, and
+  large sizes show thumbnails.
+- The **status bar** (see above) never counts hidden files. A search says how
+  it is going there too. In the file chooser dialog, which has a footer of its
+  own, the same words are a pill that floats at the bottom right of the list
+  and slides to the other corner when the pointer comes near it.
 
 Each folder remembers its icon size and sort order, and the window remembers
 its size. State lives in `$XDG_STATE_HOME/bingux/files/view.json`; a folder is
