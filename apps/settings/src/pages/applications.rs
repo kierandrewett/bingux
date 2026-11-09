@@ -659,6 +659,7 @@ fn installed_tools(
         }
         searching.set(!open);
     })
+    .active(*searching.read())
     .tooltip("Search");
     let mut sources =
         vec![menu_item("All", move |_| set_source(source, limit, None)).checked(filter.is_none())];
@@ -765,6 +766,15 @@ impl Component for ApplicationsPage {
                     .trailing(installed_tools(
                         searching, query, sort, source, limit, order, filter,
                     ))
+                    // The menu hides what is on, so the header says it.
+                    .description(match (filter, order) {
+                        (None, Sort::Name) => String::new(),
+                        (Some(kind), Sort::Name) => format!("Showing {}", kind.label()),
+                        (None, Sort::Size) => "Largest first".to_string(),
+                        (Some(kind), Sort::Size) => {
+                            format!("Showing {}, largest first", kind.label())
+                        }
+                    })
                     .below_title(search);
                 if rows.is_empty() {
                     group.row(status(Status::Empty("No applications match.".to_string())))
