@@ -510,3 +510,57 @@ ui-info-style = Style
 ui-info-version = Version
 ui-info-designer = Designer
 ui-info-glyphs = Glyphs
+
+## Files: properties, chooser and address bar
+
+# $count (Number) - bytes
+ui-files-props-bytes = { $count } bytes
+# $size (String) - the size so far
+ui-files-props-size-stopped = At least { $size } (stopped)
+# $size (String) - the size so far
+ui-files-props-size-so-far = { $size } so far…
+# $size (String) - the size so far
+ui-files-props-size-at-least = At least { $size }
+# $count (Number) - items counted
+ui-files-props-items = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+# $count (Number) - items counted
+ui-files-props-items-stopped = { $count ->
+    [one] At least { $count } item (stopped)
+   *[other] At least { $count } items (stopped)
+}
+# $count (Number) - items counted
+ui-files-props-items-so-far = { $count ->
+    [one] { $count } item so far…
+   *[other] { $count } items so far…
+}
+# $count (Number) - items counted
+ui-files-props-items-at-least = { $count ->
+    [one] At least { $count } item
+   *[other] At least { $count } items
+}
+# $name (String) - kind name, $count (Number) - how many
+ui-files-props-kind-count = { $name } ({ $count })
+# $name (String) - the name, $id (String) - the numeric id
+ui-files-props-named-id = { $name } ({ $id })
+# $size (String) - the size on the drive
+ui-files-props-on-disk = { $size } on disk
+# $size (String), $count (Number) - folder size and item count
+ui-files-props-folder-size = { $size }, { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+# $done (String), $total (String), $percent (String)
+ui-files-props-read = { $done } of { $total } ({ $percent }%)
+# $count (Number) - items changed
+ui-files-props-changed = Changed { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+# $count (Number) - items changed, $failed (Number) - items that failed
+ui-files-props-changed-failed = Changed { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}; { $failed } could not be changed

@@ -13,7 +13,7 @@ use freya::prelude::*;
 
 use super::properties::Page;
 use super::properties_permissions::{Can, ModeSet, PermissionGrid, Who};
-use super::properties_words::{NONE, PENDING, named_id, plural};
+use super::properties_words::{NONE, PENDING, named_id};
 use crate::controls::action_button;
 use crate::group::Group;
 use crate::rows::{property_row, row, switch_row};
@@ -173,7 +173,11 @@ fn enclosed(page: &Page, access: &Access) -> Group {
         TreePhase::Idle => (
             "Apply to enclosed items".to_owned(),
             buttons
-                .child(action_button("Apply…", move |_| ask.call(())).compact().enabled(ready))
+                .child(
+                    action_button("Apply…", move |_| ask.call(()))
+                        .compact()
+                        .enabled(ready),
+                )
                 .into_element(),
         ),
         TreePhase::Confirming => (
@@ -183,7 +187,11 @@ fn enclosed(page: &Page, access: &Access) -> Group {
             ),
             buttons
                 .child(action_button("Cancel", move |_| cancel.call(())).compact())
-                .child(action_button("Apply", move |_| apply.call(())).compact().destructive())
+                .child(
+                    action_button("Apply", move |_| apply.call(()))
+                        .compact()
+                        .destructive(),
+                )
                 .into_element(),
         ),
         TreePhase::Running => (
@@ -195,19 +203,31 @@ fn enclosed(page: &Page, access: &Access) -> Group {
         TreePhase::Done(change) => (
             done_line(*change),
             buttons
-                .child(action_button("Apply…", move |_| ask.call(())).compact().enabled(ready))
+                .child(
+                    action_button("Apply…", move |_| ask.call(()))
+                        .compact()
+                        .enabled(ready),
+                )
                 .into_element(),
         ),
         TreePhase::Stopped => (
             "Stopped. What was changed stays changed.".to_owned(),
             buttons
-                .child(action_button("Apply…", move |_| ask.call(())).compact().enabled(ready))
+                .child(
+                    action_button("Apply…", move |_| ask.call(()))
+                        .compact()
+                        .enabled(ready),
+                )
                 .into_element(),
         ),
         TreePhase::Failed(message) => (
             message.clone(),
             buttons
-                .child(action_button("Apply…", move |_| ask.call(())).compact().enabled(ready))
+                .child(
+                    action_button("Apply…", move |_| ask.call(()))
+                        .compact()
+                        .enabled(ready),
+                )
                 .into_element(),
         ),
     };
@@ -221,11 +241,14 @@ fn enclosed(page: &Page, access: &Access) -> Group {
 
 /// What a finished tree change did.
 fn done_line(change: TreeChange) -> String {
-    let changed = plural(change.changed, "item", "items");
     if change.failed == 0 {
-        format!("Changed {changed}")
+        crate::tr!("ui-files-props-changed", count = change.changed)
     } else {
-        format!("Changed {changed}; {} could not be changed", change.failed)
+        crate::tr!(
+            "ui-files-props-changed-failed",
+            count = change.changed,
+            failed = change.failed
+        )
     }
 }
 
@@ -244,7 +267,10 @@ fn security(page: &Page) -> Option<Group> {
         group = group.row(row("SELinux context").mono_value(context.clone()));
     }
     if details.acl {
-        group = group.row(property_row("Access control list", "Has entries beyond owner, group and others"));
+        group = group.row(property_row(
+            "Access control list",
+            "Has entries beyond owner, group and others",
+        ));
     }
     Some(group)
 }
@@ -255,10 +281,25 @@ mod tests {
 
     #[test]
     fn a_finished_change_counts_what_it_did_and_what_it_could_not() {
-        assert_eq!(done_line(TreeChange { changed: 1, failed: 0 }), "Changed 1 item");
-        assert_eq!(done_line(TreeChange { changed: 12, failed: 0 }), "Changed 12 items");
         assert_eq!(
-            done_line(TreeChange { changed: 12, failed: 2 }),
+            done_line(TreeChange {
+                changed: 1,
+                failed: 0
+            }),
+            "Changed 1 item"
+        );
+        assert_eq!(
+            done_line(TreeChange {
+                changed: 12,
+                failed: 0
+            }),
+            "Changed 12 items"
+        );
+        assert_eq!(
+            done_line(TreeChange {
+                changed: 12,
+                failed: 2
+            }),
             "Changed 12 items; 2 could not be changed"
         );
     }

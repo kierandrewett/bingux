@@ -37,24 +37,20 @@ pub(super) fn size_with_bytes(bytes: u64) -> String {
     } else {
         format!(
             "{size} ({})",
-            crate::format::isolate(format!("{} bytes", grouped(bytes)))
+            crate::format::isolate(crate::tr!("ui-files-props-bytes", count = grouped(bytes)))
         )
     }
-}
-
-pub(super) fn plural(count: u64, one: &str, many: &str) -> String {
-    format!("{count} {}", if count == 1 { one } else { many })
 }
 
 /// The size line of a folder or a selection while and after it is counted.
 pub(super) fn total_size(totals: Totals) -> String {
     let size = size_with_bytes(totals.bytes);
     if totals.cancelled {
-        format!("At least {size} (stopped)")
+        crate::tr!("ui-files-props-size-stopped", size = size)
     } else if !totals.done {
-        format!("{size} so far…")
+        crate::tr!("ui-files-props-size-so-far", size = size)
     } else if totals.unreadable > 0 {
-        format!("At least {size}")
+        crate::tr!("ui-files-props-size-at-least", size = size)
     } else {
         size
     }
@@ -63,16 +59,16 @@ pub(super) fn total_size(totals: Totals) -> String {
 /// How many items a folder or selection holds, while and after it is counted.
 /// Files and folders are counted apart in [`kinds`].
 pub(super) fn contents(totals: Totals) -> String {
-    let mut text = plural(totals.items(), "item", "items");
+    let count = totals.items();
     if totals.cancelled {
-        text.insert_str(0, "At least ");
-        text.push_str(" (stopped)");
+        crate::tr!("ui-files-props-items-stopped", count = count)
     } else if !totals.done {
-        text.push_str(" so far…");
+        crate::tr!("ui-files-props-items-so-far", count = count)
     } else if totals.unreadable > 0 {
-        text.insert_str(0, "At least ");
+        crate::tr!("ui-files-props-items-at-least", count = count)
+    } else {
+        crate::tr!("ui-files-props-items", count = count)
     }
-    text
 }
 
 /// How many of the items are files and how many are folders: `("10", "62")`.
@@ -95,7 +91,13 @@ pub(super) fn types_line(entries: &[Entry]) -> String {
     counts.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
     counts
         .iter()
-        .map(|(name, count)| format!("{name} ({count})"))
+        .map(|(name, count)| {
+            crate::tr!(
+                "ui-files-props-kind-count",
+                name = *name,
+                count = *count as u64
+            )
+        })
         .collect::<Vec<_>>()
         .join(", ")
 }
@@ -128,7 +130,7 @@ pub(super) fn named_id(name: &str, id: u32) -> String {
     if name == id.to_string() {
         name.to_owned()
     } else {
-        format!("{name} ({id})")
+        crate::tr!("ui-files-props-named-id", name = name, id = id.to_string())
     }
 }
 
@@ -139,7 +141,10 @@ pub(super) fn device_line(details: &FileDetails) -> String {
 
 /// What a file takes on the drive, against what it holds: `4 KB on disk`.
 pub(super) fn disk_usage(details: &FileDetails) -> String {
-    format!("{} on disk", display::size(details.disk_bytes))
+    crate::tr!(
+        "ui-files-props-on-disk",
+        size = display::size(details.disk_bytes)
+    )
 }
 
 /// One of a folder's biggest items: its size, and for a folder how much is in
@@ -147,7 +152,11 @@ pub(super) fn disk_usage(details: &FileDetails) -> String {
 pub(super) fn child_line(child: &ChildSize) -> String {
     let size = display::size(child.bytes);
     if child.is_dir {
-        format!("{size}, {}", plural(child.items, "item", "items"))
+        crate::tr!(
+            "ui-files-props-folder-size",
+            size = size,
+            count = child.items
+        )
     } else {
         size
     }
@@ -159,10 +168,11 @@ pub(super) fn read_line(done: u64, total: u64) -> String {
         return String::new();
     }
     let percent = (done as f64 / total as f64 * 100.0).clamp(0.0, 100.0);
-    format!(
-        "{} of {} ({percent:.0}%)",
-        display::size(done),
-        display::size(total)
+    crate::tr!(
+        "ui-files-props-read",
+        done = display::size(done),
+        total = display::size(total),
+        percent = format!("{percent:.0}")
     )
 }
 
