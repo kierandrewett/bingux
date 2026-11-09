@@ -2824,7 +2824,7 @@ mod phone_trailing {
     use crate::snapshot::Snapshot;
 
     const TITLE: &str = "Xbox Wireless Controller";
-    const STATUS: &str = "Not connected";
+    const STATUS: &str = "Not connected since yesterday evening";
 
     #[derive(PartialEq)]
     struct Scene;
