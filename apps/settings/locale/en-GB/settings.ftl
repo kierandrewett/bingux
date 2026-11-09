@@ -993,3 +993,75 @@ network-security-psk-hint = Use 8 to 63 characters, or 64 hexadecimal digits.
 network-security-key-type = Key type
 # Field label: WEP key.
 network-security-wep-key = WEP key
+
+## Network
+# Title of the Advanced section of a connection page.
+network-section-advanced = Advanced
+# Title of the IPv4 section of a connection page.
+network-section-ipv4 = IPv4
+# Title of the IPv6 section of a connection page.
+network-section-ipv6 = IPv6
+# Title of the DNS section of a connection page.
+network-section-dns = DNS
+# Title of the Security section of a connection page.
+network-section-security = Security
+# Title of the Identity section of a connection page.
+network-section-identity = Identity
+# Title of the Proxy section of a connection page.
+network-section-proxy = Proxy
+# Title of the other options section of a connection page.
+network-section-options = Other options
+# Title of the data usage section of a connection page.
+network-section-usage = Data usage
+# Title of the Tunnel section of a VPN page.
+network-section-tunnel = Tunnel
+# Title of a VPN peer section. $number (Number) - the peer's position, starting at 1.
+network-section-peer = Peer { $number }
+# One-line status under the Network page title while airplane mode is on.
+network-summary-airplane = Offline (airplane mode)
+# One-line status when the network requires a sign-in.
+network-summary-sign-in = Sign-in required
+# One-line status over Wi-Fi. $connection (String) - the Wi-Fi network name.
+network-summary-wifi = Online through Wi-Fi ({ $connection })
+# One-line status over the mobile network.
+network-summary-modem = Online through the mobile network
+# One-line status over a cable.
+network-summary-ethernet = Online through Ethernet
+# One-line status when connected to a network without internet.
+network-summary-no-internet = Connected, no internet
+# One-line status when offline.
+network-summary-offline = Offline
+# Subtitle while the Network page loads.
+network-loading = Loading…
+# Error when the sign-in page cannot be opened.
+network-portal-open-failed = Could not open the sign-in page. Try again.
+# Status value when the connection is limited.
+network-status-limited = Limited
+# Status value when there is no internet.
+network-status-no-internet = No internet
+# Subtitle of a connected network with no address yet.
+network-status-connected = Connected
+# Subtitle of a connected network. $address (String) - the IP address.
+network-status-connected-address = Connected · { $address }
+# Error when the network status cannot be read.
+network-status-read-failed = Could not read the network status. Try again in a moment.
+# Button to retry a failed network load.
+network-try-again = Try again
+# Row label for the airplane mode switch.
+network-airplane-mode = Airplane mode
+# Row label when airplane mode is on.
+network-airplane-on = Airplane mode is on
+# Row hint when airplane mode is on.
+network-airplane-on-hint = Turn it off below to connect.
+# Row label when nothing is connected.
+network-not-connected = Not connected
+# Row hint when nothing is connected.
+network-not-connected-hint = Choose a Wi-Fi network or plug in a cable.
+# Title of the Connections group on the Network page.
+network-group-connections = Connections
+# Status when the computer has no network devices.
+network-connections-empty = No network devices
+# Title of the More group on the Network page.
+network-group-more = More
+# Error when the network settings cannot be read.
+network-read-failed = Could not read the network settings. Try again.
