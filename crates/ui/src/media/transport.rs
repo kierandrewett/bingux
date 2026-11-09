@@ -156,9 +156,9 @@ impl Component for Transport {
                 .into()
         };
         let play_tip = if self.playing {
-            "Pause (Space)"
+            crate::tr!("ui-media-pause-tooltip")
         } else {
-            "Play (Space)"
+            crate::tr!("ui-media-play-tooltip")
         };
         let play = icon_button(Icon::MediaPlaybackStart, action(TransportAction::PlayPause))
             .morph(Icon::Pause, self.playing)
@@ -168,7 +168,7 @@ impl Component for Transport {
             .ink(ink)
             .tooltip_side(TipSide::Above)
             .tooltip_region(self.tooltip_region)
-            .tooltip(play_tip)
+            .tooltip(&play_tip)
             .enabled(self.enabled);
 
         let mut row = rect()
@@ -188,7 +188,7 @@ impl Component for Transport {
                 .child(button(
                     Icon::MediaSkipForward,
                     TransportAction::Next,
-                    "Next",
+                    &crate::tr!("ui-media-next"),
                     self.can_next,
                 ))
                 .into_element();
@@ -200,21 +200,25 @@ impl Component for Transport {
                     .active(on)
                     .tooltip_side(TipSide::Above)
                     .tooltip_region(self.tooltip_region)
-                    .tooltip(if on { "Shuffle is on" } else { "Shuffle" })
+                    .tooltip(&if on {
+                        crate::tr!("ui-media-shuffle-on")
+                    } else {
+                        crate::tr!("ui-media-shuffle")
+                    })
                     .enabled(self.enabled),
             );
         }
         row = row.child(button(
             Icon::MediaSkipBackward,
             TransportAction::Previous,
-            "Previous",
+            &crate::tr!("ui-media-previous"),
             self.can_previous,
         ));
         if self.skips {
             row = row.child(button(
                 Icon::MediaSeekBackward,
                 TransportAction::SkipBack,
-                "Back 10 seconds",
+                &crate::tr!("ui-media-skip-back"),
                 true,
             ));
         }
@@ -223,21 +227,24 @@ impl Component for Transport {
             row = row.child(button(
                 Icon::MediaSeekForward,
                 TransportAction::SkipForward,
-                "Forward 10 seconds",
+                &crate::tr!("ui-media-skip-forward"),
                 true,
             ));
         }
         row = row.child(button(
             Icon::MediaSkipForward,
             TransportAction::Next,
-            "Next",
+            &crate::tr!("ui-media-next"),
             self.can_next,
         ));
         if let Some(mode) = self.repeat {
             let (glyph, tip) = match mode {
-                RepeatMode::Off => (Icon::MediaPlaylistRepeat, "Repeat"),
-                RepeatMode::All => (Icon::MediaPlaylistRepeat, "Repeating all"),
-                RepeatMode::One => (Icon::MediaPlaylistRepeatSong, "Repeating one"),
+                RepeatMode::Off => (Icon::MediaPlaylistRepeat, crate::tr!("ui-media-repeat")),
+                RepeatMode::All => (Icon::MediaPlaylistRepeat, crate::tr!("ui-media-repeat-all")),
+                RepeatMode::One => (
+                    Icon::MediaPlaylistRepeatSong,
+                    crate::tr!("ui-media-repeat-one"),
+                ),
             };
             row = row.child(
                 icon_button(glyph, action(TransportAction::Repeat))
@@ -245,7 +252,7 @@ impl Component for Transport {
                     .active(mode != RepeatMode::Off)
                     .tooltip_side(TipSide::Above)
                     .tooltip_region(self.tooltip_region)
-                    .tooltip(tip)
+                    .tooltip(&tip)
                     .enabled(self.enabled),
             );
         }

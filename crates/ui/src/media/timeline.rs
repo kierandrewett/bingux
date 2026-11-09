@@ -80,7 +80,7 @@ pub fn timeline(
         times: false,
         floating: false,
         surface: Paint::Bg,
-        label: "Seek".to_owned(),
+        label: crate::tr!("ui-media-seek"),
     }
 }
 
@@ -316,7 +316,11 @@ impl Component for Timeline {
             .a11y_role(AccessibilityRole::Slider)
             .a11y_alt(self.label.clone())
             .a11y_builder({
-                let text = format!("{} of {}", spoken_time(shown), spoken_time(duration));
+                let text = crate::tr!(
+                    "ui-media-spoken-of",
+                    current = spoken_time(shown),
+                    total = spoken_time(duration)
+                );
                 move |builder| {
                     builder.set_numeric_value(shown);
                     builder.set_min_numeric_value(0.0);
@@ -531,9 +535,9 @@ impl Component for Timeline {
                     )
                     .a11y_role(AccessibilityRole::Button)
                     .a11y_alt(if *show_length.read() {
-                        "Show time left"
+                        crate::tr!("ui-media-show-time-left")
                     } else {
-                        "Show length"
+                        crate::tr!("ui-media-show-length")
                     })
                     .on_press(move |_| {
                         let now = *show_length.peek();

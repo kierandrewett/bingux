@@ -1510,3 +1510,50 @@ ui-document-open-error-permission = You do not have permission to read it.
 ui-document-open-error-folder = It is a folder, not a file.
 ui-document-open-error-too-large = It is too big to open here.
 ui-document-open-error-other = Check that the drive is connected, then try again.
+
+## Media: the player's transport, seek bar, volume, now-playing bar and the
+## spoken times a screen reader reads out.
+
+ui-media-play-tooltip = Play (Space)
+ui-media-pause-tooltip = Pause (Space)
+ui-media-next = Next
+ui-media-previous = Previous
+ui-media-shuffle = Shuffle
+ui-media-shuffle-on = Shuffle is on
+ui-media-repeat = Repeat
+ui-media-repeat-all = Repeating all
+ui-media-repeat-one = Repeating one
+ui-media-skip-back = Back 10 seconds
+ui-media-skip-forward = Forward 10 seconds
+ui-media-volume = Volume
+ui-media-mute-tooltip = Mute (M)
+ui-media-unmute-tooltip = Unmute (M)
+ui-media-seek = Seek
+ui-media-video = Video
+ui-media-show-time-left = Show time left
+ui-media-show-length = Show length
+
+# A screen reader's value for the seek bar: $current and $total are spoken times ("3 minutes 45 seconds").
+# $current (String) - the position, spoken; $total (String) - the length, spoken
+ui-media-spoken-of = { $current } of { $total }
+# $first and $second (String) - two spoken durations, one after the other
+ui-media-spoken-join = { $first } { $second }
+# $count (Number) - a number of hours
+ui-media-spoken-hours = { $count ->
+    [one] 1 hour
+   *[other] { $count } hours
+}
+# $count (Number) - a number of minutes
+ui-media-spoken-minutes = { $count ->
+    [one] 1 minute
+   *[other] { $count } minutes
+}
+# $count (Number) - a number of seconds
+ui-media-spoken-seconds = { $count ->
+    [one] 1 second
+   *[other] { $count } seconds
+}
+
+# A screen reader's name for a now-playing item. $title and $subtitle are the film or song's names.
+# $title (String) - the title; $subtitle (String) - the artist or year
+ui-media-item-a11y = { $title }, { $subtitle }. Open the player

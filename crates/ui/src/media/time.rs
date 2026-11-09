@@ -25,21 +25,25 @@ pub(crate) fn spoken_time(seconds: f64) -> String {
         0
     };
     let (hours, minutes, secs) = (whole / 3600, whole / 60 % 60, whole % 60);
-    let part = |count: u64, one: &str, many: &str| match count {
-        1 => format!("1 {one}"),
-        count => format!("{count} {many}"),
-    };
     let mut parts = Vec::new();
     if hours > 0 {
-        parts.push(part(hours, "hour", "hours"));
+        parts.push(crate::tr!("ui-media-spoken-hours", count = hours));
     }
     if minutes > 0 {
-        parts.push(part(minutes, "minute", "minutes"));
+        parts.push(crate::tr!("ui-media-spoken-minutes", count = minutes));
     }
     if secs > 0 || parts.is_empty() {
-        parts.push(part(secs, "second", "seconds"));
+        parts.push(crate::tr!("ui-media-spoken-seconds", count = secs));
     }
-    parts.join(" ")
+    parts
+        .into_iter()
+        .reduce(|first, second| {
+            crate::i18n::Message::new("ui-media-spoken-join")
+                .arg("first", first)
+                .arg("second", second)
+                .format()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

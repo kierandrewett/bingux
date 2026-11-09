@@ -37,7 +37,7 @@ pub struct VideoSurface {
 pub fn video_surface(frames: VideoFrames) -> VideoSurface {
     VideoSurface {
         frames,
-        label: "Video".to_owned(),
+        label: crate::tr!("ui-media-video"),
         on_press: None,
         on_double_press: None,
     }
