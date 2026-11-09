@@ -10,12 +10,13 @@ use std::collections::{HashSet, VecDeque};
 use std::os::fd::{AsRawFd, IntoRawFd, OwnedFd};
 use std::sync::{Arc, Condvar, Mutex};
 
-use bingux_preview_core::host::protocol::{ErrorCode, MAX_PAGE_SIZES, MAX_PAGES, Message, OpenedKind, Rect, Word};
+use bingux_preview_core::host::protocol::{ErrorCode, MAX_OUTLINE, MAX_OUTLINE_ENTRIES, MAX_PAGE_SIZES, MAX_PAGES, Message, OpenedKind, Rect, Word};
 use bingux_preview_core::host::shm::{MAX_BYTES, Shared};
 use poppler::Document;
 
 use crate::limits::{self, TOO_LARGE};
 use crate::link::{Link, Watchdog};
+use crate::picture::Picture;
 
 /// The most jobs waiting; the oldest page renders are dropped beyond it.
 const QUEUE_LIMIT: usize = 256;
@@ -28,6 +29,8 @@ const WORD_BUDGET: usize = 3800;
 
 pub enum Job {
     Open { request: u32, file: OwnedFd },
+    OpenImage { request: u32, file: OwnedFd, raw: bool },
+    Outline { request: u32 },
     Render { request: u32, page: u32, scale_milli: u32, max_w: u32, max_h: u32 },
     Text { request: u32, page: u32 },
     Search { request: u32, query: String },
@@ -79,7 +82,7 @@ fn forget(queue: &Queue, request: u32) {
 }
 
 fn work(link: &Link, watchdog: &Watchdog, queue: &Queue) {
-    let mut document: Option<OpenDocument> = None;
+    let mut document: Option<Open> = None;
     loop {
         let job = {
             let mut jobs = queue.jobs.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -91,24 +94,38 @@ fn work(link: &Link, watchdog: &Watchdog, queue: &Queue) {
             }
         };
         let request = match &job {
-            Job::Open { request, .. } | Job::Render { request, .. } | Job::Text { request, .. } | Job::Search { request, .. } => *request,
+            Job::Open { request, .. } | Job::OpenImage { request, .. } | Job::Outline { request } | Job::Render { request, .. } | Job::Text { request, .. } | Job::Search { request, .. } => *request,
         };
-        if !matches!(job, Job::Open { .. } | Job::Search { .. }) && was_cancelled(queue, request) {
+        if !matches!(job, Job::Open { .. } | Job::OpenImage { .. } | Job::Search { .. }) && was_cancelled(queue, request) {
             forget(queue, request);
             continue;
         }
         let _busy = watchdog.busy();
         match job {
             Job::Open { request, file } => match open(link, request, file) {
-                Ok(opened) => document = Some(opened),
+                Ok(opened) => document = Some(Open::Pdf(opened)),
                 Err((code, message)) => link.error(request, code, &message),
             },
+            Job::OpenImage { request, file, raw } => match open_image(link, request, file, raw) {
+                Ok(picture) => document = Some(Open::Image(picture)),
+                Err((code, message)) => link.error(request, code, &message),
+            },
+            Job::Outline { request } => {
+                if let Some(Open::Pdf(document)) = &document {
+                    send_outline(link, request, &document.inner);
+                }
+            }
             Job::Render { request, page, scale_milli, max_w, max_h } => {
                 let Some(document) = &document else {
                     link.error(request, ErrorCode::Internal, "No document is open.");
                     continue;
                 };
-                match render(&document.inner, page, scale_milli, max_w, max_h) {
+                let rendered = match document {
+                    Open::Pdf(document) => render(&document.inner, page, scale_milli, max_w, max_h),
+                    Open::Image(picture) if page == 0 => picture.render(scale_milli, max_w, max_h),
+                    Open::Image(_) => Err((ErrorCode::NotFound, format!("The picture has no page {}.", page + 1))),
+                };
+                match rendered {
                     Ok((width, height, shared)) => {
                         let message = Message::PageReady { page, width, height, stride: width * 4, size: shared.len() as u32 };
                         link.send_with(request, message, &[shared.raw_fd()]);
@@ -118,13 +135,21 @@ fn work(link: &Link, watchdog: &Watchdog, queue: &Queue) {
             }
             Job::Text { request, page } => {
                 let Some(document) = &document else { continue };
-                for message in page_text(&document.inner, page) {
-                    link.send(request, message);
+                match document {
+                    Open::Pdf(document) => {
+                        for message in page_text(&document.inner, page) {
+                            link.send(request, message);
+                        }
+                    }
+                    Open::Image(_) => link.send(request, Message::PageTextIs { page, words: Vec::new(), more: false }),
                 }
             }
             Job::Search { request, query } => {
                 let Some(document) = &document else { continue };
-                search(link, queue, &document.inner, request, &query);
+                match document {
+                    Open::Pdf(document) => search(link, queue, &document.inner, request, &query),
+                    Open::Image(_) => link.send(request, Message::SearchDone { hits: 0 }),
+                }
                 forget(queue, request);
             }
         }
@@ -134,6 +159,37 @@ fn work(link: &Link, watchdog: &Watchdog, queue: &Queue) {
 /// The document the host has open: poppler's handle, kept for the page jobs.
 struct OpenDocument {
     inner: Document,
+}
+
+/// What the host has open: a PDF, or a picture decoded whole.
+enum Open {
+    Pdf(OpenDocument),
+    Image(Picture),
+}
+
+/// Decode a picture and say how big it is. It is page 0 of a one page "document":
+/// the viewer asks for it with `RenderPage`, at the size it needs.
+fn open_image(link: &Link, request: u32, file: OwnedFd, raw: bool) -> Result<Picture, (ErrorCode, String)> {
+    let file = std::fs::File::from(file);
+    let picture = crate::picture::decode(file, raw)?;
+    link.send(
+        request,
+        Message::Opened { kind: OpenedKind::Image, duration_ns: 0, video_w: picture.width, video_h: picture.height, has_audio: false, seekable: false, pages: 1, title: String::new() },
+    );
+    Ok(picture)
+}
+
+/// The outline of a PDF, depth first, as messages that fit a datagram.
+fn send_outline(link: &Link, request: u32, document: &Document) {
+    let mut entries = crate::outline::entries(document);
+    entries.truncate(MAX_OUTLINE_ENTRIES);
+    let mut chunks = entries.chunks(MAX_OUTLINE).peekable();
+    if chunks.peek().is_none() {
+        link.send(request, Message::OutlineIs { entries: Vec::new(), more: false });
+    }
+    while let Some(chunk) = chunks.next() {
+        link.send(request, Message::OutlineIs { entries: chunk.to_vec(), more: chunks.peek().is_some() });
+    }
 }
 
 fn open(link: &Link, request: u32, file: OwnedFd) -> Result<OpenDocument, (ErrorCode, String)> {

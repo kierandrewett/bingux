@@ -30,7 +30,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use bingux_preview_core::host::protocol::{ErrorCode, Message, Packet, Rect, Word};
+use bingux_preview_core::host::protocol::{ErrorCode, Message, OutlineEntry, Packet, Rect, Word};
 use freya::engine::prelude::AlphaType;
 use freya::prelude::*;
 use freya_core::elements::image::ImageHandle;
@@ -47,12 +47,12 @@ use super::pdf_layout::{
 use crate::component::ComponentName;
 use crate::controls::capture::{CaptureEvent, Phase, use_capture};
 use crate::controls::progress::{SpinnerSize, spinner};
-use crate::controls::{icon_button, search_field, text_field};
+use crate::controls::{icon_button, search_field, segmented, text_field};
 use crate::icons::Icon;
 use crate::shell::{MenuItem, menu_button, menu_item};
 use crate::style::*;
 use crate::surface::use_tokens;
-use crate::typography::{CAPTION, Ink};
+use crate::typography::{BODY, CAPTION, Ink};
 
 /// The pages kept as renders: pages and thumbnails together.
 const KEPT: usize = CACHE_LIMIT + 10;
@@ -62,6 +62,19 @@ const THUMB_KEY: u32 = 1 << 31;
 const SIDEBAR_WIDTH: f32 = THUMB_WIDTH + 2.0 * S4_PX;
 const S4_PX: f32 = 16.0;
 const THUMB_LABEL: f32 = 20.0;
+
+/// The request that asks for the outline.
+const OUTLINE_REQUEST: u32 = 2;
+
+/// What the sidebar lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SideTab {
+    Pages,
+    Outline,
+}
+
+/// The outline's column is wider than the thumbnails': titles need the room.
+const OUTLINE_WIDTH: f32 = 248.0;
 
 /// What a person asked of the toolbar.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -336,7 +349,11 @@ impl Component for Reading {
         let mut find = use_state(Find::default);
         let picked = use_state(|| None::<(WordRef, WordRef)>);
         let zoom = use_state(|| Zoom::FitPage);
-        let sidebar = use_state(|| false);
+        let own_sidebar = use_state(|| false);
+        // The owner of a window shows the sidebar from its own title line.
+        let sidebar = self.nav.sidebar.unwrap_or(own_sidebar);
+        let mut outline = use_state(Vec::<OutlineEntry>::new);
+        let side_tab = use_state(|| SideTab::Pages);
         let viewport = use_state(|| (0.0f32, 0.0f32));
         let side_viewport = use_state(|| (0.0f32, 0.0f32));
         let pan_x = use_state(|| 0.0f32);
@@ -361,6 +378,10 @@ impl Component for Reading {
                                     let mut now = doc.write();
                                     now.pages = pages as usize;
                                     now.load = Load::Ready;
+                                    link.send(Packet { request: OUTLINE_REQUEST, message: Message::Outline });
+                                }
+                                Message::OutlineIs { entries, .. } => {
+                                    outline.write().extend(entries);
                                 }
                                 Message::PageSizes { sizes, .. } => {
                                     let mut now = doc.write();
@@ -600,6 +621,7 @@ impl Component for Reading {
             }
         };
 
+        let in_window = self.mode == Mode::Window;
         let on_key = {
             let step_hit = step_hit.clone();
             let claim = claim.clone();
@@ -643,7 +665,7 @@ impl Component for Reading {
                         true
                     }
                     // Space closes a popup; in a pane that has the keyboard it pages.
-                    Key::Character(text) if text.as_str() == " " && keyboard.is_pane() && !ctrl && !alt => {
+                    Key::Character(text) if text.as_str() == " " && (keyboard.is_pane() || in_window) && !ctrl && !alt => {
                         scroll_by(if shift { -page } else { page }, max_scroll);
                         true
                     }
@@ -892,6 +914,10 @@ impl Component for Reading {
                 })
                 // ui-lint: allow(the page stack's end insets are the layout's measured margin plus the centring offset)
                 .padding(Gaps::new(MARGIN + centre, 0.0, MARGIN + centre, 0.0))
+                // The gap is between the rows of this column, which is the layout's page gap:
+                // `ScrollView::spacing` below only spaces the column from its own neighbours.
+                // ui-lint: allow(the page gap is the document layout's measured geometry)
+                .spacing(GAP)
                 .children(rows),
         );
         // ui-lint: allow(the page gap is the document layout's measured geometry)
@@ -930,17 +956,64 @@ impl Component for Reading {
                     )
                 })
                 .collect();
+            let entries = outline.read().clone();
+            let tab = if entries.is_empty() { SideTab::Pages } else { *side_tab.read() };
+            let list: Element = match tab {
+                // ui-lint: allow(ScrollView takes a plain spacing and has no tw; the insets are the thumb layout's measured geometry)
+                SideTab::Pages => ScrollView::new_controlled(side_scroll).key("pages").width(Size::fill()).height(Size::fill()).spacing(8.0).child(rect().width(Size::fill()).padding(Gaps::new(S4_PX, 0.0, S4_PX, 0.0)).children(rows)).into(),
+                SideTab::Outline => {
+                    let rows_of_titles: Vec<Element> = entries
+                        .iter()
+                        .enumerate()
+                        .map(|(index, entry)| {
+                            let page = entry.page;
+                            let here = page != u32::MAX && page as usize == current;
+                            let jump_to = jump_to.clone();
+                            let title = if entry.title.is_empty() { "Untitled".to_owned() } else { entry.title.clone() };
+                            Element::from(
+                                rect()
+                                    .key(index)
+                                    .a11y_role(AccessibilityRole::Button)
+                                    .a11y_alt(title.clone())
+                                    .tw(&tokens, &[w_full(), flex_row(), items(Align::Center), gap(S2), rounded(Radius::Inner), if here { bg(Paint::Selection) } else { bg(Paint::Transparent) }])
+                                    // ui-lint: allow(an outline entry is indented by its depth)
+                                    .padding(Gaps::new(S2.px(), S2.px(), S2.px(), S2.px() + f32::from(entry.depth) * S4.px()))
+                                    .on_press(move |_| {
+                                        if page != u32::MAX {
+                                            jump_to(page as usize);
+                                        }
+                                    })
+                                    .child(rect().width(Size::flex(1.0)).child(BODY.in_ink(if page == u32::MAX { Ink::Muted } else { Ink::Text }).label(&tokens, title).max_lines(2))),
+                            )
+                        })
+                        .collect();
+                    ScrollView::new().key("outline").width(Size::fill()).height(Size::fill()).child(rect().tw(&tokens, &[w_full(), flex_col(), p(S2), gap(S1)]).children(rows_of_titles)).into()
+                }
+            };
+            let tabs = (!entries.is_empty()).then(|| {
+                let current_tab = if tab == SideTab::Pages { "pages" } else { "outline" };
+                let mut side_tab = side_tab;
+                Element::from(
+                    rect().tw(&tokens, &[w_full(), p(S2)]).child(
+                        segmented(vec![("pages".to_owned(), "Pages".to_owned()), ("outline".to_owned(), "Outline".to_owned())], current_tab, move |key: String| {
+                            side_tab.set(if key == "outline" { SideTab::Outline } else { SideTab::Pages });
+                        })
+                        .fill()
+                        .tabs(),
+                    ),
+                )
+            });
+            let width = if tab == SideTab::Outline { OUTLINE_WIDTH } else { SIDEBAR_WIDTH };
             Element::from(
                 rect()
-                    .width(Size::px(SIDEBAR_WIDTH))
+                    .width(Size::px(width))
                     .height(Size::fill())
                     .tw(&tokens, &[bg(Paint::Sidebar), flex_row()])
                     .on_sized(move |event: Event<SizedEventData>| {
                         let mut side_viewport = side_viewport;
                         side_viewport.set_if_modified((event.area.width(), event.area.height()));
                     })
-                    // ui-lint: allow(ScrollView takes a plain spacing and has no tw; the insets are the thumb layout's measured geometry)
-                    .child(ScrollView::new_controlled(side_scroll).width(Size::fill()).height(Size::fill()).spacing(8.0).child(rect().width(Size::fill()).padding(Gaps::new(S4_PX, 0.0, S4_PX, 0.0)).children(rows)))
+                    .child(rect().width(Size::flex(1.0)).height(Size::fill()).tw(&tokens, &[flex_col()]).maybe_child(tabs).child(rect().width(Size::fill()).height(Size::flex(1.0)).child(list)))
                     .child(rect().tw(&tokens, &[w(Dim::Hairline), h_full(), bg(Paint::Separator)])),
             )
         });

@@ -75,6 +75,10 @@ use super::zoom::{
 };
 use crate::component::ComponentName;
 use crate::controls::press::{Press, is_touch, point_of, use_press};
+use crate::dnd::{
+    DragAction, DragActions, DragImage, DragInfo, DragRequest, Dragger, DropTarget, Dropped,
+    Format, Payload, SPRING_DELAY, use_drop_target,
+};
 use crate::motion::Focusable;
 use crate::shell::panel::{PanelRect, PanelTrigger};
 use crate::shell::use_overlays;
@@ -145,6 +149,11 @@ pub(super) struct Drag {
     pub label: String,
     /// The icon of the one file dragged; `None` for several.
     pub icon: Option<FileIcon>,
+    /// Where the press that picked the files up was, in the window.
+    pub grab: (f32, f32),
+    /// The pressed row's box in the window, when the drag started: its
+    /// picture follows the pointer once the drag leaves the window.
+    pub area: Option<Area>,
 }
 
 /// A rubber band, in content coordinates.
@@ -793,12 +802,15 @@ impl Ctx {
         if let Some(pending) = pending {
             let moved = (at.0 - pending.origin.0).hypot(at.1 - pending.origin.1);
             if moved > DRAG_SLOP && pending.row < self.rows.len() {
-                self.start_drag(pending.row);
+                self.start_drag(pending.row, pending.origin);
                 gestures.pending.set(None);
             }
         }
         if gestures.drag.peek().is_some() {
             gestures.pointer.set(at);
+            if self.hand_off(at) {
+                return;
+            }
             self.autoscroll(at.1);
         }
         let band = gestures.band.peek().clone();
@@ -816,7 +828,7 @@ impl Ctx {
         }
     }
 
-    fn start_drag(&self, row: usize) {
+    fn start_drag(&self, row: usize, grab: (f32, f32)) {
         let entry = self.rows.entry(row);
         let path = entry.path.clone();
         let mut selection = self.env.selection;
@@ -828,10 +840,128 @@ impl Ctx {
             [_] => (entry.name.clone(), Some(FileIcon::for_entry(entry))),
             many => (format!("{} items", many.len()), None),
         };
+        let area = self.row_area(row);
         let mut gestures = self.gestures;
-        gestures.drag.set(Some(Drag { paths, label, icon }));
+        gestures.drag.set(Some(Drag {
+            paths,
+            label,
+            icon,
+            grab,
+            area,
+        }));
         if let Some(session) = gestures.session {
             session.begin();
+        }
+    }
+
+    /// Row `row`'s box in the window, as it is drawn now; `None` when it is
+    /// not wholly in view.
+    fn row_area(&self, row: usize) -> Option<Area> {
+        let lattice = self.lattice.get()?;
+        let viewport = *self.viewport.peek();
+        let columns = lattice.columns.max(1);
+        let scroll = <(i32, i32)>::from(self.scroll).1 as f32;
+        let x = viewport.min_x()
+            + lattice.pad_x
+            + (row % columns) as f32 * (lattice.item_w + lattice.gap_x);
+        let y = viewport.min_y()
+            + scroll
+            + lattice.pad_y
+            + (row / columns) as f32 * (lattice.item_h + lattice.gap_y);
+        let area = Area::new((x, y).into(), (lattice.item_w, lattice.item_h).into());
+        (area.min_y() >= viewport.min_y() && area.max_y() <= viewport.max_y()).then_some(area)
+    }
+
+    /// The pointer left the window with files in hand: give the drag to the
+    /// system, so the files can land in another window or program. Returns
+    /// whether it did; the view's own drag is then over, as if cancelled.
+    fn hand_off(&self, at: (f32, f32)) -> bool {
+        let window = crate::surface::window_size_peek();
+        let outside = at.0 < 0.0 || at.1 < 0.0 || at.0 >= window.width || at.1 >= window.height;
+        if !outside {
+            return false;
+        }
+        let dragger = Dragger::here();
+        if !dragger.reaches_other_programs() {
+            return false;
+        }
+        let Some(drag) = self.gestures.drag.peek().clone() else {
+            return false;
+        };
+        let request = DragRequest::new(Payload::files(&drag.paths), drag.grab)
+            .actions(DragActions::COPY_MOVE);
+        let request = match drag.area {
+            Some(area) => request.area(area),
+            None => request.image(DragImage::None),
+        };
+        if !dragger.start(request) {
+            return false;
+        }
+        // No pointer release comes back to this window: end the view's part
+        // here.
+        self.press.release();
+        let mut gestures = self.gestures;
+        gestures.drag.set(None);
+        gestures.over.set_if_modified(None);
+        gestures.ended.set(Some(Instant::now()));
+        if let Some(session) = gestures.session {
+            session.end();
+        }
+        true
+    }
+
+    /// Where files dropped at `at` (from the view's top-left) go: the folder
+    /// row under it, or the folder shown. Marks the row. `None` where a drop
+    /// cannot go (the Recent place, a row that is not a folder in a list of
+    /// recent files).
+    fn drop_folder(&self, at: (f32, f32)) -> Option<PathBuf> {
+        let viewport = *self.viewport.peek();
+        let point = (viewport.min_x() + at.0, viewport.min_y() + at.1);
+        let row = self
+            .row_at(point)
+            .filter(|row| self.rows.entry(*row).is_dir());
+        let mut over = self.gestures.over;
+        over.set_if_modified(row);
+        match row {
+            Some(row) => Some(self.rows.entry(row).path.clone()),
+            None if self.recent => None,
+            None => Some(self.rows.listing.path.clone()),
+        }
+    }
+
+    /// Files dropped from another window or program.
+    fn drop_files(&self, dropped: &Dropped) {
+        let paths = dropped.data.files();
+        let Some(dest) = self.drop_folder(dropped.position) else {
+            return;
+        };
+        let mut over = self.gestures.over;
+        over.set_if_modified(None);
+        if paths.is_empty() {
+            return;
+        }
+        let selected = self.selected_owned();
+        actions::run(
+            &self.env,
+            &selected,
+            Command::MoveInto {
+                paths,
+                dest,
+                copy: dropped.action == DragAction::Copy,
+            },
+        );
+    }
+
+    /// A drag rested on a folder row: open the folder, so the files can be
+    /// dropped further in.
+    fn spring_open(&self, at: (f32, f32)) {
+        let viewport = *self.viewport.peek();
+        let point = (viewport.min_x() + at.0, viewport.min_y() + at.1);
+        if let Some(row) = self
+            .row_at(point)
+            .filter(|row| self.rows.entry(*row).is_dir())
+        {
+            self.env.activate.call(self.rows.order[row]);
         }
     }
 
@@ -1423,6 +1553,7 @@ impl Component for FileView {
             },
             focus: a11y_id,
             window: use_try_consume::<crate::window::Window>(),
+            undo: crate::undo::use_undo(),
             preview: {
                 let target = preview_target.clone();
                 EventHandler::new(move |()| {
@@ -1492,6 +1623,45 @@ impl Component for FileView {
             pane_row,
         });
         *preview_target.borrow_mut() = Some(shared.downgrade());
+        // Files from other windows and programs: onto a folder row, or into
+        // the folder shown. The Files app only (its host shares a FileDrag);
+        // the chooser picks files, it does not take them.
+        let drops = use_drop_target(
+            DropTarget::new()
+                .accepts([Format::Uris])
+                .enabled(gestures.session.is_some())
+                .preferred(|info: DragInfo| {
+                    let held = freya_winit::modifiers::live();
+                    if held.contains(Modifiers::CONTROL) {
+                        DragAction::Copy
+                    } else if held.contains(Modifiers::SHIFT) || info.local {
+                        DragAction::Move
+                    } else {
+                        DragAction::Copy
+                    }
+                })
+                .accept_if({
+                    let shared = shared.clone();
+                    move |info: DragInfo| shared.get().drop_folder(info.position).is_some()
+                })
+                .spring_loaded(SPRING_DELAY, {
+                    let shared = shared.clone();
+                    move |info: DragInfo| shared.get().spring_open(info.position)
+                })
+                .on_drop({
+                    let shared = shared.clone();
+                    move |dropped: Dropped| shared.get().drop_files(&dropped)
+                }),
+        );
+        drops.set_area(*viewport.read());
+        // The row a drag from outside marked is cleared when it leaves.
+        use_side_effect(move || {
+            if !drops.is_targeted() && gestures.drag.peek().is_none() {
+                let mut over = gestures.over;
+                over.set_if_modified(None);
+            }
+        });
+        let drop_here = drops.is_targeted() && gestures.over.read().is_none();
         // A file shown in its folder (from a search) is selected, and may be
         // out of view: keep the selected row in view as it changes.
         let cursor_path = selection.read().cursor().map(Path::to_path_buf);
@@ -1550,6 +1720,33 @@ impl Component for FileView {
                     });
                 }
             }
+        }
+
+        // Files from another program dropped on a sidebar place: this view
+        // moves or copies them, as it does a drop on one of its folders.
+        let outside_seen = use_hook(|| {
+            Rc::new(Cell::new(
+                gestures.session.map_or(0, |drag| drag.outside_seen()),
+            ))
+        });
+        if let Some(dropped) = gestures.session.and_then(|drag| drag.outside())
+            && outside_seen.get() != dropped.id
+        {
+            outside_seen.set(dropped.id);
+            let shared = shared.clone();
+            spawn(async move {
+                let ctx = shared.get();
+                let selected = ctx.selected_owned();
+                actions::run(
+                    &ctx.env,
+                    &selected,
+                    Command::MoveInto {
+                        paths: dropped.paths,
+                        dest: dropped.dest,
+                        copy: dropped.copy,
+                    },
+                );
+            });
         }
 
         let focus_seen =
@@ -1755,6 +1952,10 @@ impl Component for FileView {
                 ],
             )
             .on_key_down(on_key_down)
+            // A drag from outside over the folder itself, not a row.
+            .maybe(drop_here, |view| {
+                view.tw(&tokens, &[border(Line::Ring(Paint::Accent))])
+            })
             .maybe_child(header)
             .child(area)
             .maybe_child(docked.then(|| status_bar(info, ui)))
@@ -1767,6 +1968,10 @@ impl Component for FileView {
             // drawn inside it: outside, the window would cut it off. It takes
             // the view's own painted corners.
             .focusable_inside(focus());
+        // What the view does, for the main menu, the palette and the
+        // shortcuts sheet while it has the focus. Its own key handler above
+        // answers the keys.
+        let commands = view_commands(&shared);
         // The list and, at its right edge, the docked preview pane. The pane
         // is always mounted so its slide has a state to start from.
         rect()
@@ -1775,9 +1980,193 @@ impl Component for FileView {
                 let mut pane_row = pane_row;
                 pane_row.set_if_modified(event.area);
             })
-            .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(view))
+            .child(
+                rect()
+                    .tw(&tokens, &[w_flex(), h_full()])
+                    .child(crate::commands::command_scope("File list", commands, view).fill()),
+            )
             .child(super::preview::dock(&shared, *pane_row.read()))
     }
+}
+
+/// The file view's commands as the selection stands: what its keys do, by
+/// menu. A command the view cannot do here (the chooser changes no files) is
+/// left out; one that needs a selection is dimmed without one. Whether there
+/// is something to paste or a tool to pack with is asked when the command
+/// runs, as the context menu asks when it opens.
+fn view_commands(shared: &Shared) -> Vec<crate::commands::Command> {
+    use crate::commands::{Command as Cmd, CommandGroup};
+    let ctx = shared.get();
+    let env = &ctx.env;
+    let facts = {
+        let selected = ctx.selected_refs();
+        actions::Facts {
+            caps: env.caps,
+            in_folder: env.folder.is_some(),
+            selected: selected.len(),
+            folders: selected.iter().filter(|entry| entry.is_dir()).count(),
+            can_paste: true,
+            bookmarked: false,
+            extractable: selected.len() == 1,
+            can_compress: true,
+            shown: env.order.len(),
+            undo: None,
+            trash: actions::TrashView::of(env.folder.as_deref()),
+        }
+    };
+    let item = |id: &str, title: &str, command: Command, group: CommandGroup, section: &str| {
+        if command.changes_files() && !env.caps.modify {
+            return None;
+        }
+        let enabled = actions::availability(&facts, &command).is_enabled();
+        let keys = actions::shortcut(&command);
+        let shared = shared.clone();
+        let mut made = Cmd::new(id, title, move |_| {
+            let ctx = shared.get();
+            let selected = ctx.selected_owned();
+            match actions::available(&ctx.env, &selected, &command) {
+                actions::Availability::Enabled => {
+                    actions::run(&ctx.env, &selected, command.clone())
+                }
+                actions::Availability::Disabled(why) => actions::notify(ctx.env.ui, why, false),
+                actions::Availability::Hidden => {}
+            }
+        })
+        .enabled(enabled)
+        .group(group)
+        .section(section)
+        .keys_handled_by_view();
+        if let Some(keys) = keys {
+            made = made.shortcut(keys);
+        }
+        Some(made)
+    };
+    let view = |id: &str, title: &str, keys: &str, kind: ViewKind| {
+        let zoom = ctx.zoom;
+        Cmd::new(id, title, move |_| zoom.show(kind))
+            .shortcut(keys)
+            .checked(zoom.kind() == kind)
+            .group(CommandGroup::View)
+            .section("kind")
+            .keys_handled_by_view()
+    };
+    use CommandGroup::{Edit, File, View};
+    let mut commands: Vec<Cmd> = [
+        item(
+            "files.new-folder",
+            "New folder",
+            Command::NewFolder,
+            File,
+            "new",
+        ),
+        item(
+            "files.duplicate",
+            "Duplicate",
+            Command::Duplicate,
+            File,
+            "change",
+        ),
+        item("files.rename", "Rename…", Command::Rename, File, "change"),
+        item(
+            "files.compress",
+            "Compress…",
+            Command::Compress,
+            File,
+            "archive",
+        ),
+        item(
+            "files.extract-to",
+            "Extract to…",
+            Command::ExtractTo,
+            File,
+            "archive",
+        ),
+        item(
+            "files.trash",
+            "Move to Trash",
+            Command::Trash,
+            File,
+            "delete",
+        ),
+        item(
+            "files.delete",
+            "Delete permanently…",
+            Command::DeletePermanently,
+            File,
+            "delete",
+        )
+        .map(Cmd::destructive),
+        item(
+            "files.properties",
+            "Properties",
+            Command::Properties,
+            File,
+            "info",
+        ),
+        item("files.cut", "Cut", Command::Cut, Edit, "clipboard"),
+        item("files.copy", "Copy", Command::Copy, Edit, "clipboard"),
+        item("files.paste", "Paste", Command::Paste, Edit, "clipboard"),
+        item(
+            "files.copy-path",
+            "Copy path",
+            Command::CopyPath,
+            Edit,
+            "clipboard",
+        ),
+        item(
+            "files.select-all",
+            "Select all",
+            Command::SelectAll,
+            Edit,
+            "select",
+        ),
+        item(
+            "files.invert",
+            "Invert selection",
+            Command::InvertSelection,
+            Edit,
+            "select",
+        ),
+        item(
+            "files.preview",
+            "Preview",
+            Command::Preview,
+            View,
+            "preview",
+        ),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    commands.extend([
+        Cmd::key_hint(
+            "files.type-select",
+            "Select an item by its name",
+            "Type a name",
+        )
+        .group(Edit)
+        .section("select"),
+        view("files.as-list", "Show as list", "Ctrl+1", ViewKind::List),
+        view("files.as-grid", "Show as grid", "Ctrl+2", ViewKind::Grid),
+        Cmd::key_hint(
+            "files.zoom",
+            "Larger, smaller, actual size",
+            "Ctrl+Plus, Ctrl+Minus, Ctrl+0",
+        )
+        .group(View)
+        .section("zoom"),
+        Cmd::key_hint(
+            "files.sort",
+            "Sort by name, size, type, date",
+            "Ctrl+Alt+1 to 4",
+        )
+        .group(View)
+        .section("sort"),
+        Cmd::key_hint("files.sort-reverse", "Reverse the order", "Ctrl+Alt+R")
+            .group(View)
+            .section("sort"),
+    ]);
+    commands
 }
 
 /// The Trash's own columns when `folder` is the Trash itself (the `files`

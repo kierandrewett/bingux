@@ -6,6 +6,8 @@
 
 use freya::prelude::*;
 
+use crate::a11y::SemanticsExt;
+
 use crate::component::{ComponentName, Prop, Published};
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
@@ -97,6 +99,7 @@ pub struct Group {
     footer: Option<String>,
     filtered: bool,
     rows: Vec<Element>,
+    semantics: Option<crate::a11y::Semantics>,
 }
 
 impl Group {
@@ -109,7 +112,16 @@ impl Group {
             footer: None,
             filtered: true,
             rows: Vec::new(),
+            semantics: None,
         }
+    }
+
+    /// What the group says to assistive technology. A titled group is a
+    /// group named by its title and described by its description already;
+    /// this changes that, such as making it a radio group.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
     }
 
     pub fn description(mut self, text: impl Into<String>) -> Self {
@@ -238,6 +250,23 @@ impl Component for Group {
                             .as_ref()
                             .map(|text| Prop::text("description", text.clone())),
                     )
+                })
+                .maybe(self.title.is_some() || self.semantics.is_some(), |group| {
+                    let title = self.title.clone();
+                    let description = self.description.clone();
+                    let semantics = self.semantics.clone();
+                    group.a11y_builder(move |node| {
+                        if let Some(title) = title {
+                            node.set_role(AccessibilityRole::Group);
+                            node.set_label(title);
+                        }
+                        if let Some(description) = description {
+                            node.set_description(description);
+                        }
+                        if let Some(semantics) = &semantics {
+                            semantics.apply(node);
+                        }
+                    })
                 })
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
@@ -459,8 +488,10 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // A section's title is a heading a screen reader can jump between.
         rect()
             .component("Section")
+            .a11y_heading(2)
             .child(search_highlight::label(SECTION, &tokens, &self.text))
     }
 }
@@ -549,24 +580,84 @@ impl Component for StatusBlock {
         // centres against the content, not a minimum height, so the short
         // case needs the fixed row height).
         let short = text.chars().count() <= 70;
-        rect()
+        let mut block_width = use_state(|| 0.0_f32);
+        let mut action_width = use_state(|| 0.0_f32);
+        // An action that would leave the message less than its floor goes
+        // under it (the rule of `controls::adaptive`): at 200 % text on a
+        // phone the message wrapped a letter to a line beside "Try again".
+        let glyph_room = if glyph.is_some() || matches!(self.status, Status::Loading(_)) {
+            IconSize::Row.px() + S3.px()
+        } else {
+            0.0
+        };
+        let stacked = self.action.is_some()
+            && crate::controls::adaptive::choose_line(
+                block_width() - 2.0 * GUTTER.px() - glyph_room,
+                S3.px(),
+                crate::controls::adaptive::LabelFacts::measure(&text, BODY),
+                crate::controls::adaptive::ControlFacts {
+                    natural: action_width(),
+                    least: None,
+                },
+            ) == crate::controls::adaptive::LineMode::Stacked;
+        let action = self.action.as_ref().map(|(label, on_press)| {
+            let on_press = on_press.clone();
+            rect()
+                .on_sized(move |event: Event<SizedEventData>| {
+                    action_width.set_if_modified(event.area.width());
+                })
+                .child(action_button(label.clone(), move |_| on_press.call(())))
+        });
+        let error = matches!(self.status, Status::Error(_));
+        let message = BODY
+            .in_ink(ink)
+            .paragraph(&tokens, text.clone())
+            .width(Size::flex(1.0));
+        let stacked_layout = [flex_col(), w_full(), px(GUTTER), py(S3), gap(S3)];
+        let layout: &[Util] = if stacked {
+            &stacked_layout
+        } else if short {
+            ROW
+        } else {
+            ROW_TALL
+        };
+        let block = rect()
             .component("StatusBlock")
+            // An error is read out when it appears, any other status politely.
+            .a11y_role(if error { AccessibilityRole::Alert } else { AccessibilityRole::Status })
+            .a11y_builder(move |node| {
+                node.set_live(if error {
+                    accesskit::Live::Assertive
+                } else {
+                    accesskit::Live::Polite
+                })
+            })
             .tw(&tokens, BOX)
-            .tw(&tokens, if short { ROW } else { ROW_TALL })
+            .tw(&tokens, layout)
             .tw(&tokens, &[bg(paint)])
-            .maybe_child(
+            .on_sized(move |event: Event<SizedEventData>| {
+                block_width.set_if_modified(event.area.width());
+            });
+        let lead = |row: Rect| {
+            row.maybe_child(
                 matches!(self.status, Status::Loading(_)).then(|| spinner(SpinnerSize::Small)),
             )
             .maybe_child(glyph.map(|glyph| icons::icon(glyph, IconSize::Row, color)))
-            .child(
-                BODY.in_ink(ink)
-                    .paragraph(&tokens, text)
-                    .width(Size::flex(1.0)),
-            )
-            .maybe_child(self.action.as_ref().map(|(label, on_press)| {
-                let on_press = on_press.clone();
-                action_button(label.clone(), move |_| on_press.call(()))
-            }))
+        };
+        if stacked {
+            block
+                .child(
+                    lead(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), w_full()]))
+                        .child(message),
+                )
+                .child(
+                    rect()
+                        .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
+                        .maybe_child(action),
+                )
+        } else {
+            lead(block).child(message).maybe_child(action)
+        }
     }
 }
 
@@ -810,5 +901,8 @@ fn skeleton_bar(tokens: &Tokens, width: Dim) -> impl IntoElement {
 
 /// A title for in-page headers such as a details view.
 pub fn heading(text: impl Into<String>) -> Element {
-    typography::styled_label(TITLE, text)
+    rect()
+        .a11y_heading(2)
+        .child(typography::styled_label(TITLE, text))
+        .into()
 }

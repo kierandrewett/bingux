@@ -57,9 +57,7 @@ use std::sync::{LazyLock, Mutex};
 
 use freya::prelude::*;
 
-use crate::contrast::{
-    AA_LARGE, AA_TEXT, Oklch, composite, ensure_contrast, on_colour_over, ratio, worst_ratio,
-};
+use crate::contrast::{AA_LARGE, AA_TEXT, Oklch, composite, on_colour_over, ratio, worst_ratio};
 use crate::theme::Tokens;
 
 /// Every colour icon, one per `scripts/icons/colour/<name>.svg`; the table of

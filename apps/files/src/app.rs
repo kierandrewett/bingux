@@ -20,7 +20,6 @@ use bingux_ui::app::use_window_seed;
 use bingux_ui::files::launch::{self, destination};
 use bingux_ui::files::{self, Browse, FileTab, Where};
 use bingux_ui::prelude::*;
-use bingux_ui::shell::MenuItem;
 use bingux_ui::tabs::{Birth, CloseWarning, Moved, Tab, TabSet, Tabs, tab_items, use_tab_window};
 use freya::prelude::*;
 
@@ -184,6 +183,8 @@ impl Component for Content {
         // and Safari, and while a tab from another window is held over this
         // one, so there is somewhere to drop it. Its tabs share the width.
         let titles = tab_titles(&shown);
+        use_window_commands(window_commands(tabs));
+        let commands = use_commands();
         let strip = (shown.len() > 1 || tab_window.insertion().is_some()).then(|| {
             Element::from(
                 tabs.strip(
@@ -234,28 +235,17 @@ impl Component for Content {
                 .on_new_tab(move |path: std::path::PathBuf| {
                     tabs.open(FileTab::new(Where::Folder(path)));
                 })
-                .menu(main_menu(tabs, overlays))
+                .menu({
+                    let mut items = commands.main_menu_items();
+                    items.extend(bingux_ui::about::app_menu_items(overlays));
+                    items
+                })
                 .tab_bar(strip),
         );
 
-        let tab_keys = tabs.shortcuts(move |_: ()| {
+        let shortcuts = tabs.shortcuts(move |_: ()| {
             tabs.open(FileTab::new(here(tabs)));
         });
-        // Ctrl+N is a new window at the folder on show, as in Finder and
-        // GNOME Files; the rest are the tab keys.
-        let shortcuts = move |event: Event<KeyboardEventData>| {
-            let modifiers = event.modifiers;
-            if let Key::Character(text) = &event.key
-                && modifiers.contains(Modifiers::CONTROL)
-                && !modifiers.intersects(Modifiers::SHIFT | Modifiers::ALT | Modifiers::META)
-                && text.eq_ignore_ascii_case("n")
-            {
-                event.stop_propagation();
-                tabs.open_window(FileTab::new(here(tabs)));
-                return;
-            }
-            tab_keys(event);
-        };
 
         tab_window
             .root(rect())
@@ -291,46 +281,24 @@ fn here(tabs: Tabs<FileTab>) -> Where {
         .map_or_else(home, |tab| tab.content.at.clone())
 }
 
-/// What the shortcuts dialog says. The file view's keys are the chooser's.
-const SHORTCUTS: &str = "\
-Ctrl+N  New window\n\
-Ctrl+T  New tab\n\
-Ctrl+W  Close tab (a middle click on a tab too)\n\
-Ctrl+Shift+T  Reopen the tab closed last\n\
-Ctrl+Tab  Next tab\n\
-Alt+1 to 9  Go to a tab\n\
-Alt+Left, Alt+Right, Alt+Up  Back, Forward, parent folder\n\
-Ctrl+L  Edit the path\n\
-Ctrl+F  Search\n\
-Type a name  Select the first item that starts with it\n\
-Ctrl+H  Show hidden files\n\
-Ctrl+Shift+N  New folder\n\
-F2  Rename\n\
-Delete  Move to the Trash\n\
-Shift+Delete  Delete permanently\n\
-Ctrl+C, Ctrl+X, Ctrl+V  Copy, cut, paste\n\
-Ctrl+D  Duplicate\n\
-Ctrl+Z  Undo\n\
-Space  Preview\n\
-Alt+Enter  Properties\n\
-Ctrl+Shift+?  About Files";
-
-fn main_menu(tabs: Tabs<FileTab>, overlays: Overlays) -> Vec<MenuItem> {
-    let mut items = tabs.menu_items(move |_: ()| {
-        tabs.open(FileTab::new(here(tabs)));
-    });
-    items.insert(
-        0,
-        menu_item("New window", move |_: ()| {
+/// The window's commands: New window and the tab commands, for the main
+/// menu, the palette and the shortcuts sheet (Ctrl+?). The browser's (Back,
+/// Edit the path, Show hidden files) and the file view's (Rename, Duplicate,
+/// Copy) are their own scopes' (`bingux_ui::files`), so the sheet lists
+/// every key the window answers without a list kept here.
+fn window_commands(tabs: Tabs<FileTab>) -> Vec<Command> {
+    // Ctrl+N is a new window at the folder on show, as in Finder and GNOME
+    // Files.
+    let mut commands = vec![
+        Command::new("files.new-window", "New window", move |_| {
             tabs.open_window(FileTab::new(here(tabs)));
         })
-        .shortcut("Ctrl+N"),
-    );
-    items.push(menu_separator());
-    items.push(menu_item("Keyboard shortcuts", move |_: ()| {
-        overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
+        .shortcut("Ctrl+N")
+        .group(CommandGroup::File)
+        .section("tabs"),
+    ];
+    commands.extend(tabs.commands(move |_: ()| {
+        tabs.open(FileTab::new(here(tabs)));
     }));
-    // Every application's menu ends with About.
-    items.extend(bingux_ui::about::app_menu_items(overlays));
-    items
+    commands
 }

@@ -13,6 +13,10 @@ pub struct Exif {
     pub exposure: Option<String>,
     /// 1 to 8; 5 to 8 mean the picture is stored on its side.
     pub orientation: Option<u16>,
+    /// The program that made or last saved the picture.
+    pub software: Option<String>,
+    /// "51.5072° N, 0.1276° W": where it was taken, when the camera knew.
+    pub location: Option<String>,
 }
 
 impl Exif {
@@ -173,7 +177,69 @@ pub fn parse_exif(data: &[u8]) -> Option<Exif> {
         }
     }
     exif.exposure = exposure_line(time, f_number, iso, focal);
+    let (software, location) = extras(data);
+    exif.software = software;
+    exif.location = location;
     Some(exif)
+}
+
+/// The software and the place, which the reader above does not read, from
+/// the TIFF block `data`.
+fn extras(data: &[u8]) -> (Option<String>, Option<String>) {
+    let Ok(parsed) = exif::Reader::new().read_raw(data.to_vec()) else {
+        return (None, None);
+    };
+    let text = |tag: exif::Tag| {
+        let field = parsed.get_field(tag, exif::In::PRIMARY)?;
+        match &field.value {
+            exif::Value::Ascii(parts) => {
+                let joined: Vec<String> = parts
+                    .iter()
+                    .map(|part| String::from_utf8_lossy(part).trim_matches('\0').trim().to_owned())
+                    .filter(|part| !part.is_empty())
+                    .collect();
+                (!joined.is_empty()).then(|| joined.join(" "))
+            }
+            _ => None,
+        }
+    };
+    let coordinate = |tag: exif::Tag, reference: exif::Tag| -> Option<(f64, char)> {
+        let field = parsed.get_field(tag, exif::In::PRIMARY)?;
+        let exif::Value::Rational(parts) = &field.value else {
+            return None;
+        };
+        let [degrees, minutes, seconds] = parts.as_slice() else {
+            return None;
+        };
+        let value = degrees.to_f64() + minutes.to_f64() / 60.0 + seconds.to_f64() / 3600.0;
+        let side = text(reference)?.chars().next()?.to_ascii_uppercase();
+        Some((value, side))
+    };
+    let location = coordinate(exif::Tag::GPSLatitude, exif::Tag::GPSLatitudeRef)
+        .zip(coordinate(exif::Tag::GPSLongitude, exif::Tag::GPSLongitudeRef))
+        .filter(|((latitude, _), (longitude, _))| latitude.abs() <= 90.0 && longitude.abs() <= 180.0)
+        .map(|((latitude, north), (longitude, east))| {
+            format!("{latitude:.4}° {north}, {longitude:.4}° {east}")
+        });
+    (text(exif::Tag::Software), location)
+}
+
+/// The EXIF of a picture in a TIFF, HEIF, PNG or WebP container, and the size
+/// its tags give (after the turn its orientation asks for).
+pub fn parse_container(source: &mut (impl std::io::Read + std::io::Seek)) -> Option<(Exif, Option<(u32, u32)>)> {
+    let mut reader = std::io::BufReader::new(source);
+    let parsed = exif::Reader::new().read_from_container(&mut reader).ok()?;
+    let found = parse_exif(parsed.buf()).unwrap_or_default();
+    let number = |tag: exif::Tag| {
+        parsed
+            .get_field(tag, exif::In::PRIMARY)
+            .and_then(|field| field.value.get_uint(0))
+    };
+    let size = number(exif::Tag::PixelXDimension)
+        .zip(number(exif::Tag::PixelYDimension))
+        .or_else(|| number(exif::Tag::ImageWidth).zip(number(exif::Tag::ImageLength)))
+        .filter(|(width, height)| *width > 0 && *height > 0);
+    Some((found, size))
 }
 
 /// "Canon EOS R5" from maker "Canon" and model "Canon EOS R5", or

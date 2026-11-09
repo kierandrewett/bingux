@@ -218,13 +218,13 @@ impl TextSize {
     /// The size in logical pixels at the current size class.
     pub fn px(self) -> f32 {
         let (regular, compact) = self.sizes();
-        resolve(regular, compact) * crate::stress::text_scale()
+        resolve(regular, compact) * crate::access::text_scale()
     }
 
     /// The size in logical pixels at `class`; see [`Space::px_in`].
     pub fn px_in(self, class: SizeClass) -> f32 {
         let (regular, compact) = self.sizes();
-        class.pick(regular, compact) * crate::stress::text_scale()
+        class.pick(regular, compact) * crate::access::text_scale()
     }
 
     /// The (regular, compact) sizes. Compact text is a step larger, so body
@@ -548,13 +548,36 @@ impl Dim {
     /// The size in logical pixels at the current size class.
     pub fn px(self) -> f32 {
         let (regular, compact) = self.sizes();
-        resolve(regular, compact)
+        self.with_text(resolve(regular, compact))
     }
 
     /// The size in logical pixels at `class`; see [`Space::px_in`].
     pub fn px_in(self, class: SizeClass) -> f32 {
         let (regular, compact) = self.sizes();
-        class.pick(regular, compact)
+        self.with_text(class.pick(regular, compact))
+    }
+
+    /// A box that holds a line of text grows with the text size
+    /// ([`crate::access::grow`]), so 200 % text is never clipped by a row,
+    /// a control or a menu item of the designed height (WCAG 1.4.4).
+    fn with_text(self, px: f32) -> f32 {
+        if self.holds_text() { crate::access::grow(px) } else { px }
+    }
+
+    /// Whether this size is the height of a box that holds one line of text.
+    pub const fn holds_text(self) -> bool {
+        matches!(
+            self,
+            Dim::Row
+                | Dim::RowTall
+                | Dim::RowSubtitle
+                | Dim::Control
+                | Dim::Button
+                | Dim::MenuItem
+                | Dim::NavItem
+                | Dim::RowButton
+                | Dim::Header
+        )
     }
 
     /// Whether this size is the hit area of something a finger presses: a
@@ -821,7 +844,8 @@ pub enum Paint {
     /// Header bars.
     Surface,
     /// The header bar that floats over a scrolling page: the page colour at
-    /// 82 %, so the blurred content behind it shows through faintly.
+    /// 82 %, so the blurred content behind it shows through faintly; opaque
+    /// under reduce transparency.
     Frosted,
     /// The sidebar and the window frame around the page panel.
     Sidebar,
@@ -977,6 +1001,8 @@ impl Paint {
             Paint::Backdrop => Color::BLACK,
             Paint::Bg => tokens.bg,
             Paint::Surface => tokens.surface,
+            // Reduce transparency: the header is the page's own colour.
+            Paint::Frosted if tokens.reduce_transparency => tokens.bg,
             Paint::Frosted => tokens.bg.with_af32(0.82),
             Paint::Sidebar => tokens.sidebar,
             Paint::Recess => tokens.recess,

@@ -311,22 +311,44 @@ impl<P: TabContent> Tabs<P> {
         }
     }
 
-    /// The tab entries of the window's main menu: New tab, Close tab and
-    /// Reopen closed tab (greyed when there is none), each with its key. The
-    /// application adds its own entries around them.
-    pub fn menu_items(self, new_tab: impl Into<EventHandler<()>>) -> Vec<MenuItem> {
+    /// The tab commands of the window: New tab, Close tab and Reopen closed
+    /// tab (disabled when there is none) in the File menu, Next and Previous
+    /// tab in the Window menu, and Alt+1 to 9 in the shortcuts sheet. Give
+    /// them to [`use_window_commands`](crate::commands::use_window_commands)
+    /// with the application's own; the main menu, the palette and the
+    /// shortcuts sheet then list them. [`Tabs::shortcuts`] still answers the
+    /// keys first, where the tab strip's window has the focus.
+    pub fn commands(self, new_tab: impl Into<EventHandler<()>>) -> Vec<crate::commands::Command> {
+        use crate::commands::{Command, CommandGroup};
         let new_tab = new_tab.into();
         let can_reopen = self.set.read().can_reopen();
-        let reopen =
-            menu_item("Reopen closed tab", move |_: ()| self.reopen()).shortcut("Ctrl+Shift+T");
         vec![
-            menu_item("New tab", move |_: ()| new_tab.call(())).shortcut("Ctrl+T"),
-            menu_item("Close tab", move |_: ()| self.close_active()).shortcut("Ctrl+W"),
-            if can_reopen {
-                reopen
-            } else {
-                reopen.disabled()
-            },
+            Command::new("tabs.new", "New tab", move |_| new_tab.call(()))
+                .shortcut("Ctrl+T")
+                .group(CommandGroup::File)
+                .section("tabs"),
+            Command::new("tabs.close", "Close tab", move |_| self.close_active())
+                .shortcut("Ctrl+W")
+                .group(CommandGroup::File)
+                .section("tabs"),
+            Command::new("tabs.reopen", "Reopen closed tab", move |_| self.reopen())
+                .shortcut("Ctrl+Shift+T")
+                .enabled(can_reopen)
+                .group(CommandGroup::File)
+                .section("tabs"),
+            Command::new("tabs.next", "Next tab", move |_| self.step(1))
+                .shortcut("Ctrl+Tab")
+                .shortcut("Ctrl+Page Down")
+                .group(CommandGroup::Window)
+                .section("tabs"),
+            Command::new("tabs.previous", "Previous tab", move |_| self.step(-1))
+                .shortcut("Ctrl+Shift+Tab")
+                .shortcut("Ctrl+Page Up")
+                .group(CommandGroup::Window)
+                .section("tabs"),
+            Command::key_hint("tabs.go-to", "Go to a tab", "Alt+1 to 9")
+                .group(CommandGroup::Window)
+                .section("tabs"),
         ]
     }
 }

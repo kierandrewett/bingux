@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use crate::component::ComponentName;
 use super::switch;
+use crate::component::ComponentName;
 use crate::inspector::snapshot::Snapshot as Tree;
 use crate::shell::WindowControls;
 use crate::shell::overlays::OverlayHost;
@@ -61,7 +61,11 @@ impl Component for Page {
                         on.set(value);
                     }
                 }))
-                .child(rect().component("Marker").tw_layout(&[w(Dim::Box5), h(Dim::Box5)]))
+                .child(
+                    rect()
+                        .component("Marker")
+                        .tw_layout(&[w(Dim::Box5), h(Dim::Box5)]),
+                )
                 .into_element(),
             Page::WindowControls => WindowControls.into_element(),
         };
@@ -113,13 +117,23 @@ fn the_switch_keeps_its_painted_size_and_moves_nothing() {
     let marker = areas(&mut shot, "Marker")[0];
     let width = Dim::SwitchWidth.px_in(SizeClass::Compact);
     let height = Dim::SwitchHeight.px_in(SizeClass::Compact);
-    assert_eq!((switch.2, switch.3), (width, height), "the switch is its painted size");
-    assert_eq!(row.3, height, "the row is no taller than the switch: the target takes no room");
+    assert_eq!(
+        (switch.2, switch.3),
+        (width, height),
+        "the switch is its painted size"
+    );
+    assert_eq!(
+        row.3, height,
+        "the row is no taller than the switch: the target takes no room"
+    );
     assert!(
         (marker.0 - (switch.0 + width + S4.px_in(SizeClass::Compact))).abs() < 0.5,
         "the marker sits one gap after the switch: {marker:?} {switch:?}"
     );
-    assert!(height < TOUCH_MIN, "the painted face is smaller than a finger target");
+    assert!(
+        height < TOUCH_MIN,
+        "the painted face is smaller than a finger target"
+    );
 }
 
 #[test]
@@ -135,9 +149,17 @@ fn a_press_in_the_ring_around_the_switch_face_toggles_it() {
     let ring = (TOUCH_MIN - height) / 2.0 - 2.0;
     assert!(ring > 2.0, "the ring is {ring} px");
     shot.click(cx, cy + height / 2.0 + ring);
-    assert_eq!(toggles(), 2, "a press just below the face is inside the target");
+    assert_eq!(
+        toggles(),
+        2,
+        "a press just below the face is inside the target"
+    );
     shot.click(cx, cy - height / 2.0 - ring);
-    assert_eq!(toggles(), 3, "a press just above the face is inside the target");
+    assert_eq!(
+        toggles(),
+        3,
+        "a press just above the face is inside the target"
+    );
 }
 
 #[test]
@@ -148,7 +170,11 @@ fn a_press_outside_the_switch_target_does_not_toggle_it() {
     shot.click(cx, cy + TOUCH_MIN / 2.0 + 6.0);
     shot.click(cx, cy - TOUCH_MIN / 2.0 - 6.0);
     shot.click(x + width + 6.0, cy + height / 2.0 + 6.0);
-    assert_eq!(toggles(), 0, "nothing outside the target reaches the switch");
+    assert_eq!(
+        toggles(),
+        0,
+        "nothing outside the target reaches the switch"
+    );
 }
 
 #[test]
@@ -156,7 +182,11 @@ fn a_touch_in_the_ring_toggles_the_switch_once() {
     let mut shot = start(Page::Switch);
     let (x, y, width, height) = areas(&mut shot, "Switch")[0];
     shot.touch(x + width / 2.0, y + height + 6.0);
-    assert_eq!(toggles(), 1, "a finger below the face toggles it exactly once");
+    assert_eq!(
+        toggles(),
+        1,
+        "a finger below the face toggles it exactly once"
+    );
 }
 
 #[test]
@@ -181,12 +211,20 @@ fn a_press_in_the_ring_around_a_window_control_reaches_it() {
     let (cx, cy) = (x + side / 2.0, y + side / 2.0);
 
     shot.click(cx, cy);
-    assert_eq!(actions(), ["minimise"], "a press on the face runs the action");
+    assert_eq!(
+        actions(),
+        ["minimise"],
+        "a press on the face runs the action"
+    );
 
     // Below the face and left of it, inside the 44 px target of the first control.
     shot.click(cx, cy + side / 2.0 + 5.0);
     shot.click(cx - side / 2.0 - 5.0, cy);
-    assert_eq!(actions(), ["minimise"; 3], "the ring around the face runs the action");
+    assert_eq!(
+        actions(),
+        ["minimise"; 3],
+        "the ring around the face runs the action"
+    );
 }
 
 #[test]
@@ -224,13 +262,18 @@ impl Frame {
         use freya::engine::prelude::{SkData, SkImage, raster_n32_premul};
         let png = shot.runner().render();
         let image = SkImage::from_encoded(SkData::new_copy(&png)).expect("the frame decodes");
-        let mut surface = raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
+        let mut surface =
+            raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
         surface.canvas().draw_image(&image, (0, 0), None);
         let info = surface.canvas().image_info();
         let row = info.min_row_bytes();
         let mut bytes = vec![0u8; info.compute_byte_size(row)];
         assert!(surface.canvas().read_pixels(&info, &mut bytes, row, (0, 0)));
-        Self { bytes, row, scale: image.width() as f32 / PHONE.0 }
+        Self {
+            bytes,
+            row,
+            scale: image.width() as f32 / PHONE.0,
+        }
     }
 
     /// The sum of every channel over a box, in logical pixels: a fill that
@@ -238,7 +281,10 @@ impl Frame {
     fn sum(&self, (x, y, width, height): (f32, f32, f32, f32)) -> (u64, u64, u64) {
         let mut total = (0u64, 0u64, 0u64);
         let (x0, y0) = ((x * self.scale) as usize, (y * self.scale) as usize);
-        let (x1, y1) = (((x + width) * self.scale) as usize, ((y + height) * self.scale) as usize);
+        let (x1, y1) = (
+            ((x + width) * self.scale) as usize,
+            ((y + height) * self.scale) as usize,
+        );
         for py in y0..y1 {
             for px in x0..x1 {
                 let at = py * self.row + px * 4;
@@ -270,14 +316,21 @@ fn the_switch_fills_while_the_pointer_is_in_the_ring_and_clears_when_it_leaves()
     shot.hover(cx, cy);
     shot.settle(Duration::from_millis(250));
     let on_face = Frame::of(&mut shot).sum(face);
-    assert_ne!(on_face, rest, "the face takes the hover fill under the pointer");
+    assert_ne!(
+        on_face, rest,
+        "the face takes the hover fill under the pointer"
+    );
 
     // Below the face, inside the 44 px target, outside the painted switch.
     let ring = height / 2.0 + 5.0;
     assert!(ring < TOUCH_MIN / 2.0, "the probe is inside the target");
     shot.hover(cx, cy + ring);
     shot.settle(Duration::from_millis(250));
-    assert_eq!(Frame::of(&mut shot).sum(face), on_face, "the pointer in the ring fills the face exactly as the pointer on it");
+    assert_eq!(
+        Frame::of(&mut shot).sum(face),
+        on_face,
+        "the pointer in the ring fills the face exactly as the pointer on it"
+    );
     shot.hover(cx, cy - ring);
     shot.settle(Duration::from_millis(250));
     assert_eq!(Frame::of(&mut shot).sum(face), on_face, "and from above");
@@ -285,7 +338,11 @@ fn the_switch_fills_while_the_pointer_is_in_the_ring_and_clears_when_it_leaves()
     // Just outside the target: it clears.
     shot.hover(cx, cy + TOUCH_MIN / 2.0 + 6.0);
     shot.settle(Duration::from_millis(250));
-    assert_eq!(Frame::of(&mut shot).sum(face), rest, "outside the target the face is at rest");
+    assert_eq!(
+        Frame::of(&mut shot).sum(face),
+        rest,
+        "outside the target the face is at rest"
+    );
     far_away(&mut shot);
     assert_eq!(Frame::of(&mut shot).sum(face), rest, "and far away");
 }
@@ -303,18 +360,29 @@ fn a_window_control_fills_while_the_pointer_is_in_the_ring_and_clears_when_it_le
     shot.hover(cx, cy);
     shot.settle(Duration::from_millis(250));
     let on_face = Frame::of(&mut shot).sum(face);
-    assert_ne!(on_face, rest, "the face takes the hover fill under the pointer");
+    assert_ne!(
+        on_face, rest,
+        "the face takes the hover fill under the pointer"
+    );
 
     // Below the face and inside the 44 px target, where no other control is.
     let ring = side / 2.0 + 5.0;
     assert!(ring < TOUCH_MIN / 2.0, "the probe is inside the target");
     shot.hover(cx, cy + ring);
     shot.settle(Duration::from_millis(250));
-    assert_eq!(Frame::of(&mut shot).sum(face), on_face, "the pointer in the ring fills the face exactly as the pointer on it");
+    assert_eq!(
+        Frame::of(&mut shot).sum(face),
+        on_face,
+        "the pointer in the ring fills the face exactly as the pointer on it"
+    );
 
     shot.hover(cx, cy + TOUCH_MIN / 2.0 + 6.0);
     shot.settle(Duration::from_millis(250));
-    assert_eq!(Frame::of(&mut shot).sum(face), rest, "outside the target the face is at rest");
+    assert_eq!(
+        Frame::of(&mut shot).sum(face),
+        rest,
+        "outside the target the face is at rest"
+    );
     far_away(&mut shot);
     assert_eq!(Frame::of(&mut shot).sum(face), rest, "and far away");
 }
@@ -333,7 +401,10 @@ fn close_lights_red_from_the_ring_and_goes_out_when_the_pointer_leaves() {
     shot.hover(cx, cy + side / 2.0 + 5.0);
     shot.settle(Duration::from_millis(250));
     let lit = Frame::of(&mut shot).sum(face);
-    assert_ne!(lit, rest, "the close control reacts to a pointer in its ring");
+    assert_ne!(
+        lit, rest,
+        "the close control reacts to a pointer in its ring"
+    );
     // The sum covers the face with its white glyph, which adds to every channel: red is 1.7 times green
     // here. Which of green and blue is the lower depends on the accent and scheme the run reads from
     // gsettings (the real dconf in a shell, the memory backend of `scripts/app_env.py`), so red is held
@@ -344,7 +415,11 @@ fn close_lights_red_from_the_ring_and_goes_out_when_the_pointer_leaves() {
     );
 
     far_away(&mut shot);
-    assert_eq!(Frame::of(&mut shot).sum(face), rest, "it goes out when the pointer leaves");
+    assert_eq!(
+        Frame::of(&mut shot).sum(face),
+        rest,
+        "it goes out when the pointer leaves"
+    );
 }
 
 #[test]
@@ -352,14 +427,29 @@ fn only_the_control_under_the_pointer_lights_where_two_targets_overlap() {
     let mut shot = start(Page::WindowControls);
     let controls = areas(&mut shot, "WindowControl");
     far_away(&mut shot);
-    let rest: Vec<_> = controls.iter().map(|face| Frame::of(&mut shot).sum(*face)).collect();
+    let rest: Vec<_> = controls
+        .iter()
+        .map(|face| Frame::of(&mut shot).sum(*face))
+        .collect();
 
     // The middle control's face: the 44 px targets of both neighbours reach toward it.
     let (x, y, side, _) = controls[1];
     shot.hover(x + side / 2.0, y + side / 2.0);
     shot.settle(Duration::from_millis(250));
     let frame = Frame::of(&mut shot);
-    assert_ne!(frame.sum(controls[1]), rest[1], "the control under the pointer lights");
-    assert_eq!(frame.sum(controls[0]), rest[0], "its left neighbour does not");
-    assert_eq!(frame.sum(controls[2]), rest[2], "its right neighbour does not");
+    assert_ne!(
+        frame.sum(controls[1]),
+        rest[1],
+        "the control under the pointer lights"
+    );
+    assert_eq!(
+        frame.sum(controls[0]),
+        rest[0],
+        "its left neighbour does not"
+    );
+    assert_eq!(
+        frame.sum(controls[2]),
+        rest[2],
+        "its right neighbour does not"
+    );
 }

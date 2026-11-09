@@ -241,9 +241,27 @@ impl Component for Banner {
             (ink.with_af32(STATE_HOVER), ink.with_af32(STATE_PRESSED))
         };
         let floating = self.floating;
+        let mut bar_width = use_state(|| 0.0_f32);
+        let mut actions_width = use_state(|| 0.0_f32);
         // Several buttons would crush the message on a phone: they go on a row
         // of their own under it, and the banner is as tall as that makes it.
-        let stacked = !floating && is_compact() && self.actions.len() > 1;
+        // So does one button that would leave the message less than its floor
+        // (a share of the line, never less than its longest word), the rule of
+        // a label beside its control (`controls::adaptive`): at 200 % text on a
+        // phone the message wrapped a letter to a line beside "Try again".
+        let glyph_room = if self.glyph().is_some() { IconSize::Row.px() + S1.px() + S2.px() } else { 0.0 };
+        let squeezed = !floating
+            && !self.actions.is_empty()
+            && crate::controls::adaptive::choose_line(
+                bar_width() - S4.px() - NOTICE_PAD.px() - glyph_room,
+                S2.px(),
+                crate::controls::adaptive::LabelFacts::measure(&self.text, BODY),
+                crate::controls::adaptive::ControlFacts {
+                    natural: actions_width(),
+                    least: None,
+                },
+            ) == crate::controls::adaptive::LineMode::Stacked;
+        let stacked = !floating && ((is_compact() && self.actions.len() > 1) || squeezed);
         let trailing = !self.actions.is_empty() || self.on_dismiss.is_some();
         let (radius, button_radius) = notice_radii(tall() || stacked);
         let one_line = NOTICE_BUTTON.px() + 2.0 * NOTICE_PAD.px();
@@ -282,7 +300,7 @@ impl Component for Banner {
                 .tw(&tokens, &[mr(S1)])
                 .child(icons::icon(glyph, IconSize::Row, Paint::NoticeGlyph(kind).color(&tokens)))
         });
-        let actions = self.actions.iter().enumerate().map(|(index, (label, on_press))| {
+        let actions: Vec<Element> = self.actions.iter().enumerate().map(|(index, (label, on_press))| {
             NoticeAction {
                 label: label.clone(),
                 kind,
@@ -293,7 +311,14 @@ impl Component for Banner {
                 id: self.button_ids.get(index).copied(),
             }
             .into_element()
-        });
+        }).collect();
+        // The buttons' own width, measured wherever they are, for `squeezed`.
+        let actions = rect()
+            .tw(&tokens, &[flex_row(), items(Align::Center)])
+            .on_sized(move |event: Event<SizedEventData>| {
+                actions_width.set_if_modified(event.area.width());
+            })
+            .children(actions);
         let dismiss = self.on_dismiss.clone().map(|on_dismiss| {
             let button = icon_button(Icon::WindowClose, move |_| on_dismiss.call(()))
                 .size(NOTICE_BUTTON)
@@ -309,8 +334,21 @@ impl Component for Banner {
 
         let bar = rect()
             .component("Banner")
-            .a11y_role(AccessibilityRole::Status)
+            // A notice is read out when it appears, without taking focus (WCAG
+            // 4.1.3): an error at once, anything else after what is being read.
+            .a11y_role(if kind == BannerKind::Error {
+                AccessibilityRole::Alert
+            } else {
+                AccessibilityRole::Status
+            })
             .a11y_alt(self.text.clone())
+            .a11y_builder(move |node| {
+                node.set_live(if kind == BannerKind::Error {
+                    accesskit::Live::Assertive
+                } else {
+                    accesskit::Live::Polite
+                })
+            })
             .tw(
                 &tokens,
                 &[
@@ -327,6 +365,7 @@ impl Component for Banner {
             .maybe(!floating, |bar| bar.tw(&tokens, &[w_full(), grow_children()]))
             .on_sized(move |event: Event<SizedEventData>| {
                 tall.set_if_modified(event.area.height() > tall_above);
+                bar_width.set_if_modified(event.area.width());
             });
         let bar = if stacked {
             bar.tw(&tokens, &[flex_col()])
@@ -340,7 +379,7 @@ impl Component for Banner {
                 .child(
                     rect()
                         .tw(&tokens, &[flex_row(), justify(Align::End), w_full()])
-                        .children(actions),
+                        .child(actions),
                 )
         } else {
             // The buttons are one flush group: the bar's gap separates the
@@ -352,7 +391,7 @@ impl Component for Banner {
                     rect()
                         .component("NoticeButtons")
                         .tw(&tokens, &[flex_row(), items(Align::Center)])
-                        .children(actions)
+                        .child(actions)
                         .maybe_child(dismiss)
                 }))
         };

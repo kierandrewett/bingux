@@ -447,7 +447,7 @@ impl Component for FileRow {
             let size = if entry.is_dir() {
                 String::new()
             } else {
-                bingux_files::display::size(entry.size)
+                super::display::size(entry.size)
             };
             let when = if entry.trash.is_some() {
                 // In the Trash the date that matters is when it was deleted.

@@ -79,6 +79,7 @@ mod compress_run;
 mod compress_tests;
 mod context_menu;
 mod directory;
+pub(crate) mod display;
 mod drag;
 mod drives;
 mod extract_dialog;
@@ -103,6 +104,7 @@ mod omnibox;
 mod omnibox_model;
 #[cfg(all(test, feature = "testing"))]
 mod omnibox_tests;
+mod open_with_menu;
 mod place_menu;
 #[cfg(all(test, feature = "testing"))]
 mod place_tests;
@@ -164,6 +166,9 @@ pub use file_icon::{
 };
 pub use folder_table::{APP_SCHEME, FOLDER_SCHEME, folder_table, location_of, place_of};
 pub use named::{RECENT_SCHEME, Root, Roots, TRASH_SCHEME, Typed};
+pub use open_with_menu::{
+    open_in_default_application, open_with_items, show_in_files, warm_open_with,
+};
 pub use places_view::{PlacesMenu, PlacesSidebar};
 pub use search::{Deep, DeepResults, Find, RunKey, use_search_run};
 pub use skeleton::skeleton;

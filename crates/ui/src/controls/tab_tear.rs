@@ -55,7 +55,10 @@ pub struct TearGate {
 impl TearGate {
     /// A gate for a strip `strip` pixels tall.
     pub fn new(strip: f32) -> Self {
-        Self { strip: strip.max(1.0), pull: Pull::Docked }
+        Self {
+            strip: strip.max(1.0),
+            pull: Pull::Docked,
+        }
     }
 
     pub fn pull(&self) -> Pull {
@@ -120,7 +123,11 @@ impl StripLayout {
         // The empty bar is beside the tabs, on the side the strip ends: the right
         // in a left-to-right strip, the left in a right-to-left one, which hugs
         // the window's right edge.
-        let (from, to) = if self.rtl { (0.0, self.rail.2) } else { (left, right) };
+        let (from, to) = if self.rtl {
+            (0.0, self.rail.2)
+        } else {
+            (left, right)
+        };
         self.rail.2 > self.rail.0 && x >= from && x < to && y >= top - slack && y <= bottom + slack
     }
 
@@ -130,9 +137,15 @@ impl StripLayout {
     /// to the left).
     pub fn index_at(&self, x: f32) -> usize {
         if self.rtl {
-            self.spans.iter().take_while(|(left, right)| (left + right) / 2.0 > x).count()
+            self.spans
+                .iter()
+                .take_while(|(left, right)| (left + right) / 2.0 > x)
+                .count()
         } else {
-            self.spans.iter().take_while(|(left, right)| (left + right) / 2.0 < x).count()
+            self.spans
+                .iter()
+                .take_while(|(left, right)| (left + right) / 2.0 < x)
+                .count()
         }
     }
 
@@ -214,7 +227,11 @@ mod tests {
     #[test]
     fn a_tab_inside_the_strip_is_reordered_never_torn() {
         for away in [0.0, 1.0, 10.0, 0.59 * STRIP] {
-            assert_eq!(pull_after(&[away]), [Pull::Docked], "{away}px from the strip");
+            assert_eq!(
+                pull_after(&[away]),
+                [Pull::Docked],
+                "{away}px from the strip"
+            );
         }
     }
 
@@ -223,7 +240,11 @@ mod tests {
         assert_eq!(pull_after(&[ARM_AT * STRIP + 0.01]), [Pull::Armed]);
         assert_eq!(pull_after(&[TEAR_AT * STRIP - 0.5]), [Pull::Armed]);
         assert_eq!(pull_after(&[TEAR_AT * STRIP]), [Pull::Torn]);
-        assert_eq!(pull_after(&[400.0]), [Pull::Torn], "a quick flick goes straight to torn");
+        assert_eq!(
+            pull_after(&[400.0]),
+            [Pull::Torn],
+            "a quick flick goes straight to torn"
+        );
     }
 
     #[test]
@@ -236,7 +257,10 @@ mod tests {
             "armed stays armed until the pointer is well back"
         );
         // Well back disarms, and the same drift does not arm it again below the arm distance.
-        assert_eq!(pull_after(&[0.7 * STRIP, 0.39 * STRIP, 0.5 * STRIP]), [Pull::Armed, Pull::Docked, Pull::Docked]);
+        assert_eq!(
+            pull_after(&[0.7 * STRIP, 0.39 * STRIP, 0.5 * STRIP]),
+            [Pull::Armed, Pull::Docked, Pull::Docked]
+        );
     }
 
     #[test]
@@ -257,10 +281,22 @@ mod tests {
     #[test]
     fn a_lone_tab_follows_the_pointer_with_its_window_after_the_slop() {
         let mut gate = TearGate::new(STRIP);
-        assert_eq!(gate.update_lone((3.0, 3.0)), Pull::Docked, "a click that wobbles is a click");
-        assert_eq!(gate.update_lone((LONE_SLOP, 0.0)), Pull::Torn, "sideways counts");
+        assert_eq!(
+            gate.update_lone((3.0, 3.0)),
+            Pull::Docked,
+            "a click that wobbles is a click"
+        );
+        assert_eq!(
+            gate.update_lone((LONE_SLOP, 0.0)),
+            Pull::Torn,
+            "sideways counts"
+        );
         let mut gate = TearGate::new(STRIP);
-        assert_eq!(gate.update_lone((0.0, -LONE_SLOP)), Pull::Torn, "so does up");
+        assert_eq!(
+            gate.update_lone((0.0, -LONE_SLOP)),
+            Pull::Torn,
+            "so does up"
+        );
     }
 
     fn layout() -> StripLayout {
@@ -285,7 +321,11 @@ mod tests {
         assert_eq!(at(273.0), 2, "left of the third tab's middle (274)");
         assert_eq!(at(275.0), 3);
         assert_eq!(at(900.0), 3, "past the last tab is the end");
-        assert_eq!(StripLayout::default().index_at(10.0), 0, "an empty strip takes it first");
+        assert_eq!(
+            StripLayout::default().index_at(10.0),
+            0,
+            "an empty strip takes it first"
+        );
     }
 
     #[test]
@@ -304,10 +344,16 @@ mod tests {
             let before = layout.spans.get(index.wrapping_sub(1));
             let after = layout.spans.get(index);
             if let Some(before) = before {
-                assert!(marker >= before.1 - 0.01, "x {x}: the marker is past the tab before it");
+                assert!(
+                    marker >= before.1 - 0.01,
+                    "x {x}: the marker is past the tab before it"
+                );
             }
             if let Some(after) = after {
-                assert!(marker <= after.0 + 0.01, "x {x}: the marker is before the tab after it");
+                assert!(
+                    marker <= after.0 + 0.01,
+                    "x {x}: the marker is before the tab after it"
+                );
             }
         }
     }
@@ -317,12 +363,27 @@ mod tests {
         let layout = layout();
         let right = 1000.0;
         assert!(layout.accepts(60.0, 18.0, right, 0.0));
-        assert!(layout.accepts(700.0, 18.0, right, 0.0), "the empty bar is the end of the strip");
-        assert!(!layout.accepts(60.0, 120.0, right, 0.0), "the page is not the strip");
-        assert!(layout.accepts(60.0, 36.0 + 10.0, right, 12.0), "a little below counts when the hand is loose");
+        assert!(
+            layout.accepts(700.0, 18.0, right, 0.0),
+            "the empty bar is the end of the strip"
+        );
+        assert!(
+            !layout.accepts(60.0, 120.0, right, 0.0),
+            "the page is not the strip"
+        );
+        assert!(
+            layout.accepts(60.0, 36.0 + 10.0, right, 12.0),
+            "a little below counts when the hand is loose"
+        );
         assert!(!layout.accepts(60.0, 36.0 + 20.0, right, 12.0));
-        assert!(!layout.accepts(4.0, 18.0, right, 12.0), "left of the strip is the window's edge");
-        assert!(!StripLayout::default().accepts(5.0, 5.0, right, 5.0), "a strip never laid out takes nothing");
+        assert!(
+            !layout.accepts(4.0, 18.0, right, 12.0),
+            "left of the strip is the window's edge"
+        );
+        assert!(
+            !StripLayout::default().accepts(5.0, 5.0, right, 5.0),
+            "a strip never laid out takes nothing"
+        );
     }
 
     /// The same three bodies in a right-to-left strip: the first is at the
@@ -347,25 +408,46 @@ mod tests {
         assert_eq!(at(135.0), 2);
         assert_eq!(at(133.0), 3);
         assert_eq!(at(-50.0), 3, "past the last tab, on the left, is the end");
-        assert_eq!(StripLayout { rtl: true, ..StripLayout::default() }.index_at(10.0), 0);
+        assert_eq!(
+            StripLayout {
+                rtl: true,
+                ..StripLayout::default()
+            }
+            .index_at(10.0),
+            0
+        );
     }
 
     #[test]
     fn right_to_left_the_marker_stands_between_the_neighbours_it_will_have() {
         let layout = mirrored();
-        assert_eq!(layout.boundary(0), Some(388.0), "the start is the first tab's right edge");
+        assert_eq!(
+            layout.boundary(0),
+            Some(388.0),
+            "the start is the first tab's right edge"
+        );
         assert_eq!(layout.boundary(1), Some(287.0));
         assert_eq!(layout.boundary(2), Some(185.0));
-        assert_eq!(layout.boundary(3), Some(84.0), "the end is the last tab's left edge");
+        assert_eq!(
+            layout.boundary(3),
+            Some(84.0),
+            "the end is the last tab's left edge"
+        );
         assert_eq!(layout.boundary(9), Some(84.0));
         for x in (0..420).step_by(3) {
             let index = layout.index_at(x as f32);
             let marker = layout.boundary(index).unwrap();
             if let Some(before) = layout.spans.get(index.wrapping_sub(1)) {
-                assert!(marker <= before.0 + 0.01, "x {x}: the marker is on the wrong side of the tab before it");
+                assert!(
+                    marker <= before.0 + 0.01,
+                    "x {x}: the marker is on the wrong side of the tab before it"
+                );
             }
             if let Some(after) = layout.spans.get(index) {
-                assert!(marker >= after.1 - 0.01, "x {x}: the marker is on the wrong side of the tab after it");
+                assert!(
+                    marker >= after.1 - 0.01,
+                    "x {x}: the marker is on the wrong side of the tab after it"
+                );
             }
         }
     }
@@ -373,9 +455,18 @@ mod tests {
     #[test]
     fn right_to_left_the_empty_bar_beside_the_tabs_is_on_the_left() {
         let layout = mirrored();
-        assert!(layout.accepts(30.0, 18.0, 400.0, 0.0), "left of the tabs is the end of the strip");
+        assert!(
+            layout.accepts(30.0, 18.0, 400.0, 0.0),
+            "left of the tabs is the end of the strip"
+        );
         assert!(layout.accepts(200.0, 18.0, 400.0, 0.0));
-        assert!(!layout.accepts(399.0 + 5.0, 18.0, 400.0, 0.0), "past the window's right edge");
-        assert!(!layout.accepts(30.0, 120.0, 400.0, 0.0), "the page is not the strip");
+        assert!(
+            !layout.accepts(399.0 + 5.0, 18.0, 400.0, 0.0),
+            "past the window's right edge"
+        );
+        assert!(
+            !layout.accepts(30.0, 120.0, 400.0, 0.0),
+            "the page is not the strip"
+        );
     }
 }

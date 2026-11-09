@@ -80,6 +80,8 @@ SOURCES = [
     ROOT / "crates/ui/examples",
     ROOT / "apps/settings/src",
     ROOT / "apps/files/src",
+    ROOT / "apps/calculator/src",
+    ROOT / "apps/weather/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -129,6 +131,9 @@ SKIP_FILES = {
     ROOT / "crates/ui/src/preview/behaviour_tests.rs",
     ROOT / "crates/ui/src/inspector/state_checks/tests.rs",
     ROOT / "crates/ui/src/charts/svg.rs",
+    # The sky gradients, scale colours and weather pictures are art, not interface.
+    ROOT / "apps/weather/src/sky.rs",
+    ROOT / "apps/weather/src/glyph.rs",
 }
 
 STYLING = re.compile(
@@ -329,6 +334,7 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "apps/settings/src/pages/sound/meter.rs": "the level meter's pw-record process and its reader thread",
     "apps/settings/src/pages/sound/effects/mod.rs": "the live-parameter writer's pacing sleep, on a thread of its own",
     "crates/ui/src/app_icon.rs": "the icon-theme name, asked from the icon lookup worker (guarded)",
+    "crates/ui/src/files/open_with_menu.rs": "starts bingux-files or xdg-open from a menu press handler and reaps the child on a thread of its own; never in render",
     "crates/ui/src/files/actions/open_with.rs": "desktop-entry scan and launch, run by the file actions' workers (FilesSearch to review)",
     "crates/ui/src/files/actions/transfer.rs": "file operations of the transfer worker",
     "crates/ui/src/files/actions.rs": "file operations of the transfer worker",
@@ -455,7 +461,14 @@ def blocking_problems() -> list[str]:
     return found
 
 
-RESILIENT_APPS = ("bingux-ui", "bingux-settings", "bingux-taxonomy", "bingux-files-app")
+RESILIENT_APPS = (
+    "bingux-ui",
+    "bingux-settings",
+    "bingux-taxonomy",
+    "bingux-files-app",
+    "bingux-weather-app",
+    "bingux-calculator-app",
+)
 
 
 def panic_problems() -> list[str]:
@@ -505,6 +518,7 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/controls/segmented.rs": "the segmented control's segments",
     "crates/ui/src/controls/checkbox.rs": "the checkbox",
     "crates/ui/src/controls/stepper.rs": "the stepper's halves",
+    "crates/ui/src/controls/keypad.rs": "a key of a keypad: a tone fill, hover and pressed layers, and one Tab stop per key, which no library button draws",
     "crates/ui/src/controls/action_strip.rs": "the action strip's cells",
     "crates/ui/src/controls/focus_stop.rs": "makes a keyboard stop out of any content",
     "crates/ui/src/controls/press.rs": "hit_area: a transparent touch target whose listeners do nothing and let the press bubble to the control that holds it",

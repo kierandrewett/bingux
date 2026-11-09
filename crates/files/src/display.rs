@@ -1,9 +1,11 @@
-//! Sizes and times as a file list shows them.
-
-use std::time::{SystemTime, UNIX_EPOCH};
+//! The calendar sums a file list needs, and the one size a drive is named
+//! by before it has a label. Words for people (sizes, dates) are written in
+//! their language by bingux-ui (`bingux_ui::files::display`, from
+//! `bingux_ui::format`); this crate cannot depend on it.
 
 /// `1.2 MB`, `340 kB`, `12 bytes`: decimal units, one decimal place under
-/// 10, as GNOME Files writes sizes.
+/// 10. Only for the name of an unlabelled drive (`500 GB Volume`), which is
+/// the drive's name rather than a size shown beside it.
 pub fn size(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["kB", "MB", "GB", "TB", "PB"];
     if bytes < 1000 {
@@ -71,62 +73,6 @@ impl Civil {
     }
 }
 
-const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-/// A modified time: `14:03` today, `Yesterday`, `12 Oct` this year,
-/// `12 Oct 2024` before. `offset` is the local offset from UTC in seconds.
-pub fn modified_at(seconds: i64, now: i64, offset: i64) -> String {
-    let then = Civil::from_unix(seconds, offset);
-    let today = Civil::from_unix(now, offset);
-    match today.day_number - then.day_number {
-        0 => format!("{:02}:{:02}", then.hour, then.minute),
-        1 => "Yesterday".into(),
-        _ if then.year == today.year => format!("{} {}", then.day, MONTHS[then.month as usize - 1]),
-        _ => format!(
-            "{} {} {}",
-            then.day,
-            MONTHS[then.month as usize - 1],
-            then.year
-        ),
-    }
-}
-
-/// [`modified_at`] for a `SystemTime`, now, in the local time zone.
-pub fn modified(time: SystemTime) -> String {
-    let seconds = match time.duration_since(UNIX_EPOCH) {
-        Ok(after) => after.as_secs() as i64,
-        Err(before) => -(before.duration().as_secs() as i64),
-    };
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |after| after.as_secs() as i64);
-    modified_at(seconds, now, local_offset(seconds))
-}
-
-/// A time in full, for a Properties dialog: `9 Mar 2024, 12:34`.
-pub fn full_at(seconds: i64, offset: i64) -> String {
-    let then = Civil::from_unix(seconds, offset);
-    format!(
-        "{} {} {}, {:02}:{:02}",
-        then.day,
-        MONTHS[then.month as usize - 1],
-        then.year,
-        then.hour,
-        then.minute
-    )
-}
-
-/// [`full_at`] for a `SystemTime`, in the local time zone.
-pub fn full(time: SystemTime) -> String {
-    let seconds = match time.duration_since(UNIX_EPOCH) {
-        Ok(after) => after.as_secs() as i64,
-        Err(before) => -(before.duration().as_secs() as i64),
-    };
-    full_at(seconds, local_offset(seconds))
-}
-
 /// The local zone's offset from UTC at `seconds`, from the C library.
 pub fn local_offset(seconds: i64) -> i64 {
     let time = seconds as libc::time_t;
@@ -155,17 +101,17 @@ mod tests {
     }
 
     #[test]
-    fn times() {
+    fn days() {
         // 2024-03-09 12:34:56 UTC.
         let then = 1_709_987_696;
-        assert_eq!(Civil::from_unix(then, 0).month, 3);
-        assert_eq!(modified_at(then, then + 60, 0), "12:34");
-        assert_eq!(modified_at(then, then + 86_400, 0), "Yesterday");
-        assert_eq!(modified_at(then, then + 5 * 86_400, 0), "9 Mar");
-        assert_eq!(modified_at(then, then + 400 * 86_400, 0), "9 Mar 2024");
+        let civil = Civil::from_unix(then, 0);
+        assert_eq!((civil.year, civil.month, civil.day), (2024, 3, 9));
+        assert_eq!((civil.hour, civil.minute), (12, 34));
         // An offset of +2 h moves the clock.
-        assert_eq!(modified_at(then, then + 60, 7200), "14:34");
-        assert_eq!(full_at(then, 0), "9 Mar 2024, 12:34");
-        assert_eq!(full_at(then, 7200), "9 Mar 2024, 14:34");
+        assert_eq!(Civil::from_unix(then, 7200).hour, 14);
+        assert_eq!(
+            Civil::from_unix(then + 86_400, 0).day_number,
+            civil.day_number + 1
+        );
     }
 }

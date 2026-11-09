@@ -66,7 +66,7 @@ mod subject;
 mod viewers;
 
 pub use bingux_preview_core::{PreviewSource, ViewerId};
-pub use chrome::PreviewNav;
+pub use chrome::{PreviewNav, ZoomMemory};
 pub use dock::PreviewDock;
 pub use host::PreviewHost;
 pub use host_link::{allow_helpers, host_available};

@@ -497,6 +497,24 @@ impl Component for MenuLayer {
         );
         let open = !self.closing;
         let active = nav.active();
+        // One accessibility id per row, kept while the menu is open: the
+        // focused panel names the highlighted row as its active descendant
+        // (WAI-ARIA menu), so a screen reader reads each row the arrows reach.
+        let row_ids = use_hook(|| {
+            std::rc::Rc::new(std::cell::RefCell::new(
+                std::collections::HashMap::<(usize, usize), AccessibilityId>::new(),
+            ))
+        });
+        let row_id = {
+            let row_ids = row_ids.clone();
+            move |level: usize, index: usize| {
+                *row_ids
+                    .borrow_mut()
+                    .entry((level, index))
+                    .or_insert_with(AccessibilityId::new_unique)
+            }
+        };
+        let active_row = nav.highlighted(active).map(|index| row_id(active, index));
         let items_at = |level: usize| panel_items(&self.menu.items, nav.open(), level);
         let rows = |level: usize| -> Vec<Element> {
             let items = items_at(level);
@@ -515,6 +533,7 @@ impl Component for MenuLayer {
                         overlays,
                         level,
                         index,
+                        id: row_id(level, index),
                         leading,
                         highlighted: nav.highlighted(level) == Some(index),
                         sub,
@@ -559,6 +578,7 @@ impl Component for MenuLayer {
         let root = Panel::new(PanelKind::Menu, open, self.menu.trigger, rows(0))
             .size(panel_width(items_at(0)), rows_height(items_at(0)))
             .pill(pill(0))
+            .active_descendant(active_row)
             .layer(self.layer)
             .on_dismiss(EventHandler::new(move |_: ()| overlays.close_menu()))
             .on_closed(EventHandler::new(move |_: ()| overlays.finish_menu()))
@@ -583,6 +603,9 @@ struct MenuRow {
     overlays: Overlays,
     level: usize,
     index: usize,
+    /// Its accessibility id, which the panel names as its active descendant
+    /// while the row is highlighted.
+    id: AccessibilityId,
     /// The width of the panel's leading column for ticks and icons, when it
     /// reserves one.
     leading: Option<f32>,
@@ -690,8 +713,31 @@ impl Component for MenuRow {
         parts.extend(trailing);
         rect()
             .component("MenuRow")
+            .a11y_id(self.id)
             .a11y_role(AccessibilityRole::MenuItem)
             .a11y_enabled(enabled)
+            // Named by its label alone; the shortcut is its keyboard shortcut,
+            // a submenu says it has one and whether it is open.
+            .a11y_builder({
+                let label = self.item.label.clone();
+                let keys = self.item.shortcut.clone();
+                let sub_open = self.sub.is_some();
+                let checked = self.item.checked;
+                move |node| {
+                    node.set_label(label);
+                    if let Some(keys) = keys {
+                        node.set_keyboard_shortcut(keys);
+                    }
+                    if has_sub {
+                        node.set_has_popup(accesskit::HasPopup::Menu);
+                        node.set_expanded(sub_open);
+                    }
+                    if let Some(checked) = checked {
+                        node.set_role(AccessibilityRole::MenuItemCheckBox);
+                        node.set_toggled(accesskit::Toggled::from(checked));
+                    }
+                }
+            })
             .tw(&tokens, MENU_ITEM)
             .maybe(opacity.is_some(), |element| {
                 element.opacity(opacity.unwrap_or(1.0))
@@ -768,6 +814,18 @@ pub struct MenuButton {
     label: String,
     icon: Option<Icon>,
     items: Vec<MenuItem>,
+    more: Option<MoreItems>,
+}
+
+/// Items a menu button adds when it opens, read then and not when the
+/// button was drawn.
+#[derive(Clone)]
+struct MoreItems(std::rc::Rc<dyn Fn() -> Vec<MenuItem>>);
+
+impl PartialEq for MoreItems {
+    fn eq(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.0, &other.0)
+    }
 }
 
 /// A button that opens a menu of `items` against itself.
@@ -776,6 +834,7 @@ pub fn menu_button(label: impl Into<String>, items: Vec<MenuItem>) -> MenuButton
         label: label.into(),
         icon: None,
         items,
+        more: None,
     }
 }
 
@@ -784,6 +843,14 @@ impl MenuButton {
     /// stays the accessible name.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// Items built when the menu opens, after the button's own: for rows
+    /// whose titles and states change without the button being drawn
+    /// again, such as the window's commands ("Undo rename").
+    pub fn items_on_open(mut self, more: impl Fn() -> Vec<MenuItem> + 'static) -> Self {
+        self.more = Some(MoreItems(std::rc::Rc::new(more)));
         self
     }
 }
@@ -798,7 +865,16 @@ impl Component for MenuButton {
         let mut pressing = use_state(|| false);
         let press = use_press();
         let mut area = use_state(Area::default);
-        let items = self.items.clone();
+        let items = {
+            let (fixed, more) = (self.items.clone(), self.more.clone());
+            move || {
+                let mut items = fixed.clone();
+                if let Some(more) = &more {
+                    items.extend((more.0)());
+                }
+                items
+            }
+        };
         let open = overlays.menu_owned_by(a11y_id);
         let size = crate::controls::button::header_size(Dim::Button);
         // The same rest state as an icon button: a bare glyph, filled only
@@ -814,6 +890,11 @@ impl Component for MenuButton {
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
+            // WAI-ARIA menu button: it says it opens a menu, and whether it is open.
+            .a11y_builder(move |node| {
+                node.set_has_popup(accesskit::HasPopup::Menu);
+                node.set_expanded(open);
+            })
             .maybe(self.icon.is_none(), |button| {
                 button.tw(
                     &tokens,
@@ -861,7 +942,7 @@ impl Component for MenuButton {
                     overlays.show_menu_from(
                         Some(a11y_id),
                         PanelTrigger::Control(PanelRect::from_area(&area.read())),
-                        items.clone(),
+                        items(),
                         false,
                     );
                 }
@@ -877,7 +958,7 @@ impl Component for MenuButton {
                     overlays.show_menu_from(
                         Some(a11y_id),
                         PanelTrigger::Control(PanelRect::from_area(&area.read())),
-                        items.clone(),
+                        items(),
                         false,
                     );
                 }
@@ -892,7 +973,7 @@ impl Component for MenuButton {
                 overlays.show_menu_from(
                     Some(a11y_id),
                     PanelTrigger::Control(PanelRect::from_area(&area.read())),
-                    items.clone(),
+                    items(),
                     true,
                 );
             })

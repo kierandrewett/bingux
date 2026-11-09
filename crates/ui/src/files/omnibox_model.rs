@@ -20,7 +20,9 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 
 use bingux_files::find::{FilterKey, Filters, Hidden, Kind, Modified, NameMode, Scope, SizeCond};
-use bingux_files::{PlaceKind, Places, display};
+use bingux_files::{PlaceKind, Places};
+
+use super::display;
 
 use super::address_complete::find_match;
 
@@ -539,7 +541,7 @@ mod tests {
         assert_eq!(
             others,
             [
-                (FilterKey::Size, "Size over 10 MB".to_string()),
+                (FilterKey::Size, "Size over 10\u{a0}MB".to_string()),
                 (FilterKey::Ext, "Extension: .png".to_string()),
                 (FilterKey::Within, "In Docs".to_string()),
                 (FilterKey::Hidden, "Only hidden files".to_string()),
@@ -563,7 +565,7 @@ mod tests {
             Query::parse("type:image,video size:>10MB modified:week ext:png name:*.x case:yes hidden:only in:Docs match:regex").filters;
         let label = |key| token_label(key, &filters);
         assert_eq!(label(FilterKey::Kind), "Type: Images, Video");
-        assert_eq!(label(FilterKey::Size), "Size over 10 MB");
+        assert_eq!(label(FilterKey::Size), "Size over 10\u{a0}MB");
         assert_eq!(label(FilterKey::Modified), "Modified in the last 7 days");
         assert_eq!(label(FilterKey::Ext), "Extension: .png");
         assert_eq!(label(FilterKey::Name), "Name regular expression, *.x");

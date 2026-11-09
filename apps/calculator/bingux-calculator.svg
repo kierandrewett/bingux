@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="body" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#77767b"/>
+            <stop offset="1" stop-color="#3d3846"/>
+        </linearGradient>
+        <linearGradient id="screen" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#d8ecd0"/>
+            <stop offset="1" stop-color="#b6d9a8"/>
+        </linearGradient>
+        <linearGradient id="key" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#f6f5f4"/>
+            <stop offset="1" stop-color="#deddda"/>
+        </linearGradient>
+        <linearGradient id="accent" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#78aeed"/>
+            <stop offset="1" stop-color="#3584e4"/>
+        </linearGradient>
+    </defs>
+    <!-- The body, with a darker lower edge for depth. -->
+    <rect fill="#241f31" height="112" rx="14" width="88" x="20" y="10"/>
+    <rect fill="url(#body)" height="110" rx="14" width="88" x="20" y="8"/>
+    <rect fill="#ffffff" height="1.5" opacity="0.35" rx="0.75" width="72" x="28" y="9.5"/>
+    <!-- The screen: a result, right aligned. -->
+    <rect fill="#1e1a28" height="30" rx="7" width="72" x="28" y="16"/>
+    <rect fill="url(#screen)" height="28" rx="6" width="70" x="29" y="16"/>
+    <g fill="#26402b" opacity="0.75">
+        <rect height="4" rx="2" width="14" x="52" y="22"/>
+        <rect height="9" rx="2.5" width="6" x="68" y="30"/>
+        <rect height="9" rx="2.5" width="6" x="77" y="30"/>
+        <rect height="9" rx="2.5" width="6" x="86" y="30"/>
+    </g>
+    <!-- Sixteen keys: three columns of digits and functions, one of operators. -->
+    <g fill="url(#key)">
+        <rect height="11" rx="4" width="15" x="28" y="54"/>
+        <rect height="11" rx="4" width="15" x="47" y="54"/>
+        <rect height="11" rx="4" width="15" x="66" y="54"/>
+        <rect height="11" rx="4" width="15" x="28" y="70"/>
+        <rect height="11" rx="4" width="15" x="47" y="70"/>
+        <rect height="11" rx="4" width="15" x="66" y="70"/>
+        <rect height="11" rx="4" width="15" x="28" y="86"/>
+        <rect height="11" rx="4" width="15" x="47" y="86"/>
+        <rect height="11" rx="4" width="15" x="66" y="86"/>
+        <rect height="11" rx="4" width="34" x="28" y="102"/>
+        <rect height="11" rx="4" width="15" x="66" y="102"/>
+    </g>
+    <g fill="url(#accent)">
+        <rect height="11" rx="4" width="15" x="85" y="54"/>
+        <rect height="11" rx="4" width="15" x="85" y="70"/>
+        <rect height="11" rx="4" width="15" x="85" y="86"/>
+        <rect height="11" rx="4" width="15" x="85" y="102"/>
+    </g>
+    <!-- Marks on the operator keys: plus, minus, times, equals. -->
+    <g fill="#ffffff">
+        <rect height="2" rx="1" width="7" x="89" y="58.5"/>
+        <rect height="7" rx="1" width="2" x="91.5" y="56"/>
+        <rect height="2" rx="1" width="7" x="89" y="74.5"/>
+        <rect height="2" rx="1" width="7" x="89" y="105.8"/>
+        <rect height="2" rx="1" width="7" x="89" y="108.8"/>
+    </g>
+    <g stroke="#ffffff" stroke-linecap="round" stroke-width="2">
+        <path d="M89.5 90 L95.5 96 M95.5 90 L89.5 96"/>
+    </g>
+</svg>

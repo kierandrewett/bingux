@@ -1,9 +1,9 @@
 //! Buttons: `ActionButton`, the accent primary button, the small row pill
 //! and the square `IconButton`.
 
+use super::default_mark::{Face, default_mark};
 use super::press::{is_right_click, use_hold, use_press};
 use super::tooltip::hover_tip;
-use super::default_mark::{Face, default_mark};
 use crate::shell::menu::MenuItem;
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{PanelRect, PanelTrigger};
@@ -198,13 +198,15 @@ impl Component for ActionButton {
         } else {
             Face::Plain
         };
-        let corner = self
-            .radius
-            .unwrap_or(if fitted { Radius::Inner } else { Radius::Control });
+        let corner = self.radius.unwrap_or(if fitted {
+            Radius::Inner
+        } else {
+            Radius::Control
+        });
         // The keycap is for a window with a keyboard: a phone shows the focus
         // ring alone.
-        let mark = (self.default_action && enabled && !is_compact())
-            .then(|| default_mark(&tokens, face));
+        let mark =
+            (self.default_action && enabled && !is_compact()).then(|| default_mark(&tokens, face));
         rect()
             .component("ActionButton")
             .published(|| {
@@ -241,7 +243,9 @@ impl Component for ActionButton {
             .maybe(!self.flat, |element| {
                 element.tw(&tokens, &[min_w(Dim::Box9)])
             })
-            .maybe(self.grow || self.fill, |element| element.tw(&tokens, &[w_flex()]))
+            .maybe(self.grow || self.fill, |element| {
+                element.tw(&tokens, &[w_flex()])
+            })
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(enabled, |element| {
                 element
@@ -294,7 +298,8 @@ impl Component for ActionButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .maybe_child(mark).focusable(focus())
+            .maybe_child(mark)
+            .focusable(focus())
             // The focus wrapper is what the row lays out, so it grows too.
             .maybe(self.grow, |wrapper| {
                 wrapper.tw(&tokens, &[w_flex(), grow_children()])
@@ -416,7 +421,8 @@ impl Component for RowButton {
                     .in_ink(Ink::Text)
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
-            ).focusable(focus())
+            )
+            .focusable(focus())
     }
 }
 
@@ -691,15 +697,7 @@ impl Component for IconButton {
                 element.a11y_alt(self.tooltip.clone().unwrap_or_default())
             })
             .tw(&tokens, ICON_BUTTON)
-            .tw(
-                &tokens,
-                &[
-                    w(size),
-                    h(size),
-                    state,
-                    rounded(radius),
-                ],
-            )
+            .tw(&tokens, &[w(size), h(size), state, rounded(radius)])
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(usable, |element| {
@@ -768,7 +766,8 @@ impl Component for IconButton {
                     }),
                     None => icons::icon(self.icon, IconSize::Control, ink).into(),
                 }
-            }).focusable(focus());
+            })
+            .focusable(focus());
         match &self.tooltip {
             Some(text) => hover_tip(button, text.clone()),
             None => Element::from(button),

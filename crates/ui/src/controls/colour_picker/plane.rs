@@ -129,9 +129,7 @@ fn paint_plane(hue: Color) -> impl FnMut(&mut FillRenderContext) + 'static {
         pen.set_style(PaintStyle::Fill);
         pen.set_dither(true);
         pen.set_shader(shaders::blend(BlendMode::Multiply, across, down));
-        context
-            .canvas
-            .draw_rect(Cell::from_wh(width, height), &pen);
+        context.canvas.draw_rect(Cell::from_wh(width, height), &pen);
     }
 }
 
@@ -332,14 +330,22 @@ mod tests {
         assert_eq!(plane_at((-9999.0, 60.0), SIZE, KNOB).0, 0.0);
         // Inside the knob's margin of an edge it is the edge too.
         assert_eq!(plane_at((2.0, 3.0), SIZE, KNOB), (0.0, 1.0));
-        assert_eq!(plane_at((SIZE.0 - 1.0, SIZE.1 - 1.0), SIZE, KNOB), (1.0, 0.0));
+        assert_eq!(
+            plane_at((SIZE.0 - 1.0, SIZE.1 - 1.0), SIZE, KNOB),
+            (1.0, 0.0)
+        );
         // Not a number is the corner, never a panic.
         assert_eq!(plane_at((f32::NAN, f32::NAN), SIZE, KNOB), (0.0, 1.0));
     }
 
     #[test]
     fn the_knob_centre_is_the_pointer_wherever_the_knob_can_go() {
-        for (x, y) in [(40.0_f32, 30.0_f32), (100.0, 66.0), (180.0, 120.0), (10.0, 10.0)] {
+        for (x, y) in [
+            (40.0_f32, 30.0_f32),
+            (100.0, 66.0),
+            (180.0, 120.0),
+            (10.0, 10.0),
+        ] {
             let (sat, val) = plane_at((x, y), SIZE, KNOB);
             let (cx, cy) = knob_centre(sat, val, SIZE, KNOB);
             assert!((cx - x).abs() < 1e-3, "{x}: knob at {cx}");
@@ -386,7 +392,10 @@ mod tests {
         assert!((right.sat - 0.51).abs() < 1e-6 && right.val == 0.5);
         let up = nudged(state, Nudge::By { x: 0.0, y: 10.0 });
         assert!((up.val - 0.6).abs() < 1e-6 && up.sat == 0.5);
-        let past = nudged(Hsva::new(211.0, 0.99, 0.01, 255), Nudge::By { x: 10.0, y: -10.0 });
+        let past = nudged(
+            Hsva::new(211.0, 0.99, 0.01, 255),
+            Nudge::By { x: 10.0, y: -10.0 },
+        );
         assert_eq!((past.sat, past.val), (1.0, 0.0));
         // The hue is not the plane's to change.
         assert_eq!(right.hue, 211.0);

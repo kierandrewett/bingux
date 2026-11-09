@@ -42,6 +42,17 @@ impl Requirement {
         }
     }
 
+    /// The least ratio under increase contrast: text at AAA (7:1), large
+    /// text at 4.5:1. Icons and state fills keep 3:1, so a hue stays a hue
+    /// (the outline and focus ring are derived at 4.5:1 all the same).
+    pub const fn min_high_contrast(self) -> f32 {
+        match self {
+            Requirement::Text | Requirement::Enhanced => 7.0,
+            Requirement::LargeText => 4.5,
+            Requirement::Component => 3.0,
+        }
+    }
+
     pub const fn label(self) -> &'static str {
         match self {
             Requirement::Text => "AA text 4.5",

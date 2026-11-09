@@ -303,22 +303,9 @@ fn load_choices() -> Result<Vec<Choice>, CommandError> {
         .collect()
 }
 
-/// Bytes as a decimal size, such as `512.0 MB` or `12 GB`.
+/// Bytes as a decimal size in the person's language, such as `512 MB` or `12 GB`.
 fn size_text(bytes: u64) -> String {
-    const UNITS: [(&str, f64); 4] = [("TB", 1e12), ("GB", 1e9), ("MB", 1e6), ("KB", 1e3)];
-    let value = bytes as f64;
-    for (index, (unit, scale)) in UNITS.iter().enumerate() {
-        if value >= *scale {
-            let amount = value / *scale;
-            // Whole numbers from 10 GB up, one decimal place below that.
-            return if index < 2 && amount >= 10.0 {
-                format!("{amount:.0} {unit}")
-            } else {
-                format!("{amount:.1} {unit}")
-            };
-        }
-    }
-    format!("{bytes} B")
+    bingux_ui::format::Bytes::new(bytes).format()
 }
 
 /// How far below the viewport the last row is mounted-and-watched, so the next
@@ -395,7 +382,10 @@ fn run_uninstall(
                         router.pop();
                     }
                 }
-                Err(error) => overlays.toast(format!("Could not uninstall {name}. {error}")),
+                Err(error) => {
+                    eprintln!("[uninstall] {name}: {error}");
+                    overlays.toast(format!("{name} could not be uninstalled."));
+                }
             }
             start_load(model);
         },

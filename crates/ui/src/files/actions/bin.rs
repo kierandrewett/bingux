@@ -17,8 +17,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use crate::files::display;
 use bingux_files::Cancel;
-use bingux_files::display;
 use bingux_files::ops::InBin;
 use freya::prelude::*;
 
@@ -102,7 +102,11 @@ pub(super) fn empty_prompt(summary: TrashSummary) -> Prompt {
     } else {
         String::new()
     };
-    let (them, are) = if summary.items == 1 { ("It", "will") } else { ("They", "will") };
+    let (them, are) = if summary.items == 1 {
+        ("It", "will")
+    } else {
+        ("They", "will")
+    };
     Prompt {
         title: "Empty the Trash?".to_owned(),
         body: format!(
@@ -165,8 +169,15 @@ fn sort_refusals(refused: Vec<(PathBuf, TrashRefusal)>) -> Refusals {
     let plural_refused = out.refused.len() > 1;
     out.refused_text = match refused_reasons.as_slice() {
         [] => None,
-        [one] => Some(format!("{}: {}", what(&out.refused), one.reason(plural_refused))),
-        _ => Some(format!("{} cannot be moved to the Trash.", what(&out.refused))),
+        [one] => Some(format!(
+            "{}: {}",
+            what(&out.refused),
+            one.reason(plural_refused)
+        )),
+        _ => Some(format!(
+            "{} cannot be moved to the Trash.",
+            what(&out.refused)
+        )),
     };
     out
 }
@@ -178,10 +189,7 @@ struct TrashPlan {
     refused: Vec<(PathBuf, TrashRefusal)>,
 }
 
-fn plan_trash(
-    paths: Vec<PathBuf>,
-    check: impl Fn(&Path) -> Result<(), TrashRefusal>,
-) -> TrashPlan {
+fn plan_trash(paths: Vec<PathBuf>, check: impl Fn(&Path) -> Result<(), TrashRefusal>) -> TrashPlan {
     let mut plan = TrashPlan {
         bin: Vec::new(),
         refused: Vec::new(),
@@ -266,17 +274,19 @@ fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
         finish(&env);
         match outcome {
             Ok(trashed) => {
-                let moved: Vec<PathBuf> = trashed.iter().map(|item| item.original.clone()).collect();
+                let moved: Vec<PathBuf> =
+                    trashed.iter().map(|item| item.original.clone()).collect();
                 if moved.len() == attempted.len()
                     && let Some(next) = &next
                 {
                     select_paths(&env, std::slice::from_ref(next));
                 }
-                undo::push(Step::Trash(trashed));
+                undo::push(&env, Step::Trash(trashed));
                 let again = env.clone();
-                env.overlays.toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
-                    super::transfer::undo(&again)
-                });
+                env.overlays
+                    .toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
+                        super::transfer::undo(&again)
+                    });
                 report_refusals(&env, then);
             }
             Err(error) => trash_failed(&env, attempted, error),
@@ -291,7 +301,12 @@ fn trash_failed(env: &Env, paths: Vec<PathBuf>, error: OpError) {
     let it = if paths.len() == 1 { "it" } else { "them" };
     match error {
         OpError::CannotTrash(refusal) => {
-            let refusals = sort_refusals(paths.into_iter().map(|path| (path, refusal.clone())).collect());
+            let refusals = sort_refusals(
+                paths
+                    .into_iter()
+                    .map(|path| (path, refusal.clone()))
+                    .collect(),
+            );
             report_refusals(env, refusals);
         }
         // Nothing the person can fix and nothing to offer: it needs a copy
@@ -303,7 +318,9 @@ fn trash_failed(env: &Env, paths: Vec<PathBuf>, error: OpError) {
         OpError::Permission => ask_delete(
             env,
             paths,
-            Some(&format!("You do not have permission to move {it} to the Trash.")),
+            Some(&format!(
+                "You do not have permission to move {it} to the Trash."
+            )),
         ),
         other => notify(env.ui, error_text("move to the Trash", &other), true),
     }
@@ -342,12 +359,14 @@ fn move_copying(env: &Env, paths: Vec<PathBuf>) {
         finish(&env);
         match outcome {
             Ok(trashed) => {
-                let moved: Vec<PathBuf> = trashed.iter().map(|item| item.original.clone()).collect();
-                undo::push(Step::Trash(trashed));
+                let moved: Vec<PathBuf> =
+                    trashed.iter().map(|item| item.original.clone()).collect();
+                undo::push(&env, Step::Trash(trashed));
                 let again = env.clone();
-                env.overlays.toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
-                    super::transfer::undo(&again)
-                });
+                env.overlays
+                    .toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
+                        super::transfer::undo(&again)
+                    });
             }
             Err(error) => notify(env.ui, error_text("move to the Trash", &error), true),
         }
@@ -405,7 +424,11 @@ fn delete(env: &Env, paths: Vec<PathBuf>) {
 /// takes a while), then ask with the count and the size in the question.
 pub(super) fn confirm_empty_trash(env: &Env) {
     let cancel = Cancel::new();
-    if !begin(env, "Counting what is in the Trash".to_owned(), Some(cancel.clone())) {
+    if !begin(
+        env,
+        "Counting what is in the Trash".to_owned(),
+        Some(cancel.clone()),
+    ) {
         return;
     }
     let env = env.clone();
@@ -413,7 +436,9 @@ pub(super) fn confirm_empty_trash(env: &Env) {
         let outcome = spawn_blocking(move || backend::trash_summary(&cancel)).await;
         finish(&env);
         match outcome {
-            Ok(summary) if summary.items == 0 => notify(env.ui, "The Trash is already empty.", false),
+            Ok(summary) if summary.items == 0 => {
+                notify(env.ui, "The Trash is already empty.", false)
+            }
             Ok(summary) => {
                 let prompt = empty_prompt(summary);
                 env.overlays.show_dialog(
@@ -499,7 +524,10 @@ pub(super) fn restore_to(env: &Env, paths: Vec<PathBuf>) {
     };
     let start = backend::trash_items(&paths)
         .into_iter()
-        .find_map(|item| item.original.and_then(|original| original.parent().map(Path::to_path_buf)))
+        .find_map(|item| {
+            item.original
+                .and_then(|original| original.parent().map(Path::to_path_buf))
+        })
         .filter(|folder| folder.is_dir())
         .unwrap_or_else(|| env.home.clone());
     let env = env.clone();
@@ -533,7 +561,10 @@ fn plan_then(env: &Env, paths: Vec<PathBuf>, into: Option<PathBuf>) {
         let planned = spawn_blocking(move || backend::plan_restore(&paths, into.as_deref())).await;
         let unknown = planned.unknown();
         if !unknown.is_empty() {
-            let names: Vec<PathBuf> = unknown.iter().map(|entry| entry.item.in_trash.clone()).collect();
+            let names: Vec<PathBuf> = unknown
+                .iter()
+                .map(|entry| entry.item.in_trash.clone())
+                .collect();
             notify(env.ui, no_record_text(&names), true);
         }
         let plan = planned.without_unknown();
@@ -562,16 +593,26 @@ fn no_record_text(paths: &[PathBuf]) -> String {
 
 /// The question before a folder that is gone is made again.
 fn ask_to_make_folders(env: &Env, plan: RestorePlan, missing: Vec<PathBuf>) {
-    let whole: Vec<PathBuf> = plan.entries.iter().map(|entry| entry.item.in_trash.clone()).collect();
+    let whole: Vec<PathBuf> = plan
+        .entries
+        .iter()
+        .map(|entry| entry.item.in_trash.clone())
+        .collect();
     let (folders, verb) = match missing.as_slice() {
         [only] => (format!("The folder {}", only.display()), "is"),
-        many => (format!("{} folders, such as {},", many.len(), many[0].display()), "are"),
+        many => (
+            format!("{} folders, such as {},", many.len(), many[0].display()),
+            "are",
+        ),
     };
     let env = env.clone();
     env.overlays.show_dialog(
         dialog(
             format!("Make the folder again to restore {}?", what(&whole)),
-            format!("{folders} {verb} no longer there. Restoring will make {} again.", if missing.len() == 1 { "it" } else { "them" }),
+            format!(
+                "{folders} {verb} no longer there. Restoring will make {} again.",
+                if missing.len() == 1 { "it" } else { "them" }
+            ),
         )
         .cancel("Cancel")
         .default_action("restore")
@@ -625,7 +666,7 @@ fn run_restore(env: &Env, plan: RestorePlan, create_missing: bool) {
             Err(RestoreFailure { done, error }) => {
                 let any = !done.is_empty();
                 if any {
-                    undo::push(Step::Restore(done.clone()));
+                    undo::push(&env, Step::Restore(done.clone()));
                     select_back(&env, &done);
                 }
                 match error {
@@ -652,10 +693,12 @@ fn restored_done(env: &Env, restored: Vec<Restored>) {
     }
     let paths: Vec<PathBuf> = restored.iter().map(|item| item.to.clone()).collect();
     select_back(env, &restored);
-    undo::push(Step::Restore(restored));
+    undo::push(env, Step::Restore(restored));
     let again = env.clone();
     env.overlays
-        .toast_with_action(restored_text(&paths), "Undo", move |_: ()| super::transfer::undo(&again));
+        .toast_with_action(restored_text(&paths), "Undo", move |_: ()| {
+            super::transfer::undo(&again)
+        });
 }
 
 /// A restore into the folder on show selects what came back; elsewhere the
@@ -708,13 +751,21 @@ pub(super) fn route(
     place: impl Fn(&Path) -> Option<InBin>,
 ) -> Route {
     if let Some(place) = place(dest) {
-        return if place.is_root() { Route::IntoTrash } else { Route::Refuse };
+        return if place.is_root() {
+            Route::IntoTrash
+        } else {
+            Route::Refuse
+        };
     }
     let all_items = !paths.is_empty()
         && paths
             .iter()
             .all(|path| place(path).is_some_and(|place| place.is_item()));
-    if !copy && all_items { Route::OutOfTrash } else { Route::Plain }
+    if !copy && all_items {
+        Route::OutOfTrash
+    } else {
+        Route::Plain
+    }
 }
 
 /// Handle a drop or paste that involves the Trash. Returns whether it did;
@@ -765,9 +816,18 @@ mod tests {
 
     #[test]
     fn the_toasts_name_the_item_or_count_them() {
-        assert_eq!(moved_text(&paths(&["/a/report.txt"])), "Moved “report.txt” to Trash");
-        assert_eq!(moved_text(&paths(&["/a/x", "/a/y", "/a/z"])), "Moved 3 items to Trash");
-        assert_eq!(restored_text(&paths(&["/a/report.txt"])), "Restored “report.txt”");
+        assert_eq!(
+            moved_text(&paths(&["/a/report.txt"])),
+            "Moved “report.txt” to Trash"
+        );
+        assert_eq!(
+            moved_text(&paths(&["/a/x", "/a/y", "/a/z"])),
+            "Moved 3 items to Trash"
+        );
+        assert_eq!(
+            restored_text(&paths(&["/a/report.txt"])),
+            "Restored “report.txt”"
+        );
         assert_eq!(restored_text(&paths(&["/a/x", "/a/y"])), "Restored 2 items");
     }
 
@@ -775,8 +835,16 @@ mod tests {
     fn the_delete_question_says_it_cannot_be_undone_in_and_out_of_the_trash() {
         let out = delete_prompt(&paths(&["/a/report.txt"]), None, false);
         assert_eq!(out.title, "Delete “report.txt” permanently?");
-        assert!(out.body.starts_with("It will be deleted for good."), "{}", out.body);
-        assert!(out.body.contains("will not go to the Trash"), "{}", out.body);
+        assert!(
+            out.body.starts_with("It will be deleted for good."),
+            "{}",
+            out.body
+        );
+        assert!(
+            out.body.contains("will not go to the Trash"),
+            "{}",
+            out.body
+        );
         assert!(out.body.contains("cannot be undone"), "{}", out.body);
 
         let many = delete_prompt(
@@ -785,27 +853,59 @@ mod tests {
             false,
         );
         assert_eq!(many.title, "Delete 3 items permanently?");
-        assert!(many.body.starts_with("They cannot be moved to the Trash. They will be deleted"), "{}", many.body);
-        assert!(many.body.contains("Undo cannot bring them back"), "{}", many.body);
+        assert!(
+            many.body
+                .starts_with("They cannot be moved to the Trash. They will be deleted"),
+            "{}",
+            many.body
+        );
+        assert!(
+            many.body.contains("Undo cannot bring them back"),
+            "{}",
+            many.body
+        );
 
         // In the Trash there is no Trash to avoid: no talk of it.
         let bin = delete_prompt(&paths(&["/a/x", "/a/y"]), None, true);
         assert_eq!(bin.title, "Delete 2 items permanently?");
-        assert!(bin.body.starts_with("They will be deleted permanently."), "{}", bin.body);
+        assert!(
+            bin.body.starts_with("They will be deleted permanently."),
+            "{}",
+            bin.body
+        );
         assert!(!bin.body.contains("Trash"), "{}", bin.body);
         assert!(bin.body.contains("cannot be undone"), "{}", bin.body);
     }
 
     #[test]
     fn the_empty_question_has_the_count_and_the_size() {
-        let some = empty_prompt(TrashSummary { items: 124, bytes: 3_200_000_000 });
+        let some = empty_prompt(TrashSummary {
+            items: 124,
+            bytes: 3_200_000_000,
+        });
         assert_eq!(some.title, "Empty the Trash?");
-        assert!(some.body.starts_with("124 items (3.2 GB) in the Trash will be deleted for good."), "{}", some.body);
+        assert!(
+            some.body
+                .starts_with("124 items (3.2\u{a0}GB) in the Trash will be deleted for good."),
+            "{}",
+            some.body
+        );
         assert!(some.body.contains("cannot be undone"), "{}", some.body);
-        let one = empty_prompt(TrashSummary { items: 1, bytes: 4096 });
-        assert!(one.body.starts_with("1 item (4.1 kB) in the Trash"), "{}", one.body);
+        let one = empty_prompt(TrashSummary {
+            items: 1,
+            bytes: 4096,
+        });
+        assert!(
+            one.body.starts_with("1 item (4.1\u{a0}kB) in the Trash"),
+            "{}",
+            one.body
+        );
         let bare = empty_prompt(TrashSummary { items: 3, bytes: 0 });
-        assert!(bare.body.starts_with("3 items in the Trash will"), "{}", bare.body);
+        assert!(
+            bare.body.starts_with("3 items in the Trash will"),
+            "{}",
+            bare.body
+        );
     }
 
     // ---- what the Trash refuses ---------------------------------------------
@@ -830,7 +930,13 @@ mod tests {
     #[test]
     fn items_the_trash_refuses_are_sorted_by_whether_a_delete_is_a_fair_offer() {
         let plan = plan_trash(
-            paths(&["/home/a/x", "/mnt/nas/b", "/home/a", "/mnt/cd/c", "/home/a/Documents"]),
+            paths(&[
+                "/home/a/x",
+                "/mnt/nas/b",
+                "/home/a",
+                "/mnt/cd/c",
+                "/home/a/Documents",
+            ]),
             check,
         );
         assert_eq!(plan.bin, paths(&["/home/a/x"]));
@@ -862,10 +968,17 @@ mod tests {
         assert_eq!(nas.delete, paths(&["/mnt/nas/b"]));
         assert_eq!(
             nas.delete_reason.as_deref(),
-            Some("Its drive has no Trash and one cannot be made there, so it cannot be moved to the Trash.")
+            Some(
+                "Its drive has no Trash and one cannot be made there, so it cannot be moved to the Trash."
+            )
         );
-        let bin = sort_refusals(plan_trash(paths(&["/home/a/.local/share/Trash/files/x"]), check).refused);
-        assert_eq!(bin.delete_reason.as_deref(), Some("It is in the Trash already."));
+        let bin = sort_refusals(
+            plan_trash(paths(&["/home/a/.local/share/Trash/files/x"]), check).refused,
+        );
+        assert_eq!(
+            bin.delete_reason.as_deref(),
+            Some("It is in the Trash already.")
+        );
         let home = sort_refusals(plan_trash(paths(&["/home/a"]), check).refused);
         assert_eq!(
             home.refused_text.as_deref(),
@@ -905,20 +1018,54 @@ mod tests {
         let sub = format!("{HOME_BIN}/files/proj");
         // Onto the Trash place: trash them, even with Ctrl (a copy cannot go there).
         for copy in [false, true] {
-            assert_eq!(route(&paths(&["/home/a/x"]), Path::new(&bin_root), copy, place), Route::IntoTrash);
+            assert_eq!(
+                route(&paths(&["/home/a/x"]), Path::new(&bin_root), copy, place),
+                Route::IntoTrash
+            );
         }
         // Onto a folder in the Trash: refused.
-        assert_eq!(route(&paths(&["/home/a/x"]), Path::new(&sub), false, place), Route::Refuse);
+        assert_eq!(
+            route(&paths(&["/home/a/x"]), Path::new(&sub), false, place),
+            Route::Refuse
+        );
         // Out of the Trash into a folder: restore, unless it is a copy.
-        assert_eq!(route(&paths(&[&item]), Path::new("/home/a/Docs"), false, place), Route::OutOfTrash);
-        assert_eq!(route(&paths(&[&item]), Path::new("/home/a/Docs"), true, place), Route::Plain);
+        assert_eq!(
+            route(&paths(&[&item]), Path::new("/home/a/Docs"), false, place),
+            Route::OutOfTrash
+        );
+        assert_eq!(
+            route(&paths(&[&item]), Path::new("/home/a/Docs"), true, place),
+            Route::Plain
+        );
         // Something inside a trashed folder is not an item: a plain move.
-        assert_eq!(route(&paths(&[&inside]), Path::new("/home/a/Docs"), false, place), Route::Plain);
+        assert_eq!(
+            route(&paths(&[&inside]), Path::new("/home/a/Docs"), false, place),
+            Route::Plain
+        );
         // A mix is not all items either.
-        assert_eq!(route(&paths(&[&item, "/home/a/x"]), Path::new("/home/a/Docs"), false, place), Route::Plain);
+        assert_eq!(
+            route(
+                &paths(&[&item, "/home/a/x"]),
+                Path::new("/home/a/Docs"),
+                false,
+                place
+            ),
+            Route::Plain
+        );
         // Ordinary drops stay ordinary.
-        assert_eq!(route(&paths(&["/home/a/x"]), Path::new("/home/a/Docs"), false, place), Route::Plain);
-        assert_eq!(route(&[], Path::new("/home/a/Docs"), false, place), Route::Plain);
+        assert_eq!(
+            route(
+                &paths(&["/home/a/x"]),
+                Path::new("/home/a/Docs"),
+                false,
+                place
+            ),
+            Route::Plain
+        );
+        assert_eq!(
+            route(&[], Path::new("/home/a/Docs"), false, place),
+            Route::Plain
+        );
     }
 
     #[test]
@@ -927,9 +1074,18 @@ mod tests {
         let rows: Vec<&PathBuf> = rows.iter().collect();
         let gone = |names: &[&str]| names.iter().map(PathBuf::from).collect::<Vec<_>>();
         assert_eq!(next_row(&rows, &gone(&["/b"])), Some(PathBuf::from("/c")));
-        assert_eq!(next_row(&rows, &gone(&["/b", "/c"])), Some(PathBuf::from("/d")));
-        assert_eq!(next_row(&rows, &gone(&["/a", "/c"])), Some(PathBuf::from("/d")));
-        assert_eq!(next_row(&rows, &gone(&["/c", "/d"])), Some(PathBuf::from("/b")));
+        assert_eq!(
+            next_row(&rows, &gone(&["/b", "/c"])),
+            Some(PathBuf::from("/d"))
+        );
+        assert_eq!(
+            next_row(&rows, &gone(&["/a", "/c"])),
+            Some(PathBuf::from("/d"))
+        );
+        assert_eq!(
+            next_row(&rows, &gone(&["/c", "/d"])),
+            Some(PathBuf::from("/b"))
+        );
         assert_eq!(next_row(&rows, &gone(&["/a", "/b", "/c", "/d"])), None);
         assert_eq!(next_row(&rows, &gone(&["/elsewhere"])), None);
     }

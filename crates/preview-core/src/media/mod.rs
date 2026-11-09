@@ -10,19 +10,20 @@
 //! | Format | [`image_info`] | [`av_info`] |
 //! | ------ | -------------- | ----------- |
 //! | PNG, GIF, BMP, WebP, JPEG | size; JPEG also its EXIF | |
+//! | TIFF, HEIF, AVIF | the size and camera its EXIF gives, when it has them | |
 //! | WAV, FLAC, Ogg Vorbis and Opus | | length, codec |
 //! | MP4, M4A, MOV | | length, codecs |
 //! | Matroska, WebM | | length, codecs |
 //!
-//! MP3 length needs a scan of every frame, and SVG, HEIF, AVIF, TIFF and
-//! JPEG XL need a container parser each; they show no facts here.
+//! MP3 length needs a scan of every frame, and SVG and JPEG XL need a parser
+//! each; they show no facts here.
 
 mod av;
 mod exif;
 mod image;
 
 pub use av::{AvInfo, av_info, av_info_from};
-pub use exif::{Exif, parse_exif};
+pub use exif::{Exif, parse_container, parse_exif};
 pub use image::{ImageInfo, image_info, image_info_from};
 
 /// The most an index read (`moov`, Matroska headers) takes from a file.

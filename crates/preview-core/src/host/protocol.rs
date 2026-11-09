@@ -33,11 +33,18 @@ pub const MAX_TRACKS: usize = 16;
 pub const MAX_PAGE_SIZES: usize = 256;
 /// The most pages the host opens; a longer document is shown up to here.
 pub const MAX_PAGES: u32 = 5000;
+/// The most outline entries one `OutlineIs` message lists.
+pub const MAX_OUTLINE: usize = 32;
+/// The most outline entries the host sends for a document.
+pub const MAX_OUTLINE_ENTRIES: usize = 4000;
 
 /// What the host can do, from `Ready`.
 pub mod feature {
     pub const MEDIA: u32 = 1;
     pub const DOCUMENT: u32 = 2;
+    /// Pictures a viewer's own codecs do not read: HEIF, AVIF, TIFF, camera
+    /// RAW previews, Radiance HDR and OpenEXR.
+    pub const IMAGE: u32 = 4;
 }
 
 /// Why the host gives up, from `Error`.
@@ -61,6 +68,18 @@ pub enum OpenedKind {
     Audio,
     Video,
     Document,
+    /// A picture, decoded whole and shown through `RenderPage` on page 0.
+    Image,
+}
+
+/// One entry of a document's outline (its table of contents).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutlineEntry {
+    /// 0 for a chapter, 1 for its sections, and so on.
+    pub depth: u8,
+    /// The page it goes to, counting from 0, or `u32::MAX` for none.
+    pub page: u32,
+    pub title: String,
 }
 
 /// A rectangle on a page, in points from its top left corner, in thousandths.
@@ -90,6 +109,13 @@ pub enum Message {
     OpenMedia { want_video: bool, max_w: u32, max_h: u32, autoplay: bool, subtitle_file: bool },
     /// Open the document on the first descriptor.
     OpenDocument,
+    /// Decode the picture on the first descriptor. `raw` says it is a camera
+    /// file: the host shows the largest preview it carries. The answer is
+    /// `Opened` (kind `Image`, the size in `video_w` and `video_h` after any
+    /// turn the file asks for), then pixels for each `RenderPage`.
+    OpenImage { raw: bool },
+    /// The document's outline, as `OutlineIs` messages.
+    Outline,
     Play,
     Pause,
     /// Move to `ns`. `accurate` lands on that exact frame (slower); otherwise
@@ -144,6 +170,8 @@ pub enum Message {
     PageSizes { first: u32, sizes: Vec<(u32, u32)> },
     /// A search finished: `hits` words matched over all pages.
     SearchDone { hits: u32 },
+    /// Entries of the outline; `more` says another message follows.
+    OutlineIs { entries: Vec<OutlineEntry>, more: bool },
     Error { code: ErrorCode, message: String },
 }
 
@@ -204,6 +232,9 @@ mod tag {
     pub const ERROR: u8 = 74;
     pub const PAGE_SIZES: u8 = 75;
     pub const SEARCH_DONE: u8 = 76;
+    pub const OUTLINE_IS: u8 = 77;
+    pub const OPEN_IMAGE: u8 = 18;
+    pub const OUTLINE: u8 = 19;
 }
 
 /// A message and the request it belongs to.
@@ -330,6 +361,7 @@ impl OpenedKind {
             OpenedKind::Audio => 0,
             OpenedKind::Video => 1,
             OpenedKind::Document => 2,
+            OpenedKind::Image => 3,
         }
     }
     fn from_u8(value: u8) -> Result<Self, ProtocolError> {
@@ -337,6 +369,7 @@ impl OpenedKind {
             0 => OpenedKind::Audio,
             1 => OpenedKind::Video,
             2 => OpenedKind::Document,
+            3 => OpenedKind::Image,
             _ => return Err(ProtocolError::BadValue),
         })
     }
@@ -350,6 +383,8 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
         Hello { .. } => tag::HELLO,
         OpenMedia { .. } => tag::OPEN_MEDIA,
         OpenDocument => tag::OPEN_DOCUMENT,
+        OpenImage { .. } => tag::OPEN_IMAGE,
+        Outline => tag::OUTLINE,
         Play => tag::PLAY,
         Pause => tag::PAUSE,
         Seek { .. } => tag::SEEK,
@@ -376,6 +411,7 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
         SearchHit { .. } => tag::SEARCH_HIT,
         PageSizes { .. } => tag::PAGE_SIZES,
         SearchDone { .. } => tag::SEARCH_DONE,
+        OutlineIs { .. } => tag::OUTLINE_IS,
         Error { .. } => tag::ERROR,
     };
     out.u8(tag);
@@ -391,7 +427,8 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
             out.bool(*autoplay);
             out.bool(*subtitle_file);
         }
-        OpenDocument | Play | Pause | Close => {}
+        OpenDocument | Outline | Play | Pause | Close => {}
+        OpenImage { raw } => out.bool(*raw),
         Seek { ns, accurate } => {
             out.u64(*ns);
             out.bool(*accurate);
@@ -503,6 +540,27 @@ pub fn encode(packet: &Packet) -> Vec<u8> {
             }
         }
         SearchDone { hits } => out.u32(*hits),
+        OutlineIs { entries, more } => {
+            out.bool(*more);
+            // As many entries as fit: a message is at most `MAX_MESSAGE`.
+            let mut budget = MAX_MESSAGE - 64;
+            let fit = entries
+                .iter()
+                .take(MAX_OUTLINE)
+                .take_while(|entry| {
+                    let size = 1 + 4 + 2 + entry.title.len().min(512);
+                    let fits = size <= budget;
+                    budget = budget.saturating_sub(size);
+                    fits
+                })
+                .count();
+            out.u16(fit as u16);
+            for entry in &entries[..fit] {
+                out.u8(entry.depth);
+                out.u32(entry.page);
+                out.str(&entry.title);
+            }
+        }
         Error { code, message } => {
             out.u8(code.to_u8());
             out.str(message);
@@ -537,6 +595,8 @@ pub fn decode(bytes: &[u8]) -> Result<Packet, ProtocolError> {
             subtitle_file: r.bool()?,
         },
         tag::OPEN_DOCUMENT => OpenDocument,
+        tag::OPEN_IMAGE => OpenImage { raw: r.bool()? },
+        tag::OUTLINE => Outline,
         tag::PLAY => Play,
         tag::PAUSE => Pause,
         tag::SEEK => Seek { ns: r.u64()?, accurate: r.bool()? },
@@ -634,6 +694,18 @@ pub fn decode(bytes: &[u8]) -> Result<Packet, ProtocolError> {
             PageSizes { first, sizes }
         }
         tag::SEARCH_DONE => SearchDone { hits: r.u32()? },
+        tag::OUTLINE_IS => {
+            let more = r.bool()?;
+            let mut entries = Vec::new();
+            for _ in 0..r.count(MAX_OUTLINE)? {
+                entries.push(OutlineEntry {
+                    depth: r.u8()?,
+                    page: r.u32()?,
+                    title: r.str()?,
+                });
+            }
+            OutlineIs { entries, more }
+        }
         tag::ERROR => Error {
             code: ErrorCode::from_u8(r.u8()?)?,
             message: r.str()?,
@@ -656,6 +728,8 @@ mod tests {
             Message::Hello { version: 1 },
             Message::OpenMedia { want_video: true, max_w: 1280, max_h: 720, autoplay: false, subtitle_file: true },
             Message::OpenDocument,
+            Message::OpenImage { raw: true },
+            Message::Outline,
             Message::Play,
             Message::Pause,
             Message::Seek { ns: 5_000_000_000, accurate: true },
@@ -695,6 +769,14 @@ mod tests {
             Message::SearchHit { page: 2, rects: vec![rect, rect] },
             Message::PageSizes { first: 3, sizes: vec![(612_000, 792_000), (595_000, 842_000)] },
             Message::SearchDone { hits: 4 },
+            Message::OutlineIs {
+                entries: vec![
+                    OutlineEntry { depth: 0, page: 0, title: "Introduction".into() },
+                    OutlineEntry { depth: 1, page: 3, title: "Why \u{e9}vidence".into() },
+                    OutlineEntry { depth: 0, page: u32::MAX, title: String::new() },
+                ],
+                more: true,
+            },
             Message::Error { code: ErrorCode::NoDecoder, message: "No decoder for H.265.".into() },
         ]
     }

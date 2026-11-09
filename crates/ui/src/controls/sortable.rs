@@ -49,7 +49,7 @@ use freya::prelude::*;
 
 use super::press::use_press;
 use crate::component::ComponentName;
-use crate::drag::{PointerDrag, Frames, is_touch, use_frames, use_pointer_drag};
+use crate::drag::{Frames, PointerDrag, is_touch, use_frames, use_pointer_drag};
 use crate::group::{SlotFilter, card_rows};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
@@ -190,7 +190,10 @@ impl Env {
         self.shared.scroll_start.set(self.scroll_y());
         self.shared.carry.set(0.0);
         self.shared.focus_after.set(None);
-        self.shared.reorder.borrow_mut().pick(Stack::new(sizes, 0.0), index);
+        self.shared
+            .reorder
+            .borrow_mut()
+            .pick(Stack::new(sizes, 0.0), index);
         self.publish();
         self.start_frames();
         true
@@ -202,7 +205,13 @@ impl Env {
             return;
         }
         let grip = Dim::RowButton.px();
-        let row = self.shared.sizes.borrow().get(index).copied().unwrap_or(grip);
+        let row = self
+            .shared
+            .sizes
+            .borrow()
+            .get(index)
+            .copied()
+            .unwrap_or(grip);
         let within = event.element_location().y as f32 + (row - grip) / 2.0;
         if !self.pick(index, within) {
             return;
@@ -468,12 +477,23 @@ impl Component for Sortable {
                 let lifted = rect()
                     .tw(
                         &tokens,
-                        &[w_full(), flex_row(), grow_children(), items(Align::Center), pr(ROW_INSET)],
+                        &[
+                            w_full(),
+                            flex_row(),
+                            grow_children(),
+                            items(Align::Center),
+                            pr(ROW_INSET),
+                        ],
                     )
                     .maybe(held, |lifted| {
                         lifted
-                            .tw(&tokens, &[rounded(Radius::Card), fill(lifted_fill), lift_shadow(lift)])
-                            .maybe(lift > 0.5, |lifted| lifted.tw(&tokens, &[border(Line::Hairline)]))
+                            .tw(
+                                &tokens,
+                                &[rounded(Radius::Card), fill(lifted_fill), lift_shadow(lift)],
+                            )
+                            .maybe(lift > 0.5, |lifted| {
+                                lifted.tw(&tokens, &[border(Line::Hairline)])
+                            })
                             .layer(HELD_LAYER)
                             .scale(1.0 + LIFT_SCALE * lift)
                             .opacity(1.0 - LIFT_FADE * lift)
@@ -508,10 +528,14 @@ impl Component for Sortable {
                         let env = long_env.clone();
                         down_press.begin(
                             &event,
-                            Some(EventHandler::new(move |at: (f32, f32)| env.long_press(index, at, within))),
+                            Some(EventHandler::new(move |at: (f32, f32)| {
+                                env.long_press(index, at, within)
+                            })),
                         );
                     })
-                    .on_global_pointer_move(move |event: Event<PointerEventData>| move_press.moved(&event))
+                    .on_global_pointer_move(move |event: Event<PointerEventData>| {
+                        move_press.moved(&event)
+                    })
                     .on_global_pointer_up(move |_| up_press.release())
                     .on_key_down(move |event: Event<KeyboardEventData>| {
                         if !event.modifiers.alt() {
@@ -542,12 +566,10 @@ impl Component for Sortable {
                 .position(Position::new_absolute().top(top - 1.0).left(0.0))
                 .layer(LINE_LAYER)
                 .tw(&tokens, &[w_full(), h(Dim::Ring), px(GUTTER)])
-                .child(
-                    rect().tw(
-                        &tokens,
-                        &[w_full(), h_full(), rounded(Radius::Pill), bg(Paint::Accent)],
-                    ),
-                )
+                .child(rect().tw(
+                    &tokens,
+                    &[w_full(), h_full(), rounded(Radius::Pill), bg(Paint::Accent)],
+                ))
         });
         let message = announce.read().clone();
         let live = (!message.is_empty()).then(|| {
@@ -578,11 +600,7 @@ impl Component for Sortable {
             .children(card_rows(rows, lit, filter))
             .maybe_child(line)
             .maybe_child(live);
-        drag.track(
-            card,
-            move |_| release.release(),
-            move || cancel.cancel(),
-        )
+        drag.track(card, move |_| release.release(), move || cancel.cancel())
     }
 }
 
@@ -637,7 +655,11 @@ impl Component for Grip {
                     surface(Paint::Transparent, glow && !down, down, false),
                 ],
             )
-            .cursor(if self.held { CursorIcon::Grabbing } else { CursorIcon::Grab })
+            .cursor(if self.held {
+                CursorIcon::Grabbing
+            } else {
+                CursorIcon::Grab
+            })
             .maybe(!movable, |grip| grip.opacity(0.4))
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
@@ -669,7 +691,8 @@ impl Component for Grip {
                 } else {
                     Ink::Muted.color(&tokens)
                 },
-            )).focusable(focus())
+            ))
+            .focusable(focus())
     }
 }
 

@@ -1,6 +1,6 @@
 //! The rows of the Info panel: pure, from what the viewer loaded.
 
-use bingux_files::display;
+use crate::files::display;
 use bingux_preview_core::{Loaded, PreviewSource};
 
 use super::subject::Resolved;
@@ -13,14 +13,20 @@ pub struct InfoRow {
 }
 
 fn row(label: &'static str, value: impl Into<String>) -> InfoRow {
-    InfoRow { label, value: value.into() }
+    InfoRow {
+        label,
+        value: value.into(),
+    }
 }
 
 /// The facts of every file, then those the viewer read. Rows that have no
 /// value are left out.
 pub fn rows(resolved: &Resolved) -> Vec<InfoRow> {
     let facts = &resolved.facts;
-    let mut rows = vec![row("Name", facts.name.clone()), row("Type", facts.description)];
+    let mut rows = vec![
+        row("Name", facts.name.clone()),
+        row("Type", facts.description),
+    ];
     if let Some(size) = facts.size {
         rows.push(row("Size", display::size(size)));
     }
@@ -39,9 +45,14 @@ pub fn rows(resolved: &Resolved) -> Vec<InfoRow> {
             rows.extend(exif.lens.clone().map(|text| row("Lens", text)));
             rows.extend(exif.taken.clone().map(|text| row("Taken", text)));
             rows.extend(exif.exposure.clone().map(|text| row("Exposure", text)));
+            rows.extend(exif.software.clone().map(|text| row("Software", text)));
+            rows.extend(exif.location.clone().map(|text| row("Place", text)));
         }
         Loaded::Media(Some(info)) => {
-            rows.extend(info.seconds.map(|seconds| row("Length", bingux_preview_core::media::clock(seconds))));
+            rows.extend(
+                info.seconds
+                    .map(|seconds| row("Length", bingux_preview_core::media::clock(seconds))),
+            );
             rows.extend(info.codec_line().map(|text| row("Codecs", text)));
         }
         Loaded::Text(window) => {
@@ -56,7 +67,11 @@ pub fn rows(resolved: &Resolved) -> Vec<InfoRow> {
             rows.push(row("Format", listing.format.name()));
             rows.push(row(
                 "Contents",
-                format!("{files} {}{}", if files == 1 { "file" } else { "files" }, if listing.truncated { " or more" } else { "" }),
+                format!(
+                    "{files} {}{}",
+                    if files == 1 { "file" } else { "files" },
+                    if listing.truncated { " or more" } else { "" }
+                ),
             ));
             if bytes > 0 {
                 rows.push(row("Unpacked", display::size(bytes)));
@@ -108,10 +123,18 @@ mod tests {
             exif: Default::default(),
         };
         info.exif.camera = Some("Canon EOS R5".into());
-        let picture = resolved("holiday.png", 2_500_000, Loaded::Image(Some(info)), ViewerId::Image);
+        let picture = resolved(
+            "holiday.png",
+            2_500_000,
+            Loaded::Image(Some(info)),
+            ViewerId::Image,
+        );
         let rows = rows(&picture);
         let labels: Vec<_> = rows.iter().map(|row| row.label).collect();
-        assert_eq!(labels, ["Name", "Type", "Size", "Dimensions", "Resolution", "Camera"]);
+        assert_eq!(
+            labels,
+            ["Name", "Type", "Size", "Dimensions", "Resolution", "Camera"]
+        );
     }
 
     #[test]
@@ -126,8 +149,14 @@ mod tests {
             ViewerId::Media,
         );
         let values: Vec<String> = rows(&song).into_iter().map(|row| row.value).collect();
-        assert!(values.iter().any(|value| value.contains("3:07")), "{values:?}");
-        assert!(values.iter().any(|value| value.contains("FLAC")), "{values:?}");
+        assert!(
+            values.iter().any(|value| value.contains("3:07")),
+            "{values:?}"
+        );
+        assert!(
+            values.iter().any(|value| value.contains("FLAC")),
+            "{values:?}"
+        );
     }
 
     #[test]

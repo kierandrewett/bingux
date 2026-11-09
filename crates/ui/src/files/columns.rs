@@ -38,7 +38,8 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bingux_files::display::{self, Civil};
+use crate::format::{Date, DatePart, Moment, Relative, Time, YearDisplay, Zone};
+use bingux_files::display::{Civil, local_offset};
 use bingux_files::{Entry, Kind as EntryKind, Sort, SortKey};
 use freya::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -446,7 +447,10 @@ impl ColumnLayout {
         let others: Vec<Column> = among.iter().copied().filter(|c| *c != column).collect();
         let moving = self.columns.remove(from);
         let at = match others.get(slot) {
-            Some(before) => self.columns.iter().position(|known| known.column == *before),
+            Some(before) => self
+                .columns
+                .iter()
+                .position(|known| known.column == *before),
             None => others
                 .last()
                 .and_then(|last| self.columns.iter().position(|known| known.column == *last))
@@ -535,7 +539,12 @@ pub fn plan(layout: &ColumnLayout, available: f32, set: impl Into<ColumnSet>) ->
 /// [`plan`] for a measured row of `row_width` pixels whose icon is `icon_px`
 /// wide: the icon [`gutter`] is taken off first. Call it while rendering, as
 /// the gutter gap reads the size class.
-pub fn plan_in(layout: &ColumnLayout, icon_px: f32, row_width: f32, set: impl Into<ColumnSet>) -> Plan {
+pub fn plan_in(
+    layout: &ColumnLayout,
+    icon_px: f32,
+    row_width: f32,
+    set: impl Into<ColumnSet>,
+) -> Plan {
     let available = if row_width > 0.0 {
         (row_width - gutter(icon_px)).max(1.0)
     } else {
@@ -593,7 +602,8 @@ pub fn name_cell(plan: &Plan, child: impl IntoElement) -> Rect {
 // Cell text
 // ----------------------------------------------------------------------------
 
-/// How a time column writes a date.
+/// How a time column writes a date, in the person's language and order
+/// (`crate::format`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DateStyle {
     /// `12 Mar` this year, `12 Mar 2025` before.
@@ -603,11 +613,6 @@ pub enum DateStyle {
     /// is how long ago.
     Relative,
 }
-
-const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 // FilesModel is adding `sized`, `created`, `accessed`, `mode` and `owner` to
 // `Entry` (see /var/tmp/FilesModel/API.md). Until they land these shims stand
@@ -644,7 +649,7 @@ pub fn cell_text_styled(
     home: &Path,
     dates: DateStyle,
 ) -> String {
-    text_with(column, entry, now, home, dates, &display::local_offset)
+    text_with(column, entry, now, home, dates, &local_offset)
 }
 
 /// The cell text, with the zone offset as a parameter so tests need not
@@ -676,7 +681,7 @@ fn text_with(
             } else if !sized(entry) {
                 "\u{2013}".to_string()
             } else {
-                display::size(entry.size)
+                super::display::size(entry.size)
             }
         }
         Column::Kind => entry.mime.description.to_string(),
@@ -691,10 +696,10 @@ fn text_with(
         // Where it was, as the folder it was in; nothing is known when the
         // info file is missing. The Trash says how long ago, as Recent does.
         Column::OriginalLocation => match entry.trash.as_ref() {
-            Some(trash) => trash
-                .original
-                .as_deref()
-                .map_or_else(|| "Unknown".to_owned(), |original| location_text(original, home)),
+            Some(trash) => trash.original.as_deref().map_or_else(
+                || "Unknown".to_owned(),
+                |original| location_text(original, home),
+            ),
             None => String::new(),
         },
         Column::Deleted => {
@@ -714,16 +719,18 @@ fn unix_seconds(time: SystemTime) -> i64 {
     }
 }
 
-/// `12 Mar` in the year of `now`, `12 Mar 2025` in another.
+/// `12 Mar` in the year of `now`, `12 Mar 2025` in another, read on a clock
+/// `offset` seconds east of UTC.
 fn absolute_date(seconds: i64, now: i64, offset: i64) -> String {
-    let then = Civil::from_unix(seconds, offset);
-    let today = Civil::from_unix(now, offset);
-    let month = MONTHS[then.month as usize - 1];
-    if then.year == today.year {
-        format!("{} {month}", then.day)
-    } else {
-        format!("{} {month} {}", then.day, then.year)
-    }
+    Date::new(Moment::from_unix(seconds))
+        .zone(zone_of(offset))
+        .now(Moment::from_unix(now))
+        .year(YearDisplay::IfNotCurrent)
+        .format()
+}
+
+fn zone_of(offset: i64) -> Zone {
+    Zone::Offset(i32::try_from(offset).unwrap_or(0))
 }
 
 fn relative_date(seconds: i64, now: i64, offset: i64) -> String {
@@ -736,31 +743,32 @@ fn relative_date(seconds: i64, now: i64, offset: i64) -> String {
             absolute_date(seconds, now, offset)
         };
     }
-    let plural = |count: i64, unit: &str| {
-        if count == 1 {
-            format!("1 {unit} ago")
-        } else {
-            format!("{count} {unit}s ago")
-        }
+    let ago = || {
+        Relative::new(Moment::from_unix(seconds))
+            .now(Moment::from_unix(now))
+            .format()
     };
     if elapsed < 60 {
         return "Just now".into();
     }
-    if elapsed < 3600 {
-        return plural(elapsed / 60, "minute");
-    }
     if elapsed < 6 * 3600 {
-        return plural(elapsed / 3600, "hour");
+        return ago();
     }
+    // Which day it was is the calendar's question, so the buckets go by
+    // the day numbers; the words are the locale's.
     let then = Civil::from_unix(seconds, offset);
     let today = Civil::from_unix(now, offset);
-    let clock = format!("{:02}:{:02}", then.hour, then.minute);
+    let moment = Moment::from_unix(seconds);
+    let clock = Time::new(moment).zone(zone_of(offset)).format();
     match today.day_number - then.day_number {
         0 => format!("Today {clock}"),
         1 => format!("Yesterday {clock}"),
         2..=6 => {
-            let weekday = (then.day_number + 3).rem_euclid(7) as usize;
-            format!("{} {clock}", WEEKDAYS[weekday])
+            let weekday = Date::new(moment)
+                .zone(zone_of(offset))
+                .part(DatePart::Weekday)
+                .format();
+            format!("{weekday} {clock}")
         }
         _ => absolute_date(seconds, now, offset),
     }
@@ -901,7 +909,10 @@ fn line_position(widths: &[f32], dragged: usize, slot: usize) -> f32 {
         edges.push((index, left, left + width));
         left += width;
     }
-    let others: Vec<_> = edges.iter().filter(|(index, ..)| *index != dragged).collect();
+    let others: Vec<_> = edges
+        .iter()
+        .filter(|(index, ..)| *index != dragged)
+        .collect();
     match others.get(slot) {
         Some((_, start, _)) => *start,
         None => others.last().map_or(0.0, |(_, _, end)| *end),
@@ -1048,7 +1059,12 @@ impl Component for ColumnHeaders {
         let ignore_press = use_state(|| false);
         let last_edge_press = use_state(|| None::<(Instant, Column)>);
         let widths: Vec<f32> = self.plan.columns.iter().map(|(_, width)| *width).collect();
-        let drawn: Vec<Column> = self.plan.columns.iter().map(|(column, _)| *column).collect();
+        let drawn: Vec<Column> = self
+            .plan
+            .columns
+            .iter()
+            .map(|(column, _)| *column)
+            .collect();
         let shared = Shared {
             layout: self.layout,
             drag,
@@ -1082,7 +1098,9 @@ impl Component for ColumnHeaders {
                             event.prevent_default();
                         }
                     }
-                    Drag::Move { column, start_x, .. } => {
+                    Drag::Move {
+                        column, start_x, ..
+                    } => {
                         drag.set_if_modified(Some(Drag::Move {
                             column,
                             start_x,
@@ -1344,7 +1362,12 @@ impl Component for HeaderCell {
                     w_full(),
                     h_full(),
                     rounded(Radius::Mark),
-                    surface(Paint::Transparent, hovering(), self.moving || pressing(), false),
+                    surface(
+                        Paint::Transparent,
+                        hovering(),
+                        self.moving || pressing(),
+                        false,
+                    ),
                 ],
             )
             .on_pointer_enter(move |_| hovering.set(true))
@@ -1471,8 +1494,7 @@ impl Component for HeaderCell {
                 }
                 event.stop_propagation();
                 if shift {
-                    let Some(index) = shared.drawn.iter().position(|known| *known == column)
-                    else {
+                    let Some(index) = shared.drawn.iter().position(|known| *known == column) else {
                         return;
                     };
                     let slot = (index as i32 + step).clamp(0, shared.drawn.len() as i32 - 1);
@@ -1548,10 +1570,7 @@ mod tests {
             shown(&layout),
             vec![Column::Size, Column::Modified, Column::Location]
         );
-        assert_eq!(
-            layout.visible(false),
-            vec![Column::Size, Column::Modified]
-        );
+        assert_eq!(layout.visible(false), vec![Column::Size, Column::Modified]);
         assert!(layout.is_visible(Column::Name));
         assert!(!layout.is_visible(Column::Kind));
     }
@@ -1629,7 +1648,11 @@ mod tests {
     fn plan_leaves_location_out_without_it() {
         let layout = ColumnLayout::default();
         let plan = plan(&layout, 10_000.0, false);
-        assert!(plan.columns.iter().all(|(column, _)| *column != Column::Location));
+        assert!(
+            plan.columns
+                .iter()
+                .all(|(column, _)| *column != Column::Location)
+        );
         let plan = super::plan(&layout, 10_000.0, true);
         assert_eq!(plan.columns.last().map(|(c, _)| *c), Some(Column::Location));
     }
@@ -1685,10 +1708,16 @@ mod tests {
         // Shown: Size, Modified, Location; Kind sits hidden between.
         let among = shown(&layout);
         layout.move_to_slot(Column::Location, 0, &among);
-        assert_eq!(shown(&layout), vec![Column::Location, Column::Size, Column::Modified]);
+        assert_eq!(
+            shown(&layout),
+            vec![Column::Location, Column::Size, Column::Modified]
+        );
         let among = shown(&layout);
         layout.move_to_slot(Column::Location, 99, &among);
-        assert_eq!(shown(&layout), vec![Column::Size, Column::Modified, Column::Location]);
+        assert_eq!(
+            shown(&layout),
+            vec![Column::Size, Column::Modified, Column::Location]
+        );
         // A slot of its own index changes nothing.
         let before = layout.clone();
         let among = shown(&layout);
@@ -1697,7 +1726,10 @@ mod tests {
         // One step right swaps with the neighbour.
         let among = shown(&layout);
         layout.move_to_slot(Column::Size, 1, &among);
-        assert_eq!(shown(&layout), vec![Column::Modified, Column::Size, Column::Location]);
+        assert_eq!(
+            shown(&layout),
+            vec![Column::Modified, Column::Size, Column::Location]
+        );
     }
 
     #[test]
@@ -1759,7 +1791,10 @@ mod tests {
         let layout: ColumnLayout = serde_json::from_str(json).unwrap();
         let order = layout.order();
         // Known columns keep their saved order, new ones follow.
-        assert_eq!(order[..4], [Column::Name, Column::Owner, Column::Size, Column::Modified]);
+        assert_eq!(
+            order[..4],
+            [Column::Name, Column::Owner, Column::Size, Column::Modified]
+        );
         assert_eq!(order.len(), Column::ALL.len());
         assert!(layout.is_visible(Column::Owner));
         // The unknown column is dropped, the first duplicate wins.
@@ -1809,8 +1844,14 @@ mod tests {
     fn name_size_and_kind() {
         let entry = file("report.pdf", 1_500, None);
         let now = THEN;
-        assert_eq!(text(Column::Name, &entry, now, DateStyle::Absolute), "report.pdf");
-        assert_eq!(text(Column::Size, &entry, now, DateStyle::Absolute), "1.5 kB");
+        assert_eq!(
+            text(Column::Name, &entry, now, DateStyle::Absolute),
+            "report.pdf"
+        );
+        assert_eq!(
+            text(Column::Size, &entry, now, DateStyle::Absolute),
+            "1.5\u{a0}kB"
+        );
         let kind = text(Column::Kind, &entry, now, DateStyle::Absolute);
         assert!(!kind.is_empty());
         assert_eq!(kind, entry.mime.description);
@@ -1827,12 +1868,22 @@ mod tests {
         let entry = file("a.txt", 1, Some(THEN));
         // The same year drops the year.
         assert_eq!(
-            text(Column::Modified, &entry, THEN + 40 * 86_400, DateStyle::Absolute),
+            text(
+                Column::Modified,
+                &entry,
+                THEN + 40 * 86_400,
+                DateStyle::Absolute
+            ),
             "9 Mar"
         );
         // Another year keeps it.
         assert_eq!(
-            text(Column::Modified, &entry, THEN + 400 * 86_400, DateStyle::Absolute),
+            text(
+                Column::Modified,
+                &entry,
+                THEN + 400 * 86_400,
+                DateStyle::Absolute
+            ),
             "9 Mar 2024"
         );
         // The offset moves a time across midnight: 22:34 UTC is the 10th at +2 h.
@@ -1877,14 +1928,35 @@ mod tests {
 
     #[test]
     fn permissions() {
-        assert_eq!(permissions_text(0o755, EntryKind::Directory, false), "drwxr-xr-x");
-        assert_eq!(permissions_text(0o644, EntryKind::File, false), "-rw-r--r--");
+        assert_eq!(
+            permissions_text(0o755, EntryKind::Directory, false),
+            "drwxr-xr-x"
+        );
+        assert_eq!(
+            permissions_text(0o644, EntryKind::File, false),
+            "-rw-r--r--"
+        );
         assert_eq!(permissions_text(0o777, EntryKind::File, true), "lrwxrwxrwx");
-        assert_eq!(permissions_text(0o000, EntryKind::Other, false), "?---------");
-        assert_eq!(permissions_text(0o4755, EntryKind::File, false), "-rwsr-xr-x");
-        assert_eq!(permissions_text(0o4644, EntryKind::File, false), "-rwSr--r--");
-        assert_eq!(permissions_text(0o1777, EntryKind::Directory, false), "drwxrwxrwt");
-        assert_eq!(permissions_text(0o1776, EntryKind::Directory, false), "drwxrwxrwT");
+        assert_eq!(
+            permissions_text(0o000, EntryKind::Other, false),
+            "?---------"
+        );
+        assert_eq!(
+            permissions_text(0o4755, EntryKind::File, false),
+            "-rwsr-xr-x"
+        );
+        assert_eq!(
+            permissions_text(0o4644, EntryKind::File, false),
+            "-rwSr--r--"
+        );
+        assert_eq!(
+            permissions_text(0o1777, EntryKind::Directory, false),
+            "drwxrwxrwt"
+        );
+        assert_eq!(
+            permissions_text(0o1776, EntryKind::Directory, false),
+            "drwxrwxrwT"
+        );
     }
 
     #[test]
@@ -1895,7 +1967,10 @@ mod tests {
             "~/Documents/Reports"
         );
         assert_eq!(location_text(Path::new("/home/kieran/a.pdf"), home), "~");
-        assert_eq!(location_text(Path::new("/srv/share/a.pdf"), home), "/srv/share");
+        assert_eq!(
+            location_text(Path::new("/srv/share/a.pdf"), home),
+            "/srv/share"
+        );
         // A sibling that merely starts with the same letters is not inside it.
         assert_eq!(
             location_text(Path::new("/home/kieran2/a.pdf"), home),

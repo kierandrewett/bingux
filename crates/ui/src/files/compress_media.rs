@@ -6,10 +6,10 @@
 //! what to install. An encoder it lacks is a disabled option in its dropdown
 //! with the same kind of reason.
 
-use bingux_files::display::size;
+use crate::files::display::size;
 use bingux_files::ops::{
-    AUDIO_KBPS, AudioCodec, DIMENSIONS, Estimate, FRAME_RATES, HEIGHTS, ImageFormat, Level, MediaKind,
-    SOUND_KBPS, Sound, Tools, VideoCodec, VideoQuality,
+    AUDIO_KBPS, AudioCodec, DIMENSIONS, Estimate, FRAME_RATES, HEIGHTS, ImageFormat, Level,
+    MediaKind, SOUND_KBPS, Sound, Tools, VideoCodec, VideoQuality,
 };
 use freya::prelude::*;
 
@@ -41,14 +41,25 @@ pub(super) struct Media<'a> {
     pub choose: EventHandler<()>,
 }
 
-fn keyed<T: Copy>(items: &[T], key: impl Fn(T) -> String, label: impl Fn(T) -> String) -> Vec<(String, String)> {
-    items.iter().map(|item| (key(*item), label(*item))).collect()
+fn keyed<T: Copy>(
+    items: &[T],
+    key: impl Fn(T) -> String,
+    label: impl Fn(T) -> String,
+) -> Vec<(String, String)> {
+    items
+        .iter()
+        .map(|item| (key(*item), label(*item)))
+        .collect()
 }
 
 /// A group, or, when the kind cannot be made here, the one row that says why.
 fn missing(kind: MediaKind, reason: String) -> Element {
     Group::titled(kind.label())
-        .row(row(format!("{} cannot be made smaller", kind.label())).subtitle(reason).enabled(false))
+        .row(
+            row(format!("{} cannot be made smaller", kind.label()))
+                .subtitle(reason)
+                .enabled(false),
+        )
         .into()
 }
 
@@ -56,7 +67,11 @@ pub(super) fn media_groups(m: &Media<'_>) -> Vec<Element> {
     let mut groups = Vec::new();
     let Some(tools) = m.tools else {
         // Still looking: the card is already the right size.
-        groups.push(Group::titled("Checking").row(row("Looking for the tools that shrink media…").enabled(false)).into());
+        groups.push(
+            Group::titled("Checking")
+                .row(row("Looking for the tools that shrink media…").enabled(false))
+                .into(),
+        );
         return groups;
     };
     for kind in m.subject.kinds_present() {
@@ -71,7 +86,11 @@ pub(super) fn media_groups(m: &Media<'_>) -> Vec<Element> {
         });
     }
     // Nothing to reduce here means nothing to size or place.
-    if m.subject.kinds_present().iter().any(|kind| tools.unavailable(*kind).is_none()) {
+    if m.subject
+        .kinds_present()
+        .iter()
+        .any(|kind| tools.unavailable(*kind).is_none())
+    {
         groups.push(result(m));
     }
     groups
@@ -80,7 +99,11 @@ pub(super) fn media_groups(m: &Media<'_>) -> Vec<Element> {
 fn images(m: &Media<'_>, tools: &Tools) -> Element {
     let options = &m.draft.reduce.image;
     let mut state = m.fields.draft;
-    let formats = keyed(&ImageFormat::ALL, |f| f.key().to_string(), |f| f.label().to_string());
+    let formats = keyed(
+        &ImageFormat::ALL,
+        |f| f.key().to_string(),
+        |f| f.label().to_string(),
+    );
     let format_row = form_row(
         "Format",
         dropdown(formats, options.format.key(), move |key: String| {
@@ -97,16 +120,30 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
         state.write().reduce.image.quality = value.round().clamp(1.0, 100.0) as u8;
     })
     .max(100.0)
-    .value_text(if lossless { "Lossless".to_string() } else { options.quality.to_string() })
-    .subtitle(if lossless { "PNG keeps every pixel; only the packing changes." } else { "Lower is smaller." })
+    .value_text(if lossless {
+        "Lossless".to_string()
+    } else {
+        options.quality.to_string()
+    })
+    .subtitle(if lossless {
+        "PNG keeps every pixel; only the packing changes."
+    } else {
+        "Lower is smaller."
+    })
     .enabled(!lossless);
     let mut sizes = vec![("original".to_string(), dimension_label(None))];
-    sizes.extend(keyed(&DIMENSIONS, |px| px.to_string(), |px| dimension_label(Some(px))));
+    sizes.extend(keyed(
+        &DIMENSIONS,
+        |px| px.to_string(),
+        |px| dimension_label(Some(px)),
+    ));
     sizes.push(("custom".to_string(), "Other…".to_string()));
     let selected = if m.draft.custom_dimension {
         "custom".to_string()
     } else {
-        options.max_dimension.map_or_else(|| "original".to_string(), |px| px.to_string())
+        options
+            .max_dimension
+            .map_or_else(|| "original".to_string(), |px| px.to_string())
     };
     let cap_row = form_row(
         "Longest side",
@@ -121,7 +158,9 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
         m.draft.custom_dimension,
         S0,
         rect().child(Element::from(
-            form_field("Pixels", m.fields.dimension).suffix("px").error(m.check.dimension.clone()),
+            form_field("Pixels", m.fields.dimension)
+                .suffix("px")
+                .error(m.check.dimension.clone()),
         )),
     )
     .lazy();
@@ -131,10 +170,16 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
         .row(cap_row)
         .row(custom)
         .row(
-            switch_row("Remove location and camera data", options.strip_metadata, move |on: bool| {
-                state.write().reduce.image.strip_metadata = on;
-            })
-            .subtitle("Takes out the EXIF, including where and with what it was taken. The colours stay."),
+            switch_row(
+                "Remove location and camera data",
+                options.strip_metadata,
+                move |on: bool| {
+                    state.write().reduce.image.strip_metadata = on;
+                },
+            )
+            .subtitle(
+                "Takes out the EXIF, including where and with what it was taken. The colours stay.",
+            ),
         )
         .into()
 }
@@ -142,7 +187,11 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
 fn films(m: &Media<'_>, tools: &Tools) -> Element {
     let options = &m.draft.reduce.video;
     let mut state = m.fields.draft;
-    let codecs = keyed(&VideoCodec::ALL, |c| c.key().to_string(), |c| c.label().to_string());
+    let codecs = keyed(
+        &VideoCodec::ALL,
+        |c| c.key().to_string(),
+        |c| c.label().to_string(),
+    );
     let codec_row = form_row(
         "Format",
         dropdown(codecs, options.codec.key(), move |key: String| {
@@ -167,7 +216,10 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
             draft.reduce.video.quality = match key.as_str() {
                 "fastest" => VideoQuality::Level(Level::Fastest),
                 "smallest" => VideoQuality::Level(Level::Smallest),
-                "custom" => VideoQuality::Crf(bingux_files::ops::VideoCodec::crf_for(codec, Level::Balanced)),
+                "custom" => VideoQuality::Crf(bingux_files::ops::VideoCodec::crf_for(
+                    codec,
+                    Level::Balanced,
+                )),
                 _ => VideoQuality::Level(Level::Balanced),
             };
         }),
@@ -181,41 +233,62 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         matches!(options.quality, VideoQuality::Crf(_)),
         S0,
         rect().child(Element::from(
-            slider_row("Constant rate factor", f64::from(high - crf) / f64::from(high - low) * 100.0, move |value: f64| {
-                let mut draft = state.write();
-                let (low, high) = draft.reduce.video.codec.crf_range();
-                let crf = f64::from(high) - value / 100.0 * f64::from(high - low);
-                draft.reduce.video.quality = VideoQuality::Crf(crf.round().clamp(f64::from(low), f64::from(high)) as u8);
-            })
+            slider_row(
+                "Constant rate factor",
+                f64::from(high - crf) / f64::from(high - low) * 100.0,
+                move |value: f64| {
+                    let mut draft = state.write();
+                    let (low, high) = draft.reduce.video.codec.crf_range();
+                    let crf = f64::from(high) - value / 100.0 * f64::from(high - low);
+                    draft.reduce.video.quality =
+                        VideoQuality::Crf(crf.round().clamp(f64::from(low), f64::from(high)) as u8);
+                },
+            )
             .value_text(format!("CRF {crf}"))
             .subtitle("Higher quality on the right: a bigger file"),
         )),
     )
     .lazy();
     let mut heights = vec![("original".to_string(), height_label(None))];
-    heights.extend(keyed(&HEIGHTS, |px| px.to_string(), |px| height_label(Some(px))));
+    heights.extend(keyed(
+        &HEIGHTS,
+        |px| px.to_string(),
+        |px| height_label(Some(px)),
+    ));
     let height_row = form_row(
         "Resolution",
         dropdown(
             heights,
-            &options.max_height.map_or_else(|| "original".to_string(), |px| px.to_string()),
+            &options
+                .max_height
+                .map_or_else(|| "original".to_string(), |px| px.to_string()),
             move |key: String| state.write().reduce.video.max_height = key.parse().ok(),
         )
         .title("Resolution"),
     );
     let mut rates = vec![("original".to_string(), rate_label(None))];
-    rates.extend(keyed(&FRAME_RATES, |fps| fps.to_string(), |fps| rate_label(Some(fps))));
+    rates.extend(keyed(
+        &FRAME_RATES,
+        |fps| fps.to_string(),
+        |fps| rate_label(Some(fps)),
+    ));
     let rate_row = form_row(
         "Frame rate",
         dropdown(
             rates,
-            &options.max_fps.map_or_else(|| "original".to_string(), |fps| fps.to_string()),
+            &options
+                .max_fps
+                .map_or_else(|| "original".to_string(), |fps| fps.to_string()),
             move |key: String| state.write().reduce.video.max_fps = key.parse().ok(),
         )
         .title("Frame rate"),
     );
     let mut sounds = vec![("remove".to_string(), "Remove sound".to_string())];
-    sounds.extend(keyed(&SOUND_KBPS, |kbps| kbps.to_string(), |kbps| format!("{kbps} kbit/s")));
+    sounds.extend(keyed(
+        &SOUND_KBPS,
+        |kbps| kbps.to_string(),
+        |kbps| format!("{kbps} kbit/s"),
+    ));
     let sound_row = form_row(
         "Sound",
         dropdown(
@@ -238,9 +311,13 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
         .row(rate_row)
         .row(sound_row)
         .row(
-            switch_row("Remove location and other tags", options.strip_metadata, move |on: bool| {
-                state.write().reduce.video.strip_metadata = on;
-            })
+            switch_row(
+                "Remove location and other tags",
+                options.strip_metadata,
+                move |on: bool| {
+                    state.write().reduce.video.strip_metadata = on;
+                },
+            )
             .subtitle("Takes out the title, the place and the other tags"),
         )
         .into()
@@ -249,7 +326,11 @@ fn films(m: &Media<'_>, tools: &Tools) -> Element {
 fn songs(m: &Media<'_>, tools: &Tools) -> Element {
     let options = &m.draft.reduce.audio;
     let mut state = m.fields.draft;
-    let codecs = keyed(&AudioCodec::ALL, |c| c.key().to_string(), |c| c.label().to_string());
+    let codecs = keyed(
+        &AudioCodec::ALL,
+        |c| c.key().to_string(),
+        |c| c.label().to_string(),
+    );
     let codec_row = form_row(
         "Format",
         dropdown(codecs, options.codec.key(), move |key: String| {
@@ -260,10 +341,18 @@ fn songs(m: &Media<'_>, tools: &Tools) -> Element {
         .unavailable(audio_codecs_unavailable(tools))
         .title("Song format"),
     );
-    let rates = keyed(&AUDIO_KBPS, |kbps| kbps.to_string(), |kbps| format!("{kbps} kbit/s"));
+    let rates = keyed(
+        &AUDIO_KBPS,
+        |kbps| kbps.to_string(),
+        |kbps| format!("{kbps} kbit/s"),
+    );
     let lossless = !options.codec.has_bitrate();
     let rate_row = row("Bitrate")
-        .subtitle(if lossless { "FLAC keeps every sample; only the packing changes." } else { "Opus sounds fine at 96; MP3 wants 128 or more." })
+        .subtitle(if lossless {
+            "FLAC keeps every sample; only the packing changes."
+        } else {
+            "Opus sounds fine at 96; MP3 wants 128 or more."
+        })
         .trailing(
             dropdown(rates, &options.kbps.to_string(), move |key: String| {
                 if let Ok(kbps) = key.parse() {
@@ -277,9 +366,13 @@ fn songs(m: &Media<'_>, tools: &Tools) -> Element {
         .row(codec_row)
         .row(rate_row)
         .row(
-            switch_row("Remove tags and cover", options.strip_metadata, move |on: bool| {
-                state.write().reduce.audio.strip_metadata = on;
-            })
+            switch_row(
+                "Remove tags and cover",
+                options.strip_metadata,
+                move |on: bool| {
+                    state.write().reduce.audio.strip_metadata = on;
+                },
+            )
             .subtitle("Takes out the artist, the title and the picture"),
         )
         .into()
@@ -298,7 +391,9 @@ fn result(m: &Media<'_>) -> Element {
     let original: u64 = reducible.iter().map(|&index| m.subject.sizes[index]).sum();
     let estimated = m.estimate.map(|estimate| estimate.estimated);
     let summary_line = match (m.estimate_error, estimated) {
-        (Some(error), _) if !error.is_empty() && !error.contains("cancelled") => format!("Original {}, no estimate: {error}", size(original)),
+        (Some(error), _) if !error.is_empty() && !error.contains("cancelled") => {
+            format!("Original {}, no estimate: {error}", size(original))
+        }
         (_, Some(estimated)) if !m.estimating => summary(original, Some(estimated)),
         _ => summary(original, None),
     };
@@ -314,8 +409,20 @@ fn result(m: &Media<'_>) -> Element {
         let now = m
             .estimate
             .and_then(|estimate| estimate.per_file.get(shown).copied().flatten())
-            .map_or_else(|| "…".to_string(), |bytes| if bytes >= was { "kept as it is".to_string() } else { format!("about {}", size(bytes)) });
-        group = group.row(property_row(m.subject.names[index].clone(), format!("{}, {now}", size(was))));
+            .map_or_else(
+                || "…".to_string(),
+                |bytes| {
+                    if bytes >= was {
+                        "kept as it is".to_string()
+                    } else {
+                        format!("about {}", size(bytes))
+                    }
+                },
+            );
+        group = group.row(property_row(
+            m.subject.names[index].clone(),
+            format!("{}, {now}", size(was)),
+        ));
     }
     let beside = m.draft.location.is_none();
     group = group

@@ -80,7 +80,11 @@ impl Geometry {
     /// distance from the strip's top, its bottom and its trailing edge. At
     /// compact density there is no inset and each is the whole touch target.
     pub(crate) fn cluster(&self, buttons: usize) -> f32 {
-        if buttons == 0 { 0.0 } else { buttons as f32 * self.button() + 2.0 * self.inset }
+        if buttons == 0 {
+            0.0
+        } else {
+            buttons as f32 * self.button() + 2.0 * self.inset
+        }
     }
 
     /// The width of the strip's content for `count` tabs of `tab`: a gap
@@ -106,15 +110,35 @@ mod tests {
     fn a_tab_is_as_far_from_the_strips_bottom_as_from_its_top() {
         for class in CLASSES {
             let g = Geometry::in_class(class);
-            assert_eq!(g.strip, Dim::TabBar.px_in(class), "{class:?}: the strip is a tab bar tall");
-            assert_eq!(g.top, FIELD_INSET.px_in(class), "{class:?}: the band above the tabs is the field inset");
-            assert_eq!(g.top + g.tab + g.top, g.strip, "{class:?}: the same band below");
-            assert_eq!(g.tab, g.button(), "{class:?}: a tab is as tall as an end button, which is square");
+            assert_eq!(
+                g.strip,
+                Dim::TabBar.px_in(class),
+                "{class:?}: the strip is a tab bar tall"
+            );
+            assert_eq!(
+                g.top,
+                FIELD_INSET.px_in(class),
+                "{class:?}: the band above the tabs is the field inset"
+            );
+            assert_eq!(
+                g.top + g.tab + g.top,
+                g.strip,
+                "{class:?}: the same band below"
+            );
+            assert_eq!(
+                g.tab,
+                g.button(),
+                "{class:?}: a tab is as tall as an end button, which is square"
+            );
         }
         let regular = Geometry::in_class(SizeClass::Regular);
         assert_eq!((regular.strip, regular.tab, regular.top), (40.0, 32.0, 4.0));
         let compact = Geometry::in_class(SizeClass::Compact);
-        assert_eq!((compact.strip, compact.tab, compact.top), (44.0, 44.0, 0.0), "a finger's tab is the whole strip");
+        assert_eq!(
+            (compact.strip, compact.tab, compact.top),
+            (44.0, 44.0, 0.0),
+            "a finger's tab is the whole strip"
+        );
         assert!(compact.tab >= TOUCH_MIN);
     }
 
@@ -122,11 +146,21 @@ mod tests {
     fn the_strip_is_taller_than_a_field_and_still_shorter_than_the_header_it_replaced() {
         for class in CLASSES {
             let g = Geometry::in_class(class);
-            assert!(g.strip >= Dim::Control.px_in(class), "{class:?}: room for the tabs and the window's buttons");
-            assert!(g.strip <= Dim::Header.px_in(class), "{class:?}: no second row above the tabs");
+            assert!(
+                g.strip >= Dim::Control.px_in(class),
+                "{class:?}: room for the tabs and the window's buttons"
+            );
+            assert!(
+                g.strip <= Dim::Header.px_in(class),
+                "{class:?}: no second row above the tabs"
+            );
         }
         let regular = Geometry::in_class(SizeClass::Regular);
-        assert_eq!(Dim::Header.px_in(SizeClass::Regular) - regular.strip, 8.0, "8 px back for the window");
+        assert_eq!(
+            Dim::Header.px_in(SizeClass::Regular) - regular.strip,
+            8.0,
+            "8 px back for the window"
+        );
     }
 
     #[test]
@@ -134,12 +168,24 @@ mod tests {
         for class in CLASSES {
             let g = Geometry::in_class(class);
             assert_eq!(g.cluster(0), 0.0);
-            assert_eq!(g.cluster(1), g.button() + 2.0 * g.inset, "{class:?}: the inset before and after");
-            assert_eq!(g.cluster(2), 2.0 * g.button() + 2.0 * g.inset, "{class:?}: two buttons share their insets");
+            assert_eq!(
+                g.cluster(1),
+                g.button() + 2.0 * g.inset,
+                "{class:?}: the inset before and after"
+            );
+            assert_eq!(
+                g.cluster(2),
+                2.0 * g.button() + 2.0 * g.inset,
+                "{class:?}: two buttons share their insets"
+            );
         }
         let regular = Geometry::in_class(SizeClass::Regular);
         assert_eq!((regular.tab, regular.cluster(1)), (32.0, 40.0));
-        assert_eq!(Geometry::in_class(SizeClass::Compact).cluster(1), TOUCH_MIN, "flush on a phone");
+        assert_eq!(
+            Geometry::in_class(SizeClass::Compact).cluster(1),
+            TOUCH_MIN,
+            "flush on a phone"
+        );
     }
 
     #[test]
@@ -151,7 +197,10 @@ mod tests {
             assert_eq!(g.content(3.0, 100.0), 300.0 + 2.0 * g.gap());
             for count in [1.0, 2.0, 7.0] {
                 let tab = g.tab_in(500.0, count);
-                assert!((g.content(count, tab) - 500.0).abs() < 0.001, "{class:?}: {count} tabs fill the room");
+                assert!(
+                    (g.content(count, tab) - 500.0).abs() < 0.001,
+                    "{class:?}: {count} tabs fill the room"
+                );
             }
         }
     }

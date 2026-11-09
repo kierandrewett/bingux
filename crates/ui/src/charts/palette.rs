@@ -147,3 +147,54 @@ fn from_hsl(hue: f32, saturation: f32, lightness: f32) -> Color {
 fn channel(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
+
+/// The colour of `stops` (`(position, colour)` in ascending order) at
+/// `position`, blended between the two stops round it; the end colours beyond
+/// the ends, and nothing for no stops.
+pub(crate) fn blend(stops: &[(f64, Color)], position: f64) -> Color {
+    let Some(&(first_at, first)) = stops.first() else {
+        return Color::TRANSPARENT;
+    };
+    if position <= first_at {
+        return first;
+    }
+    for pair in stops.windows(2) {
+        let (a_at, a) = pair[0];
+        let (b_at, b) = pair[1];
+        if position <= b_at {
+            let t = if b_at > a_at {
+                ((position - a_at) / (b_at - a_at)) as f32
+            } else {
+                1.0
+            };
+            let mix =
+                |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * t).round() as u8;
+            return Color::from_argb(
+                mix(a.a(), b.a()),
+                mix(a.r(), b.r()),
+                mix(a.g(), b.g()),
+                mix(a.b(), b.b()),
+            );
+        }
+    }
+    stops
+        .last()
+        .map_or(Color::TRANSPARENT, |&(_, colour)| colour)
+}
+
+#[cfg(test)]
+mod blend_tests {
+    use super::*;
+
+    #[test]
+    fn colours_blend_between_stops() {
+        let stops = vec![
+            (0.0, Color::from_rgb(0, 0, 0)),
+            (10.0, Color::from_rgb(100, 200, 50)),
+        ];
+        let mid = blend(&stops, 5.0);
+        assert_eq!((mid.r(), mid.g(), mid.b()), (50, 100, 25));
+        assert_eq!(blend(&stops, -3.0).r(), 0);
+        assert_eq!(blend(&stops, 30.0).g(), 200);
+    }
+}

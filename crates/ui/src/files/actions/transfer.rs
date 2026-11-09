@@ -51,7 +51,11 @@ pub(super) fn finish(env: &Env) {
 
 /// Select `paths` once they are listed: what a person expects after a paste.
 pub(super) fn select_paths(env: &Env, paths: &[PathBuf]) {
-    let mut selection = env.selection;
+    select_in(env.selection, paths);
+}
+
+/// [`select_paths`] for a step that keeps the selection and not the view.
+pub(super) fn select_in(mut selection: State<super::Selection>, paths: &[PathBuf]) {
     let mut selection = selection.write();
     if let Some((first, rest)) = paths.split_first() {
         selection.select_only(first);
@@ -168,9 +172,10 @@ fn ask_about(overlays: Overlays, ask: Ask) {
         .existing
         .parent()
         .and_then(Path::file_name)
-        .map_or_else(|| "the destination".to_owned(), |name| {
-            format!("“{}”", name.to_string_lossy())
-        });
+        .map_or_else(
+            || "the destination".to_owned(),
+            |name| format!("“{}”", name.to_string_lossy()),
+        );
     let answer = |resolution: Resolution| {
         let reply = reply.clone();
         move |_: ()| {
@@ -185,8 +190,16 @@ fn ask_about(overlays: Overlays, ask: Ask) {
         .content(Element::from(ApplyToAll(remember)))
         .cancel("Cancel")
         .response("Skip", ResponseKind::Default, answer(Resolution::Skip))
-        .response("Keep both", ResponseKind::Default, answer(Resolution::KeepBoth))
-        .response("Replace", ResponseKind::Destructive, answer(Resolution::Replace))
+        .response(
+            "Keep both",
+            ResponseKind::Default,
+            answer(Resolution::KeepBoth),
+        )
+        .response(
+            "Replace",
+            ResponseKind::Destructive,
+            answer(Resolution::Replace),
+        )
         .default_action("keep_both"),
     );
 }
@@ -330,7 +343,7 @@ fn transfer(env: &Env, paths: Vec<PathBuf>, dest: PathBuf, cut: bool, clear_held
                     }
                     let moved = pair_moves(&paths, &made);
                     if !moved.is_empty() {
-                        undo::push(Step::Move(moved));
+                        undo::push(&env, Step::Move(moved));
                     }
                 }
                 notify(
@@ -421,7 +434,7 @@ pub(super) fn rename_many(env: &Env, pairs: Vec<(PathBuf, String)>) {
             Ok(done) => {
                 let now: Vec<PathBuf> = done.iter().map(|(_, now)| now.clone()).collect();
                 if !done.is_empty() {
-                    undo::push(Step::Renames(done));
+                    undo::push(&env, Step::Renames(done));
                 }
                 let text = if count == 1 {
                     "Renamed 1 item.".to_string()
@@ -482,13 +495,14 @@ pub(super) fn duplicate(env: &Env, paths: Vec<PathBuf>) {
             for (folder, members) in &groups {
                 // A copy into the folder it came from is never a conflict:
                 // it takes the next free copy name.
-                made.extend(backend::copy(
+                let copies = backend::copy(
                     members,
                     folder,
                     &ConflictPolicy::KeepBoth,
                     &progress,
                     &cancel,
-                )?);
+                )?;
+                made.extend(pair_moves(members, &copies));
             }
             Ok::<_, OpError>(made)
         })
@@ -497,11 +511,12 @@ pub(super) fn duplicate(env: &Env, paths: Vec<PathBuf>) {
         finish(&env);
         match outcome {
             Ok(made) => {
+                let copies: Vec<PathBuf> = made.iter().map(|(_, copy)| copy.clone()).collect();
                 if !made.is_empty() {
-                    undo::push(Step::Duplicate(made.clone()));
+                    undo::push(&env, Step::Duplicate(made));
                 }
                 notify(env.ui, format!("Duplicated {whole}."), false);
-                select_paths(&env, &made);
+                select_paths(&env, &copies);
             }
             Err(OpError::Cancelled) => notify(env.ui, "Duplicating stopped.", false),
             Err(error) => notify(env.ui, error_text("duplicate", &error), true),
@@ -539,33 +554,106 @@ pub(super) fn pair_moves(originals: &[PathBuf], arrived: &[PathBuf]) -> Vec<(Pat
 // Undo
 // ---------------------------------------------------------------------------
 
-/// Take back the newest change.
+/// Take back the newest change: the window's Undo, which the toasts' Undo
+/// and Ctrl+Z in a file view reach too.
 pub(super) fn undo(env: &Env) {
-    let Some(step) = undo::pop() else {
+    if env.undo.undo().is_none() {
         notify(env.ui, "There is nothing to undo.", false);
-        return;
-    };
-    let env = env.clone();
-    spawn_in_window(async move {
-        let again = step.clone();
-        let outcome = spawn_blocking(move || reverse(&step)).await;
-        match outcome {
-            Ok(restored) => {
-                notify(env.ui, "Undone.", false);
-                select_paths(&env, &restored);
-            }
-            Err(error) => {
-                // Still the newest change: try again once the cause is gone.
-                undo::push(again);
-                notify(env.ui, error_text("undo that", &error), true);
-            }
+    }
+}
+
+/// The last part of a path, as a name to give back.
+fn name_of(path: &Path) -> Result<String, OpError> {
+    path.file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .ok_or(OpError::Invalid(bingux_files::location::NameError::Empty))
+}
+
+/// Do an undone step again. Blocking. `back` is what its undo put back.
+/// Returns the step as it is now, for the next Undo, and what to select.
+pub(super) fn redo_step(step: &Step, back: &[PathBuf]) -> Result<(Step, Vec<PathBuf>), OpError> {
+    match step {
+        Step::Rename { from, to } => {
+            let now = backend::rename(from, &name_of(to)?)?;
+            Ok((
+                Step::Rename {
+                    from: from.clone(),
+                    to: now.clone(),
+                },
+                vec![now],
+            ))
         }
-        env.reload.call(());
-    });
+        Step::Trash(_) => Ok((Step::Trash(backend::trash(back)?), Vec::new())),
+        Step::Create { path, folder } => {
+            let parent = path
+                .parent()
+                .ok_or(OpError::Invalid(bingux_files::location::NameError::Empty))?;
+            let name = name_of(path)?;
+            let made = if *folder {
+                backend::create_dir(parent, &name)?
+            } else {
+                backend::create_file(parent, &name)?
+            };
+            Ok((
+                Step::Create {
+                    path: made.clone(),
+                    folder: *folder,
+                },
+                vec![made],
+            ))
+        }
+        Step::Move(pairs) => {
+            let mut again = Vec::new();
+            for (original, now) in pairs {
+                let Some(folder) = now.parent() else {
+                    continue;
+                };
+                let moved = backend::move_to(
+                    std::slice::from_ref(original),
+                    folder,
+                    &ConflictPolicy::KeepBoth,
+                    &Progress::new(),
+                    &Cancel::new(),
+                )?;
+                again.extend(moved.into_iter().map(|path| (original.clone(), path)));
+            }
+            let shown = again.iter().map(|(_, now)| now.clone()).collect();
+            Ok((Step::Move(again), shown))
+        }
+        Step::Duplicate(pairs) => {
+            let mut again = Vec::new();
+            for (original, _) in pairs {
+                let Some(folder) = original.parent() else {
+                    continue;
+                };
+                let copies = backend::copy(
+                    std::slice::from_ref(original),
+                    folder,
+                    &ConflictPolicy::KeepBoth,
+                    &Progress::new(),
+                    &Cancel::new(),
+                )?;
+                again.extend(copies.into_iter().map(|copy| (original.clone(), copy)));
+            }
+            let shown = again.iter().map(|(_, copy)| copy.clone()).collect();
+            Ok((Step::Duplicate(again), shown))
+        }
+        Step::Renames(pairs) => {
+            let names: Vec<(PathBuf, String)> = pairs
+                .iter()
+                .map(|(old, now)| Ok((old.clone(), name_of(now)?)))
+                .collect::<Result<_, OpError>>()?;
+            let again = rename_pairs(&names)?;
+            let shown = again.iter().map(|(_, now)| now.clone()).collect();
+            Ok((Step::Renames(again), shown))
+        }
+        // Never offered: a restore cannot be redone (see `Step::redoable`).
+        Step::Restore(_) => Ok((step.clone(), Vec::new())),
+    }
 }
 
 /// Reverse one step. Blocking. Returns what is back in place.
-fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
+pub(super) fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
     match step {
         Step::Rename { from, to } => {
             let name = from
@@ -594,7 +682,10 @@ fn reverse(step: &Step) -> Result<Vec<PathBuf>, OpError> {
         }
         // The copies go to the Trash, not out of existence: one may have
         // been edited since.
-        Step::Duplicate(copies) => backend::trash(copies).map(|_| Vec::new()),
+        Step::Duplicate(pairs) => {
+            let copies: Vec<PathBuf> = pairs.iter().map(|(_, copy)| copy.clone()).collect();
+            backend::trash(&copies).map(|_| Vec::new())
+        }
         Step::Renames(pairs) => {
             let back: Vec<(PathBuf, String)> = pairs
                 .iter()
@@ -663,7 +754,10 @@ mod tests {
     #[test]
     fn a_renamed_arrival_pairs_in_order() {
         let pairs = pair_moves(&paths(&["/a/x"]), &paths(&["/b/x (copy)"]));
-        assert_eq!(pairs, [(PathBuf::from("/a/x"), PathBuf::from("/b/x (copy)"))]);
+        assert_eq!(
+            pairs,
+            [(PathBuf::from("/a/x"), PathBuf::from("/b/x (copy)"))]
+        );
     }
 
     #[test]
@@ -673,9 +767,19 @@ mod tests {
 
     #[test]
     fn the_busy_line_says_finishing_while_the_drive_is_written() {
-        assert_eq!(busy_text("Copying", "12 items", false, 12, 3, None), "Copying 4 of 12");
-        assert_eq!(busy_text("Copying", "“a”", false, 1, 0, None), "Copying “a”");
-        assert_eq!(busy_text("Copying", "12 items", true, 5, 2, None), "Copying 12 items", "still counting");
+        assert_eq!(
+            busy_text("Copying", "12 items", false, 12, 3, None),
+            "Copying 4 of 12"
+        );
+        assert_eq!(
+            busy_text("Copying", "“a”", false, 1, 0, None),
+            "Copying “a”"
+        );
+        assert_eq!(
+            busy_text("Copying", "12 items", true, 5, 2, None),
+            "Copying 12 items",
+            "still counting"
+        );
         assert_eq!(
             busy_text("Copying", "12 items", false, 12, 12, Some("My Disk")),
             "Finishing… writing to My Disk"
@@ -720,7 +824,11 @@ mod tests {
         for (name, text) in [("a", "A"), ("b", "B"), ("c", "C")] {
             assert_eq!(fs::read_to_string(dir.join(name)).unwrap(), text);
         }
-        assert_eq!(fs::read_dir(&dir).unwrap().count(), 3, "no hidden name is left");
+        assert_eq!(
+            fs::read_dir(&dir).unwrap().count(),
+            3,
+            "no hidden name is left"
+        );
         fs::remove_dir_all(dir).unwrap();
     }
 

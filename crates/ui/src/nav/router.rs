@@ -158,11 +158,24 @@ pub fn use_location() -> Location {
     location
 }
 
+/// [`use_location`] for a view that also runs without a router (a headless
+/// test, a specimen): `None` there. Reactive.
+pub fn use_try_location() -> Option<Location> {
+    let router = use_try_consume::<Router>()?;
+    let location = router.model.read().location().clone();
+    Some(location)
+}
+
 /// The fragment of the window's location, or `None` without a router.
 /// Reactive.
 pub(crate) fn use_fragment() -> Option<String> {
     let router = use_try_consume::<Router>()?;
-    let fragment = router.model.read().location().fragment().map(str::to_string);
+    let fragment = router
+        .model
+        .read()
+        .location()
+        .fragment()
+        .map(str::to_string);
     fragment
 }
 
@@ -375,9 +388,9 @@ impl Router {
             .chain(std::iter::once(model.current().id))
             .collect();
         let mut retained = self.retained;
-        retained
-            .write()
-            .retain(|(entry, _), _| alive.contains(entry) || !removed.iter().any(|gone| gone.id == *entry));
+        retained.write().retain(|(entry, _), _| {
+            alive.contains(entry) || !removed.iter().any(|gone| gone.id == *entry)
+        });
     }
 
     /// Ask whether to leave a page that has unsaved changes.
@@ -434,7 +447,12 @@ impl Router {
 
     pub(crate) fn set_title(&self, entry: u64, title: &str) {
         if self.model.peek().current().id != entry
-            && !self.model.peek().back_entries().iter().any(|e| e.id == entry)
+            && !self
+                .model
+                .peek()
+                .back_entries()
+                .iter()
+                .any(|e| e.id == entry)
         {
             return;
         }
@@ -449,7 +467,12 @@ impl Router {
         self.model.peek().set_guard(entry, guard);
     }
 
-    pub(crate) fn open_modal(&self, kind: ModalKind, title: &str, dismiss: EventHandler<()>) -> u64 {
+    pub(crate) fn open_modal(
+        &self,
+        kind: ModalKind,
+        title: &str,
+        dismiss: EventHandler<()>,
+    ) -> u64 {
         let mut model = self.model;
         let id = model.write().open_modal(kind, title);
         let mut dismissers = self.dismissers;
@@ -465,7 +488,13 @@ impl Router {
     pub(crate) fn close_modal(&self, id: u64) {
         let mut dismissers = self.dismissers;
         dismissers.write().remove(&id);
-        if self.model.peek().modals().iter().any(|modal| modal.id == id) {
+        if self
+            .model
+            .peek()
+            .modals()
+            .iter()
+            .any(|modal| modal.id == id)
+        {
             let mut model = self.model;
             model.write().close_modal(id);
         }
@@ -527,8 +556,11 @@ pub fn use_pop_guard(guard: impl Fn() -> PopGuard + 'static) {
     let router = use_try_consume::<Router>();
     let entry = use_entry_id();
     // The closure changes every render; the registration does not.
-    let current: std::rc::Rc<std::cell::RefCell<Box<dyn Fn() -> PopGuard>>> =
-        use_hook(|| std::rc::Rc::new(std::cell::RefCell::new(Box::new(|| PopGuard::Allow) as Box<dyn Fn() -> PopGuard>)));
+    let current: std::rc::Rc<std::cell::RefCell<Box<dyn Fn() -> PopGuard>>> = use_hook(|| {
+        std::rc::Rc::new(std::cell::RefCell::new(
+            Box::new(|| PopGuard::Allow) as Box<dyn Fn() -> PopGuard>
+        ))
+    });
     *current.borrow_mut() = Box::new(guard);
     let registered = current.clone();
     use_side_effect_with_deps(&entry, move |entry| {

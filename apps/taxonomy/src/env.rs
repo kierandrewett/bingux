@@ -106,13 +106,15 @@ pub struct Env {
     pub pseudo: bool,
     /// The factor the type ramp is multiplied by, in percent.
     pub text_scale: u32,
+    /// Increase contrast (`bingux_ui::access`).
+    pub high_contrast: bool,
 }
 
 /// The display scales the switcher offers, in percent.
 pub const SCALES: [u32; 4] = [100, 125, 150, 200];
 
 /// The text scales the switcher offers, in percent: those of
-/// `bingux_ui::stress::TEXT_SCALES`.
+/// `bingux_ui::access::TEXT_SCALES`.
 pub const TEXT_SCALES: [u32; 4] = [100, 125, 150, 200];
 
 impl Env {
@@ -136,13 +138,15 @@ impl Env {
                 .and_then(|text| text.parse().ok())
                 .filter(|scale| SCALES.contains(scale))
                 .unwrap_or(100),
-            // `BINGUX_PSEUDO_LOCALE` and `BINGUX_TEXT_SCALE` are read by
-            // bingux_ui::stress, which this starts from.
+            // `BINGUX_PSEUDO_LOCALE` is read by bingux_ui::stress and
+            // `BINGUX_TEXT_SCALE` by bingux_ui::access; this starts from them.
             pseudo: bingux_ui::stress::pseudo_locale(),
             text_scale: TEXT_SCALES
                 .into_iter()
-                .find(|percent| *percent == (bingux_ui::stress::text_scale() * 100.0).round() as u32)
+                .find(|percent| *percent == (bingux_ui::access::text_scale() * 100.0).round() as u32)
                 .unwrap_or(100),
+            // `BINGUX_HIGH_CONTRAST=1` starts it on.
+            high_contrast: bingux_ui::access::Access::current().high_contrast,
         }
     }
 
@@ -154,7 +158,11 @@ impl Env {
             ThemeMode::System | ThemeMode::Both => system.scheme,
         };
         let accent = self.accent.unwrap_or(system.accent_name);
-        Tokens::new(accent, scheme, system.reduced_motion)
+        let access = bingux_ui::access::Access {
+            high_contrast: self.high_contrast,
+            ..system.access()
+        };
+        Tokens::with_access(accent, scheme, access)
     }
 
     /// The schemes a specimen is shown in: the window's, or both.
@@ -215,7 +223,11 @@ pub fn apply_window(env: Env) {
     // The stress switches are text-making state, not window state, but they
     // follow the same switcher; the root is keyed on them, so it rebuilds.
     bingux_ui::stress::set_pseudo_locale(env.pseudo);
-    bingux_ui::stress::set_text_scale(env.text_scale as f32 / 100.0);
+    bingux_ui::access::set(bingux_ui::access::Access {
+        high_contrast: env.high_contrast,
+        text_scale: env.text_scale as f32 / 100.0,
+        ..bingux_ui::access::Access::current()
+    });
 }
 
 /// A word for the environment, for the header and a snapshot's file name.
@@ -232,6 +244,9 @@ pub fn describe(env: &Env) -> String {
     }
     if env.text_scale != 100 {
         text.push_str(&format!(" · text {}%", env.text_scale));
+    }
+    if env.high_contrast {
+        text.push_str(" · high contrast");
     }
     text
 }
@@ -258,14 +273,14 @@ impl Component for Stage {
         let window_tokens = use_tokens();
         let tokens = match self.dark {
             None => window_tokens,
-            Some(dark) => Tokens::new(
+            Some(dark) => Tokens::with_access(
                 window_tokens.accent_name,
                 if dark {
                     Scheme::PreferDark
                 } else {
                     Scheme::PreferLight
                 },
-                window_tokens.reduced_motion,
+                window_tokens.access(),
             ),
         };
         let shared = use_provide_context(|| SharedTokens(State::create(tokens)));

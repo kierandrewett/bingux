@@ -88,7 +88,9 @@ fn chain() -> Vec<TreeNode> {
     vec![node]
 }
 
-const CHAIN_OPEN: &[u64] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+const CHAIN_OPEN: &[u64] = &[
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+];
 
 /// One visible row with what the tests ask about it.
 #[derive(Debug)]
@@ -112,7 +114,9 @@ struct Frame {
 
 impl Frame {
     fn of(shot: &mut Snapshot, scale: f32) -> Self {
-        Self { tree: Tree::capture_headless(shot.runner(), scale) }
+        Self {
+            tree: Tree::capture_headless(shot.runner(), scale),
+        }
     }
 
     fn below(&self, id: u64, out: &mut Vec<u64>) {
@@ -134,7 +138,10 @@ impl Frame {
             .map(|row| {
                 let mut under = Vec::new();
                 self.below(row.id, &mut under);
-                let nodes: Vec<_> = under.iter().map(|id| self.tree.node(*id).unwrap()).collect();
+                let nodes: Vec<_> = under
+                    .iter()
+                    .map(|id| self.tree.node(*id).unwrap())
+                    .collect();
                 let by = |name: &str| -> Vec<Area> {
                     nodes
                         .iter()
@@ -143,7 +150,9 @@ impl Frame {
                         .collect()
                 };
                 let guides = by("TreeGuide");
-                let slot = by("TreeChevron").pop().expect("every row has a chevron slot");
+                let slot = by("TreeChevron")
+                    .pop()
+                    .expect("every row has a chevron slot");
                 let text = nodes
                     .iter()
                     .find(|node| node.kind == Kind::Paragraph)
@@ -186,8 +195,16 @@ fn close(a: f32, b: f32) -> bool {
 
 /// Each case: a scene, the size of its window and the scale of its display.
 fn cases() -> Vec<(Scene, (f32, f32), f64)> {
-    let five = Scene { nodes: five_levels, open: FIVE_OPEN, selected: Some(8) };
-    let chain = Scene { nodes: chain, open: CHAIN_OPEN, selected: Some(20) };
+    let five = Scene {
+        nodes: five_levels,
+        open: FIVE_OPEN,
+        selected: Some(8),
+    };
+    let chain = Scene {
+        nodes: chain,
+        open: CHAIN_OPEN,
+        selected: Some(20),
+    };
     vec![
         (five, DESKTOP, 1.0),
         (five, DESKTOP, 2.0),
@@ -200,7 +217,15 @@ fn cases() -> Vec<(Scene, (f32, f32), f64)> {
 
 #[test]
 fn the_rows_are_the_visible_ones_and_the_closed_branches_hide_their_children() {
-    let (_, lines) = mount(Scene { nodes: five_levels, open: FIVE_OPEN, selected: Some(8) }, DESKTOP, 1.0);
+    let (_, lines) = mount(
+        Scene {
+            nodes: five_levels,
+            open: FIVE_OPEN,
+            selected: Some(8),
+        },
+        DESKTOP,
+        1.0,
+    );
     // Window, Column, two labels, ScrollView, Group, Row, two labels, a closed
     // Row, and a closed Footer.
     let depths: Vec<usize> = lines.iter().map(|line| line.depth).collect();
@@ -215,7 +240,11 @@ fn a_guide_runs_on_the_middle_of_its_ancestors_chevron() {
         let mut ancestors: Vec<Area> = Vec::new();
         for (index, line) in lines.iter().enumerate() {
             ancestors.truncate(line.depth);
-            assert_eq!(line.guides.len(), line.depth, "row {index} has a guide per ancestor");
+            assert_eq!(
+                line.guides.len(),
+                line.depth,
+                "row {index} has a guide per ancestor"
+            );
             for (level, guide) in line.guides.iter().enumerate() {
                 let slot = ancestors[level];
                 let mark = *guide;
@@ -253,7 +282,10 @@ fn guides_cover_the_whole_row_and_join_from_row_to_row() {
             // A level both rows draw continues without a break or an overlap.
             for level in 0..above.depth.min(below.depth) {
                 let (a, b) = (&above.guides[level], &below.guides[level]);
-                assert!(close(a.min_x(), b.min_x()), "{size:?}@{scale}: level {level} moves between rows");
+                assert!(
+                    close(a.min_x(), b.min_x()),
+                    "{size:?}@{scale}: level {level} moves between rows"
+                );
                 assert!(
                     close(a.max_y(), b.min_y()),
                     "{size:?}@{scale}: level {level} breaks between rows {index} and {}",
@@ -264,7 +296,8 @@ fn guides_cover_the_whole_row_and_join_from_row_to_row() {
         for line in &lines {
             for guide in &line.guides {
                 assert!(
-                    close(guide.min_y(), line.area.min_y()) && close(guide.max_y(), line.area.max_y()),
+                    close(guide.min_y(), line.area.min_y())
+                        && close(guide.max_y(), line.area.max_y()),
                     "{size:?}@{scale}: a guide does not cover its row"
                 );
             }
@@ -340,11 +373,18 @@ fn a_leaf_label_is_where_a_folders_label_is() {
                 .map(|line| line.text.min_x())
                 .collect();
             for x in &at {
-                assert!(close(*x, at[0]), "{size:?}@{scale}: depth {depth} labels start at {at:?}");
+                assert!(
+                    close(*x, at[0]),
+                    "{size:?}@{scale}: depth {depth} labels start at {at:?}"
+                );
             }
         }
         // The text follows the chevron slot at the row's own gap.
-        let class = if size.0 < 400.0 { SizeClass::Compact } else { SizeClass::Regular };
+        let class = if size.0 < 400.0 {
+            SizeClass::Compact
+        } else {
+            SizeClass::Regular
+        };
         for line in lines.iter().filter(|line| line.depth > 0) {
             assert!(
                 close(line.text.min_x() - line.slot.max_x(), S1.px_in(class)),
@@ -363,7 +403,11 @@ fn a_leaf_label_is_where_a_folders_label_is() {
 fn the_badge_ends_inside_the_rows_padding_and_the_text_gives_way() {
     for (scene, size, scale) in cases() {
         let (_, lines) = mount(scene, size, scale);
-        let pad = S2.px_in(if size.0 < 400.0 { SizeClass::Compact } else { SizeClass::Regular });
+        let pad = S2.px_in(if size.0 < 400.0 {
+            SizeClass::Compact
+        } else {
+            SizeClass::Regular
+        });
         for (index, line) in lines.iter().enumerate() {
             let Some(badge) = line.badge else { continue };
             assert!(
@@ -378,24 +422,42 @@ fn the_badge_ends_inside_the_rows_padding_and_the_text_gives_way() {
             );
             assert!(badge.min_x() > line.area.min_x());
         }
-        assert!(lines.iter().any(|line| line.badge.is_some()), "a row has a badge");
+        assert!(
+            lines.iter().any(|line| line.badge.is_some()),
+            "a row has a badge"
+        );
     }
 }
 
 #[test]
 fn a_deep_tree_narrows_its_levels_and_keeps_its_label() {
     let size = PHONE;
-    let (_, lines) = mount(Scene { nodes: chain, open: CHAIN_OPEN, selected: Some(20) }, size, 1.0);
+    let (_, lines) = mount(
+        Scene {
+            nodes: chain,
+            open: CHAIN_OPEN,
+            selected: Some(20),
+        },
+        size,
+        1.0,
+    );
     let deepest = lines.last().unwrap();
     assert_eq!(deepest.depth, 20);
     let slot = Dim::IconControl.px_in(SizeClass::Compact);
     // Narrower than a slot, but never less than the least level.
     let step = lines[2].slot.min_x() - lines[1].slot.min_x();
-    assert!(step < slot && step >= S2.px_in(SizeClass::Compact), "the level is {step} wide");
+    assert!(
+        step < slot && step >= S2.px_in(SizeClass::Compact),
+        "the level is {step} wide"
+    );
     // The label still has room to read, and nothing is cut at the row's end.
     // Six slots are kept for the label run and the badge; the badge and the
     // gaps take about two and a half of them.
-    assert!(deepest.text.width() >= slot * 3.0, "the label has {} px", deepest.text.width());
+    assert!(
+        deepest.text.width() >= slot * 3.0,
+        "the label has {} px",
+        deepest.text.width()
+    );
     assert!(deepest.slot.max_x() <= deepest.area.max_x());
     assert!(deepest.badge.unwrap().max_x() <= deepest.area.max_x());
 }
@@ -437,23 +499,44 @@ fn the_guides_are_on_whole_device_pixels_at_every_scale() {
 
 #[test]
 fn the_selected_rows_fill_is_under_its_guides() {
-    let (mut shot, lines) =
-        mount(Scene { nodes: five_levels, open: FIVE_OPEN, selected: Some(8) }, DESKTOP, 1.0);
+    let (mut shot, lines) = mount(
+        Scene {
+            nodes: five_levels,
+            open: FIVE_OPEN,
+            selected: Some(8),
+        },
+        DESKTOP,
+        1.0,
+    );
     // The selected row, four levels deep, has a fill and all four guides, and
     // its guides are inside the row's own box: the row paints its fill first
     // and the guides over it.
-    let selected = lines.iter().find(|line| line.depth == 4 && line.filled).expect("a selected row");
+    let selected = lines
+        .iter()
+        .find(|line| line.depth == 4 && line.filled)
+        .expect("a selected row");
     assert_eq!(selected.guides.len(), 4);
     for guide in &selected.guides {
-        assert!(selected.area.contains(guide.origin) && selected.area.contains((guide.max_x() - 0.1, guide.max_y() - 0.1).into()));
+        assert!(
+            selected.area.contains(guide.origin)
+                && selected
+                    .area
+                    .contains((guide.max_x() - 0.1, guide.max_y() - 0.1).into())
+        );
     }
     // Hovering a row fills it the same way and moves nothing.
     let before: Vec<Area> = lines.iter().flat_map(|line| line.guides.clone()).collect();
     let target = lines.iter().find(|line| line.depth == 2).unwrap();
-    let (x, y) = (target.area.min_x() + 60.0, target.area.min_y() + target.area.height() / 2.0);
+    let (x, y) = (
+        target.area.min_x() + 60.0,
+        target.area.min_y() + target.area.height() / 2.0,
+    );
     shot.hover(x, y).settle(Duration::from_millis(300));
     let after = Frame::of(&mut shot, 1.0).lines();
     let moved: Vec<Area> = after.iter().flat_map(|line| line.guides.clone()).collect();
     assert_eq!(before, moved);
-    assert!(after.iter().filter(|line| line.filled).count() >= 2, "the hovered row is filled too");
+    assert!(
+        after.iter().filter(|line| line.filled).count() >= 2,
+        "the hovered row is filled too"
+    );
 }

@@ -27,18 +27,29 @@ impl Pixels {
     fn of(shot: &mut Snapshot) -> Self {
         let png = shot.runner().render();
         let image = SkImage::from_encoded(SkData::new_copy(&png)).expect("the frame decodes");
-        let mut surface = raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
+        let mut surface =
+            raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
         surface.canvas().draw_image(&image, (0, 0), None);
         let info = surface.canvas().image_info();
         let row = info.min_row_bytes();
         let mut bytes = vec![0u8; info.compute_byte_size(row)];
         assert!(surface.canvas().read_pixels(&info, &mut bytes, row, (0, 0)));
-        Self { bytes, row, width: image.width() as usize, height: image.height() as usize }
+        Self {
+            bytes,
+            row,
+            width: image.width() as usize,
+            height: image.height() as usize,
+        }
     }
 
     fn at(&self, x: usize, y: usize) -> [u8; 4] {
         let at = y * self.row + x * 4;
-        [self.bytes[at], self.bytes[at + 1], self.bytes[at + 2], self.bytes[at + 3]]
+        [
+            self.bytes[at],
+            self.bytes[at + 1],
+            self.bytes[at + 2],
+            self.bytes[at + 3],
+        ]
     }
 }
 
@@ -47,7 +58,11 @@ fn render(direction: Direction, content: impl Fn() -> Element + 'static) -> Pixe
         move || {
             window_directed(
                 direction,
-                rect().width(Size::fill()).height(Size::fill()).background((20, 20, 20)).child(content()),
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .background((20, 20, 20))
+                    .child(content()),
             )
             .into_element()
         },
@@ -76,8 +91,14 @@ fn unmirrored(ltr: &Pixels, rtl: &Pixels) -> usize {
 /// A box written as for left to right with something different on each side.
 fn boxed(style: fn(Rect) -> Rect) -> impl Fn() -> Element {
     move || {
-        style(rect().margin((10.0, 10.0, 10.0, 12.0)).width(Size::px(120.0)).height(Size::px(60.0)).background((90, 90, 90)))
-            .into()
+        style(
+            rect()
+                .margin((10.0, 10.0, 10.0, 12.0))
+                .width(Size::px(120.0))
+                .height(Size::px(60.0))
+                .background((90, 90, 90)),
+        )
+        .into()
     }
 }
 
@@ -86,7 +107,10 @@ fn check(what: &str, style: fn(Rect) -> Rect) {
     let rtl = render(Direction::Rtl, boxed(style));
     let wrong = unmirrored(&ltr, &rtl);
     // A rounded corner is anti-aliased, so one pixel of it may land a shade apart.
-    assert!(wrong <= 4, "{what}: {wrong} pixels of the right-to-left frame are not the reflection of the left-to-right one");
+    assert!(
+        wrong <= 4,
+        "{what}: {wrong} pixels of the right-to-left frame are not the reflection of the left-to-right one"
+    );
 }
 
 #[test]
@@ -96,19 +120,39 @@ fn a_plain_box_is_the_reflection() {
 
 #[test]
 fn a_corner_radius_is_the_reflection() {
-    check("radius", |r| r.corner_radius(CornerRadius::new(24.0, 0.0, 0.0, 8.0)));
+    check("radius", |r| {
+        r.corner_radius(CornerRadius::new(24.0, 0.0, 0.0, 8.0))
+    });
 }
 
 #[test]
 fn a_border_is_the_reflection() {
     check("border", |r| {
-        r.border(Border::new().width(BorderWidth { top: 0.0, right: 0.0, bottom: 2.0, left: 6.0 }).fill((255, 0, 0)).alignment(BorderAlignment::Inner))
+        r.border(
+            Border::new()
+                .width(BorderWidth {
+                    top: 0.0,
+                    right: 0.0,
+                    bottom: 2.0,
+                    left: 6.0,
+                })
+                .fill((255, 0, 0))
+                .alignment(BorderAlignment::Inner),
+        )
     });
 }
 
 #[test]
 fn a_shadow_is_the_reflection() {
-    check("shadow", |r| r.shadow(Shadow::new().x(8.0).y(0.0).blur(4.0).color((0, 0, 255, 200))));
+    check("shadow", |r| {
+        r.shadow(
+            Shadow::new()
+                .x(8.0)
+                .y(0.0)
+                .blur(4.0)
+                .color((0, 0, 255, 200)),
+        )
+    });
 }
 
 #[test]
@@ -130,9 +174,24 @@ fn a_row_runs_from_the_right_and_its_frame_is_the_reflection() {
             .horizontal()
             .padding((4.0, 4.0, 4.0, 20.0))
             .spacing(6.0)
-            .child(rect().width(Size::px(30.0)).height(Size::px(30.0)).background((255, 0, 0)))
-            .child(rect().width(Size::px(50.0)).height(Size::px(30.0)).background((0, 255, 0)))
-            .child(rect().width(Size::px(10.0)).height(Size::px(30.0)).background((0, 0, 255)))
+            .child(
+                rect()
+                    .width(Size::px(30.0))
+                    .height(Size::px(30.0))
+                    .background((255, 0, 0)),
+            )
+            .child(
+                rect()
+                    .width(Size::px(50.0))
+                    .height(Size::px(30.0))
+                    .background((0, 255, 0)),
+            )
+            .child(
+                rect()
+                    .width(Size::px(10.0))
+                    .height(Size::px(30.0))
+                    .background((0, 0, 255)),
+            )
             .into()
     };
     let ltr = render(Direction::Ltr, row);
@@ -156,8 +215,17 @@ impl Component for Restyled {
             .component("Row")
             .horizontal()
             .width(Size::fill())
-            .background(if pressed() { (60, 60, 60) } else { (40, 40, 40) })
-            .child(rect().component("First").width(Size::px(30.0)).height(Size::px(30.0)))
+            .background(if pressed() {
+                (60, 60, 60)
+            } else {
+                (40, 40, 40)
+            })
+            .child(
+                rect()
+                    .component("First")
+                    .width(Size::px(30.0))
+                    .height(Size::px(30.0)),
+            )
             .child(
                 rect()
                     .component("Second")
@@ -170,21 +238,39 @@ impl Component for Restyled {
 
 fn areas(shot: &mut Snapshot, name: &'static str) -> Area {
     shot.runner()
-        .find(|node, element| (element.accessibility().builder.class_name() == Some(name)).then(|| node.layout().area))
+        .find(|node, element| {
+            (element.accessibility().builder.class_name() == Some(name)).then(|| node.layout().area)
+        })
         .unwrap_or_else(|| panic!("no {name} on screen"))
 }
 
 #[test]
 fn a_node_whose_element_is_replaced_still_mirrors_its_children() {
-    let mut shot = Snapshot::new(|| window_directed(Direction::Rtl, Restyled).into_element(), (W, H));
+    let mut shot = Snapshot::new(
+        || window_directed(Direction::Rtl, Restyled).into_element(),
+        (W, H),
+    );
     shot.settle(Duration::from_millis(300));
-    assert_eq!(areas(&mut shot, "First").max_x(), W, "the first child starts at the right edge");
+    assert_eq!(
+        areas(&mut shot, "First").max_x(),
+        W,
+        "the first child starts at the right edge"
+    );
     // The row's element is replaced (a new background) and its second child is
     // wider, so the row measures its children again.
     assert!(shot.click_component("Second"));
     shot.settle(Duration::from_millis(300));
-    assert_eq!(areas(&mut shot, "First").max_x(), W, "the row still starts from the right: {:?}", areas(&mut shot, "First"));
-    assert_eq!(areas(&mut shot, "Second").max_x(), W - 30.0, "and the second child follows on its left");
+    assert_eq!(
+        areas(&mut shot, "First").max_x(),
+        W,
+        "the row still starts from the right: {:?}",
+        areas(&mut shot, "First")
+    );
+    assert_eq!(
+        areas(&mut shot, "Second").max_x(),
+        W - 30.0,
+        "and the second child follows on its left"
+    );
 }
 
 /// A row that reads the other way once it is pressed.
@@ -194,37 +280,83 @@ struct Flips;
 impl Component for Flips {
     fn render(&self) -> impl IntoElement {
         let mut flipped = use_state(|| false);
-        let direction = if flipped() { Direction::Rtl } else { Direction::Ltr };
+        let direction = if flipped() {
+            Direction::Rtl
+        } else {
+            Direction::Ltr
+        };
         directed(
             direction,
             rect()
                 .component("Row")
                 .horizontal()
                 .width(Size::fill())
-                .child(rect().component("First").width(Size::px(30.0)).height(Size::px(30.0)).on_pointer_down(move |_| flipped.set(true)))
-                .child(rect().component("Second").width(Size::px(50.0)).height(Size::px(30.0))),
+                .child(
+                    rect()
+                        .component("First")
+                        .width(Size::px(30.0))
+                        .height(Size::px(30.0))
+                        .on_pointer_down(move |_| flipped.set(true)),
+                )
+                .child(
+                    rect()
+                        .component("Second")
+                        .width(Size::px(50.0))
+                        .height(Size::px(30.0)),
+                ),
         )
     }
 }
 
 #[test]
 fn a_subtree_that_changes_direction_is_laid_out_again() {
-    let mut shot = Snapshot::new(|| window_directed(Direction::Ltr, Flips).into_element(), (W, H));
+    let mut shot = Snapshot::new(
+        || window_directed(Direction::Ltr, Flips).into_element(),
+        (W, H),
+    );
     shot.settle(Duration::from_millis(300));
-    assert_eq!((areas(&mut shot, "First").min_x(), areas(&mut shot, "Second").min_x()), (0.0, 30.0));
+    assert_eq!(
+        (
+            areas(&mut shot, "First").min_x(),
+            areas(&mut shot, "Second").min_x()
+        ),
+        (0.0, 30.0)
+    );
     assert!(shot.click_component("First"));
     shot.settle(Duration::from_millis(300));
-    assert_eq!(areas(&mut shot, "First").max_x(), W, "the first child is at the right edge after the flip");
-    assert_eq!(areas(&mut shot, "Second").max_x(), W - 30.0, "and the second follows on its left");
+    assert_eq!(
+        areas(&mut shot, "First").max_x(),
+        W,
+        "the first child is at the right edge after the flip"
+    );
+    assert_eq!(
+        areas(&mut shot, "Second").max_x(),
+        W - 30.0,
+        "and the second follows on its left"
+    );
 }
 
 #[test]
 fn a_default_label_is_aligned_like_an_explicit_left_in_left_to_right() {
     let plain = || label().text("A line of text").font_size(14.0).into();
-    let left = || label().text("A line of text").font_size(14.0).text_align(TextAlign::Left).into();
-    let boxed = |label: fn() -> Element| move || rect().width(Size::px(180.0)).child(label()).into();
-    let (a, b) = (render(Direction::Ltr, boxed(plain)), render(Direction::Ltr, boxed(left)));
-    assert_eq!(unmirrored_same(&a, &b), 0, "start is left in left to right: the same pixels as an explicit left");
+    let left = || {
+        label()
+            .text("A line of text")
+            .font_size(14.0)
+            .text_align(TextAlign::Left)
+            .into()
+    };
+    let boxed =
+        |label: fn() -> Element| move || rect().width(Size::px(180.0)).child(label()).into();
+    let (a, b) = (
+        render(Direction::Ltr, boxed(plain)),
+        render(Direction::Ltr, boxed(left)),
+    );
+    assert_eq!(
+        unmirrored_same(&a, &b),
+        0,
+        "start is left in left to right: the same pixels as an explicit left"
+    );
 }
 
 /// Pixels that differ between two frames of one direction.
@@ -247,12 +379,21 @@ fn scrolled(direction: Direction) -> Pixels {
         move || {
             window_directed(
                 direction,
-                rect().width(Size::fill()).height(Size::fill()).background((20, 20, 20)).child(
-                    ScrollView::new()
-                        .width(Size::fill())
-                        .height(Size::fill())
-                        .child(rect().width(Size::fill()).height(Size::px(600.0)).background((60, 90, 140))),
-                ),
+                rect()
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .background((20, 20, 20))
+                    .child(
+                        ScrollView::new()
+                            .width(Size::fill())
+                            .height(Size::fill())
+                            .child(
+                                rect()
+                                    .width(Size::fill())
+                                    .height(Size::px(600.0))
+                                    .background((60, 90, 140)),
+                            ),
+                    ),
             )
             .into_element()
         },
@@ -277,10 +418,19 @@ fn a_scrollbar_is_the_reflection() {
             .filter(|&(x, y)| frame.at(x, y) != frame.at(frame.width / 2, y))
             .count()
     };
-    assert!(ink(&ltr, ltr.width - 20..ltr.width) > 0, "the scrollbar shows at the right edge, left to right");
-    assert!(ink(&rtl, 0..20) > 0, "the scrollbar shows at the left edge, right to left");
+    assert!(
+        ink(&ltr, ltr.width - 20..ltr.width) > 0,
+        "the scrollbar shows at the right edge, left to right"
+    );
+    assert!(
+        ink(&rtl, 0..20) > 0,
+        "the scrollbar shows at the left edge, right to left"
+    );
     let wrong = unmirrored(&ltr, &rtl);
-    assert!(wrong <= 40, "{wrong} pixels of the right-to-left frame are not the reflection of the left-to-right one");
+    assert!(
+        wrong <= 40,
+        "{wrong} pixels of the right-to-left frame are not the reflection of the left-to-right one"
+    );
 }
 
 /// The overlay scrollbar tracks of the frame: the 20 px wide, tall boxes the scroll bar draws in.
@@ -365,9 +515,25 @@ fn a_page_scrollbar_in_a_phone_window_is_on_the_left_edge_inside_the_window() {
         let ltr = phone_page(Direction::Ltr, inset);
         let rtl = phone_page(Direction::Rtl, inset);
         // The outer box is the track, the inner ones the bar and its thumb: the thumb is what shows.
-        let thumb = |areas: &[Area]| areas.iter().map(|area| area.min_x()).fold(f32::NAN, f32::min);
-        assert_eq!(thumb(&ltr), 370.0, "left to right the bar is at the right edge: {ltr:?}");
-        assert_eq!(thumb(&rtl), 0.0, "right to left the bar is at the left edge, inside the window: {rtl:?}");
-        assert!(rtl.iter().all(|area| area.min_x() >= -20.0), "no part of the bar is more than its own width outside: {rtl:?}");
+        let thumb = |areas: &[Area]| {
+            areas
+                .iter()
+                .map(|area| area.min_x())
+                .fold(f32::NAN, f32::min)
+        };
+        assert_eq!(
+            thumb(&ltr),
+            370.0,
+            "left to right the bar is at the right edge: {ltr:?}"
+        );
+        assert_eq!(
+            thumb(&rtl),
+            0.0,
+            "right to left the bar is at the left edge, inside the window: {rtl:?}"
+        );
+        assert!(
+            rtl.iter().all(|area| area.min_x() >= -20.0),
+            "no part of the bar is more than its own width outside: {rtl:?}"
+        );
     }
 }

@@ -195,22 +195,30 @@ impl From<io::Error> for OpError {
     }
 }
 
-/// An I/O error as a sentence: capitalised, no `(os error N)`, a full stop.
-fn plain(error: &io::Error) -> String {
-    let text = error.to_string();
-    let text = match text.find(" (os error") {
-        Some(index) => &text[..index],
-        None => &text,
+/// An I/O error as a sentence for a person: what went wrong and what to do,
+/// never the kernel's own wording or its `(os error N)`. The raw error goes
+/// to the log for whoever looks into it.
+pub(crate) fn plain(error: &io::Error) -> String {
+    use io::ErrorKind as Kind;
+    eprintln!("[bingux-files] {error}");
+    let text = match error.kind() {
+        Kind::NotFound => "It is no longer there. Reload the folder and try again.",
+        Kind::PermissionDenied => "You do not have permission. Ask the owner for access.",
+        Kind::AlreadyExists => "Something with that name already exists. Choose another name.",
+        Kind::ReadOnlyFilesystem => "The drive is read-only. Choose another place.",
+        Kind::StorageFull => "The drive is full. Free some space, then try again.",
+        Kind::TimedOut | Kind::WouldBlock => "The drive took too long to answer. Try again.",
+        Kind::NotADirectory => "That is not a folder.",
+        Kind::IsADirectory => "That is a folder, not a file.",
+        Kind::DirectoryNotEmpty => "The folder is not empty.",
+        Kind::ResourceBusy => "It is in use by another app. Close it there, then try again.",
+        Kind::InvalidFilename => "Could not use that name. Choose another name.",
+        Kind::CrossesDevices => "That cannot be done between two drives in one step.",
+        Kind::Unsupported => "This drive cannot do that.",
+        Kind::Interrupted => "It was interrupted. Try again.",
+        _ => "Could not read or write the drive. Check that it is connected, then try again.",
     };
-    let mut chars = text.chars();
-    let mut out: String = match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
-        None => String::from("The operation failed"),
-    };
-    if !out.ends_with('.') {
-        out.push('.');
-    }
-    out
+    text.to_owned()
 }
 
 /// How far a long operation has got. Clones share the counters, so give one

@@ -588,6 +588,11 @@ fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
         return apply_layout(rect, util);
     }
     match util {
+        // Increase contrast: a control's fill has an edge, so a button or a
+        // field shows its bounds on a card of nearly the same grey.
+        Util::Bg(paint @ (Paint::Control | Paint::Raised)) if tokens.high_contrast => rect
+            .background(paint.color(tokens))
+            .border(line_border(tokens, Line::Outline)),
         Util::Bg(paint) => rect.background(paint.color(tokens)),
         Util::Fill(colour) => rect.background(colour),
         Util::Ink(paint) => rect.color(paint.color(tokens)),
@@ -600,13 +605,20 @@ fn apply(rect: Rect, tokens: Option<&Tokens>, util: Util) -> Rect {
             hover,
             press,
             selected,
-        } => rect.background(crate::surface::surface_color(
-            tokens,
-            base.color(tokens),
-            hover,
-            press,
-            selected,
-        )),
+        } => {
+            let rect = rect.background(crate::surface::surface_color(
+                tokens,
+                base.color(tokens),
+                hover,
+                press,
+                selected,
+            ));
+            if tokens.high_contrast && matches!(base, Paint::Control | Paint::Raised) {
+                rect.border(line_border(tokens, Line::Outline))
+            } else {
+                rect
+            }
+        }
         Util::Border(line) => rect.border(line_border(tokens, line)),
         Util::Glow(paint, blur, spread, inset) => rect.shadow(
             Shadow::new()

@@ -647,6 +647,9 @@ pub(crate) struct Panel {
     overlaid: Vec<Element>,
     /// The menu root's keyboard focus, key handler and global pointer-move handler.
     focus: Option<AccessibilityId>,
+    /// The row the arrows have reached, named as the focused surface's active
+    /// descendant so a screen reader reads it.
+    active_descendant: Option<AccessibilityId>,
     on_key: Option<EventHandler<Event<KeyboardEventData>>>,
     on_move: Option<EventHandler<(f32, f32)>>,
     /// The bar's measured size, read once it is laid out. The bar is placed from it.
@@ -683,6 +686,7 @@ impl Panel {
             cascade: 0,
             overlaid: Vec::new(),
             focus: None,
+            active_descendant: None,
             on_key: None,
             on_move: None,
             measure: None,
@@ -791,6 +795,12 @@ impl Panel {
 
     /// Makes this the root of a menu: its surface takes `focus`, key presses
     /// go to `on_key`, and every pointer move in the window goes to `on_move`.
+    /// The highlighted row of a panel that keeps the focus on itself.
+    pub(crate) fn active_descendant(mut self, row: Option<AccessibilityId>) -> Self {
+        self.active_descendant = row;
+        self
+    }
+
     pub(crate) fn navigation(
         mut self,
         focus: AccessibilityId,
@@ -1171,7 +1181,20 @@ impl Panel {
         // and the key handler (see `native_backdrop`).
         if local.is_none() {
             if let Some(focus) = self.focus {
-                surface = surface.a11y_id(focus).a11y_focusable(true);
+                let active = self.active_descendant;
+                let role = match self.kind {
+                    PanelKind::Choice => AccessibilityRole::ListBox,
+                    _ => AccessibilityRole::Menu,
+                };
+                surface = surface
+                    .a11y_id(focus)
+                    .a11y_focusable(true)
+                    .a11y_role(role)
+                    .a11y_builder(move |node| {
+                        if let Some(active) = active {
+                            node.set_active_descendant(active);
+                        }
+                    });
             }
             if let Some(on_key) = self.on_key.clone() {
                 surface =

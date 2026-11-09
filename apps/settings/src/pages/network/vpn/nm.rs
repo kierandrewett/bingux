@@ -17,7 +17,10 @@ pub fn run(args: &[&str]) -> Result<String, String> {
             std::io::ErrorKind::NotFound => {
                 "Network settings are not available because nmcli is not installed.".to_string()
             }
-            _ => format!("Network settings could not be started: {error}."),
+            _ => {
+                eprintln!("bingux-settings: nmcli could not start: {error}");
+                "Could not open the network settings. Try again.".to_string()
+            }
         })?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     if output.status.success() {

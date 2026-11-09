@@ -297,10 +297,17 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
             .leading(Icon::ViewConceal),
         )
         .row(
-            switch_row("Personal images on the login screen", personal_images, move |on: bool| {
-                write(ctx, Change::Set("privacy.show_personal_images", on.to_string()))
-            })
-            .subtitle("Show your avatar and wallpaper before you sign in. Every local account can see them.")
+            switch_row(
+                "Personal images on the login screen",
+                personal_images,
+                move |on: bool| {
+                    write(
+                        ctx,
+                        Change::Set("privacy.show_personal_images", on.to_string()),
+                    )
+                },
+            )
+            .subtitle("Picture and wallpaper")
             .leading(Icon::AvatarDefault),
         );
     if let Some(gnome) = gnome {

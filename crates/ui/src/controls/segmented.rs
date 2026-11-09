@@ -123,7 +123,10 @@ impl Component for ScrollingRail {
         let scroll = use_scroll_controller(ScrollConfig::default);
         let mut viewport = use_state(|| 0.0_f32);
         let widths = use_state(Vec::<f32>::new);
-        let selected_index = self.options.iter().position(|(key, _)| *key == self.selected);
+        let selected_index = self
+            .options
+            .iter()
+            .position(|(key, _)| *key == self.selected);
         // The rail pads its segments and sets them apart by `S1`.
         let step = S1.px();
         // Where the rail is scrolled to, read here so the effect below does not
@@ -132,7 +135,11 @@ impl Component for ScrollingRail {
         offset.set(-(<(i32, i32)>::from(scroll).0 as f32));
         let deps = (
             selected_index,
-            widths.read().iter().map(|width| width.round() as i32).collect::<Vec<_>>(),
+            widths
+                .read()
+                .iter()
+                .map(|width| width.round() as i32)
+                .collect::<Vec<_>>(),
             viewport().round() as i32,
             step.round() as i32,
         );
@@ -176,7 +183,8 @@ impl Component for ScrollingRail {
 /// must. `current` is where the region starts now. One `step` of the rail
 /// beside the segment is shown too, so its neighbour is in sight.
 fn reveal(widths: &[f32], index: usize, step: f32, region: f32, current: f32) -> f32 {
-    let content = 2.0 * step + widths.iter().sum::<f32>() + step * widths.len().saturating_sub(1) as f32;
+    let content =
+        2.0 * step + widths.iter().sum::<f32>() + step * widths.len().saturating_sub(1) as f32;
     let left = step + widths[..index].iter().sum::<f32>() + step * index as f32;
     let (near, far) = (left - step, left + widths[index] + step);
     let to = if near < current {
@@ -212,8 +220,13 @@ impl Component for SegmentRail {
                 .collect()
         };
         let key_ids = ids.clone();
+        let field = crate::a11y::use_field_label();
         Element::from(
             rect()
+                // A segmented control is one choice of several: a radio group
+                // named by its row, each segment a radio button.
+                .a11y_role(AccessibilityRole::RadioGroup)
+                .a11y_builder(move |builder| crate::a11y::label_from_field(builder, field.as_ref()))
                 .tw(
                     &tokens,
                     &[
@@ -222,7 +235,11 @@ impl Component for SegmentRail {
                         items(Align::Center),
                         p(S1),
                         gap(S1),
-                        rounded(if fitted { Radius::Inner } else { Radius::Control }),
+                        rounded(if fitted {
+                            Radius::Inner
+                        } else {
+                            Radius::Control
+                        }),
                         bg(Paint::Control),
                     ],
                 )
@@ -313,8 +330,8 @@ impl Component for Segment {
             .a11y_id(a11y_id)
             .a11y_focusable(enabled && self.selected)
             .a11y_enabled(enabled)
-            .a11y_role(AccessibilityRole::Tab)
-            .a11y_builder(|builder| builder.set_selected(self.selected))
+            .a11y_role(AccessibilityRole::RadioButton)
+            .a11y_builder(|builder| builder.set_toggled(accesskit::Toggled::from(self.selected)))
             .tw(
                 &tokens,
                 &[
@@ -380,7 +397,8 @@ impl Component for Segment {
                 })
                 .label(&tokens, self.text.clone())
                 .max_lines(1),
-            ).focusable(focus())
+            )
+            .focusable(focus())
             .maybe(self.fill, |wrapper| wrapper.tw(&tokens, &[w_flex()]))
             .tw(&tokens, &[h_full()])
     }
@@ -446,7 +464,10 @@ mod scroll_tests {
 
     impl Component for Host {
         fn render(&self) -> impl IntoElement {
-            let options = TABS.iter().map(|tab| (tab.to_string(), tab.to_string())).collect();
+            let options = TABS
+                .iter()
+                .map(|tab| (tab.to_string(), tab.to_string()))
+                .collect();
             segmented(options, TABS[self.0], |_: String| {})
                 .tabs()
                 .scroll()

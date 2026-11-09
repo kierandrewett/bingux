@@ -29,8 +29,8 @@
 //! digits, so a count that ticks up while a big folder loads does not
 //! shimmer.
 
+use super::display;
 use crate::layout::divider;
-use bingux_files::display;
 use freya::prelude::*;
 
 use super::actions::Ui;
@@ -112,11 +112,19 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
     if info.unresponsive {
         return "Waiting for the drive to answer…".to_owned();
     }
+    // Loading and Stopped read alike: the state, then what has come in so
+    // far. No count until the first rows arrive, so it never says "0 items".
     if info.stopped {
-        return format!("Stopped · {} read so far", item_count(info.total_listed));
+        return match info.total_listed {
+            0 => "Stopped".to_owned(),
+            count => format!("Stopped · {} so far", item_count(count)),
+        };
     }
     if info.loading && !info.complete {
-        return format!("Loading… {}", item_count(info.total_listed));
+        return match info.total_listed {
+            0 => "Loading…".to_owned(),
+            count => format!("Loading · {} so far", item_count(count)),
+        };
     }
     let mut size = String::new();
     if info.selected_bytes > 0 {
@@ -461,7 +469,7 @@ mod tests {
             complete: false,
             ..info(12_000)
         };
-        assert_eq!(status_text(&stopped), "Stopped · 12,000 items read so far");
+        assert_eq!(status_text(&stopped), "Stopped · 12,000 items so far");
         assert!(has_news(&stopped));
     }
 
@@ -504,7 +512,7 @@ mod tests {
             free: Some(96_000_000_000),
             ..info(5)
         };
-        assert_eq!(status_text(&roomy), "5 items, 96 GB free");
+        assert_eq!(status_text(&roomy), "5 items, 96\u{a0}GB free");
         let picked = StatusInfo {
             selected: 1,
             ..roomy
@@ -526,7 +534,16 @@ mod tests {
             total_listed: 1204,
             ..info(0)
         };
-        assert_eq!(status_text(&loading), "Loading… 1,204 items");
+        assert_eq!(status_text(&loading), "Loading · 1,204 items so far");
+        let first = StatusInfo {
+            total_listed: 0,
+            ..loading.clone()
+        };
+        assert_eq!(
+            status_text(&first),
+            "Loading…",
+            "no count before the first rows"
+        );
         let stuck = StatusInfo {
             unresponsive: true,
             ..loading

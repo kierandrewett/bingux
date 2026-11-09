@@ -225,6 +225,7 @@ impl Component for Slider {
         let mut size = use_state(Area::default);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let field = crate::a11y::use_field_label();
         let on_moved = self.on_moved.clone();
         let max = self.max;
         let mark = self.mark;
@@ -264,7 +265,11 @@ impl Component for Slider {
         let direction = use_direction();
         let percent_at = move |x: f64| -> f64 {
             let half = thumb_size as f64 / 2.0;
-            let x = if direction.is_rtl() { width as f64 - x } else { x };
+            let x = if direction.is_rtl() {
+                width as f64 - x
+            } else {
+                x
+            };
             snap(((x - half) / travel as f64 * max).clamp(0.0, max))
         };
         // The press, the drag wherever the pointer goes, and the release are
@@ -299,7 +304,11 @@ impl Component for Slider {
             move |event: Event<KeyboardEventData>| {
                 // Shift moves ten steps, as the colour picker's plane does.
                 let delta = step.unwrap_or(5.0)
-                    * if event.modifiers.contains(Modifiers::SHIFT) { 10.0 } else { 1.0 };
+                    * if event.modifiers.contains(Modifiers::SHIFT) {
+                        10.0
+                    } else {
+                        1.0
+                    };
                 // The value grows towards the end of the reading direction: Left in a
                 // right-to-left interface.
                 let along = direction.along(&event.key).unwrap_or(0) as f64;
@@ -348,6 +357,8 @@ impl Component for Slider {
                 builder.set_numeric_value(value);
                 builder.set_min_numeric_value(0.0);
                 builder.set_max_numeric_value(max);
+                builder.set_orientation(accesskit::Orientation::Horizontal);
+                crate::a11y::label_from_field(builder, field.as_ref());
             })
             .maybe(self.fluid, |element| element.width(Size::fill()))
             .maybe(!self.fluid, |element| element.tw(&tokens, &[w(self.width)]))
@@ -439,7 +450,10 @@ impl Component for Slider {
                             .opacity(DANGER_TRACK_OPACITY)
                             .tw(
                                 &tokens,
-                                &[rounded_on(Radius::Pill, Corners::Right, 0.0), bg(Paint::Danger)],
+                                &[
+                                    rounded_on(Radius::Pill, Corners::Right, 0.0),
+                                    bg(Paint::Danger),
+                                ],
                             )
                     }),
             )
@@ -460,7 +474,10 @@ impl Component for Slider {
                             .height(Size::px(track_height))
                             .tw(
                                 &tokens,
-                                &[rounded_on(Radius::Pill, Corners::Right, 0.0), bg(Paint::Danger)],
+                                &[
+                                    rounded_on(Radius::Pill, Corners::Right, 0.0),
+                                    bg(Paint::Danger),
+                                ],
                             )
                     }),
             )
@@ -496,7 +513,8 @@ impl Component for Slider {
                         rect()
                             .width(Size::px(thumb_size))
                             .height(Size::px(thumb_size))
-                            .tw(&tokens, &[rounded(Radius::Pill)]).focusable(focus()),
+                            .tw(&tokens, &[rounded(Radius::Pill)])
+                            .focusable(focus()),
                     )
             }))
             .child({
@@ -522,15 +540,12 @@ impl Component for Slider {
                 // The centre colour sits a ring's width inside the knob.
                 let inner = (thumb - 2.0 * S1.px()).max(0.0);
                 match self.thumb_fill {
-                    Some(colour) => knob.child(
-                        rect()
-                            .width(Size::px(inner))
-                            .height(Size::px(inner))
-                            .tw(
-                                &tokens,
-                                &[rounded(Radius::Pill), fill(colour), border(Line::Hairline)],
-                            ),
-                    ),
+                    Some(colour) => {
+                        knob.child(rect().width(Size::px(inner)).height(Size::px(inner)).tw(
+                            &tokens,
+                            &[rounded(Radius::Pill), fill(colour), border(Line::Hairline)],
+                        ))
+                    }
                     None => knob,
                 }
             });

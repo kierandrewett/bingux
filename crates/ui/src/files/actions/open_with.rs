@@ -7,10 +7,9 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 
-use bingux_files::location::file_uri;
+use crate::platform::apps::{Arguments, expand_exec, spawn};
 
 /// How many applications the menu lists for one type.
 const MENU_LIMIT: usize = 12;
@@ -37,7 +36,7 @@ fn apps() -> &'static [App] {
 
 /// Read the desktop entries on a thread now, so the first menu does not wait
 /// for the disk.
-pub(super) fn warm() {
+pub(in crate::files) fn warm() {
     if APPS.get().is_none() {
         std::thread::spawn(|| {
             apps();
@@ -81,8 +80,15 @@ fn data_dirs() -> Vec<PathBuf> {
         .ok()
         .filter(|value| !value.is_empty())
         .unwrap_or_else(|| "/usr/local/share:/usr/share".to_owned());
-    dirs.extend(system.split(':').filter(|dir| !dir.is_empty()).map(PathBuf::from));
-    dirs.into_iter().map(|dir| dir.join("applications")).collect()
+    dirs.extend(
+        system
+            .split(':')
+            .filter(|dir| !dir.is_empty())
+            .map(PathBuf::from),
+    );
+    dirs.into_iter()
+        .map(|dir| dir.join("applications"))
+        .collect()
 }
 
 fn scan() -> Vec<App> {
@@ -93,7 +99,10 @@ fn scan() -> Vec<App> {
         };
         for entry in entries.flatten() {
             let path = entry.path();
-            if path.extension().is_none_or(|extension| extension != "desktop") {
+            if path
+                .extension()
+                .is_none_or(|extension| extension != "desktop")
+            {
                 continue;
             }
             if let Ok(text) = fs::read_to_string(&path)
@@ -151,93 +160,38 @@ fn parse_desktop_entry(text: &str) -> Option<App> {
     })
 }
 
-/// The command line of `app` for `path`: the `Exec` line split into words,
-/// the file field codes replaced and the rest dropped.
+/// The command line of `app` for `path`: the `Exec` line split into words and
+/// the field codes replaced, as the platform layer does for every launcher.
 fn command_line(app: &App, path: &Path) -> Vec<String> {
-    let mut words = Vec::new();
-    let mut word = String::new();
-    let mut quoted = false;
-    let mut started = false;
-    let mut chars = app.exec.chars().peekable();
-    while let Some(character) = chars.next() {
-        match character {
-            '"' => {
-                quoted = !quoted;
-                started = true;
-            }
-            '\\' if quoted => {
-                if let Some(next) = chars.next() {
-                    word.push(next);
-                }
-            }
-            ' ' | '\t' if !quoted => {
-                if started {
-                    words.push(std::mem::take(&mut word));
-                    started = false;
-                }
-            }
-            other => {
-                word.push(other);
-                started = true;
-            }
-        }
-    }
-    if started {
-        words.push(word);
-    }
-    let file = path.to_string_lossy().into_owned();
-    let uri = file_uri(path);
-    let mut line = Vec::new();
-    for word in words {
-        match word.as_str() {
-            "%f" | "%F" => line.push(file.clone()),
-            "%u" | "%U" => line.push(uri.clone()),
-            "%i" | "%c" | "%k" | "%d" | "%D" | "%n" | "%N" | "%v" | "%m" => {}
-            other => line.push(other.replace("%%", "%")),
-        }
-    }
-    // An entry with no field code still gets the file, as most launchers do.
-    if !app.exec.contains('%') {
-        line.push(file);
-    }
-    line
+    expand_exec(
+        &app.exec,
+        &app.name,
+        &app.icon,
+        None,
+        &Arguments {
+            files: &[path.to_path_buf()],
+            uris: &[],
+        },
+    )
 }
 
 /// Start `app` on `path`. It runs on its own: it is not a child of the file
 /// view's work, and its output is dropped.
 pub(in crate::files) fn launch(app: &App, path: &Path) -> io::Result<()> {
-    let line = command_line(app, path);
-    let Some((program, arguments)) = line.split_first() else {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty command"));
-    };
-    let mut child = Command::new(program)
-        .args(arguments)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
-    // Reap it when it ends, so it does not stay a zombie.
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(())
+    spawn(&command_line(app, path), None)
 }
 
 /// Open `path` in the application the system names for its type, as a
-/// double click does in any file manager (`xdg-open`, which asks the MIME
-/// database and the user's defaults). It runs on its own and its output is
-/// dropped.
-pub(in crate::files) fn open_default(path: &Path) -> io::Result<()> {
-    let mut child = Command::new("xdg-open")
-        .arg(path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
+/// double click does in any file manager: the desktop's portal, else the
+/// default application of the MIME database, else `xdg-open`
+/// (`crate::platform::open`). It returns at once; `failed` is called on the UI
+/// thread with what went wrong when nothing could open the file.
+pub(in crate::files) fn open_default(path: &Path, failed: impl FnOnce(String) + 'static) {
+    crate::platform::open::open_file_then(path.to_path_buf(), move |result| {
+        if let Err(error) = result {
+            failed(error.to_string());
+        }
     });
-    Ok(())
 }
 
 #[cfg(test)]

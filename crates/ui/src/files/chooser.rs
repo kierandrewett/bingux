@@ -391,9 +391,9 @@ impl Session {
             Host::Dialog(_) => self.finish(vec![path]),
             Host::Browser(_) => {
                 let mut problem = self.nav.problem;
-                if let Err(error) = open_default(&path) {
-                    problem.set(Some(format!("Could not open the file: {error}.")));
-                }
+                open_default(&path, move |why| {
+                    problem.set(Some(format!("Could not open the file. {why}")));
+                });
             }
         }
     }
@@ -835,16 +835,11 @@ impl Component for ChooserBody {
                 .map(|choice| (choice.id.clone(), choice.selected.clone()))
                 .collect::<Vec<_>>()
         });
-        let include_noise = use_state(|| true);
         let places_rev = use_state(|| 0_u32);
         let places = use_resource(*places_rev.read(), load_places).with(Clone::clone);
         let current = place_of(model.read().location());
         let (directory, reload) = use_directory(&current);
         let load = directory.read(&current);
-        let here = match &current {
-            Where::Folder(path) => path.clone(),
-            Where::Recent => home.clone(),
-        };
         // The file type filter is the chooser's, so the search leaves out
         // what it would only hide.
         let chooser_filter = if matches!(request.action, Action::SelectFolder | Action::SaveFiles) {
@@ -972,43 +967,38 @@ impl Component for ChooserBody {
             (Load::Ready(_), Some(shown)) => Load::Ready(shown.listing.clone()),
             (other, _) => other.clone(),
         };
-        let folder_name = match &current {
-            Where::Folder(path) => path.file_name().map_or_else(
-                || path.display().to_string(),
-                |name| name.to_string_lossy().into_owned(),
-            ),
-            Where::Recent => "Recent".to_string(),
-        };
-
         let active_filter = (!folder_mode)
             .then(|| (*filter.read()).and_then(|index| filters.get(index)))
             .flatten();
         let use_grid = kind_of(*level.read()) == ViewKind::Grid;
 
+        // A window's Go and View keys are its commands (below), so they
+        // reach the folder wherever the focus is, a page that stands in for
+        // the list included; a dialog's are this handler's.
+        let routed = matches!(self.host, Host::Browser(_));
         let shortcuts = {
             let session = session.clone();
             move |event: Event<KeyboardEventData>| {
                 let mut draft = draft;
                 let alt = event.modifiers.contains(Modifiers::ALT);
                 let ctrl = event.modifiers.contains(Modifiers::CONTROL);
-                let shift = event.modifiers.contains(Modifiers::SHIFT);
                 // Back and Forward are along the reading direction: Alt+Right goes back in a
                 // window that reads from the right.
                 let key = direction.reading_key(&event.key);
                 match &key {
-                    Key::Named(NamedKey::ArrowUp) if alt => {
+                    Key::Named(NamedKey::ArrowUp) if alt && !routed => {
                         event.stop_propagation();
                         session.nav.up();
                     }
-                    Key::Named(NamedKey::ArrowLeft) if alt => {
+                    Key::Named(NamedKey::ArrowLeft) if alt && !routed => {
                         event.stop_propagation();
                         session.nav.back();
                     }
-                    Key::Named(NamedKey::ArrowRight) if alt => {
+                    Key::Named(NamedKey::ArrowRight) if alt && !routed => {
                         event.stop_propagation();
                         session.nav.forward();
                     }
-                    Key::Named(NamedKey::Home) if alt => {
+                    Key::Named(NamedKey::Home) if alt && !routed => {
                         event.stop_propagation();
                         session.nav.go(Where::Folder(session.home.clone()));
                     }
@@ -1017,11 +1007,13 @@ impl Component for ChooserBody {
                         event.stop_propagation();
                         session.nav.up();
                     }
-                    Key::Named(NamedKey::F5) if !ctrl && !alt => {
+                    Key::Named(NamedKey::F5) if !ctrl && !alt && !routed => {
                         event.stop_propagation();
                         session.reload.run();
                     }
-                    Key::Character(text) if ctrl && !alt && text.eq_ignore_ascii_case("r") => {
+                    Key::Character(text)
+                        if ctrl && !alt && !routed && text.eq_ignore_ascii_case("r") =>
+                    {
                         event.stop_propagation();
                         session.reload.run();
                     }
@@ -1033,16 +1025,18 @@ impl Component for ChooserBody {
                         event.stop_propagation();
                         session.reload.stop();
                     }
-                    Key::Character(text) if ctrl && !alt && text.eq_ignore_ascii_case("f") => {
+                    Key::Character(text)
+                        if ctrl && !alt && !routed && text.eq_ignore_ascii_case("f") =>
+                    {
                         event.stop_propagation();
                         session.start_search("");
                     }
-                    Key::Character(text) if ctrl && text.eq_ignore_ascii_case("l") => {
+                    Key::Character(text) if ctrl && !routed && text.eq_ignore_ascii_case("l") => {
                         event.stop_propagation();
                         draft.set(AddressBar::text_of(&session.nav.here()));
                         editing.set(true);
                     }
-                    Key::Character(text) if ctrl && text.eq_ignore_ascii_case("h") => {
+                    Key::Character(text) if ctrl && !routed && text.eq_ignore_ascii_case("h") => {
                         event.stop_propagation();
                         let shown = *show_hidden.peek();
                         show_hidden.set(!shown);
@@ -1057,6 +1051,21 @@ impl Component for ChooserBody {
                 }
             }
         };
+        // A window's Go and View commands, for its keys, its main menu, the
+        // palette and the shortcuts sheet. The body is mounted once per
+        // window, so they are the window's.
+        crate::commands::use_window_commands(if routed {
+            browser_commands(
+                &session,
+                editing,
+                draft,
+                show_hidden,
+                preview_pane,
+                direction == crate::controls::direction::Direction::Rtl,
+            )
+        } else {
+            Vec::new()
+        });
 
         let footer = footer(&tokens, compact, &session, saving, problem);
         let footer_none = footer.is_none();
@@ -1199,7 +1208,7 @@ impl Component for ChooserBody {
                         .child(divider(&tokens))
                 }))
                 .child(files);
-            return root
+            let root = root
                 .tw(
                     &tokens,
                     &[
@@ -1216,8 +1225,8 @@ impl Component for ChooserBody {
                         .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(sidebar))
                         .child(rect().tw(&tokens, SPLIT_HAIRLINE))
                 }))
-                .child(pane)
-                .into_element();
+                .child(pane);
+            return root.into_element();
         }
         root.tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
             .child(toolbar)
@@ -1235,6 +1244,105 @@ impl Component for ChooserBody {
             )
             .into_element()
     }
+}
+
+/// The commands of a browser window's folder: going places and what the
+/// view shows, run from their keys wherever the focus is. Back and Forward
+/// follow the reading direction (`rtl`: Alt+Right goes back). Alt+P is the
+/// file view's own key, so the command only names it.
+fn browser_commands(
+    session: &Session,
+    mut editing: State<bool>,
+    draft: OmniDraft,
+    mut show_hidden: State<bool>,
+    mut preview_pane: State<bool>,
+    rtl: bool,
+) -> Vec<crate::commands::Command> {
+    use crate::commands::{Command, CommandGroup};
+    let nav = session.nav;
+    let (can_back, can_forward) = {
+        let model = nav.model.read();
+        (model.can_go_back(), model.can_forward())
+    };
+    let here = nav.current();
+    let has_parent = super::history::parent(&here).is_some();
+    let in_folder = matches!(here, Where::Folder(_));
+    let home = session.home.clone();
+    let reload = session.reload.clone();
+    let search = session.clone();
+    let hidden = *show_hidden.read();
+    let pane = *preview_pane.read();
+    let (back_key, forward_key) = if rtl {
+        ("Alt+Right", "Alt+Left")
+    } else {
+        ("Alt+Left", "Alt+Right")
+    };
+    vec![
+        Command::new("files.back", "Back", move |_| nav.back())
+            .shortcut(back_key)
+            .enabled(can_back)
+            .icon(Icon::GoPrevious)
+            .group(CommandGroup::Go)
+            .section("history"),
+        Command::new("files.forward", "Forward", move |_| nav.forward())
+            .shortcut(forward_key)
+            .enabled(can_forward)
+            .icon(Icon::GoNext)
+            .group(CommandGroup::Go)
+            .section("history"),
+        Command::new("files.up", "Parent folder", move |_| nav.up())
+            .shortcut("Alt+Up")
+            .enabled(has_parent)
+            .icon(Icon::PanUp)
+            .group(CommandGroup::Go)
+            .section("places"),
+        Command::new("files.home", "Home", move |_| {
+            nav.go(Where::Folder(home.clone()))
+        })
+        .shortcut("Alt+Home")
+        .icon(Icon::UserHome)
+        .group(CommandGroup::Go)
+        .section("places"),
+        Command::new("files.location", "Go to location…", move |_| {
+            let mut draft = draft;
+            draft.set(AddressBar::text_of(&nav.here()));
+            editing.set(true);
+        })
+        .shortcut("Ctrl+L")
+        .group(CommandGroup::Go)
+        .section("places")
+        .keywords(["path", "address"]),
+        Command::new("files.search", "Search", move |_| search.start_search(""))
+            .shortcut("Ctrl+F")
+            .icon(Icon::Search)
+            .group(CommandGroup::Edit)
+            .section("find"),
+        Command::new("files.hidden", "Show hidden files", move |_| {
+            let shown = *show_hidden.peek();
+            show_hidden.set(!shown);
+        })
+        .shortcut("Ctrl+H")
+        .checked(hidden)
+        .group(CommandGroup::View)
+        .section("show")
+        .keywords(["dotfiles"]),
+        Command::new("files.preview-pane", "Show preview pane", move |_| {
+            let shown = *preview_pane.peek();
+            preview_pane.set(!shown);
+        })
+        .shortcut("Alt+P")
+        .checked(pane)
+        .group(CommandGroup::View)
+        .section("show")
+        .keys_handled_by_view(),
+        Command::new("files.reload", "Reload", move |_| reload.run())
+            .shortcut("F5")
+            .shortcut("Ctrl+R")
+            .enabled(in_folder)
+            .icon(Icon::Refresh)
+            .group(CommandGroup::View)
+            .section("reload"),
+    ]
 }
 
 /// The icon size a folder opens at when nothing is remembered for it: 16 px
@@ -1315,6 +1423,9 @@ fn main_area(
     let mut places_rev = session.places_rev;
     let mut sort = sort;
     let mut show_hidden = show_hidden;
+    // A read stopped part way shows what it got, under a banner that says
+    // the list is not whole and offers to read it again.
+    let partial = listing.stopped && !order.is_empty();
     let mut view = FileView::new(listing.clone(), order, selection)
         .icon_px(level)
         .sort(*sort.peek())
@@ -1367,7 +1478,46 @@ fn main_area(
     if let Some(placeholder) = placeholder {
         view = view.placeholder(placeholder);
     }
+    if partial {
+        return PartialListing {
+            view: view.into(),
+            reload: session.reload.clone(),
+        }
+        .into();
+    }
     view.into()
+}
+
+/// The rows a stopped read got, under a banner that says the list is not
+/// whole, with Reload.
+#[derive(PartialEq)]
+struct PartialListing {
+    view: Element,
+    reload: Reload,
+}
+
+impl Component for PartialListing {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let reload = self.reload.clone();
+        rect()
+            .component("PartialListing")
+            .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
+            .child(
+                rect().tw(&tokens, &[w_full(), px(S3), pt(S2)]).child(
+                    crate::shell::banner(
+                        "Loading stopped before every item was read. Reload to see them all.",
+                    )
+                    .kind(crate::shell::BannerKind::Warning)
+                    .action("Reload", move |_: ()| reload.run()),
+                ),
+            )
+            .child(
+                rect()
+                    .tw(&tokens, &[w_full(), h_flex()])
+                    .child(self.view.clone()),
+            )
+    }
 }
 
 /// What a middle click on a row of a history menu does: open its folder in a

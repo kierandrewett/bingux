@@ -61,7 +61,11 @@ pub fn open_with(overlays: Overlays, info: AppInfo) {
 pub fn open_at(overlays: Overlays, info: AppInfo, page: Page) {
     overlays.show_dialog(framed_dialog(
         format!("About {}", info.name),
-        Element::from(AboutBody { info, overlays, start: page }),
+        Element::from(AboutBody {
+            info,
+            overlays,
+            start: page,
+        }),
         Dim::Dialog.px(),
         Dim::PopupHeight.px(),
     ));
@@ -80,7 +84,12 @@ fn environment(tokens: &Tokens) -> Environment {
     Environment {
         facts: details::facts(),
         scale: *Platform::get().current_window().scale_factor.read(),
-        theme: if tokens.scheme.is_dark() { "Dark" } else { "Light" }.to_owned(),
+        theme: if tokens.scheme.is_dark() {
+            "Dark"
+        } else {
+            "Light"
+        }
+        .to_owned(),
         accent: tokens.accent_name.to_owned(),
         density: if is_compact() { "Compact" } else { "Regular" }.to_owned(),
     }
@@ -157,8 +166,7 @@ impl Component for AboutBody {
                 // Alt+Left goes back, as it does in every window with a Back (Alt+Right where the
                 // window reads from the right).
                 let back = event.modifiers.contains(Modifiers::ALT)
-                    && direction.reading_key(&event.key)
-                        == Key::Named(NamedKey::ArrowLeft);
+                    && direction.reading_key(&event.key) == Key::Named(NamedKey::ArrowLeft);
                 if back && *page.peek() != Page::Main {
                     event.stop_propagation();
                     page.set(Page::Main);
@@ -192,9 +200,9 @@ fn link_row(title: &str, url: &str, overlays: Overlays) -> Element {
     row(title)
         .value(link::shown(url))
         .on_press(move |_| {
-            if !link::open(&url_owned) {
+            link::open(&url_owned, move || {
                 overlays.toast("The link could not be opened.");
-            }
+            });
         })
         .into()
 }
@@ -214,7 +222,10 @@ fn main_page(
     };
     let mut hero = rect()
         .component("AboutHero")
-        .tw(tokens, &[flex_col(), items(Align::Center), w_full(), gap(S2), pt(S2)])
+        .tw(
+            tokens,
+            &[flex_col(), items(Align::Center), w_full(), gap(S2), pt(S2)],
+        )
         .child(app_icon(info.icon.clone(), IconSize::AppLarge))
         .child(centred(TITLE, &info.name));
     let version = info.version_line();
@@ -248,8 +259,16 @@ fn main_page(
             .navigates()
             .on_press(move |_| page.set(Page::Licence)),
     );
-    doors = doors.row(row("Credits").navigates().on_press(move |_| page.set(Page::Credits)));
-    doors = doors.row(row("Legal").navigates().on_press(move |_| page.set(Page::Legal)));
+    doors = doors.row(
+        row("Credits")
+            .navigates()
+            .on_press(move |_| page.set(Page::Credits)),
+    );
+    doors = doors.row(
+        row("Legal")
+            .navigates()
+            .on_press(move |_| page.set(Page::Legal)),
+    );
     elements.push(doors.into());
 
     let mut facts = Group::new(Some("Details".to_owned()));
@@ -276,12 +295,13 @@ fn main_page(
         rect()
             .tw(tokens, &[flex_row(), justify(Align::Center), w_full()])
             .child(
-                action_button("Copy details", move |_| {
-                    match freya::clipboard::Clipboard::set(text.clone()) {
+                action_button(
+                    "Copy details",
+                    move |_| match freya::clipboard::Clipboard::set(text.clone()) {
                         Ok(()) => overlays.toast("Details copied."),
                         Err(_) => overlays.toast("The details could not be copied."),
-                    }
-                })
+                    },
+                )
                 .icon(Icon::EditCopy),
             )
             .into(),
@@ -310,7 +330,12 @@ fn licence_page(tokens: &Tokens, info: &AppInfo) -> Vec<Element> {
         };
         elements.push(caption(note));
     } else {
-        elements.push(text_card(None, tokens, BODY, &details::paragraphs(&info.licence_text)));
+        elements.push(text_card(
+            None,
+            tokens,
+            BODY,
+            &details::paragraphs(&info.licence_text),
+        ));
     }
     elements
 }
@@ -366,10 +391,23 @@ fn legal_page(tokens: &Tokens, info: &AppInfo, legal: Option<Legal>) -> Vec<Elem
         );
     }
     if crates.is_empty() {
-        elements.push(text_card(None, tokens, LISTING, &details::paragraphs(&legal.text)));
+        elements.push(text_card(
+            None,
+            tokens,
+            LISTING,
+            &details::paragraphs(&legal.text),
+        ));
     } else {
-        let blocks: Vec<String> = crates.chunks(LISTING_BLOCK).map(|lines| lines.join("\n")).collect();
-        elements.push(text_card(Some("Licences of each library"), tokens, LISTING, &blocks));
+        let blocks: Vec<String> = crates
+            .chunks(LISTING_BLOCK)
+            .map(|lines| lines.join("\n"))
+            .collect();
+        elements.push(text_card(
+            Some("Licences of each library"),
+            tokens,
+            LISTING,
+            &blocks,
+        ));
     }
     if let Some(path) = legal.path {
         elements.push(caption(format!("The full licence texts are in {path}.")));
@@ -381,12 +419,25 @@ fn legal_page(tokens: &Tokens, info: &AppInfo, legal: Option<Legal>) -> Vec<Elem
 /// when there is one. The text is selectable (drag, double and triple click,
 /// Ctrl+C, Copy in the right-click menu) and is a Tab stop, so a keyboard
 /// user can select all of it: a licence is a text people copy from.
-fn text_card(heading: Option<&str>, tokens: &Tokens, style: TextStyle, paragraphs: &[String]) -> Element {
+fn text_card(
+    heading: Option<&str>,
+    tokens: &Tokens,
+    style: TextStyle,
+    paragraphs: &[String],
+) -> Element {
     let mut column = rect().tw(tokens, &[flex_col(), w_full(), gap(S3)]);
     for text in paragraphs {
-        let block = crate::controls::select_text(text.clone()).style(style).tab_stop(true);
-        let block = if style.mono { block.breaks_anywhere() } else { block };
+        let block = crate::controls::select_text(text.clone())
+            .style(style)
+            .tab_stop(true);
+        let block = if style.mono {
+            block.breaks_anywhere()
+        } else {
+            block
+        };
         column = column.child(Element::from(block));
     }
-    Group::new(heading.map(str::to_owned)).content(column).into()
+    Group::new(heading.map(str::to_owned))
+        .content(column)
+        .into()
 }

@@ -42,7 +42,9 @@ use super::press::{Press, use_press};
 use super::tooltip::hover_tip;
 use crate::component::ComponentName;
 use crate::elide::isolate_ltr;
-pub use crate::elide::{ElideStep, Measure, elide_middle, elide_name, elide_path, elide_path_traced};
+pub use crate::elide::{
+    ElideStep, Measure, elide_middle, elide_name, elide_path, elide_path_traced,
+};
 use crate::shell::{MenuItem, Overlays, menu_item};
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -108,12 +110,18 @@ thread_local! {
 /// The families a label falls back through: the interface font first, as the
 /// app registers it as the default.
 static FAMILIES: LazyLock<[Vec<String>; 2]> = LazyLock::new(|| {
-    let rest = || freya_core::style::default_fonts::default_fonts().into_iter().map(|font| font.to_string());
+    let rest = || {
+        freya_core::style::default_fonts::default_fonts()
+            .into_iter()
+            .map(|font| font.to_string())
+    };
     [
         std::iter::once(crate::theme::font_family().to_owned())
             .chain(rest())
             .collect(),
-        std::iter::once(mono_family().to_owned()).chain(rest()).collect(),
+        std::iter::once(mono_family().to_owned())
+            .chain(rest())
+            .collect(),
     ]
 });
 
@@ -157,11 +165,14 @@ pub(crate) fn measure_text_scaled(text: &str, style: TextStyle, scale: f32) -> f
     }) {
         return width;
     }
-    let app_fonts = CurrentContext::try_with(|_| try_consume_root_context::<FontCollection>()).flatten();
+    let app_fonts =
+        CurrentContext::try_with(|_| try_consume_root_context::<FontCollection>()).flatten();
     let remember = app_fonts.is_some();
     let fonts = app_fonts.unwrap_or_else(|| SYSTEM_FONTS.with(Clone::clone));
     MEASURED.with_borrow_mut(|all| {
-        let measured = all.entry(key).or_insert_with(|| measured_style(style, size));
+        let measured = all
+            .entry(key)
+            .or_insert_with(|| measured_style(style, size));
         let mut builder = ParagraphBuilder::new(&measured.paragraph, fonts);
         builder.push_style(&measured.text);
         builder.add_text(text);
@@ -184,7 +195,11 @@ fn measured_style(style: TextStyle, size: f32) -> Measured {
     let mut text = SkTextStyle::new();
     text.set_font_size(size);
     text.set_font_families(&FAMILIES[usize::from(style.mono)]);
-    text.set_font_style(FontStyle::new(style.weight.into(), Width::NORMAL, Slant::Upright));
+    text.set_font_style(FontStyle::new(
+        style.weight.into(),
+        Width::NORMAL,
+        Slant::Upright,
+    ));
     text.set_letter_spacing(style.tracking);
     if style.tabular {
         text.add_font_feature("tnum", 1);
@@ -404,7 +419,10 @@ impl Component for PathLabel {
         // `Elided` box is what the Layout checks read as "this text is cut on
         // purpose, and its full text is the tooltip".
         let text = if cut && self.tooltip {
-            rect().component("Elided").child(hover_tip(text, self.text.clone())).into()
+            rect()
+                .component("Elided")
+                .child(hover_tip(text, self.text.clone()))
+                .into()
         } else {
             text
         };
@@ -420,7 +438,10 @@ impl Component for PathLabel {
             .height(Size::px(line))
             .tw(&tokens, &[clip()])
             .maybe(self.align.is_some() && width().is_some(), |element| {
-                element.tw(&tokens, &[flex_col(), items(self.align.unwrap_or(Align::Center))])
+                element.tw(
+                    &tokens,
+                    &[flex_col(), items(self.align.unwrap_or(Align::Center))],
+                )
             })
             .on_sized(move |event: Event<SizedEventData>| {
                 width.set_if_modified(Some(event.area.width()));
@@ -457,12 +478,13 @@ impl Component for CopyMenu {
         let press = use_press();
         let items = overlays.map(|overlays| {
             let text = self.text.clone();
-            vec![menu_item(self.label, move |_| {
-                match freya::clipboard::Clipboard::set(text.clone()) {
+            vec![menu_item(
+                self.label,
+                move |_| match freya::clipboard::Clipboard::set(text.clone()) {
                     Ok(()) => overlays.toast("Copied."),
                     Err(_) => overlays.toast("The text could not be copied."),
-                }
-            })]
+                },
+            )]
         });
         let items = items.unwrap_or_default();
         let touch_items = items.clone();

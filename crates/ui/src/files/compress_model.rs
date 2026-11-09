@@ -17,12 +17,12 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use bingux_files::Entry;
 use bingux_files::ops::{
     Excludes, Format, ImageFormat, MediaKind, NameCheck, OnConflict, PackOptions, Password,
     ReduceOptions, Tools, VideoCodec, VideoQuality, check_name, file_name, free_base,
     suggested_base,
 };
-use bingux_files::Entry;
 
 /// What the dialog makes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,7 +194,9 @@ pub fn parse_dimension(text: &str) -> Result<u32, String> {
         .parse()
         .map_err(|_| "Use digits only, such as 1600.".to_string())?;
     if !(MIN_DIMENSION..=MAX_DIMENSION).contains(&number) {
-        return Err(format!("Use a size from {MIN_DIMENSION} to {MAX_DIMENSION} pixels."));
+        return Err(format!(
+            "Use a size from {MIN_DIMENSION} to {MAX_DIMENSION} pixels."
+        ));
     }
     Ok(number)
 }
@@ -215,7 +217,11 @@ pub fn usable_format(wanted: Format) -> Format {
 pub fn unavailable_formats() -> Vec<(String, String)> {
     Format::ALL
         .into_iter()
-        .filter_map(|format| format.unavailable().map(|why| (format.label().to_string(), why)))
+        .filter_map(|format| {
+            format
+                .unavailable()
+                .map(|why| (format.label().to_string(), why))
+        })
         .collect()
 }
 
@@ -299,7 +305,10 @@ pub fn result_name(draft: &Draft, typed: &Typed, existing: &HashSet<String>) -> 
     let format = draft.pack.format;
     let wanted = file_name(&typed.name, format);
     if existing.contains(&wanted) && draft.conflict == OnConflict::KeepBoth {
-        file_name(&free_base(&typed.name, format, |name| existing.contains(name)), format)
+        file_name(
+            &free_base(&typed.name, format, |name| existing.contains(name)),
+            format,
+        )
     } else {
         wanted
     }
@@ -307,7 +316,9 @@ pub fn result_name(draft: &Draft, typed: &Typed, existing: &HashSet<String>) -> 
 
 /// Whether the typed name is taken, for the conflict row.
 pub fn name_is_taken(draft: &Draft, typed: &Typed, existing: &HashSet<String>) -> bool {
-    check_name(&typed.name, draft.pack.format, |name| existing.contains(name)) == NameCheck::Taken
+    check_name(&typed.name, draft.pack.format, |name| {
+        existing.contains(name)
+    }) == NameCheck::Taken
 }
 
 /// The pack options of a form, with its password.
@@ -404,7 +415,7 @@ pub fn audio_codecs_unavailable(tools: &Tools) -> Vec<(String, String)> {
 
 /// The sentence of the footer's summary row: `Original 842 MB, estimated 120 MB`.
 pub fn summary(original: u64, estimated: Option<u64>) -> String {
-    use bingux_files::display::size;
+    use crate::files::display::size;
     match estimated {
         Some(estimated) => format!("Original {}, estimated {}", size(original), size(estimated)),
         None => format!("Original {}, estimating…", size(original)),
@@ -418,7 +429,7 @@ pub fn created_text(name: &str) -> String {
 
 /// How a finished reduction reads in a toast.
 pub fn reduced_text(reduced: usize, kept: usize, failed: usize, from: u64, to: u64) -> String {
-    use bingux_files::display::size;
+    use crate::files::display::size;
     let mut parts = Vec::new();
     if reduced == 1 && kept == 0 && failed == 0 {
         parts.push(format!("Reduced from {} to {}", size(from), size(to)));
@@ -456,13 +467,22 @@ mod tests {
 
     fn entry(name: &str, folder: bool) -> Entry {
         let kind = if folder { Kind::Directory } else { Kind::File };
-        let mut entry = Entry::named(PathBuf::from("/home/u/Pictures").join(name), name.to_string(), kind, false, false);
+        let mut entry = Entry::named(
+            PathBuf::from("/home/u/Pictures").join(name),
+            name.to_string(),
+            kind,
+            false,
+            false,
+        );
         entry.size = 1000;
         entry
     }
 
     fn subject(names: &[&str]) -> Subject {
-        let entries: Vec<Entry> = names.iter().map(|name| entry(name, !name.contains('.'))).collect();
+        let entries: Vec<Entry> = names
+            .iter()
+            .map(|name| entry(name, !name.contains('.')))
+            .collect();
         Subject::of(&entries)
     }
 
@@ -476,15 +496,26 @@ mod tests {
         }
     }
 
-    fn world<'a>(subject: &'a Subject, existing: &'a HashSet<String>, tools: Option<&'a Tools>) -> World<'a> {
-        World { subject, existing, tools }
+    fn world<'a>(
+        subject: &'a Subject,
+        existing: &'a HashSet<String>,
+        tools: Option<&'a Tools>,
+    ) -> World<'a> {
+        World {
+            subject,
+            existing,
+            tools,
+        }
     }
 
     #[test]
     fn titles_and_default_names_follow_the_selection() {
         assert_eq!(subject(&["holiday"]).title(), "Compress “holiday”");
         assert_eq!(subject(&["holiday"]).default_base(), "holiday");
-        assert_eq!(subject(&["a.txt", "b.txt", "c"]).title(), "Compress 3 items");
+        assert_eq!(
+            subject(&["a.txt", "b.txt", "c"]).title(),
+            "Compress 3 items"
+        );
         assert_eq!(subject(&["a.txt", "b.txt"]).default_base(), "Archive");
         assert_eq!(subject(&["report.pdf"]).default_base(), "report");
     }
@@ -493,12 +524,26 @@ mod tests {
     fn pure_media_opens_on_reduce_and_anything_else_on_archive() {
         assert_eq!(subject(&["a.jpg", "b.png"]).default_mode(), Mode::Reduce);
         assert_eq!(subject(&["a.mp4"]).default_mode(), Mode::Reduce);
-        assert_eq!(subject(&["a.flac", "b.jpg", "c.mkv"]).default_mode(), Mode::Reduce);
-        assert_eq!(subject(&["a.jpg", "notes.txt"]).default_mode(), Mode::Archive, "mixed: archive only");
-        assert_eq!(subject(&["photos"]).default_mode(), Mode::Archive, "a folder is not media");
+        assert_eq!(
+            subject(&["a.flac", "b.jpg", "c.mkv"]).default_mode(),
+            Mode::Reduce
+        );
+        assert_eq!(
+            subject(&["a.jpg", "notes.txt"]).default_mode(),
+            Mode::Archive,
+            "mixed: archive only"
+        );
+        assert_eq!(
+            subject(&["photos"]).default_mode(),
+            Mode::Archive,
+            "a folder is not media"
+        );
         assert!(!subject(&["a.jpg", "photos"]).is_pure_media());
         let kinds = subject(&["a.flac", "b.jpg", "c.mkv", "d.jpg"]);
-        assert_eq!(kinds.kinds_present(), [MediaKind::Image, MediaKind::Video, MediaKind::Audio]);
+        assert_eq!(
+            kinds.kinds_present(),
+            [MediaKind::Image, MediaKind::Video, MediaKind::Audio]
+        );
     }
 
     #[test]
@@ -506,10 +551,18 @@ mod tests {
         let subject = subject(&["a.txt"]);
         let none = HashSet::new();
         let draft = Draft::new(&subject, Prefs::default());
-        let check_of = |name: &str, existing: &HashSet<String>| check(&draft, &typed(name), &world(&subject, existing, None));
-        assert_eq!(check_of("", &none).name.as_deref(), Some("Enter a name for the archive."));
+        let check_of = |name: &str, existing: &HashSet<String>| {
+            check(&draft, &typed(name), &world(&subject, existing, None))
+        };
+        assert_eq!(
+            check_of("", &none).name.as_deref(),
+            Some("Enter a name for the archive.")
+        );
         assert!(check_of("", &none).blocked.is_some());
-        assert_eq!(check_of("a/b", &none).name.as_deref(), Some("A name cannot contain a slash."));
+        assert_eq!(
+            check_of("a/b", &none).name.as_deref(),
+            Some("A name cannot contain a slash.")
+        );
         assert!(check_of("fine", &none).blocked.is_none() || !Format::Zip.is_available());
         // A taken name is no error; the conflict row asks what to do.
         let taken: HashSet<String> = ["fine.zip".to_string()].into();
@@ -520,12 +573,19 @@ mod tests {
     #[test]
     fn a_taken_name_is_numbered_or_replaced() {
         let subject = subject(&["a.txt"]);
-        let taken: HashSet<String> = ["Archive.zip".to_string(), "Archive 2.zip".to_string()].into();
+        let taken: HashSet<String> =
+            ["Archive.zip".to_string(), "Archive 2.zip".to_string()].into();
         let mut draft = Draft::new(&subject, Prefs::default());
         draft.pack.format = Format::Zip;
-        assert_eq!(result_name(&draft, &typed("Archive"), &taken), "Archive 3.zip");
+        assert_eq!(
+            result_name(&draft, &typed("Archive"), &taken),
+            "Archive 3.zip"
+        );
         draft.conflict = OnConflict::Replace;
-        assert_eq!(result_name(&draft, &typed("Archive"), &taken), "Archive.zip");
+        assert_eq!(
+            result_name(&draft, &typed("Archive"), &taken),
+            "Archive.zip"
+        );
         assert_eq!(result_name(&draft, &typed("Free"), &taken), "Free.zip");
     }
 
@@ -536,7 +596,8 @@ mod tests {
         let mut draft = Draft::new(&subject, Prefs::default());
         draft.locked = true;
         let mut input = typed("x");
-        let check_now = |draft: &Draft, input: &Typed| check(draft, input, &world(&subject, &none, None));
+        let check_now =
+            |draft: &Draft, input: &Typed| check(draft, input, &world(&subject, &none, None));
         assert!(check_now(&draft, &input).password.is_some());
         input.password = "secret".into();
         assert!(check_now(&draft, &input).confirm.is_some());
@@ -560,10 +621,19 @@ mod tests {
         let draft = Draft::new(&subject, Prefs::default());
         let mut input = typed("x");
         input.excludes = "*.tmp, node_modules".into();
-        assert!(check(&draft, &input, &world(&subject, &none, None)).excludes.is_none());
+        assert!(
+            check(&draft, &input, &world(&subject, &none, None))
+                .excludes
+                .is_none()
+        );
         input.excludes = "a[bc".into();
         let bad = check(&draft, &input, &world(&subject, &none, None));
-        assert!(bad.excludes.as_deref().is_some_and(|text| text.contains("never closed")), "{bad:?}");
+        assert!(
+            bad.excludes
+                .as_deref()
+                .is_some_and(|text| text.contains("never closed")),
+            "{bad:?}"
+        );
         assert!(bad.blocked.is_some());
         assert!(pack_options(&draft, &input).is_err());
     }
@@ -583,7 +653,9 @@ mod tests {
             ffmpeg: Some("/usr/bin/ffmpeg".into()),
             ffprobe: Some("/usr/bin/ffprobe".into()),
             magick: Some("/usr/bin/magick".into()),
-            encoders: ["libx264", "aac", "libopus", "libwebp", "mjpeg", "png"].map(String::from).to_vec(),
+            encoders: ["libx264", "aac", "libopus", "libwebp", "mjpeg", "png"]
+                .map(String::from)
+                .to_vec(),
             magick_formats: ["JPEG", "PNG", "WEBP"].map(String::from).to_vec(),
         }
     }
@@ -595,18 +667,39 @@ mod tests {
         let mut draft = Draft::new(&subject, Prefs::default());
         assert_eq!(draft.mode, Mode::Reduce);
         let waiting = check(&draft, &typed(""), &world(&subject, &none, None));
-        assert!(waiting.blocked.as_deref().is_some_and(|text| text.contains("Looking")));
+        assert!(
+            waiting
+                .blocked
+                .as_deref()
+                .is_some_and(|text| text.contains("Looking"))
+        );
         let ready = tools();
-        assert!(check(&draft, &typed(""), &world(&subject, &none, Some(&ready))).blocked.is_none());
-        let no_ffmpeg = Tools { ffmpeg: None, ffprobe: None, ..tools() };
+        assert!(
+            check(&draft, &typed(""), &world(&subject, &none, Some(&ready)))
+                .blocked
+                .is_none()
+        );
+        let no_ffmpeg = Tools {
+            ffmpeg: None,
+            ffprobe: None,
+            ..tools()
+        };
         assert_eq!(
-            check(&draft, &typed(""), &world(&subject, &none, Some(&no_ffmpeg))).blocked.as_deref(),
+            check(
+                &draft,
+                &typed(""),
+                &world(&subject, &none, Some(&no_ffmpeg))
+            )
+            .blocked
+            .as_deref(),
             Some("ffmpeg is not installed.")
         );
         // A codec the machine lacks blocks too.
         draft.reduce.video.codec = VideoCodec::H265;
         assert_eq!(
-            check(&draft, &typed(""), &world(&subject, &none, Some(&ready))).blocked.as_deref(),
+            check(&draft, &typed(""), &world(&subject, &none, Some(&ready)))
+                .blocked
+                .as_deref(),
             Some("ffmpeg here has no H.265 (MP4) encoder.")
         );
     }
@@ -619,10 +712,21 @@ mod tests {
         let mut draft = Draft::new(&subject, Prefs::default());
         draft.custom_dimension = true;
         let mut input = typed("");
-        assert!(check(&draft, &input, &world(&subject, &none, Some(&ready))).dimension.is_some());
+        assert!(
+            check(&draft, &input, &world(&subject, &none, Some(&ready)))
+                .dimension
+                .is_some()
+        );
         input.dimension = "1600".into();
-        assert!(check(&draft, &input, &world(&subject, &none, Some(&ready))).blocked.is_none());
-        assert_eq!(reduce_options(&draft, &input).image.max_dimension, Some(1600));
+        assert!(
+            check(&draft, &input, &world(&subject, &none, Some(&ready)))
+                .blocked
+                .is_none()
+        );
+        assert_eq!(
+            reduce_options(&draft, &input).image.max_dimension,
+            Some(1600)
+        );
     }
 
     #[test]
@@ -633,7 +737,11 @@ mod tests {
         prefs.reduce.replace_original = true;
         prefs.pack.password = Some(Password::new("x"));
         let draft = Draft::new(&subject, prefs);
-        assert!(!draft.pack.delete_originals && !draft.reduce.replace_original && draft.pack.password.is_none());
+        assert!(
+            !draft.pack.delete_originals
+                && !draft.reduce.replace_original
+                && draft.pack.password.is_none()
+        );
     }
 
     #[test]
@@ -647,12 +755,21 @@ mod tests {
 
     #[test]
     fn the_summary_and_toasts_read_like_the_spec() {
-        assert_eq!(summary(842_000_000, Some(120_000_000)), "Original 842 MB, estimated 120 MB");
+        assert_eq!(
+            summary(842_000_000, Some(120_000_000)),
+            "Original 842\u{a0}MB, estimated 120\u{a0}MB"
+        );
         assert!(summary(842_000_000, None).ends_with("estimating…"));
         assert_eq!(created_text("Photos.zip"), "Created “Photos.zip”");
-        assert_eq!(reduced_text(3, 0, 0, 1_200_000_000, 410_000_000), "Reduced 3 files from 1.2 GB to 410 MB");
+        assert_eq!(
+            reduced_text(3, 0, 0, 1_200_000_000, 410_000_000),
+            "Reduced 3 files from 1.2\u{a0}GB to 410\u{a0}MB"
+        );
         assert_eq!(reduced_text(0, 1, 0, 0, 0), "Already small: kept original");
-        assert_eq!(reduced_text(2, 1, 1, 2_000_000, 1_000_000), "Reduced 2 files from 2.0 MB to 1.0 MB. 1 already small: kept. 1 could not be reduced");
+        assert_eq!(
+            reduced_text(2, 1, 1, 2_000_000, 1_000_000),
+            "Reduced 2 files from 2\u{a0}MB to 1\u{a0}MB. 1 already small: kept. 1 could not be reduced"
+        );
         assert_eq!(reduced_text(0, 0, 0, 0, 0), "Nothing was reduced");
     }
 
@@ -661,10 +778,21 @@ mod tests {
         let none = Tools::default();
         let images = image_formats_unavailable(&none);
         assert_eq!(images.len(), ImageFormat::ALL.len());
-        assert!(video_codecs_unavailable(&none).iter().all(|(_, why)| why.contains("ffmpeg")));
-        assert!(audio_codecs_unavailable(&tools()).iter().all(|(key, _)| key != "opus"));
+        assert!(
+            video_codecs_unavailable(&none)
+                .iter()
+                .all(|(_, why)| why.contains("ffmpeg"))
+        );
+        assert!(
+            audio_codecs_unavailable(&tools())
+                .iter()
+                .all(|(key, _)| key != "opus")
+        );
         for (label, why) in unavailable_formats() {
-            assert!(label.starts_with('.') && why.ends_with('.'), "{label}: {why}");
+            assert!(
+                label.starts_with('.') && why.ends_with('.'),
+                "{label}: {why}"
+            );
         }
     }
 }

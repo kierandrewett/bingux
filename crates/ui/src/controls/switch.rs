@@ -5,6 +5,8 @@ use accesskit::Toggled;
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::a11y::{Semantics, label_from_field, use_field_label};
+
 use super::press::{hit_area, use_press};
 use crate::component::{ComponentName, Prop, Published, prop_override};
 use crate::motion::Focusable;
@@ -23,6 +25,7 @@ pub struct Switch {
     on: bool,
     enabled: bool,
     on_toggle: EventHandler<bool>,
+    semantics: Option<Semantics>,
 }
 
 pub fn switch(on: bool, on_toggle: impl Into<EventHandler<bool>>) -> Switch {
@@ -30,12 +33,20 @@ pub fn switch(on: bool, on_toggle: impl Into<EventHandler<bool>>) -> Switch {
         on,
         enabled: true,
         on_toggle: on_toggle.into(),
+        semantics: None,
     }
 }
 
 impl Switch {
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// Says more than the row's title and subtitle, which name a switch in a
+    /// row: a label of its own for a switch outside one, a hint.
+    pub fn semantics(mut self, semantics: Semantics) -> Self {
+        self.semantics = Some(semantics);
         self
     }
 }
@@ -65,6 +76,8 @@ impl Component for Switch {
         let on_toggle = self.on_toggle.clone();
         let enabled = use_enabled(self.enabled);
         let press = use_press();
+        let field = use_field_label();
+        let semantics = self.semantics.clone();
 
         let track = if on { Paint::Accent } else { Paint::Control };
         let thumb = thumb_paint(on);
@@ -100,7 +113,13 @@ impl Component for Switch {
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Switch)
-            .a11y_builder(move |builder| builder.set_toggled(Toggled::from(on)))
+            .a11y_builder(move |builder| {
+                builder.set_toggled(Toggled::from(on));
+                if let Some(semantics) = &semantics {
+                    semantics.apply(builder);
+                }
+                label_from_field(builder, field.as_ref());
+            })
             .tw(
                 &tokens,
                 &[

@@ -4,8 +4,8 @@ use std::collections::HashSet;
 use std::rc::Rc;
 
 use bingux_ui::charts::{
-    Bar, FlameTree, Segment, Series, SeriesColour, Unit, bar_chart, donut, flame_graph, line_chart,
-    ring, sparkline, timeline_chart,
+    Bar, FlameTree, Segment, Series, SeriesColour, Unit, bar_chart, compass, day_arc, donut,
+    flame_graph, line_chart, range_bar, ring, sparkline, timeline_chart,
 };
 use bingux_ui::controls::TreeNode;
 use bingux_ui::prelude::*;
@@ -239,6 +239,96 @@ pub const SPARKLINE: &[Spec] = &[Spec::forced("With and without an area", || {
     )
 })];
 
+/// One line of the week: a day, its low and high among the week's, and now.
+fn day_line(day: &'static str, low: f64, high: f64, now: Option<f64>) -> Element {
+    let tokens = use_tokens();
+    let stops = vec![
+        (0.0, Paint::Accent.color(&tokens)),
+        (12.0, Paint::Success.color(&tokens)),
+        (22.0, Paint::Warning.color(&tokens)),
+        (30.0, Paint::Danger.color(&tokens)),
+    ];
+    let mut bar = range_bar(0.0, 30.0)
+        .span(low, high)
+        .colours(stops)
+        .label(format!("{day}: low {low}, high {high}"));
+    if let Some(now) = now {
+        bar = bar.marker(now);
+    }
+    hstack(S4)
+        .tw_layout(&[w_full(), items(Align::Center)])
+        .child(
+            rect()
+                .tw_layout(&[w(Dim::Box11)])
+                .child(typography::BODY.label(&tokens, day)),
+        )
+        .child(rect().width(Size::flex(1.0)).child(bar))
+        .into()
+}
+
+pub const RANGE_BAR: &[Spec] = &[
+    Spec::forced("A week of lows and highs, with now", || {
+        card(
+            vstack(S3)
+                .tw_layout(&[w_full()])
+                .child(day_line("Mon", 6.0, 14.0, Some(11.0)))
+                .child(day_line("Tue", 8.0, 21.0, None))
+                .child(day_line("Wed", 11.0, 26.0, None))
+                .child(day_line("Thu", 2.0, 9.0, None))
+                .child(day_line("Fri", 14.0, 15.0, None)),
+        )
+    }),
+    Spec::forced("A value on its scale", || {
+        let tokens = use_tokens();
+        card(
+            vstack(S3).tw_layout(&[w_full()]).child(
+                range_bar(0.0, 11.0)
+                    .colours(vec![
+                        (0.0, Paint::Success.color(&tokens)),
+                        (5.0, Paint::Warning.color(&tokens)),
+                        (8.0, Paint::Danger.color(&tokens)),
+                    ])
+                    .marker(6.0)
+                    .label("UV index 6 of 11"),
+            ),
+        )
+    }),
+];
+
+pub const DIALS: &[Spec] = &[
+    Spec::forced("Compass with a value", || {
+        card(
+            hstack(S8)
+                .child(
+                    compass(45.0)
+                        .centre("12", "km/h")
+                        .label("From the north-east at 12 km/h"),
+                )
+                .child(
+                    compass(250.0)
+                        .centre("4", "km/h")
+                        .label("From the west-south-west at 4 km/h"),
+                ),
+        )
+    }),
+    Spec::forced("Day arc, sun up and sun down", || {
+        card(
+            vstack(S4)
+                .tw_layout(&[w_full()])
+                .child(
+                    day_arc(Some(0.62))
+                        .times("07:08", "16:20")
+                        .label("Sunrise 07:08, sunset 16:20"),
+                )
+                .child(
+                    day_arc(None)
+                        .times("07:08", "16:20")
+                        .label("Sunrise 07:08, sunset 16:20"),
+                ),
+        )
+    }),
+];
+
 pub const TIMELINE: &[Spec] = &[
     Spec::live("Frame times with a budget line", || {
         card(
@@ -448,3 +538,26 @@ pub const LEVEL_METER: &[Spec] = &[Spec::forced(
             .into_element()
     },
 )];
+
+/// Eighty digits: more than a line of any window holds.
+const LONG_FIGURES: &str = "31,415,926,535,897,932,384,626,433,832,795,028,841,971,693,993,751,058,209,749,445,923,078,164";
+
+pub const READOUT: &[Spec] = &[
+    Spec::forced("A result that fits", || {
+        readout("1,234,567.89").into_element()
+    }),
+    Spec::forced("A result scaled down to fit", || {
+        readout("123,456,789,012,345,678.123456").into_element()
+    }),
+    Spec::forced("A result so long it scrolls at its smallest size", || {
+        readout(LONG_FIGURES).into_element()
+    }),
+    Spec::live("Right-click for Copy", || {
+        let mut digits = use_state(|| 3usize);
+        let text: String = "7".repeat(digits());
+        vstack(S3)
+            .child(readout(text).copy_text("77"))
+            .child(action_button("Add a digit", move |_| digits.set(digits() + 1)).compact())
+            .into_element()
+    }),
+];
