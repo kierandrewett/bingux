@@ -314,7 +314,7 @@ impl Component for LevelMeter {
         if self.compact {
             bingux_ui::controls::hover_tip(rect().tw(&tokens, &[w(Dim::Button)]).child(bar), name)
         } else {
-            rect().tw(&tokens, &[w_full()]).child(bar)
+            Element::from(rect().tw(&tokens, &[w_full()]).child(bar))
         }
     }
 }

@@ -300,7 +300,6 @@ impl Ui {
     fn join(self, target: &Join) {
         let ssid = target.ssid.clone();
         let label = connecting_label(&ssid);
-        let window = self.ctx.window;
         match (&target.uuid, target.security) {
             (Some(uuid), _) => {
                 let uuid = uuid.clone();
@@ -311,9 +310,9 @@ impl Ui {
                     || {},
                 );
             }
-            (None, Security::Enterprise) => join::open_enterprise(window, ssid),
+            (None, Security::Enterprise) => join::open_enterprise(self.ctx.overlays, ssid),
             (None, security) if security.needs_password() => {
-                join::open_password(window, ssid, security)
+                join::open_password(self.ctx.overlays, ssid, security)
             }
             (None, _) => self.act(
                 &label,
@@ -761,7 +760,7 @@ fn available_group(ui: Ui, data: &Data) -> Element {
 /// Saved networks and the hidden network popup.
 fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
     let saved = data.model.joinable().count();
-    let window = ui.ctx.window;
+    let overlays = ui.ctx.overlays;
     let router = ui.ctx.router;
     Element::from(
         Group::new(None::<String>)
@@ -779,7 +778,7 @@ fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
                 row("Connect to hidden network…")
                     .navigates()
                     .enabled(radio == Radio::On)
-                    .on_press(move |_| join::open_hidden(window)),
+                    .on_press(move |_| join::open_hidden(overlays)),
             ),
     )
 }
