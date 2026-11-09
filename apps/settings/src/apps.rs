@@ -739,10 +739,16 @@ pub fn uninstall(app: &AppEntry) -> Result<(), String> {
             let args: Vec<&str> = args.iter().map(String::as_str).collect();
             system::run(program, &args, UNINSTALL_TIMEOUT)
                 .map(|_| ())
-                .map_err(|error| error.0)
+                .map_err(|error| {
+                    eprintln!("[uninstall] {}: {}", app.id, error.0);
+                    format!("Could not remove “{}”. Try again.", app.name)
+                })
         }
         Removal::Files(files) => files.iter().try_for_each(|file| {
-            std::fs::remove_file(file).map_err(|error| format!("{}: {error}", file.display()))
+            std::fs::remove_file(file).map_err(|error| {
+                eprintln!("[uninstall] {}: {error}", file.display());
+                format!("Could not remove “{}”. Try again.", app.name)
+            })
         }),
         Removal::Unavailable(reason) => Err(reason.to_string()),
     }

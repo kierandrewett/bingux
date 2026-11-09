@@ -210,11 +210,10 @@ fn failure(transcript: &str) -> String {
         .find_map(|line| line.trim().strip_prefix("BAD PASSWORD:"))
     {
         let reason = reason.trim();
-        return if reason.is_empty() {
-            "The new password was rejected.".into()
-        } else {
-            reason.to_string()
-        };
+        if !reason.is_empty() {
+            eprintln!("[passwd] rejected: {reason}");
+        }
+        return "The new password was rejected.".into();
     }
     if lower.contains("do not match") {
         return "The new passwords do not match.".into();

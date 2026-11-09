@@ -511,7 +511,9 @@ fn write_then(ctx: Ctx, args: Vec<String>, after: impl FnOnce(bool) + 'static) {
         move |result| match result {
             Ok(_) => after(true),
             Err(e) => {
-                ctx.overlays.toast(e.0);
+                eprintln!("[search] write failed: {}", e.0);
+                ctx.overlays
+                    .toast("Could not save the search setting. Try again.");
                 after(false);
             }
         },
