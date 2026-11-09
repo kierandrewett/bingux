@@ -286,8 +286,10 @@ matching GStreamer plugins (`gstreamer1-plugin-libav`, `gstreamer1-plugins-bad-f
 
 The address bar is one box that is either the trail of folders or, once you
 edit it, the place to type a path **and** to search. Press its empty end, press
-Ctrl+L (the path), press Ctrl+F or the search button (an empty field), or just
-type `/`, `~` or a letter on the list. Editing alone shows a plain field. When
+Ctrl+L (the path), press Ctrl+F or the search button (an empty field), or
+type `/` or `~` on the list. Letters typed on the list do not search: they
+select the first name that starts with them (type `re` for `Reports`; the same
+letter again moves on to the next name with it, and a pause starts afresh). Editing alone shows a plain field. When
 you type, a card grows out of the field: it has the field's left edge and
 width, the field is its first row, and it lies over the list below it (the list
 does not move). The card follows the window when it is resized, never leaves it,
@@ -466,7 +468,7 @@ only code that changes a history, and they are tested without a window.
 | Open a folder (double click, Enter, a crumb, a sidebar place, a bookmark, a typed path, Alt+Home, Up, Alt+Up or Backspace) | A new entry after the current one; Forward is forgotten                                                                                                                                                      |
 | Go to the folder already shown (also written with a trailing slash, `.`, `..` or `//`)                                     | Nothing: no entry, Forward stays                                                                                                                                                                             |
 | Back, Forward, a choice from the Back or Forward menu                                                                      | Only moves along the list; choosing a row several entries away is one move                                                                                                                                   |
-| Refresh (F5, Ctrl+R), a search (Ctrl+F, typing), Escape                                                                    | Nothing                                                                                                                                                                                                      |
+| Refresh (F5, Ctrl+R), a search (Ctrl+F), Escape                                                                            | Nothing                                                                                                                                                                                                      |
 | A typed path that is not there, is a file or cannot be entered                                                             | The address bar says why and stays: no entry. A file is opened with its program                                                                                                                              |
 | The tab's first folder                                                                                                     | The only entry. Starting at a folder never adds it twice                                                                                                                                                     |
 | The recent files, the Trash and the root folder `/`                                                                        | Places like any other, each with its entry. The Trash is `trash:///` however it was reached, and its rows say `Trash` (and the name an item had before it was deleted), not `files`; Up from it goes nowhere |
@@ -553,7 +555,8 @@ entry in a history. The same rules hold for Settings and every other
 | Alt+Left, Alt+Right, Alt+Up, Alt+Home   | Back, Forward, parent folder, home                                                                                           |
 | Backspace                               | Parent folder                                                                                                                |
 | Ctrl+L, or type `/` or `~`              | Edit the path                                                                                                                |
-| Ctrl+F, or just start typing a name     | Search in the location field (see Location and search)                                                                       |
+| Ctrl+F                                  | Search in the location field (see Location and search)                                                                       |
+| Type a name                             | Select the first name that starts with it; the same letter again moves to the next                                           |
 | F5, Ctrl+R                              | Read the folder again                                                                                                        |
 | Escape                                  | Stop reading the folder while the toolbar shows Stop (see Reload and Stop); in a search, clear the text, then end the search |
 | Ctrl+H                                  | Show or hide hidden files                                                                                                    |

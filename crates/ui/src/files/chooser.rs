@@ -336,7 +336,7 @@ impl Session {
 
     // ---- search -----------------------------------------------------
 
-    /// Ctrl+F, a letter typed on the list, or the toolbar's search button:
+    /// Ctrl+F or the toolbar's search button:
     /// turn the address bar into the location field with `typed` in it, and
     /// give it the keyboard. The field offers the card once something is
     /// typed; with nothing typed it is a plain field.

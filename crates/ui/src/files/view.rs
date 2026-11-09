@@ -30,8 +30,8 @@
 //! | --- | ---- |
 //! | arrows, Home, End, Page Up and Down | move the cursor; Shift extends |
 //! | Enter | open the cursor row |
-//! | letters | search the folder in the address bar when the owner offers a search ([`FileView::on_search`]); else jump to a name that starts with them |
-//! | Ctrl+F | start that search |
+//! | letters | jump to the first name that starts with them (one letter again: the next name with it) |
+//! | Ctrl+F | search the folder in the address bar when the owner offers a search ([`FileView::on_search`]) |
 //! | Space | Quick Look: preview the selected file (see `preview.rs`) |
 //! | Ctrl+A, Ctrl+Space | select all, toggle the cursor row |
 //! | F2, Delete, Shift+Delete | rename, move to the Trash, delete permanently (asks first, and cannot be undone) |
@@ -218,8 +218,7 @@ pub(super) struct Ctx {
     pub thumbnails: bool,
     /// The Recent place: dates read as how long ago, and a Location column.
     pub recent: bool,
-    /// A letter typed on the list, or Ctrl+F, starts a search; see
-    /// [`FileView::on_search`].
+    /// Ctrl+F starts a search; see [`FileView::on_search`].
     pub on_search: Option<EventHandler<String>>,
     pub home: PathBuf,
     pub wants: Wants,
@@ -640,12 +639,9 @@ impl Ctx {
             && text != "/"
             && text != "~"
         {
-            // Typing a name searches the folder when the owner offers a
-            // search; otherwise it jumps to a name that starts with it.
-            if let Some(start) = &self.on_search {
-                start.call(text.to_string());
-                return true;
-            }
+            // Typing a name jumps to the first one that starts with it, as
+            // in Finder and Nautilus: one letter again moves on to the next
+            // name with it. Ctrl+F is the search.
             let prefix = typed
                 .borrow_mut()
                 .push(text.chars().next().unwrap_or(' '), Instant::now())
@@ -1094,9 +1090,8 @@ impl FileView {
         self
     }
 
-    /// Typing a name on the list, or Ctrl+F, calls this with the typed
-    /// letter (empty for Ctrl+F) so the owner can start a search, instead of
-    /// jumping to a name that starts with the letter.
+    /// Ctrl+F calls this (with an empty text) so the owner can start a
+    /// search in its address bar. Letters typed on the list jump to a name.
     pub fn on_search(mut self, handler: impl Into<EventHandler<String>>) -> Self {
         self.on_search = Some(handler.into());
         self

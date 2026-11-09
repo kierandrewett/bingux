@@ -3,7 +3,7 @@
 //!
 //! The trail ([`address_crumbs`](super::address_crumbs)) is the resting
 //! state. A press on its empty end, a double click, Ctrl+L, Ctrl+F, a typed
-//! `/`, `~` or letter turns it into the location field
+//! `/` or `~` turns it into the location field
 //! ([`omnibox`](super::omnibox)), in the same box. On a phone the trail is one
 //! row with the folder's name.
 //!
@@ -15,7 +15,7 @@
 //! | State | Shows | Entered by |
 //! | ----- | ----- | ---------- |
 //! | Trail | crumbs | resting; Escape, or a folder opened |
-//! | Field | the text field; once something is typed, the card of completions and search results grows out of it | Ctrl+L, Ctrl+F, a press on the trail's empty end, `/`, `~` or a letter typed on the list |
+//! | Field | the text field; once something is typed, the card of completions and search results grows out of it | Ctrl+L, Ctrl+F, a press on the trail's empty end, `/` or `~` typed on the list |
 //!
 //! There is no search bar under the toolbar and no filter button: the field
 //! is where a place is typed and where a search is made, with its scope and

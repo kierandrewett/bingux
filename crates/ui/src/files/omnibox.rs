@@ -3,7 +3,7 @@
 //!
 //! At rest the address bar is the trail of folders
 //! ([`address_crumbs`](super::address_crumbs)). A press on its empty end,
-//! Ctrl+L, Ctrl+F, a double click, or a `/`, `~` or a letter typed on the list
+//! Ctrl+L, Ctrl+F, a double click, or a `/` or `~` typed on the list
 //! turns it into this field, in the same box. Editing alone shows nothing
 //! more. Once something is typed, the card grows out of the field
 //! ([`Omnibox`](crate::controls::Omnibox), which owns the motion and the
@@ -380,7 +380,7 @@ impl Component for LocationField {
             })
         };
 
-        // A text that was not made by this field (a `/`, `~` or a letter that started the typing)
+        // A text that was not made by this field (a `/` or `~` that started the typing)
         // is completed from the start.
         use_side_effect({
             let request = request.clone();
