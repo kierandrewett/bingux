@@ -202,8 +202,7 @@ pub fn save<T: Serialize>(key: &str, value: &T) {
 /// display alike (a lossy conversion gives both the same replacement
 /// characters).
 ///
-/// A path that is valid UTF-8 is its own text, so the keys an earlier build
-/// wrote still match. Any other path is a NUL, which no path contains and so
+/// A path that is valid UTF-8 is its own text. Any other path is a NUL, which no path contains and so
 /// no other key starts with, then its bytes, with `%` and every byte outside
 /// printable ASCII written as `%XX`: different bytes, different key.
 fn folder_key(folder: &Path) -> Cow<'_, str> {
@@ -255,7 +254,11 @@ pub fn folder(folder: &Path) -> Option<FolderView> {
 /// Remember how `folder` is shown.
 pub fn remember_folder(folder: &Path, view: FolderView) {
     with_store(|store| {
-        if put_folder(&mut store.file.folders, folder_key(folder).into_owned(), view) {
+        if put_folder(
+            &mut store.file.folders,
+            folder_key(folder).into_owned(),
+            view,
+        ) {
             schedule_write(store);
         }
     });
@@ -303,10 +306,9 @@ mod tests {
 
     #[test]
     fn an_unknown_sort_key_reads_as_name() {
-        let back: SortSetting = serde_json::from_str(
-            r#"{"key":"colour","descending":true,"folders_first":true}"#,
-        )
-        .unwrap();
+        let back: SortSetting =
+            serde_json::from_str(r#"{"key":"colour","descending":true,"folders_first":true}"#)
+                .unwrap();
         assert_eq!(Sort::from(back).key, SortKey::Name);
     }
 
@@ -382,7 +384,10 @@ mod folder_keys {
         // `%FF` as three characters and the byte 0xFF, before the same byte.
         assert_ne!(folder_key(&odd(b"%FF\xfe")), folder_key(&odd(b"\xff\xfe")));
         // No valid path starts with the NUL that marks an escaped one.
-        assert_ne!(folder_key(&odd(b"x\xff")), folder_key(Path::new("/home/me/x%FF")));
+        assert_ne!(
+            folder_key(&odd(b"x\xff")),
+            folder_key(Path::new("/home/me/x%FF"))
+        );
         assert!(folder_key(&odd(b"x\xff")).starts_with('\0'));
     }
 
@@ -390,16 +395,37 @@ mod folder_keys {
     fn each_odd_folder_keeps_its_own_view() {
         let (a, b) = (odd(b"caf\xe9-\xff"), odd(b"caf\xe9-\xfe"));
         let mut folders = Vec::new();
-        assert!(put_folder(&mut folders, folder_key(&a).into_owned(), view(SortKey::Size, 96)));
-        assert_eq!(find_folder(&folders, &folder_key(&a)), Some(view(SortKey::Size, 96)));
+        assert!(put_folder(
+            &mut folders,
+            folder_key(&a).into_owned(),
+            view(SortKey::Size, 96)
+        ));
+        assert_eq!(
+            find_folder(&folders, &folder_key(&a)),
+            Some(view(SortKey::Size, 96))
+        );
         // The lookalike has not been given a view.
         assert_eq!(find_folder(&folders, &folder_key(&b)), None);
-        assert!(put_folder(&mut folders, folder_key(&b).into_owned(), view(SortKey::Modified, 32)));
+        assert!(put_folder(
+            &mut folders,
+            folder_key(&b).into_owned(),
+            view(SortKey::Modified, 32)
+        ));
         assert_eq!(folders.len(), 2);
-        assert_eq!(find_folder(&folders, &folder_key(&a)), Some(view(SortKey::Size, 96)));
-        assert_eq!(find_folder(&folders, &folder_key(&b)), Some(view(SortKey::Modified, 32)));
+        assert_eq!(
+            find_folder(&folders, &folder_key(&a)),
+            Some(view(SortKey::Size, 96))
+        );
+        assert_eq!(
+            find_folder(&folders, &folder_key(&b)),
+            Some(view(SortKey::Modified, 32))
+        );
         // Putting the same view again changes nothing.
-        assert!(!put_folder(&mut folders, folder_key(&b).into_owned(), view(SortKey::Modified, 32)));
+        assert!(!put_folder(
+            &mut folders,
+            folder_key(&b).into_owned(),
+            view(SortKey::Modified, 32)
+        ));
     }
 
     #[test]
@@ -409,12 +435,26 @@ mod folder_keys {
             format: FORMAT,
             ..File::default()
         };
-        put_folder(&mut file.folders, folder_key(&a).into_owned(), view(SortKey::Kind, 64));
-        put_folder(&mut file.folders, folder_key(&b).into_owned(), view(SortKey::Name, 128));
+        put_folder(
+            &mut file.folders,
+            folder_key(&a).into_owned(),
+            view(SortKey::Kind, 64),
+        );
+        put_folder(
+            &mut file.folders,
+            folder_key(&b).into_owned(),
+            view(SortKey::Name, 128),
+        );
         let text = serde_json::to_string(&file).unwrap();
         let back: File = serde_json::from_str(&text).unwrap();
-        assert_eq!(find_folder(&back.folders, &folder_key(&a)), Some(view(SortKey::Kind, 64)));
-        assert_eq!(find_folder(&back.folders, &folder_key(&b)), Some(view(SortKey::Name, 128)));
+        assert_eq!(
+            find_folder(&back.folders, &folder_key(&a)),
+            Some(view(SortKey::Kind, 64))
+        );
+        assert_eq!(
+            find_folder(&back.folders, &folder_key(&b)),
+            Some(view(SortKey::Name, 128))
+        );
     }
 
     #[test]
