@@ -107,8 +107,9 @@ fn no_icon_button_of_a_header_has_a_fill_at_rest() {
 fn no_icon_button_of_the_files_toolbar_has_a_fill_at_rest() {
     let mut shot = settled(files_window);
     let buttons = shot.icon_buttons();
-    // The menu button and the toolbar's Back, Forward, Up, Reload and New folder.
-    assert!(buttons.len() >= 6, "the menu button and the toolbar's buttons are on screen: {buttons:?}");
+    // The redesigned Files header: the main menu, Back, Forward, Search and New folder. Up is
+    // Alt+Up and Reload is F5 (see `browser_header`), so neither is a button here.
+    assert!(buttons.len() >= 5, "the main menu and the header's buttons are on screen: {buttons:?}");
     assert_eq!(filled(&buttons), Vec::<String>::new(), "icon buttons that fill at rest");
 }
 
