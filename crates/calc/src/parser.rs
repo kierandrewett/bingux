@@ -208,7 +208,7 @@ impl Parser {
         if self.depth > MAX_DEPTH {
             return Err(syntax(
                 self.peek().map_or(self.end, |t| t.at),
-                "Too many brackets inside one another.",
+                "Too many brackets are nested. Remove some of them.",
             ));
         }
         Ok(())
@@ -263,7 +263,10 @@ impl Parser {
         while self.starts_factor() {
             if matches!(self.peek_tok(), Some(Tok::Num(_))) && ends_in_number(&left) {
                 let at = self.peek().map_or(self.end, |t| t.at);
-                return Err(syntax(at, "Two numbers need an operator between them."));
+                return Err(syntax(
+                    at,
+                    "A number follows a number. Add an operator between them.",
+                ));
             }
             let right = self.power()?;
             left = Ast::Bin(Op::Mul, Box::new(left), Box::new(right));
@@ -447,7 +450,7 @@ pub(crate) fn parse(tokens: Vec<Token>) -> Result<Ast> {
         None => Ok(ast),
         Some(token) if token.tok == Tok::RParen => Err(syntax(
             token.at,
-            "There is a closing bracket with no opening one.",
+            "There is a closing bracket with no opening one. Remove it or add the opening one.",
         )),
         Some(token) => Err(parser.unexpected(&token.clone())),
     }

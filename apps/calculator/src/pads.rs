@@ -21,11 +21,17 @@ fn digit(calc: &Calc, digit: &'static str) -> KeypadKey {
 }
 
 fn operator(calc: &Calc, label: &str, name: &str, text: &'static str) -> KeypadKey {
-    typed(calc, label, text).name(name).tone(KeyTone::Operator)
+    typed(calc, label, text)
+        .name(name)
+        .tooltip(name)
+        .tone(KeyTone::Operator)
 }
 
 fn function(calc: &Calc, label: &str, name: &str, text: &'static str) -> KeypadKey {
-    typed(calc, label, text).name(name).tone(KeyTone::Plain)
+    typed(calc, label, text)
+        .name(name)
+        .tooltip(name)
+        .tone(KeyTone::Plain)
 }
 
 fn delete_key(calc: &Calc) -> KeypadKey {
@@ -33,18 +39,21 @@ fn delete_key(calc: &Calc) -> KeypadKey {
     keypad_key("Delete", move |_: ()| calc.backspace())
         .icon(Icon::EditClear)
         .name("Delete the last character")
+        .tooltip("Delete (Backspace)")
         .tone(KeyTone::Plain)
 }
 
 fn clear_key(calc: &Calc) -> KeypadKey {
     let entry = calc.can_clear_entry();
     let press = calc.clone();
+    let name = if entry {
+        "Clear the entry"
+    } else {
+        "Clear everything"
+    };
     keypad_key(if entry { "C" } else { "AC" }, move |_: ()| press.clear())
-        .name(if entry {
-            "Clear the entry"
-        } else {
-            "Clear everything"
-        })
+        .name(name)
+        .tooltip(format!("{name} (Escape)"))
         .tone(KeyTone::Destructive)
 }
 
@@ -52,6 +61,7 @@ fn equals_key(calc: &Calc) -> KeypadKey {
     let calc = calc.clone();
     keypad_key("=", move |_: ()| calc.equals())
         .name("Equals")
+        .tooltip("Equals (Enter)")
         .tone(KeyTone::Suggested)
 }
 
@@ -59,6 +69,7 @@ fn negate_key(calc: &Calc) -> KeypadKey {
     let calc = calc.clone();
     keypad_key("\u{b1}", move |_: ()| calc.negate())
         .name("Change sign")
+        .tooltip("Change sign")
         .tone(KeyTone::Plain)
 }
 

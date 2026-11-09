@@ -518,6 +518,7 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/controls/segmented.rs": "the segmented control's segments",
     "crates/ui/src/controls/checkbox.rs": "the checkbox",
     "crates/ui/src/controls/stepper.rs": "the stepper's halves",
+    "crates/ui/src/controls/keypad.rs": "a key of a keypad: a tone fill, hover and pressed layers, and one Tab stop per key, which no library button draws",
     "crates/ui/src/controls/action_strip.rs": "the action strip's cells",
     "crates/ui/src/controls/focus_stop.rs": "makes a keyboard stop out of any content",
     "crates/ui/src/controls/press.rs": "hit_area: a transparent touch target whose listeners do nothing and let the press bubble to the control that holds it",

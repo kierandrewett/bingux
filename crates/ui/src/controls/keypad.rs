@@ -15,13 +15,14 @@
 use freya::prelude::*;
 
 use super::press::use_press;
+use super::tooltip::hover_tip_sized;
 use crate::component::ComponentName;
 use crate::focus::{press_focus, use_focus_core};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
-use crate::typography::{BODY, HEADING, Ink, TextStyle};
+use crate::typography::{EMPHASIS, HEADING, Ink, TextStyle};
 
 /// What a key is for, which decides how it is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -48,6 +49,7 @@ pub struct KeypadKey {
     enabled: bool,
     active: bool,
     icon: Option<Icon>,
+    tooltip: Option<String>,
     on_press: EventHandler<()>,
 }
 
@@ -61,6 +63,7 @@ pub fn keypad_key(label: impl Into<String>, on_press: impl Into<EventHandler<()>
         enabled: true,
         active: false,
         icon: None,
+        tooltip: None,
         on_press: on_press.into(),
     }
 }
@@ -100,6 +103,14 @@ impl KeypadKey {
     /// than letters (Backspace). The name is still what a screen reader says.
     pub fn icon(mut self, icon: Icon) -> Self {
         self.icon = Some(icon);
+        self
+    }
+
+    /// A tooltip for the key, shown after the pointer rests on it: the key's
+    /// name and its shortcut ("Delete (Backspace)"). A key whose face says all
+    /// of it (a digit) needs none.
+    pub fn tooltip(mut self, text: impl Into<String>) -> Self {
+        self.tooltip = Some(text.into());
         self
     }
 }
@@ -203,16 +214,12 @@ impl Component for Keypad {
 
 /// The label of a digit or an operator: the heading size, tabular figures.
 const KEY_LARGE: TextStyle = TextStyle {
-    weight: FontWeight::MEDIUM,
     tabular: true,
     ..HEADING
 };
 
 /// The label of a function key.
-const KEY_SMALL: TextStyle = TextStyle {
-    weight: FontWeight::MEDIUM,
-    ..BODY
-};
+const KEY_SMALL: TextStyle = EMPHASIS;
 
 #[derive(PartialEq)]
 struct KeyView {
@@ -283,7 +290,7 @@ impl Component for KeyView {
                 &[
                     flex_row(),
                     center(),
-                    min_h(Dim::Control),
+                    min_h(if self.dense { Dim::Box7 } else { Dim::Control }),
                     rounded(Radius::Control),
                     surface(base, hovering(), pressing(), false),
                 ],
@@ -336,7 +343,17 @@ impl Component for KeyView {
             .tw(&tokens, &[grow_children()])
             .width(Size::flex(key.span as f32))
             .height(Size::fill());
-        face
+        match &key.tooltip {
+            // The tip's box takes the key's flex size: a box of its own
+            // would shrink the key to its label and the row would not fill.
+            Some(text) => hover_tip_sized(
+                face,
+                text.clone(),
+                Size::flex(key.span as f32),
+                Size::fill(),
+            ),
+            None => face.into_element(),
+        }
     }
 }
 
@@ -378,5 +395,103 @@ mod layout_tests {
     #[test]
     fn no_keys_no_rows() {
         assert!(pad(4, &[]).rows().is_empty());
+    }
+}
+
+/// A key with a tooltip lives in a box of its own (`hover_tip_sized`). That
+/// box has to take the key's flex share of the row, or the key shrinks to its
+/// label and the row no longer fills.
+#[cfg(all(test, feature = "testing"))]
+mod tooltip_layout_tests {
+    use freya::prelude::*;
+
+    use super::*;
+    use crate::shell::overlays::OverlayHost;
+    use crate::snapshot::Snapshot;
+    use crate::theme::provide_tokens;
+    use crate::window::WindowHost;
+
+    #[derive(PartialEq, Clone)]
+    struct Page {
+        /// Which of the keys carry a tooltip.
+        tips: [bool; 4],
+        /// Key labels: a short one beside long ones shows a shrunken box.
+        labels: [&'static str; 4],
+    }
+
+    impl Component for Page {
+        fn render(&self) -> impl IntoElement {
+            let keys = self
+                .labels
+                .iter()
+                .zip(self.tips)
+                .map(|(label, tip)| {
+                    let key = keypad_key(*label, |_: ()| {});
+                    if tip { key.tooltip("A tooltip") } else { key }
+                })
+                .collect();
+            rect()
+                .width(Size::fill())
+                .height(Size::fill())
+                .child(keypad(4, keys))
+        }
+    }
+
+    #[derive(PartialEq, Clone)]
+    struct Root(Page);
+
+    impl Component for Root {
+        fn render(&self) -> impl IntoElement {
+            let _tokens = provide_tokens();
+            WindowHost::new(OverlayHost::new(self.0.clone()))
+        }
+    }
+
+    /// The width of every key, left to right, as drawn.
+    fn key_widths(page: Page) -> Vec<f32> {
+        let labels = page.labels;
+        let mut shot = Snapshot::new(move || Root(page.clone()).into_element(), (400.0, 120.0));
+        shot.settle(std::time::Duration::from_millis(300));
+        let tree = crate::inspector::snapshot::Snapshot::capture_headless(shot.runner(), 1.0);
+        let faces: Vec<_> = tree
+            .nodes
+            .iter()
+            .filter(|node| node.a11y.component.as_deref() == Some("KeypadKey"))
+            .filter_map(|node| node.area)
+            .collect();
+        assert_eq!(faces.len(), labels.len(), "every key is drawn");
+        let mut widths: Vec<(f32, f32)> = faces
+            .iter()
+            .map(|area| (area.min_x(), area.width()))
+            .collect();
+        widths.sort_by(|a, b| a.0.total_cmp(&b.0));
+        widths.into_iter().map(|(_, width)| width).collect()
+    }
+
+    #[test]
+    fn keys_with_and_without_a_tooltip_share_the_row_alike() {
+        let labels = ["7", "8", "sinh", "="];
+        let plain = key_widths(Page {
+            tips: [false; 4],
+            labels,
+        });
+        for tips in [
+            [true; 4],
+            [false, true, false, true],
+            [true, false, false, false],
+        ] {
+            let widths = key_widths(Page { tips, labels });
+            for (plain, with) in plain.iter().zip(&widths) {
+                assert!(
+                    (plain - with).abs() < 1.0,
+                    "tips {tips:?}: key widths {widths:?} differ from {plain:?}"
+                );
+            }
+        }
+        let first = plain[0];
+        assert!(
+            plain.iter().all(|w| (w - first).abs() < 1.0),
+            "equal columns: {plain:?}"
+        );
     }
 }

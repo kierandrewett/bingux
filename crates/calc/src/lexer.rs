@@ -202,7 +202,12 @@ pub(crate) fn lex(src: &str, locale: &Locale) -> Result<Vec<Token>> {
                 push(Tok::Ident(name), &mut out);
                 i = j;
             }
-            other => return Err(syntax(i, format!("{other} is not part of an expression."))),
+            other => {
+                return Err(syntax(
+                    i,
+                    format!("Cannot read \u{201c}{other}\u{201d}. Check the expression."),
+                ));
+            }
         }
         for token in out.iter_mut().skip(before) {
             token.end = i;
@@ -228,7 +233,7 @@ fn scan_number(chars: &[char], start: usize, locale: &Locale) -> Result<(Num, us
             if j > first {
                 let digits: String = chars[first..j].iter().filter(|c| **c != '_').collect();
                 let value = BigInt::parse_bytes(digits.as_bytes(), radix)
-                    .ok_or_else(|| syntax(start, "That is not a number."))?;
+                    .ok_or_else(|| syntax(start, "That is not a number. Check the digits."))?;
                 return Ok((Num::from_big(value), j));
             }
         }

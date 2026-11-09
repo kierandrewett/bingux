@@ -17,29 +17,35 @@ mod snapshot_mode;
 
 use bingux_ui::prelude::Application;
 
-const USAGE: &str = "Usage: bingux-calculator [--help]\n\
+const USAGE: &str = "Usage: bingux-calculator [--mode MODE]\n\
 \n\
-Opens the calculator. A second launch raises the window that is open.\n\
+Opens the calculator. MODE is basic, scientific, programmer or convert.\n\
+A second launch raises the window that is open, in the mode it names.\n\
 \n\
-The history, the mode and the exchange rates are kept under\n\
+The history, the mode, the window size and the exchange rates are kept under\n\
 $XDG_STATE_HOME and $XDG_CACHE_HOME in a folder named bingux-calculator.\n";
 
 fn main() {
     #[cfg(feature = "snapshot")]
     if std::env::args().nth(1).as_deref() == Some("--snapshot") {
-        let dir = std::env::args()
-            .nth(2)
-            .unwrap_or_else(|| "/tmp/bingux-calculator-snapshots".to_string());
-        snapshot_mode::run(&dir);
+        snapshot_mode::run(std::env::args().skip(2));
         return;
     }
-    let _ = model::INITIAL.set(model::Initial::load());
+    let initial = model::Initial::load();
+    let (width, height) = initial
+        .saved
+        .settings
+        .window
+        .map_or((880.0, 660.0), |(w, h)| (w as f32, h as f32));
+    let _ = model::INITIAL.set(initial);
     Application::new("bingux-calculator")
         .title("Calculator")
-        .size(880.0, 660.0)
+        .routes(app::routes())
+        .address_option("--mode")
+        .size(width, height)
         .borderless()
         .about(bingux_ui::app_info!(
-            description = "Calculate, convert units and currencies, and work in binary",
+            description = "Calculate, convert units and currencies, and work in binary.",
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)

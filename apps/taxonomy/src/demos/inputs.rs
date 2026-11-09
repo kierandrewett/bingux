@@ -1,9 +1,9 @@
 //! Controls: text input, forms and selection.
 
 use bingux_ui::controls::colour_picker::{colour_button, colour_chip, colour_picker};
-use bingux_ui::controls::form::validate;
 use bingux_ui::controls::direction::{Direction, directed};
 use bingux_ui::controls::fade_text::fade_text;
+use bingux_ui::controls::form::validate;
 use bingux_ui::controls::tab_close::selection_after_close;
 use bingux_ui::prelude::*;
 use bingux_ui::style::colour_from_argb;
@@ -26,6 +26,17 @@ pub const TEXT_FIELD: &[Spec] = &[
     Spec::forced("Filled", || {
         let value = use_state(|| "bingux-workstation".to_string());
         text_field(value, |_| {}).fill_width().into_element()
+    }),
+    Spec::live("Display line: reads as text, no box or ring", || {
+        let value = use_state(|| "1234.5 * 8 + 3".to_string());
+        text_field(value, |_| {})
+            .display(
+                BODY.in_ink(bingux_ui::typography::Ink::Muted),
+                TextAlign::End,
+            )
+            .placeholder("Type an expression")
+            .fill_width()
+            .into_element()
     }),
     Spec::forced("Password", || {
         let value = use_state(|| "hunter2".to_string());
@@ -104,15 +115,24 @@ pub const SEARCH_FIELD: &[Spec] = &[
     }),
     Spec::forced("On the page well", || {
         let query = use_state(|| "wifi".to_string());
-        search_field(query, |_| {}).well().fill_width().into_element()
+        search_field(query, |_| {})
+            .well()
+            .fill_width()
+            .into_element()
     }),
     Spec::forced("Dense", || {
         let query = use_state(|| "wifi".to_string());
-        search_field(query, |_| {}).dense().fill_width().into_element()
+        search_field(query, |_| {})
+            .dense()
+            .fill_width()
+            .into_element()
     }),
     Spec::forced("Flat find bar", || {
         let query = use_state(|| "wifi".to_string());
-        search_field(query, |_| {}).flat().fill_width().into_element()
+        search_field(query, |_| {})
+            .flat()
+            .fill_width()
+            .into_element()
     }),
 ];
 
@@ -422,10 +442,12 @@ pub const COLOUR_PICKER: &[Spec] = &[
         colour_picker(colour(), move |next| colour.set(next))
             .accents(false)
             .presets(
-                ["#e01b24", "#ff7800", "#f6d32d", "#33d17a", "#3584e4", "#9141ac"]
-                    .iter()
-                    .filter_map(|hex| bingux_ui::style::colour_from_hex(hex))
-                    .collect(),
+                [
+                    "#e01b24", "#ff7800", "#f6d32d", "#33d17a", "#3584e4", "#9141ac",
+                ]
+                .iter()
+                .filter_map(|hex| bingux_ui::style::colour_from_hex(hex))
+                .collect(),
             )
             .recents(false)
             .into_element()
@@ -439,7 +461,9 @@ pub const COLOUR_PICKER: &[Spec] = &[
                 .collect::<Vec<_>>()
         });
         colour_picker(colour(), move |next| colour.set(next))
-            .recent(recent.read().clone(), move |list: Vec<Color>| recent.set(list))
+            .recent(recent.read().clone(), move |list: Vec<Color>| {
+                recent.set(list)
+            })
             .into_element()
     }),
     Spec::live("A wrong hex says why and moves nothing", || {
@@ -514,7 +538,9 @@ pub const COLOUR_BUTTON: &[Spec] = &[
             .child(colour_chip(tokens, colour(), 24.0))
             .into_element()
     })
-    .script("click-component ColourButton; wait 700; click-component ColourPlane; wait 300; save {out}"),
+    .script(
+        "click-component ColourButton; wait 700; click-component ColourPlane; wait 300; save {out}",
+    ),
 ];
 
 /// How tall a framed strip is: the bar and a few lines of page.
@@ -523,7 +549,11 @@ const FRAME_HEIGHT: f32 = 168.0;
 /// Three tabs, for the specimens that differ in what is selected.
 fn three(selected: u64) -> TabStrip {
     tab_strip(
-        vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents"), TabItem::new(3, "Downloads")],
+        vec![
+            TabItem::new(1, "Home"),
+            TabItem::new(2, "Documents"),
+            TabItem::new(3, "Downloads"),
+        ],
         selected,
     )
     .on_new(|_| {})
@@ -534,9 +564,19 @@ pub const TABS: &[Spec] = &[
         live_tabs(&["Home", "Documents", "Downloads"])
     })
     .page(FRAME_HEIGHT),
-    Spec::live("Every tab closes: its button, a middle click, Ctrl+W, the menu", || {
-        live_tabs_with_menu(&["Home", "Documents", "Downloads", "Pictures", "Music", "Videos"])
-    })
+    Spec::live(
+        "Every tab closes: its button, a middle click, Ctrl+W, the menu",
+        || {
+            live_tabs_with_menu(&[
+                "Home",
+                "Documents",
+                "Downloads",
+                "Pictures",
+                "Music",
+                "Videos",
+            ])
+        },
+    )
     .page(FRAME_HEIGHT),
     Spec::live("Many tabs: scroll, fade, tab list", || {
         live_tabs(&[
@@ -555,39 +595,46 @@ pub const TABS: &[Spec] = &[
         ])
     })
     .page(FRAME_HEIGHT),
-    Spec::forced("First tab selected: the selection fill, as a sidebar row's", || framed(three(1)))
-        .page(FRAME_HEIGHT),
+    Spec::forced(
+        "First tab selected: the selection fill, as a sidebar row's",
+        || framed(three(1)),
+    )
+    .page(FRAME_HEIGHT),
     Spec::forced("Middle tab selected", || framed(three(2))).page(FRAME_HEIGHT),
-    Spec::forced("Last tab selected: the page keeps square corners at the window's edge", || framed(three(3)))
-        .page(FRAME_HEIGHT),
-    Spec::forced("Nine tabs: the strip scrolls, the selected tab in view", || {
-        framed(
-            tab_strip(
-                [
-                    "Home",
-                    "Documents",
-                    "Downloads",
-                    "Pictures",
-                    "Music",
-                    "Videos",
-                    "Projects",
-                    "Archive",
-                    "Backups",
-                ]
-                .iter()
-                .enumerate()
-                .map(|(index, name)| TabItem::new(index as u64 + 1, *name))
-                .collect(),
-                5,
+    Spec::forced(
+        "Last tab selected: the page keeps square corners at the window's edge",
+        || framed(three(3)),
+    )
+    .page(FRAME_HEIGHT),
+    Spec::forced(
+        "Nine tabs: the strip scrolls, the selected tab in view",
+        || {
+            framed(
+                tab_strip(
+                    [
+                        "Home",
+                        "Documents",
+                        "Downloads",
+                        "Pictures",
+                        "Music",
+                        "Videos",
+                        "Projects",
+                        "Archive",
+                        "Backups",
+                    ]
+                    .iter()
+                    .enumerate()
+                    .map(|(index, name)| TabItem::new(index as u64 + 1, *name))
+                    .collect(),
+                    5,
+                )
+                .on_new(|_| {}),
             )
-            .on_new(|_| {}),
-        )
-    })
+        },
+    )
     .page(FRAME_HEIGHT),
     Spec::forced("Long titles", || {
-        framed(
-            tab_strip(vec![TabItem::new(1, LONG), TabItem::new(2, "Short")], 1).on_new(|_| {}),
-        )
+        framed(tab_strip(vec![TabItem::new(1, LONG), TabItem::new(2, "Short")], 1).on_new(|_| {}))
     })
     .page(FRAME_HEIGHT),
     Spec::forced("With icons", || {
@@ -609,35 +656,40 @@ pub const TABS: &[Spec] = &[
     })
     .page(FRAME_HEIGHT),
     Spec::forced("Without a New tab button", || {
-        framed(
-            tab_strip(vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents")], 1),
-        )
+        framed(tab_strip(
+            vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents")],
+            1,
+        ))
     })
     .page(FRAME_HEIGHT),
     Spec::forced("Keyboard focus on the selected tab", || framed(three(2)))
         .page(FRAME_HEIGHT)
         .script("key tab; wait 300; save {out}"),
-    Spec::forced("Right to left: the first tab at the right, icons and close buttons mirrored", || {
-        directed(
-            Direction::Rtl,
-            framed(
-                tab_strip(
-                    vec![
-                        TabItem::new(1, "Home").icon(Icon::Folder),
-                        TabItem::new(2, "Documents").icon(Icon::DocumentOpen),
-                        TabItem::new(3, "Downloads").icon(Icon::Folder),
-                    ],
-                    2,
-                )
-                .on_new(|_| {}),
-            ),
-        )
-        .into_element()
-    })
+    Spec::forced(
+        "Right to left: the first tab at the right, icons and close buttons mirrored",
+        || {
+            directed(
+                Direction::Rtl,
+                framed(
+                    tab_strip(
+                        vec![
+                            TabItem::new(1, "Home").icon(Icon::Folder),
+                            TabItem::new(2, "Documents").icon(Icon::DocumentOpen),
+                            TabItem::new(3, "Downloads").icon(Icon::Folder),
+                        ],
+                        2,
+                    )
+                    .on_new(|_| {}),
+                ),
+            )
+            .into_element()
+        },
+    )
     .page(FRAME_HEIGHT),
-    Spec::forced("Hover, pressed and selected look different: the pointer is on Documents", || {
-        framed(three(1))
-    })
+    Spec::forced(
+        "Hover, pressed and selected look different: the pointer is on Documents",
+        || framed(three(1)),
+    )
     .page(FRAME_HEIGHT)
     .script("hover-text Documents; wait 300; save {out}"),
 ];
@@ -650,7 +702,11 @@ fn fading(text: &'static str, width: f32, direction: Direction) -> Element {
         rect()
             .tw(&tokens, &[w(Dim::Page), flex_col(), gap(S1)])
             .child(caption(format!("{width} px of room")))
-            .child(rect().width(Size::px(width)).child(fade_text(text).style(BODY))),
+            .child(
+                rect()
+                    .width(Size::px(width))
+                    .child(fade_text(text).style(BODY)),
+            ),
     )
     .into_element()
 }
@@ -659,14 +715,15 @@ pub const FADE_TEXT: &[Spec] = &[
     Spec::forced("Too long: the last 24 px fade out, no ellipsis", || {
         fading(LONG, 220.0, Direction::Ltr)
     }),
-    Spec::forced("Fits: drawn plain", || fading("Documents", 220.0, Direction::Ltr)),
-    Spec::forced("Right to left: the line ends at the right and fades on the left", || {
-        fading(LONG, 220.0, Direction::Rtl)
+    Spec::forced("Fits: drawn plain", || {
+        fading("Documents", 220.0, Direction::Ltr)
     }),
+    Spec::forced(
+        "Right to left: the line ends at the right and fades on the left",
+        || fading(LONG, 220.0, Direction::Rtl),
+    ),
     Spec::forced("In a narrow strip title", || {
-        framed(
-            tab_strip(vec![TabItem::new(1, LONG), TabItem::new(2, "Short")], 1).on_new(|_| {}),
-        )
+        framed(tab_strip(vec![TabItem::new(1, LONG), TabItem::new(2, "Short")], 1).on_new(|_| {}))
     })
     .page(FRAME_HEIGHT),
 ];
@@ -677,12 +734,18 @@ pub const FADE_TEXT: &[Spec] = &[
 /// under them.
 fn framed(strip: TabStrip) -> Element {
     let tokens = use_tokens();
-    let bar = rect().tw(&tokens, &[w_full(), h(Dim::TabBar), bg(Paint::Surface)]).child(strip);
+    let bar = rect()
+        .tw(&tokens, &[w_full(), h(Dim::TabBar), bg(Paint::Surface)])
+        .child(strip);
     let page = rect()
         .tw(&tokens, &[w_full(), h_flex(), flex_col(), bg(Paint::Bg), p(S4), gap(S1)])
         .child(caption("The page the selected tab opens."))
         .child(caption("The tabs are separate from it: no shape joins them and the page has no corner of its own."));
-    rect().tw(&tokens, &[w_full(), h_full(), flex_col()]).child(bar).child(page).into_element()
+    rect()
+        .tw(&tokens, &[w_full(), h_full(), flex_col()])
+        .child(bar)
+        .child(page)
+        .into_element()
 }
 
 /// A strip that adds, selects, closes and reorders its own tabs, starting
