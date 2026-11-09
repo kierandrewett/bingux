@@ -115,8 +115,14 @@ impl<T: Copy> Ready<T> {
 struct Entry {
     window: Rc<Ready<WindowId>>,
     parent: Option<Token>,
+    /// The window a root popup opened from; `None` for a popup of a popup.
+    opener: Option<WindowId>,
+    /// Told `Dismissed` when a newer root popup of the same window takes this one away.
+    on_event: Rc<dyn Fn(PopupEvent)>,
     /// Closed (or refused) before or after it opened: nothing is to be done with its window.
     closed: Cell<bool>,
+    /// Taken away by a newer root popup: it hears `Dismissed` from that, never `Refused`.
+    displaced: Cell<bool>,
 }
 
 /// Opens popups as Freya windows made as `xdg_popup`s.
@@ -147,6 +153,35 @@ impl WaylandBackend {
         order.reverse();
         order
     }
+
+    /// Closes the root popups still open on `opener`, and the popups opened from them. Returns
+    /// the `on_event` of each popup closed, so each hears `Dismissed` once the new popup is asked
+    /// for. Their windows are closed here, before the new one is launched.
+    fn displace(&self, opener: Option<WindowId>) -> Vec<Rc<dyn Fn(PopupEvent)>> {
+        let Some(window) = opener else {
+            return Vec::new();
+        };
+        let roots: Vec<Token> = self
+            .entries
+            .borrow()
+            .iter()
+            .filter(|(_, entry)| entry.opener == Some(window) && !entry.closed.get())
+            .map(|(token, _)| *token)
+            .collect();
+        let mut listeners = Vec::new();
+        for root in roots {
+            for token in self.subtree(root) {
+                let entries = self.entries.borrow();
+                let Some(entry) = entries.get(&token).filter(|entry| !entry.closed.get()) else {
+                    continue;
+                };
+                entry.displaced.set(true);
+                listeners.push(entry.on_event.clone());
+            }
+            self.close(root);
+        }
+        listeners
+    }
 }
 
 impl PopupBackend for WaylandBackend {
@@ -162,14 +197,31 @@ impl PopupBackend for WaylandBackend {
             Parent::Popup(parent) => Some(parent),
             Parent::Window(_) => None,
         };
+        let opener = match request.parent {
+            Parent::Window(id) => Some(id),
+            Parent::Popup(_) => None,
+        };
+        // The compositor keeps one grabbing popup chain per toplevel and refuses a second while
+        // the first is up: a root popup still open on this window is taken away first.
+        let displaced = self.displace(opener);
         let entry = Rc::new(Entry {
             window: window.clone(),
             parent: parent_token,
+            opener,
+            on_event: request.on_event.clone(),
             closed: Cell::new(false),
+            displaced: Cell::new(false),
         });
         self.entries.borrow_mut().insert(token, entry.clone());
         register(token, request.parent);
         let entries = self.entries.clone();
+        if !displaced.is_empty() {
+            spawn_global(async move {
+                for listener in displaced {
+                    listener(PopupEvent::Dismissed);
+                }
+            });
+        }
         let OpenRequest {
             placement,
             parent,
@@ -199,7 +251,9 @@ impl PopupBackend for WaylandBackend {
             let Some(parent_window) = parent_window.filter(|_| !entry.closed.get()) else {
                 entry.closed.set(true);
                 window.give_up();
-                on_event(PopupEvent::Refused);
+                if !entry.displaced.get() {
+                    on_event(PopupEvent::Refused);
+                }
                 return;
             };
 
@@ -492,5 +546,94 @@ impl PopupBackend for FakeBackend {
 
     fn window(&self, _: Token) -> Option<WindowId> {
         None
+    }
+}
+
+#[cfg(test)]
+mod displace_tests {
+    use super::*;
+
+    fn entry(opener: Option<WindowId>, parent: Option<Token>) -> Rc<Entry> {
+        Rc::new(Entry {
+            window: Rc::new(Ready::new()),
+            parent,
+            opener,
+            on_event: Rc::new(|_| {}),
+            closed: Cell::new(false),
+            displaced: Cell::new(false),
+        })
+    }
+
+    #[test]
+    fn a_new_root_popup_takes_the_open_popups_of_its_window_and_not_of_another() {
+        let backend = WaylandBackend::default();
+        let window = WindowId::from(7_u64);
+        {
+            let mut entries = backend.entries.borrow_mut();
+            entries.insert(1, entry(Some(window), None));
+            entries.insert(2, entry(None, Some(1)));
+            entries.insert(3, entry(Some(WindowId::from(8_u64)), None));
+        }
+        let listeners = backend.displace(Some(window));
+        assert_eq!(listeners.len(), 2);
+        assert!(backend.entries.borrow().get(&1).is_none());
+        assert!(backend.entries.borrow().get(&2).is_none());
+        assert!(
+            backend
+                .entries
+                .borrow()
+                .get(&3)
+                .is_some_and(|e| !e.closed.get() && !e.displaced.get())
+        );
+        assert!(backend.displace(None).is_empty());
+    }
+
+    fn recording(
+        opener: Option<WindowId>,
+        parent: Option<Token>,
+        token: Token,
+        log: &Rc<RefCell<Vec<Token>>>,
+    ) -> Rc<Entry> {
+        let log = log.clone();
+        Rc::new(Entry {
+            window: Rc::new(Ready::new()),
+            parent,
+            opener,
+            on_event: Rc::new(move |event| {
+                if event == PopupEvent::Dismissed {
+                    log.borrow_mut().push(token);
+                }
+            }),
+            closed: Cell::new(false),
+            displaced: Cell::new(false),
+        })
+    }
+
+    #[test]
+    fn a_chain_is_destroyed_newest_first_and_each_popup_parents_to_the_one_above() {
+        let backend = WaylandBackend::default();
+        let window = WindowId::from(7_u64);
+        let log = Rc::new(RefCell::new(Vec::new()));
+        {
+            let mut entries = backend.entries.borrow_mut();
+            entries.insert(1, recording(Some(window), None, 1, &log));
+            entries.insert(2, recording(None, Some(1), 2, &log));
+            entries.insert(3, recording(None, Some(2), 3, &log));
+        }
+        // Each popup parents to the popup directly above it; the root parents to the window.
+        {
+            let entries = backend.entries.borrow();
+            assert_eq!(entries[&1].parent, None);
+            assert_eq!(entries[&2].parent, Some(1));
+            assert_eq!(entries[&3].parent, Some(2));
+        }
+        // Destroying the root destroys the chain: the newest popup first, the root last.
+        assert_eq!(backend.subtree(1), vec![3, 2, 1]);
+        let listeners = backend.displace(Some(window));
+        for listener in &listeners {
+            listener(PopupEvent::Dismissed);
+        }
+        assert_eq!(*log.borrow(), vec![3, 2, 1]);
+        assert!(backend.entries.borrow().is_empty());
     }
 }
