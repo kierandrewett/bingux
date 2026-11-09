@@ -651,7 +651,7 @@ impl Documents {
             origin: Origin::New,
         });
         let number = self.with(Store::free_untitled);
-        self.add(init, Drafts::new_id(), move |entry| {
+        self.add(init, Drafts::new_id(), None, move |entry| {
             entry.untitled = number;
             entry.phase = Phase::Ready;
         })
@@ -662,6 +662,7 @@ impl Documents {
         self,
         mut init: DocumentInit,
         draft: String,
+        preset: Option<Rc<dyn DocumentContent>>,
         setup: impl FnOnce(&mut Entry),
     ) -> Document {
         let hooks = self.hooks();
@@ -689,7 +690,7 @@ impl Documents {
         setup(&mut entry);
         self.edit(|store| store.entries.push(entry));
         init.title = self.handle(id).title();
-        let content = (hooks.make)(&init);
+        let content = preset.unwrap_or_else(|| (hooks.make)(&init));
         self.edit(|store| {
             if let Some(entry) = store.entry_mut(id) {
                 entry.content = content.clone();
@@ -707,6 +708,20 @@ impl Documents {
     /// reported to the person, and the returned document is closed at once.
     pub fn open_path(self, path: impl Into<PathBuf>) -> Document {
         self.open_with(Plan::new(path.into(), Origin::Opened))
+    }
+
+    /// Like [`open_or_create`](Self::open_or_create), but the document's text
+    /// is `content`: the app's own editor, which gets the file's bytes through
+    /// [`DocumentContent::load`] like any other document's.
+    pub fn open_path_with(
+        self,
+        path: impl Into<PathBuf>,
+        content: Rc<dyn DocumentContent>,
+    ) -> Document {
+        let mut plan = Plan::new(path.into(), Origin::Opened);
+        plan.create = true;
+        plan.content = Some(content);
+        self.open_with(plan)
     }
 
     /// Like [`open_path`](Self::open_path), and a file that is not there yet
@@ -741,7 +756,7 @@ impl Documents {
         });
         let id = init.id;
         let scroll = plan.scroll;
-        let document = self.add(init, Drafts::new_id(), move |entry| {
+        let document = self.add(init, Drafts::new_id(), plan.content.clone(), move |entry| {
             entry.scroll.set(scroll);
         });
         let limit = self.with(|store| store.settings.max_size);
@@ -1810,7 +1825,7 @@ impl Documents {
         let base = draft.meta.base;
         let has_path = draft.meta.path.is_some();
         let draft_id = draft.id.clone();
-        let document = self.add(init, draft_id.clone(), move |entry| {
+        let document = self.add(init, draft_id.clone(), None, move |entry| {
             entry.untitled = number;
             entry.edited = true;
             entry.stamp.set(base);
@@ -1931,6 +1946,7 @@ struct Plan {
     path: PathBuf,
     origin: Origin,
     create: bool,
+    content: Option<Rc<dyn DocumentContent>>,
     app_value: Value,
     scroll: (f32, f32),
 }
@@ -1941,6 +1957,7 @@ impl Plan {
             path,
             origin,
             create: false,
+            content: None,
             app_value: Value::Null,
             scroll: (0.0, 0.0),
         }
@@ -2090,6 +2107,12 @@ impl Document {
     pub fn save_then(self, then: impl Fn() + 'static) {
         self.docs
             .begin_save(self.id, None, After::then(then), false);
+    }
+
+    /// Like [`save_as`](Self::save_as), and `then` runs once it has been saved
+    /// under the new name. A cancelled choice runs nothing.
+    pub fn save_as_then(self, then: impl Fn() + 'static) {
+        self.docs.save_as(self.id, After::then(then));
     }
 
     /// Asks where to save the document, then saves it there. It then belongs

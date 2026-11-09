@@ -1984,6 +1984,8 @@ is the open documents in order and a read of it redraws when it changes, so a
 tab strip can be drawn from it. Tell it which one is showing with
 `documents.set_current(Some(document))`: the window title and the scene follow.
 
+`documents.open_path_with(path, content)` opens or creates the file with the app's own `Rc<dyn DocumentContent>` instead of a fresh one, so a tab that already holds its text hands that text to the manager. The manager still calls the content's `load` with the file's bytes; the content decides whether to take them.
+
 The app's side of one document is `DocumentContent`:
 
 ```rust

@@ -12,6 +12,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
+use crate::content::EditorContent;
 use bingux_text::encoding::{self, LineEnding};
 use bingux_text::encoding_rs;
 use bingux_text::{Editor, Indent, Language};
@@ -20,6 +21,7 @@ use bingux_ui::commands::{
     Command, CommandGroup, command_scope, use_commands, use_window_commands,
 };
 use bingux_ui::dnd::{DragActions, DropTarget, Dropped, Format, use_drop_target};
+use bingux_ui::document::{DocumentEvent, DocumentId, Documents, DocumentsConfig, use_documents};
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::prelude::*;
 use bingux_ui::tabs::{Birth, Tab, TabContent, TabSet, Tabs, tab_items, use_tab_window};
@@ -53,8 +55,6 @@ thread_local! {
 /// Keeps what `main` read before the window, for the first window to take.
 pub fn prepare(prefs: Prefs, session: Session) {
     PREFS.with(|current| *current.borrow_mut() = prefs.clone());
-    // Read the small state files now, not on the first frame.
-    let _ = session::recent();
     START.with(|start| *start.borrow_mut() = Some((prefs, session)));
 }
 
@@ -73,51 +73,90 @@ pub fn window_size() -> (f32, f32) {
 #[derive(Clone, PartialEq)]
 pub struct DocTab {
     pub doc: u64,
+    /// The same file in the shared document manager, for a file tab.
+    pub shared: Option<DocumentId>,
 }
 
 impl TabContent for DocTab {
     fn duplicate(&self) -> Self {
         DocTab {
             doc: document::duplicate(self.doc, &prefs_now()),
+            shared: None,
         }
     }
 }
 
 /// The tabs of the last session, or one new document.
-fn restore(prefs: &Prefs, session: Session) -> TabSet<DocTab> {
-    let mut docs = Vec::new();
+fn restore(prefs: &Prefs, session: Session, documents: Documents) -> TabSet<DocTab> {
+    let mut tabs = Vec::new();
     for saved in &session.tabs {
-        if let Some(id) = restore_tab(prefs, saved) {
-            docs.push(id);
+        if let Some(tab) = restore_tab(prefs, saved, documents) {
+            tabs.push(tab);
         }
     }
-    // Drafts no tab names, from a run that ended before it wrote its session.
-    for draft in session::orphan_drafts(&session) {
-        if let Some(id) = restore_tab(
-            prefs,
-            &SavedTab {
-                draft: Some(draft),
-                ..SavedTab::default()
-            },
-        ) {
-            docs.push(id);
-        }
-    }
-    let mut ids = docs.into_iter();
-    let Some(first) = ids.next() else {
+    let mut tabs = tabs.into_iter();
+    let Some(first) = tabs.next() else {
         return TabSet::new(DocTab {
             doc: document::new_untitled(prefs),
+            shared: None,
         });
     };
-    let mut set = TabSet::new(DocTab { doc: first });
-    for id in ids {
-        set.open(DocTab { doc: id });
+    let mut set = TabSet::new(first);
+    for tab in tabs {
+        set.open(tab);
     }
     set.nth(session.active);
     set
 }
 
-fn restore_tab(prefs: &Prefs, saved: &SavedTab) -> Option<u64> {
+/// The tab for a saved tab, with its file in the shared manager too.
+fn restore_tab(prefs: &Prefs, saved: &SavedTab, documents: Documents) -> Option<DocTab> {
+    let doc = restore_doc(prefs, saved)?;
+    // A draft holds unsaved text: the shared copy is edited too.
+    let shared = saved
+        .path
+        .as_deref()
+        .and_then(|path| share(documents, path, doc, saved.draft.is_some()));
+    Some(DocTab { doc, shared })
+}
+
+/// Trims trailing spaces and adds the final newline that the document's
+/// settings, or the preferences, ask for, before its text is written.
+fn tidy_for_save(id: u64, prefs: &Prefs) {
+    let Some((handle, config)) = document::with(id, |doc| (doc.handle.clone(), doc.config.clone()))
+    else {
+        return;
+    };
+    let trim = config
+        .trim_trailing_whitespace
+        .unwrap_or(prefs.trim_on_save);
+    let final_newline = config.insert_final_newline.unwrap_or(prefs.final_newline);
+    handle.update(|editor| {
+        if trim {
+            editor.trim_trailing_whitespace();
+        }
+        if final_newline && editor.len_chars() > 0 {
+            editor.ensure_final_newline();
+        }
+    });
+}
+
+/// Puts `path` in the shared document manager, over the text of tab document
+/// `doc`, and returns its id. `edited` marks it unsaved, as the old registry's
+/// draft does.
+fn share(documents: Documents, path: &Path, doc: u64, edited: bool) -> Option<DocumentId> {
+    let (handle, format) = document::with(doc, |doc| (doc.handle.clone(), doc.format.clone()))?;
+    let content = Rc::new(EditorContent::over_tab(handle, format));
+    let document = documents.open_path_with(path, content);
+    if edited {
+        document.set_edited(true);
+    }
+    let id = document.id();
+    document::update(doc, |doc| doc.shared = Some(id));
+    Some(id)
+}
+
+fn restore_doc(prefs: &Prefs, saved: &SavedTab) -> Option<u64> {
     let draft_text = saved.draft.as_deref().and_then(session::read_draft);
     let language = saved
         .language
@@ -268,6 +307,7 @@ struct Actions {
     overlays: Overlays,
     prefs: State<Prefs>,
     editor_id: AccessibilityId,
+    documents: Documents,
 }
 
 impl Actions {
@@ -284,7 +324,10 @@ impl Actions {
 
     fn new_document(&self) {
         let id = document::new_untitled(&self.prefs.peek());
-        self.tabs.open(DocTab { doc: id });
+        self.tabs.open(DocTab {
+            doc: id,
+            shared: None,
+        });
         self.focus_editor();
     }
 
@@ -331,7 +374,7 @@ impl Actions {
                 document::new_draft_name(),
             )
         };
-        session::add_recent(&path);
+        let shared = share(self.documents, &path, id, false);
         let blank = self.current().filter(|current| {
             document::with(*current, |doc| {
                 doc.path.is_none() && !doc.is_modified() && doc.handle.peek().len_chars() == 0
@@ -341,12 +384,18 @@ impl Actions {
         let current_tab = self.tabs.set().peek().current().map(|tab| tab.id);
         match (blank, current_tab) {
             (Some(old), Some(tab)) => {
-                self.tabs
-                    .update_if(tab, |_| true, move |content| content.doc = id);
+                self.tabs.update_if(
+                    tab,
+                    |_| true,
+                    move |content| {
+                        content.doc = id;
+                        content.shared = shared;
+                    },
+                );
                 document::remove(old);
             }
             _ => {
-                self.tabs.open(DocTab { doc: id });
+                self.tabs.open(DocTab { doc: id, shared });
             }
         }
         self.focus_editor();
@@ -382,17 +431,23 @@ impl Actions {
     /// Saves document `id`, asking for a name first when it has none. `then`
     /// runs after a save that worked.
     fn save(&self, id: u64, then: Option<Rc<dyn Fn()>>) {
-        let Some((path, read_only)) = document::with(id, |doc| (doc.path.clone(), doc.read_only))
+        let Some((shared, path, read_only)) =
+            document::with(id, |doc| (doc.shared, doc.path.clone(), doc.read_only))
         else {
             return;
         };
-        match path {
-            Some(path) if !read_only => self.write(id, path, then),
+        match (shared, path) {
+            (Some(shared), Some(_)) if !read_only => self.save_shared(id, shared, then, false),
+            (None, Some(path)) if !read_only => self.write(id, path, then),
             _ => self.save_as(id, then),
         }
     }
 
     fn save_as(&self, id: u64, then: Option<Rc<dyn Fn()>>) {
+        if let Some(shared) = document::with(id, |doc| doc.shared).flatten() {
+            self.save_shared(id, shared, then, true);
+            return;
+        }
         let actions = *self;
         let Some((name, folder)) = document::with(id, |doc| {
             let name = match &doc.path {
@@ -433,36 +488,19 @@ impl Actions {
                     doc.handle.update(|editor| editor.set_language(detected));
                 }
             });
-            session::add_recent(&path);
             actions.write(id, path, then.clone());
         });
     }
 
     fn write(&self, id: u64, path: PathBuf, then: Option<Rc<dyn Fn()>>) {
         let prefs = self.prefs.peek().clone();
-        let Some((handle, format, config, draft)) = document::with(id, |doc| {
-            (
-                doc.handle.clone(),
-                doc.format,
-                doc.config.clone(),
-                doc.draft.clone(),
-            )
+        let Some((handle, format, draft)) = document::with(id, |doc| {
+            (doc.handle.clone(), doc.format, doc.draft.clone())
         }) else {
             return;
         };
-        let trim = config
-            .trim_trailing_whitespace
-            .unwrap_or(prefs.trim_on_save);
-        let final_newline = config.insert_final_newline.unwrap_or(prefs.final_newline);
-        handle.update(|editor| {
-            if trim {
-                editor.trim_trailing_whitespace();
-            }
-            if final_newline && editor.len_chars() > 0 {
-                editor.ensure_final_newline();
-            }
-            editor.mark_saved();
-        });
+        tidy_for_save(id, &prefs);
+        handle.update(|editor| editor.mark_saved());
         let rope = handle.peek().rope().clone();
         let revision = handle.peek().revision();
         let overlays = self.overlays;
@@ -484,6 +522,9 @@ impl Actions {
                             .retain(|notice| matches!(notice, Notice::Binary));
                     });
                     session::remove_draft(draft);
+                    if document::with(id, |doc| doc.shared.is_none()).unwrap_or(false) {
+                        share(actions.documents, &path, id, false);
+                    }
                     if let Some(then) = then {
                         then();
                     }
@@ -525,6 +566,58 @@ impl Actions {
         });
     }
 
+    /// Saves a document the shared manager holds, to its file or, with
+    /// `as_new`, to a file the user picks. `then` runs once it has been saved.
+    fn save_shared(&self, id: u64, shared: DocumentId, then: Option<Rc<dyn Fn()>>, as_new: bool) {
+        let prefs = self.prefs.peek().clone();
+        tidy_for_save(id, &prefs);
+        let Some(document) = self.documents.get(shared) else {
+            return;
+        };
+        let actions = *self;
+        let after = move || actions.saved_shared(id, shared, then.clone());
+        if as_new {
+            document.save_as_then(after);
+        } else {
+            document.save_then(after);
+        }
+    }
+
+    /// After the shared manager saved document `id`: the tab follows the file
+    /// it now has, its draft is gone, and `then` runs.
+    fn saved_shared(&self, id: u64, shared: DocumentId, then: Option<Rc<dyn Fn()>>) {
+        let Some(path) = self
+            .documents
+            .get(shared)
+            .and_then(|document| document.path())
+        else {
+            return;
+        };
+        let stamp = document::stamp_now(&path);
+        let Some((handle, draft, revision)) = document::with(id, |doc| {
+            (
+                doc.handle.clone(),
+                doc.draft.clone(),
+                doc.handle.peek().revision(),
+            )
+        }) else {
+            return;
+        };
+        document::update(id, |doc| {
+            doc.path = Some(path.clone());
+            doc.read_only = false;
+            doc.stamp = stamp;
+            doc.draft_revision = revision;
+            doc.notices
+                .retain(|notice| matches!(notice, Notice::Binary));
+        });
+        handle.update(|editor| editor.mark_saved());
+        session::remove_draft(draft);
+        if let Some(then) = then {
+            then();
+        }
+    }
+
     fn save_all(&self) {
         for id in document::ids() {
             let dirty = document::with(id, |doc| {
@@ -539,6 +632,13 @@ impl Actions {
 
     /// Reads the file again, as one undo step (Undo brings the text back).
     fn reload(&self, id: u64, encoding: Option<&'static encoding_rs::Encoding>) {
+        let shared = document::with(id, |doc| doc.shared).flatten();
+        if let (Some(shared), None) = (shared, encoding) {
+            if let Some(document) = self.documents.get(shared) {
+                document.reload();
+            }
+            return;
+        }
         let Some(path) = document::with(id, |doc| doc.path.clone()).flatten() else {
             return;
         };
@@ -693,7 +793,7 @@ fn suggested_name(doc: &document::Doc) -> String {
 }
 
 fn unsaved(tab: &DocTab) -> bool {
-    document::with(tab.doc, |doc| doc.is_modified()).unwrap_or(false)
+    tab.shared.is_some() || document::with(tab.doc, |doc| doc.is_modified()).unwrap_or(false)
 }
 
 #[derive(PartialEq)]
@@ -717,15 +817,31 @@ impl Component for Content {
                     .unwrap_or_else(prefs_now)
             }
         });
+        let closed_docs = use_state(Vec::<DocumentId>::new);
+        let documents = use_documents(
+            DocumentsConfig::new("bingux-text-editor", "Text Editor")
+                .mime("text/plain")
+                .filter(Filter::new("Text files").mime("text/*"))
+                .sandboxed(session::folder().join("shared"))
+                .restore(false),
+            |_| Rc::new(EditorContent::new(Editor::new(""))),
+            move |event| {
+                if let DocumentEvent::Closed(id) = event {
+                    let mut closed = closed_docs;
+                    closed.write().push(id);
+                }
+            },
+        );
         let set = use_state({
             let start = start.clone();
             move || {
                 birth
                     .and_then(|birth| birth.into_set())
                     .unwrap_or_else(|| match start {
-                        Some((prefs, session)) => restore(&prefs, session),
+                        Some((prefs, session)) => restore(&prefs, session, documents),
                         None => TabSet::new(DocTab {
                             doc: document::new_untitled(&prefs_now()),
+                            shared: None,
                         }),
                     })
             }
@@ -739,6 +855,7 @@ impl Component for Content {
             overlays,
             prefs,
             editor_id,
+            documents,
         };
         let commands = use_commands();
         let find = use_find();
@@ -795,6 +912,27 @@ impl Component for Content {
             spawn(async move {
                 asks.write().retain(|id| *id != tab_id);
                 ask_to_close(actions, tab_id);
+            });
+        }
+
+        // A shared document the manager closed: its tabs close too.
+        let closed = closed_docs.read().first().copied();
+        if let Some(doc) = closed {
+            let mut closed_docs = closed_docs;
+            spawn(async move {
+                closed_docs.write().retain(|id| *id != doc);
+                let tab_ids: Vec<u64> = actions
+                    .tabs
+                    .set()
+                    .peek()
+                    .tabs()
+                    .iter()
+                    .filter(|tab| tab.content.shared == Some(doc))
+                    .map(|tab| tab.id)
+                    .collect();
+                for tab_id in tab_ids {
+                    close_tab(actions, tab_id);
+                }
             });
         }
 
@@ -1146,6 +1284,7 @@ fn tick(actions: Actions) {
     let mut saved = Vec::new();
     for tab in &tabs {
         let id = tab.content.doc;
+        let shared = tab.content.shared;
         let Some((handle, path, draft, draft_revision, untitled, phase)) =
             document::with(id, |doc| {
                 (
@@ -1179,6 +1318,9 @@ fn tick(actions: Actions) {
             session::write_draft(draft.clone(), editor.text());
             drop(editor);
             document::update(id, |doc| doc.draft_revision = revision);
+            if let Some(shared) = shared.and_then(|shared| actions.documents.get(shared)) {
+                shared.set_edited(true);
+            }
         } else {
             drop(editor);
         }
@@ -1261,20 +1403,41 @@ fn check_disk(actions: Actions, id: u64, path: PathBuf) {
     });
 }
 
-/// The question before a tab with unsaved changes closes.
-fn ask_to_close(actions: Actions, tab_id: u64) {
+/// Closes tab `tab_id` and drops its editor draft. The shared manager, not
+/// this module, closes the document of a file tab.
+fn close_tab(actions: Actions, tab_id: u64) {
     let Some(doc_id) = actions.tabs.set().peek().content(tab_id).map(|tab| tab.doc) else {
         return;
     };
+    if let Some(draft) = document::with(doc_id, |doc| doc.draft.clone()) {
+        session::remove_draft(draft);
+    }
+    actions.tabs.close_now(tab_id);
+}
+
+/// The question before a tab with unsaved changes closes.
+fn ask_to_close(actions: Actions, tab_id: u64) {
+    let Some((doc_id, shared)) = actions
+        .tabs
+        .set()
+        .peek()
+        .content(tab_id)
+        .map(|tab| (tab.doc, tab.shared))
+    else {
+        return;
+    };
+    if let Some(shared) = shared {
+        // The manager asks about unsaved changes and closes the document;
+        // its Closed event closes this tab.
+        if let Some(document) = actions.documents.get(shared) {
+            document.close();
+        }
+        return;
+    }
     let Some(name) = document::with(doc_id, |doc| doc.title()) else {
         return;
     };
-    let close = move || {
-        if let Some(draft) = document::with(doc_id, |doc| doc.draft.clone()) {
-            session::remove_draft(draft);
-        }
-        actions.tabs.close_now(tab_id);
-    };
+    let close = move || close_tab(actions, tab_id);
     let save_close: Rc<dyn Fn()> = Rc::new(close.clone());
     actions.overlays.show_dialog(
         dialog(
@@ -1408,29 +1571,6 @@ fn tip(commands: bingux_ui::commands::Commands, id: &str, name: &str) -> String 
     }
 }
 
-/// The recent files, as the rows of the Open recent submenu.
-fn recent_items(actions: Actions) -> Vec<MenuItem> {
-    let recent = session::recent();
-    if recent.is_empty() {
-        return vec![menu_item(tr!("text-editor-no-recent"), |_| {}).disabled()];
-    }
-    let mut items: Vec<MenuItem> = recent
-        .iter()
-        .take(12)
-        .map(|path| {
-            let open = path.clone();
-            menu_item(document::display_name(path), move |_| {
-                actions.open_path(open.clone())
-            })
-        })
-        .collect();
-    items.push(menu_separator());
-    items.push(menu_item(tr!("text-editor-clear-recent"), |_| {
-        session::clear_recent()
-    }));
-    items
-}
-
 /// The commands that work wherever the keyboard is: files, find, view and
 /// editing choices. The keys of the editor itself (Undo, the clipboard, the
 /// line edits) come with its scope.
@@ -1479,7 +1619,7 @@ fn window_commands(
         Command::submenu(
             "file.open-recent",
             tr!("text-editor-cmd-open-recent"),
-            recent_items(actions),
+            actions.documents.recent_menu(),
         )
         .group(CommandGroup::File)
         .section("new"),

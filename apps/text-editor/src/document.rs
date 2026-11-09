@@ -95,6 +95,8 @@ pub struct Doc {
     /// The bytes of the file as read, kept for Reopen with another encoding
     /// when the file is small.
     pub raw: Option<Rc<Vec<u8>>>,
+    /// The same file in the shared document manager, once it is in it.
+    pub shared: Option<bingux_ui::document::DocumentId>,
 }
 
 impl Doc {
@@ -243,6 +245,7 @@ pub fn insert(
                 saving: false,
                 draft_revision: 0,
                 raw: None,
+                shared: None,
             },
         )
     });

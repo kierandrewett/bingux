@@ -5,7 +5,6 @@
 //! | `session.json` | The open tabs in order (a file, or an untitled draft), the one on show, each caret and scroll line |
 //! | `drafts/NAME.txt` | The unsaved text of a document, written two seconds after a change, deleted when it is saved or closed without saving |
 //! | `positions.json` | The caret and scroll line of the last 500 files, so a file opens where it was left |
-//! | `recent.json` | The last 20 files opened, for Open recent |
 //!
 //! Nothing typed is lost: a document with changes, saved or not, has a draft,
 //! and the next start opens it again with its changes. Every write is to a
@@ -16,8 +15,6 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-/// How many files Open recent keeps.
-pub const RECENT_KEPT: usize = 20;
 /// How many files' caret positions are remembered.
 const POSITIONS_KEPT: usize = 500;
 /// Drafts larger than this are not written: the file itself is the copy.
@@ -125,63 +122,12 @@ pub fn remove_draft(name: String) {
     });
 }
 
-/// Drafts no tab of the session names: from a crash before the session was
-/// written. Read before the window opens.
-pub fn orphan_drafts(session: &Session) -> Vec<String> {
-    let named: Vec<&str> = session
-        .tabs
-        .iter()
-        .filter_map(|tab| tab.draft.as_deref())
-        .collect();
-    let Ok(entries) = std::fs::read_dir(drafts_folder()) else {
-        return Vec::new();
-    };
-    entries
-        .filter_map(|entry| entry.ok())
-        .filter_map(|entry| {
-            entry
-                .file_name()
-                .to_str()?
-                .strip_suffix(".txt")
-                .map(str::to_owned)
-        })
-        .filter(|name| !named.contains(&name.as_str()))
-        .collect()
-}
-
 // ---------------------------------------------------------------------------
-// Recent files and positions, held in memory and written behind.
+// Caret positions, held in memory and written behind.
 // ---------------------------------------------------------------------------
 
 thread_local! {
-    static RECENT: std::cell::RefCell<Vec<PathBuf>> = std::cell::RefCell::new(read_json::<Vec<PathBuf>>(&folder().join("recent.json")));
     static POSITIONS: std::cell::RefCell<Positions> = std::cell::RefCell::new(read_json(&folder().join("positions.json")));
-}
-
-pub fn recent() -> Vec<PathBuf> {
-    RECENT.with(|recent| recent.borrow().clone())
-}
-
-pub fn add_recent(path: &Path) {
-    let list = RECENT.with(|recent| {
-        let mut recent = recent.borrow_mut();
-        recent.retain(|known| known != path);
-        recent.insert(0, path.to_path_buf());
-        recent.truncate(RECENT_KEPT);
-        recent.clone()
-    });
-    if let Ok(bytes) = serde_json::to_vec_pretty(&list) {
-        bingux_ui::task::spawn_detached("text-editor-recent", move || {
-            let _ = write_file(&folder().join("recent.json"), &bytes);
-        });
-    }
-}
-
-pub fn clear_recent() {
-    RECENT.with(|recent| recent.borrow_mut().clear());
-    bingux_ui::task::spawn_detached("text-editor-recent", move || {
-        let _ = write_file(&folder().join("recent.json"), b"[]");
-    });
 }
 
 pub fn position(path: &Path) -> Option<Position> {
