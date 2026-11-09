@@ -67,6 +67,8 @@ pub mod selection;
 pub mod shell;
 #[cfg(feature = "testing")]
 pub mod snapshot;
+#[cfg(test)]
+mod source_scan;
 pub mod stage;
 pub mod stress;
 pub mod style;
