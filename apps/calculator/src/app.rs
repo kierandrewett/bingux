@@ -71,22 +71,6 @@ fn switch_mode(calc: &Calc, mode: Mode) {
     bingux_ui::nav::navigate(&slug(mode));
 }
 
-/// What the shortcuts dialog says, one shortcut a line.
-fn shortcuts_text() -> String {
-    [
-        tr!("calculator-shortcut-equals"),
-        tr!("calculator-shortcut-clear"),
-        tr!("calculator-shortcut-delete"),
-        tr!("calculator-shortcut-copy"),
-        tr!("calculator-shortcut-history"),
-        tr!("calculator-shortcut-modes"),
-        tr!("calculator-shortcut-operators"),
-        tr!("calculator-shortcut-percent"),
-        tr!("calculator-shortcut-about"),
-    ]
-    .join("\n")
-}
-
 /// The name of a mode as shown, in the language shown. `Mode::name` stays
 /// the English key of addresses and the saved state.
 pub fn mode_title(mode: Mode) -> String {
@@ -180,6 +164,10 @@ impl Component for Content {
 
         let toggle = calc.clone();
         let showing_history = if compact { history_page } else { history_open };
+        // The window's commands: the palette, the shortcuts sheet and the
+        // main menu list them with their keys.
+        let commands = use_commands();
+        use_window_commands(window_commands(&calc, overlays, showing_history));
         let history_button = icon_button(Icon::Clock, move |_: ()| toggle_history(&toggle))
             .tooltip(&if showing_history {
                 tr!("calculator-history-hide.tooltip")
@@ -189,8 +177,8 @@ impl Component for Content {
 
         // The history button sits beside the menu on a desktop. A phone's
         // header has no room for a third button there, so it goes first.
-        let menu =
-            menu_button(tr!("ui-main-menu"), main_menu(&calc, overlays)).icon(Icon::OpenMenu);
+        let menu = menu_button(tr!("ui-main-menu"), main_menu(&calc, overlays, commands))
+            .icon(Icon::OpenMenu);
         let header = HeaderBar::new(tr!("calculator-title")).title_slot(switch);
         let header = if compact {
             header.leading(history_button)
@@ -200,7 +188,6 @@ impl Component for Content {
         let header = header.trailing(menu).trailing(WindowControls);
 
         let key_calc = calc.clone();
-        let copy_calc = calc.clone();
         let body = if compact && history_page {
             rect()
                 .tw(&tokens, &[w_full(), h_flex()])
@@ -233,14 +220,6 @@ impl Component for Content {
                     event.stop_propagation();
                 }
             })
-            .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                let chord = event.modifiers.intersects(Modifiers::ctrl_or_meta())
-                    && event.modifiers.contains(Modifiers::SHIFT);
-                if chord && matches!(&event.key, Key::Character(c) if c.eq_ignore_ascii_case("c")) {
-                    let shown = copy_calc.shown();
-                    copy_calc.copy_text(shown.copy, overlays);
-                }
-            })
             .child(header)
             .child(body)
     }
@@ -258,8 +237,65 @@ fn toggle_history(calc: &Calc) {
     }
 }
 
-/// Keys the window takes when no control did: Enter, Escape, Backspace and
-/// any character typed while a key of the keypad (not the field) has focus.
+/// The window's commands: the modes, copy, clear and history. The palette,
+/// the shortcuts sheet and the main menu list them, with their keys.
+fn window_commands(calc: &Calc, overlays: Overlays, showing_history: bool) -> Vec<Command> {
+    let keys = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"];
+    let mut commands: Vec<Command> = Mode::ALL
+        .iter()
+        .enumerate()
+        .map(|(index, &mode)| {
+            let calc = calc.clone();
+            let checked = calc.mode() == mode;
+            Command::new(
+                format!("calculator.mode.{}", slug(mode)),
+                mode_title(mode),
+                move |_| switch_mode(&calc, mode),
+            )
+            .shortcut(keys[index])
+            .checked(checked)
+            .group(CommandGroup::View)
+        })
+        .collect();
+    let copy = calc.clone();
+    commands.push(
+        Command::new(
+            "calculator.copy",
+            tr!("calculator-command-copy"),
+            move |_| {
+                let shown = copy.shown();
+                copy.copy_text(shown.copy, overlays);
+            },
+        )
+        .shortcut("Ctrl+Shift+C")
+        .group(CommandGroup::Edit),
+    );
+    let clear = calc.clone();
+    commands.push(
+        Command::new(
+            "calculator.clear",
+            tr!("calculator-command-clear"),
+            move |_| clear.clear(),
+        )
+        .shortcut("Escape")
+        .group(CommandGroup::Edit),
+    );
+    let history = calc.clone();
+    commands.push(
+        Command::new(
+            "calculator.history",
+            tr!("calculator-command-history"),
+            move |_| toggle_history(&history),
+        )
+        .shortcut("Ctrl+H")
+        .checked(showing_history)
+        .group(CommandGroup::View),
+    );
+    commands
+}
+
+/// Keys the window takes when no control did: Enter, Backspace and any
+/// character typed while a key of the keypad (not the field) has focus.
 fn shortcut(calc: &Calc, overlays: Overlays, event: &Event<KeyboardEventData>) -> bool {
     if overlays.dialog_open() {
         return false;
@@ -271,21 +307,8 @@ fn shortcut(calc: &Calc, overlays: Overlays, event: &Event<KeyboardEventData>) -
             calc.equals();
             true
         }
-        Key::Named(NamedKey::Escape) => {
-            calc.clear();
-            true
-        }
         Key::Named(NamedKey::Backspace) if !ctrl && !alt => {
             calc.backspace();
-            true
-        }
-        Key::Character(text) if ctrl && !alt && text.eq_ignore_ascii_case("h") => {
-            toggle_history(calc);
-            true
-        }
-        Key::Character(text) if ctrl && !alt && matches!(text.as_str(), "1" | "2" | "3" | "4") => {
-            let index = text.parse::<usize>().unwrap_or(1) - 1;
-            switch_mode(calc, Mode::ALL[index]);
             true
         }
         Key::Character(text) if !ctrl && !alt && text.chars().count() == 1 && text != " " => {
@@ -444,7 +467,7 @@ fn paired(
     }
 }
 
-fn main_menu(calc: &Calc, overlays: Overlays) -> Vec<MenuItem> {
+fn main_menu(calc: &Calc, overlays: Overlays, commands: Commands) -> Vec<MenuItem> {
     let (group, precision) = calc.with(|s| (s.saved.settings.group, s.saved.settings.precision));
     let group_calc = calc.clone();
     let mut items = vec![
@@ -477,9 +500,7 @@ fn main_menu(calc: &Calc, overlays: Overlays) -> Vec<MenuItem> {
     );
     items.push(menu_separator());
     items.push(menu_item(tr!("ui-command-shortcuts"), move |_| {
-        overlays.show_dialog(
-            dialog(tr!("ui-shortcuts-title"), shortcuts_text()).cancel(tr!("ui-dialog-close")),
-        );
+        commands.show_shortcuts()
     }));
     items.extend(bingux_ui::about::app_menu_items(overlays));
     items
