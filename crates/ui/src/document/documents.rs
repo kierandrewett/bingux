@@ -2109,6 +2109,12 @@ impl Document {
             .begin_save(self.id, None, After::then(then), false);
     }
 
+    /// Like [`save_as`](Self::save_as), and `then` runs once it has been saved
+    /// under the new name. A cancelled choice runs nothing.
+    pub fn save_as_then(self, then: impl Fn() + 'static) {
+        self.docs.save_as(self.id, After::then(then));
+    }
+
     /// Asks where to save the document, then saves it there. It then belongs
     /// to the new file.
     pub fn save_as(self) {

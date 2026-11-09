@@ -455,6 +455,22 @@ fn a_name_that_is_not_there_yet_opens_as_a_new_document_that_saves_there() {
 }
 
 #[test]
+fn save_then_runs_its_callback_once_the_save_has_worked() {
+    reset();
+    let mut session = Session::new("save-then");
+    let path = session.dir.join("then.txt");
+    let document = session.run(|docs| docs.open_or_create(&path));
+    session.wait_until("ready", |_| document.phase() == Phase::Ready);
+    session.set_text(document, "then");
+    let ran = std::rc::Rc::new(std::cell::Cell::new(false));
+    let flag = ran.clone();
+    session.run(|_| document.save_then(move || flag.set(true)));
+    session.wait_until("saved", |_| !document.is_unsaved());
+    assert!(ran.get(), "the callback runs after the save");
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "then");
+}
+
+#[test]
 fn a_file_opened_with_the_apps_own_content_loads_into_that_content() {
     reset();
     let mut session = Session::new("with-content");
