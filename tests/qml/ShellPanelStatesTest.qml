@@ -4,8 +4,9 @@ import Quickshell
 
 // A gallery of the panel-level shell states for a human to look at, run under a
 // compositor like ShellStatesTest.qml: the session power confirm step, a services
-// list that could not be read, and a services list with an action error. It
-// prints SHELL_PANEL_STATES_DONE once drawn.
+// list that could not be read, and a services list with an action error. The
+// services panels never read the bus here (autoRefresh: false), so each state is
+// the one set below. It prints SHELL_PANEL_STATES_DONE once drawn.
 ShellRoot {
     FloatingWindow {
         implicitWidth: 1000
@@ -34,6 +35,7 @@ ShellRoot {
                 ServicesPanel {
                     anchors.fill: parent
                     anchors.margins: 8
+                    autoRefresh: false
                     readFailed: true
                 }
             }
@@ -43,19 +45,11 @@ ShellRoot {
                 radius: 16
                 color: Theme.popupSurface
                 ServicesPanel {
-                    id: actionPanel
                     anchors.fill: parent
                     anchors.margins: 8
+                    autoRefresh: false
                     actionError: "Could not restart ssh.service"
                     actionDetail: "The service manager refused the request."
-                    // The VM has no user bus, so the list read fails and sets
-                    // readFailed, hiding this banner. Clear it so the action error shows.
-                    Timer {
-                        interval: 100
-                        repeat: true
-                        running: true
-                        onTriggered: actionPanel.readFailed = false
-                    }
                 }
             }
         }

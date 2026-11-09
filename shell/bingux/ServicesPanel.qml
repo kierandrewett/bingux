@@ -19,9 +19,12 @@ ColumnLayout {
     property string actionError: ""
     property string actionDetail: ""
     property string status: ""
+    // false: the panel never reads systemctl on its own (no load, refresh timer or
+    // visibility reload). Tests and fixtures set the states they need directly.
+    property bool autoRefresh: true
     spacing: 12
     function refresh() {
-        if (!visible || worker.running)
+        if (!autoRefresh || !visible || worker.running)
             return;
         worker.requestedScope = scope;
         worker.command = ["systemctl", scope === "User" ? "--user" : "--system", "list-units", "--type=service", "--all", "--output=json", "--no-pager"];
@@ -52,7 +55,7 @@ ColumnLayout {
     Timer {
         interval: 10000
         repeat: true
-        running: root.visible
+        running: root.visible && root.autoRefresh
         onTriggered: root.refresh()
     }
     Process {
