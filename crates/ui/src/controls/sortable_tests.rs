@@ -757,6 +757,8 @@ fn a_long_list_shows_a_line_and_leaves_the_other_rows_still() {
     // The line and the moves of the rows are animations: wait for the line, with a generous cap,
     // rather than trust a fixed number of frames on a loaded machine.
     shot.settle_until(Duration::from_secs(5), |shot| drop_line(shot, home).is_some());
+    // The drag is armed by the frames that follow the line (releasing at once drops nothing).
+    frames(&mut shot, 10);
     assert!(
         (label(&mut shot, "Network").min_y() - next).abs() < 0.01
             && (label(&mut shot, "Power").min_y() - third).abs() < 0.01,
@@ -773,6 +775,7 @@ fn a_long_list_shows_a_line_and_leaves_the_other_rows_still() {
     );
     shot.release(end);
     frames(&mut shot, 10);
+    shot.settle_until(Duration::from_secs(5), |_| !log.moves.borrow().is_empty());
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 2)]);
     assert_eq!(
         order(&mut shot),
