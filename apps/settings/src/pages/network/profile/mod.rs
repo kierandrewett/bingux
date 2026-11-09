@@ -25,6 +25,7 @@ mod store;
 
 use freya::prelude::*;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 
 use super::details::TechnicalDetails;
@@ -33,8 +34,8 @@ use super::model::{NetCtx, use_net_ctx};
 use super::{Owner, Section};
 use crate::pages::connection_editor::{
     CLONED_MAC_CHOICES, Changes, Kind, METERED_CHOICES, ProfileData, WIFI_SECURITY_CHOICES,
-    dns_summary, dot1x_summary, ip_summary, label_of, permissions_value, split_cloned_mac,
-    wifi_security_kind, yes_no,
+    dns_summary, dot1x_summary, has_custom_dns, ip_summary, label_of, permissions_value,
+    split_cloned_mac, wifi_security_kind, yes_no,
 };
 use crate::pages::loading::veiled;
 use crate::routes;
@@ -180,11 +181,12 @@ impl Component for PasswordRow {
     }
 }
 
-/// A dropdown's `(key, label)` pairs as owned strings.
+/// A dropdown's `(key, label)` pairs as owned strings. Each label is a message ID, shown in the
+/// language in use.
 fn options(choices: &[(&str, &str)]) -> Vec<(String, String)> {
     choices
         .iter()
-        .map(|(key, label)| (key.to_string(), label.to_string()))
+        .map(|(key, label)| (key.to_string(), bingux_ui::i18n::text(label)))
         .collect()
 }
 
@@ -211,7 +213,7 @@ fn advanced_row(page: &Page) -> Element {
     let router = page.ctx.router;
     Group::new(None::<String>)
         .row(
-            row("Advanced")
+            row(tr!("network-profile-advanced-title"))
                 .subtitle(advanced_summary(&page.saved, page.kind()))
                 .navigates()
                 .on_press(move |_| router.open(route.clone())),
@@ -223,37 +225,40 @@ fn advanced_row(page: &Page) -> Element {
 fn advanced_summary(saved: &ProfileData, kind: Kind) -> String {
     let mut parts: Vec<String> = Vec::new();
     if saved.get("ipv4.method") == "manual" {
-        parts.push("Manual IPv4".to_string());
+        parts.push(tr!("network-profile-advanced-manual-ipv4"));
     }
     match saved.get("ipv6.method") {
-        "manual" => parts.push("Manual IPv6".to_string()),
-        "disabled" | "ignore" => parts.push("IPv6 off".to_string()),
+        "manual" => parts.push(tr!("network-profile-advanced-manual-ipv6")),
+        "disabled" | "ignore" => parts.push(tr!("network-profile-advanced-ipv6-off")),
         _ => {}
     }
-    if dns_summary(saved) != "Automatic" {
-        parts.push("Custom DNS".to_string());
+    if has_custom_dns(saved) {
+        parts.push(tr!("network-profile-advanced-custom-dns"));
     }
     if saved.get("proxy.method") == "auto" {
-        parts.push("Proxy".to_string());
+        parts.push(tr!("network-profile-advanced-proxy"));
     }
     if kind != Kind::Vpn {
         let identity = identity_summary(saved);
-        if identity != "Default" {
+        if identity != tr!("network-profile-identity-default") {
             parts.push(identity);
         }
     }
-    if kind == Kind::Wired && dot1x_summary(saved) == "802.1X on" {
-        parts.push("802.1X".to_string());
+    if kind == Kind::Wired && !saved.get("802-1x.eap").is_empty() {
+        parts.push(tr!("network-profile-advanced-802-1x"));
     }
     let priority = saved.int("connection.autoconnect-priority").unwrap_or(0);
     if priority != 0 {
-        parts.push(format!("Priority {priority}"));
+        parts.push(tr!(
+            "network-profile-advanced-priority",
+            priority = priority
+        ));
     }
     if !saved.get("connection.permissions").is_empty() {
-        parts.push("Only for you".to_string());
+        parts.push(tr!("network-profile-advanced-only-for-you"));
     }
     if parts.is_empty() {
-        "Addresses, DNS, security and technical details".to_string()
+        tr!("network-profile-advanced-empty")
     } else {
         parts.join(", ")
     }
@@ -272,7 +277,7 @@ fn identity_summary(saved: &ProfileData) -> String {
         parts.push(format!("MTU {mtu}"));
     }
     if parts.is_empty() {
-        "Default".to_string()
+        tr!("network-profile-identity-default")
     } else {
         parts.join(" · ")
     }
@@ -449,6 +454,7 @@ mod tests {
 
     #[test]
     fn identity_summary_names_only_what_differs() {
+        crate::register_catalogue_for_tests();
         let plain = ProfileData::parse("connection.type:802-3-ethernet\n802-3-ethernet.mtu:auto\n");
         assert_eq!(identity_summary(&plain), "Default");
         let custom = ProfileData::parse(

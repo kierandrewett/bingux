@@ -126,3 +126,119 @@ bluetooth-detail-trust = Connects automatically
 bluetooth-forget-title = Forget “{ $name }”?
 bluetooth-forget-body = This computer will forget the pairing. Pair again to use the device.
 bluetooth-forget-cancel = Cancel
+
+## Connection editor
+
+# Dropdown labels and summaries in the connection editor. Search keywords in settings_index.rs stay literal.
+network-editor-metered-automatic = Automatic
+network-editor-metered-yes = Yes
+network-editor-metered-no = No
+network-editor-ipv4-auto = Automatic (DHCP)
+network-editor-ipv4-manual = Manual
+network-editor-ipv4-link-local = Link-local only
+network-editor-ipv4-shared = Shared with other computers
+network-editor-ipv4-off = Off
+network-editor-ipv6-auto = Automatic
+network-editor-ipv6-dhcp = Automatic, DHCP only
+network-editor-ipv6-manual = Manual
+network-editor-ipv6-link-local = Link-local only
+network-editor-ipv6-shared = Shared with other computers
+network-editor-ipv6-ignore = Ignore
+network-editor-ipv6-off = Off
+network-editor-vpn-ipv4-auto = Automatic (DHCP)
+network-editor-vpn-ipv4-manual = Manual
+network-editor-vpn-ipv4-off = Off
+network-editor-vpn-ipv6-auto = Automatic
+network-editor-vpn-ipv6-manual = Manual
+network-editor-vpn-ipv6-ignore = Ignore
+network-editor-vpn-ipv6-off = Off
+network-editor-privacy-default = Default
+network-editor-privacy-off = Off
+network-editor-privacy-public = Prefer public addresses
+network-editor-privacy-temporary = Prefer temporary addresses
+network-editor-addr-gen-default = Default
+network-editor-addr-gen-stable = Stable and private
+network-editor-addr-gen-eui64 = From the hardware address
+network-editor-multicast-default = Default
+network-editor-multicast-off = Off
+network-editor-multicast-resolve = Resolve only
+network-editor-multicast-on = On
+network-editor-dot-default = Default
+network-editor-dot-off = Off
+network-editor-dot-when-available = When available
+network-editor-dot-always = Always
+network-editor-retry-default = Default
+network-editor-retry-once = Once
+network-editor-retry-2 = 2 times
+network-editor-retry-3 = 3 times
+network-editor-retry-5 = 5 times
+network-editor-retry-10 = 10 times
+network-editor-retry-forever = Forever
+network-editor-band-automatic = Automatic
+network-editor-band-2ghz = 2.4 GHz
+network-editor-band-5ghz = 5 GHz
+network-editor-mac-default = Default
+network-editor-mac-never = Never
+network-editor-mac-always = Always
+network-editor-cloned-default = Default
+network-editor-cloned-preserve = Preserve
+network-editor-cloned-permanent = Permanent
+network-editor-cloned-random = Random
+network-editor-cloned-stable = Stable
+network-editor-cloned-address = Specific address
+network-editor-wol-default = Default
+network-editor-wol-off = Off
+network-editor-wol-magic = Magic packet
+network-editor-wifi-security-none = None
+network-editor-wifi-security-wpa-psk = WPA & WPA2 Personal
+network-editor-wifi-security-sae = WPA3 Personal
+network-editor-wifi-security-wpa-eap = WPA & WPA2 Enterprise
+network-editor-wifi-security-wep = WEP
+network-editor-eap-peap = PEAP
+network-editor-eap-ttls = Tunnelled TLS
+network-editor-eap-tls = TLS
+network-editor-eap-fast = FAST
+network-editor-phase2-mschapv2 = MSCHAPv2
+network-editor-phase2-mschap = MSCHAP
+network-editor-phase2-pap = PAP
+network-editor-phase2-chap = CHAP
+network-editor-phase2-gtc = GTC
+network-editor-phase2-md5 = MD5
+network-editor-dot1x-off = 802.1X off
+network-editor-dot1x-on = 802.1X on
+network-editor-proxy-off = None
+network-editor-proxy-automatic = Automatic
+
+# $address (String) - an IPv4 address set by hand.
+network-editor-summary-manual = Manual · { $address }
+# $servers (String) - the DNS servers set by hand, joined with commas.
+network-editor-dns-automatic-servers = Automatic + { $servers }
+network-editor-dns-automatic = Automatic
+network-editor-dns-none = None
+
+# Validation hints shown under a field that does not accept what was typed.
+network-editor-route-hint = Write a route as network/prefix, next hop and metric, such as 10.0.0.0/8 192.168.1.1 100.
+network-editor-route4-hint = Enter an IPv4 route such as 10.0.0.0/8 192.168.1.1.
+network-editor-route6-hint = Enter an IPv6 route such as 2001:db8::/32 fe80::1.
+network-editor-mtu-hint = Enter a size in bytes from 576 to 65535.
+network-editor-metric-hint = Enter -1 for automatic, or a whole number.
+network-editor-search-domain-hint = Enter a domain such as example.com.
+network-editor-dhcp-hostname-hint = Enter a host name without spaces.
+network-editor-file-path-hint = Enter the full path of a file, such as /etc/ssl/certs/ca.pem.
+network-editor-wep-key-hint = Use 5 or 13 characters, or 10 or 26 hexadecimal digits.
+network-editor-connection-name-empty = Enter a name.
+
+## Network profile
+
+network-profile-advanced-title = Advanced
+network-profile-advanced-manual-ipv4 = Manual IPv4
+network-profile-advanced-manual-ipv6 = Manual IPv6
+network-profile-advanced-ipv6-off = IPv6 off
+network-profile-advanced-custom-dns = Custom DNS
+network-profile-advanced-proxy = Proxy
+network-profile-advanced-802-1x = 802.1X
+# $priority (Number) - the connection's autoconnect priority.
+network-profile-advanced-priority = Priority { $priority }
+network-profile-advanced-only-for-you = Only for you
+network-profile-advanced-empty = Addresses, DNS, security and technical details
+network-profile-identity-default = Default
