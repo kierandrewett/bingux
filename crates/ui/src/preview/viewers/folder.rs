@@ -30,7 +30,7 @@ fn plural(count: u64, one: &str, many: &str) -> String {
 /// and the second is a space, so both lines have their height from the start.
 pub(super) fn folder_lines(totals: Totals) -> (String, String) {
     if totals.items() == 0 && !totals.done {
-        return ("Counting…".to_owned(), " ".to_owned());
+        return (crate::tr!("ui-preview-counting"), " ".to_owned());
     }
     let mut size = display::size(totals.bytes);
     if !totals.done {
@@ -121,7 +121,7 @@ mod tests {
     fn a_folder_counts_up_then_settles() {
         assert_eq!(
             folder_lines(Totals::default()),
-            ("Counting…".to_owned(), " ".to_owned())
+            (crate::tr!("ui-preview-counting"), " ".to_owned())
         );
         let counting = Totals {
             bytes: 1_500_000,

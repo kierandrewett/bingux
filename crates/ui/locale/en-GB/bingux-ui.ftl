@@ -502,6 +502,7 @@ ui-preview-next-match-tooltip = Next match (Enter)
 ui-preview-close-find-tooltip = Close find (Escape)
 ui-preview-find-placeholder = Find in document
 ui-preview-untitled = Untitled
+ui-preview-counting = Counting…
 ui-preview-outline-tab = Outline
 ui-preview-subtitles-tooltip = Subtitles (C)
 ui-preview-playback-speed-tooltip = Playback speed ([ and ])
