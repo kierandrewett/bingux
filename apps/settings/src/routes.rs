@@ -12,7 +12,7 @@
 //! `router.open(routes::name(..))`; the helpers below make the [`Target`]
 //! (a location and the title the row already knows).
 
-use bingux_ui::prelude::{Location, Params, RouteTable, Target};
+use bingux_ui::prelude::{Location, Params, RouteTable, Target, tr};
 use freya::prelude::*;
 
 use crate::pages::network::{self, Owner, Section, UsageScope};
@@ -262,7 +262,7 @@ pub fn table() -> RouteTable {
     // Applications.
     table = table
         .route("applications/default")
-        .title("Default applications")
+        .title_with(|_| tr!("routes-default-apps"))
         .page(|_| applications::DefaultAppsPage.into());
     for (kind, known) in applications::KINDS.iter().enumerate() {
         table = table
@@ -304,13 +304,13 @@ pub fn table() -> RouteTable {
             .into()
         })
         .route("datetime/timezone")
-        .title("Time zone")
+        .title_with(|_| tr!("routes-time-zone"))
         .page(|_| datetime::TimeZonePage.into())
         .route("background/font")
-        .title("Font")
+        .title_with(|_| tr!("routes-font"))
         .page(|_| appearance::FontPage.into())
         .route("display/:index:int")
-        .title_with(|p| format!("Display {}", p.int("index").unwrap_or(0) + 1))
+        .title_with(|p| tr!("routes-display", number = p.int("index").unwrap_or(0) + 1))
         .page(|p| {
             displays::DisplayPage {
                 index: p.int("index").unwrap_or(0) as usize,
@@ -318,7 +318,7 @@ pub fn table() -> RouteTable {
             .into()
         })
         .route("keyboard/shortcuts")
-        .title("Shortcuts")
+        .title_with(|_| tr!("routes-shortcuts"))
         .page(|_| keyboard::ShortcutsPage.into())
         .route("keyboard/input/:kind/:id")
         .title_param("id")
@@ -332,7 +332,7 @@ pub fn table() -> RouteTable {
             .into()
         })
         .route("sound/applications")
-        .title("Application volumes")
+        .title_with(|_| tr!("routes-application-volumes"))
         .page(|_| sound::ApplicationsPage.into());
 
     network_routes(table)
@@ -354,13 +354,13 @@ fn root(table: RouteTable, page: PageId) -> RouteTable {
 fn network_routes(table: RouteTable) -> RouteTable {
     let mut table = table
         .route("network/wifi")
-        .title("Wi-Fi")
+        .title_with(|_| tr!("routes-wifi"))
         .page(|_| network::wifi::WifiPage.into())
         .route("network/wifi/saved")
-        .title("Saved networks")
+        .title_with(|_| tr!("routes-saved-networks"))
         .page(|_| network::wifi::SavedNetworksPage.into())
         .route("network/hotspot")
-        .title("Wi-Fi hotspot")
+        .title_with(|_| tr!("routes-wifi-hotspot"))
         .page(|_| network::wifi::HotspotPage.into())
         .route("network/wifi/network/:ssid")
         .title_param("ssid")
@@ -380,7 +380,7 @@ fn network_routes(table: RouteTable) -> RouteTable {
             .into()
         })
         .route("network/ethernet/:device/profile")
-        .title("Profiles")
+        .title_with(|_| tr!("routes-profiles"))
         .page(|p| {
             network::ethernet::ProfilesPage {
                 device: p.str("device").to_string(),
@@ -416,22 +416,22 @@ fn network_routes(table: RouteTable) -> RouteTable {
             .into()
         })
         .route("network/mobile")
-        .title("Mobile network")
+        .title_with(|_| tr!("routes-mobile-network"))
         .page(|_| network::mobile::MobilePage.into())
         .route("network/mobile/advanced")
-        .title("Advanced")
+        .title_with(|_| tr!("routes-advanced"))
         .page(|_| network::mobile::MobileAdvancedPage.into())
         .route("network/mobile/usage")
-        .title("Data usage")
+        .title_with(|_| tr!("routes-data-usage"))
         .page(|_| network::mobile::MobileUsagePage.into())
         .route("network/mobile/advanced/network")
-        .title("Network")
+        .title_with(|_| tr!("routes-network"))
         .page(|_| network::mobile::MobileNetworkPage.into())
         .route("network/mobile/advanced/apn")
-        .title("Access point names")
+        .title_with(|_| tr!("routes-access-point-names"))
         .page(|_| network::mobile::ApnListPage.into())
         .route("network/mobile/advanced/apn-add")
-        .title("New access point")
+        .title_with(|_| tr!("routes-new-access-point"))
         .page(|_| network::mobile::ApnPage { name: None }.into())
         .route("network/mobile/advanced/apn/:name")
         .title_param("name")
@@ -442,10 +442,10 @@ fn network_routes(table: RouteTable) -> RouteTable {
             .into()
         })
         .route("network/proxy")
-        .title("Proxy")
+        .title_with(|_| tr!("routes-proxy"))
         .page(|_| network::proxy::ProxyPage.into())
         .route("network/usage")
-        .title("Data usage")
+        .title_with(|_| tr!("routes-data-usage"))
         .page(|_| {
             network::usage::UsagePage {
                 scope: UsageScope::All,
@@ -510,7 +510,7 @@ fn network_routes(table: RouteTable) -> RouteTable {
     }
     table
         .route("network/vpn/:name/tunnel")
-        .title("Tunnel")
+        .title_with(|_| tr!("routes-tunnel"))
         .page(|p| {
             section_page(
                 Owner::Vpn {
@@ -520,7 +520,7 @@ fn network_routes(table: RouteTable) -> RouteTable {
             )
         })
         .route("network/vpn/:name/tunnel/peer/:index:int")
-        .title_with(|p| format!("Peer {}", p.int("index").unwrap_or(0) + 1))
+        .title_with(|p| tr!("routes-peer", number = p.int("index").unwrap_or(0) + 1))
         .page(|p| {
             section_page(
                 Owner::Vpn {

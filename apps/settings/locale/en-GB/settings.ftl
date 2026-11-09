@@ -38,3 +38,28 @@ settings-related-title = Related
 settings-command-search = Search settings
 settings-command-back = Back
 settings-command-regions = Move between the sidebar and the page
+
+## Routes (page titles in the window's title bar and history)
+
+# Titles of subpages, shown in the header and the history menu.
+routes-default-apps = Default applications
+routes-time-zone = Time zone
+routes-font = Font
+# $number (Number) - the display's position, counting from 1.
+routes-display = Display { $number }
+routes-shortcuts = Shortcuts
+routes-application-volumes = Application volumes
+routes-wifi = Wi-Fi
+routes-saved-networks = Saved networks
+routes-wifi-hotspot = Wi-Fi hotspot
+routes-profiles = Profiles
+routes-mobile-network = Mobile network
+routes-advanced = Advanced
+routes-data-usage = Data usage
+routes-access-point-names = Access point names
+routes-new-access-point = New access point
+routes-proxy = Proxy
+routes-tunnel = Tunnel
+# $number (Number) - the peer's position, counting from 1.
+routes-peer = Peer { $number }
+routes-network = Network
