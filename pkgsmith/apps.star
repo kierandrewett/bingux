@@ -16,6 +16,9 @@ It opens the page named in a bingux-settings:// address, so links and the shell'
     "bingux-files": """File manager for the Bingux desktop
 Files is the Bingux desktop's file manager. It has tabs, a places sidebar, list and grid views, previews, search and
 file operations with undo. It opens folders and bingux-files:// addresses.""",
+    "bingux-text-editor": """Text and code editor for the Bingux desktop
+Text Editor edits plain text and code in tabs, with colours for about 200 languages, find and replace, any encoding
+and line ending, a Markdown preview and drafts that keep unsaved text across restarts.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
@@ -39,6 +42,11 @@ DEPENDS = {
         "rpm": ["shared-mime-info", "xdg-utils", "/usr/bin/gio"],
         "deb": ["shared-mime-info", "xdg-utils", "libglib2.0-bin"],
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2"],
+    },
+    "bingux-text-editor": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
     },
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
@@ -85,6 +93,11 @@ RECOMMENDS = {
             "unzip: open zip archives",
         ],
     },
+    "bingux-text-editor": {
+        "rpm": ["adwaita-sans-fonts", "adwaita-mono-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans and Mono fonts"],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
@@ -96,6 +109,7 @@ RECOMMENDS = {
 SUGGESTS = {
     "bingux-settings": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
+    "bingux-text-editor": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
 

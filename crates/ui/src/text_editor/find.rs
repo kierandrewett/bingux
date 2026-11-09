@@ -676,7 +676,7 @@ impl Component for GoToLineBar {
             (_, true) => format!("Line {current} of {lines}"),
             (Some((line, Some(col))), _) => format!("Line {line}, column {col}"),
             (Some((line, None)), _) => format!("Line {line}"),
-            (None, false) => "Type a line number, or line:column".into(),
+            (None, false) => "Line number or line:column".into(),
         };
         let open = self.open;
         let on_close = self.on_close.clone();

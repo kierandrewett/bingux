@@ -1,0 +1,54 @@
+.TH BINGUX-TEXT-EDITOR 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-text-editor \- text and code editor for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-text-editor
+.RI [ FILE | URI | new: ]...
+.SH DESCRIPTION
+.B bingux-text-editor
+opens the Text Editor window: documents in tabs, colours for about 200
+languages, find and replace, any encoding and line ending, and a Markdown
+preview.
+With no argument it opens the documents of the last session, or a new empty
+document, or raises the window when it is already open.
+.PP
+Only one Text Editor window runs.
+A second launch hands its files to the running window, which opens each in a
+tab and comes to the front.
+.SH ARGUMENTS
+.TP
+.I FILE
+A file path.
+.B ~
+and relative paths are accepted.
+A file that does not exist yet opens as a new document that is saved there.
+.TP
+.I URI
+.BR file:///path .
+.TP
+.B new:
+A new empty document.
+.TP
+.B \-\-help
+Print the usage and exit.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/bingux/text-editor.json
+Preferences.
+.TP
+.I $XDG_STATE_HOME/bingux/text-editor/
+The session, drafts of unsaved documents, recent files and where each file was
+left.
+.SH DEFAULT EDITOR
+The desktop entry lists the common text types.
+To open plain text in Text Editor, run:
+.PP
+.RS
+.B xdg\-mime default bingux\-text\-editor.desktop text/plain
+.RE
+.SH SEE ALSO
+The user guide is
+.I /usr/share/doc/bingux-text-editor/text-editor.md
+.SH EXIT STATUS
+0 when the window closed or the running window took the files; 2 for an
+unknown option.
