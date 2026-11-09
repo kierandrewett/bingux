@@ -31,7 +31,7 @@ const TILES: [(&str, &str, Icon); 5] = [
 ];
 /// What the shell shows when `controlCentre` is absent (`ControlCentreServices.qml`).
 const TILE_DEFAULTS: [bool; 5] = [true, true, false, false, false];
-const UNREADABLE: &str = "Could not read the desktop settings.";
+const UNREADABLE: &str = "Could not read the desktop settings. Restart the desktop and try again.";
 
 const DOCK_SIZE_MIN: f64 = 32.0;
 const DOCK_SIZE_RANGE: f64 = 48.0;
@@ -298,7 +298,7 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
         )
         .row(
             switch_row(
-                "Personal images on the login screen",
+                "Show on sign-in screen",
                 personal_images,
                 move |on: bool| {
                     write(
@@ -336,7 +336,7 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
 fn introduction_group(error: State<Option<String>>) -> Group {
     Group::titled("Introduction").row(
         row("Shortcuts and shell tour")
-            .subtitle("Show the first-login guide to this desktop's shortcuts again.")
+            .subtitle("Shown at first sign-in")
             .trailing(row_button("Show introduction", move |_| {
                 show_introduction(error)
             })),
@@ -356,7 +356,13 @@ fn show_introduction(mut error: State<Option<String>>) {
         },
         move |result| match result {
             Ok(_) => error.set(None),
-            Err(failure) => error.set(Some(failure.0)),
+            Err(failure) => {
+                eprintln!("settings: introduction failed: {}", failure.0);
+                error.set(Some(
+                    "Could not show the introduction. Restart the desktop and try again."
+                        .to_string(),
+                ));
+            }
         },
     );
 }
@@ -575,7 +581,7 @@ impl Component for DesktopPage {
                         vec![
                             ("launch".into(), "Open a new window".into()),
                             ("close".into(), "Close all its windows".into()),
-                            ("none".into(), "Nothing".into()),
+                            ("none".into(), "Do nothing".into()),
                         ],
                         &m.dock_middle_click,
                         move |key: String| {
@@ -586,7 +592,7 @@ impl Component for DesktopPage {
                         "Scroll",
                         vec![
                             ("cycle".into(), "Switch between windows".into()),
-                            ("none".into(), "Nothing".into()),
+                            ("none".into(), "Do nothing".into()),
                         ],
                         &m.dock_scroll,
                         move |key: String| write(ctx, Change::Set("desktop.dock_scroll", key)),
