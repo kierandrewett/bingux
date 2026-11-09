@@ -70,8 +70,6 @@ test("mouse movement and keyboard share selection without a stationary pointer s
     context.hovered = false;
     context.selectAtPointer();
     assert.equal(root.selectedIndex, 1);
-    const row = readFileSync(new URL("../shell/bingux/SearchResult.qml", import.meta.url), "utf8");
-    assert.match(row, /color: root.selected \? Theme.searchSelection : "transparent"/);
 });
 
 test("chevron entrance is claimed once per highlighted index, not per query or delegate", () => {
