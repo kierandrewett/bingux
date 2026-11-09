@@ -198,11 +198,7 @@ pub fn ago(now: i64, then: i64) -> String {
             "data-usage-hours-ago",
             count = (seconds / 3600).to_string().as_str()
         ),
-        _ if seconds < 2 * 86_400 => tr!("data-usage-day-ago"),
-        _ => tr!(
-            "data-usage-days-ago",
-            count = (seconds / 86_400).to_string().as_str()
-        ),
+        _ => tr!("data-usage-days-ago", count = seconds / 86_400),
     }
 }
 

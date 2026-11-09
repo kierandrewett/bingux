@@ -1296,8 +1296,11 @@ data-usage-err-range-length = Choose a range of one year or less.
 data-usage-just-now = just now
 data-usage-minutes-ago = { $count } min ago
 data-usage-hours-ago = { $count } h ago
-data-usage-day-ago = 1 day ago
-data-usage-days-ago = { $count } days ago
+# $count (Number) - whole days since then.
+data-usage-days-ago = { $count ->
+    [one] 1 day ago
+   *[other] { $count } days ago
+}
 # $used and $limit are sizes such as "12 GB".
 data-usage-over-limit-message = Over the monthly limit: { $used } used of { $limit } this billing cycle.
 data-usage-err-save-limit = Could not save the data limit. Try again.
