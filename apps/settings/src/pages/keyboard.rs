@@ -138,6 +138,18 @@ fn selected_in(current: &[String], group: &[(&str, &str)]) -> String {
         .unwrap_or_default()
 }
 
+/// The label of the option from `group` in a Lua `xkb-options` list such as
+/// `ctrl:nocaps, compose:ralt`; the group's first label when none is set.
+fn managed_key(lua: &str, group: &[(&str, &str)]) -> String {
+    let listed: Vec<String> = lua.split(',').map(|item| item.trim().to_string()).collect();
+    let chosen = selected_in(&listed, group);
+    group
+        .iter()
+        .find(|(key, _)| *key == chosen)
+        .map_or(group[0].1, |(_, label)| label)
+        .to_string()
+}
+
 /// `current` with every option from `group` removed and `choice` added. Other
 /// options in the list are kept as they are.
 fn with_choice(current: &[String], group: &[(&str, &str)], choice: &str) -> Vec<String> {
@@ -645,7 +657,7 @@ impl Component for KeyboardPage {
             .map_or(model.repeat, |value| value == "true");
 
         let repeat_switch = match repeat_lua {
-            Some(value) => row("Repeat keys").subtitle(gnoblin::MANAGED).value(value),
+            Some(value) => gnoblin::managed_row("Repeat keys", gnoblin::on_off(&value)),
             None => switch_row("Repeat keys", model.repeat, move |next: bool| {
                 commit(
                     loaded,
@@ -665,10 +677,9 @@ impl Component for KeyboardPage {
         // they are nested under the switch and shown while it is on.
         let repeat_nested: Vec<Element> = if repeat_on {
             let delay: Element = match delay_lua {
-                Some(value) => row("Delay before repeat")
-                    .subtitle(gnoblin::MANAGED)
-                    .value(format!("{value} ms"))
-                    .into(),
+                Some(value) => {
+                    gnoblin::managed_row("Delay before repeat", gnoblin::millis(&value)).into()
+                }
                 None => slider_row(
                     "Delay before repeat",
                     to_percent(model.delay_ms, DELAY_RANGE),
@@ -687,10 +698,7 @@ impl Component for KeyboardPage {
                 .into(),
             };
             let interval: Element = match interval_lua {
-                Some(value) => row("Repeat speed")
-                    .subtitle(gnoblin::MANAGED)
-                    .value(format!("{value} ms"))
-                    .into(),
+                Some(value) => gnoblin::managed_row("Repeat speed", gnoblin::millis(&value)).into(),
                 None => slider_row(
                     "Repeat speed",
                     100.0 - to_percent(model.interval_ms, INTERVAL_RANGE),
@@ -727,9 +735,7 @@ impl Component for KeyboardPage {
             .map_or(model.remember_numlock, |value| value == "true");
         let mut typing_group = Group::titled("Typing");
         let remember_numlock_row = match numlock_remember_lua {
-            Some(value) => row("Remember Num Lock state")
-                .subtitle(gnoblin::MANAGED)
-                .value(value),
+            Some(value) => gnoblin::managed_row("Remember Num Lock state", gnoblin::on_off(&value)),
             None => switch_row(
                 "Remember Num Lock state",
                 model.remember_numlock,
@@ -755,10 +761,9 @@ impl Component for KeyboardPage {
             Vec::new()
         } else {
             let sign_in: Element = match numlock_state_lua {
-                Some(value) => row("Num Lock on at sign-in")
-                    .subtitle(gnoblin::MANAGED)
-                    .value(value)
-                    .into(),
+                Some(value) => {
+                    gnoblin::managed_row("Num Lock on at sign-in", gnoblin::on_off(&value)).into()
+                }
                 None => switch_row(
                     "Num Lock on at sign-in",
                     model.numlock_on,
@@ -791,7 +796,7 @@ impl Component for KeyboardPage {
         let compose_current = selected_in(&model.xkb_options, &COMPOSE_KEY);
         let alternate_current = selected_in(&model.xkb_options, &ALTERNATE_KEY);
         let caps_row = match xkb_lua.clone() {
-            Some(_) => row("Caps Lock key").subtitle(gnoblin::MANAGED),
+            Some(lua) => gnoblin::managed_row("Caps Lock key", managed_key(&lua, &CAPS_LOCK)),
             None => {
                 let options = model.xkb_options.clone();
                 choice_row(
@@ -809,7 +814,7 @@ impl Component for KeyboardPage {
             }
         };
         let compose_row = match xkb_lua.clone() {
-            Some(_) => row("Compose key").subtitle(gnoblin::MANAGED),
+            Some(lua) => gnoblin::managed_row("Compose key", managed_key(&lua, &COMPOSE_KEY)),
             None => {
                 let options = model.xkb_options.clone();
                 choice_row(
@@ -872,7 +877,10 @@ impl Component for KeyboardPage {
         // Compose and the alternate characters key both type accented letters
         // and symbols, so they share a group.
         let alternate_row = match xkb_lua {
-            Some(_) => row("Alternate characters key").subtitle(gnoblin::MANAGED),
+            Some(lua) => gnoblin::managed_row(
+                "Alternate characters key",
+                managed_key(&lua, &ALTERNATE_KEY),
+            ),
             None => {
                 let options = model.xkb_options.clone();
                 choice_row(
@@ -907,7 +915,17 @@ impl Component for KeyboardPage {
         let sources_group = Group::titled("Input sources");
         let sources: Element = match sources_state.read().clone() {
             None => sources_group.row(skeleton()).into(),
-            Some(Err(message)) => sources_group.row(status(Status::Error(message))).into(),
+            Some(Err(message)) => sources_group
+                .row(
+                    status(Status::Error(message)).action("Try again", move |_| {
+                        let mut state = sources_state;
+                        background_then(
+                            move || system::load_persistent("keyboard-sources", sources::read),
+                            move |config| state.set(Some(config)),
+                        );
+                    }),
+                )
+                .into(),
             Some(Ok(config)) => {
                 let count = config.sources.len();
                 let catalog = edits.catalog.read().clone().unwrap_or_default();

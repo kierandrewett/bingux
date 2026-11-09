@@ -291,6 +291,17 @@ fn option_label(options: &[(&str, &str)], value: &str) -> String {
         .map_or_else(|| value.to_string(), |(_, label)| label.to_string())
 }
 
+/// A Lua choice key such as `disabled-on-external-mouse` in words, for a
+/// managed row that has no list of labels to look it up in.
+fn option_label_any(value: &str) -> String {
+    let spaced = value.replace(['-', '_'], " ");
+    let mut chars = spaced.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => spaced,
+    }
+}
+
 /// One illustrated choice: its label, how its picture is drawn, whether it
 /// is the current value, the change it makes to the touchpad, and the
 /// touchpad keys it writes.
@@ -322,9 +333,7 @@ impl Setting<'_> {
 
     fn switch(&self, on: bool, apply: fn(&mut Model, bool)) -> Row {
         match self.lua() {
-            Some(value) => row(self.title)
-                .subtitle(gnoblin::MANAGED)
-                .value(if value == "true" { "On" } else { "Off" }),
+            Some(value) => gnoblin::managed_row(self.title, gnoblin::on_off(&value)),
             None => {
                 let (schema, key, loaded, overlays) =
                     (self.schema, self.key, self.loaded, self.overlays);
@@ -344,10 +353,10 @@ impl Setting<'_> {
     /// words.
     fn speed(&self, speed: f64, apply: fn(&mut Model, f64)) -> Element {
         match self.lua() {
-            Some(value) => row(self.title)
-                .subtitle(gnoblin::MANAGED)
-                .value(value)
-                .into(),
+            Some(value) => {
+                gnoblin::managed_row(self.title, value.parse::<f64>().map_or(value, speed_label))
+                    .into()
+            }
             None => {
                 let (schema, loaded, overlays) = (self.schema, self.loaded, self.overlays);
                 level_row(self.title, speed_percent(speed), move |percent: f64| {
@@ -369,10 +378,7 @@ impl Setting<'_> {
     /// The double-click time as a slider, shown in milliseconds.
     fn double_click(&self, ms: u32, apply: fn(&mut Model, u32)) -> Element {
         match self.lua() {
-            Some(value) => row(self.title)
-                .subtitle(gnoblin::MANAGED)
-                .value(format!("{value} ms"))
-                .into(),
+            Some(value) => gnoblin::managed_row(self.title, gnoblin::millis(&value)).into(),
             None => {
                 let (loaded, overlays) = (self.loaded, self.overlays);
                 level_row(self.title, double_click_percent(ms), move |percent: f64| {
@@ -398,9 +404,7 @@ impl Setting<'_> {
         apply: fn(&mut Model, String),
     ) -> Row {
         match self.lua() {
-            Some(value) => row(self.title)
-                .subtitle(gnoblin::MANAGED)
-                .value(option_label(options, &value)),
+            Some(value) => gnoblin::managed_row(self.title, option_label(options, &value)),
             None => {
                 let (schema, key, loaded, overlays) =
                     (self.schema, self.key, self.loaded, self.overlays);
@@ -439,7 +443,7 @@ impl Setting<'_> {
             .iter()
             .find_map(|key| gnoblin::lua_override(self.overrides, &["input", self.group, *key]));
         if let Some(value) = overridden {
-            return row(title).subtitle(gnoblin::MANAGED).value(value).into();
+            return gnoblin::managed_row(title, option_label_any(&value)).into();
         }
         let tokens = self.tokens;
         let (loaded, overlays) = (self.loaded, self.overlays);

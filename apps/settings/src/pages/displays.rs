@@ -2266,7 +2266,9 @@ impl Component for DisplaysPage {
 
         page = match loaded.night {
             Ok(night) => page.child(night_group(ctx, &night)),
-            Err(failure) => page.child(status(Status::Error(failure.0))),
+            Err(failure) => page.child(
+                status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
+            ),
         };
         page
     }

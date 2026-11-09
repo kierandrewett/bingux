@@ -877,9 +877,10 @@ impl Component for AppPage {
         // skeleton until `gio mime` has answered, and says so if it fails.
         let defaults = match &data.choices {
             None => Group::titled("Open by default").row(skeleton_row()),
-            Some(Err(failure)) => {
-                Group::titled("Open by default").row(status(Status::Error(failure.0.clone())))
-            }
+            Some(Err(failure)) => Group::titled("Open by default").row(
+                status(Status::Error(failure.0.clone()))
+                    .action("Try again", move |_| start_load(model)),
+            ),
             Some(Ok(choices)) => {
                 let handled: Vec<(usize, bool)> = choices
                     .iter()

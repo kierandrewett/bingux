@@ -178,7 +178,8 @@ fn reload(path: &str, original: &str) -> Result<(), String> {
             if restored {
                 let _ = gnoblin::gnoblinctl(&["config", "reload"]);
             }
-            Err(format!("Gnoblin did not accept the change: {}", e.0))
+            eprintln!("keyboard: the desktop did not accept the change: {}", e.0);
+            Err("The desktop did not accept the change, so it was undone. Try again.".to_string())
         }
     }
 }
