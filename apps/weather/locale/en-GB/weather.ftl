@@ -180,19 +180,61 @@ weather-moon-waning-gibbous = Waning gibbous
 weather-moon-last-quarter = Last quarter
 weather-moon-waning-crescent = Waning crescent
 
-## The conditions as a line of text, to copy or to read aloud
+## The conditions as a line of text, to copy or to read aloud.
+## Each sentence shape is one message so translators see the whole sentence.
+## Sky words in sentences: lowercase forms of the sky labels above.
+# Inline sky forms, used inside the conditions sentences
+weather-sky-inline-clear = clear
+weather-sky-inline-mostly-clear = mostly clear
+weather-sky-inline-partly-cloudy = partly cloudy
+weather-sky-inline-overcast = overcast
+weather-sky-inline-fog = fog
+weather-sky-inline-freezing-fog = freezing fog
+weather-sky-inline-light-drizzle = light drizzle
+weather-sky-inline-drizzle = drizzle
+weather-sky-inline-heavy-drizzle = heavy drizzle
+weather-sky-inline-light-freezing-drizzle = light freezing drizzle
+weather-sky-inline-freezing-drizzle = freezing drizzle
+weather-sky-inline-light-rain = light rain
+weather-sky-inline-rain = rain
+weather-sky-inline-heavy-rain = heavy rain
+weather-sky-inline-light-freezing-rain = light freezing rain
+weather-sky-inline-freezing-rain = freezing rain
+weather-sky-inline-light-snow = light snow
+weather-sky-inline-snow = snow
+weather-sky-inline-heavy-snow = heavy snow
+weather-sky-inline-snow-grains = snow grains
+weather-sky-inline-light-showers = light showers
+weather-sky-inline-showers = showers
+weather-sky-inline-heavy-showers = heavy showers
+weather-sky-inline-light-snow-showers = light snow showers
+weather-sky-inline-snow-showers = snow showers
+weather-sky-inline-thunderstorm = thunderstorm
+weather-sky-inline-thunderstorm-hail = thunderstorm with hail
+weather-sky-inline-severe-thunderstorm-hail = severe thunderstorm with hail
+weather-sky-inline-cloudy = cloudy
 
-# $place is the place's name; $temperature, $sky and the others are formatted already.
+# $place: the place name. $temperature: the temperature with its unit. $sky: a weather-sky-inline word.
 weather-conditions-both = { $place }: { $temperature }, { $sky }.
+# $place: the place name. $temperature: the temperature with its unit.
 weather-conditions-temperature = { $place }: { $temperature }.
+# $place: the place name. $sky: a weather-sky-inline word.
 weather-conditions-sky = { $place }, { $sky }.
+# $place: the place name.
 weather-conditions-place = { $place }.
-weather-conditions-feels = feels like { $temperature }
-weather-conditions-high = high { $temperature }
-weather-conditions-low = low { $temperature }
-weather-conditions-wind = wind { $speed }
-# $direction is the compass point spelled out, such as "north-east".
-weather-conditions-wind-from = wind { $speed } from the { $direction }
-weather-conditions-humidity = humidity { $percent }%
-# $parts are the fragments of one sentence, joined with commas.
-weather-conditions-sentence = { $parts }.
+
+# $feels, $high, $low: temperatures with units. Feels-like, day high and day low.
+weather-feel-all = feels like { $feels }, high { $high }, low { $low }.
+weather-feel-feels-high = feels like { $feels }, high { $high }.
+weather-feel-feels-low = feels like { $feels }, low { $low }.
+weather-feel-high-low = high { $high }, low { $low }.
+weather-feel-feels = feels like { $feels }.
+weather-feel-high = high { $high }.
+weather-feel-low = low { $low }.
+
+# $speed: wind speed with unit. $direction: a cardinal word, e.g. north-east. $percent: relative humidity.
+weather-air-wind-from-humidity = wind { $speed } from the { $direction }, humidity { $percent }%.
+weather-air-wind-from = wind { $speed } from the { $direction }.
+weather-air-wind-humidity = wind { $speed }, humidity { $percent }%.
+weather-air-wind = wind { $speed }.
+weather-air-humidity = humidity { $percent }%.
