@@ -329,7 +329,7 @@ fn load_editing(name: Option<String>) -> Result<Editing, CommandError> {
                 .find(|(profile, _)| *profile == name)
                 .ok_or_else(|| {
                     CommandError(format!(
-                        "“{name}” no longer exists. Reload the list and try again."
+                        "“{name}” is no longer set up. Go back and choose it again."
                     ))
                 })?;
             Some(show(&uuid, true)?)

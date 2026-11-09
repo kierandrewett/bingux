@@ -489,8 +489,8 @@ sound-preset-delete-warning = You cannot undo this.
 sound-preset-exists = A preset called “{ $name }” already exists. Choose another name.
 sound-preset-switch-failed = Could not switch preset. Try again.
 sound-preset-change-failed = Could not change the preset. Try again.
-# $error (String) - the underlying error text
-sound-preset-read-failed = Could not read the file. { $error }
+# Error. The reason is logged, not shown.
+sound-preset-read-failed = Could not read the file. Check that it is a valid preset and try again.
 # $name (String) - the imported preset name
 sound-preset-imported = “{ $name }” imported
 # $lines (String) - one line per setting that did not map exactly
@@ -2576,8 +2576,8 @@ network-vpn-add-server = Server
 network-vpn-add-settings-needed = Add the settings this VPN needs, one name = value per line.
 network-vpn-add-settings = Settings
 network-vpn-add-settings-hint = One name = value per line.
-# Error. Variable: error, the reason the file could not be read.
-network-vpn-add-read-failed = The file could not be read: { $error }.
+# Error. The reason is logged, not shown.
+network-vpn-add-read-failed = Could not read the file. Check that it is a VPN profile and try again.
 network-vpn-add-unknown-kind = This file does not say what kind of VPN it is. Choose the type above.
 # Error. Variable: name, the VPN type's name.
 network-vpn-add-not-installed = { $name } is not installed. Install its plugin to add this VPN.
