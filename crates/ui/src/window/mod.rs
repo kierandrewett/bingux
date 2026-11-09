@@ -478,6 +478,9 @@ impl Component for WindowHost {
         provide_scroll_activity();
         // The window's tooltips share one clock: see `controls::tooltip`.
         crate::controls::tooltip::provide_tooltips();
+        // Drag and drop: the window's drop targets and the drag over it,
+        // from this window, another or another program. See `dnd`.
+        crate::dnd::provide_drop_hub();
         // Tab, Shift+Tab and F6 move focus for every window and popup, so the
         // handler sits on the root. See `focus` for the region model.
         let focus = provide_focus_core();

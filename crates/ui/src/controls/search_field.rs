@@ -45,6 +45,7 @@ pub struct SearchField {
     on_escape: Option<EventHandler<()>>,
     on_enter_modifiers: Option<EventHandler<Modifiers>>,
     on_arrow: Option<EventHandler<f64>>,
+    semantics: Option<crate::a11y::Semantics>,
 }
 
 /// A search field over `value`. Its placeholder is `Search`.
@@ -68,6 +69,7 @@ pub fn search_field(
         on_escape: None,
         on_enter_modifiers: None,
         on_arrow: None,
+        semantics: None,
     }
 }
 
@@ -150,6 +152,15 @@ impl SearchField {
     /// Told when Up or Down is pressed in the field, as the text field tells
     /// it: negative for Down, positive for Up. A list under the field moves
     /// its highlight with it.
+    /// What the field says beyond "Search": the results list it
+    /// [`controls`](crate::a11y::Semantics::controls) and the result the arrows
+    /// have reached ([`active_descendant`](crate::a11y::Semantics::active_descendant)),
+    /// for a field that keeps the focus over its results (a palette, a finder).
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
+    }
+
     pub fn on_arrow(mut self, handler: impl Into<EventHandler<f64>>) -> Self {
         self.on_arrow = Some(handler.into());
         self
@@ -192,6 +203,9 @@ impl SearchField {
         }
         if let Some(handler) = &self.on_enter_modifiers {
             field = field.on_enter_modifiers(handler.clone());
+        }
+        if let Some(semantics) = &self.semantics {
+            field = field.semantics(semantics.clone());
         }
         if let Some(handler) = &self.on_arrow {
             field = field.on_arrow(handler.clone());

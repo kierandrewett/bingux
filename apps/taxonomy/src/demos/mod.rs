@@ -3,6 +3,7 @@
 
 pub mod accessibility;
 pub mod buttons;
+pub mod commands;
 pub mod common;
 pub mod containers;
 pub mod data;
@@ -15,3 +16,5 @@ pub mod inputs;
 pub mod inspector;
 pub mod navigation;
 pub mod platform;
+pub mod transfer;
+pub mod table;

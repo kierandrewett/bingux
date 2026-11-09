@@ -472,20 +472,21 @@ include_str!(..)` (Bingux's apps embed the repository's `COPYING`).
   directory, for a build tree). Nothing is read until the page is opened.
 - **It cannot be forgotten.** `Application::run` registers the window whatever
   `main` says, so a bare `Application::new("id")` still has one, named after its
-  id and title with no version, and the shortcut and `about::open` work.
+  id and title with no version, and the palette's About and `about::open` work.
   `scripts/ui-lint.py` fails an app crate whose `src/main.rs` starts an
   `Application` without `.about(` and `app_info!`.
-- **The shortcut is Ctrl+Shift+?** in the main window of every application
-  (`about::is_shortcut`). It does nothing while a dialog is open: that dialog
-  holds a question. `about::open(overlays)` opens it from code, and the
-  headless runner's script command `key ctrl+shift+?` reaches it the way a
-  person does.
+- **It has no shortcut of its own**, as in GNOME: Ctrl+? is the
+  [keyboard shortcuts sheet](#the-keyboard-shortcuts-sheet). The command
+  palette (Ctrl+Shift+P) has **About <name>** (the window's `app.about`
+  command), so it is still a few keys away. `about::open(overlays)` opens it
+  from code.
 - **The main menu ends with "About <name>"** from `about::app_menu_items(overlays)`
-  (a separator and the item, with the shortcut shown). An app whose menu is a
-  list it builds appends them; an app with no menu puts `app_menu(items)` in
-  its header (`NavigationSplitView::header_trailing`). Settings, Files and
-  Taxonomy do. Settings' **System > About** page is about the computer; the
-  window the menu opens is about Settings.
+  (a separator and the item). An app whose menu is a list it builds appends
+  them; an app with no menu puts `app_menu(items)` in its header
+  (`NavigationSplitView::header_trailing`), which also lists the window's
+  [commands](#commands). Settings, Files and Taxonomy do. Settings' **System >
+  About** page is about the computer; the window the menu opens is about
+  Settings.
 - The page behind it is inert while it is open, Escape and a press on the scrim
   close it, Alt+Left goes back from a page to the main one, and the focus returns to
   where it was. The card has one size on every page.
@@ -956,7 +957,7 @@ Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compac
 When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. The rest is `bingux_ui::tabs`, the same for every application with tabs:
 
 - **`TabSet<P: TabContent>`** is the tabs as plain data (tested without a window): a new tab opens beside the one on show; `ClosedTabs<P>` is the stack behind Reopen closed tab (the last `CLOSED_TABS_KEPT`, 10, with their place and their content, and a closed group comes back left to right at its places); `duplicate` asks the content for a copy (`TabContent::duplicate`); `detach`, `detach_others`, `detach_all`, `insert_moved` and `adopt` move tabs between windows without losing or duplicating one, and tell the content it is leaving (`TabContent::depart`). What a tab shows is the application's `P`: Files' is `files::FileTab` (a place and its `TabMemory`, so Back and Forward come back with a reopened or moved tab).
-- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.menu_items(new_tab)` are the menu's New tab, Close tab and Reopen closed tab. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
+- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.commands(new_tab)` are the window commands New tab, Close tab, Reopen closed tab, Next tab and Previous tab (see [Commands](#commands)), for the main menu, the palette and the shortcuts sheet. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
 - **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip, and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
 - A second application's tabs are another `TabContent` and nothing else: no copy of the set, the window registry or the tear-off.
 
@@ -3283,6 +3284,14 @@ selected and the reached one the active descendant. Sliders, steppers and
 faders take the arrows, Page Up and Page Down, Home and End; a pane divider
 (`Splitter`) takes the arrows and Home and End, and says its position as a
 value. Dialogs trap the focus and give it back (Keyboard focus, above).
+The command palette's field keeps the focus and names the highlighted result
+as its active descendant (`SearchField::semantics` with `Semantics::controls`
+and `active_descendant`, for any field over a list of results); each result is
+named by its title with its shortcut as its keyboard shortcut and its group as
+its description, and how many match is read out once typing pauses. In the
+shortcuts sheet each line is one list item named by the command, its keys its
+shortcut and description. Undo and Redo from the keyboard or a menu say what
+they did ("Undid rename").
 
 **Notices stay.** A toast does not go while the pointer is over it, a finger
 is on it or one of its buttons has the focus, and while a screen reader runs it
@@ -4125,6 +4134,152 @@ Environment variables for tests and screenshots:
 
 Zooming, turning and flipping animate; reduced motion makes every move instant and turns the glide off. A resize keeps what was last asked for: fitted content stays fitted and content at actual size stays at actual size. `.start(FitMode)` says how content opens, `.orientation(turns, mirrored)` how it comes (a photograph stored on its side), and `.on_mode(f)` reports when the person chooses fit or actual size so an owner can remember it per kind of content. `use_zoom_handle()` returns a `ZoomHandle` that a toolbar, a menu or a Save a copy command drives and reads (`rotate`, `flip_horizontal`, `fit`, `turns`, `mirrored`, `percent`). The arithmetic is `View`, tested without a window.
 
+## Drag and drop
+
+`bingux_ui::dnd` moves data by dragging: inside a window, between windows of an
+app and between apps. One set of types covers all three, so a view takes a
+file from Files, from another window of its own app or from any other Wayland
+app in the same way.
+
+| Piece                                | What it is for                                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `drop_target(view)`                  | A view that takes drops. Draws an accent ring and tint while a drag it takes is over it              |
+| `use_drop_target(DropTarget::new())` | The same for a view that draws its own highlight (a list marks the row under the pointer)            |
+| `drag_source(view, \|_\| payload)`   | A view that can be dragged. Press, move past `DRAG_SLOP` (6 px) and the drag starts                  |
+| `use_drag()` / `Dragger::here()`     | Start a drag from a view with its own gesture (Files keeps its in-window drag and hands it over)     |
+| `Payload`                            | What a drag or a copy offers, in one or more MIME types; lazy parts are made only when someone drops |
+| `Received`                           | What a drop or a paste brought, read as text, URIs, files, a picture or bytes                        |
+| `Format`                             | A kind of data: `Uris`, `Text`, `Html`, `Image`, `Mime(type)`                                        |
+
+### A drop target
+
+```rust
+use bingux_ui::dnd::{drop_target, Dropped, Format, SPRING_DELAY};
+
+drop_target(status_page(Icon::Music, "No music").description("Drop music here."))
+    // Read as the first of these the drag offers.
+    .accepts([Format::Uris])
+    // Copy and Move unless set; Ask is settled before on_drop (see below).
+    .actions(DragActions::COPY_MOVE)
+    // Optional: take only some drags, from where the pointer is.
+    .accept_if(|info: DragInfo| info.formats.contains(&Format::Uris))
+    // Optional: open after a drag rests here (a folder, a tab, a sidebar place).
+    .spring_loaded(SPRING_DELAY, move |_| open_library())
+    .on_drop(move |dropped: Dropped| add_files(dropped.data.files()))
+```
+
+- **Which target.** The pointer picks the smallest enabled target under it
+  that takes one of the formats the drag offers and whose `accept_if` agrees.
+  A list can be one target and decide per row from `DragInfo::position`
+  (from the target's top-left).
+- **Which action.** Of the actions both sides allow, the target's `preferred`
+  callback chooses; without one, Copy, Move with Shift held, Copy with Ctrl
+  held. The compositor has the last word on Wayland, and `DragInfo::action`
+  is what a drop would do now (for a badge). `Dropped::action` is Copy or
+  Move: when a source asks the target to choose (Wayland's `ask`), bingux-ui
+  takes the target's preferred action.
+- **Spring loading.** `spring_loaded(delay, open)` runs `open` once a drag has
+  rested on the target for `delay` (`SPRING_DELAY` is 700 ms, Finder's medium).
+  Moving more than 6 px starts the count again.
+- **Highlight.** `drop_target` draws `Paint::AccentSoft` with a 2 px accent
+  ring. `.highlight(false)` turns it off; `use_drop_target` returns a
+  `DropHandle` whose `over()` (reactive) is the drag over it, to draw your own.
+  Give the handle the view's box with `.track(rect)` or `.set_area(area)`.
+
+### A drag source
+
+```rust
+use bingux_ui::dnd::{drag_source, DragActions, DragEnd, Payload};
+
+drag_source(track_row(&track), move |_| Payload::files([track.path.clone()]))
+    .actions(DragActions::COPY)
+    .on_end(|end: DragEnd| if let DragEnd::Dropped(DragAction::Move) = end { /* remove ours */ })
+```
+
+- The payload closure runs when the drag starts. Parts made with
+  `Payload::lazy(mime, f)` run `f` only when a target asks for that type.
+- The picture under the pointer is the view itself as drawn (faded to 85%),
+  held where it was pressed. `.image(DragImage::None)` leaves the plain cursor.
+- `on_end` says how it went: `Dropped(Copy | Move)` or `Cancelled`. After a
+  Move of anything but files the source removes its own copy. A file manager
+  that takes a move of files moves them itself, so a source of files does
+  nothing.
+- A view with its own gesture calls `Dragger::start(DragRequest::new(payload,
+press_point).area(box))` while the button is held. It returns `true` when
+  the system has the drag: the window then gets no pointer events until the
+  drag ends. Files keeps its own drag (chip, rows, sidebar and tabs) inside
+  the window and calls `start` when the pointer leaves the window, if
+  `Dragger::reaches_other_programs()`.
+
+### Payloads
+
+| Builder                               | Types offered                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `.text(t)`                            | `text/plain;charset=utf-8`, `text/plain`, `UTF8_STRING`, `TEXT`, `STRING`                        |
+| `.html(h)`                            | `text/html` (add `.text` for apps that take only text)                                           |
+| `.uris(list)`                         | `text/uri-list`                                                                                  |
+| `Payload::files(paths)`               | `text/uri-list` and the paths as text, one a line                                                |
+| `Payload::copied_files(paths, cut)`   | As `files`, plus `x-special/gnome-copied-files` and, for a cut, `application/x-kde-cutselection` |
+| `.image(mime, bytes)`, `.bytes(m, b)` | That type                                                                                        |
+| `.lazy(mime, \|\| bytes)`             | That type, made when asked for                                                                   |
+| `.local(value)`                       | Nothing outside the app: a drop in this app gets `value` from `Received::local::<T>()`           |
+
+`Received` reads what came: `text()`, `uris()`, `files()` (local `file:` URIs,
+percent-decoded), `is_cut()` for copied files, `image()`, `bytes()`, `mime()`.
+A drop from this app is handed over in memory (`is_local()`), with its
+`local` value; it never goes through a pipe.
+
+### How it works on Wayland
+
+winit 0.30 has no `wl_data_device` on Wayland, and Freya's clipboard is plain
+text. `dnd::wayland` adds the protocol without patching either: a thread of its
+own with its own event queue on winit's `wl_display` (the way `smithay-clipboard`
+works), with a `wl_data_device`, a primary selection device and its own pointer
+and keyboard objects, which it uses only to learn the serials a drag and a
+selection must quote. `WindowHost` registers each window's `wl_surface` with it,
+so drag events go to the window they are over. Data is written and read on
+threads of their own, and a drag's data is made on the UI thread when a target
+asks, so a drop on a window of the same app cannot deadlock.
+
+With no Wayland (a test, X11) and for touch, a drag stays in its window and
+reaches that window's targets.
+
+What the compositor needs: `wl_data_device_manager` (version 3 for actions),
+`wl_shm` and `wl_compositor` for the drag picture, and
+`zwp_primary_selection_device_manager_v1` for the primary selection (optional).
+
+### The clipboard
+
+`bingux_ui::clipboard::Clipboard` is the typed clipboard. Copy a `Payload`,
+paste the `Format` you want:
+
+```rust
+use bingux_ui::clipboard::Clipboard;
+use bingux_ui::dnd::{Format, Payload};
+
+Clipboard::general().write(Payload::new().html(html).text(plain));
+Clipboard::general().write(Payload::copied_files(&paths, true)); // Cut
+let files = Clipboard::general().read(Format::Uris).map(|data| data.files());
+let picture = Clipboard::general().read_async(Format::Image).await;
+Clipboard::primary().write_text(selected); // middle-click paste
+```
+
+| Call                              | What it does                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `general()` / `primary()`         | The clipboard of Copy and Paste, or the selection a middle click pastes        |
+| `write(payload)`, `write_text(t)` | Own the clipboard with every type of the payload, made now                     |
+| `read(format)`                    | Read it in that format; waits at most `READ_TIMEOUT` (1.5 s) for the other app |
+| `read_async(format)`              | The same on a worker thread, for a picture or anything large                   |
+| `read_text()`                     | Plain text or `None`                                                           |
+| `formats()`, `has(&format)`       | What is on it now: enable Paste from this                                      |
+| `clear()`                         | Give it up                                                                     |
+
+Once the Wayland connection is up, Freya's own clipboard calls (the text
+field's Copy, Cut and Paste, `freya::clipboard::Clipboard`) go through this
+clipboard too, so there is one clipboard per app. What the app copied is read
+back from memory. With no Wayland the general clipboard's text goes through
+Freya's clipboard (a test's memory clipboard included) and the other types,
+and the primary selection, stay in the app.
 ## Locale and formats
 
 Text that holds a number, a date, a size or a list is written for the person's
@@ -4312,3 +4467,420 @@ bingux-ui).
 The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and
 times, Relative times, Lists and counts and Locale pages show every formatter
 in ten languages.
+
+## Commands
+
+A command is one thing an application can do: an id, a title, an optional
+icon, its keyboard shortcuts, whether it is enabled or checked, the menu
+group and section it belongs to, and what it runs. An app declares its
+commands where their state lives, and every window gets, with no more code:
+
+| Built from the commands      | What it is                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| Keyboard shortcuts           | One router per window. A shortcut runs its command; a disabled command takes the key.      |
+| The main menu                | `app_menu` in the header: a submenu per group (File, Edit, View...), then General, About.  |
+| Context menus                | `commands.context_menu(&[&[ids], ..])`: unavailable commands left out, no shortcuts shown. |
+| The keyboard shortcuts sheet | Ctrl+? or Ctrl+/: every shortcut the window answers, by group, with a filter.              |
+| The command palette          | Ctrl+Shift+P: fuzzy search over the enabled commands, the ones run last first.             |
+
+```rust
+use bingux_ui::prelude::*;
+
+// Commands for the whole window, available wherever the focus is. Call it on
+// every render with the commands as they are now.
+use_window_commands(vec![
+    Command::new("file.new-window", "New window", move |_| open_window())
+        .shortcut("Ctrl+N")
+        .group(CommandGroup::File),
+    Command::new("view.hidden", "Show hidden files", move |_| hidden.toggle())
+        .shortcut("Ctrl+H")
+        .checked(hidden())            // a tick in the menu
+        .group(CommandGroup::View)
+        .keywords(["dotfiles"]),      // the palette finds it by these too
+]);
+
+// Commands of a view, ahead of the window's while the focus is inside it.
+command_scope(
+    "File list",
+    vec![
+        Command::new("file.rename", "Rename…", move |_| rename())
+            .shortcut("F2")
+            .enabled(selection.len() == 1)
+            .group(CommandGroup::File)
+            .section("change"),
+    ],
+    list,
+)
+.fill()
+```
+
+| Builder                                         | Effect                                                                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `.shortcut("Ctrl+Shift+P")`                     | Adds a shortcut. Several are allowed; menus show the first. Text that is not a shortcut panics in debug.                       |
+| `.enabled(false)`                               | Dimmed in menus, left out of context menus and the palette; its shortcut does nothing.                                         |
+| `.checked(bool)`                                | A state the command toggles: a tick in menus.                                                                                  |
+| `.group(CommandGroup::Edit)`                    | The menu it is in: `App` (top level, "General" in the sheet), `File`, `Edit`, `View`, `Go`, `Window`, `Other("Name")`, `Help`. |
+| `.section("clipboard")`                         | Commands of one section sit together, with a separator between sections.                                                       |
+| `.icon(Icon)`                                   | Shown in the palette.                                                                                                          |
+| `.keywords([..])`                               | Other words the palette finds it by.                                                                                           |
+| `.destructive()`                                | Its menu item is coloured as destructive.                                                                                      |
+| `.hidden_from_menu()`, `.hidden_from_palette()` | Leaves it out of one of them; it still answers its shortcut.                                                                   |
+| `Command::key_hint(id, title, "Alt+1 to 9")`    | A key a control handles itself, listed in the sheet only.                                                                      |
+
+**Scopes, as a responder chain.** `use_window_commands` adds commands that
+are always available. `command_scope(name, commands, child)` wraps a view;
+its commands apply while the keyboard focus is inside it, and scopes nest. The
+innermost scope that holds the focus wins: its Ctrl+A shadows the window's,
+and a command id it shares with an outer scope replaces that command. The
+router learns which scopes hold the focus from the key itself, which travels
+from the focused control up through every scope it is in, so a view's
+shortcut never runs while the focus is elsewhere. Menus and the palette list
+the commands of the view that last had the focus (by keyboard or a click
+inside it), so opening the header menu with the pointer keeps them.
+
+**What the router leaves alone.** A control that handles a key stops it, and
+no command sees it: a text field keeps its own Ctrl+Z, Ctrl+C and Ctrl+A,
+and a list keeps its arrows. While a dialog or a menu is open, the router
+stands aside (the palette and the sheet are dialogs).
+
+**Shortcuts.** `Shortcut::parse` reads what people write: modifiers then the
+key, joined by `+` (`Ctrl+Shift+P`, `F2`, `Alt+Left`, `Ctrl+?`, `Ctrl+Plus`,
+`Page Down`, `Space`). Ctrl, Alt and Super must be held exactly as written,
+and Shift too for a letter, digit or named key. A symbol is the character the
+layout types, so `Ctrl+?` works whether the layout needs Shift for `?` or
+not; write the symbol, not `Ctrl+Shift+/`. A layout with no Latin letters
+reaches `Ctrl+C` by the key's position. `label()` is the text menus show
+(`Ctrl+Shift+P`, GNOME's order: Ctrl, Alt, Shift, Super), `caps()` the key
+caps, and `key_caps(&shortcut)` draws them.
+
+**Checks in a debug build.** Two commands of one scope (or of two window
+scopes) with one shortcut are reported on stderr once, as is a window command
+on a bare key (a letter with no Ctrl or Alt), which must belong to a view
+(WCAG 2.1.4, character key shortcuts).
+
+**Every window has** `app.command-palette` (Ctrl+Shift+P),
+`app.shortcuts` (Ctrl+? and Ctrl+/) and, in an `Application`, `app.about`
+(the palette's About; the main menu ends with About). A window whose
+components call `use_undo` also has `edit.undo` and `edit.redo` (below). An
+app's own command with one of these ids replaces it.
+
+`use_commands()` returns the window's registry: `run(id)`, `get(id)`,
+`all()`, `recent()`, `main_menu_items()`, `context_menu(..)`,
+`show_palette()` and `show_shortcuts()`. The registry and the router live in
+the window's `OverlayHost` (and `Application::run` provides the registry, so
+the app's root component may declare commands above its host). A host inside
+another leaves routing to the outer one, so a key never runs a command twice.
+`MenuButton::items_on_open(f)` builds items when the menu opens, which is how
+`app_menu` reads titles such as "Undo rename" that change without a redraw.
+
+### The command palette
+
+Ctrl+Shift+P, `commands.show_palette()` or `open_palette(overlays, commands)`.
+A card with a search field and the window's enabled commands: with nothing
+typed, the ones run last first and then the rest in menu order; typing
+filters by fuzzy match ("tgsb" finds "Toggle sidebar"), letters together and
+at the starts of words first, with the matched letters marked. Keywords and
+the group name find a command too, ranked below title matches. Each row shows
+the icon, title, group and shortcut, so the palette teaches the keys. Up and
+Down move the highlight, Enter or a click runs it, Escape closes. The command
+runs after the palette has closed and the focus is back, so a command that
+opens a dialog or starts a rename finds the window as it left it.
+
+### The keyboard shortcuts sheet
+
+Ctrl+? or Ctrl+/, `commands.show_shortcuts()` or
+`open_shortcuts(overlays, commands)`. A card titled "Keyboard shortcuts" with
+a filter and a group per menu (General, File, Edit...), each row the title and
+its shortcuts as key caps. It lists the focused view's commands and the
+window's; a shortcut an inner view has taken is listed once, under the command
+that has it. `Command::key_hint` rows list keys controls handle themselves.
+The filter matches titles (fuzzy) and keys (`ctrl+z`). An app no longer
+writes its own shortcuts dialog: the sheet is generated.
+
+## Undo and redo
+
+`use_undo()` returns the window's `UndoStack`, one for all of its views
+(AppKit's `NSUndoManager`). A change that can be taken back is pushed as an
+`UndoStep`: a name as people read it, what undoes it and what does it again.
+
+```rust
+let undo = use_undo();
+let old = name.peek().clone();
+name.set(new.clone());
+undo.push(UndoStep::new(
+    "Rename",
+    move || name.set(old.clone()),
+    move || name.set(new.clone()),
+));
+```
+
+| Call                                                  | What it does                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `undo.push(step)`                                     | Remembers a change and empties the redo stack.                                                                    |
+| `UndoStep::new(name, undo, redo)`                     | A step. The name is a verb and its object in sentence case ("Move to Trash").                                     |
+| `UndoStep::undo_only(name, undo)`                     | A step that cannot be redone. Undoing it drops the redo history behind it.                                        |
+| `.coalesce(key)`                                      | Steps with one key, pushed within `COALESCE` (1.5 s) of each other, are one step: a run of typing.                |
+| `undo.group(name, \|\| ..)`                           | Every step pushed inside is one step called `name`. Groups nest.                                                  |
+| `undo.undo()`, `undo.redo()`                          | Take back or do again; return the step's name.                                                                    |
+| `undo.undo_title()`, `redo_title()`                   | "Undo rename" / "Redo rename", or "Undo" / "Redo" with nothing to do. Reading them in `render` redraws on change. |
+| `can_undo()`, `can_redo()`, `set_limit(n)`, `clear()` | State, the depth (`DEFAULT_LIMIT`, 100), and forgetting everything after a save that cannot be undone.            |
+| `UndoStack::detached()`                               | A stack of its own: one per document in a window of several.                                                      |
+
+**Edit > Undo and Redo follow the stack.** A window whose components call
+`use_undo` has the commands `edit.undo` ("Undo rename", Ctrl+Z) and
+`edit.redo` ("Redo rename", Ctrl+Shift+Z and Ctrl+Y) in its Edit menu, its
+palette (while there is something to undo) and its shortcuts sheet, disabled
+with nothing to take back. A window that never calls it shows neither.
+
+**Text fields keep their own undo.** Ctrl+Z in a text field undoes typing in
+that field, and the field stops the key, so the window's Undo runs only while
+the focus is elsewhere.
+
+**Work that takes time.** The closures run on the UI thread and return at
+once. A step that moves files starts the work on a worker and reports when it
+is done, as anything else on the UI thread does. A step pushed while the stack
+runs a step is ignored, so an undo that goes through the app's own code path
+does not record itself.
+
+## Data table
+
+`data_table(rows, columns, key)` shows any number of rows in typed columns, as a
+list view and the file list do, for any app that has rows with attributes: apps,
+devices, processes, connections, transactions. Only the rows in view are built,
+so a hundred thousand scroll as smoothly as ten.
+
+```rust
+let rows = use_hook(|| Rc::new(load_apps()));          // Rc<Vec<App>>
+let columns = use_hook(|| Rc::new(vec![
+    Column::text("name", "Name", |app: &App| app.name.clone())
+        .flex().priority(0).sort_by_text().editable(),
+    Column::text("size", "Size", |app: &App| format_size(app.bytes))
+        .width(96.0).numeric().priority(1).sort_by_key(|app| app.bytes),
+    Column::text("opened", "Last opened", |app: &App| app.opened.clone())
+        .width(130.0).priority(2).muted().sort_by_text(),
+]));
+let selection = use_state(Selection::<AppId>::new);
+
+data_table(&rows, columns, |app: &App| app.id)
+    .id("apps")                        // remember columns and sort
+    .label("Installed apps")
+    .selection(selection)
+    .sorted_by("name", SortDirection::Ascending)
+    .row_menu(|keys| vec![menu_item("Uninstall", move |()| uninstall(&keys))])
+    .on_activate(open)
+```
+
+The table fills its parent, so give the parent a height. It draws a heading row
+that stays in place and scrolls its rows beneath. Keep `rows` and `columns` in a
+hook or a state: an `Rc` that is the same allocation as last time means "same
+rows", and the visible rows are not drawn again.
+
+### Rows and columns
+
+- **`Rows<T>`** is where the rows come from, and is never copied. A `Vec<T>`,
+  `Rc<Vec<T>>` or `Rc<[T]>` converts to it; a model that pages from a database
+  implements `RowSource<T>` (`len`, `get`).
+- **`key`** is a row's identity (an id, a path), not its place. The selection and
+  the keyboard cursor follow keys, so a sort or a reload leaves them on the same
+  rows.
+- **`Column::text(id, title, f)`** is a column of one line of text. **`Column::new(id,
+title, f)`** draws an element (an icon and a name, a bar, a switch); add
+  `.summary(f)` to say its value in words. The `id` names the column in the saved
+  layout and the sort, so it never changes.
+- `.flex()` takes what the fixed columns leave; `.width(px)` is a fixed width;
+  `.min_width(px)`; `.numeric()` aligns to the end in figures of one width;
+  `.muted()` for secondary information; `.fixed()` stops the person resizing it.
+- `.priority(n)`: when the table is too narrow for every shown column, the
+  highest number goes first and a column of 0 stays (and cannot be hidden). The
+  person can bring a dropped column back by widening the window.
+- `.sort_by(cmp)`, `.sort_by_key(f)` and `.sort_by_text()` make a column
+  sortable. The sort is stable, in both directions. `natural_cmp` compares text
+  the way a person reads it: case ignored, numbers by value.
+- `.editable()` lets F2, or a double click, edit the cell's text in place. Enter
+  calls the table's `on_edit(CellEdit { key, column, text })`, Escape or clicking
+  elsewhere drops the edit. The table never changes the rows itself.
+
+### What the person can do
+
+| With                              | Result                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| Click a heading                   | Sorts by it; again turns it round. An arrow shows the sort.                       |
+| Drag a heading's edge             | Resizes the column. A double click on the edge fits it to its widest cell.        |
+| Drag a heading                    | Moves the column; a line shows where it will land.                                |
+| Right-click a heading             | Lists the columns to show or hide, and Reset columns.                             |
+| Click, Ctrl+click, Shift+click    | Selects a row, toggles one, selects the range from the last click.                |
+| Double click, Enter               | Opens the row (`on_activate`).                                                    |
+| Right click, long press, Menu key | The row's menu (`row_menu`), acting on the whole selection when the row is in it. |
+
+With an `id` the order, widths, visibility and sort are saved in
+the app's `ui.json` under `$XDG_STATE_HOME/bingux/<app id>/` and read back at the
+next start. A column added by an update joins at its place; one that went away is
+ignored.
+
+### Keyboard
+
+The table is one Tab stop and a WAI-ARIA grid. A ring marks the cell that holds
+the keyboard.
+
+| Key                 | Action                                                               |
+| ------------------- | -------------------------------------------------------------------- |
+| Arrow keys          | Move the cursor one cell; the row it reaches is selected             |
+| Home, End           | First and last cell of the row                                       |
+| Ctrl+Home, Ctrl+End | First cell of the first row, last of the last                        |
+| Page Up, Page Down  | A page of rows                                                       |
+| Shift+arrow         | Extend the selection from the anchor                                 |
+| Ctrl+arrow          | Move the cursor without changing the selection                       |
+| Space               | Toggles the row in a multiple selection (selects it in a single one) |
+| Enter               | Open the row                                                         |
+| F2                  | Edit the cell                                                        |
+| Ctrl+A, Escape      | Select every row, clear the selection                                |
+| Menu, Shift+F10     | The row's menu, or the columns menu on a heading                     |
+| Letters             | Jump to the next row whose first column starts with them             |
+
+From a heading (Up from the first row): Enter or Space sorts; Shift+Left and
+Shift+Right move the column; Ctrl+Left and Ctrl+Right resize it.
+
+The table tells assistive technology it is a grid with row and column counts,
+a multi-select flag, a row index and a selected state on each row, column
+headers with a sort direction, and cells with a column index.
+
+### Selection
+
+`Selection<K>` holds the selected keys and the anchor a range grows from, and is
+a `State` the app owns: `.selection(state)`. `SelectionMode` is `None`, `Single`
+or `Multiple` (the default): `.selection_mode(mode)`. `Selection::apply` carries
+out a `Gesture` (`Replace`, `Toggle`, `Extend`, `ExtendAdd`) for a mode; the
+pointer and the keyboard both use it, so Shift+click and Shift+arrow agree. The
+list view uses the same type.
+
+`.marks()` starts each row with a selection mark and puts a select-all mark in
+the heading (not on a phone). `.batch_actions(vec![batch_action("Uninstall", f)
+.icon(icon).destructive()])` shows a bar above the table while two or more rows
+(one on a phone) are selected: "3 selected", the actions, and a button that
+clears. Each action is called with the selected keys in the order the rows are
+shown. Name actions with a verb for the result.
+
+### States, density and width
+
+- `.status(TableStatus::Loading)` shows quiet placeholder rows under the real
+  headings. `.status(TableStatus::failed("Could not load the apps").detail(next
+step).retry(f))` shows what failed and a Try again button. With no rows, the
+  table shows `.empty_state(status_page(..))` or a plain "Nothing to show";
+  give it one short title, one line and one action.
+- `.density(RowDensity::Compact | Comfortable | Spacious)` is the row height:
+  36, 40 or 56 px on a desktop; a phone's rows are as tall as a finger needs.
+- `.striped()` puts every other row on a faint fill. `.headerless()` leaves out
+  the heading row.
+- On a phone there is no heading row. A row is two lines: its first column
+  (or that column's element), then the text of the other columns in one muted
+  line, with a chevron when it opens something. A button above the rows opens the
+  sort menu. A tap opens the row, or, while rows are selected, joins or leaves
+  the selection; a long press selects a row (when the table has batch actions) or
+  opens its menu.
+
+To replace the Files list with it later: Files' `ColumnLayout` and `Plan`
+correspond to the table's saved layout and plan, its `Rows` to a `RowSource`,
+and its cells to `Column::new` elements. Files keeps its rubber band, drag and
+thumbnails by wrapping the rows it draws; the table supplies the header, sort,
+columns, selection and keyboard.
+
+## List view
+
+`list_view(rows, row, key)` is the single-column list: contacts, saved networks, a
+queue. Rows come from a `Rows<T>` source (see "Data table") and only the rows in
+view are built. `row` turns an item into a `ListRow`: `list_row(title)` with
+`.subtitle(text)`, `.icon(icon)` or `.leading(element)`, `.value(text)` at the end,
+`.chevron()` for a row that opens something, `.enabled(false)` and `.actions(..)`.
+
+```rust
+list_view(
+    &contacts,
+    |c: &Contact| list_row(c.name.clone()).icon(Icon::Avatar).value(c.role),
+    |c| c.id,
+)
+.selection_mode(SelectionMode::Multiple)
+.selection(selected)
+.sections(|c| Some(c.initial.to_string()))
+.on_activate(open)
+```
+
+- **Selection.** A list starts with `SelectionMode::None`, where a press opens the
+  row (`on_activate`). With `Single` or `Multiple` a press selects and a double
+  press, or Enter, opens. Shift and Ctrl work as in the table, `Selection<K>` is
+  the same type, and `.marks()` draws a selection mark at the start of each row (a
+  phone shows marks by itself while rows are selected).
+- **Sections.** `.sections(|item| Some(title))` puts a header before each run of
+  rows with the same title; `None` has no header. A header is as tall as a row,
+  because a long list needs one row height to scroll without measuring.
+- **Two lines.** Every row is one height. `.two_line()` makes it tall enough for a
+  subtitle and shows the subtitle.
+- **Menu.** `.row_menu(|keys| ..)` is the right click, long press and Menu key
+  menu. A row's `actions` are added to it, so a desktop reaches them there.
+- **Swipe.** On a phone a row with actions slides open to show them as buttons
+  (76 px each) when swiped; swiping back, tapping the row or pressing Escape
+  closes it, and only one row is open.
+- **Reorder.** `.on_reorder(|from, to| ..)` gives each row a grip and the keys of
+  `sortable` (drag the grip, Alt+Up and Alt+Down). The caller owns the order; see
+  `reorder.rs` for the contract. A reorderable list builds every row, so it is for
+  a few dozen rows, and has neither sections nor selection.
+- **Keyboard.** One Tab stop. Up and Down move a cursor (headers are skipped) and
+  select as they go; Shift extends; Ctrl moves without selecting; Home, End, Page
+  Up, Page Down; Space toggles; Enter opens; Ctrl+A selects all; Escape clears;
+  letters jump to the row whose title starts with them.
+- `.empty_state(element)` is what shows with no rows.
+
+## Toolbar
+
+`toolbar()` lays items out in groups and keeps them legible at any width.
+
+```rust
+toolbar()
+    .id("main")                    // where the customisation is saved
+    .customizable()
+    .group(toolbar_group(vec![
+        toolbar_item("back", "Back", Icon::GoPrevious, back).leading(),
+        toolbar_item("forward", "Forward", Icon::GoNext, forward).leading(),
+    ]).linked())
+    .group(toolbar_group(vec![
+        toolbar_item("add", "Add", Icon::ListAdd, add).shortcut("Ctrl+N"),
+        toolbar_item("share", "Share", Icon::EditCopy, share).secondary(),
+    ]))
+    .group(toolbar_group(vec![
+        toolbar_item("open", "Open", Icon::DocumentOpen, open).prominent(),
+    ]))
+```
+
+- **Items.** `toolbar_item(id, label, icon, on_press)` is a button; `.toggled(bool)`
+  makes it a toggle. `toolbar_menu(id, label, icon, items)` opens a menu under
+  itself. `toolbar_element(id, label, element, width)` is an element of your own, a
+  search field or a path bar. The `id` never changes once shipped, because the
+  saved customisation uses it. The `label` is the tooltip, the accessible name and
+  the row in the overflow menu: a verb for an action, a noun for a toggle.
+- **Groups.** A group sets its items apart from the next with a wider gap; keep to
+  three. `.linked()` joins its buttons in one rounded bar with hairlines, as Back
+  and Forward are or the choices of a view switch; `button_group(vec![group_button(
+icon, label, on_press).active(bool)])` is the same bar on its own.
+- **Placement.** `.leading()` puts an item before the title and keeps it longest,
+  the default puts it after the title, `.secondary()` after it and first to go.
+  `.prominent()` is one labelled accent button at the trailing end that never goes
+  into the menu; use it for what most people open the window to do.
+- **Overflow.** When the bar is narrower than its items, the rest go into a More
+  button's menu: secondary items first, then primary, then leading, the last of
+  each rank first, with a separator where the group changes, toggles as ticks and
+  menu items as submenus. An element item never goes into the menu.
+- **Every item is a menu command.** `ToolbarItem::menu_item()` and
+  `Toolbar::menu_items()` give the rows, so people who hide or customise the bar
+  still reach everything, and the app's own menu can list the same ones.
+- **Customising.** With `.customizable()` and an `.id(..)`, a right click on the
+  bar, or "Customise toolbar" in the More menu, lists every item with a tick and a
+  Reset toolbar. The hidden items are saved by id in the app's `ui.json`; an item
+  added by an update shows by default.
+- **The window's title.** `.title(text)` and `.subtitle(text)` are the window's
+  own: short (about fifteen characters), never the app's name. In a bar they sit
+  between the clusters. `.header()` draws the whole toolbar as the window's
+  `HeaderBar`: leading items, the centred title and subtitle, trailing items and
+  (`.window_controls()`) the window buttons. The items give way before the title
+  is cut.
+- **Keyboard.** The buttons are one Tab stop. Left and Right (mirrored in a
+  right-to-left window), Home and End move between them, and Tab leaves the bar.
+  Menu buttons and the prominent action keep their own stops.

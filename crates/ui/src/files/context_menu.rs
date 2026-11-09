@@ -375,6 +375,7 @@ fn empty_plan(facts: &Facts, looks: Looks, templates: &[Template], compress: Opt
         .flatten();
     let undo = facts
         .undo
+        .clone()
         .and_then(|label| Row::command(label, facts, Command::Undo));
     join(vec![
         vec![
@@ -901,7 +902,7 @@ mod tests {
         let none = labels(&plan(&facts(Capabilities::FILES_APP, 0, 0)));
         assert!(!none.iter().any(|label| label.starts_with("Undo")));
         let mut with_undo = facts(Capabilities::FILES_APP, 0, 0);
-        with_undo.undo = Some("Undo rename");
+        with_undo.undo = Some("Undo rename".to_owned());
         let rows = plan(&with_undo);
         assert_eq!(
             labels(&rows)[3..5],
