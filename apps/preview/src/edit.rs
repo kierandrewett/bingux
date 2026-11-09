@@ -114,7 +114,11 @@ pub fn upright_size(path: &Path) -> Option<(u32, u32)> {
         tag,
         Tag::Rotate90 | Tag::Rotate270 | Tag::Rotate90FlipH | Tag::Rotate270FlipH
     );
-    Some(if sideways { (height, width) } else { (width, height) })
+    Some(if sideways {
+        (height, width)
+    } else {
+        (width, height)
+    })
 }
 
 /// The part of `picture` that `crop` names, at least one pixel each way.
