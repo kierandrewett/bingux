@@ -236,7 +236,7 @@ impl Component for Crumbs {
         rect()
             .component("AddressCrumbs")
             .a11y_role(AccessibilityRole::Navigation)
-            .a11y_alt("Location")
+            .a11y_alt(crate::tr!("ui-files-address-location"))
             .tw(
                 &tokens,
                 &[
@@ -281,13 +281,13 @@ fn crumb_menu(
     let open_path = path.to_path_buf();
     let copy_path = path.to_path_buf();
     let mark_path = path.to_path_buf();
-    let toast = move |text: &'static str| {
+    let toast = move |text: String| {
         if let Some(overlays) = overlays {
             overlays.toast(text);
         }
     };
     let bookmark = if bookmarked {
-        menu_item("Remove from bookmarks", move |_| {
+        menu_item(crate::tr!("ui-files-address-remove-bookmark"), move |_| {
             let path = mark_path.clone();
             let on_changed = on_changed.clone();
             spawn(async move {
@@ -298,12 +298,12 @@ fn crumb_menu(
                             on_changed.call(());
                         }
                     }
-                    Err(_) => toast("The bookmark could not be removed."),
+                    Err(_) => toast(crate::tr!("ui-files-address-bookmark-remove-failed")),
                 }
             });
         })
     } else {
-        menu_item("Add to bookmarks", move |_| {
+        menu_item(crate::tr!("ui-files-address-add-bookmark"), move |_| {
             let path = mark_path.clone();
             let on_changed = on_changed.clone();
             spawn(async move {
@@ -314,7 +314,7 @@ fn crumb_menu(
                             on_changed.call(());
                         }
                     }
-                    Err(_) => toast("The bookmark could not be saved."),
+                    Err(_) => toast(crate::tr!("ui-files-address-bookmark-save-failed")),
                 }
             });
         })
@@ -322,12 +322,12 @@ fn crumb_menu(
     let roots = Roots::current();
     let in_trash = roots.below_trash(path).is_some();
     let copy_label = if in_trash {
-        "Copy location"
+        crate::tr!("ui-files-address-copy-location")
     } else {
-        "Copy path"
+        crate::tr!("ui-files-address-copy-path")
     };
     let mut items = vec![
-        menu_item("Open", move |_| {
+        menu_item(crate::tr!("ui-files-address-open"), move |_| {
             on_open.call(Where::Folder(open_path.clone()));
         }),
         menu_separator(),
@@ -339,8 +339,8 @@ fn crumb_menu(
                 None => copy_path.display().to_string(),
             };
             match freya::clipboard::Clipboard::set(text) {
-                Ok(()) => toast("Copied."),
-                Err(_) => toast("The path could not be copied."),
+                Ok(()) => toast(crate::tr!("ui-files-address-copied")),
+                Err(_) => toast(crate::tr!("ui-files-address-copy-failed")),
             }
         }),
     ];
@@ -524,7 +524,7 @@ impl Component for OverflowButton {
         let stop = focus_stop_with(
             id,
             content,
-            "Hidden folders",
+            crate::tr!("ui-files-address-hidden-folders"),
             AccessibilityRole::Button,
             true,
             Radius::Inner,
@@ -783,7 +783,7 @@ impl Component for Chevron {
             );
         let stop = focus_stop_press(
             content,
-            format!("Folders in {}", self.title),
+            crate::tr!("ui-files-address-folders-in", title = self.title.clone()),
             AccessibilityRole::Button,
             true,
             Radius::Inner,
@@ -792,9 +792,9 @@ impl Component for Chevron {
         );
 
         let rows: Vec<Element> = match &list {
-            None => vec![NoticeRow::busy("Loading…").into()],
+            None => vec![NoticeRow::busy(crate::tr!("ui-files-address-loading")).into()],
             Some(list) if list.folders.is_empty() => {
-                vec![NoticeRow::quiet("No subfolders").into()]
+                vec![NoticeRow::quiet(crate::tr!("ui-files-address-no-subfolders")).into()]
             }
             Some(list) => {
                 let mut rows: Vec<Element> = list
@@ -817,9 +817,7 @@ impl Component for Chevron {
                     })
                     .collect();
                 if list.more {
-                    rows.push(
-                        NoticeRow::quiet("More folders. Type the path to reach them.").into(),
-                    );
+                    rows.push(NoticeRow::quiet(crate::tr!("ui-files-address-more-folders")).into());
                 }
                 rows
             }
@@ -930,7 +928,7 @@ impl Component for CompactTrail {
         rows.push(
             ListRow {
                 icon: Lead::Action(Icon::Pencil),
-                parts: vec![Part::plain("Type a path")],
+                parts: vec![Part::plain(crate::tr!("ui-files-address-type-path"))],
                 current: false,
                 highlighted: false,
                 mark: Mark::Plain,
@@ -948,7 +946,7 @@ impl Component for CompactTrail {
         )
         .size(Dim::DropdownMenu.px(), height)
         .scroll(scroll)
-        .title("Location")
+        .title(crate::tr!("ui-files-address-location"))
         .on_dismiss(close);
 
         // The stop is the box and carries the ring. The face inside it is the
@@ -1071,7 +1069,7 @@ impl Component for CompactTrail {
                     )
                     .child(
                         field_action(Icon::Pencil, move |_: ()| on_edit.call(()))
-                            .tooltip("Type a path"),
+                            .tooltip(&crate::tr!("ui-files-address-type-path")),
                     )
             }))
             .child(Element::from(panel))

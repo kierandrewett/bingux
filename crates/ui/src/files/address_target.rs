@@ -36,12 +36,12 @@ pub(super) enum Problem {
 
 impl Problem {
     /// The reason in plain words, to put before the path.
-    pub(super) fn reason(self) -> &'static str {
+    pub(super) fn reason(self) -> String {
         match self {
-            Problem::NotFound => "Not found",
-            Problem::NotAFolder => "Not a folder",
-            Problem::NoPermission => "No permission",
-            Problem::NotResponding => "Not responding",
+            Problem::NotFound => crate::tr!("ui-files-address-problem-not-found"),
+            Problem::NotAFolder => crate::tr!("ui-files-address-problem-not-a-folder"),
+            Problem::NoPermission => crate::tr!("ui-files-address-problem-no-permission"),
+            Problem::NotResponding => crate::tr!("ui-files-address-problem-not-responding"),
         }
     }
 
