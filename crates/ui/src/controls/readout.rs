@@ -145,6 +145,7 @@ impl Component for Readout {
 
         let body: Element = if scrolls {
             ScrollView::new()
+                // ui-lint: allow(the scroll axis of a ScrollView, not a box style)
                 .direction(Direction::Horizontal)
                 .show_scrollbar(true)
                 .child(text)
@@ -217,7 +218,8 @@ mod tests {
     #[test]
     fn text_that_would_get_too_small_scrolls_at_the_smallest_size() {
         assert_eq!(Readout::fit(1000.0, 300.0, 1.0, 0.45), (0.45, true));
-        assert_eq!(Readout::fit(1000.0, 300.0, 1.5, 0.45), (0.675, true));
+        let (scale, scrolls) = Readout::fit(1000.0, 300.0, 1.5, 0.45);
+        assert!((scale - 0.675).abs() < 1e-6 && scrolls);
     }
 
     #[test]

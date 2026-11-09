@@ -57,6 +57,7 @@ pub struct Application {
     transparent: bool,
     usage: String,
     normalise: Option<fn(&std::ffi::OsStr) -> String>,
+    address_options: Vec<&'static str>,
     about: Option<crate::about::AppInfo>,
 }
 
@@ -77,6 +78,7 @@ impl Application {
             borderless: false,
             transparent: false,
             normalise: None,
+            address_options: Vec::new(),
             about: None,
         }
     }
@@ -147,6 +149,15 @@ impl Application {
     /// The argument is the process's own bytes (`OsStr`): a file name that is
     /// not valid UTF-8 is a valid argument, and the address built from it
     /// must name that exact file. An option (`-h`) is not passed either.
+    /// Declare `--name VALUE` and `--name=VALUE` as another way to write an
+    /// address: `--mode convert` opens `convert`, as the bare argument does,
+    /// on a first launch and in a copy that is already running. A desktop
+    /// entry's actions use it (`Exec=bingux-calculator --mode convert`).
+    pub fn address_option(mut self, name: &'static str) -> Self {
+        self.address_options.push(name);
+        self
+    }
+
     pub fn normalise(mut self, normalise: fn(&std::ffi::OsStr) -> String) -> Self {
         self.normalise = Some(normalise);
         self
@@ -178,7 +189,7 @@ impl Application {
         // `args()` panics on an argument that is not valid UTF-8, which a file
         // name may be; `args_os()` never does.
         let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
-        let launch = match Launch::parse(&arguments) {
+        let launch = match Launch::parse(&arguments, &self.address_options) {
             Ok(launch) => launch,
             Err(error) => {
                 eprintln!("{}: {error}\n{}", self.app_id, self.usage);
@@ -646,11 +657,17 @@ struct Launch {
 
 /// Why a command line was refused.
 #[derive(Debug, PartialEq, Eq)]
-struct UnknownOption(String);
+enum LaunchError {
+    Unknown(String),
+    NeedsValue(String),
+}
 
-impl std::fmt::Display for UnknownOption {
+impl std::fmt::Display for LaunchError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "unknown option '{}'", self.0)
+        match self {
+            LaunchError::Unknown(name) => write!(f, "unknown option '{name}'"),
+            LaunchError::NeedsValue(name) => write!(f, "option '{name}' needs a value"),
+        }
     }
 }
 
@@ -661,13 +678,21 @@ impl Launch {
     /// mistyped flag can never reach the app as a place to open. `--` ends the
     /// options, so a folder called `--odd` is opened as `-- --odd`. A lone `-`
     /// and every argument that does not start with `-` is an address.
-    fn parse(arguments: &[std::ffi::OsString]) -> Result<Self, UnknownOption> {
+    ///
+    /// `address_options` are the options the app declared with
+    /// [`Application::address_option`]: `--mode convert` and `--mode=convert`
+    /// both name the address `convert`.
+    fn parse(
+        arguments: &[std::ffi::OsString],
+        address_options: &[&str],
+    ) -> Result<Self, LaunchError> {
         let mut launch = Launch {
             help: false,
             addresses: Vec::new(),
         };
         let mut options_end = false;
-        for argument in arguments {
+        let mut rest = arguments.iter();
+        while let Some(argument) = rest.next() {
             let bytes = argument.as_encoded_bytes();
             if options_end || bytes == b"-" || !bytes.starts_with(b"-") {
                 launch.addresses.push(argument.clone());
@@ -675,8 +700,24 @@ impl Launch {
                 options_end = true;
             } else if bytes == b"--help" || bytes == b"-h" {
                 launch.help = true;
+            } else if let Some(name) = address_options.iter().find(|name| bytes == name.as_bytes())
+            {
+                let value = rest
+                    .next()
+                    .ok_or_else(|| LaunchError::NeedsValue((*name).to_string()))?;
+                launch.addresses.push(value.clone());
+            } else if let Some(value) = address_options.iter().find_map(|name| {
+                bytes
+                    .strip_prefix(name.as_bytes())
+                    .and_then(|tail| tail.strip_prefix(b"="))
+            }) {
+                launch.addresses.push(
+                    <std::ffi::OsStr as std::os::unix::ffi::OsStrExt>::from_bytes(value).to_owned(),
+                );
             } else {
-                return Err(UnknownOption(argument.to_string_lossy().into_owned()));
+                return Err(LaunchError::Unknown(
+                    argument.to_string_lossy().into_owned(),
+                ));
             }
         }
         Ok(launch)
@@ -689,9 +730,39 @@ mod launch_tests {
 
     use super::*;
 
-    fn parse(arguments: &[&str]) -> Result<Launch, UnknownOption> {
+    fn parse(arguments: &[&str]) -> Result<Launch, LaunchError> {
+        parse_with(arguments, &[])
+    }
+
+    fn parse_with(arguments: &[&str], options: &[&str]) -> Result<Launch, LaunchError> {
         let arguments: Vec<OsString> = arguments.iter().map(OsString::from).collect();
-        Launch::parse(&arguments)
+        Launch::parse(&arguments, options)
+    }
+
+    #[test]
+    fn an_address_option_names_an_address() {
+        let addresses = |arguments: &[&str]| -> Vec<String> {
+            parse_with(arguments, &["--mode"])
+                .expect("a command line")
+                .addresses
+                .iter()
+                .map(|text| text.to_string_lossy().into_owned())
+                .collect()
+        };
+        assert_eq!(addresses(&["--mode", "convert"]), ["convert"]);
+        assert_eq!(addresses(&["--mode=convert"]), ["convert"]);
+        assert_eq!(addresses(&["a", "--mode", "b", "c"]), ["a", "b", "c"]);
+        // Its value is the address, even when the value starts with a dash.
+        assert_eq!(addresses(&["--mode", "-x"]), ["-x"]);
+    }
+
+    #[test]
+    fn an_address_option_without_a_value_is_refused() {
+        let error = parse_with(&["--mode"], &["--mode"]).expect_err("refused");
+        assert_eq!(error.to_string(), "option '--mode' needs a value");
+        // An app that did not declare it still sees an unknown option.
+        let error = parse(&["--mode", "x"]).expect_err("refused");
+        assert_eq!(error.to_string(), "unknown option '--mode'");
     }
 
     fn addresses(arguments: &[&str]) -> Vec<String> {
@@ -761,10 +832,12 @@ mod launch_tests {
         use std::os::unix::ffi::OsStringExt;
         let odd = OsString::from_vec(b"/tmp/caf\xe9".to_vec());
         assert_eq!(
-            Launch::parse(&[odd.clone()]).expect("an address").addresses,
+            Launch::parse(&[odd.clone()], &[])
+                .expect("an address")
+                .addresses,
             [odd]
         );
         let option = OsString::from_vec(b"-caf\xe9".to_vec());
-        assert!(Launch::parse(&[option]).is_err());
+        assert!(Launch::parse(&[option], &[]).is_err());
     }
 }

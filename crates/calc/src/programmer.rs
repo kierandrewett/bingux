@@ -181,7 +181,12 @@ fn lex(src: &str, base: u32) -> Result<Vec<PToken>> {
                 };
                 push(tok, &mut out, j - i)
             }
-            other => return Err(syntax(i, format!("{other} is not part of an expression."))),
+            other => {
+                return Err(syntax(
+                    i,
+                    format!("Cannot read \u{201c}{other}\u{201d}. Check the expression."),
+                ));
+            }
         };
     }
     Ok(out)
@@ -196,14 +201,20 @@ fn number(word: &str, base: u32, at: usize) -> Result<BigInt> {
     };
     let digits: String = digits.chars().filter(|c| *c != '_').collect();
     if digits.is_empty() {
-        return Err(syntax(at, "That is not a number."));
+        return Err(syntax(at, "That is not a number. Check the digits."));
     }
     BigInt::parse_bytes(digits.as_bytes(), radix).ok_or_else(|| {
         let bad = digits
             .chars()
             .find(|c| c.to_digit(radix).is_none())
             .unwrap_or('?');
-        syntax(at, format!("{bad} is not a digit in {}.", base_name(radix)))
+        syntax(
+            at,
+            format!(
+                "{bad} is not a digit in {}. Remove it or change the base.",
+                base_name(radix)
+            ),
+        )
     })
 }
 
@@ -281,7 +292,9 @@ impl Machine<'_> {
             PTok::Nor => !(a | b),
             PTok::Shl | PTok::Shr | PTok::Rol | PTok::Ror => {
                 if b.is_negative() {
-                    return Err(CalcError::Domain("A shift needs a count of 0 or more."));
+                    return Err(CalcError::Domain(
+                        "A shift needs a count of 0 or more. Change the count.",
+                    ));
                 }
                 let count = b.to_u32().unwrap_or(u32::MAX);
                 match op {
@@ -340,7 +353,10 @@ impl Machine<'_> {
                 self.pos += 1;
                 self.depth += 1;
                 if self.depth > 150 {
-                    return Err(syntax(0, "Too many brackets inside one another."));
+                    return Err(syntax(
+                        0,
+                        "Too many brackets are nested. Remove some of them.",
+                    ));
                 }
                 let v = self.unary()?;
                 self.depth -= 1;
@@ -354,7 +370,10 @@ impl Machine<'_> {
                 self.pos += 1;
                 self.depth += 1;
                 if self.depth > 150 {
-                    return Err(syntax(0, "Too many brackets inside one another."));
+                    return Err(syntax(
+                        0,
+                        "Too many brackets are nested. Remove some of them.",
+                    ));
                 }
                 let v = self.unary()?;
                 self.depth -= 1;
@@ -378,7 +397,10 @@ impl Machine<'_> {
             PTok::LParen => {
                 self.depth += 1;
                 if self.depth > 150 {
-                    return Err(syntax(token.at, "Too many brackets inside one another."));
+                    return Err(syntax(
+                        token.at,
+                        "Too many brackets are nested. Remove some of them.",
+                    ));
                 }
                 let inner = self.level(0)?;
                 self.depth -= 1;
@@ -424,7 +446,10 @@ fn run(tokens: &[PToken], word: Word, ans: &BigInt) -> Result<IntValue> {
     let value = machine.level(0)?;
     if let Some(extra) = tokens.get(machine.pos) {
         return Err(if extra.tok == PTok::RParen {
-            syntax(extra.at, "There is a closing bracket with no opening one.")
+            syntax(
+                extra.at,
+                "There is a closing bracket with no opening one. Remove it or add the opening one.",
+            )
         } else {
             syntax(extra.at, "Check the expression.")
         });
@@ -671,7 +696,10 @@ mod tests {
     #[test]
     fn a_digit_outside_the_base_is_reported() {
         let err = ev("19", 8, w(8, false)).unwrap_err();
-        assert_eq!(err.to_string(), "9 is not a digit in octal.");
+        assert_eq!(
+            err.to_string(),
+            "9 is not a digit in octal. Remove it or change the base."
+        );
         assert!(matches!(
             ev("12", 2, w(8, false)),
             Err(CalcError::Syntax { .. })

@@ -350,6 +350,7 @@ pub const KEYPAD: &[Spec] = &[
         })
         .icon(Icon::EditClear)
         .name("Delete the last digit")
+        .tooltip("Delete (Backspace)")
         .tone(KeyTone::Plain);
         let height = pad_height(4);
         vstack(S3)

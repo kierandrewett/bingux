@@ -35,6 +35,6 @@ pub use model::{
 };
 pub use router::{
     Router, Target, navigate, provide_router, router, try_router, use_entry_id, use_location,
-    use_page_title, use_pop_guard, use_retained_state, use_router,
+    use_page_title, use_pop_guard, use_retained_state, use_router, use_try_location,
 };
 pub use table::{Mode, Params, RouteDef, RouteKind, RouteTable, Transition};

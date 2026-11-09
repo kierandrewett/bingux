@@ -900,7 +900,11 @@ pub fn convert(
 ) -> Result<Num> {
     let (from, to) = match (category.unit(from), category.unit(to)) {
         (Some(from), Some(to)) => (from, to),
-        _ => return Err(CalcError::Unit("That unit is not in this category.".into())),
+        _ => {
+            return Err(CalcError::Unit(
+                "That unit is not in this category. Pick a unit from the list.".into(),
+            ));
+        }
     };
     if from.id == to.id {
         return Ok(value.clone());
