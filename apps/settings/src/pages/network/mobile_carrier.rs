@@ -117,7 +117,12 @@ impl Component for MobileNetworkPage {
                         let mut search = search;
                         search.set(match result {
                             Ok(found) => Search::Found(found),
-                            Err(error) => Search::Failed(error.0),
+                            Err(error) => {
+                                eprintln!("bingux-settings: carrier scan failed: {}", error.0);
+                                Search::Failed(
+                                    "Could not search for networks. Try again in a moment.".into(),
+                                )
+                            }
                         });
                     },
                 );

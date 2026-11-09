@@ -326,7 +326,11 @@ fn load_editing(name: Option<String>) -> Result<Editing, CommandError> {
             let (_, uuid) = parse_gsm_list(&list)
                 .into_iter()
                 .find(|(profile, _)| *profile == name)
-                .ok_or_else(|| CommandError(format!("\"{name}\" no longer exists.")))?;
+                .ok_or_else(|| {
+                    CommandError(format!(
+                        "“{name}” is no longer set up. Go back and choose it again."
+                    ))
+                })?;
             Some(show(&uuid, true)?)
         }
     };
