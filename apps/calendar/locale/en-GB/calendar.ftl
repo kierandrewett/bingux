@@ -185,8 +185,6 @@ calendar-not-calendar = Could not import { $name }. It is not a calendar file.
 calendar-no-events-to-import = { $name } has no events to import.
 calendar-imported-one = Imported 1 event.
 calendar-imported-many = Imported { $count } events.
-calendar-no-calendar-to-add = There is no calendar to add the event to.
-calendar-more-options = More Options
 # Agenda day headings.
 calendar-yesterday = Yesterday
 calendar-tomorrow = Tomorrow
