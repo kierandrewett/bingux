@@ -608,6 +608,18 @@ impl Player {
         );
     }
 
+    /// Saves the frame on screen, without subtitles, as a picture at `path`
+    /// (the type follows the extension: `.png`, `.jpg`). Waits for mpv to
+    /// write it, so call it off the UI thread. Whether it was written.
+    pub fn save_frame(&self, path: &Path) -> bool {
+        let Some(path) = path.to_str() else {
+            return false;
+        };
+        self.mpv()
+            .command(&["screenshot-to-file", path, "video"])
+            .is_ok()
+    }
+
     pub fn set_levelling(&self, levelling: Levelling) {
         let handle = self.mpv();
         let (replaygain, filter) = match levelling {
