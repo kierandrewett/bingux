@@ -31,8 +31,8 @@ Ctrl+R, F5  Refresh\n\
 Ctrl+N  Add a location\n\
 Ctrl+Shift+C  Copy the conditions\n\
 Ctrl+Page Down, Ctrl+Page Up  Next and previous place\n\
-Left, Right  Look at each hour, on the hourly forecast\n\
-Up, Down  Look at each day, on the 10-day forecast\n\
+Left, Right  Look at each hour\n\
+Up, Down  Look at each day\n\
 Alt+Up, Alt+Down  Move a place in the list\n\
 Delete  Remove the place in the list\n\
 Ctrl+Shift+?  About Weather";
@@ -361,15 +361,14 @@ impl Component for Shell {
             overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
         }));
 
-        // The header.
-        let title = place
-            .as_ref()
-            .map_or_else(|| "Weather".to_string(), |place| place.name.clone());
+        // The header. The hero names the place, so the header does not say it
+        // again: it names the app over the list and is empty over a page. (The
+        // window's own title, for the task list, stays "Weather".)
         let showing_list = compact && *hub.list.read();
         let mut header = HeaderBar::new(if showing_list {
             "Weather".to_string()
         } else {
-            title
+            String::new()
         })
         .busy(busy && !showing_list)
         .trailing(
@@ -410,7 +409,7 @@ impl Component for Shell {
             _ => None,
         };
         let page: Element = match &now_showing {
-            Current::Nothing => status_page(Icon::FindLocation, "Add a city")
+            Current::Nothing => status_page(Icon::LocationArrow, "Add a city")
                 .description(
                     "Your location is not available. Search for a city to see its forecast.",
                 )

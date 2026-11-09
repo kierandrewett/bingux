@@ -51,7 +51,7 @@ for warnings that matter for your safety.
 
 ## Where you are
 
-"My Location" is found, in this order, with:
+"My location" is found, in this order, with:
 
 1. **The desktop's location service** (the Location portal, GeoClue behind it),
    when there is one. The desktop asks you once. If you say no, Weather does not
@@ -61,7 +61,7 @@ for warnings that matter for your safety.
    about 25 km. The lookup service sees the computer's address.
 3. **A city you choose**, when neither works.
 
-The list says which one was used, under "My Location" ("From the location
+The list says which one was used, under "My location" ("From the location
 service", or "Approximate, from the network address"), and so does the hero.
 Turn **Use my location** off in the menu to use only the cities you add. A town
 name for a position is looked up from OpenStreetMap's Nominatim.
@@ -152,7 +152,7 @@ test or a screenshot that must leave your own alone. `HTTPS_PROXY` is honoured.
 - **"No connection"**: Weather could not reach the internet. Check the
   connection and choose **Try again**. If a forecast was saved it stays on
   screen meanwhile.
-- **"My Location" says the location is turned off for this app**: the desktop
+- **"My location" says the location is turned off for this app**: the desktop
   refused the position. Add a city instead, or allow it in the desktop's
   privacy settings and choose **Try again**.
 - **The wrong city**: a position from the network address is approximate and can

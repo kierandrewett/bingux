@@ -81,6 +81,7 @@ pub struct Sortable {
     labels: Vec<String>,
     on_reorder: EventHandler<(usize, usize)>,
     indicate: Indicate,
+    selected: Option<usize>,
 }
 
 /// A reorderable list of `items`: rows that the person drags or moves with
@@ -95,6 +96,7 @@ pub fn sortable(
         labels: Vec::new(),
         on_reorder: on_reorder.into(),
         indicate: Indicate::Slide,
+        selected: None,
     }
 }
 
@@ -103,6 +105,16 @@ impl Sortable {
     /// ("Reorder Compressor") and the announcement of its move.
     pub fn labels(mut self, labels: Vec<String>) -> Self {
         self.labels = labels;
+        self
+    }
+
+    /// The item that is selected (its row says `.selected(true)`). The row
+    /// draws the selection under itself, and the grip is outside the row, so the
+    /// list draws it under the grip and the inset beyond it too: the selection
+    /// then covers the whole row, as in any other list. (A hover is the row's
+    /// own and does not reach the grip.)
+    pub fn selected(mut self, index: Option<usize>) -> Self {
+        self.selected = index;
         self
     }
 
@@ -474,6 +486,21 @@ impl Component for Sortable {
                 };
 
                 let lifted_fill = Paint::Popover.color(&tokens).with_af32(lift);
+                // The row's fill ends where the row does, and the grip and the
+                // inset after it are the list's, so the list fills them with
+                // what the row fills itself with when it is selected.
+                let chosen = self.selected == Some(index);
+                let tail_lit = chosen && !held;
+                // An underlay as wide as the grip and its inset, at the row's
+                // end and as tall as the row: absolute, so it takes no room.
+                let tail = tail_lit.then(|| {
+                    rect()
+                        .component("SortableTail")
+                        .position(Position::new_absolute().top(0.0).right(-ROW_INSET.px()))
+                        .width(Size::px(Dim::RowButton.px() + ROW_INSET.px()))
+                        .height(Size::fill())
+                        .tw(&tokens, &[surface(Paint::Transparent, false, false, true)])
+                });
                 let lifted = rect()
                     .tw(
                         &tokens,
@@ -498,6 +525,7 @@ impl Component for Sortable {
                             .scale(1.0 + LIFT_SCALE * lift)
                             .opacity(1.0 - LIFT_FADE * lift)
                     })
+                    .maybe_child(tail)
                     .child(
                         rect()
                             .key(*epoch.read())

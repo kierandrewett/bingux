@@ -109,6 +109,7 @@ var names = {
     "list-add-symbolic": true,
     "list-drag-handle-symbolic": true,
     "list-remove-symbolic": true,
+    "location-arrow-symbolic": true,
     "mail-unread-symbolic": true,
     "media-eject-symbolic": true,
     "media-optical-symbolic": true,
