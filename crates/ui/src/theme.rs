@@ -153,6 +153,12 @@ pub struct Tokens {
     pub success: Color,
     pub warning: Color,
     pub danger: Color,
+    /// The accent fill and the danger fill are so close in hue that a filled
+    /// destructive button would look like the primary one (a red accent). A
+    /// destructive button then takes the tinted treatment instead: danger
+    /// ink on a danger-tinted fill. True when the two OKLCH hues are within
+    /// 25 degrees.
+    pub danger_near_accent: bool,
     /// Text and icons on a filled surface: the surface colour darkened (or,
     /// on a dark fill, near-white) by [`on_colour_over`] to reach AA, and AAA
     /// where the hue allows, at rest, hover and press. They follow the
@@ -298,6 +304,7 @@ impl Tokens {
             success,
             warning,
             danger,
+            danger_near_accent: danger_near_accent(accent, danger),
             on_accent: on_fill(accent, &p),
             on_danger: on_fill(danger, &p),
             on_success: on_fill(success, &p),
@@ -316,7 +323,14 @@ impl Tokens {
                 p.text_min(),
             ),
             accent_ink: text_ink(accent, &p),
-            danger_ink: text_ink(danger, &p),
+            // The danger ink is also the label of a tinted destructive button
+            // (`danger_near_accent`): it holds on the danger tint at rest and
+            // under the hover and press layers.
+            danger_ink: text_ink_also(
+                danger,
+                &p,
+                &fill_states(composite(danger.with_af32(0.12), p.card), &p),
+            ),
             success_ink: text_ink(success, &p),
             warning_ink: text_ink(warning, &p),
             search_hit: highlight(warning, 0.30, &p),
@@ -535,6 +549,23 @@ fn fit_fill(fill: Color, p: &Palette) -> Color {
     fill
 }
 
+/// How far apart (OKLCH hue, degrees) the accent and danger fills must be for
+/// a filled destructive button to read as different from the primary one.
+pub(crate) const DANGER_HUE_SEPARATION: f32 = 25.0;
+
+/// Whether the accent fill is close enough to the danger fill in hue that a
+/// destructive button must not be a plain danger fill. Both fills are
+/// saturated here (a grey accent such as slate has no hue to clash).
+pub(crate) fn danger_near_accent(accent: Color, danger: Color) -> bool {
+    use crate::contrast::Oklch;
+    let (a, d) = (Oklch::from_colour(accent), Oklch::from_colour(danger));
+    if a.c < 0.05 {
+        return false;
+    }
+    let gap = (a.h - d.h).rem_euclid(360.0);
+    gap.min(360.0 - gap) < DANGER_HUE_SEPARATION
+}
+
 /// `colour` at `alpha` over the card, then moved in lightness until the
 /// scheme's text reads on it at AA: the fill behind a search hit.
 fn highlight(colour: Color, alpha: f32, p: &Palette) -> Color {
@@ -553,6 +584,11 @@ fn ring_colour(colour: Color, p: &Palette) -> Color {
 /// of the scheme and on its own 16% tint over a card and a control, which is
 /// where badges and banners set it.
 fn text_ink(colour: Color, p: &Palette) -> Color {
+    text_ink_also(colour, p, &[])
+}
+
+/// [`text_ink`], held on `also` as well: surfaces only this ink is drawn on.
+fn text_ink_also(colour: Color, p: &Palette, also: &[Color]) -> Color {
     let tint = |under: Color| composite(colour.with_af32(0.18), under);
     let mut surfaces = vec![
         p.content,
@@ -571,6 +607,7 @@ fn text_ink(colour: Color, p: &Palette) -> Color {
     if p.high_contrast {
         surfaces.extend(p.grounds());
     }
+    surfaces.extend_from_slice(also);
     ensure_contrast(colour, &surfaces, p.text_min())
 }
 

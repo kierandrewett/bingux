@@ -79,12 +79,20 @@ pub struct Bg {
 impl Bg {
     /// A layer drawn straight on the window: no fill beneath it.
     pub const fn layer(paint: Paint) -> Self {
-        Self { paint, under: paint, state: State::Rest }
+        Self {
+            paint,
+            under: paint,
+            state: State::Rest,
+        }
     }
 
     /// A fill over a layer.
     pub const fn over(paint: Paint, under: Paint) -> Self {
-        Self { paint, under, state: State::Rest }
+        Self {
+            paint,
+            under,
+            state: State::Rest,
+        }
     }
 
     pub const fn state(self, state: State) -> Self {
@@ -129,7 +137,14 @@ pub struct Pair {
 }
 
 const fn pair(what: &'static str, fg: Fg, bg: Bg, need: Requirement) -> Pair {
-    Pair { what, fg, bg, need, opacity: 1.0, exempt: None }
+    Pair {
+        what,
+        fg,
+        bg,
+        need,
+        opacity: 1.0,
+        exempt: None,
+    }
 }
 
 /// The layers a control or text can sit on directly.
@@ -144,11 +159,17 @@ const LAYERS: [Paint; 7] = [
 ];
 
 /// The layers coloured text and tinted badges sit on.
-const TEXT_LAYERS: [Paint; 5] =
-    [Paint::Bg, Paint::Sidebar, Paint::Card, Paint::Control, Paint::Popover];
+const TEXT_LAYERS: [Paint; 5] = [
+    Paint::Bg,
+    Paint::Sidebar,
+    Paint::Card,
+    Paint::Control,
+    Paint::Popover,
+];
 
 /// Disabled controls fade with this opacity; see [`crate::style::DISABLED_OPACITY`].
-const DISABLED_REASON: &str = "WCAG 1.4.3 and 1.4.11 exempt inactive components; 3:1 is the house target and is reported";
+const DISABLED_REASON: &str =
+    "WCAG 1.4.3 and 1.4.11 exempt inactive components; 3:1 is the house target and is reported";
 
 /// Every foreground and background pair the design system uses.
 pub fn pairs() -> Vec<Pair> {
@@ -159,12 +180,24 @@ pub fn pairs() -> Vec<Pair> {
     // Ink tiers on every layer.
     for ink in [Ink::Text, Ink::Muted] {
         for layer in LAYERS {
-            out.push(pair("text ink on a layer", Fg::Ink(ink), Bg::layer(layer), text));
+            out.push(pair(
+                "text ink on a layer",
+                Fg::Ink(ink),
+                Bg::layer(layer),
+                text,
+            ));
         }
     }
     // Interaction layers: hover, press and the selected row or sidebar item.
     for ink in [Ink::Text, Ink::Muted] {
-        for layer in [Paint::Bg, Paint::Sidebar, Paint::Recess, Paint::Card, Paint::Control, Paint::Popover] {
+        for layer in [
+            Paint::Bg,
+            Paint::Sidebar,
+            Paint::Recess,
+            Paint::Card,
+            Paint::Control,
+            Paint::Popover,
+        ] {
             for state in [State::Hover, State::Pressed, State::Selected] {
                 out.push(pair(
                     "text ink on an interaction layer",
@@ -185,7 +218,12 @@ pub fn pairs() -> Vec<Pair> {
     // Coloured text and links.
     for ink in [Ink::Accent, Ink::Danger, Ink::Success, Ink::Warning] {
         for layer in TEXT_LAYERS {
-            out.push(pair("coloured text on a layer", Fg::Ink(ink), Bg::layer(layer), text));
+            out.push(pair(
+                "coloured text on a layer",
+                Fg::Ink(ink),
+                Bg::layer(layer),
+                text,
+            ));
         }
     }
     for state in [State::Hover, State::Selected] {
@@ -252,7 +290,9 @@ pub fn pairs() -> Vec<Pair> {
             fill,
             ui,
         );
-        edge.exempt = Some("decorative: a faint hairline; the soft fill and the shadow set the notice off, not its edge");
+        edge.exempt = Some(
+            "decorative: a faint hairline; the soft fill and the shadow set the notice off, not its edge",
+        );
         out.push(edge);
     }
     out.push(pair(
@@ -261,6 +301,17 @@ pub fn pairs() -> Vec<Pair> {
         Bg::layer(Paint::DangerSoft),
         text,
     ));
+    // A destructive button beside a red or orange accent is tinted, not
+    // filled (`Tokens::danger_near_accent`): its label is the danger ink on
+    // the danger tint, at rest and under the hover and press layers.
+    for state in [State::Rest, State::Hover, State::Pressed] {
+        out.push(pair(
+            "tinted destructive button label",
+            Fg::Ink(Ink::Danger),
+            Bg::layer(Paint::DangerSoft).state(state),
+            text,
+        ));
+    }
     // Text on every filled surface, at rest, hover and press.
     for (fg, fill) in [
         (Paint::OnAccent, Paint::Accent),
@@ -321,17 +372,47 @@ pub fn pairs() -> Vec<Pair> {
     }
     // Non-text: component boundaries, indicators and the focus ring.
     for layer in TEXT_LAYERS {
-        out.push(pair("control edge, track and unchecked mark", Fg::Paint(Paint::Outline), Bg::layer(layer), ui));
-        out.push(pair("accent fill, mark and selected state", Fg::Paint(Paint::Accent), Bg::layer(layer), ui));
-        out.push(pair("icon in muted ink", Fg::Paint(Paint::Muted), Bg::layer(layer), ui));
+        out.push(pair(
+            "control edge, track and unchecked mark",
+            Fg::Paint(Paint::Outline),
+            Bg::layer(layer),
+            ui,
+        ));
+        out.push(pair(
+            "accent fill, mark and selected state",
+            Fg::Paint(Paint::Accent),
+            Bg::layer(layer),
+            ui,
+        ));
+        out.push(pair(
+            "icon in muted ink",
+            Fg::Paint(Paint::Muted),
+            Bg::layer(layer),
+            ui,
+        ));
         for paint in [Paint::Success, Paint::Warning, Paint::Danger] {
-            out.push(pair("status fill and chart series", Fg::Paint(paint), Bg::layer(layer), ui));
+            out.push(pair(
+                "status fill and chart series",
+                Fg::Paint(paint),
+                Bg::layer(layer),
+                ui,
+            ));
         }
     }
     // The rings also sit on the raised control fill.
     for layer in LAYERS {
-        out.push(pair("keyboard focus ring", Fg::Paint(Paint::FocusRing), Bg::layer(layer), ui));
-        out.push(pair("error ring", Fg::Paint(Paint::ErrorRing), Bg::layer(layer), ui));
+        out.push(pair(
+            "keyboard focus ring",
+            Fg::Paint(Paint::FocusRing),
+            Bg::layer(layer),
+            ui,
+        ));
+        out.push(pair(
+            "error ring",
+            Fg::Paint(Paint::ErrorRing),
+            Bg::layer(layer),
+            ui,
+        ));
     }
     let mut hairline = pair(
         "row separator and hairline",
@@ -339,7 +420,8 @@ pub fn pairs() -> Vec<Pair> {
         Bg::layer(Paint::Card),
         ui,
     );
-    hairline.exempt = Some("decorative divider: WCAG 1.4.11 asks nothing of it, rows are named by text");
+    hairline.exempt =
+        Some("decorative divider: WCAG 1.4.11 asks nothing of it, rows are named by text");
     out.push(hairline);
     // Disabled controls.
     for layer in [Paint::Card, Paint::Bg] {
@@ -407,7 +489,11 @@ impl Row {
     /// `pass`, `AAA`-grade pass, `exempt` or `FAIL`, as the table shows it.
     pub fn badge(&self) -> &'static str {
         if self.passes() {
-            if self.level() == Level::Aaa { "AAA" } else { "pass" }
+            if self.level() == Level::Aaa {
+                "AAA"
+            } else {
+                "pass"
+            }
         } else if self.pair.exempt.is_some() {
             "exempt"
         } else {
@@ -434,9 +520,7 @@ pub fn evaluate(tokens: &Tokens) -> Vec<Row> {
             let mut bg = pair.bg.colour(tokens);
             let mut fg = contrast::composite(pair.fg.colour(tokens), bg);
             if pair.opacity < 1.0 {
-                let fade = |c: Color| {
-                    contrast::composite(c.with_af32(pair.opacity), layer)
-                };
+                let fade = |c: Color| contrast::composite(c.with_af32(pair.opacity), layer);
                 bg = fade(bg);
                 fg = fade(fg);
             }
@@ -557,7 +641,11 @@ mod tests {
                 contrast::Oklch::from_colour(ink),
             );
             if contrast::luminance(ink) < contrast::luminance(fill) {
-                assert!(i.l < f.l - 0.2, "{}: ink is not much darker", tokens.accent_name);
+                assert!(
+                    i.l < f.l - 0.2,
+                    "{}: ink is not much darker",
+                    tokens.accent_name
+                );
             }
         }
     }
@@ -588,5 +676,40 @@ mod tests {
                 assert!(!reason.is_empty());
             }
         }
+    }
+
+    #[test]
+    fn primary_and_destructive_buttons_differ_for_every_accent() {
+        // The pair that matters is not a contrast but a likeness: Save and
+        // Delete side by side must not be the same button. Either the hues
+        // are far apart, or the destructive button is tinted (danger ink on
+        // a pale fill) and so is far from the solid accent in lightness.
+        for tokens in all_tokens() {
+            let accent = contrast::Oklch::from_colour(tokens.accent);
+            let danger = contrast::Oklch::from_colour(tokens.danger);
+            let gap = (accent.h - danger.h).rem_euclid(360.0);
+            let hue_apart = gap.min(360.0 - gap) >= crate::theme::DANGER_HUE_SEPARATION;
+            let destructive_fill = if tokens.danger_near_accent {
+                Paint::DangerSoft.color(&tokens)
+            } else {
+                tokens.danger
+            };
+            let fill = contrast::Oklch::from_colour(destructive_fill);
+            let distinct = hue_apart
+                || accent.c < 0.05
+                || (tokens.danger_near_accent && (fill.l - accent.l).abs() > 0.15);
+            assert!(
+                distinct,
+                "{} {:?}: the destructive button looks like the primary one",
+                tokens.accent_name, tokens.scheme
+            );
+        }
+        let red = Tokens::derive("red", Scheme::PreferLight, false, false);
+        assert!(
+            red.danger_near_accent,
+            "a red accent must tint destructive buttons"
+        );
+        let blue = Tokens::derive("blue", Scheme::PreferDark, false, false);
+        assert!(!blue.danger_near_accent);
     }
 }
