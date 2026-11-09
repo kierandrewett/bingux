@@ -14,8 +14,7 @@
 //! describes each one from its own port metadata. Bingux writes no plugin of
 //! its own.
 //!
-//! `import` reads EasyEffects presets and Equalizer APO / AutoEq text, and
-//! `legacy` migrates presets written for Bingux's old plugins.
+//! `import` reads EasyEffects presets and Equalizer APO / AutoEq text.
 
 pub mod catalog;
 pub mod chain;
@@ -24,7 +23,6 @@ pub mod eq;
 pub mod graph;
 pub mod import;
 pub mod import_table;
-pub mod legacy;
 pub mod lv2;
 pub mod preset;
 pub mod service;

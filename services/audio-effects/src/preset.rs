@@ -8,7 +8,7 @@
 //! Version 2 names an effect by its kind (`compressor`, see `effects`) and
 //! stores the plugin's controls under the plugin's own port symbols, so a
 //! preset says exactly what the plugin was set to and nothing about how it is
-//! hosted. Version 1 presets (Bingux's own plugins) are migrated by `legacy`.
+//! hosted. Any other version is refused.
 
 use std::collections::BTreeMap;
 
@@ -143,8 +143,7 @@ impl Preset {
         self
     }
 
-    /// Read a version 2 preset from JSON text and check it. A version 1 file
-    /// is refused here: `legacy::migrate` reads those.
+    /// Read a version 2 preset from JSON text and check it.
     pub fn parse(text: &str) -> Result<Self, PresetError> {
         let preset: Preset =
             serde_json::from_str(text).map_err(|e| PresetError(format!("Not a preset: {e}")))?;
@@ -174,7 +173,7 @@ impl Preset {
         }
         if self.version < VERSION {
             return Err(PresetError(format!(
-                "Preset version {} is out of date and has not been migrated.",
+                "Preset version {} is not supported by this build.",
                 self.version
             )));
         }
@@ -321,7 +320,7 @@ mod tests {
             Preset::parse(r#"{"version":1,"name":"x","direction":"output"}"#)
                 .unwrap_err()
                 .0
-                .contains("migrated")
+                .contains("not supported")
         );
         let twice = r#"{"name":"x","direction":"output","plugins":[{"id":"a","type":"gate"},{"id":"a","type":"gate"}]}"#;
         assert!(Preset::parse(twice).unwrap_err().0.contains("twice"));

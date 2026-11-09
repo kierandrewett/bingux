@@ -315,60 +315,9 @@ impl Store {
         Ok(state)
     }
 
-    /// Move every version 1 preset to version 2 (see `legacy`). The original
-    /// file is kept in `presets/legacy/` with a `.notes.txt` beside it that
-    /// says what could not be carried across. Returns the number migrated.
-    pub fn migrate_legacy(&self) -> usize {
-        let mut migrated = 0;
-        for direction in Direction::ALL {
-            let directory = self.presets_dir(direction);
-            let Ok(entries) = std::fs::read_dir(&directory) else {
-                continue;
-            };
-            for entry in entries.filter_map(Result::ok) {
-                let path = entry.path();
-                if path.extension().is_none_or(|ext| ext != "json") {
-                    continue;
-                }
-                let Ok(text) = std::fs::read_to_string(&path) else {
-                    continue;
-                };
-                if !crate::legacy::is_legacy(&text) {
-                    continue;
-                }
-                let Ok(result) = crate::legacy::migrate(&text) else {
-                    continue;
-                };
-                let keep = directory.join("legacy");
-                let Some(file_name) = path.file_name() else {
-                    continue;
-                };
-                if std::fs::create_dir_all(&keep).is_err()
-                    || write_atomic(&keep.join(file_name), &text).is_err()
-                    || write_atomic(&path, &result.preset.to_json()).is_err()
-                {
-                    continue;
-                }
-                if !result.notes.is_empty() {
-                    let _ = write_atomic(
-                        &keep.join(format!(
-                            "{}.notes.txt",
-                            path.file_stem().unwrap_or_default().to_string_lossy()
-                        )),
-                        &(result.notes.join("\n") + "\n"),
-                    );
-                }
-                migrated += 1;
-            }
-        }
-        migrated
-    }
-
     /// Write the factory presets that were never written. One the person has
-    /// since deleted or changed is left alone. Presets in the old format
-    /// are migrated first.
+    /// since deleted or changed is left alone.
     pub fn ensure_factory(&self) -> Result<(), StoreError> {
-        self.migrate_legacy();
         let mut state = self.state();
         let mut changed = false;
         for preset in factory_presets() {

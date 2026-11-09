@@ -64,9 +64,8 @@ levels can come from the sink monitors.
 ## Presets
 
 Version 2: effect `type` is the kind (`compressor`), `controls` are the plugin's
-port symbols (`al`, `cr`, `ftl_0`). Version 1 files (Bingux's own plugins) are
-migrated by `legacy.rs` when the store starts; the original is kept in
-`presets/legacy/` with a notes file. EasyEffects presets import through
+port symbols (`al`, `cr`, `ftl_0`). Other versions are refused; only version 2 is read.
+EasyEffects presets import through
 `import_table.rs`, generated from Easy Effects' own `BIND_LV2_PORT` lines.
 
 ## Measured on a private PipeWire 1.4.11 + WirePlumber graph
