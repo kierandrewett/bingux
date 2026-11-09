@@ -11,6 +11,7 @@ use crate::ui::{
     qr_code, row, status, use_overlays, use_popup_actions, use_window,
 };
 use bingux_ui::layout::hstack;
+use bingux_ui::prelude::tr;
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
@@ -78,7 +79,7 @@ pub fn payload(ssid: &str, kind: Kind, password: Option<&str>) -> String {
 /// Open the share popup.
 pub fn open(window: Window, target: Target) {
     window.open(
-        popup("Share network", ShareBody { target })
+        popup(tr!("network-wifi-share-title"), ShareBody { target })
             .width(Dim::PopupNarrow)
             .flags(PopupFlags::GRABBER | PopupFlags::OK),
     );
@@ -104,17 +105,22 @@ pub fn secret_row(
     row(title).subtitle(text).trailing(
         hstack(S2)
             .child(
-                action_button(if visible { "Hide" } else { "Show" }, move |_| {
-                    shown.set(!visible)
-                })
+                action_button(
+                    if visible {
+                        tr!("network-wifi-hide")
+                    } else {
+                        tr!("network-wifi-show")
+                    },
+                    move |_| shown.set(!visible),
+                )
                 .compact()
                 .flat(),
             )
             .child(
-                action_button("Copy", move |_| {
+                action_button(tr!("network-wifi-copy"), move |_| {
                     match freya::clipboard::Clipboard::set(copy.clone()) {
-                        Ok(()) => overlays.toast("Password copied"),
-                        Err(_) => overlays.toast("Could not copy the password. Try again."),
+                        Ok(()) => overlays.toast(tr!("network-wifi-password-copied")),
+                        Err(_) => overlays.toast(tr!("network-wifi-error-copy")),
                     }
                 })
                 .compact()
@@ -137,7 +143,7 @@ impl Component for ShareBody {
         let overlays = use_overlays();
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Done".into(),
+                label: tr!("network-wifi-done"),
                 enabled: true,
                 on_press: EventHandler::new(move |_: ()| window.close()),
             }),
@@ -160,9 +166,7 @@ impl Component for ShareBody {
         });
 
         let Some(kind) = Kind::of(&target.key_mgmt) else {
-            return popup_column().child(status(Status::Info(
-                "This network uses an account to sign in. It has no code to share.".into(),
-            )));
+            return popup_column().child(status(Status::Info(tr!("network-wifi-account-only"))));
         };
         let loaded = secret.read().clone();
         let password = match &loaded {
@@ -172,20 +176,18 @@ impl Component for ShareBody {
         let mut body = popup_column();
         match &loaded {
             None => {
-                body = body.child(status(Status::Loading(
-                    "Reading the saved password…".into(),
-                )));
+                body = body.child(status(Status::Loading(tr!(
+                    "network-wifi-reading-password"
+                ))));
             }
             Some(Err(error)) => {
                 body = body.child(status(Status::Error(super::super::plain(
                     &error.0,
-                    "Could not read the saved password. Try again.",
+                    &tr!("network-wifi-error-read-password"),
                 ))));
             }
             Some(Ok(None)) if kind != Kind::Open => {
-                body = body.child(status(Status::Info(
-                    "This network has no saved password to share.".into(),
-                )));
+                body = body.child(status(Status::Info(tr!("network-wifi-no-password"))));
             }
             Some(Ok(_)) => {
                 let text = payload(&target.ssid, kind, password.as_deref());
@@ -194,20 +196,25 @@ impl Component for ShareBody {
                         rect().tw_layout(&[w_full(), items(Align::Center)]).child(
                             qr_code(text)
                                 .size(220.0)
-                                .label(format!("QR code to join {}", target.ssid)),
+                                .label(tr!("network-wifi-qr-label", ssid = target.ssid.clone())),
                         ),
                     )
-                    .child(caption(
-                        "Point a phone's camera at the code to join this network.",
-                    ));
+                    .child(caption(tr!("network-wifi-scan-caption")));
             }
         }
 
-        let name_row = row("Network name").value(target.ssid.clone());
+        let name_row = row(tr!("network-wifi-share-name")).value(target.ssid.clone());
         let password_row = match (&loaded, kind) {
-            (_, Kind::Open) => row("Password").value("None, open network"),
-            (Some(Ok(Some(password))), _) => secret_row("Password", password, shown, overlays),
-            _ => row("Password").value("—"),
+            (_, Kind::Open) => {
+                row(tr!("network-wifi-share-password")).value(tr!("network-wifi-share-open"))
+            }
+            (Some(Ok(Some(password))), _) => secret_row(
+                &tr!("network-wifi-share-password"),
+                password,
+                shown,
+                overlays,
+            ),
+            _ => row(tr!("network-wifi-share-password")).value("—"),
         };
         body.child(Group::new(None::<String>).row(name_row).row(password_row))
     }

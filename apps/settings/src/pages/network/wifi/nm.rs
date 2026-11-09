@@ -8,6 +8,7 @@ use std::time::Duration;
 
 use crate::pages::network::model::{self, CONNECT, QUICK, nmcli, split_terse};
 use crate::system::CommandError;
+use bingux_ui::prelude::tr;
 
 /// `device wifi list` can take about four seconds on a busy radio.
 const SCAN: Duration = Duration::from_secs(10);
@@ -69,16 +70,16 @@ impl Security {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Self::Open => "Open",
-            Self::Owe => "Enhanced Open",
-            Self::Wep => "WEP",
-            Self::Wpa => "WPA / WPA2",
-            Self::Wpa2 => "WPA2",
-            Self::Wpa3 => "WPA3",
-            Self::Wpa2Wpa3 => "WPA2 / WPA3",
-            Self::Enterprise => "Enterprise (802.1X)",
+            Self::Open => tr!("network-wifi-open-label"),
+            Self::Owe => "Enhanced Open".to_string(),
+            Self::Wep => "WEP".to_string(),
+            Self::Wpa => "WPA / WPA2".to_string(),
+            Self::Wpa2 => "WPA2".to_string(),
+            Self::Wpa3 => "WPA3".to_string(),
+            Self::Wpa2Wpa3 => "WPA2 / WPA3".to_string(),
+            Self::Enterprise => "Enterprise (802.1X)".to_string(),
         }
     }
 
@@ -215,12 +216,12 @@ pub fn band_label(freq: &str) -> String {
 }
 
 /// Words for a signal percentage, for the network screen.
-pub fn signal_words(signal: u8) -> &'static str {
+pub fn signal_words(signal: u8) -> String {
     match signal {
-        80..=u8::MAX => "Excellent",
-        60..=79 => "Good",
-        40..=59 => "Fair",
-        _ => "Weak",
+        80..=u8::MAX => tr!("network-wifi-signal-excellent"),
+        60..=79 => tr!("network-wifi-signal-good"),
+        40..=59 => tr!("network-wifi-signal-fair"),
+        _ => tr!("network-wifi-signal-weak"),
     }
 }
 
@@ -534,13 +535,13 @@ pub fn join_error(error: &CommandError) -> String {
     let said = error.0.trim();
     let lower = said.to_lowercase();
     if lower.contains("secrets were required") || lower.contains("(7)") {
-        "The password was not accepted. Check it and try again.".to_string()
+        tr!("network-wifi-error-password-refused")
     } else if lower.contains("timeout expired") {
-        "The network did not answer in time. Move closer and try again.".to_string()
+        tr!("network-wifi-error-timeout")
     } else if lower.contains("no network with ssid") || lower.contains("could not be found") {
-        "The network is out of range. Move closer and try again.".to_string()
+        tr!("network-wifi-error-out-of-range")
     } else {
-        super::super::plain(said, "Could not join the network. Try again.")
+        super::super::plain(said, &tr!("network-wifi-error-join"))
     }
 }
 

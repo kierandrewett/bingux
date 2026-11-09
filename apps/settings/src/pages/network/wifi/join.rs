@@ -9,6 +9,7 @@ use super::nm::{self, HiddenSecurity, Security};
 use crate::system::{CommandError, background_then};
 use crate::ui::{Group, Overlays, Status, choice_row, form_field, status, use_overlays};
 use bingux_ui::controls::form::validate;
+use bingux_ui::prelude::tr;
 use bingux_ui::shell::{form_dialog, open_form};
 use bingux_ui::style::*;
 
@@ -30,8 +31,9 @@ impl Phase {
 fn phase_line(phase: &Phase, ssid: &str) -> Option<Element> {
     match phase {
         Phase::Idle => None,
-        Phase::Connecting => Some(Element::from(status(Status::Loading(format!(
-            "Connecting to {ssid}…"
+        Phase::Connecting => Some(Element::from(status(Status::Loading(tr!(
+            "network-wifi-connecting",
+            ssid = ssid
         ))))),
         Phase::Failed(text) => Some(Element::from(status(Status::Error(text.clone())))),
     }
@@ -67,7 +69,7 @@ fn wep_key(text: &str) -> Result<(), String> {
     match text.len() {
         5 | 13 => Ok(()),
         10 | 26 if hex => Ok(()),
-        _ => Err("Use 5 or 13 characters, or 10 or 26 hexadecimal digits.".into()),
+        _ => Err(tr!("network-wifi-wep-key-hint")),
     }
 }
 
@@ -75,7 +77,7 @@ fn wep_key(text: &str) -> Result<(), String> {
 /// one is refused here; NetworkManager reports the rest.
 fn sae_password(text: &str) -> Result<(), String> {
     if text.is_empty() {
-        Err("Enter the password.".into())
+        Err(tr!("network-wifi-enter-password"))
     } else {
         Ok(())
     }
@@ -127,7 +129,7 @@ impl Component for PasswordBody {
             }
         };
         let submit = start.clone();
-        let field = form_field("Password", password)
+        let field = form_field(tr!("network-wifi-field-password"), password)
             .password()
             .autofocus()
             .validate(check)
@@ -137,17 +139,22 @@ impl Component for PasswordBody {
                 &bingux_ui::surface::tokens_now(),
                 &[flex_col(), w_full(), gap(S4)],
             )
-            .child(Group::new(None::<String>).row(field).footer(format!(
-                "{} network. Passwords are case sensitive.",
-                self.security.label()
+            .child(Group::new(None::<String>).row(field).footer(tr!(
+                "network-wifi-password-footer",
+                security = self.security.label()
             )))
             .child(bingux_ui::motion::reveal_block_if(
                 S6,
                 phase_line(&phase.read(), &ssid),
             ));
-        form_dialog(self.ssid.clone(), body, "Connect", move |_: ()| start())
-            .blocked(if busy { None } else { problem })
-            .stays_open()
+        form_dialog(
+            self.ssid.clone(),
+            body,
+            &tr!("network-wifi-connect"),
+            move |_: ()| start(),
+        )
+        .blocked(if busy { None } else { problem })
+        .stays_open()
     }
 }
 
@@ -168,9 +175,9 @@ impl Component for EnterpriseBody {
         let password = use_state(String::new);
         let phase = use_state(|| Phase::Idle);
         let blocked = if user.read().trim().is_empty() {
-            Some("Enter the user name.".to_string())
+            Some(tr!("network-wifi-enter-user"))
         } else if password.read().is_empty() {
-            Some("Enter the password.".to_string())
+            Some(tr!("network-wifi-enter-password"))
         } else {
             None
         };
@@ -190,37 +197,55 @@ impl Component for EnterpriseBody {
         };
         let submit = start.clone();
         let body = rect()
-            .tw(&bingux_ui::surface::tokens_now(), &[flex_col(), w_full(), gap(S4)])
+            .tw(
+                &bingux_ui::surface::tokens_now(),
+                &[flex_col(), w_full(), gap(S4)],
+            )
             .child(
                 Group::new(None::<String>)
-                    .row(form_field("User name", user).autofocus())
+                    .row(form_field(tr!("network-wifi-field-user"), user).autofocus())
                     .row(
-                        form_field("Password", password)
+                        form_field(tr!("network-wifi-field-password"), password)
                             .password()
                             .on_submit(move |_: ()| submit()),
                     )
-                    .footer(
-                        "Signs in with PEAP and MSCHAPv2, and checks the network's certificate \
-                         against the system's. Other methods are set in the network's Security settings.",
-                    ),
+                    .footer(tr!("network-wifi-enterprise-footer")),
             )
-            .child(bingux_ui::motion::reveal_block_if(S6, phase_line(&phase.read(), &ssid)));
-        form_dialog(self.ssid.clone(), body, "Connect", move |_: ()| start())
-            .blocked(if phase.read().busy() { None } else { blocked })
-            .stays_open()
+            .child(bingux_ui::motion::reveal_block_if(
+                S6,
+                phase_line(&phase.read(), &ssid),
+            ));
+        form_dialog(
+            self.ssid.clone(),
+            body,
+            &tr!("network-wifi-connect"),
+            move |_: ()| start(),
+        )
+        .blocked(if phase.read().busy() { None } else { blocked })
+        .stays_open()
     }
 }
 
 /// The form dialog for a network that does not announce its name.
 pub fn open_hidden(overlays: Overlays) {
-    open_form(overlays, "Hidden network", HiddenBody, None);
+    open_form(
+        overlays,
+        tr!("network-wifi-hidden-network"),
+        HiddenBody,
+        None,
+    );
 }
 
 #[derive(PartialEq)]
 struct HiddenBody;
 
-const SECURITY_OPTIONS: [(&str, &str); 3] =
-    [("open", "Open"), ("wpa2", "WPA & WPA2"), ("wpa3", "WPA3")];
+fn security_options() -> Vec<(String, String)> {
+    vec![
+        ("open".to_string(), tr!("network-wifi-open-label")),
+        ("wpa2".to_string(), tr!("network-wifi-security-wpa2")),
+        ("wpa3".to_string(), tr!("network-wifi-security-wpa3")),
+    ]
+}
 
 fn hidden_security(key: &str) -> HiddenSecurity {
     match key {
@@ -269,20 +294,17 @@ impl Component for HiddenBody {
             }
         };
         let press = start.clone();
-        let options = SECURITY_OPTIONS
-            .iter()
-            .map(|(key, label)| (key.to_string(), label.to_string()))
-            .collect();
+        let options = security_options();
         let submit = start.clone();
         let mut fields = Group::new(None::<String>)
             .row(
-                form_field("Network name", name)
+                form_field(tr!("network-wifi-field-network-name"), name)
                     .autofocus()
                     .validate(validate::ssid)
                     .on_submit(move |_: ()| start()),
             )
             .row(choice_row(
-                "Security",
+                tr!("network-wifi-field-security"),
                 options,
                 &security.read(),
                 move |key: String| security.set(key),
@@ -306,9 +328,14 @@ impl Component for HiddenBody {
                 S6,
                 phase_line(&phase.read(), &ssid),
             ));
-        form_dialog("Hidden network", body, "Connect", move |_: ()| press())
-            .blocked(if busy { None } else { blocked })
-            .stays_open()
+        form_dialog(
+            tr!("network-wifi-hidden-network"),
+            body,
+            &tr!("network-wifi-connect"),
+            move |_: ()| press(),
+        )
+        .blocked(if busy { None } else { blocked })
+        .stays_open()
     }
 }
 

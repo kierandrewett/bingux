@@ -31,6 +31,7 @@ use crate::ui::{
     use_tokens,
 };
 use bingux_ui::layout::hstack;
+use bingux_ui::prelude::tr;
 use bingux_ui::shell::{MenuItem, menu_item, menu_separator};
 use bingux_ui::style::*;
 
@@ -223,7 +224,7 @@ fn use_ui() -> Ui {
 }
 
 fn connecting_label(ssid: &str) -> String {
-    format!("Connecting to {ssid}…")
+    tr!("network-wifi-connecting", ssid = ssid)
 }
 
 impl Ui {
@@ -288,8 +289,8 @@ impl Ui {
 
     fn disconnect(self, uuid: String) {
         self.act(
-            "Disconnecting…",
-            |error| plain(&error.0, "Could not disconnect. Try again."),
+            &tr!("network-wifi-disconnecting"),
+            |error| plain(&error.0, &tr!("network-wifi-error-disconnect")),
             move || nm::disconnect(&uuid),
             || {},
         );
@@ -330,20 +331,17 @@ impl Ui {
             move || nm::saved_secret(&uuid, &key_mgmt),
             move |result| match result {
                 Ok(Some(password)) => match freya::clipboard::Clipboard::set(password) {
-                    Ok(()) => self.ctx.overlays.toast("Password copied"),
-                    Err(_) => self
-                        .ctx
-                        .overlays
-                        .toast("Could not copy the password. Try again."),
+                    Ok(()) => self.ctx.overlays.toast(tr!("network-wifi-password-copied")),
+                    Err(_) => self.ctx.overlays.toast(tr!("network-wifi-error-copy")),
                 },
                 Ok(None) => self
                     .ctx
                     .overlays
-                    .toast("No saved password for this network"),
-                Err(error) => self.ctx.overlays.toast(plain(
-                    &error.0,
-                    "Could not read the saved password. Try again.",
-                )),
+                    .toast(tr!("network-wifi-no-saved-password")),
+                Err(error) => self
+                    .ctx
+                    .overlays
+                    .toast(plain(&error.0, &tr!("network-wifi-error-read-password"))),
             },
         );
     }
@@ -359,24 +357,28 @@ impl Ui {
         let router = self.ctx.router;
         self.ctx.overlays.show_dialog(
             dialog(
-                format!("Forget “{name}”?"),
-                "The saved password is removed. Connecting again asks for it.",
+                tr!("network-wifi-forget-title", name = name.clone()),
+                tr!("network-wifi-forget-body"),
             )
-            .cancel("Cancel")
+            .cancel(tr!("network-wifi-cancel"))
             .default_action(CANCEL_ID)
-            .response("Forget", ResponseKind::Destructive, move |_| {
-                let uuid = uuid.clone();
-                self.act(
-                    "Forgetting…",
-                    |error| plain(&error.0, "Could not forget the network. Try again."),
-                    move || nm::forget(&uuid),
-                    move || {
-                        if leave {
-                            router.pop();
-                        }
-                    },
-                );
-            }),
+            .response(
+                tr!("network-wifi-forget"),
+                ResponseKind::Destructive,
+                move |_| {
+                    let uuid = uuid.clone();
+                    self.act(
+                        &tr!("network-wifi-forgetting"),
+                        |error| plain(&error.0, &tr!("network-wifi-error-forget")),
+                        move || nm::forget(&uuid),
+                        move || {
+                            if leave {
+                                router.pop();
+                            }
+                        },
+                    );
+                },
+            ),
         );
     }
 }
@@ -478,19 +480,16 @@ fn or_dash(text: &str) -> String {
 
 /// "1 network nearby" or "N networks nearby".
 fn network_count(count: usize) -> String {
-    if count == 1 {
-        "1 network nearby".to_string()
-    } else {
-        format!("{count} networks nearby")
-    }
+    tr!("network-wifi-nearby", count = count)
 }
 
 /// A screen that could not read the networks: what failed and Try again.
 fn failure(ui: Ui, error: CommandError, head: Option<PageHead>) -> Rect {
-    let message = plain(&error.0, "Could not read the Wi-Fi networks. Try again.");
-    page_column()
-        .maybe_child(head)
-        .child(status(Status::Error(message)).action("Try again", move |_| ui.reload_all()))
+    let message = plain(&error.0, &tr!("network-wifi-error-list"));
+    page_column().maybe_child(head).child(
+        status(Status::Error(message))
+            .action(&tr!("network-wifi-try-again"), move |_| ui.reload_all()),
+    )
 }
 
 /// The right-click menu of a network: connect or disconnect, what a saved
@@ -502,15 +501,17 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
         (true, Some(saved)) => {
             let uuid = saved.uuid.clone();
             items.push(
-                menu_item("Disconnect", move |_| ui.disconnect(uuid.clone()))
-                    .icon(Icon::WindowClose),
+                menu_item(tr!("network-wifi-disconnect"), move |_| {
+                    ui.disconnect(uuid.clone())
+                })
+                .icon(Icon::WindowClose),
             );
         }
         (true, None) => {}
         (false, _) => {
             let target = join_target(model, network);
             items.push(
-                menu_item("Connect", move |_| ui.join(&target))
+                menu_item(tr!("network-wifi-connect"), move |_| ui.join(&target))
                     .icon(Icon::NetworkWirelessSignalExcellent),
             );
         }
@@ -525,12 +526,17 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
             key_mgmt: String::new(),
         };
         items.push(menu_separator());
-        items.push(menu_item("Share", move |_| ui.share(target.clone())).icon(Icon::SendTo));
+        items.push(
+            menu_item(tr!("network-wifi-share-action"), move |_| {
+                ui.share(target.clone())
+            })
+            .icon(Icon::SendTo),
+        );
     }
     items.push(menu_separator());
     let key = profile.map_or_else(|| network.ssid.clone(), |saved| saved.name.clone());
     items.push(
-        menu_item("Open", move |_| {
+        menu_item(tr!("network-wifi-open"), move |_| {
             ui.ctx
                 .router
                 .open(routes::wifi_network(&key.clone(), false))
@@ -548,18 +554,28 @@ fn saved_items(ui: Ui, saved: &Saved, leave: bool) -> Vec<MenuItem> {
     if saved.security().needs_password() {
         let copy = saved.clone();
         items.push(
-            menu_item("Copy password", move |_| ui.copy_password(&copy)).icon(Icon::EditCopy),
+            menu_item(tr!("network-wifi-copy-password"), move |_| {
+                ui.copy_password(&copy)
+            })
+            .icon(Icon::EditCopy),
         );
     }
     if shareable(saved) {
         let target = share_saved(saved);
-        items.push(menu_item("Share", move |_| ui.share(target.clone())).icon(Icon::SendTo));
+        items.push(
+            menu_item(tr!("network-wifi-share-action"), move |_| {
+                ui.share(target.clone())
+            })
+            .icon(Icon::SendTo),
+        );
     }
     let forget = saved.clone();
     items.push(
-        menu_item("Forget", move |_| ui.confirm_forget(&forget, leave))
-            .icon(Icon::UserTrash)
-            .destructive(),
+        menu_item(tr!("network-wifi-forget"), move |_| {
+            ui.confirm_forget(&forget, leave)
+        })
+        .icon(Icon::UserTrash)
+        .destructive(),
     );
     items
 }
@@ -567,35 +583,36 @@ fn saved_items(ui: Ui, saved: &Saved, leave: bool) -> Vec<MenuItem> {
 /// The sentence at the top of the Wi-Fi screen.
 fn wifi_subtitle(radio: Radio, model: &Model) -> String {
     match radio {
-        Radio::Missing => "No Wi-Fi hardware".to_string(),
-        Radio::Airplane => "Off in airplane mode".to_string(),
-        Radio::Blocked => "Off by hardware switch".to_string(),
-        Radio::Off => "Off".to_string(),
+        Radio::Missing => tr!("network-wifi-radio-missing"),
+        Radio::Airplane => tr!("network-wifi-radio-airplane"),
+        Radio::Blocked => tr!("network-wifi-radio-blocked"),
+        Radio::Off => tr!("network-wifi-radio-off"),
         Radio::On => match model.current() {
-            Some((Some(network), _)) => format!("Connected to {}", network.ssid),
-            Some((None, Some(saved))) => format!("Connected to {}", saved.ssid),
-            _ => "Not connected".to_string(),
+            Some((Some(network), _)) => {
+                tr!("network-wifi-connected-to", network = network.ssid.clone())
+            }
+            Some((None, Some(saved))) => {
+                tr!("network-wifi-connected-to", network = saved.ssid.clone())
+            }
+            _ => tr!("network-wifi-not-connected"),
         },
     }
 }
 
 /// `Connected · 5 GHz · 540 Mbit/s · Secured`: what is known of the link.
 fn link_line(network: Option<&Network>) -> String {
-    let mut parts = vec!["Connected".to_string()];
+    let mut parts = vec![tr!("network-wifi-connected")];
     if let Some(network) = network {
         for part in [&network.band, &network.rate] {
             if !part.is_empty() {
                 parts.push(part.clone());
             }
         }
-        parts.push(
-            if network.security.secured() {
-                "Secured"
-            } else {
-                "Open"
-            }
-            .to_string(),
-        );
+        parts.push(if network.security.secured() {
+            tr!("network-wifi-secured")
+        } else {
+            tr!("network-wifi-open-label")
+        });
     }
     parts.join(" · ")
 }
@@ -605,19 +622,19 @@ fn link_line(network: Option<&Network>) -> String {
 fn radio_status(ui: Ui, radio: Radio) -> Option<Element> {
     let message = match radio {
         Radio::On => return None,
-        Radio::Missing => Status::Empty("This computer has no Wi-Fi adapter.".into()),
-        Radio::Blocked => Status::Info("A hardware switch has turned Wi-Fi off.".into()),
-        Radio::Airplane => Status::Info("Wi-Fi is off because airplane mode is on.".into()),
-        Radio::Off => Status::Empty("Wi-Fi is off. Turn it on to see networks.".into()),
+        Radio::Missing => Status::Empty(tr!("network-wifi-no-adapter").into()),
+        Radio::Blocked => Status::Info(tr!("network-wifi-hardware-switch").into()),
+        Radio::Airplane => Status::Info(tr!("network-wifi-airplane-on").into()),
+        Radio::Off => Status::Empty(tr!("network-wifi-off-turn-on").into()),
     };
     let block = status(message);
     let block = match radio {
-        Radio::Off => block.action("Turn on", move |_| {
+        Radio::Off => block.action(&tr!("network-wifi-turn-on"), move |_| {
             model::toggle_link(ui.ctx, "wifi".to_string(), true, || {
                 model::set_wifi_radio(true)
             })
         }),
-        Radio::Airplane => block.action("Turn off airplane mode", move |_| {
+        Radio::Airplane => block.action(&tr!("network-wifi-turn-off-airplane"), move |_| {
             model::toggle_link(ui.ctx, "airplane".to_string(), false, || {
                 model::set_airplane_mode(false)
             })
@@ -651,7 +668,9 @@ fn connected_block(ui: Ui, model: &Model) -> Option<Element> {
         }
         None => hero.leading(Icon::NetworkWirelessSignalExcellent),
     };
-    Some(Element::from(Group::titled("Connected network").row(hero)))
+    Some(Element::from(
+        Group::titled(&tr!("network-wifi-connected-network")).row(hero),
+    ))
 }
 
 /// Whether NetworkManager is bringing `ssid` up now: this screen started it,
@@ -689,7 +708,7 @@ fn network_rows(ui: Ui, data: &Data) -> Vec<Element> {
             if connecting {
                 trailing = trailing.child(Element::from(spinner(SpinnerSize::Small)));
             } else if profile.is_some() {
-                trailing = trailing.child(caption("Saved"));
+                trailing = trailing.child(caption(tr!("network-wifi-saved")));
             }
             let target = join_target(&data.model, network);
             let line = row(network.ssid.clone())
@@ -711,7 +730,7 @@ fn network_rows(ui: Ui, data: &Data) -> Vec<Element> {
 
 /// The available networks group, with its scan state.
 fn available_group(ui: Ui, data: &Data) -> Element {
-    let title = "Available networks";
+    let title = tr!("network-wifi-available");
     let scanning = *ui.scanning.read();
     let trailing = if scanning {
         Element::from(spinner(SpinnerSize::Small))
@@ -724,20 +743,20 @@ fn available_group(ui: Ui, data: &Data) -> Element {
         if scanning {
             // The heading's spinner is the only one: the body just says so.
             return Element::from(
-                Group::titled(title)
+                Group::titled(&title)
                     .trailing(trailing)
-                    .row(row("Looking for networks…")),
+                    .row(row(tr!("network-wifi-looking"))),
             );
         }
         let block = if data.model.current().is_some() {
-            status(Status::Empty("No other Wi-Fi networks found".into()))
-                .action("Scan again", move |_| ui.refresh(true))
+            status(Status::Empty(tr!("network-wifi-none-other").into()))
+                .action(&tr!("network-wifi-scan-again"), move |_| ui.refresh(true))
         } else {
-            status(Status::Empty("No Wi-Fi networks found".into()))
-                .action("Scan again", move |_| ui.refresh(true))
+            status(Status::Empty(tr!("network-wifi-none").into()))
+                .action(&tr!("network-wifi-scan-again"), move |_| ui.refresh(true))
         };
         return Element::from(
-            Group::titled(title)
+            Group::titled(&title)
                 .trailing(trailing)
                 .row(Element::from(block)),
         );
@@ -750,7 +769,7 @@ fn available_group(ui: Ui, data: &Data) -> Element {
         network_count(rows.len())
     };
     Element::from(
-        Group::titled(title)
+        Group::titled(&title)
             .description(count)
             .trailing(trailing)
             .rows(rows),
@@ -765,9 +784,9 @@ fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
     Element::from(
         Group::new(None::<String>)
             .row(
-                row("Saved networks")
+                row(tr!("network-wifi-saved-networks"))
                     .value(if saved == 0 {
-                        "None".to_string()
+                        tr!("network-wifi-none-value")
                     } else {
                         saved.to_string()
                     })
@@ -775,7 +794,7 @@ fn manage_group(ui: Ui, data: &Data, radio: Radio) -> Element {
                     .on_press(move |_| router.open(routes::wifi_saved())),
             )
             .row(
-                row("Connect to hidden network…")
+                row(tr!("network-wifi-join-hidden"))
                     .navigates()
                     .enabled(radio == Radio::On)
                     .on_press(move |_| join::open_hidden(overlays)),
@@ -810,11 +829,15 @@ impl Component for WifiPage {
             wifi_subtitle(radio, &data.model)
         });
         if !data.loading && matches!(radio, Radio::On | Radio::Off) {
-            head = head.switch("Wi-Fi", radio == Radio::On, move |next: bool| {
-                model::toggle_link(ui.ctx, "wifi".to_string(), next, move || {
-                    model::set_wifi_radio(next)
-                })
-            });
+            head = head.switch(
+                tr!("network-wifi-name"),
+                radio == Radio::On,
+                move |next: bool| {
+                    model::toggle_link(ui.ctx, "wifi".to_string(), next, move || {
+                        model::set_wifi_radio(next)
+                    })
+                },
+            );
         }
         if let Some(error) = data.error.clone() {
             return failure(ui, error, Some(head));
@@ -849,29 +872,33 @@ impl Component for SavedNetworksPage {
             return failure(ui, error, Some(head));
         }
         if count == 0 && !data.loading {
-            return page_column().child(head).child(status(Status::Empty(
-                "No saved networks. Networks you join appear here.".into(),
-            )));
+            return page_column()
+                .child(head)
+                .child(status(Status::Empty(tr!("network-wifi-no-saved").into())));
         }
 
         let rows = data.model.joinable().map(|saved| {
             let in_range = data.model.networks.iter().any(|n| n.ssid == saved.ssid);
             let mut parts: Vec<String> = Vec::new();
             if saved.active {
-                parts.push("Connected".to_string());
+                parts.push(tr!("network-wifi-connected"));
             } else if radio == Radio::On {
-                parts.push(if in_range { "In range" } else { "Out of range" }.to_string());
+                parts.push(if in_range {
+                    tr!("network-wifi-in-range")
+                } else {
+                    tr!("network-wifi-out-of-range")
+                });
             }
             parts.push(
                 if saved.autoconnect {
-                    "Connects automatically"
+                    tr!("network-wifi-auto")
                 } else {
-                    "Connects manually"
+                    tr!("network-wifi-manual")
                 }
                 .to_string(),
             );
             if saved.priority != 0 {
-                parts.push(format!("Priority {}", saved.priority));
+                parts.push(tr!("network-wifi-priority", value = saved.priority));
             }
             let key = saved.name.clone();
             let mut menu = Vec::new();
@@ -882,7 +909,7 @@ impl Component for SavedNetworksPage {
                     security: saved.security(),
                 };
                 menu.push(
-                    menu_item("Connect", move |_| ui.join(&target))
+                    menu_item(tr!("network-wifi-connect"), move |_| ui.join(&target))
                         .icon(Icon::NetworkWirelessSignalExcellent),
                 );
                 menu.push(menu_separator());
@@ -962,25 +989,25 @@ impl Component for WifiNetworkPage {
             network.is_some_and(|n| n.in_use) || profile.is_some_and(|saved| saved.active);
         let connecting = connecting_to(ui, &data.ov, &ssid, profile);
         let radio_words = match radio {
-            Radio::On => "out of range",
-            Radio::Airplane => "airplane mode is on",
-            _ => "Wi-Fi is off",
+            Radio::On => tr!("network-wifi-words-out-of-range"),
+            Radio::Airplane => tr!("network-wifi-words-airplane"),
+            _ => tr!("network-wifi-words-off"),
         };
 
         let state = if data.loading {
             "—".to_string()
         } else if connecting {
-            "Connecting…".to_string()
+            tr!("network-wifi-connecting-short")
         } else if connected {
-            "Connected".to_string()
+            tr!("network-wifi-connected")
         } else if profile.is_some() && network.is_none() {
-            format!("Saved · {radio_words}")
+            tr!("network-wifi-saved-radio", radio = radio_words.to_string())
         } else if profile.is_some() {
-            "Saved".to_string()
+            tr!("network-wifi-saved")
         } else if network.is_none() {
-            "Out of range".to_string()
+            tr!("network-wifi-out-of-range")
         } else {
-            "Not saved".to_string()
+            tr!("network-wifi-not-saved")
         };
         let hero = model::hero(
             tokens,
@@ -993,11 +1020,15 @@ impl Component for WifiNetworkPage {
         if connected {
             let uuid = profile.map(|saved| saved.uuid.clone());
             actions.push(
-                strip_action(Icon::WindowClose, "Disconnect", move |_| {
-                    if let Some(uuid) = &uuid {
-                        ui.disconnect(uuid.clone());
-                    }
-                })
+                strip_action(
+                    Icon::WindowClose,
+                    tr!("network-wifi-disconnect"),
+                    move |_| {
+                        if let Some(uuid) = &uuid {
+                            ui.disconnect(uuid.clone());
+                        }
+                    },
+                )
                 .enabled(profile.is_some()),
             );
         } else {
@@ -1011,11 +1042,15 @@ impl Component for WifiNetworkPage {
                 (None, None) => None,
             };
             actions.push(
-                strip_action(Icon::NetworkWirelessSignalExcellent, "Connect", move |_| {
-                    if let Some(target) = &target {
-                        ui.join(target);
-                    }
-                })
+                strip_action(
+                    Icon::NetworkWirelessSignalExcellent,
+                    tr!("network-wifi-connect"),
+                    move |_| {
+                        if let Some(target) = &target {
+                            ui.join(target);
+                        }
+                    },
+                )
                 .enabled(network.is_some() && radio == Radio::On && !connecting),
             );
         }
@@ -1029,14 +1064,16 @@ impl Component for WifiNetworkPage {
             _ => None,
         };
         if let Some(target) = share_target {
-            actions.push(strip_action(Icon::SendTo, "Share", move |_| {
-                ui.share(target.clone())
-            }));
+            actions.push(strip_action(
+                Icon::SendTo,
+                tr!("network-wifi-share-action"),
+                move |_| ui.share(target.clone()),
+            ));
         }
         if let Some(saved) = profile {
             let forget = saved.clone();
             actions.push(
-                strip_action(Icon::UserTrash, "Forget", move |_| {
+                strip_action(Icon::UserTrash, tr!("network-wifi-forget"), move |_| {
                     ui.confirm_forget(&forget, true)
                 })
                 .destructive(),
@@ -1051,9 +1088,9 @@ impl Component for WifiNetworkPage {
             let ctx = ui.ctx;
             blocks.push(Element::from(
                 Group::new(None::<String>).row(
-                    row("Sign-in required")
+                    row(tr!("network-wifi-sign-in-required"))
                         .trailing(Element::from(action_button(
-                            "Open sign-in page",
+                            tr!("network-wifi-open-sign-in"),
                             move |_| super::open_portal(ctx),
                         )))
                         .on_press(move |_| super::open_portal(ctx)),
@@ -1069,22 +1106,25 @@ impl Component for WifiNetworkPage {
             && let Some(device) = data.ov.wifi_device()
             && !device.address4().is_empty()
         {
-            info = info.row(row("IP address").technical_value(device.address4()));
+            info = info.row(row(tr!("network-wifi-ip-address")).technical_value(device.address4()));
         }
         if let Some(network) = network {
-            info = info.row(row("Signal strength").value(format!(
-                "{} ({}%)",
-                nm::signal_words(network.signal),
-                network.signal
+            info = info.row(row(tr!("network-wifi-signal")).value(tr!(
+                "network-wifi-signal-paren",
+                words = nm::signal_words(network.signal).to_string(),
+                percent = network.signal
             )));
             if !network.rate.is_empty() {
-                info = info.row(row("Speed").value(network.rate.clone()));
+                info = info.row(row(tr!("network-wifi-speed")).value(network.rate.clone()));
             }
             if profile.is_none() {
                 info = info
-                    .row(row("Security").value(network.security.label()))
-                    .row(row("Frequency").value(or_dash(&network.band)))
-                    .row(row("Access point").technical_value(or_dash(&network.bssid)));
+                    .row(row(tr!("network-wifi-security")).value(network.security.label()))
+                    .row(row(tr!("network-wifi-frequency")).value(or_dash(&network.band)))
+                    .row(
+                        row(tr!("network-wifi-access-point"))
+                            .technical_value(or_dash(&network.bssid)),
+                    );
             }
         }
         let owner = profile.map(|saved| Owner::Wifi {
@@ -1146,16 +1186,22 @@ pub fn wifi_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element> {
         _ => None,
     };
     let subtitle = if airplane {
-        "Off in airplane mode".to_string()
+        tr!("network-wifi-radio-airplane")
     } else if !ov.wifi_usable() {
-        "Off by hardware switch".to_string()
+        tr!("network-wifi-radio-blocked")
     } else if !on {
-        "Off".to_string()
+        tr!("network-wifi-radio-off")
     } else {
         match device {
-            Some(device) if hotspot => format!("Hotspot on · {}", device.connection),
+            Some(device) if hotspot => tr!(
+                "network-wifi-hotspot-on",
+                connection = device.connection.clone()
+            ),
             Some(device) if device.state.starts_with("connecting") => {
-                format!("Connecting to {}…", device.connection)
+                tr!(
+                    "network-wifi-connecting-to",
+                    name = device.connection.clone()
+                )
             }
             Some(device) if device.connected() => {
                 let name = joined.map_or(device.connection.as_str(), |n| n.ssid.as_str());
@@ -1163,14 +1209,18 @@ pub fn wifi_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element> {
                     .map(|n| n.band.as_str())
                     .filter(|band| !band.is_empty())
                 {
-                    Some(band) => format!("Connected to {name} · {band}"),
-                    None => format!("Connected to {name}"),
+                    Some(band) => tr!(
+                        "network-wifi-connected-band",
+                        network = name.to_string(),
+                        band = band.to_string()
+                    ),
+                    None => tr!("network-wifi-connected-to", network = name.to_string()),
                 }
             }
-            _ => "Not connected".to_string(),
+            _ => tr!("network-wifi-not-connected"),
         }
     };
-    let mut item = row("Wi-Fi").subtitle(subtitle);
+    let mut item = row(tr!("network-wifi-name")).subtitle(subtitle);
     item = match joined {
         Some(network) if usable && on => {
             item.leading_signal(nm::signal_level(network.signal), network.security.secured())
@@ -1201,11 +1251,11 @@ pub fn hotspot_row(ctx: NetCtx, ov: &Overview) -> Option<Element> {
             (Some(Ok(model)), Some(device)) => model
                 .hotspot()
                 .filter(|ap| ap.name == device.connection)
-                .map(|ap| format!("On: {}", ap.ssid)),
+                .map(|ap| tr!("network-wifi-hotspot-on-short", ssid = ap.ssid.clone())),
             _ => None,
         };
         Element::from(
-            row("Wi-Fi hotspot")
+            row(tr!("network-wifi-hotspot-row"))
                 .value(running.unwrap_or_default())
                 .navigates()
                 .on_press(move |_| ctx.router.open(routes::hotspot())),

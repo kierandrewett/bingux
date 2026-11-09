@@ -2290,3 +2290,233 @@ data-usage-limit-size = Limit size
 data-usage-unit = Unit
 data-usage-warn-at = Warn at
 data-usage-use-global = Use the limit for all connections
+
+
+## Wi-Fi
+# Status while joining a network.
+network-wifi-connecting = Connecting to { $ssid }…
+# Status while disconnecting from a network.
+network-wifi-disconnecting = Disconnecting…
+# Error when disconnecting fails.
+network-wifi-error-disconnect = Could not disconnect. Try again.
+# Toast shown after the saved password is copied.
+network-wifi-password-copied = Password copied
+# Toast shown when the password cannot be copied.
+network-wifi-error-copy = Could not copy the password. Try again.
+# Toast shown when a network has no saved password to copy.
+network-wifi-no-saved-password = No saved password for this network
+# Error when the saved password cannot be read.
+network-wifi-error-read-password = Could not read the saved password. Try again.
+# Title of the confirmation dialog for forgetting a network.
+# { $name } is the network name.
+network-wifi-forget-title = Forget “{ $name }”?
+# Body of the confirmation dialog for forgetting a network.
+network-wifi-forget-body = The saved password is removed. Connecting again asks for it.
+# Button to cancel a dialog.
+network-wifi-cancel = Cancel
+# Button to forget a saved network.
+network-wifi-forget = Forget
+# Status while a saved network is being forgotten.
+network-wifi-forgetting = Forgetting…
+# Error when a saved network cannot be forgotten.
+network-wifi-error-forget = Could not forget the network. Try again.
+# Summary of how many Wi-Fi networks are in range.
+# { $count } is the number of networks.
+network-wifi-nearby = { $count ->
+    [one] 1 network nearby
+   *[other] { $count } networks nearby
+}
+# Error when the Wi-Fi networks cannot be listed.
+network-wifi-error-list = Could not read the Wi-Fi networks. Try again.
+# Button to retry a failed load.
+network-wifi-try-again = Try again
+# Menu item to disconnect from a network.
+network-wifi-disconnect = Disconnect
+# Menu item and button to connect to a network.
+network-wifi-connect = Connect
+# Menu item to open a connected network's details.
+network-wifi-open = Open
+# Label for a radio that is off because of airplane mode.
+network-wifi-radio-airplane = Off in airplane mode
+# Label for a radio that is off because of a hardware switch.
+network-wifi-radio-blocked = Off by hardware switch
+# Label for a radio that is off.
+network-wifi-radio-off = Off
+# Label for a computer with no Wi-Fi adapter.
+network-wifi-radio-missing = No Wi-Fi hardware
+# Summary line when connected to a named network.
+# { $network } is the network name.
+network-wifi-connected-to = Connected to { $network }
+# Summary line when connected to a network with a band shown.
+# { $network } is the network name and { $band } is the frequency band.
+network-wifi-connected-band = Connected to { $network } · { $band }
+# Summary line when no network is joined.
+network-wifi-not-connected = Not connected
+# State word for a connected network.
+network-wifi-connected = Connected
+# State word for a network that needs a password.
+network-wifi-secured = Secured
+# State word for a network that needs no password.
+network-wifi-open-label = Open
+# Status when the computer has no Wi-Fi adapter.
+network-wifi-no-adapter = This computer has no Wi-Fi adapter.
+# Status when a hardware switch has turned Wi-Fi off.
+network-wifi-hardware-switch = A hardware switch has turned Wi-Fi off.
+# Status when airplane mode has turned Wi-Fi off.
+network-wifi-airplane-on = Wi-Fi is off because airplane mode is on.
+# Status when Wi-Fi is off.
+network-wifi-off-turn-on = Wi-Fi is off. Turn it on to see networks.
+# Action to turn Wi-Fi on.
+network-wifi-turn-on = Turn on
+# Action to turn airplane mode off.
+network-wifi-turn-off-airplane = Turn off airplane mode
+# Title of the group for the connected network.
+network-wifi-connected-network = Connected network
+# Caption on a network that is saved.
+network-wifi-saved = Saved
+# Title of the list of nearby networks.
+network-wifi-available = Available networks
+# Status while networks are being looked for.
+network-wifi-looking = Looking for networks…
+# Status when a scan finds no other networks.
+network-wifi-none-other = No other Wi-Fi networks found
+# Status when a scan finds no networks.
+network-wifi-none = No Wi-Fi networks found
+# Action to scan for networks again.
+network-wifi-scan-again = Scan again
+# Row title for saved networks.
+network-wifi-saved-networks = Saved networks
+# Value when there are no saved networks.
+network-wifi-none-value = None
+# Row to join a network that does not announce its name.
+network-wifi-join-hidden = Connect to hidden network…
+# Status when no networks have been saved.
+network-wifi-no-saved = No saved networks. Networks you join appear here.
+# Detail: a saved network is in range.
+network-wifi-in-range = In range
+# Detail: a saved network is out of range.
+network-wifi-out-of-range = Out of range
+# Detail: a saved network connects on its own.
+network-wifi-auto = Connects automatically
+# Detail: a saved network needs choosing by hand.
+network-wifi-manual = Connects manually
+# Detail: priority of a saved network.
+# { $value } is the priority number.
+network-wifi-priority = Priority { $value }
+# Phrase: a network is out of range, used in a sentence.
+network-wifi-words-out-of-range = out of range
+# Phrase: airplane mode is on, used in a sentence.
+network-wifi-words-airplane = airplane mode is on
+# Phrase: Wi-Fi is off, used in a sentence.
+network-wifi-words-off = Wi-Fi is off
+# Status while a network is being joined, on a row.
+network-wifi-connecting-short = Connecting…
+# Row state for a saved network, with radio state.
+# { $radio } is a phrase such as "out of range".
+network-wifi-saved-radio = Saved · { $radio }
+# Row state for a network that is not saved.
+network-wifi-not-saved = Not saved
+# Title of the sign-in row for a captive portal.
+network-wifi-sign-in-required = Sign-in required
+# Action to open the sign-in page.
+network-wifi-open-sign-in = Open sign-in page
+# Detail row: IP address.
+network-wifi-ip-address = IP address
+# Detail row: signal strength.
+network-wifi-signal = Signal strength
+# Detail row: link speed.
+network-wifi-speed = Speed
+# Detail row: security type.
+network-wifi-security = Security
+# Detail row: frequency band.
+network-wifi-frequency = Frequency
+# Detail row: access point address.
+network-wifi-access-point = Access point
+# Signal word for a strong signal.
+network-wifi-signal-excellent = Excellent
+# Signal word for a good signal.
+network-wifi-signal-good = Good
+# Signal word for a fair signal.
+network-wifi-signal-fair = Fair
+# Signal word for a weak signal.
+network-wifi-signal-weak = Weak
+# Summary when a hotspot is the connection.
+# { $connection } is the hotspot connection name.
+network-wifi-hotspot-on = Hotspot on · { $connection }
+# Summary while connecting to a named network.
+# { $name } is the network name.
+network-wifi-connecting-to = Connecting to { $name }…
+# Title of the Wi-Fi hotspot row.
+network-wifi-hotspot-row = Wi-Fi hotspot
+# Title of the hidden network form.
+network-wifi-hidden-network = Hidden network
+# Hidden network security option: WPA and WPA2.
+network-wifi-security-wpa2 = WPA & WPA2
+# Hidden network security option: WPA3.
+network-wifi-security-wpa3 = WPA3
+# Validation: enter the password.
+network-wifi-enter-password = Enter the password.
+# Validation: enter the user name.
+network-wifi-enter-user = Enter the user name.
+# Validation: WEP key length.
+network-wifi-wep-key-hint = Use 5 or 13 characters, or 10 or 26 hexadecimal digits.
+# Footer: passwords for a network type.
+# { $security } is the security type, such as WPA2.
+network-wifi-password-footer = { $security } network. Passwords are case sensitive.
+# Form field label: password.
+network-wifi-field-password = Password
+# Form field label: user name.
+network-wifi-field-user = User name
+# Footer for the 802.1X sign-in form.
+network-wifi-enterprise-footer = Signs in with PEAP and MSCHAPv2, and checks the network's certificate against the system's. Other methods are set in the network's Security settings.
+# Form field label: network name.
+network-wifi-field-network-name = Network name
+# Form field label: security type.
+network-wifi-field-security = Security
+# Error when a join fails because the password was refused.
+network-wifi-error-password-refused = The password was not accepted. Check it and try again.
+# Error when a join times out.
+network-wifi-error-timeout = The network did not answer in time. Move closer and try again.
+# Error when a network is out of range.
+network-wifi-error-out-of-range = The network is out of range. Move closer and try again.
+# Error when a join fails for another reason.
+network-wifi-error-join = Could not join the network. Try again.
+# Share popup title.
+network-wifi-share-title = Share network
+# Share popup button to close.
+network-wifi-done = Done
+# Share status: loading the saved password.
+network-wifi-reading-password = Reading the saved password…
+# Share status: network needs an account, so no code.
+network-wifi-account-only = This network uses an account to sign in. It has no code to share.
+# Share status: saved network has no password.
+network-wifi-no-password = This network has no saved password to share.
+# Share caption under the QR code.
+network-wifi-scan-caption = Point a phone's camera at the code to join this network.
+# Share field: network name.
+network-wifi-share-name = Network name
+# Share field value for an open network.
+network-wifi-share-open = None, open network
+# Share field: password.
+network-wifi-share-password = Password
+# Share action: show the password.
+network-wifi-show = Show
+# Share action: hide the password.
+network-wifi-hide = Hide
+# Share action: copy the password.
+network-wifi-copy = Copy
+# Menu item that shares a network as a QR code.
+network-wifi-share-action = Share
+# Menu item that copies a saved network's password.
+network-wifi-copy-password = Copy password
+# Title of the Wi-Fi row and switch.
+network-wifi-name = Wi-Fi
+# Subtitle of the Wi-Fi hotspot row while it runs: the connection it shares.
+# { $ssid } is the network name.
+network-wifi-hotspot-on-short = On: { $ssid }
+# Signal strength value: the word for the level, then the percentage.
+# { $words } is Excellent, Good, Fair or Weak; { $percent } is a number.
+network-wifi-signal-paren = { $words } ({ $percent }%)
+# Share QR code label for accessibility.
+# { $ssid } is the network name.
+network-wifi-qr-label = QR code to join { $ssid }
