@@ -53,11 +53,6 @@ text-editor-cancel = Cancel
 text-editor-save = Save
 text-editor-link-not-web = Only web and mail links open from the preview
 
-## Recent files
-
-text-editor-no-recent = No recent files
-text-editor-clear-recent = Clear recent files
-
 ## Notice banners
 
 text-editor-reloaded = “{ $name }” changed on disk and was read again.

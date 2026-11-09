@@ -55,8 +55,6 @@ thread_local! {
 /// Keeps what `main` read before the window, for the first window to take.
 pub fn prepare(prefs: Prefs, session: Session) {
     PREFS.with(|current| *current.borrow_mut() = prefs.clone());
-    // Read the small state files now, not on the first frame.
-    let _ = session::recent();
     START.with(|start| *start.borrow_mut() = Some((prefs, session)));
 }
 
@@ -93,19 +91,6 @@ fn restore(prefs: &Prefs, session: Session, documents: Documents) -> TabSet<DocT
     let mut tabs = Vec::new();
     for saved in &session.tabs {
         if let Some(tab) = restore_tab(prefs, saved, documents) {
-            tabs.push(tab);
-        }
-    }
-    // Drafts no tab names, from a run that ended before it wrote its session.
-    for draft in session::orphan_drafts(&session) {
-        if let Some(tab) = restore_tab(
-            prefs,
-            &SavedTab {
-                draft: Some(draft),
-                ..SavedTab::default()
-            },
-            documents,
-        ) {
             tabs.push(tab);
         }
     }
@@ -390,7 +375,6 @@ impl Actions {
             )
         };
         let shared = share(self.documents, &path, id, false);
-        session::add_recent(&path);
         let blank = self.current().filter(|current| {
             document::with(*current, |doc| {
                 doc.path.is_none() && !doc.is_modified() && doc.handle.peek().len_chars() == 0
@@ -504,7 +488,6 @@ impl Actions {
                     doc.handle.update(|editor| editor.set_language(detected));
                 }
             });
-            session::add_recent(&path);
             actions.write(id, path, then.clone());
         });
     }
@@ -630,7 +613,6 @@ impl Actions {
         });
         handle.update(|editor| editor.mark_saved());
         session::remove_draft(draft);
-        session::add_recent(&path);
         if let Some(then) = then {
             then();
         }
@@ -1589,29 +1571,6 @@ fn tip(commands: bingux_ui::commands::Commands, id: &str, name: &str) -> String 
     }
 }
 
-/// The recent files, as the rows of the Open recent submenu.
-fn recent_items(actions: Actions) -> Vec<MenuItem> {
-    let recent = session::recent();
-    if recent.is_empty() {
-        return vec![menu_item(tr!("text-editor-no-recent"), |_| {}).disabled()];
-    }
-    let mut items: Vec<MenuItem> = recent
-        .iter()
-        .take(12)
-        .map(|path| {
-            let open = path.clone();
-            menu_item(document::display_name(path), move |_| {
-                actions.open_path(open.clone())
-            })
-        })
-        .collect();
-    items.push(menu_separator());
-    items.push(menu_item(tr!("text-editor-clear-recent"), |_| {
-        session::clear_recent()
-    }));
-    items
-}
-
 /// The commands that work wherever the keyboard is: files, find, view and
 /// editing choices. The keys of the editor itself (Undo, the clipboard, the
 /// line edits) come with its scope.
@@ -1660,7 +1619,7 @@ fn window_commands(
         Command::submenu(
             "file.open-recent",
             tr!("text-editor-cmd-open-recent"),
-            recent_items(actions),
+            actions.documents.recent_menu(),
         )
         .group(CommandGroup::File)
         .section("new"),
