@@ -45,6 +45,7 @@ pub static ENTRIES: &[Entry] = &[
             "TEXT_SCALE_RANGE",
             "clamp_scale",
             "grow",
+            "TEXT_LINE",
             "set",
             "set_text_scale",
             "text_scale",

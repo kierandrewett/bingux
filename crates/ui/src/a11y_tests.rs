@@ -10,6 +10,7 @@ use std::time::Duration;
 
 use accesskit::{Live, Node, NodeId, Role, Toggled};
 use freya::prelude::*;
+use freya_core::element::ElementExt;
 use freya_testing::TestingRunner;
 use freya_testing::prelude::{MouseEventName, PlatformEvent};
 
@@ -242,4 +243,46 @@ fn semantics_on_any_element_reach_the_tree() {
     assert_eq!(group.label(), Some("Battery"));
     assert_eq!(group.value(), Some("82 %, charging"));
     assert_eq!(group.description(), Some("Lasts about 5 hours"));
+}
+
+#[test]
+fn an_open_dropdown_names_the_option_the_arrows_reach_as_its_active_descendant() {
+    use freya::prelude::{Key, NamedKey};
+    #[derive(PartialEq)]
+    struct Direct;
+    impl Component for Direct {
+        fn render(&self) -> impl IntoElement {
+            provide_tokens();
+            let options = vec![
+                ("light".to_string(), "Light".to_string()),
+                ("dark".to_string(), "Dark".to_string()),
+            ];
+            // The window host gives Tab its focus core.
+            crate::shell::overlays::OverlayHost::new(rect().expanded().child(
+                Group::new(None).row(row("Style").trailing(dropdown(options, "light", |_: String| {}))),
+            ))
+        }
+    }
+    let mut shot = Snapshot::new(|| Direct.into(), (640.0, 480.0));
+    shot.settle(Duration::from_millis(300));
+    // Tab reaches the dropdown; Enter opens it and Down moves through it.
+    shot.key(Key::Named(NamedKey::Tab));
+    shot.settle(Duration::from_millis(100));
+    shot.key(Key::Named(NamedKey::Enter));
+    shot.settle(Duration::from_millis(500));
+    shot.key(Key::Named(NamedKey::ArrowDown));
+    shot.settle(Duration::from_millis(200));
+    let combos: Vec<(Option<bool>, Option<NodeId>)> = shot.runner().find_many(|_, element| {
+        let data = element.accessibility();
+        (data.builder.role() == Role::ComboBox)
+            .then(|| (data.builder.is_expanded(), data.builder.active_descendant()))
+    });
+    assert_eq!(combos.len(), 1, "{combos:?}");
+    assert_eq!(combos[0].0, Some(true), "the list is open: {combos:?}");
+    let active = combos[0].1.expect("an active descendant while open");
+    let option_ids: Vec<NodeId> = shot.runner().find_many(|_, element| {
+        let data = element.accessibility();
+        (data.builder.role() == Role::ListBoxOption).then(|| data.a11y_id).flatten()
+    });
+    assert!(option_ids.contains(&active), "the active descendant is an option: {option_ids:?}");
 }
