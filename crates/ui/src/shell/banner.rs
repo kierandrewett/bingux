@@ -309,8 +309,21 @@ impl Component for Banner {
 
         let bar = rect()
             .component("Banner")
-            .a11y_role(AccessibilityRole::Status)
+            // A notice is read out when it appears, without taking focus (WCAG
+            // 4.1.3): an error at once, anything else after what is being read.
+            .a11y_role(if kind == BannerKind::Error {
+                AccessibilityRole::Alert
+            } else {
+                AccessibilityRole::Status
+            })
             .a11y_alt(self.text.clone())
+            .a11y_builder(move |node| {
+                node.set_live(if kind == BannerKind::Error {
+                    accesskit::Live::Assertive
+                } else {
+                    accesskit::Live::Polite
+                })
+            })
             .tw(
                 &tokens,
                 &[

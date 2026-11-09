@@ -6,6 +6,8 @@
 
 use freya::prelude::*;
 
+use crate::a11y::SemanticsExt;
+
 use crate::component::{ComponentName, Prop, Published};
 use crate::controls::button::action_button;
 use crate::controls::progress::{SpinnerSize, spinner};
@@ -97,6 +99,7 @@ pub struct Group {
     footer: Option<String>,
     filtered: bool,
     rows: Vec<Element>,
+    semantics: Option<crate::a11y::Semantics>,
 }
 
 impl Group {
@@ -109,7 +112,16 @@ impl Group {
             footer: None,
             filtered: true,
             rows: Vec::new(),
+            semantics: None,
         }
+    }
+
+    /// What the group says to assistive technology. A titled group is a
+    /// group named by its title and described by its description already;
+    /// this changes that, such as making it a radio group.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
     }
 
     pub fn description(mut self, text: impl Into<String>) -> Self {
@@ -238,6 +250,23 @@ impl Component for Group {
                             .as_ref()
                             .map(|text| Prop::text("description", text.clone())),
                     )
+                })
+                .maybe(self.title.is_some() || self.semantics.is_some(), |group| {
+                    let title = self.title.clone();
+                    let description = self.description.clone();
+                    let semantics = self.semantics.clone();
+                    group.a11y_builder(move |node| {
+                        if let Some(title) = title {
+                            node.set_role(AccessibilityRole::Group);
+                            node.set_label(title);
+                        }
+                        if let Some(description) = description {
+                            node.set_description(description);
+                        }
+                        if let Some(semantics) = &semantics {
+                            semantics.apply(node);
+                        }
+                    })
                 })
                 .tw(&tokens, GROUP)
                 .maybe_child(heading)
@@ -459,8 +488,10 @@ struct SectionLabel {
 impl Component for SectionLabel {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // A section's title is a heading a screen reader can jump between.
         rect()
             .component("Section")
+            .a11y_heading(2)
             .child(search_highlight::label(SECTION, &tokens, &self.text))
     }
 }
@@ -810,5 +841,8 @@ fn skeleton_bar(tokens: &Tokens, width: Dim) -> impl IntoElement {
 
 /// A title for in-page headers such as a details view.
 pub fn heading(text: impl Into<String>) -> Element {
-    typography::styled_label(TITLE, text)
+    rect()
+        .a11y_heading(2)
+        .child(typography::styled_label(TITLE, text))
+        .into()
 }

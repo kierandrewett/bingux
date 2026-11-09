@@ -90,6 +90,7 @@ pub struct TextField {
     alt_digit: Option<(usize, EventHandler<usize>)>,
     /// Apps' own entries, appended to the full edit menu after the general ones.
     edit_extra: Vec<MenuItem>,
+    semantics: Option<crate::a11y::Semantics>,
 }
 
 /// `value` is the live draft; `on_submit` fires on Enter with the text.
@@ -129,6 +130,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         on_enter_modifiers: None,
         alt_digit: None,
         edit_extra: Vec::new(),
+        semantics: None,
     }
 }
 
@@ -322,6 +324,14 @@ impl TextField {
         self
     }
 
+    /// The field's name and hint for assistive technology, for a field outside
+    /// a row or form line (which name it from their title). The label, hint
+    /// and invalid parts are read; the text is always the field's value.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
+    }
+
     /// Give the field an accessibility id, so a window can focus it.
     pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
         self.a11y_id = Some(id);
@@ -414,6 +424,19 @@ impl Component for TextField {
         let alt_digit = self.alt_digit.clone();
         let multiline = self.multiline;
         let invalid = self.invalid.is_some() || self.danger_outline;
+        let field = crate::a11y::use_field_label();
+        let a11y_label = self
+            .semantics
+            .as_ref()
+            .and_then(|semantics| semantics.label.clone())
+            .or_else(|| field.as_ref().map(|field| field.title.clone()));
+        let a11y_hint = self
+            .semantics
+            .as_ref()
+            .and_then(|semantics| semantics.hint.clone())
+            .or_else(|| field.and_then(|field| field.hint))
+            .or_else(|| self.invalid.clone());
+        let a11y_invalid = invalid || self.semantics.as_ref().is_some_and(|semantics| semantics.invalid);
         let own_id = use_a11y();
         let input_id = self.a11y_id.unwrap_or(own_id);
         let visual = use_visual_focus(input_id);
@@ -581,6 +604,9 @@ impl Component for TextField {
             .probe(probe)
             .request(request)
             .a11y_id(input_id)
+            .maybe(a11y_label.is_some(), |input| input.a11y_label(a11y_label.unwrap_or_default()))
+            .maybe(a11y_hint.is_some(), |input| input.a11y_description(a11y_hint.unwrap_or_default()))
+            .a11y_invalid(a11y_invalid)
             .on_submit(move |text: String| on_submit.call(text))
             .auto_focus(self.autofocus)
             .on_pre_key_down(move |event: Event<KeyboardEventData>| {

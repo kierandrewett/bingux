@@ -215,6 +215,8 @@ impl Component for FormField {
         let mut line_width = use_state(|| 0.0_f32);
         let own_id = use_a11y();
         let focus = use_focus(own_id);
+        // The field is named by the title and described by the hint.
+        crate::a11y::provide_field_label(&self.title, self.hint.as_deref());
         // The message waits until the person has left the field or pressed
         // Enter in it, so a half-typed address is not called wrong.
         let mut touched = use_state(|| false);

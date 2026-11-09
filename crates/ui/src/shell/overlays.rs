@@ -342,6 +342,7 @@ impl Component for OverlayHost {
         // The window host below uses this core too, so the menus and dialogs
         // drawn beside it share the page's focus state.
         let _ = crate::focus::provide_focus_core();
+        let announcer = crate::a11y::provide_announcer();
         let scope = current_scope_id();
         let overlays = use_hook(move || Overlays::in_scope(scope));
         use_provide_context(|| overlays);
@@ -378,6 +379,7 @@ impl Component for OverlayHost {
                 stack: OverlayStack::Window,
                 page,
             })
+            .child(crate::a11y::AnnouncerRegion { announcer })
     }
 }
 

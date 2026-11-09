@@ -71,6 +71,8 @@ impl Component for Checkbox {
         let mut pressing = use_state(|| false);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        // A box with no text of its own is named by the row it sits in.
+        let field = crate::a11y::use_field_label().filter(|_| self.text.is_none());
         let state = self.state;
         let enabled = use_enabled(self.enabled);
         let on_toggle = self.on_toggle.clone();
@@ -118,7 +120,8 @@ impl Component for Checkbox {
                     CheckState::Off => Toggled::False,
                     CheckState::On => Toggled::True,
                     CheckState::Mixed => Toggled::Mixed,
-                })
+                });
+                crate::a11y::label_from_field(builder, field.as_ref());
             })
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .maybe(!enabled, |element| element.opacity(0.45))

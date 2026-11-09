@@ -225,6 +225,7 @@ impl Component for Slider {
         let mut size = use_state(Area::default);
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let field = crate::a11y::use_field_label();
         let on_moved = self.on_moved.clone();
         let max = self.max;
         let mark = self.mark;
@@ -348,6 +349,8 @@ impl Component for Slider {
                 builder.set_numeric_value(value);
                 builder.set_min_numeric_value(0.0);
                 builder.set_max_numeric_value(max);
+                builder.set_orientation(accesskit::Orientation::Horizontal);
+                crate::a11y::label_from_field(builder, field.as_ref());
             })
             .maybe(self.fluid, |element| element.width(Size::fill()))
             .maybe(!self.fluid, |element| element.tw(&tokens, &[w(self.width)]))

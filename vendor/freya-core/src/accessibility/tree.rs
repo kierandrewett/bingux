@@ -24,6 +24,7 @@ use crate::{
         id::AccessibilityId,
     },
     data::Overflow,
+    element::ElementExt,
     elements::{
         label::LabelElement,
         paragraph::ParagraphElement,
@@ -221,6 +222,14 @@ impl AccessibilityTree {
 
             let node_parent_id = tree.parents.get(&node_id).unwrap_or(&NodeId::ROOT);
             added_or_updated_ids.insert(*node_parent_id);
+        }
+
+        // Bingux patch: a control named by its content is named again when text deep inside
+        // it changes, not only when a direct child does.
+        for node_id in added_or_updated_ids.clone() {
+            if let Some(ancestor) = named_ancestor(node_id, tree) {
+                added_or_updated_ids.insert(ancestor);
+            }
         }
 
         // Create the updated nodes
@@ -464,29 +473,55 @@ impl AccessibilityTree {
             y1: area.max_y(),
         });
 
-        // Set inner text
-        let inner_text = accessibility_data
-            .builder
-            .value()
-            .map(String::from)
-            .or_else(|| {
-                tree.children.get(&node_id).and_then(|children| {
-                    children.iter().find_map(|child| {
-                        let child_element = tree.elements.get(child)?;
-                        let mut child_builder = child_element.accessibility().builder.clone();
-                        child_element.finish_accessibility(&mut child_builder);
-                        child_builder.value().map(String::from)
-                    })
-                })
-            });
-
-        if let Some(inner_text) = inner_text {
-            // Accesskit derives the name of Role::Label nodes from the value, not the label
-            if accessibility_data.builder.role() == Role::Label {
-                accessibility_data.builder.set_value(inner_text);
-            } else {
-                accessibility_data.builder.set_label(inner_text);
+        // Bingux patch: the accessible name. A name the element was given (`a11y_alt`) is never
+        // replaced. A node whose role takes its name from its content (WAI-ARIA "name from
+        // content": a button, a tab, a check box, a menu item, a list option, a heading) without
+        // one is named by all the text inside it, however deep, leaving out what is hidden and
+        // the controls nested in it, which name themselves. Upstream took the value of the
+        // first child only, so a row with its title one box down, or a dropdown, had no name,
+        // and it overwrote a given name with the first child's text.
+        let role = accessibility_data.builder.role();
+        if role == Role::Label {
+            if accessibility_data.builder.value().is_none()
+                && let Some(text) = first_child_text(node_id, tree)
+            {
+                accessibility_data.builder.set_value(text);
             }
+        } else if accessibility_data.builder.label().is_none() {
+            // AT-SPI reads a paragraph's name, not its value: it names itself with its text.
+            let own_paragraph = (role == Role::Paragraph && is_text(element.as_ref()))
+                .then(|| accessibility_data.builder.value().map(String::from))
+                .flatten();
+            let text = if let Some(text) = own_paragraph {
+                Some(text)
+            } else if names_from_content(role) {
+                // A text element given a role (a label that is a heading) is named by its text.
+                let mut pieces: Vec<String> = accessibility_data
+                    .builder
+                    .value()
+                    .filter(|_| is_text(element.as_ref()))
+                    .map(|text| vec![text.to_string()])
+                    .unwrap_or_default();
+                content_text(node_id, tree, &mut pieces, 0);
+                (!pieces.is_empty()).then(|| pieces.join(", "))
+            } else {
+                first_child_text(node_id, tree)
+            };
+            if let Some(text) = text {
+                accessibility_data.builder.set_label(text);
+            }
+        }
+
+        // Bingux patch: text and pictures inside a control that is named by them are
+        // presentational (WAI-ARIA "children presentational"): a reader announces "Network,
+        // tab" once, not the tab and then a label "Network" again. A picture with no name (an
+        // icon in an SVG) is decoration wherever it is.
+        let leaf_role = accessibility_data.builder.role();
+        let text_leaf = matches!(leaf_role, Role::Label | Role::Paragraph);
+        let unnamed_picture = matches!(leaf_role, Role::SvgRoot | Role::Image)
+            && accessibility_data.builder.label().is_none();
+        if (text_leaf && inside_named_control(node_id, tree)) || unnamed_picture {
+            accessibility_data.builder.set_hidden();
         }
 
         // Set focusable action
@@ -578,4 +613,190 @@ fn color_to_accesskit(color: Color) -> accesskit::Color {
         blue: color.b(),
         alpha: color.a(),
     }
+}
+
+/// Bingux patch: how deep [`content_text`] looks, and how far up a text leaf or an update looks
+/// for the control it names.
+const NAME_DEPTH: usize = 12;
+/// The longest name made from content; a reader does not read a page as one name.
+const NAME_MAX: usize = 400;
+
+/// Whether a node of `role` is named by the text inside it when it was given no name.
+fn names_from_content(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Button
+            | Role::DefaultButton
+            | Role::CheckBox
+            | Role::RadioButton
+            | Role::Switch
+            | Role::Tab
+            | Role::MenuItem
+            | Role::MenuItemCheckBox
+            | Role::MenuItemRadio
+            | Role::ListBoxOption
+            | Role::ListItem
+            | Role::TreeItem
+            | Role::Link
+            | Role::Heading
+            | Role::ComboBox
+            | Role::Cell
+            | Role::GridCell
+            | Role::ColumnHeader
+            | Role::RowHeader
+            | Role::Tooltip
+            | Role::Status
+            | Role::Alert
+    )
+}
+
+/// Roles a person operates. Inside a control named by its content, a nested one names itself
+/// and its text is left out of the outer name (a row's switch, a field in a list item).
+fn is_control(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Button
+            | Role::DefaultButton
+            | Role::CheckBox
+            | Role::RadioButton
+            | Role::Switch
+            | Role::ComboBox
+            | Role::TextInput
+            | Role::MultilineTextInput
+            | Role::SearchInput
+            | Role::PasswordInput
+            | Role::SpinButton
+            | Role::Slider
+            | Role::Link
+            | Role::MenuItem
+            | Role::Tab
+    )
+}
+
+/// Whether `element` draws text itself (a label or a paragraph).
+fn is_text(element: &dyn ElementExt) -> bool {
+    let element = element as &dyn Any;
+    element.is::<LabelElement>() || element.is::<ParagraphElement>()
+}
+
+/// The accessibility data of `node_id` as the tree will see it.
+fn finished(node_id: NodeId, tree: &Tree) -> Option<Node> {
+    let element = tree.elements.get(&node_id)?;
+    let mut builder = element.accessibility().builder.clone();
+    element.finish_accessibility(&mut builder);
+    Some(builder)
+}
+
+/// The text of the first direct child that has one (Freya's own rule, kept for containers).
+fn first_child_text(node_id: NodeId, tree: &Tree) -> Option<String> {
+    tree.children.get(&node_id)?.iter().find_map(|child| {
+        let builder = finished(*child, tree)?;
+        (!builder.is_hidden())
+            .then(|| builder.value().map(String::from))
+            .flatten()
+    })
+}
+
+/// Appends the visible text inside `node_id`, in tree order, to `pieces`.
+fn content_text(node_id: NodeId, tree: &Tree, pieces: &mut Vec<String>, depth: usize) {
+    if depth > NAME_DEPTH || pieces.iter().map(String::len).sum::<usize>() > NAME_MAX {
+        return;
+    }
+    let Some(children) = tree.children.get(&node_id) else {
+        return;
+    };
+    for child in children {
+        let Some(builder) = finished(*child, tree) else {
+            continue;
+        };
+        if builder.is_hidden() || is_control(builder.role()) {
+            continue;
+        }
+        let text = builder
+            .label()
+            .or_else(|| matches!(builder.role(), Role::Label | Role::Paragraph).then(|| builder.value()).flatten())
+            .map(str::trim)
+            .filter(|text| !text.is_empty());
+        match text {
+            Some(text) => pieces.push(text.to_string()),
+            None => content_text(*child, tree, pieces, depth + 1),
+        }
+    }
+}
+
+/// The nearest ancestor of `node_id` that is named by its content, within [`NAME_DEPTH`] steps.
+fn named_ancestor(node_id: NodeId, tree: &Tree) -> Option<NodeId> {
+    let mut current = node_id;
+    for _ in 0..NAME_DEPTH {
+        let parent = *tree.parents.get(&current)?;
+        if parent == current {
+            return None;
+        }
+        let builder = finished(parent, tree)?;
+        if names_from_content(builder.role()) {
+            return Some(parent);
+        }
+        if is_control(builder.role()) || builder.role() == Role::Window {
+            return None;
+        }
+        current = parent;
+    }
+    None
+}
+
+/// Whether the text leaf `node_id` is said by a control around it: a button, check box, tab,
+/// option or other control whose content is presentational, a text field (whose value is the
+/// text), or a heading, cell or status named by its content because it was given no name.
+fn inside_named_control(node_id: NodeId, tree: &Tree) -> bool {
+    let mut current = node_id;
+    for _ in 0..NAME_DEPTH {
+        let Some(parent) = tree.parents.get(&current).copied() else {
+            return false;
+        };
+        if parent == current {
+            return false;
+        }
+        let Some(builder) = finished(parent, tree) else {
+            return false;
+        };
+        let role = builder.role();
+        if matches!(
+            role,
+            Role::TextInput | Role::MultilineTextInput | Role::SearchInput | Role::PasswordInput
+        ) {
+            return true;
+        }
+        if presentational_children(role) {
+            return true;
+        }
+        if names_from_content(role) {
+            return builder.label().is_none();
+        }
+        if is_control(role) || role == Role::Window {
+            return false;
+        }
+        current = parent;
+    }
+    false
+}
+
+/// Roles whose content is presentational whatever their name (WAI-ARIA): a button's text is
+/// its name or a copy of it, never a separate thing to read.
+fn presentational_children(role: Role) -> bool {
+    matches!(
+        role,
+        Role::Button
+            | Role::DefaultButton
+            | Role::CheckBox
+            | Role::RadioButton
+            | Role::Switch
+            | Role::Tab
+            | Role::MenuItem
+            | Role::MenuItemCheckBox
+            | Role::MenuItemRadio
+            | Role::ListBoxOption
+            | Role::Slider
+            | Role::ProgressIndicator
+            | Role::Image
+    )
 }

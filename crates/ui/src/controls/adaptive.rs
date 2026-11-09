@@ -313,6 +313,8 @@ impl Component for AdaptiveLine {
             fluid: State::create(false),
         });
 
+        // The control on the line is named by the label beside it.
+        crate::a11y::provide_field_label(&self.label, None);
         let facts = LabelFacts::measure(&self.label, BODY);
         let inner = (width() - 2.0 * GUTTER.px()).max(0.0);
         let control = ControlFacts {
