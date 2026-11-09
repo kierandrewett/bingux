@@ -219,20 +219,16 @@ pub fn import_file(model: Model, overlays: Overlays, path: PathBuf) {
         let parsed = match parsed {
             Ok(parsed) => parsed,
             Err(Unreadable::Read) => {
-                overlays.toast(format!(
-                    "Could not read {name}. Check that you can open the file."
-                ));
+                overlays.toast(tr!("calendar-read-failed", name = name.as_str()));
                 return;
             }
             Err(Unreadable::NotCalendar) => {
-                overlays.toast(format!(
-                    "Could not import {name}. It is not a calendar file."
-                ));
+                overlays.toast(tr!("calendar-not-calendar", name = name.as_str()));
                 return;
             }
         };
         if parsed.items.is_empty() {
-            overlays.toast(format!("{name} has no events to import."));
+            overlays.toast(tr!("calendar-no-events-to-import", name = name.as_str()));
             return;
         }
         confirm_import(model, overlays, name, Arc::new(parsed));
@@ -254,9 +250,10 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
         .map(|c| (c.id.clone(), c.name.clone()))
         .collect();
     let count = parsed.items.len();
-    let message = match count {
-        1 => format!("1 event from {name}."),
-        n => format!("{n} events from {name}."),
+    let message = if count == 1 {
+        tr!("calendar-imported-one")
+    } else {
+        tr!("calendar-imported-many", count = count)
     };
     let note = if parsed.warnings.is_empty() {
         message
@@ -288,9 +285,10 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
                     })
                     .collect();
                 model.apply(changes);
-                overlays.toast(match count {
-                    1 => "Imported 1 event.".to_string(),
-                    n => format!("Imported {n} events."),
+                overlays.toast(if count == 1 {
+                    tr!("calendar-imported-one")
+                } else {
+                    tr!("calendar-imported-many", count = count)
                 });
             }),
     );

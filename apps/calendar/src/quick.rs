@@ -126,7 +126,7 @@ impl Component for QuickBody {
             let new = new.clone();
             move || {
                 let Some(item) = item_of(&model, &new) else {
-                    overlays.toast("There is no calendar to add the event to.");
+                    overlays.toast(tr!("calendar-no-calendar-to-add"));
                     return;
                 };
                 let day = convert::date_of(new.start.date());
@@ -168,7 +168,7 @@ impl Component for QuickBody {
         }
         let preview: Element = if lines.is_empty() {
             CAPTION
-                .label(&tokens, "Say what, when and where. For example: Lunch with Sam at Nando\u{2019}s tomorrow 1pm.")
+                .label(&tokens, tr!("calendar-quick-hint"))
                 .into_element()
         } else {
             let mut column = vstack(S1);
@@ -204,7 +204,7 @@ impl Component for QuickBody {
                             enter();
                         }
                     })
-                    .placeholder("Lunch with Sam tomorrow 1pm")
+                    .placeholder(tr!("calendar-quick-placeholder"))
                     .autofocus()
                     .fill_width(),
                 ),
@@ -213,7 +213,11 @@ impl Component for QuickBody {
             .child(
                 rect()
                     .tw(&tokens, &[w_full(), flex_row(), justify(Align::End)])
-                    .child(action_button("More Options", more).flat().enabled(true)),
+                    .child(
+                        action_button(tr!("calendar-more-options"), more)
+                            .flat()
+                            .enabled(true),
+                    ),
             )
     }
 }

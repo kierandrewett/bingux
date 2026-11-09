@@ -18,9 +18,9 @@ use crate::model::{EventRef, Model, time_text};
 /// "Today", "Tomorrow", or the weekday.
 fn heading(day: Date, today: Date) -> String {
     match day.days() - today.days() {
-        -1 => "Yesterday".to_string(),
-        0 => "Today".to_string(),
-        1 => "Tomorrow".to_string(),
+        -1 => tr!("calendar-yesterday"),
+        0 => tr!("calendar-today"),
+        1 => tr!("calendar-tomorrow"),
         _ => day.weekday().name().to_string(),
     }
 }
@@ -79,12 +79,9 @@ impl Component for AgendaView {
         let occurrences = shown(model.occurrences(anchor, to));
         let days = by_day(&occurrences, anchor, to);
         if days.is_empty() {
-            return status_page(Icon::XOfficeCalendar, "Nothing coming up")
-                .description(format!(
-                    "There are no events in the next {} days.",
-                    *span.read()
-                ))
-                .action("Add event", move |_| {
+            return status_page(Icon::XOfficeCalendar, tr!("calendar-nothing-coming-up"))
+                .description(tr!("calendar-no-events-in-days", days = *span.read()))
+                .action(tr!("calendar-add-event"), move |_| {
                     editor::open(model, window, overlays, Seed::at_day(&model, anchor));
                 })
                 .into_element();
@@ -140,8 +137,8 @@ impl Component for DayList {
                     &tokens,
                     &[w_full(), flex_col(), items(Align::Center), gap(S2), p(S4)],
                 )
-                .child(CAPTION.label(&tokens, "No events"))
-                .child(action_button("Add event", move |_| {
+                .child(CAPTION.label(&tokens, tr!("calendar-no-events")))
+                .child(action_button(tr!("calendar-add-event"), move |_| {
                     editor::open(model, window, overlays, Seed::at_day(&model, day));
                 }))
                 .into_element()
@@ -186,11 +183,8 @@ impl Component for SearchResults {
         );
         let found = shown(found);
         if found.is_empty() {
-            return status_page(Icon::Search, "No results")
-                .description(format!(
-                    "Nothing matches \u{201c}{}\u{201d}.",
-                    self.query.trim()
-                ))
+            return status_page(Icon::Search, tr!("calendar-no-results"))
+                .description(tr!("calendar-nothing-matches", query = self.query.trim()))
                 .into_element();
         }
         let first = found
