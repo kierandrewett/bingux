@@ -10,6 +10,7 @@
 
 use std::path::Path;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::style::S10;
 use freya::prelude::*;
 
@@ -34,9 +35,12 @@ use crate::ui::{
 /// The header title of the add-VPN flow for `kind`.
 pub fn add_vpn_title(kind: Option<&str>) -> String {
     match kind {
-        None => "Add VPN".to_string(),
-        Some("import") => "Import VPN".to_string(),
-        Some(kind) => format!("Add {}", plugins::display_name(kind)),
+        None => tr!("network-vpn-add-title"),
+        Some("import") => tr!("network-vpn-import-title"),
+        Some(kind) => tr!(
+            "network-vpn-add-kind-title",
+            name = plugins::display_name(kind)
+        ),
     }
 }
 
@@ -70,14 +74,11 @@ fn name_problem(name: &str, taken: &[String]) -> Option<String> {
     if name.is_empty() {
         None
     } else if taken.iter().any(|other| other == name) {
-        Some("Use a name that no other connection has.".to_string())
+        Some(tr!("network-vpn-add-name-taken"))
     } else {
         None
     }
 }
-
-const ADD_FAILED: &str = "Could not add the VPN. Check the details and try again.";
-const IMPORT_FAILED: &str = "Could not import the VPN. Check the file and try again.";
 
 /// Run `work`, which makes a VPN and returns its name, then open that VPN's
 /// screen. The overview is read again first, so the screen finds the new
@@ -164,7 +165,7 @@ impl Component for Chooser {
             move |_: ()| ctx.router.open(routes::add_vpn(Some(&kind.clone())))
         };
 
-        let mut types = Group::titled("Type").row(
+        let mut types = Group::titled(&tr!("network-vpn-add-type")).row(
             row("WireGuard")
                 .leading(Icon::NetworkVpn)
                 .navigates()
@@ -178,8 +179,8 @@ impl Component for Chooser {
                     .on_press(open(&plugin.short)),
             );
         }
-        let import = Group::titled("From a file").row(
-            row("Import from file…")
+        let import = Group::titled(&tr!("network-vpn-add-from-file")).row(
+            row(tr!("network-vpn-add-import-from-file"))
                 .leading(Icon::DocumentOpen)
                 .navigates()
                 .on_press(open("import")),
@@ -231,7 +232,7 @@ impl Component for WireguardForm {
         let taken_names = taken.read().clone().unwrap_or_default();
         let (tunnel_name, tunnel, keepalive_text) = read();
         let problem = if tunnel_name.is_empty() {
-            Some("Give the VPN a name.".to_string())
+            Some(tr!("network-vpn-add-name-required"))
         } else {
             name_problem(&tunnel_name, &taken_names)
                 .or_else(|| interface_error(&tunnel.interface))
@@ -268,84 +269,87 @@ impl Component for WireguardForm {
         };
 
         let all = wireguard::is_all_traffic(&wireguard::parse_list(&allowed.read()));
-        let mut interface = Group::titled("Interface").row(
-            form_field("Private key", private_key)
+        let mut interface = Group::titled(&tr!("network-vpn-add-group-interface")).row(
+            form_field(tr!("network-vpn-add-private-key"), private_key)
                 .password()
                 .monospace()
                 .hint(if has_wg {
-                    "Stays on this computer. Generate one, or paste your own."
+                    tr!("network-vpn-add-key-local")
                 } else {
-                    "Paste the key from your VPN provider."
+                    tr!("network-vpn-add-key-provider")
                 })
                 .validate(check::key),
         );
         if has_wg {
             interface = interface.row(action_row(
                 None,
-                action_button("Generate key", generate).compact(),
+                action_button(&tr!("network-vpn-add-generate-key"), generate).compact(),
             ));
         }
         interface = interface
             .row(
-                form_field("Addresses", addresses)
+                form_field(tr!("network-vpn-add-addresses"), addresses)
                     .multiline(2)
                     .monospace()
-                    .hint("This computer's addresses inside the tunnel, one per line, with the prefix length.")
+                    .hint(tr!("network-vpn-add-addresses-hint"))
                     .placeholder("10.8.0.2/32")
                     .validate(check::cidr_list),
             )
             .row(
-                form_field("DNS servers", dns)
+                form_field(tr!("network-vpn-add-dns"), dns)
                     .multiline(2)
                     .monospace()
                     .optional()
-                    .hint("Used while the tunnel is up, one per line.")
+                    .hint(tr!("network-vpn-add-dns-hint"))
                     .validate(check::dns_list),
             );
-        let peer = Group::titled("Peer")
+        let peer = Group::titled(&tr!("network-vpn-add-group-peer"))
             .row(
-                form_field("Public key", public_key)
+                form_field(tr!("network-vpn-add-public-key"), public_key)
                     .monospace()
-                    .hint("The other side's public key.")
+                    .hint(tr!("network-vpn-add-public-key-hint"))
                     .validate(check::key),
             )
             .row(
-                form_field("Endpoint", endpoint)
+                form_field(tr!("network-vpn-add-endpoint"), endpoint)
                     .optional()
-                    .hint("Where to reach it, as host:port.")
+                    .hint(tr!("network-vpn-add-endpoint-hint"))
                     .placeholder("vpn.example.com:51820")
                     .validate(check::endpoint),
             )
             .row(
-                form_field("Preshared key", preshared)
+                form_field(tr!("network-vpn-add-preshared"), preshared)
                     .password()
                     .monospace()
                     .optional()
-                    .hint("An extra secret both sides share, if they use one.")
+                    .hint(tr!("network-vpn-add-preshared-hint"))
                     .validate(check::key),
             )
             .row(
-                form_field("Keepalive", keepalive)
+                form_field(tr!("network-vpn-add-keepalive"), keepalive)
                     .optional()
-                    .suffix("seconds")
-                    .hint("Keeps the connection open through a router. 25 is usual.")
+                    .suffix(&tr!("network-vpn-add-seconds"))
+                    .hint(tr!("network-vpn-add-keepalive-hint"))
                     .validate(check::keepalive),
             );
-        let mut traffic =
-            Group::titled("Traffic").row(switch_row("Route all traffic", all, move |on: bool| {
+        let mut traffic = Group::titled(&tr!("network-vpn-add-group-traffic")).row(switch_row(
+            &tr!("network-vpn-add-route-all"),
+            all,
+            move |on: bool| {
                 let mut allowed = allowed;
                 allowed.set(if on {
                     wireguard::ALL_TRAFFIC.join("\n")
                 } else {
                     String::new()
                 });
-            }));
+            },
+        ));
         if !all {
             traffic = traffic.row(
-                form_field("Allowed addresses", allowed)
+                form_field(tr!("network-vpn-add-allowed"), allowed)
                     .multiline(2)
                     .monospace()
-                    .hint("Networks that go through this peer, one per line.")
+                    .hint(tr!("network-vpn-add-allowed-hint"))
                     .placeholder("10.8.0.0/24")
                     .validate(check::cidr_list),
             );
@@ -354,8 +358,8 @@ impl Component for WireguardForm {
         page_column()
             .child(
                 Group::titled("VPN").row(
-                    form_field("Name", name)
-                        .hint("How this VPN is listed.")
+                    form_field(tr!("network-vpn-add-name"), name)
+                        .hint(tr!("network-vpn-add-name-hint"))
                         .placeholder("Work")
                         .error(name_problem(&tunnel_name, &taken_names)),
                 ),
@@ -371,8 +375,8 @@ impl Component for WireguardForm {
                     .map(|message| Element::from(status(Status::Error(message)))),
             ))
             .child(submit_row(
-                "Add VPN",
-                Some("It does not connect until you turn it on."),
+                &tr!("network-vpn-add-submit"),
+                Some(tr!("network-vpn-add-no-connect").as_str()),
                 problem.is_none(),
                 *busy.read(),
                 create,
@@ -420,9 +424,9 @@ impl Component for PluginAdd {
         };
         match list.into_iter().find(|plugin| plugin.short == self.short) {
             Some(plugin) => page_column().child(PluginAddForm { plugin }),
-            None => page_column().child(status(Status::Empty(format!(
-                "{} is not installed. Install its plugin to add this VPN.",
-                plugins::display_name(&self.short)
+            None => page_column().child(status(Status::Empty(tr!(
+                "network-vpn-add-not-installed",
+                name = plugins::display_name(&self.short)
             )))),
         }
     }
@@ -430,8 +434,8 @@ impl Component for PluginAdd {
 
 fn placeholder_form() -> Element {
     Group::titled("VPN")
-        .row(row("Name").value("—"))
-        .row(row("Server").value("—"))
+        .row(row(tr!("network-vpn-add-name")).value("—"))
+        .row(row(tr!("network-vpn-add-server")).value("—"))
         .into()
 }
 
@@ -459,7 +463,7 @@ impl Component for PluginAddForm {
         let vpn_name = name.read().trim().to_string();
         let lines = parse_lines(&raw.read());
         let problem = if vpn_name.is_empty() {
-            Some("Give the VPN a name.".to_string())
+            Some(tr!("network-vpn-add-name-required"))
         } else {
             name_problem(&vpn_name, &taken_names)
                 .or_else(|| {
@@ -467,9 +471,8 @@ impl Component for PluginAddForm {
                 })
                 .or_else(|| lines.clone().err())
                 .or_else(|| {
-                    (!known && lines.as_ref().is_ok_and(|entries| entries.is_empty())).then(|| {
-                        "Add the settings this VPN needs, one name = value per line.".to_string()
-                    })
+                    (!known && lines.as_ref().is_ok_and(|entries| entries.is_empty()))
+                        .then(|| tr!("network-vpn-add-settings-needed"))
                 })
         };
 
@@ -513,11 +516,11 @@ impl Component for PluginAddForm {
             group = field_rows(group, fields, &states, &texts);
         } else {
             group = field_rows(group, fields, &states, &texts).row(
-                form_field("Settings", raw)
+                form_field(tr!("network-vpn-add-settings"), raw)
                     .multiline(4)
                     .monospace()
                     .placeholder("gateway = vpn.example.com")
-                    .hint("One name = value per line.")
+                    .hint(tr!("network-vpn-add-settings-hint"))
                     .validate(check_lines),
             );
         }
@@ -525,8 +528,8 @@ impl Component for PluginAddForm {
         page_column()
             .child(
                 Group::titled("VPN").row(
-                    form_field("Name", name)
-                        .hint("How this VPN is listed.")
+                    form_field(tr!("network-vpn-add-name"), name)
+                        .hint(tr!("network-vpn-add-name-hint"))
                         .placeholder("Work")
                         .error(name_problem(&vpn_name, &taken_names)),
                 ),
@@ -540,8 +543,8 @@ impl Component for PluginAddForm {
                     .map(|message| Element::from(status(Status::Error(message)))),
             ))
             .child(submit_row(
-                "Add VPN",
-                Some("It does not connect until you turn it on."),
+                &tr!("network-vpn-add-submit"),
+                Some(tr!("network-vpn-add-no-connect").as_str()),
                 problem.is_none(),
                 *busy.read(),
                 create,
@@ -575,7 +578,7 @@ fn add_plugin_profile(short: &str, name: &str, profile: &PluginProfile) -> Resul
     if !profile.user_name.is_empty() {
         args.extend(["vpn.user-name", &profile.user_name]);
     }
-    nm::run(&args).map_err(|raw| super::plain(&raw, ADD_FAILED))?;
+    nm::run(&args).map_err(|raw| super::plain(&raw, &tr!("network-vpn-add-failed")))?;
     Ok(name.to_string())
 }
 
@@ -622,13 +625,11 @@ fn stem_of(path: &str) -> String {
 /// Returns the new profile's name.
 fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, String> {
     let text = crate::system::read_to_string(path)
-        .map_err(|error| format!("The file could not be read: {error}."))?;
+        .map_err(|error| tr!("network-vpn-add-read-failed", error = error.to_string()))?;
     let head: String = text.lines().take(60).collect::<Vec<_>>().join("\n");
     let kind = if kind == "auto" {
         detect_kind(path, &head)
-            .ok_or_else(|| {
-                "This file does not say what kind of VPN it is. Choose the type above.".to_string()
-            })?
+            .ok_or_else(|| tr!("network-vpn-add-unknown-kind"))?
             .to_string()
     } else {
         kind.to_string()
@@ -640,16 +641,15 @@ fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, S
         .iter()
         .find(|plugin| plugin.short == kind)
         .ok_or_else(|| {
-            format!(
-                "{} is not installed. Install its plugin to add this VPN.",
-                plugins::display_name(&kind)
+            tr!(
+                "network-vpn-add-not-installed",
+                name = plugins::display_name(&kind)
             )
         })?;
     let existing = nm::connection_names()?;
     let added = nm::run(&["connection", "import", "type", &plugin.short, "file", path])
-        .map_err(|raw| super::plain(&raw, IMPORT_FAILED))?;
-    let (made, uuid) = nm::added(&added)
-        .ok_or_else(|| "The new VPN could not be found. Try again.".to_string())?;
+        .map_err(|raw| super::plain(&raw, &tr!("network-vpn-import-check-file")))?;
+    let (made, uuid) = nm::added(&added).ok_or_else(|| tr!("network-vpn-add-new-missing"))?;
     // Two profiles with one name cannot be told apart by `nmcli ... id`.
     let name = wireguard::unique_name(&made, &existing);
     nm::run(&[
@@ -662,24 +662,23 @@ fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, S
         "connection.autoconnect",
         "no",
     ])
-    .map_err(|raw| super::plain(&raw, IMPORT_FAILED))?;
+    .map_err(|raw| super::plain(&raw, &tr!("network-vpn-import-check-file")))?;
     Ok(name)
 }
 
 /// Let the person pick the file with the system chooser; `chosen` gets its
 /// path. Cancelling does nothing.
 fn browse(ctx: NetCtx, chosen: impl FnOnce(String) + 'static) {
-    let configuration = ["*.conf", "*.ovpn", "*.pcf", "*.sh"]
-        .into_iter()
-        .fold(Filter::new("VPN configuration"), |filter, pattern| {
-            filter.glob(pattern)
-        });
+    let configuration = ["*.conf", "*.ovpn", "*.pcf", "*.sh"].into_iter().fold(
+        Filter::new(&tr!("network-vpn-add-filter-vpn")),
+        |filter, pattern| filter.glob(pattern),
+    );
     choose(
         ctx.window,
         ChooserRequest::open()
-            .title("Choose a VPN file")
+            .title(&tr!("network-vpn-add-choose-file"))
             .filter(configuration)
-            .filter(Filter::new("All files").glob("*")),
+            .filter(Filter::new(&tr!("network-vpn-add-filter-all")).glob("*")),
         move |answer| {
             if let Some(path) = answer.and_then(|answer| answer.paths.into_iter().next()) {
                 chosen(path.to_string_lossy().into_owned());
@@ -693,7 +692,7 @@ fn check_path(text: &str) -> Result<(), String> {
     if text.starts_with('/') {
         Ok(())
     } else {
-        Err("Enter the full path of the file, starting with /.".to_string())
+        Err(tr!("network-vpn-add-path-required"))
     }
 }
 
@@ -712,7 +711,7 @@ impl Component for ImportForm {
 
         let installed = found.read().clone().unwrap_or_default();
         let mut options = vec![
-            ("auto".to_string(), "Detect from the file".to_string()),
+            ("auto".to_string(), tr!("network-vpn-add-detect")),
             ("wireguard".to_string(), "WireGuard".to_string()),
         ];
         options.extend(
@@ -747,11 +746,11 @@ impl Component for ImportForm {
                     extensions.push(format!(".{} ({})", list[0], plugin.name));
                 }
             }
-            format!("Reads {}.", extensions.join(", "))
+            tr!("network-vpn-add-reads", list = extensions.join(", "))
         };
-        let file_group = Group::titled("File")
+        let file_group = Group::titled(&tr!("network-vpn-add-file"))
             .row(
-                form_field("File", path)
+                form_field(tr!("network-vpn-add-file"), path)
                     .monospace()
                     .hint(hint)
                     .placeholder("/home/you/work.ovpn")
@@ -762,8 +761,8 @@ impl Component for ImportForm {
                     }),
             )
             .row(action_row(
-                Some("Or choose the file from your folders."),
-                action_button("Browse…", move |_| {
+                Some(tr!("network-vpn-add-browse-hint").as_str()),
+                action_button(&tr!("network-vpn-add-browse"), move |_| {
                     browse(ctx, move |file| {
                         let mut path = path;
                         path.set(file);
@@ -772,7 +771,7 @@ impl Component for ImportForm {
                 .compact(),
             ))
             .row(choice_row(
-                "Type",
+                &tr!("network-vpn-add-type"),
                 options,
                 &chosen_kind,
                 move |key: String| {
@@ -791,10 +790,8 @@ impl Component for ImportForm {
                     .map(|message| Element::from(status(Status::Error(message)))),
             ))
             .child(submit_row(
-                "Import",
-                Some(
-                    "The VPN opens when it is imported. It does not connect until you turn it on.",
-                ),
+                &tr!("network-vpn-add-import"),
+                Some(tr!("network-vpn-add-import-note").as_str()),
                 valid,
                 *busy.read(),
                 import,

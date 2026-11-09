@@ -7,6 +7,8 @@
 
 use std::process::Command;
 
+use bingux_ui::prelude::tr;
+
 /// Run `nmcli args`. The error is nmcli's own message, without the `Error:`
 /// prefix and the `Hint:` lines.
 pub fn run(args: &[&str]) -> Result<String, String> {
@@ -15,12 +17,11 @@ pub fn run(args: &[&str]) -> Result<String, String> {
         .output()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => {
-                "Network settings are not available. Restart the computer and try again."
-                    .to_string()
+                tr!("network-vpn-nmcli-missing")
             }
             _ => {
                 eprintln!("bingux-settings: nmcli could not start: {error}");
-                "Could not open the network settings. Try again.".to_string()
+                tr!("network-vpn-nmcli-failed")
             }
         })?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -70,29 +71,27 @@ pub fn activation_reason(message: &str) -> String {
         || has("no secrets")
         || has("no agents were available")
     {
-        "The VPN needs a password or key that is not saved. Add it in the VPN's settings."
-            .to_string()
+        tr!("network-vpn-reason-needs-secret")
     } else if has("(11)") || has("login failed") || has("authentication failed") {
-        "The server refused the user name or password.".to_string()
+        tr!("network-vpn-reason-refused")
     } else if has("timeout") || has("timed out") || has("(7)") {
-        "The server did not answer in time. Check its address and your connection.".to_string()
+        tr!("network-vpn-reason-timeout")
     } else if has("(8)") || has("(9)") || has("service did not start") || has("failed to start") {
-        "The VPN program failed to start. Check its settings, and that its plugin is installed."
-            .to_string()
+        tr!("network-vpn-reason-program-failed")
     } else if has("(6)") {
-        "The server sent no usable network settings. Try again later.".to_string()
+        tr!("network-vpn-reason-no-settings")
     } else if has("no suitable device") || has("not available on device") {
-        "There is no network connection to carry the VPN. Connect to a network first.".to_string()
+        tr!("network-vpn-reason-no-device")
     } else if has("no such connection") || has("unknown connection") || has("(12)") {
-        "This VPN no longer exists.".to_string()
+        tr!("network-vpn-reason-gone")
     } else if has("(3)") || has("(4)") || has("(5)") {
-        "The VPN was disconnected.".to_string()
+        tr!("network-vpn-reason-disconnected")
     } else if has("not authorized") || has("insufficient privileges") {
-        "You are not allowed to change this connection.".to_string()
+        tr!("network-vpn-reason-not-allowed")
     } else if message.is_empty() {
-        "The VPN did not connect. Try again.".to_string()
+        tr!("network-vpn-reason-no-reason")
     } else {
-        super::super::plain(message, "Could not change the VPN. Try again.")
+        super::super::plain(message, &tr!("network-vpn-reason-fallback"))
     }
 }
 
