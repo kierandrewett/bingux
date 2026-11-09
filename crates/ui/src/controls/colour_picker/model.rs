@@ -77,7 +77,11 @@ impl Hsva {
             } else {
                 found.hue
             },
-            sat: if found.val == 0.0 { self.sat } else { found.sat },
+            sat: if found.val == 0.0 {
+                self.sat
+            } else {
+                found.sat
+            },
             val: found.val,
             alpha: found.alpha,
         }
@@ -130,7 +134,15 @@ impl Hsva {
         // HSL and HSV share a hue; a grey has none of its own in RGB, so the
         // one being edited is the hue.
         let chromatic = sat > 0.0 && light > 0.0 && light < 1.0;
-        (if chromatic { rgb_hue(r, g, b) } else { self.hue }, sat, light)
+        (
+            if chromatic {
+                rgb_hue(r, g, b)
+            } else {
+                self.hue
+            },
+            sat,
+            light,
+        )
     }
 
     /// A colour from HSL, with each part clamped. The colour is the nearest
@@ -246,8 +258,18 @@ pub fn parse_hex(text: &str) -> Result<Hex, HexError> {
     let value = u32::from_str_radix(digits, 16).map_err(|_| HexError::Length(count))?;
     let double = |shift: u32| (((value >> shift) & 0xf) as u8) * 17;
     Ok(match count {
-        3 => Hex { r: double(8), g: double(4), b: double(0), alpha: None },
-        4 => Hex { r: double(12), g: double(8), b: double(4), alpha: Some(double(0)) },
+        3 => Hex {
+            r: double(8),
+            g: double(4),
+            b: double(0),
+            alpha: None,
+        },
+        4 => Hex {
+            r: double(12),
+            g: double(8),
+            b: double(4),
+            alpha: Some(double(0)),
+        },
         6 => Hex {
             r: (value >> 16) as u8,
             g: (value >> 8) as u8,
@@ -334,7 +356,11 @@ impl Mode {
             }
             Mode::Hsl => {
                 let (h, s, l) = colour.hsl();
-                [h.round() as i32, (s * 100.0).round() as i32, (l * 100.0).round() as i32]
+                [
+                    h.round() as i32,
+                    (s * 100.0).round() as i32,
+                    (l * 100.0).round() as i32,
+                ]
             }
             Mode::Hsv => [
                 colour.hue.round() as i32,
@@ -505,7 +531,11 @@ mod tests {
     fn rgb_survives_a_round_trip_through_hsv() {
         for (r, g, b) in grid() {
             let (h, s, v) = rgb_to_hsv(r, g, b);
-            assert_eq!(hsv_to_rgb(h, s, v), (r, g, b), "{r},{g},{b} via {h},{s},{v}");
+            assert_eq!(
+                hsv_to_rgb(h, s, v),
+                (r, g, b),
+                "{r},{g},{b} via {h},{s},{v}"
+            );
         }
         for grey in 0..=255u8 {
             let (h, s, v) = rgb_to_hsv(grey, grey, grey);
@@ -517,7 +547,11 @@ mod tests {
     fn rgb_survives_a_round_trip_through_hsl() {
         for (r, g, b) in grid() {
             let (h, s, l) = rgb_to_hsl(r, g, b);
-            assert_eq!(hsl_to_rgb(h, s, l), (r, g, b), "{r},{g},{b} via {h},{s},{l}");
+            assert_eq!(
+                hsl_to_rgb(h, s, l),
+                (r, g, b),
+                "{r},{g},{b} via {h},{s},{l}"
+            );
         }
         for grey in 0..=255u8 {
             let (h, s, l) = rgb_to_hsl(grey, grey, grey);
@@ -707,22 +741,40 @@ mod tests {
 
     #[test]
     fn hex_accepts_three_four_six_and_eight_digits_with_or_without_a_hash() {
-        let blue = Hex { r: 0x35, g: 0x84, b: 0xe4, alpha: None };
+        let blue = Hex {
+            r: 0x35,
+            g: 0x84,
+            b: 0xe4,
+            alpha: None,
+        };
         assert_eq!(parse_hex("#3584e4"), Ok(blue));
         assert_eq!(parse_hex("3584e4"), Ok(blue));
         assert_eq!(parse_hex("#3584E4"), Ok(blue));
         assert_eq!(parse_hex("  #3584e4\n"), Ok(blue));
         assert_eq!(
             parse_hex("#3584e480"),
-            Ok(Hex { alpha: Some(0x80), ..blue })
+            Ok(Hex {
+                alpha: Some(0x80),
+                ..blue
+            })
         );
         assert_eq!(
             parse_hex("#fc0"),
-            Ok(Hex { r: 0xff, g: 0xcc, b: 0x00, alpha: None })
+            Ok(Hex {
+                r: 0xff,
+                g: 0xcc,
+                b: 0x00,
+                alpha: None
+            })
         );
         assert_eq!(
             parse_hex("fc08"),
-            Ok(Hex { r: 0xff, g: 0xcc, b: 0x00, alpha: Some(0x88) })
+            Ok(Hex {
+                r: 0xff,
+                g: 0xcc,
+                b: 0x00,
+                alpha: Some(0x88)
+            })
         );
     }
 
@@ -743,7 +795,10 @@ mod tests {
         assert!(!HexError::Length(5).message().is_empty());
         assert!(HexError::BadDigit('g').message().contains('g'));
         // Non-ASCII digits are not hex digits, and do not panic.
-        assert_eq!(parse_hex("#\u{ff11}\u{ff12}\u{ff13}"), Err(HexError::BadDigit('\u{ff11}')));
+        assert_eq!(
+            parse_hex("#\u{ff11}\u{ff12}\u{ff13}"),
+            Err(HexError::BadDigit('\u{ff11}'))
+        );
     }
 
     #[test]
@@ -752,12 +807,17 @@ mod tests {
             for alpha in [0u8, 1, 127, 128, 254, 255] {
                 let colour = Hsva::from_colour(argb(alpha, r, g, b));
                 let text = colour.to_hex(true);
-                let back = Hsva::from_colour(colour.colour()).edited_by_hex(&text).unwrap();
+                let back = Hsva::from_colour(colour.colour())
+                    .edited_by_hex(&text)
+                    .unwrap();
                 assert_eq!(back.colour(), argb(alpha, r, g, b), "{text}");
                 // Without alpha the text is six digits and the alpha is kept.
                 let six = colour.to_hex(false);
                 assert_eq!(six.len(), 7);
-                assert_eq!(colour.edited_by_hex(&six).unwrap().colour(), argb(alpha, r, g, b));
+                assert_eq!(
+                    colour.edited_by_hex(&six).unwrap().colour(),
+                    argb(alpha, r, g, b)
+                );
             }
         }
     }
@@ -777,13 +837,22 @@ mod tests {
             editing.edited_by_hex("#ff0000").unwrap().colour(),
             argb(90, 255, 0, 0)
         );
-        assert_eq!(editing.edited_by_hex("f00").unwrap().colour(), argb(90, 255, 0, 0));
+        assert_eq!(
+            editing.edited_by_hex("f00").unwrap().colour(),
+            argb(90, 255, 0, 0)
+        );
         assert_eq!(
             editing.edited_by_hex("#ff000080").unwrap().colour(),
             argb(0x80, 255, 0, 0)
         );
-        assert_eq!(editing.edited_by_hex("#f008").unwrap().colour(), argb(0x88, 255, 0, 0));
-        assert!(editing.edited_by_hex("#ff00").is_ok(), "four digits are rgba");
+        assert_eq!(
+            editing.edited_by_hex("#f008").unwrap().colour(),
+            argb(0x88, 255, 0, 0)
+        );
+        assert!(
+            editing.edited_by_hex("#ff00").is_ok(),
+            "four digits are rgba"
+        );
         assert_eq!(editing.edited_by_hex("#ff000"), Err(HexError::Length(5)));
     }
 

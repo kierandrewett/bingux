@@ -48,7 +48,10 @@ pub struct SearchField {
 }
 
 /// A search field over `value`. Its placeholder is `Search`.
-pub fn search_field(value: State<String>, on_change: impl Into<EventHandler<String>>) -> SearchField {
+pub fn search_field(
+    value: State<String>,
+    on_change: impl Into<EventHandler<String>>,
+) -> SearchField {
     SearchField {
         value,
         on_change: on_change.into(),
@@ -232,7 +235,13 @@ mod tests {
         Disabled,
     }
 
-    const LOOKS: [Look; 5] = [Look::Plain, Look::Well, Look::Dense, Look::Flat, Look::Disabled];
+    const LOOKS: [Look; 5] = [
+        Look::Plain,
+        Look::Well,
+        Look::Dense,
+        Look::Flat,
+        Look::Disabled,
+    ];
 
     #[derive(PartialEq)]
     struct Host {
@@ -244,9 +253,11 @@ mod tests {
         fn render(&self) -> impl IntoElement {
             let tokens = provide_tokens();
             let value = use_state(|| self.typed.to_string());
-            let mut field = search_field(value, |text: String| CHANGES.with(|log| log.borrow_mut().push(text)))
-                .on_submit(|text: String| SUBMITS.with(|log| log.borrow_mut().push(text)))
-                .fill_width();
+            let mut field = search_field(value, |text: String| {
+                CHANGES.with(|log| log.borrow_mut().push(text))
+            })
+            .on_submit(|text: String| SUBMITS.with(|log| log.borrow_mut().push(text)))
+            .fill_width();
             field = match self.look {
                 Look::Plain => field,
                 Look::Well => field.well(),
@@ -254,7 +265,9 @@ mod tests {
                 Look::Flat => field.flat(),
                 Look::Disabled => field.enabled(false),
             };
-            rect().tw(&tokens, &[w_full(), h_full(), p(S5), bg(Paint::Surface)]).child(field)
+            rect()
+                .tw(&tokens, &[w_full(), h_full(), p(S5), bg(Paint::Surface)])
+                .child(field)
         }
     }
 
@@ -270,10 +283,20 @@ mod tests {
     /// Desktop at 1x and 2x, phone at 1x and 2x: the four places the field is
     /// drawn.
     fn setups(look: Look, typed: &'static str) -> Vec<Setup> {
-        [(SizeClass::Regular, 1.0), (SizeClass::Regular, 2.0), (SizeClass::Compact, 1.0), (SizeClass::Compact, 2.0)]
-            .into_iter()
-            .map(|(class, scale)| Setup { class, scale, look, typed })
-            .collect()
+        [
+            (SizeClass::Regular, 1.0),
+            (SizeClass::Regular, 2.0),
+            (SizeClass::Compact, 1.0),
+            (SizeClass::Compact, 2.0),
+        ]
+        .into_iter()
+        .map(|(class, scale)| Setup {
+            class,
+            scale,
+            look,
+            typed,
+        })
+        .collect()
     }
 
     fn window(class: SizeClass) -> (f32, f32) {
@@ -293,7 +316,8 @@ mod tests {
         fn of(shot: &mut Snapshot) -> Self {
             let png = shot.runner().render();
             let image = SkImage::from_encoded(SkData::new_copy(&png)).expect("the frame decodes");
-            let mut surface = raster_n32_premul((image.width(), image.height())).expect("a surface");
+            let mut surface =
+                raster_n32_premul((image.width(), image.height())).expect("a surface");
             surface.canvas().draw_image(&image, (0, 0), None);
             let info = surface.canvas().image_info();
             let row = info.min_row_bytes();
@@ -328,10 +352,18 @@ mod tests {
     fn open(setup: Setup) -> Snapshot {
         CHANGES.with(|log| log.borrow_mut().clear());
         SUBMITS.with(|log| log.borrow_mut().clear());
-        let pointer = if setup.class.is_compact() { PointerKind::Touch } else { PointerKind::Mouse };
+        let pointer = if setup.class.is_compact() {
+            PointerKind::Touch
+        } else {
+            PointerKind::Mouse
+        };
         mirror_density(setup.class, pointer);
         let Setup { look, typed, .. } = setup;
-        let mut shot = Snapshot::with_scale(move || Host { look, typed }.into_element(), window(setup.class), setup.scale);
+        let mut shot = Snapshot::with_scale(
+            move || Host { look, typed }.into_element(),
+            window(setup.class),
+            setup.scale,
+        );
         shot.settle(Duration::from_millis(300));
         shot
     }
@@ -405,11 +437,35 @@ mod tests {
                 let mut shot = open(setup);
                 let found = seen(&mut shot, setup.scale);
                 let height = height_of(look, setup.class);
-                assert!((found.field[3] - height).abs() < 0.01, "{setup:?}: field {:?} is not {height} tall", found.field);
-                assert!((found.slot[2] - found.field[3]).abs() < 0.01, "{setup:?}: slot {:?} in field {:?}", found.slot, found.field);
-                assert!((found.slot[3] - found.field[3]).abs() < 0.01, "{setup:?}: slot {:?} in field {:?}", found.slot, found.field);
-                assert!((found.slot[0] - found.field[0]).abs() < 0.01, "{setup:?}: slot starts at {}, field at {}", found.slot[0], found.field[0]);
-                assert!((found.slot[1] - found.field[1]).abs() < 0.01, "{setup:?}: slot {:?} in field {:?}", found.slot, found.field);
+                assert!(
+                    (found.field[3] - height).abs() < 0.01,
+                    "{setup:?}: field {:?} is not {height} tall",
+                    found.field
+                );
+                assert!(
+                    (found.slot[2] - found.field[3]).abs() < 0.01,
+                    "{setup:?}: slot {:?} in field {:?}",
+                    found.slot,
+                    found.field
+                );
+                assert!(
+                    (found.slot[3] - found.field[3]).abs() < 0.01,
+                    "{setup:?}: slot {:?} in field {:?}",
+                    found.slot,
+                    found.field
+                );
+                assert!(
+                    (found.slot[0] - found.field[0]).abs() < 0.01,
+                    "{setup:?}: slot starts at {}, field at {}",
+                    found.slot[0],
+                    found.field[0]
+                );
+                assert!(
+                    (found.slot[1] - found.field[1]).abs() < 0.01,
+                    "{setup:?}: slot {:?} in field {:?}",
+                    found.slot,
+                    found.field
+                );
             }
         }
     }
@@ -422,10 +478,20 @@ mod tests {
                 let found = seen(&mut shot, setup.scale);
                 let (ix, iy) = centre(found.icon);
                 let (sx, sy) = centre(found.slot);
-                assert!((ix - sx).abs() <= 0.5, "{setup:?}: icon centre x {ix}, slot centre x {sx}");
-                assert!((iy - sy).abs() <= 0.5, "{setup:?}: icon centre y {iy}, slot centre y {sy}");
+                assert!(
+                    (ix - sx).abs() <= 0.5,
+                    "{setup:?}: icon centre x {ix}, slot centre x {sx}"
+                );
+                assert!(
+                    (iy - sy).abs() <= 0.5,
+                    "{setup:?}: icon centre y {iy}, slot centre y {sy}"
+                );
                 let size = Dim::IconControl.px_in(setup.class);
-                assert!((found.icon[2] - size).abs() < 0.01 && (found.icon[3] - size).abs() < 0.01, "{setup:?}: icon {:?}", found.icon);
+                assert!(
+                    (found.icon[2] - size).abs() < 0.01 && (found.icon[3] - size).abs() < 0.01,
+                    "{setup:?}: icon {:?}",
+                    found.icon
+                );
             }
         }
     }
@@ -438,7 +504,10 @@ mod tests {
                 let found = seen(&mut shot, setup.scale);
                 let gap = S1.px_in(setup.class);
                 let from_slot = found.text_start - (found.slot[0] + found.slot[2]);
-                assert!((from_slot - gap).abs() <= 0.01, "{setup:?}: text starts {from_slot} after the slot, expected {gap}");
+                assert!(
+                    (from_slot - gap).abs() <= 0.01,
+                    "{setup:?}: text starts {from_slot} after the slot, expected {gap}"
+                );
                 assert_eq!(found.role, "SearchInput", "{setup:?}");
             }
         }
@@ -450,18 +519,42 @@ mod tests {
             for setup in setups(look, "wifi") {
                 let mut shot = open(setup);
                 let found = seen(&mut shot, setup.scale);
-                let clear = found.clear.unwrap_or_else(|| panic!("{setup:?}: no clear button"));
+                let clear = found
+                    .clear
+                    .unwrap_or_else(|| panic!("{setup:?}: no clear button"));
                 // The trailing slot is the field's height square at its end.
-                let slot = [found.field[0] + found.field[2] - found.field[3], found.field[1], found.field[3], found.field[3]];
+                let slot = [
+                    found.field[0] + found.field[2] - found.field[3],
+                    found.field[1],
+                    found.field[3],
+                    found.field[3],
+                ];
                 let (bx, by) = centre(clear);
                 let (sx, sy) = centre(slot);
-                assert!((bx - sx).abs() <= 0.5, "{setup:?}: clear centre x {bx}, slot centre x {sx}");
-                assert!((by - sy).abs() <= 0.5, "{setup:?}: clear centre y {by}, slot centre y {sy}");
-                assert!((clear[2] - clear[3]).abs() < 0.01, "{setup:?}: the button is not square: {clear:?}");
+                assert!(
+                    (bx - sx).abs() <= 0.5,
+                    "{setup:?}: clear centre x {bx}, slot centre x {sx}"
+                );
+                assert!(
+                    (by - sy).abs() <= 0.5,
+                    "{setup:?}: clear centre y {by}, slot centre y {sy}"
+                );
+                assert!(
+                    (clear[2] - clear[3]).abs() < 0.01,
+                    "{setup:?}: the button is not square: {clear:?}"
+                );
             }
             // Empty, there is nothing to clear.
-            let mut shot = open(Setup { class: SizeClass::Regular, scale: 1.0, look, typed: "" });
-            assert!(seen(&mut shot, 1.0).clear.is_none(), "{look:?}: a clear button on an empty field");
+            let mut shot = open(Setup {
+                class: SizeClass::Regular,
+                scale: 1.0,
+                look,
+                typed: "",
+            });
+            assert!(
+                seen(&mut shot, 1.0).clear.is_none(),
+                "{look:?}: a clear button on an empty field"
+            );
         }
     }
 
@@ -472,13 +565,30 @@ mod tests {
     fn ink_centre(frame: &Frame, icon: Box4, scale: f64) -> (f32, f32) {
         let s = scale as f32;
         let margin = 3.0;
-        let (x0, y0) = (((icon[0] - margin) * s).floor() as usize, ((icon[1] - margin) * s).floor() as usize);
-        let (x1, y1) = (((icon[0] + icon[2] + margin) * s).ceil() as usize, ((icon[1] + icon[3] + margin) * s).ceil() as usize);
+        let (x0, y0) = (
+            ((icon[0] - margin) * s).floor() as usize,
+            ((icon[1] - margin) * s).floor() as usize,
+        );
+        let (x1, y1) = (
+            ((icon[0] + icon[2] + margin) * s).ceil() as usize,
+            ((icon[1] + icon[3] + margin) * s).ceil() as usize,
+        );
         // The background is the region's corner, where the icon does not reach.
         let bg = frame.pixel(x0, y0);
-        let distance = |px: [u8; 3]| -> u32 { (0..3).map(|c| (i32::from(px[c]) - i32::from(bg[c])).unsigned_abs()).sum() };
-        let strongest = (y0..=y1).flat_map(|y| (x0..=x1).map(move |x| (x, y))).map(|(x, y)| distance(frame.pixel(x, y))).max().unwrap_or(0);
-        assert!(strongest >= 60, "nothing is drawn around the icon {icon:?} (strongest {strongest})");
+        let distance = |px: [u8; 3]| -> u32 {
+            (0..3)
+                .map(|c| (i32::from(px[c]) - i32::from(bg[c])).unsigned_abs())
+                .sum()
+        };
+        let strongest = (y0..=y1)
+            .flat_map(|y| (x0..=x1).map(move |x| (x, y)))
+            .map(|(x, y)| distance(frame.pixel(x, y)))
+            .max()
+            .unwrap_or(0);
+        assert!(
+            strongest >= 60,
+            "nothing is drawn around the icon {icon:?} (strongest {strongest})"
+        );
         let floor = strongest / 3;
         let (mut left, mut top, mut right, mut bottom) = (usize::MAX, usize::MAX, 0, 0);
         for y in y0..=y1 {
@@ -491,7 +601,10 @@ mod tests {
                 }
             }
         }
-        (((left + right + 1) as f32 / 2.0) / s, ((top + bottom + 1) as f32 / 2.0) / s)
+        (
+            ((left + right + 1) as f32 / 2.0) / s,
+            ((top + bottom + 1) as f32 / 2.0) / s,
+        )
     }
 
     #[test]
@@ -504,10 +617,18 @@ mod tests {
                 let frame = Frame::of(&mut shot);
                 let (ix, iy) = ink_centre(&frame, found.icon, setup.scale);
                 let (sx, sy) = centre(found.slot);
-                eprintln!("{setup:?}: ink centre ({ix:.2}, {iy:.2}), slot centre ({sx:.2}, {sy:.2})");
+                eprintln!(
+                    "{setup:?}: ink centre ({ix:.2}, {iy:.2}), slot centre ({sx:.2}, {sy:.2})"
+                );
                 worst = worst.max((ix - sx).abs()).max((iy - sy).abs());
-                assert!((ix - sx).abs() <= 0.75, "{setup:?}: ink centre x {ix}, slot centre x {sx}");
-                assert!((iy - sy).abs() <= 0.75, "{setup:?}: ink centre y {iy}, slot centre y {sy}");
+                assert!(
+                    (ix - sx).abs() <= 0.75,
+                    "{setup:?}: ink centre x {ix}, slot centre x {sx}"
+                );
+                assert!(
+                    (iy - sy).abs() <= 0.75,
+                    "{setup:?}: ink centre y {iy}, slot centre y {sy}"
+                );
             }
         }
         eprintln!("worst ink offset {worst:.2} px");
@@ -521,14 +642,32 @@ mod tests {
 
     #[test]
     fn escape_clears_the_text_then_the_next_escape_leaves_the_field() {
-        let setup = Setup { class: SizeClass::Regular, scale: 1.0, look: Look::Plain, typed: "wifi" };
+        let setup = Setup {
+            class: SizeClass::Regular,
+            scale: 1.0,
+            look: Look::Plain,
+            typed: "wifi",
+        };
         let mut shot = open(setup);
         let found = seen(&mut shot, 1.0);
-        click(&mut shot, (found.field[0] + found.field[2] / 2.0, found.field[1] + found.field[3] / 2.0), 1.0);
+        click(
+            &mut shot,
+            (
+                found.field[0] + found.field[2] / 2.0,
+                found.field[1] + found.field[3] / 2.0,
+            ),
+            1.0,
+        );
         shot.key(Key::Named(NamedKey::Escape));
         shot.settle(Duration::from_millis(100));
-        assert_eq!(CHANGES.with(|log| log.borrow().clone()), vec![String::new()]);
-        assert!(seen(&mut shot, 1.0).clear.is_none(), "the clear button stays on an emptied field");
+        assert_eq!(
+            CHANGES.with(|log| log.borrow().clone()),
+            vec![String::new()]
+        );
+        assert!(
+            seen(&mut shot, 1.0).clear.is_none(),
+            "the clear button stays on an emptied field"
+        );
         // Empty, Escape is the default: no change is reported again.
         shot.key(Key::Named(NamedKey::Escape));
         assert_eq!(CHANGES.with(|log| log.borrow().len()), 1);
@@ -536,11 +675,19 @@ mod tests {
 
     #[test]
     fn the_clear_button_empties_the_field_and_reports_it() {
-        let setup = Setup { class: SizeClass::Regular, scale: 2.0, look: Look::Plain, typed: "wifi" };
+        let setup = Setup {
+            class: SizeClass::Regular,
+            scale: 2.0,
+            look: Look::Plain,
+            typed: "wifi",
+        };
         let mut shot = open(setup);
         let found = seen(&mut shot, 2.0);
         click(&mut shot, centre(found.clear.expect("a clear button")), 2.0);
-        assert_eq!(CHANGES.with(|log| log.borrow().clone()), vec![String::new()]);
+        assert_eq!(
+            CHANGES.with(|log| log.borrow().clone()),
+            vec![String::new()]
+        );
         assert!(seen(&mut shot, 2.0).clear.is_none());
     }
 
@@ -575,7 +722,10 @@ mod tests {
         assert!(files.len() > 100, "found only {} sources", files.len());
         let mut found = Vec::new();
         for (path, text) in &files {
-            let name = path.file_name().and_then(|name| name.to_str()).unwrap_or_default();
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
             // The address field is a path field that turns into a search: it
             // shares the slot through `leading` and asks for the search role
             // with `search()` itself.
@@ -596,45 +746,94 @@ mod tests {
                 }
             }
         }
-        assert!(found.is_empty(), "search fields built by hand, use search_field:\n{}", found.join("\n"));
+        assert!(
+            found.is_empty(),
+            "search fields built by hand, use search_field:\n{}",
+            found.join("\n")
+        );
     }
 
     #[test]
     fn a_field_under_the_pointer_takes_the_hover_layer_and_one_beside_it_does_not() {
-        let setup = Setup { class: SizeClass::Regular, scale: 1.0, look: Look::Plain, typed: "" };
+        let setup = Setup {
+            class: SizeClass::Regular,
+            scale: 1.0,
+            look: Look::Plain,
+            typed: "",
+        };
         let mut shot = open(setup);
         let found = seen(&mut shot, 1.0);
         // Empty space in the field, right of the placeholder.
-        let at = (found.field[0] + found.field[2] - 40.0, found.field[1] + found.field[3] / 2.0);
+        let at = (
+            found.field[0] + found.field[2] - 40.0,
+            found.field[1] + found.field[3] / 2.0,
+        );
         let rest = Frame::of(&mut shot).pixel(at.0 as usize, at.1 as usize);
         shot.hover(at.0, at.1);
         shot.settle(Duration::from_millis(100));
         let hovered = Frame::of(&mut shot).pixel(at.0 as usize, at.1 as usize);
         assert_ne!(rest, hovered, "the field looks the same under the pointer");
-        shot.hover(found.field[0] + found.field[2] + 10.0, found.field[1] + found.field[3] + 10.0);
+        shot.hover(
+            found.field[0] + found.field[2] + 10.0,
+            found.field[1] + found.field[3] + 10.0,
+        );
         shot.settle(Duration::from_millis(100));
-        assert_eq!(Frame::of(&mut shot).pixel(at.0 as usize, at.1 as usize), rest, "the hover layer stays after the pointer leaves");
+        assert_eq!(
+            Frame::of(&mut shot).pixel(at.0 as usize, at.1 as usize),
+            rest,
+            "the hover layer stays after the pointer leaves"
+        );
     }
 
     #[test]
     fn a_disabled_field_keeps_its_text_and_slot_but_offers_no_clear_button_and_ignores_escape() {
-        let setup = Setup { class: SizeClass::Regular, scale: 1.0, look: Look::Disabled, typed: "wifi" };
+        let setup = Setup {
+            class: SizeClass::Regular,
+            scale: 1.0,
+            look: Look::Disabled,
+            typed: "wifi",
+        };
         let mut shot = open(setup);
         let found = seen(&mut shot, 1.0);
         assert!(found.clear.is_none(), "a disabled field has a clear button");
         assert!((found.slot[2] - found.field[3]).abs() < 0.01);
-        click(&mut shot, (found.field[0] + found.field[2] / 2.0, found.field[1] + found.field[3] / 2.0), 1.0);
+        click(
+            &mut shot,
+            (
+                found.field[0] + found.field[2] / 2.0,
+                found.field[1] + found.field[3] / 2.0,
+            ),
+            1.0,
+        );
         shot.key(Key::Named(NamedKey::Escape));
-        assert!(CHANGES.with(|log| log.borrow().is_empty()), "a disabled field cleared");
+        assert!(
+            CHANGES.with(|log| log.borrow().is_empty()),
+            "a disabled field cleared"
+        );
     }
 
     #[test]
     fn enter_submits_the_text() {
-        let setup = Setup { class: SizeClass::Regular, scale: 1.0, look: Look::Plain, typed: "wifi" };
+        let setup = Setup {
+            class: SizeClass::Regular,
+            scale: 1.0,
+            look: Look::Plain,
+            typed: "wifi",
+        };
         let mut shot = open(setup);
         let found = seen(&mut shot, 1.0);
-        click(&mut shot, (found.field[0] + found.field[2] / 2.0, found.field[1] + found.field[3] / 2.0), 1.0);
+        click(
+            &mut shot,
+            (
+                found.field[0] + found.field[2] / 2.0,
+                found.field[1] + found.field[3] / 2.0,
+            ),
+            1.0,
+        );
         shot.key(Key::Named(NamedKey::Enter));
-        assert_eq!(SUBMITS.with(|log| log.borrow().clone()), vec!["wifi".to_string()]);
+        assert_eq!(
+            SUBMITS.with(|log| log.borrow().clone()),
+            vec!["wifi".to_string()]
+        );
     }
 }

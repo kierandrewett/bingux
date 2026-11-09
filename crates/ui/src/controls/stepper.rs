@@ -159,7 +159,8 @@ impl Component for Stepper {
             .child(step_button(Icon::ListAdd, can_increment, move |_| {
                 increment();
                 a11y_id.request_focus();
-            })).focusable(focus())
+            }))
+            .focusable(focus())
     }
 }
 
@@ -246,11 +247,12 @@ mod geometry {
         fn render(&self) -> impl IntoElement {
             let tokens = crate::theme::provide_tokens();
             let text = self.0;
-            rect().expanded().tw(&tokens, &[p(S4)]).child(
-                crate::shell::OverlayHost::new(
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
                     stepper(1000, |_| {}).range(0, 5000).suffix(text),
-                ),
-            )
+                ))
         }
     }
 

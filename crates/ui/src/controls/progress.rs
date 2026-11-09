@@ -262,7 +262,11 @@ impl Component for Spinner {
         let ink = self.ink;
         // The same loop clock as an indeterminate bar's. Under reduced motion
         // the ring turns slowly instead of standing still.
-        let phase = use_cycle(if tokens.reduced_motion { SPIN_SLOW_MS } else { SPIN_MS });
+        let phase = use_cycle(if tokens.reduced_motion {
+            SPIN_SLOW_MS
+        } else {
+            SPIN_MS
+        });
         // The angle is a prop, so each tick re-renders the arc and repaints it
         // with the new rotation.
         let arc = SpinnerArc {

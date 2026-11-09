@@ -110,7 +110,8 @@ fn step(shot: &mut Snapshot) {
 fn area_of(shot: &mut Snapshot, class: &'static str) -> Option<Area> {
     shot.runner()
         .find_many(|node, element| {
-            (element.accessibility().builder.class_name() == Some(class)).then(|| node.layout().area)
+            (element.accessibility().builder.class_name() == Some(class))
+                .then(|| node.layout().area)
         })
         .into_iter()
         .next()
@@ -121,10 +122,17 @@ fn shows(shot: &mut Snapshot, text: &str) -> bool {
     !shot
         .runner()
         .find_many(|_, element| {
-            let shown: String = Label::try_downcast(element).map(|label| label.text.to_string()).or_else(|| {
-                Paragraph::try_downcast(element)
-                    .map(|paragraph| paragraph.spans.iter().map(|span| span.text.to_string()).collect())
-            })?;
+            let shown: String = Label::try_downcast(element)
+                .map(|label| label.text.to_string())
+                .or_else(|| {
+                    Paragraph::try_downcast(element).map(|paragraph| {
+                        paragraph
+                            .spans
+                            .iter()
+                            .map(|span| span.text.to_string())
+                            .collect()
+                    })
+                })?;
             (shown == text).then_some(())
         })
         .is_empty()
@@ -165,13 +173,19 @@ impl Pixels {
     fn of(shot: &mut Snapshot) -> Self {
         let png = shot.runner().render();
         let image = SkImage::from_encoded(SkData::new_copy(&png)).expect("the frame decodes");
-        let mut surface = raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
+        let mut surface =
+            raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
         surface.canvas().draw_image(&image, (0, 0), None);
         let info = surface.canvas().image_info();
         let row = info.min_row_bytes();
         let mut bytes = vec![0u8; info.compute_byte_size(row)];
         assert!(surface.canvas().read_pixels(&info, &mut bytes, row, (0, 0)));
-        Self { bytes, row, width: image.width() as usize, height: image.height() as usize }
+        Self {
+            bytes,
+            row,
+            width: image.width() as usize,
+            height: image.height() as usize,
+        }
     }
 
     /// The pixel at a window point, as red, green and blue.
@@ -185,8 +199,14 @@ impl Pixels {
 
     /// Every pixel of `area`, to tell one frame of it from another.
     fn region(&self, area: Area) -> Vec<u8> {
-        let (x0, x1) = (area.min_x().floor().max(0.0) as usize, (area.max_x().ceil() as usize).min(self.width));
-        let (y0, y1) = (area.min_y().floor().max(0.0) as usize, (area.max_y().ceil() as usize).min(self.height));
+        let (x0, x1) = (
+            area.min_x().floor().max(0.0) as usize,
+            (area.max_x().ceil() as usize).min(self.width),
+        );
+        let (y0, y1) = (
+            area.min_y().floor().max(0.0) as usize,
+            (area.max_y().ceil() as usize).min(self.height),
+        );
         let mut out = Vec::new();
         for y in y0..y1 {
             out.extend_from_slice(&self.bytes[y * self.row + x0 * 4..y * self.row + x1 * 4]);
@@ -211,7 +231,8 @@ fn dark(reduced: bool) -> Tokens {
 fn the_segment_starts_off_the_left_edge() {
     let mut shot = open(Scene::Bar, false);
     let track = area_of(&mut shot, "ProgressTrack").expect("the bar has a track");
-    let segment = area_of(&mut shot, "ProgressSegment").expect("the segment is on screen once the track is measured");
+    let segment = area_of(&mut shot, "ProgressSegment")
+        .expect("the segment is on screen once the track is measured");
     assert!(
         segment.max_x() <= track.min_x() + 1.0,
         "a sweep begins with the segment entirely left of the track: the track is {track:?} and the segment {segment:?}"
@@ -259,7 +280,9 @@ fn a_sweep_wraps_to_the_start_and_goes_again() {
         "the next sweep begins off the left edge, at -30%: {positions:.1?}"
     );
     assert!(
-        positions[wrap..wrap + 4].windows(2).all(|pair| pair[1] > pair[0] + 0.5),
+        positions[wrap..wrap + 4]
+            .windows(2)
+            .all(|pair| pair[1] > pair[0] + 0.5),
         "the second sweep moves on as the first did: {positions:.1?}"
     );
 }
@@ -285,7 +308,8 @@ fn the_sweep_is_drawn_inside_the_track() {
             frame.at(segment.min_x() + segment.width() / 2.0, y)
         );
         assert!(
-            !near(frame.at(segment.min_x() - 6.0, y), accent) && !near(frame.at(segment.max_x() + 6.0, y), accent),
+            !near(frame.at(segment.min_x() - 6.0, y), accent)
+                && !near(frame.at(segment.max_x() + 6.0, y), accent),
             "the track beside the segment is not accent"
         );
         seen = true;
@@ -306,7 +330,10 @@ fn a_clipped_segment_stays_inside_the_track() {
         if segment.max_x() > track.max_x() + 10.0 && segment.min_x() < track.max_x() - 10.0 {
             let frame = Pixels::of(&mut shot);
             let y = track.min_y() + track.height() / 2.0;
-            assert!(near(frame.at(track.max_x() - 8.0, y), accent), "the part inside the track is drawn");
+            assert!(
+                near(frame.at(track.max_x() - 8.0, y), accent),
+                "the part inside the track is drawn"
+            );
             assert!(
                 !near(frame.at(track.max_x() + 4.0, y), accent),
                 "the part past the track's edge is clipped"
@@ -322,9 +349,15 @@ fn the_sweep_goes_on_when_the_page_draws_again() {
     let mut shot = open(Scene::Bar, false);
     // Three steps in, the segment is part-way across.
     let before = *sweep(&mut shot, 3).last().expect("three steps");
-    assert!(before > -20.0 && before < 40.0, "three steps in, the segment is on its way: {before}");
+    assert!(
+        before > -20.0 && before < 40.0,
+        "three steps in, the segment is on its way: {before}"
+    );
     let redraw = area_of(&mut shot, "Redraw").expect("the page has a box to press");
-    shot.click(redraw.min_x() + redraw.width() / 2.0, redraw.min_y() + redraw.height() / 2.0);
+    shot.click(
+        redraw.min_x() + redraw.width() / 2.0,
+        redraw.min_y() + redraw.height() / 2.0,
+    );
     assert!(
         shows(&mut shot, "Copying 1 of 10"),
         "pressing the box drew the page and the bar's caption again"
@@ -367,18 +400,29 @@ fn reduced_motion_breathes_instead_of_standing_still() {
         let track = area_of(&mut shot, "ProgressTrack").expect("the bar has a track");
         let fill = area_of(&mut shot, "ProgressSegment").expect("the breathing fill is on screen");
         assert!(
-            (fill.min_x() - track.min_x()).abs() < 1.0 && (fill.width() - track.width()).abs() < 1.0,
+            (fill.min_x() - track.min_x()).abs() < 1.0
+                && (fill.width() - track.width()).abs() < 1.0,
             "under reduced motion nothing travels: the fill is the whole track, {fill:?} in {track:?}"
         );
         let frame = Pixels::of(&mut shot);
-        let pixel = frame.at(track.min_x() + track.width() / 2.0, track.min_y() + track.height() / 2.0);
-        assert!(!near(pixel, ground), "the bar is never invisible: {pixel:?} on {ground:?}");
+        let pixel = frame.at(
+            track.min_x() + track.width() / 2.0,
+            track.min_y() + track.height() / 2.0,
+        );
+        assert!(
+            !near(pixel, ground),
+            "the bar is never invisible: {pixel:?} on {ground:?}"
+        );
         seen.push(pixel);
     }
     let mut distinct = seen.clone();
     distinct.sort_unstable();
     distinct.dedup();
-    assert!(distinct.len() >= 8, "the fill changes on nearly every step: {} distinct of {seen:?}", distinct.len());
+    assert!(
+        distinct.len() >= 8,
+        "the fill changes on nearly every step: {} distinct of {seen:?}",
+        distinct.len()
+    );
     let swing = (0..3)
         .map(|channel| {
             let values = seen.iter().map(|pixel| pixel[channel]);
@@ -386,7 +430,10 @@ fn reduced_motion_breathes_instead_of_standing_still() {
         })
         .max()
         .unwrap_or(0);
-    assert!(swing >= 40, "the breath is a visible change, {swing} levels at most: {seen:?}");
+    assert!(
+        swing >= 40,
+        "the breath is a visible change, {swing} levels at most: {seen:?}"
+    );
 }
 
 /// A spinner's frames over `steps` steps: its pixels after each.
@@ -416,7 +463,12 @@ fn keeps_turning(frames: &[Vec<u8>], what: &str) {
     let mut distinct: Vec<&Vec<u8>> = frames.iter().collect();
     distinct.sort_unstable();
     distinct.dedup();
-    assert!(distinct.len() >= 5, "{what} drew {} different frames in {} steps", distinct.len(), frames.len());
+    assert!(
+        distinct.len() >= 5,
+        "{what} drew {} different frames in {} steps",
+        distinct.len(),
+        frames.len()
+    );
 }
 
 #[test]
@@ -460,14 +512,23 @@ fn the_cycle_runs_from_nothing_to_one_and_starts_over() {
         phases.push(phase.get());
     }
     println!("phase after each step: {phases:.3?}");
-    assert!(phases.iter().all(|p| (0.0..=1.0).contains(p)), "a phase stays within 0..=1: {phases:?}");
+    assert!(
+        phases.iter().all(|p| (0.0..=1.0).contains(p)),
+        "a phase stays within 0..=1: {phases:?}"
+    );
     // The first tick of a loop counts for nothing, so it stands still for two steps.
     let moving = &phases[2..];
     let wraps = moving.windows(2).filter(|pair| pair[1] < pair[0]).count();
-    assert!(wraps >= 2, "sixteen steps of 170 ms are more than two cycles of 800 ms: {phases:?}");
+    assert!(
+        wraps >= 2,
+        "sixteen steps of 170 ms are more than two cycles of 800 ms: {phases:?}"
+    );
     for pair in moving.windows(2) {
         let rises = pair[1] > pair[0];
         let starts_over = pair[0] > 0.99 && pair[1] < 0.01;
-        assert!(rises || starts_over, "every step moves on, or starts the next cycle from 0: {phases:?}");
+        assert!(
+            rises || starts_over,
+            "every step moves on, or starts the next cycle from 0: {phases:?}"
+        );
     }
 }

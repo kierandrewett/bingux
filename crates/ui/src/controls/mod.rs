@@ -16,11 +16,12 @@ pub mod dropdown;
 #[cfg(all(test, feature = "testing"))]
 mod dropdown_rows_tests;
 pub mod fade_text;
+pub mod fader;
 pub mod focus_stop;
 pub mod form;
 #[cfg(all(test, feature = "testing"))]
 pub(crate) mod hit_area_tests;
-pub mod fader;
+pub mod keypad;
 pub mod level_meter;
 pub mod master_detail;
 pub mod meter;
@@ -33,6 +34,7 @@ mod progress_tests;
 pub mod property_row;
 pub mod qr_code;
 pub mod radio;
+pub mod readout;
 pub mod row_action;
 pub mod scrub;
 pub mod search_field;
@@ -75,11 +77,12 @@ pub use checkbox::{CheckState, Checkbox, checkbox};
 pub use direction::{directed, use_direction};
 pub use dropdown::{Dropdown, app_dropdown, dropdown};
 pub use fade_text::{FadeText, fade_text};
+pub use fader::{Fader, fader};
 pub use focus_stop::{
     StopRing, focus_stop, focus_stop_menu, focus_stop_press, focus_stop_pressed, focus_stop_with,
 };
 pub use form::{FormField, form_field, live_state, pending_bar};
-pub use fader::{Fader, fader};
+pub use keypad::{KeyTone, Keypad, KeypadKey, keypad, keypad_key};
 pub use level_meter::{LEVEL_WARN, LevelMeter, level_meter};
 pub use master_detail::{MASTER_WIDTH, MasterDetail, master_detail};
 pub use meter::{UsageMeter, usage_meter};
@@ -90,6 +93,7 @@ pub use path_label::{
 pub use progress::{ProgressBar, Spinner, SpinnerSize, progress_bar, spinner};
 pub use property_row::{PropertyRow, property_row};
 pub use qr_code::{EccLevel, QrCode, QrError, QrMatrix, qr_code};
+pub use readout::{Readout, readout};
 pub use row_action::{RowAction, row_action};
 pub use search_field::{SearchField, search_field};
 pub use segmented::{Segmented, segmented};
@@ -104,7 +108,7 @@ pub use stepper::{Stepper, stepper};
 pub use switch::{Switch, switch};
 pub use tab_tear::{Detach, StripLayout, StripProbe};
 pub use tabs::{TabItem, TabStrip, tab_strip};
-pub use text_field::{TextField, text_field};
+pub use text_field::{FieldEdit, TextField, text_field};
 pub use tooltip::{hover_tip, tooltip_icon};
 pub use tree_view::{TreeNode, TreeView, tree_view};
 pub use usage_bar::{USAGE_WARN, UsageBar, usage_bar};

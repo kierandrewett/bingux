@@ -185,7 +185,8 @@ impl Component for Checkbox {
                             )
                             .opacity(fill)
                             .maybe_child(glyph),
-                    ).focusable(focus()),
+                    )
+                    .focusable(focus()),
             )
             .maybe_child(
                 self.text

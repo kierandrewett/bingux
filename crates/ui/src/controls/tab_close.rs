@@ -202,7 +202,10 @@ impl RapidClose {
     /// Leaving lets the held widths go.
     pub(crate) fn pointer_in_strip(&mut self, inside: bool, now: Duration) {
         if let (false, Hold::Held { width }) = (inside, self.hold) {
-            self.hold = Hold::Releasing { from: width, since: now };
+            self.hold = Hold::Releasing {
+                from: width,
+                since: now,
+            };
         }
     }
 
@@ -307,10 +310,16 @@ mod tests {
     fn closing_several_picks_the_nearest_tab_that_stays() {
         let ids = [1, 2, 3, 4, 5];
         // Tabs to the right of 2 go: 2 stays selected.
-        assert_eq!(selection_after_close(&ids, &to_the_right(&ids, 2), 2), Some(2));
+        assert_eq!(
+            selection_after_close(&ids, &to_the_right(&ids, 2), 2),
+            Some(2)
+        );
         // The selected tab was one of those to the right: the one it was
         // closed beside is selected, since nothing to its right stays.
-        assert_eq!(selection_after_close(&ids, &to_the_right(&ids, 2), 4), Some(2));
+        assert_eq!(
+            selection_after_close(&ids, &to_the_right(&ids, 2), 4),
+            Some(2)
+        );
         // All but 3 go while 5 is selected: only 3 is left.
         assert_eq!(selection_after_close(&ids, &others(&ids, 3), 5), Some(3));
         // The right neighbour wins over the left one when both stay.
@@ -322,11 +331,27 @@ mod tests {
         let ids = [10, 20, 30, 40];
         assert_eq!(others(&ids, 30), [10, 20, 40]);
         assert_eq!(to_the_right(&ids, 20), [30, 40]);
-        assert_eq!(to_the_right(&ids, 40), Vec::<u64>::new(), "nothing is right of the last tab");
-        assert_eq!(to_the_right(&ids, 99), Vec::<u64>::new(), "nor of one that is not there");
+        assert_eq!(
+            to_the_right(&ids, 40),
+            Vec::<u64>::new(),
+            "nothing is right of the last tab"
+        );
+        assert_eq!(
+            to_the_right(&ids, 99),
+            Vec::<u64>::new(),
+            "nor of one that is not there"
+        );
         assert_eq!(to_the_left(&ids, 30), [10, 20]);
-        assert_eq!(to_the_left(&ids, 10), Vec::<u64>::new(), "nothing is left of the first tab");
-        assert_eq!(to_the_left(&ids, 99), Vec::<u64>::new(), "nor of one that is not there");
+        assert_eq!(
+            to_the_left(&ids, 10),
+            Vec::<u64>::new(),
+            "nothing is left of the first tab"
+        );
+        assert_eq!(
+            to_the_left(&ids, 99),
+            Vec::<u64>::new(),
+            "nor of one that is not there"
+        );
         assert_eq!(others(&[10], 10), Vec::<u64>::new());
         // The two sides and the tab itself are every tab, once.
         for of in ids {
@@ -338,15 +363,25 @@ mod tests {
     }
 
     #[test]
-    fn closing_the_tabs_to_the_left_keeps_the_one_it_was_opened_on_selected_when_the_selection_went() {
+    fn closing_the_tabs_to_the_left_keeps_the_one_it_was_opened_on_selected_when_the_selection_went()
+     {
         let ids = [1, 2, 3, 4, 5];
         // The tab the menu is on stays, and stays selected if it was.
-        assert_eq!(selection_after_close(&ids, &to_the_left(&ids, 4), 4), Some(4));
+        assert_eq!(
+            selection_after_close(&ids, &to_the_left(&ids, 4), 4),
+            Some(4)
+        );
         // The selection was among those that went: the next tab to its right that
         // stays is the one the menu was opened on.
-        assert_eq!(selection_after_close(&ids, &to_the_left(&ids, 4), 2), Some(4));
+        assert_eq!(
+            selection_after_close(&ids, &to_the_left(&ids, 4), 2),
+            Some(4)
+        );
         // The selection was to the right: it stays.
-        assert_eq!(selection_after_close(&ids, &to_the_left(&ids, 3), 5), Some(5));
+        assert_eq!(
+            selection_after_close(&ids, &to_the_left(&ids, 3), 5),
+            Some(5)
+        );
     }
 
     // ---- The menu
@@ -360,7 +395,13 @@ mod tests {
             .collect()
     }
 
-    const ALL: Offers = Offers { close_many: true, duplicate: true, reopen: true, can_reopen: true, reorder: true };
+    const ALL: Offers = Offers {
+        close_many: true,
+        duplicate: true,
+        reopen: true,
+        can_reopen: true,
+        reorder: true,
+    };
 
     #[test]
     fn a_middle_tab_offers_everything_in_the_order_of_a_browsers_menu() {
@@ -378,31 +419,58 @@ mod tests {
                 (Act::MoveRight, true),
             ]
         );
-        assert_eq!(rows.iter().filter(|row| **row == Row::Separator).count(), 2, "three groups, two separators");
-        assert_eq!(rows.first(), Some(&Row::Item { act: Act::Close, enabled: true }));
+        assert_eq!(
+            rows.iter().filter(|row| **row == Row::Separator).count(),
+            2,
+            "three groups, two separators"
+        );
+        assert_eq!(
+            rows.first(),
+            Some(&Row::Item {
+                act: Act::Close,
+                enabled: true
+            })
+        );
     }
 
     #[test]
-    fn the_last_tab_has_no_tabs_to_its_right_the_first_none_to_its_left_and_a_lone_tab_has_no_others() {
+    fn the_last_tab_has_no_tabs_to_its_right_the_first_none_to_its_left_and_a_lone_tab_has_no_others()
+     {
         let last = acts(&menu_rows(2, 3, ALL));
         assert!(last.contains(&(Act::CloseToTheRight, false)));
         assert!(last.contains(&(Act::CloseToTheLeft, true)));
         assert!(last.contains(&(Act::CloseOthers, true)));
-        assert!(!last.iter().any(|(act, _)| *act == Act::MoveRight), "no move past the end");
+        assert!(
+            !last.iter().any(|(act, _)| *act == Act::MoveRight),
+            "no move past the end"
+        );
         let first = acts(&menu_rows(0, 3, ALL));
-        assert!(first.contains(&(Act::CloseToTheLeft, false)), "nothing is left of the first tab: the item is greyed out");
+        assert!(
+            first.contains(&(Act::CloseToTheLeft, false)),
+            "nothing is left of the first tab: the item is greyed out"
+        );
         assert!(first.contains(&(Act::CloseToTheRight, true)));
         let lone = acts(&menu_rows(0, 1, ALL));
         assert!(lone.contains(&(Act::CloseOthers, false)));
         assert!(lone.contains(&(Act::CloseToTheLeft, false)));
         assert!(lone.contains(&(Act::CloseToTheRight, false)));
-        assert!(lone.contains(&(Act::Close, true)), "a lone tab can still be closed");
-        assert!(!lone.iter().any(|(act, _)| matches!(act, Act::MoveLeft | Act::MoveRight)));
+        assert!(
+            lone.contains(&(Act::Close, true)),
+            "a lone tab can still be closed"
+        );
+        assert!(
+            !lone
+                .iter()
+                .any(|(act, _)| matches!(act, Act::MoveLeft | Act::MoveRight))
+        );
     }
 
     #[test]
     fn reopen_is_greyed_out_until_a_tab_has_been_closed() {
-        let none = Offers { can_reopen: false, ..ALL };
+        let none = Offers {
+            can_reopen: false,
+            ..ALL
+        };
         assert!(acts(&menu_rows(0, 2, none)).contains(&(Act::Reopen, false)));
         assert!(acts(&menu_rows(0, 2, ALL)).contains(&(Act::Reopen, true)));
     }
@@ -410,7 +478,14 @@ mod tests {
     #[test]
     fn a_strip_with_only_close_offers_close() {
         let rows = menu_rows(0, 3, Offers::default());
-        assert_eq!(rows, [Row::Item { act: Act::Close, enabled: true }], "no separators around a lone group");
+        assert_eq!(
+            rows,
+            [Row::Item {
+                act: Act::Close,
+                enabled: true
+            }],
+            "no separators around a lone group"
+        );
     }
 
     #[test]
@@ -419,14 +494,27 @@ mod tests {
             for offers in [
                 ALL,
                 Offers::default(),
-                Offers { duplicate: true, ..Offers::default() },
-                Offers { reorder: true, ..Offers::default() },
-                Offers { reopen: true, ..Offers::default() },
+                Offers {
+                    duplicate: true,
+                    ..Offers::default()
+                },
+                Offers {
+                    reorder: true,
+                    ..Offers::default()
+                },
+                Offers {
+                    reopen: true,
+                    ..Offers::default()
+                },
             ] {
                 let rows = menu_rows(place, 4, offers);
                 assert_ne!(rows.first(), Some(&Row::Separator));
                 assert_ne!(rows.last(), Some(&Row::Separator));
-                assert!(!rows.windows(2).any(|pair| pair[0] == Row::Separator && pair[1] == Row::Separator));
+                assert!(
+                    !rows
+                        .windows(2)
+                        .any(|pair| pair[0] == Row::Separator && pair[1] == Row::Separator)
+                );
             }
         }
     }
@@ -461,9 +549,17 @@ mod tests {
         assert!(rapid.is_held());
         // The room now gives 200 (one tab fewer): the tabs stay 150.
         assert_eq!(rapid.tab_width(200.0, ms(0), MOTION), 150.0);
-        assert_eq!(rapid.tab_width(240.0, ms(60_000), MOTION), 150.0, "however long the pointer stays");
+        assert_eq!(
+            rapid.tab_width(240.0, ms(60_000), MOTION),
+            150.0,
+            "however long the pointer stays"
+        );
         rapid.pointer_in_strip(true, ms(10));
-        assert_eq!(rapid.tab_width(240.0, ms(60_000), MOTION), 150.0, "entering changes nothing");
+        assert_eq!(
+            rapid.tab_width(240.0, ms(60_000), MOTION),
+            150.0,
+            "entering changes nothing"
+        );
     }
 
     #[test]
@@ -486,17 +582,33 @@ mod tests {
         rapid.pointer_in_strip(false, ms(1000));
         assert!(!rapid.is_held());
         assert!(rapid.is_growing(ms(1000), MOTION));
-        assert_eq!(rapid.tab_width(210.0, ms(1000), MOTION), 150.0, "it starts where it was held");
+        assert_eq!(
+            rapid.tab_width(210.0, ms(1000), MOTION),
+            150.0,
+            "it starts where it was held"
+        );
         let half = rapid.tab_width(210.0, ms(1100), MOTION);
-        assert!(half > 150.0 && half < 210.0, "half way through it is in between: {half}");
-        assert!(half > 180.0, "ease out: more than half the way at half the time ({half})");
+        assert!(
+            half > 150.0 && half < 210.0,
+            "half way through it is in between: {half}"
+        );
+        assert!(
+            half > 180.0,
+            "ease out: more than half the way at half the time ({half})"
+        );
         assert_eq!(rapid.tab_width(210.0, ms(1200), MOTION), 210.0);
         assert_eq!(rapid.tab_width(210.0, ms(9999), MOTION), 210.0);
         assert!(!rapid.is_growing(ms(1200), MOTION));
-        assert!(!rapid.settle(ms(1100), MOTION), "not settled before the end");
+        assert!(
+            !rapid.settle(ms(1100), MOTION),
+            "not settled before the end"
+        );
         assert!(rapid.settle(ms(1200), MOTION));
         assert!(rapid.is_idle());
-        assert!(!rapid.settle(ms(1300), MOTION), "settling twice changes nothing");
+        assert!(
+            !rapid.settle(ms(1300), MOTION),
+            "settling twice changes nothing"
+        );
     }
 
     #[test]
@@ -507,7 +619,10 @@ mod tests {
         let mut last = 0.0;
         for t in (0..=250).step_by(10) {
             let width = rapid.tab_width(240.0, ms(t), MOTION);
-            assert!(width >= last - 0.001, "the width never shrinks while it grows: {width} after {last}");
+            assert!(
+                width >= last - 0.001,
+                "the width never shrinks while it grows: {width} after {last}"
+            );
             last = width;
         }
         assert_eq!(last, 240.0);

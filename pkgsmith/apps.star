@@ -13,6 +13,9 @@ DESCRIPTIONS = {
 Settings is the Bingux desktop's settings application: network, Bluetooth, sound and sound effects, displays,
 appearance, the dock, top bar and sidebar, power, date and time, keyboard, mouse, accounts and default applications.
 It opens the page named in a bingux-settings:// address, so links and the shell's shortcuts land on the right page.""",
+    "bingux-calculator": """Calculator for the Bingux desktop
+Calculator has basic, scientific, programmer and conversion modes. Arithmetic is exact, results show as you type, and
+the history is kept. It converts units and currencies, with exchange rates cached for use without a network.""",
     "bingux-files": """File manager for the Bingux desktop
 Files is the Bingux desktop's file manager. It has tabs, a places sidebar, list and grid views, previews, search and
 file operations with undo. It opens folders and bingux-files:// addresses.""",
@@ -35,6 +38,7 @@ DEPENDS = {
         "deb": ["shared-mime-info", "xdg-utils", "dconf-gsettings-backend | gsettings-backend", "libglib2.0-bin", "gsettings-desktop-schemas", "systemd"],
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2", "dconf", "gsettings-desktop-schemas", "systemd"],
     },
+    "bingux-calculator": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-files": {
         "rpm": ["shared-mime-info", "xdg-utils", "/usr/bin/gio"],
         "deb": ["shared-mime-info", "xdg-utils", "libglib2.0-bin"],
@@ -75,6 +79,11 @@ RECOMMENDS = {
             "gnome-settings-daemon: night light and input settings",
         ],
     },
+    "bingux-calculator": {
+        "rpm": ["adwaita-sans-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
     "bingux-files": {
         "rpm": ["adwaita-sans-fonts", "udisks2", "gvfs", "tar", "util-linux", "eject", "unzip"],
         "deb": ["eject", "gvfs", "tar", "udisks2", "unzip", "util-linux"],
@@ -95,6 +104,7 @@ RECOMMENDS = {
 # The applications that name each other, as suggestions.
 SUGGESTS = {
     "bingux-settings": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
+    "bingux-calculator": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }

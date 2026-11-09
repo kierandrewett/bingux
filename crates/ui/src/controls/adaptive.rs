@@ -294,7 +294,11 @@ pub struct AdaptiveLine {
 }
 
 impl AdaptiveLine {
-    pub fn new(component: &'static str, label: impl Into<String>, control: impl Into<Element>) -> Self {
+    pub fn new(
+        component: &'static str,
+        label: impl Into<String>,
+        control: impl Into<Element>,
+    ) -> Self {
         Self {
             component,
             label: label.into(),
@@ -333,11 +337,17 @@ impl Component for AdaptiveLine {
                 rect().width(Size::px(label_cell_width(label))),
                 rect().tw(&tokens, &[w_flex()]).min_width(Size::px(0.0)),
             ),
-            LineMode::Stacked => (rect().tw(&tokens, &[w_full()]), rect().tw(&tokens, &[w_full()])),
+            LineMode::Stacked => (
+                rect().tw(&tokens, &[w_full()]),
+                rect().tw(&tokens, &[w_full()]),
+            ),
         };
-        let line = rect()
-            .component(self.component)
-            .on_sized(move |event: Event<SizedEventData>| width.set_if_modified(event.area.width()));
+        let line =
+            rect()
+                .component(self.component)
+                .on_sized(move |event: Event<SizedEventData>| {
+                    width.set_if_modified(event.area.width())
+                });
         let line = if mode == LineMode::Stacked {
             line.tw(
                 &tokens,
@@ -401,17 +411,26 @@ mod tests {
 
     #[test]
     fn a_line_that_has_not_been_measured_is_laid_out_beside() {
-        assert_eq!(choose_line(0.0, GAP, label(90.0, 60.0), field()), LineMode::Beside);
+        assert_eq!(
+            choose_line(0.0, GAP, label(90.0, 60.0), field()),
+            LineMode::Beside
+        );
         let unknown = ControlFacts {
             natural: 0.0,
             least: Some(120.0),
         };
-        assert_eq!(choose_line(266.0, GAP, label(90.0, 60.0), unknown), LineMode::Beside);
+        assert_eq!(
+            choose_line(266.0, GAP, label(90.0, 60.0), unknown),
+            LineMode::Beside
+        );
     }
 
     #[test]
     fn a_wide_popup_keeps_the_label_beside_a_full_size_field() {
-        assert_eq!(choose_line(488.0, GAP, label(90.0, 60.0), field()), LineMode::Beside);
+        assert_eq!(
+            choose_line(488.0, GAP, label(90.0, 60.0), field()),
+            LineMode::Beside
+        );
     }
 
     #[test]
@@ -420,14 +439,19 @@ mod tests {
         // field used to take 240 and leave the label 14.
         let mode = choose_line(266.0, GAP, label(90.0, 60.0), field());
         assert_eq!(mode, LineMode::Shrunk { label: 90.0 });
-        let LineMode::Shrunk { label } = mode else { unreachable!() };
+        let LineMode::Shrunk { label } = mode else {
+            unreachable!()
+        };
         assert!(266.0 - GAP - label >= 120.0, "the field keeps its least");
     }
 
     #[test]
     fn a_label_that_leaves_the_field_less_than_its_least_stacks() {
         // 150 px: a 60 px label and 12 px gap leave a field 78 px, under 120.
-        assert_eq!(choose_line(150.0, GAP, label(60.0, 40.0), field()), LineMode::Stacked);
+        assert_eq!(
+            choose_line(150.0, GAP, label(60.0, 40.0), field()),
+            LineMode::Stacked
+        );
         // The label may also wrap in its share and let the field shrink.
         assert_eq!(
             choose_line(266.0, GAP, label(160.0, 90.0), field()),
@@ -462,7 +486,10 @@ mod tests {
             natural: 160.0,
             least: None,
         };
-        assert_eq!(choose_line(200.0, GAP, label(120.0, 60.0), stepper), LineMode::Stacked);
+        assert_eq!(
+            choose_line(200.0, GAP, label(120.0, 60.0), stepper),
+            LineMode::Stacked
+        );
     }
 
     #[test]
@@ -561,7 +588,10 @@ mod tests {
     }
 
     fn value(natural: f32, longest_word: f32) -> ValueFacts {
-        ValueFacts { natural, longest_word }
+        ValueFacts {
+            natural,
+            longest_word,
+        }
     }
 
     #[test]
@@ -607,7 +637,13 @@ mod tests {
     #[test]
     fn a_word_wider_than_the_room_beside_the_title_stacks_instead_of_breaking() {
         assert_eq!(
-            choose_value_line(340.0, ROW_GAP, label(70.0, 70.0), value(300.0, 280.0), false),
+            choose_value_line(
+                340.0,
+                ROW_GAP,
+                label(70.0, 70.0),
+                value(300.0, 280.0),
+                false
+            ),
             ValueLine::Stacked
         );
     }
@@ -635,7 +671,10 @@ mod tests {
                     match choose_value_line(inner, ROW_GAP, label, value, compact) {
                         ValueLine::Beside { label: taken } => {
                             assert!(taken >= floor - 0.01, "{inner}");
-                            assert!(taken + ROW_GAP + value.natural <= inner + 0.01, "{inner}: it fits on one line");
+                            assert!(
+                                taken + ROW_GAP + value.natural <= inner + 0.01,
+                                "{inner}: it fits on one line"
+                            );
                         }
                         ValueLine::Wrapped { label: taken } => {
                             assert!(!compact, "{inner}: a phone row never wraps beside");

@@ -126,7 +126,18 @@ pub fn focus_stop_with(
     menu: Vec<MenuItem>,
     ring: StopRing,
 ) -> Rect {
-    focus_stop_pressed(a11y_id, content, label, role, enabled, radius, on_activate, menu, ring, None)
+    focus_stop_pressed(
+        a11y_id,
+        content,
+        label,
+        role,
+        enabled,
+        radius,
+        on_activate,
+        menu,
+        ring,
+        None,
+    )
 }
 
 /// [`focus_stop_with`] that also tells the caller when the box is held down.

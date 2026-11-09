@@ -332,7 +332,10 @@ struct HoverTip {
 fn bubble(tokens: &Tokens, text: &str, full: bool) -> Rect {
     rect()
         .tw(tokens, TOOLTIP)
-        .tw(tokens, &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))])
+        .tw(
+            tokens,
+            &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))],
+        )
         .maybe(full, |bubble| bubble.width(Size::fill()))
         .interactive(false)
         .child(
@@ -347,7 +350,9 @@ fn bubble(tokens: &Tokens, text: &str, full: bool) -> Rect {
 /// The width a bubble is laid out in: `Dim::TooltipMax`, or the window's width
 /// less the edge margins when that is less.
 fn room(window_width: f32) -> f32 {
-    Dim::TooltipMax.px().min((window_width - 2.0 * PANEL_EDGE).max(0.0))
+    Dim::TooltipMax
+        .px()
+        .min((window_width - 2.0 * PANEL_EDGE).max(0.0))
 }
 
 /// The box a bubble is laid out in. A text element wraps at the room its
@@ -358,7 +363,10 @@ fn room(window_width: f32) -> f32 {
 /// never as wide as what it hangs from. It is placed (and raised) as the
 /// bubble is; the bubble inside it is what is drawn.
 fn slot(room: f32, bubble: Rect) -> Rect {
-    rect().width(Size::px(room)).interactive(false).child(bubble)
+    rect()
+        .width(Size::px(room))
+        .interactive(false)
+        .child(bubble)
 }
 
 impl Component for HoverTip {
@@ -525,7 +533,11 @@ impl Component for HoverTip {
                 .top(placed.y - area.min_y()),
         );
 
-        rect().child(wrapper).child(probe).child(label).into_element()
+        rect()
+            .child(wrapper)
+            .child(probe)
+            .child(label)
+            .into_element()
     }
 }
 

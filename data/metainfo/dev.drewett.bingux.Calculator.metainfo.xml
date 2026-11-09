@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Calculator</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Calculator</name>
+  <summary>Calculate, convert units and currencies, and work in binary</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Calculator is the Bingux desktop's calculator. Type an expression or press
+      the keys, and the result shows as you type.
+    </p>
+    <ul>
+      <li>Exact arithmetic: 0.1 + 0.2 is 0.3, and 100! shows every digit</li>
+      <li>Basic, Scientific, Programmer and Convert modes</li>
+      <li>Percent that works as it does on a till, and a history that is kept</li>
+      <li>Binary, octal, decimal and hexadecimal side by side, with a grid of bits</li>
+      <li>Length, mass, temperature, data, currency and more, with offline exchange rates</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">bingux-calculator.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-calculator</binary>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Utility</category>
+    <category>Calculator</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-09"/>
+  </releases>
+</component>

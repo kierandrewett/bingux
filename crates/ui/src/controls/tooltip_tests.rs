@@ -21,8 +21,7 @@ use crate::window::WindowHost;
 const WINDOW: (f32, f32) = (800.0, 600.0);
 const FRAME: Duration = Duration::from_millis(16);
 /// Longer than a one-line tip, so it wraps inside the widest bubble.
-const LONG: &str =
-    "Turns the sound off for every app and every device until you turn it back on, alerts and the volume tone too";
+const LONG: &str = "Turns the sound off for every app and every device until you turn it back on, alerts and the volume tone too";
 
 /// An icon button whose tooltip is `off` until it is pressed, `on` after.
 #[derive(PartialEq, Clone)]
@@ -84,28 +83,27 @@ impl Component for Page {
         // The "c" key opens and closes a choice list or popover, which is a modal of the
         // window's navigation as a `Panel` makes it.
         let mut choice = use_state(|| false);
-        let mut page = rect()
-            .expanded()
-            .on_global_key_down(move |event: Event<KeyboardEventData>| {
-                if let Key::Character(key) = &event.key
-                    && key == "c"
-                {
-                    choice.toggle();
-                }
-                if let (Some(overlays), Key::Character(key)) = (overlays, &event.key)
-                    && key == "m"
-                {
-                    overlays.show_menu(
-                        (40.0, 40.0),
-                        vec![crate::shell::menu_item("Open", |_| {})],
-                    );
-                }
-                if let (Some(activity), Key::Character(key)) = (activity, &event.key)
-                    && key == "s"
-                {
-                    activity.pulse();
-                }
-            });
+        let mut page =
+            rect()
+                .expanded()
+                .on_global_key_down(move |event: Event<KeyboardEventData>| {
+                    if let Key::Character(key) = &event.key
+                        && key == "c"
+                    {
+                        choice.toggle();
+                    }
+                    if let (Some(overlays), Key::Character(key)) = (overlays, &event.key)
+                        && key == "m"
+                    {
+                        overlays
+                            .show_menu((40.0, 40.0), vec![crate::shell::menu_item("Open", |_| {})]);
+                    }
+                    if let (Some(activity), Key::Character(key)) = (activity, &event.key)
+                        && key == "s"
+                    {
+                        activity.pulse();
+                    }
+                });
         for toggle in &self.toggles {
             page = page.child(Element::from(toggle.clone()));
         }
@@ -186,10 +184,15 @@ fn bubbles(shot: &mut Snapshot, texts: &[&str]) -> Vec<Seen> {
                 let boxed = node.layout().area;
                 boxed.contains(centre).then(|| (boxed, own))
             });
-            let (area, opacity) = around
-                .into_iter()
-                .min_by(|a, b| (a.0.width() * a.0.height()).total_cmp(&(b.0.width() * b.0.height())))?;
-            (opacity > 0.0).then_some(Seen { text, area, label, opacity })
+            let (area, opacity) = around.into_iter().min_by(|a, b| {
+                (a.0.width() * a.0.height()).total_cmp(&(b.0.width() * b.0.height()))
+            })?;
+            (opacity > 0.0).then_some(Seen {
+                text,
+                area,
+                label,
+                opacity,
+            })
         })
         .collect()
 }
@@ -207,7 +210,10 @@ fn frame(shot: &mut Snapshot) {
 fn until_shown(shot: &mut Snapshot, texts: &[&str]) -> Seen {
     for _ in 0..120 {
         frame(shot);
-        if let Some(seen) = bubbles(shot, texts).into_iter().find(|seen| seen.opacity > 0.99) {
+        if let Some(seen) = bubbles(shot, texts)
+            .into_iter()
+            .find(|seen| seen.opacity > 0.99)
+        {
             return seen;
         }
     }
@@ -257,7 +263,14 @@ fn trace(name: &str, frames: &[Vec<Seen>]) {
                 )
             })
             .collect();
-        eprintln!("{name} frame {index:2}: {}", if line.is_empty() { "-".into() } else { line.join(" | ") });
+        eprintln!(
+            "{name} frame {index:2}: {}",
+            if line.is_empty() {
+                "-".into()
+            } else {
+                line.join(" | ")
+            }
+        );
     }
 }
 
@@ -276,7 +289,10 @@ fn a_new_label_never_moves_the_bubble_off_its_control() {
         before.area
     );
     let steady_top = before.area.min_y();
-    assert!(steady_top > toggle.bottom(), "the bubble opens below its control");
+    assert!(
+        steady_top > toggle.bottom(),
+        "the bubble opens below its control"
+    );
 
     // Press: the label changes under the resting pointer. Press again to go
     // back. Every frame of both changes is checked.
@@ -289,7 +305,10 @@ fn a_new_label_never_moves_the_bubble_off_its_control() {
         let mut last_centre = None;
         for (index, seen) in frames.iter().enumerate() {
             let [seen] = seen.as_slice() else {
-                panic!("press {press}, frame {index}: {} bubbles, not one: {seen:?}", seen.len());
+                panic!(
+                    "press {press}, frame {index}: {} bubbles, not one: {seen:?}",
+                    seen.len()
+                );
             };
             assert!(
                 (seen.centre_x() - toggle.centre_x()).abs() <= 0.51,
@@ -303,7 +322,11 @@ fn a_new_label_never_moves_the_bubble_off_its_control() {
                 seen.text,
                 seen.area.min_y()
             );
-            assert!(seen.opacity > 0.99, "press {press}, frame {index}: faded to {}", seen.opacity);
+            assert!(
+                seen.opacity > 0.99,
+                "press {press}, frame {index}: faded to {}",
+                seen.opacity
+            );
             if let Some(last) = last_centre {
                 assert!((seen.centre_x() - last as f32).abs() <= 0.51);
             }
@@ -361,7 +384,10 @@ fn moving_to_a_neighbouring_control_opens_its_tip_at_once_and_never_shows_two() 
             "frame {index}, before the second tip is drawn: {seen:?}"
         );
     }
-    assert!(frames[opened][0].opacity > 0.99, "the second tip shows in full at once");
+    assert!(
+        frames[opened][0].opacity > 0.99,
+        "the second tip shows in full at once"
+    );
     let beta = until_shown(&mut shot, &["Alpha", "Beta"]);
     assert_eq!(beta.text, "Beta");
     assert!((beta.centre_x() - second.centre_x()).abs() <= 0.51);
@@ -380,7 +406,10 @@ fn the_wait_comes_back_once_the_pointer_has_been_away() {
     // Off the controls for longer than the grace time.
     shot.hover(600.0, 500.0);
     shot.settle(Duration::from_millis(500));
-    assert!(bubbles(&mut shot, &["Alpha", "Beta"]).is_empty(), "the tip goes when the pointer leaves");
+    assert!(
+        bubbles(&mut shot, &["Alpha", "Beta"]).is_empty(),
+        "the tip goes when the pointer leaves"
+    );
 
     // Back on a control: nothing for the first 300 ms, then the tip.
     let (x, y) = second.middle();
@@ -405,7 +434,10 @@ fn a_long_label_wraps_inside_the_widest_bubble_and_flips_once_at_the_edge() {
     shot.hover(x, y);
     let short = until_shown(&mut shot, &["Mute", LONG]);
     assert_eq!(short.text, "Mute");
-    assert!(short.area.min_y() > toggle.bottom(), "a short tip opens below");
+    assert!(
+        short.area.min_y() > toggle.bottom(),
+        "a short tip opens below"
+    );
     let one_line = short.label.height();
 
     press_at(&mut shot, x, y);
@@ -427,14 +459,32 @@ fn a_long_label_wraps_inside_the_widest_bubble_and_flips_once_at_the_edge() {
             flips += 1;
             below = now_below;
         }
-        assert!(seen.area.max_x() <= WINDOW.0 - 8.0 && seen.area.min_x() >= 8.0, "frame {index}: past the margin");
-        assert!(seen.area.max_y() <= WINDOW.1 - 8.0 && seen.area.min_y() >= 8.0, "frame {index}: past the margin");
+        assert!(
+            seen.area.max_x() <= WINDOW.0 - 8.0 && seen.area.min_x() >= 8.0,
+            "frame {index}: past the margin"
+        );
+        assert!(
+            seen.area.max_y() <= WINDOW.1 - 8.0 && seen.area.min_y() >= 8.0,
+            "frame {index}: past the margin"
+        );
     }
-    assert_eq!(flips, 1, "it flips above once when the text grows, not back and forth");
-    let long = frames.last().and_then(|seen| seen.first()).expect("the long tip is up");
+    assert_eq!(
+        flips, 1,
+        "it flips above once when the text grows, not back and forth"
+    );
+    let long = frames
+        .last()
+        .and_then(|seen| seen.first())
+        .expect("the long tip is up");
     assert_eq!(long.text, LONG);
-    assert!(long.area.max_y() <= toggle.top(), "the wrapped tip sits above the control");
-    assert!(long.label.height() >= 2.0 * one_line - 1.0, "the long text wraps onto more lines");
+    assert!(
+        long.area.max_y() <= toggle.top(),
+        "the wrapped tip sits above the control"
+    );
+    assert!(
+        long.label.height() >= 2.0 * one_line - 1.0,
+        "the long text wraps onto more lines"
+    );
     assert!(
         long.area.width() <= Dim::TooltipMax.px_in(SizeClass::Regular),
         "the wrapped tip is {} wide, past the {} limit",
@@ -443,7 +493,9 @@ fn a_long_label_wraps_inside_the_widest_bubble_and_flips_once_at_the_edge() {
     );
     // The bubble of a text that wrapped fills the room it wrapped in: the text inside it
     // is as wide as its longest line, so the box is wider than the text.
-    let room = Dim::TooltipMax.px_in(SizeClass::Regular).min(WINDOW.0 - 16.0);
+    let room = Dim::TooltipMax
+        .px_in(SizeClass::Regular)
+        .min(WINDOW.0 - 16.0);
     assert!(
         (long.area.width() - room).abs() <= 1.0,
         "a tip whose text wrapped is as wide as its room ({room}), not as its longest line: {}",
@@ -464,7 +516,11 @@ fn a_long_label_wraps_inside_the_widest_bubble_and_flips_once_at_the_edge() {
         let [seen] = seen.as_slice() else {
             panic!("frame {index}: {} bubbles: {seen:?}", seen.len());
         };
-        assert!(seen.area.max_y() <= toggle.top(), "frame {index}: {:?} came back below", seen.text);
+        assert!(
+            seen.area.max_y() <= toggle.top(),
+            "frame {index}: {:?} came back below",
+            seen.text
+        );
         assert!((seen.centre_x() - toggle.centre_x()).abs() <= 0.51);
     }
 }
@@ -487,7 +543,10 @@ fn a_tip_goes_when_a_menu_opens_and_none_opens_over_it() {
     // The pointer moves about the control while the menu is open: no tip.
     shot.hover(x + 2.0, y + 2.0);
     shot.settle(Duration::from_millis(700));
-    assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened over the menu");
+    assert!(
+        bubbles(&mut shot, &["Copy"]).is_empty(),
+        "a tip opened over the menu"
+    );
 }
 
 #[test]
@@ -502,18 +561,28 @@ fn a_tip_goes_when_a_choice_or_popover_opens_and_none_opens_over_it() {
     // A popover opens from the control: where the system allows it, it is a window of its
     // own, and a bubble drawn in this window would show from under it.
     shot.key(Key::Character("c".into()));
-    let open = shot.runner().run_in(|| crate::nav::try_router().map(|router| router.model().modals().len()));
+    let open = shot
+        .runner()
+        .run_in(|| crate::nav::try_router().map(|router| router.model().modals().len()));
     assert_eq!(open, Some(1), "the choice is on the window's stack");
     let frames = watch(&mut shot, &["Copy"], 30);
-    assert!(frames[10..].iter().all(Vec::is_empty), "a tip is still drawn beside the open choice");
+    assert!(
+        frames[10..].iter().all(Vec::is_empty),
+        "a tip is still drawn beside the open choice"
+    );
     shot.hover(x + 2.0, y + 2.0);
     shot.settle(Duration::from_millis(700));
-    assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened beside the open choice");
+    assert!(
+        bubbles(&mut shot, &["Copy"]).is_empty(),
+        "a tip opened beside the open choice"
+    );
 
     // Closed, the control's tip is back after the usual rest.
     shot.key(Key::Character("c".into()));
     shot.settle(Duration::from_millis(200));
-    let open = shot.runner().run_in(|| crate::nav::try_router().map(|router| router.model().modals().len()));
+    let open = shot
+        .runner()
+        .run_in(|| crate::nav::try_router().map(|router| router.model().modals().len()));
     assert_eq!(open, Some(0), "the choice left the window's stack");
     shot.hover(x + 40.0, y + 40.0);
     shot.hover(x, y);
@@ -538,7 +607,10 @@ fn a_scroll_takes_the_tip_down_at_once_and_it_waits_for_the_content_to_be_still(
     scroll_notch(&mut shot);
     frame(&mut shot);
     frame(&mut shot);
-    assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "the tip is still up two frames after the scroll began");
+    assert!(
+        bubbles(&mut shot, &["Copy"]).is_empty(),
+        "the tip is still up two frames after the scroll began"
+    );
 
     // A second of scrolling, the pointer resting on the control: not one frame
     // draws the tip, and none opens however long the pointer rests.
@@ -564,7 +636,11 @@ fn a_scroll_takes_the_tip_down_at_once_and_it_waits_for_the_content_to_be_still(
         }
         assert!(quiet < 150, "the tip never came back");
     }
-    assert!(quiet * 16 >= 500, "the tip came back after only {} ms of stillness", quiet * 16);
+    assert!(
+        quiet * 16 >= 500,
+        "the tip came back after only {} ms of stillness",
+        quiet * 16
+    );
     assert_eq!(until_shown(&mut shot, &["Copy"]).text, "Copy");
 }
 
@@ -581,8 +657,15 @@ fn a_pointer_that_arrives_while_the_content_scrolls_opens_no_tip_until_it_is_sti
         scroll_notch(&mut shot);
         for _ in 0..3 {
             frame(&mut shot);
-            assert!(bubbles(&mut shot, &["Copy"]).is_empty(), "a tip opened during the scroll");
+            assert!(
+                bubbles(&mut shot, &["Copy"]).is_empty(),
+                "a tip opened during the scroll"
+            );
         }
     }
-    assert_eq!(until_shown(&mut shot, &["Copy"]).text, "Copy", "and it opens once the content is still");
+    assert_eq!(
+        until_shown(&mut shot, &["Copy"]).text,
+        "Copy",
+        "and it opens once the content is still"
+    );
 }

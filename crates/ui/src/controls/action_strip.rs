@@ -144,7 +144,8 @@ impl Component for StripCell {
                     .label(&tokens, action.label.clone())
                     .max_lines(1)
                     .text_overflow(TextOverflow::Ellipsis),
-            ).focusable_inside(focus())
+            )
+            .focusable_inside(focus())
             .tw(&tokens, &[w_flex(), h_full()])
     }
 }

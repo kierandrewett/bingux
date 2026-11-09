@@ -448,3 +448,26 @@ pub const LEVEL_METER: &[Spec] = &[Spec::forced(
             .into_element()
     },
 )];
+
+/// Eighty digits: more than a line of any window holds.
+const LONG_FIGURES: &str = "31,415,926,535,897,932,384,626,433,832,795,028,841,971,693,993,751,058,209,749,445,923,078,164";
+
+pub const READOUT: &[Spec] = &[
+    Spec::forced("A result that fits", || {
+        readout("1,234,567.89").into_element()
+    }),
+    Spec::forced("A result scaled down to fit", || {
+        readout("123,456,789,012,345,678.123456").into_element()
+    }),
+    Spec::forced("A result so long it scrolls at its smallest size", || {
+        readout(LONG_FIGURES).into_element()
+    }),
+    Spec::live("Right-click for Copy", || {
+        let mut digits = use_state(|| 3usize);
+        let text: String = "7".repeat(digits());
+        vstack(S3)
+            .child(readout(text).copy_text("77"))
+            .child(action_button("Add a digit", move |_| digits.set(digits() + 1)).compact())
+            .into_element()
+    }),
+];

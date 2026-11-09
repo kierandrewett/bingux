@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Calculator
+Comment=Calculate, convert units and currencies, and work in binary
+Exec=bingux-calculator
+Icon=bingux-calculator
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=Calculate;Calculation;Maths;Math;Sum;Scientific;Programmer;Binary;Hexadecimal;Convert;Currency;Unit;Percent;
+StartupWMClass=bingux-calculator
+StartupNotify=true

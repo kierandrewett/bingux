@@ -280,9 +280,10 @@ impl Component for ColourButton {
         let dismiss = EventHandler::new(move |_: ()| open.set(false));
 
         let actions = {
-            let mut row = rect()
-                .component("ColourActions")
-                .tw(&tokens, &[w_full(), flex_row(), gap(S2), justify(Align::End)]);
+            let mut row = rect().component("ColourActions").tw(
+                &tokens,
+                &[w_full(), flex_row(), gap(S2), justify(Align::End)],
+            );
             if !live {
                 row = row.child(action_button("Cancel", dismiss.clone()));
             }
@@ -301,22 +302,27 @@ impl Component for ColourButton {
                     )
                     .maybe_child(content)
             };
-            let cancel = (!live).then(|| Element::from(action_button("Cancel", dismiss.clone()).flat()));
+            let cancel =
+                (!live).then(|| Element::from(action_button("Cancel", dismiss.clone()).flat()));
             rect()
                 .component("ColourHeader")
-                .tw(&tokens, &[w_full(), flex_row(), grow_children(), items(Align::Center)])
+                .tw(
+                    &tokens,
+                    &[w_full(), flex_row(), grow_children(), items(Align::Center)],
+                )
                 .child(side(cancel, false))
                 .child(
-                    rect()
-                        .tw(&tokens, &[w_flex(), center()])
-                        .child(
-                            EMPHASIS
-                                .in_ink(Ink::Text)
-                                .label(&tokens, self.title.clone())
-                                .max_lines(1),
-                        ),
+                    rect().tw(&tokens, &[w_flex(), center()]).child(
+                        EMPHASIS
+                            .in_ink(Ink::Text)
+                            .label(&tokens, self.title.clone())
+                            .max_lines(1),
+                    ),
                 )
-                .child(side(Some(Element::from(primary_button("Done", done.clone()))), true))
+                .child(side(
+                    Some(Element::from(primary_button("Done", done.clone()))),
+                    true,
+                ))
         };
 
         let compact = g.compact();
