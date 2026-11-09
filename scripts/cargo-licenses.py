@@ -38,6 +38,9 @@ PROGRAMS = {
     "bingux-files": "bingux-files-app",
     "bingux-calculator": "bingux-calculator-app",
     "bingux-weather": "bingux-weather-app",
+    "bingux-text-editor": "bingux-text-editor",
+    "bingux-preview": "bingux-preview",
+    "bingux-calendar": "bingux-calendar",
     "bingux-taxonomy": "bingux-taxonomy",
     "bingux-preview-host": "bingux-preview-host",
     "bingux-config": "bingux-config",
@@ -52,13 +55,16 @@ PROGRAMS = {
 
 # The package that ships each program (pkgsmith/), and the licences that package adds for files
 # that are not Rust crates (Quickshell, which the shell binary embeds, is LGPL; the project's own
-# code is GPL). Settings, Files and Taxonomy are the application packages; every other program is
+# code is GPL). Settings, Files, Calendar, Preview and Taxonomy are the application packages; every other program is
 # part of `bingux`.
 PACKAGE_OF = {
     "bingux-settings": "bingux-settings",
     "bingux-files": "bingux-files",
     "bingux-calculator": "bingux-calculator",
     "bingux-weather": "bingux-weather",
+    "bingux-text-editor": "bingux-text-editor",
+    "bingux-preview": "bingux-preview",
+    "bingux-calendar": "bingux-calendar",
     "bingux-taxonomy": "bingux-taxonomy",
     "bingux-preview-host": "bingux",
     "bingux-config": "bingux",
@@ -71,6 +77,11 @@ PACKAGE_OF = {
 }
 OWN = ["GPL-3.0-or-later"]
 EXTRA = {"bingux": ["LGPL-3.0-or-later"]}
+
+
+# Crates that give their licence as a file (`license-file` in Cargo.toml) and no SPDX expression, so
+# cargo cannot print one. The expression is read from the file's text, checked when the crate is added.
+LICENCE_FILE_ONLY = {"ical": "Apache-2.0"}
 
 
 def own_crate(name):
@@ -119,7 +130,7 @@ def crates(crate_name):
         key = (name, version.lstrip("v"))
         if match := re.search(r"\((/[^)]*)\)", package):
             paths[key] = match.group(1)
-        found[key] = normalise(licence) or "UNKNOWN"
+        found[key] = normalise(licence) or LICENCE_FILE_ONLY.get(name, "UNKNOWN")
     return [(name, version, licence) for (name, version), licence in sorted(found.items())], paths
 
 

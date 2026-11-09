@@ -22,6 +22,7 @@ use freya::prelude::*;
 use freya::winit::window::Fullscreen;
 
 use crate::copy;
+use crate::crop_mode::{CropEditor, CropJob};
 use crate::edit::{self, Orientation};
 use crate::playlist::{Family, Playlist, family_of};
 use crate::prefs;
@@ -63,12 +64,17 @@ impl Component for App {
     }
 }
 
-/// A file that went to the Trash, with what Undo needs to bring it back.
+/// The last thing Undo can take back.
 #[derive(Clone)]
-struct Binned {
-    trashed: Vec<Trashed>,
-    file: PathBuf,
-    at: usize,
+enum Done {
+    /// A file went to the Trash, with what Undo needs to bring it back.
+    Binned {
+        trashed: Vec<Trashed>,
+        file: PathBuf,
+        at: usize,
+    },
+    /// A cropped copy was saved; Undo moves it to the Trash.
+    Copied { copy: PathBuf },
 }
 
 #[derive(PartialEq)]
@@ -125,7 +131,8 @@ impl Component for Content {
         let mut slideshow = use_state(|| false);
         let mut chrome_near = use_state(|| false);
         let mut over_file = use_state(|| false);
-        let binned = use_state(|| None::<Binned>);
+        let done = use_state(|| None::<Done>);
+        let cropping = use_state(|| None::<CropJob>);
 
         // A second launch changes the location: its file opens here.
         let handled = use_hook({
@@ -214,6 +221,30 @@ impl Component for Content {
                 }
             }
         };
+        // Undo takes back the last file moved to the Trash or the last cropped copy.
+        let undo = move || {
+            let mut done = done;
+            let mut playlist = playlist;
+            let Some(last) = done.peek().clone() else {
+                return;
+            };
+            match last {
+                Done::Binned { trashed, file, at } => match ops::untrash(&trashed) {
+                    Ok(_) => {
+                        playlist.write().put_back(file, at);
+                        done.set(None);
+                    }
+                    Err(_) => overlays.toast(copy::UNDO_FAILED),
+                },
+                Done::Copied { copy: made } => match ops::trash(std::slice::from_ref(&made)) {
+                    Ok(_) => {
+                        playlist.write().take_out(&made);
+                        done.set(None);
+                    }
+                    Err(_) => overlays.toast(copy::UNDO_COPY_FAILED),
+                },
+            }
+        };
         let trash = {
             let current = current.clone();
             move || {
@@ -225,44 +256,17 @@ impl Component for Content {
                 match ops::trash(std::slice::from_ref(&file)) {
                     Ok(trashed) => {
                         let mut playlist = playlist;
-                        let mut binned = binned;
+                        let mut done = done;
                         let at = playlist.write().remove_current().map_or(0, |(_, at)| at);
-                        binned.set(Some(Binned { trashed, file, at }));
+                        done.set(Some(Done::Binned { trashed, file, at }));
                         overlays.toast_with_action(
                             copy::moved_to_trash(&label),
                             copy::UNDO,
-                            move |_: ()| {
-                                let mut binned = binned;
-                                let mut playlist = playlist;
-                                let Some(done) = binned.peek().clone() else {
-                                    return;
-                                };
-                                match ops::untrash(&done.trashed) {
-                                    Ok(_) => {
-                                        playlist.write().put_back(done.file, done.at);
-                                        binned.set(None);
-                                    }
-                                    Err(_) => overlays.toast(copy::UNDO_FAILED),
-                                }
-                            },
+                            move |_: ()| undo(),
                         );
                     }
                     Err(_) => overlays.toast(copy::trash_failed(&label)),
                 }
-            }
-        };
-        let undo = move || {
-            let mut binned = binned;
-            let mut playlist = playlist;
-            let Some(done) = binned.peek().clone() else {
-                return;
-            };
-            match ops::untrash(&done.trashed) {
-                Ok(_) => {
-                    playlist.write().put_back(done.file, done.at);
-                    binned.set(None);
-                }
-                Err(_) => overlays.toast(copy::UNDO_FAILED),
             }
         };
         let orientation_of = move |zoom: ZoomHandle| {
@@ -281,7 +285,7 @@ impl Component for Content {
                 let (total, home) = orientation_of(zoom);
                 spawn(async move {
                     let result = bingux_ui::task::spawn_blocking(move || {
-                        edit::png_bytes(&file, total, home)
+                        edit::png_bytes(&file, total, home, None)
                             .and_then(|png| edit::copy_to_clipboard(&png))
                     })
                     .await;
@@ -321,7 +325,7 @@ impl Component for Content {
                             .map(|name| name.to_string_lossy().into_owned())
                             .unwrap_or_default();
                         let result = bingux_ui::task::spawn_blocking(move || {
-                            edit::save_copy(&file, &target, total, home)
+                            edit::save_copy(&file, &target, total, home, None)
                         })
                         .await;
                         match result {
@@ -331,6 +335,66 @@ impl Component for Content {
                     });
                 });
             }
+        };
+        let begin_crop = {
+            let current = current.clone();
+            move || {
+                let Some(file) = current.clone() else { return };
+                if !edit::can_copy(&file) || *slideshow.peek() {
+                    return;
+                }
+                match edit::upright_size(&file) {
+                    Some((width, height)) => {
+                        let mut cropping = cropping;
+                        cropping.set(Some(CropJob {
+                            file,
+                            size: (width as f32, height as f32),
+                            orientation: (zoom.turns(), zoom.mirrored()),
+                        }));
+                    }
+                    None => overlays.toast(copy::CROP_FAILED),
+                }
+            }
+        };
+        let cancel_crop = move || {
+            let mut cropping = cropping;
+            cropping.set(None);
+        };
+        let save_crop = move |crop: edit::Crop| {
+            let Some(job) = cropping.peek().clone() else {
+                return;
+            };
+            let target = edit::copy_name(&job.file);
+            let shown = target
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            // The picture began upright, so how it was turned is what is done to the decode.
+            let total = Orientation::new(job.orientation.0, job.orientation.1);
+            spawn(async move {
+                let file = job.file.clone();
+                let made = target.clone();
+                let result = bingux_ui::task::spawn_blocking(move || {
+                    edit::save_copy(&file, &made, total, Orientation::UPRIGHT, Some(crop))
+                })
+                .await;
+                let mut cropping = cropping;
+                let mut playlist = playlist;
+                let mut done = done;
+                match result {
+                    Ok(()) => {
+                        cropping.set(None);
+                        playlist.write().put_after_current(target.clone());
+                        done.set(Some(Done::Copied { copy: target }));
+                        overlays.toast_with_action(
+                            copy::saved_crop(&shown),
+                            copy::UNDO,
+                            move |_: ()| undo(),
+                        );
+                    }
+                    Err(_) => overlays.toast(copy::SAVE_FAILED),
+                }
+            });
         };
         let show_in_files = {
             let current = current.clone();
@@ -347,8 +411,17 @@ impl Component for Content {
         let on_key = {
             let copy_picture = copy_picture.clone();
             let save_copy = save_copy.clone();
+            let begin_crop = begin_crop.clone();
             let trash = trash.clone();
             move |event: Event<KeyboardEventData>| {
+                // While cropping the box has the keys; the window keeps only Escape.
+                if cropping.peek().is_some() {
+                    if matches!(event.key, Key::Named(NamedKey::Escape)) {
+                        cancel_crop();
+                        event.stop_propagation();
+                    }
+                    return;
+                }
                 let ctrl = event.modifiers.contains(Modifiers::CONTROL);
                 let shift = event.modifiers.contains(Modifiers::SHIFT);
                 let alt = event.modifiers.contains(Modifiers::ALT);
@@ -377,6 +450,12 @@ impl Component for Content {
                     // Pictures only: a document has a find field that takes these keys.
                     Key::Named(NamedKey::Delete) if picture && !ctrl && !alt => {
                         trash();
+                        true
+                    }
+                    Key::Character(text)
+                        if picture && !ctrl && !alt && !shift && text.as_str() == "c" =>
+                    {
+                        begin_crop();
                         true
                     }
                     Key::Character(text)
@@ -446,7 +525,14 @@ impl Component for Content {
                 .tooltip(copy::PAGES_TOOLTIP),
             );
         }
-        if picture && !compact {
+        let cropping_now = cropping.read().is_some();
+        if picture && !compact && !cropping_now {
+            if current.as_deref().is_some_and(edit::can_copy) {
+                let begin_crop = begin_crop.clone();
+                header = header.trailing(
+                    icon_button(Icon::Crop, move |_| begin_crop()).tooltip(copy::CROP_TOOLTIP),
+                );
+            }
             header = header
                 .trailing(
                     icon_button(Icon::ObjectRotateLeft, move |_| zoom.rotate(false))
@@ -457,7 +543,7 @@ impl Component for Content {
                         .tooltip(copy::TURN_RIGHT_TOOLTIP),
                 );
         }
-        if current.is_some() && !compact {
+        if current.is_some() && !compact && !cropping_now {
             let mut info_state = info;
             header = header.trailing(
                 icon_button(Icon::DialogInformation, move |_| {
@@ -476,7 +562,8 @@ impl Component for Content {
                 slideshow: *slideshow.read(),
                 can_slideshow: list.is_pictures(),
                 full,
-                can_undo: binned.read().is_some(),
+                can_undo: done.read().is_some(),
+                can_crop: picture && current.as_deref().is_some_and(edit::can_copy) && !*slideshow.read(),
             },
             MenuActions {
                 open: EventHandler::new(open),
@@ -487,6 +574,10 @@ impl Component for Content {
                 save_copy: EventHandler::new({
                     let save_copy = save_copy.clone();
                     move |_: ()| save_copy()
+                }),
+                crop: EventHandler::new({
+                    let begin_crop = begin_crop.clone();
+                    move |_: ()| begin_crop()
                 }),
                 trash: EventHandler::new({
                     let trash = trash.clone();
@@ -534,13 +625,31 @@ impl Component for Content {
             nav = nav.position(at, of);
         }
 
-        let body: Element = match &current {
-            Some(path) => {
+        // A crop belongs to the file it began on: another file, or none, ends it.
+        let cropped = cropping.read().clone();
+        if let Some(job) = &cropped
+            && current.as_deref() != Some(job.file.as_path())
+        {
+            spawn(async move {
+                let mut cropping = cropping;
+                cropping.set(None);
+            });
+        }
+        let crop_on_show = cropped.filter(|job| current.as_deref() == Some(job.file.as_path()));
+
+        let body: Element = match (&current, crop_on_show) {
+            (Some(_), Some(job)) => CropEditor {
+                job,
+                on_save: EventHandler::new(save_crop),
+                on_cancel: EventHandler::new(move |_: ()| cancel_crop()),
+            }
+            .into_element(),
+            (Some(path), None) => {
                 PreviewHost::new(Some(PreviewSource::path(path.clone())), Mode::Window, nav)
                     .folder(false)
                     .into_element()
             }
-            None => status_page(Icon::ImageGeneric, copy::EMPTY_TITLE)
+            (None, _) => status_page(Icon::ImageGeneric, copy::EMPTY_TITLE)
                 .description(copy::EMPTY_LINE)
                 .action(copy::EMPTY_ACTION, EventHandler::new(open))
                 .into_element(),
@@ -610,6 +719,7 @@ struct MenuState {
     can_slideshow: bool,
     full: bool,
     can_undo: bool,
+    can_crop: bool,
 }
 
 /// What its items do.
@@ -617,6 +727,7 @@ struct MenuActions {
     open: EventHandler<()>,
     copy_picture: EventHandler<()>,
     save_copy: EventHandler<()>,
+    crop: EventHandler<()>,
     trash: EventHandler<()>,
     undo: EventHandler<()>,
     slideshow: EventHandler<()>,
@@ -676,6 +787,11 @@ fn main_menu(
         }
         items.push(copy_item);
         items.push(save_item);
+        let mut crop_item = item(copy::MENU_CROP, Some("C"), &actions.crop);
+        if !state.can_crop {
+            crop_item = crop_item.disabled();
+        }
+        items.push(crop_item);
         items.push(menu_separator());
         items
             .push(menu_item(copy::MENU_TURN_LEFT, move |_| zoom.rotate(false)).shortcut("Shift+R"));

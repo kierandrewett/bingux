@@ -238,7 +238,7 @@ pub fn use_main_window() -> MainWindow {
 
 impl WindowLike for MainWindow {
     fn close(self) {
-        Platform::get().close_window(Platform::window_id());
+        crate::document::guard::request_close(Platform::window_id());
     }
 
     fn resize_to(self, width: f32, height: f32) {

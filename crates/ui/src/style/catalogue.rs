@@ -16,8 +16,8 @@ use freya::prelude::{Color, FontWeight};
 use super::*;
 use crate::theme::{BannerKind, Tokens};
 use crate::typography::{
-    BADGE, BODY, CAPTION, CODE, EMPHASIS, HEADING, HERO, LINK, NUMERIC, OVERLINE, PAGE_TITLE,
-    SECTION, TITLE, TextStyle, VALUE,
+    BADGE, BODY, CAPTION, CODE, EMPHASIS, EVENT_TITLE, HEADING, HERO, LINK, NUMERIC, OVERLINE,
+    PAGE_TITLE, SECTION, TITLE, TextStyle, VALUE,
 };
 
 /// The space steps, in order.
@@ -57,6 +57,13 @@ const DIMS: &[(&str, Dim)] = &[
     ("DashHeight", Dim::DashHeight),
     ("SpinnerMedium", Dim::SpinnerMedium),
     ("SignalBar", Dim::SignalBar),
+    ("CalendarHour", Dim::CalendarHour),
+    ("CalendarGutter", Dim::CalendarGutter),
+    ("CalendarChip", Dim::CalendarChip),
+    ("CalendarWeekNumber", Dim::CalendarWeekNumber),
+    ("CalendarCellMin", Dim::CalendarCellMin),
+    ("CalendarDot", Dim::CalendarDot),
+    ("CalendarBar", Dim::CalendarBar),
     ("Dot", Dim::Dot),
     ("Track", Dim::Track),
     ("SliderTrack", Dim::SliderTrack),
@@ -201,10 +208,19 @@ pub const PAINTS: &[(&str, Paint)] = &[
     ("Scrim", Paint::Scrim),
     ("Knob", Paint::Knob),
     ("Track", Paint::Track),
-    ("NoticeFill(Neutral)", Paint::NoticeFill(BannerKind::Neutral)),
+    (
+        "NoticeFill(Neutral)",
+        Paint::NoticeFill(BannerKind::Neutral),
+    ),
     ("NoticeFill(Info)", Paint::NoticeFill(BannerKind::Info)),
-    ("NoticeFill(Success)", Paint::NoticeFill(BannerKind::Success)),
-    ("NoticeFill(Warning)", Paint::NoticeFill(BannerKind::Warning)),
+    (
+        "NoticeFill(Success)",
+        Paint::NoticeFill(BannerKind::Success),
+    ),
+    (
+        "NoticeFill(Warning)",
+        Paint::NoticeFill(BannerKind::Warning),
+    ),
     ("NoticeFill(Error)", Paint::NoticeFill(BannerKind::Error)),
     ("SyntaxTag", Paint::SyntaxTag),
     ("SyntaxAttr", Paint::SyntaxAttr),
@@ -241,6 +257,7 @@ pub const TEXT_STYLES: &[(&str, TextStyle)] = &[
     ("VALUE", VALUE),
     ("NUMERIC", NUMERIC),
     ("LINK", LINK),
+    ("EVENT_TITLE", EVENT_TITLE),
     ("CAPTION", CAPTION),
     ("BADGE", BADGE),
     ("OVERLINE", OVERLINE),

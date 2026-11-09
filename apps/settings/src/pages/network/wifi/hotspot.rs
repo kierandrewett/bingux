@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
+use super::super::plain;
 use super::nm::{self, Saved};
 use super::share;
 use super::{Data, Radio, data, radio_of, use_polling, use_ui};
@@ -242,7 +243,11 @@ impl Component for HotspotPage {
 
         if let Some(error) = error {
             return page_column().child(PageHead::new()).child(
-                status(Status::Error(error.0)).action("Try again", move |_| ui.reload_all()),
+                status(Status::Error(plain(
+                    &error.0,
+                    "Could not read the hotspot settings. Try again.",
+                )))
+                .action("Try again", move |_| ui.reload_all()),
             );
         }
 
@@ -269,7 +274,8 @@ impl Component for HotspotPage {
                 strip_action(Icon::NetworkWirelessDisabled, "Turn off", move |_| {
                     let uuid = stop_uuid.clone();
                     ui.act(
-                        &format!("Turning off {stop_name}."),
+                        &format!("Turning off {stop_name}…"),
+                        |error| plain(&error.0, "Could not turn off the hotspot. Try again."),
                         move || nm::disconnect(&uuid),
                         || {},
                     );
@@ -279,15 +285,15 @@ impl Component for HotspotPage {
             match radio {
                 Radio::Missing => blocks.push(Element::from(Group::new(None::<String>).row(
                     Element::from(status(Status::Empty(
-                        "This computer has no Wi-Fi hardware.".into(),
+                        "This computer has no Wi-Fi adapter.".into(),
                     ))),
                 ))),
                 Radio::Blocked => blocks.push(Element::from(Group::new(None::<String>).row(
-                    Element::from(status(Status::Info("Wi-Fi hardware is disabled.".into()))),
+                    Element::from(status(Status::Info("A hardware switch has turned Wi-Fi off.".into()))),
                 ))),
                 Radio::Airplane => blocks.push(Element::from(Group::new(None::<String>).row(
                     Element::from(status(Status::Info(
-                        "Airplane mode is on, so the radio is off. Turn it off on the Network page to share a connection."
+                        "Airplane mode has turned Wi-Fi off. Turn off airplane mode on the Network page to share a connection."
                             .into(),
                     ))),
                 ))),
@@ -328,7 +334,8 @@ impl Component for HotspotPage {
                         let device = device.clone();
                         let uuid = uuid.clone();
                         ui.act(
-                            "Turning on the Wi-Fi hotspot.",
+                            "Turning on the Wi-Fi hotspot…",
+                            |error| plain(&error.0, "Could not turn on the hotspot. Try again."),
                             move || start(&device, uuid.as_deref(), &ssid, &secret, &band),
                             || {},
                         );
@@ -413,7 +420,9 @@ impl Component for RunningGroup {
         let password_row = match &*secret.read() {
             Some(Ok(Some(text))) => share::secret_row("Password", text, shown, overlays),
             Some(Ok(None)) => row("Password").value("None saved"),
-            Some(Err(error)) => row("Password").value(error.0.clone()),
+            Some(Err(error)) => {
+                row("Password").value(plain(&error.0, "Could not read the password"))
+            }
             None => row("Password").value("—"),
         };
         let band = match band_key(&self.ap.band).as_str() {

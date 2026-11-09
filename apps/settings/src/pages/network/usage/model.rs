@@ -100,10 +100,10 @@ const MAX_CUSTOM_DAYS: i64 = 366;
 pub fn custom_dates(from: &str, to: &str) -> Result<(Date, Date), String> {
     let (from, to) = (format::parse_date(from)?, format::parse_date(to)?);
     if to < from {
-        return Err("The end date is before the start date.".into());
+        return Err("Choose an end date after the start date.".into());
     }
     if to.to_days() - from.to_days() >= MAX_CUSTOM_DAYS {
-        return Err("Choose a range of at most one year.".into());
+        return Err("Choose a range of one year or less.".into());
     }
     Ok((from, to))
 }
@@ -234,6 +234,12 @@ pub fn no_history(error: &Error) -> bool {
     matches!(error, Error::NotFound(_) | Error::Outdated { .. })
 }
 
+/// Log what the recorder said and return the sentence the person sees.
+pub fn unreadable(error: &dyn std::fmt::Display) -> String {
+    eprintln!("bingux-settings: data usage: {error}");
+    "Could not read the data usage. Try again.".to_string()
+}
+
 /// The limits of `connection` and the limits for all, from the recorder's
 /// database, or the defaults when it does not exist yet.
 pub fn read_settings(connection: Option<&str>) -> Result<(UsageSettings, UsageSettings), String> {
@@ -243,12 +249,12 @@ pub fn read_settings(connection: Option<&str>) -> Result<(UsageSettings, UsageSe
             let defaults = UsageSettings::default();
             return Ok((defaults, defaults));
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err(unreadable(&error)),
     };
-    let global = reader.settings(None).map_err(|error| error.to_string())?;
+    let global = reader.settings(None).map_err(|error| unreadable(&error))?;
     let own = reader
         .settings(connection)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| unreadable(&error))?;
     Ok((own, global))
 }
 
@@ -284,10 +290,11 @@ fn quiet<T: Default>(
         Ok(value) => Ok(value),
         Err(Error::UnknownScope(_)) => Ok(T::default()),
         Err(Error::Unsupported(what)) => {
+            eprintln!("bingux-settings: data usage unsupported: {what}");
             *unsupported = Some(what.to_string());
             Ok(T::default())
         }
-        Err(error) => Err(error.to_string()),
+        Err(error) => Err(unreadable(&error)),
     }
 }
 
@@ -306,7 +313,7 @@ pub fn load(request: Request) -> Result<Snapshot, String> {
             bare.since_boot = counters_since_boot(&request.scope);
             return Ok(bare);
         }
-        Err(error) => return Err(error.to_string()),
+        Err(error) => return Err(unreadable(&error)),
     };
     read(&*source, &request, now, settings, global)
 }
@@ -340,8 +347,11 @@ fn read(
         Some((from, to)) => match source.series(&scope, request.period.granularity(), from, to) {
             Ok(buckets) => Ok(buckets),
             Err(Error::UnknownScope(_)) => Ok(Vec::new()),
-            Err(Error::Unsupported(what)) => Err(what.to_string()),
-            Err(error) => return Err(error.to_string()),
+            Err(Error::Unsupported(what)) => {
+                eprintln!("bingux-settings: data usage unsupported: {what}");
+                Err("Data usage history is not available here.".to_string())
+            }
+            Err(error) => return Err(unreadable(&error)),
         },
         None => Ok(Vec::new()),
     };
@@ -350,7 +360,7 @@ fn read(
     if let (UsageScope::All, Some((from, to))) = (&request.scope, span) {
         interfaces = source
             .interface_totals(from, to)
-            .map_err(|error| error.to_string())?
+            .map_err(|error| unreadable(&error))?
             .into_iter()
             .map(|(info, totals)| Breakdown {
                 name: info.name,
@@ -361,7 +371,7 @@ fn read(
             .collect();
         connections = source
             .connection_totals(from, to)
-            .map_err(|error| error.to_string())?
+            .map_err(|error| unreadable(&error))?
             .into_iter()
             .map(|(info, totals)| Breakdown {
                 name: info.name,
@@ -376,17 +386,17 @@ fn read(
         UsageScope::All => Some(
             source
                 .since_boot_total()
-                .map_err(|error| error.to_string())?,
+                .map_err(|error| unreadable(&error))?,
         ),
-        UsageScope::Interface(name) => {
-            source.since_boot(name).map_err(|error| error.to_string())?
-        }
+        UsageScope::Interface(name) => source
+            .since_boot(name)
+            .map_err(|error| unreadable(&error))?,
         UsageScope::Connection(_) => None,
     };
     let last_sample = source
         .last_sample_time()
-        .map_err(|error| error.to_string())?;
-    let live = source.is_live(now).map_err(|error| error.to_string())?;
+        .map_err(|error| unreadable(&error))?;
+    let live = source.is_live(now).map_err(|error| unreadable(&error))?;
 
     Ok(Snapshot {
         now,

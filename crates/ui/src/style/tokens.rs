@@ -468,6 +468,20 @@ pub enum Dim {
     IconBox,
     /// One Wi-Fi signal bar: 3 px wide.
     SignalBar,
+    /// One hour of a calendar's time grid: 56 px, 64 px for a finger.
+    CalendarHour,
+    /// The column of hour labels beside a time grid: 56 px, 44 px on a phone.
+    CalendarGutter,
+    /// One event bar in a month cell: 20 px, 24 px for a finger.
+    CalendarChip,
+    /// The week-number column of a month grid: 28 px.
+    CalendarWeekNumber,
+    /// The least a day cell of the month view is tall before it scrolls: 88 px.
+    CalendarCellMin,
+    /// The dot under a day that has events: 5 px.
+    CalendarDot,
+    /// The bar down the edge of an event: 3 px.
+    CalendarBar,
     /// The keyboard focus ring and selection rings: 2 px.
     Ring,
     /// The saturation and value plane of a colour picker: 168 px high, 200 px
@@ -668,6 +682,13 @@ impl Dim {
             | Dim::StripCell
             | Dim::IconBox
             | Dim::SignalBar
+            | Dim::CalendarHour
+            | Dim::CalendarGutter
+            | Dim::CalendarChip
+            | Dim::CalendarWeekNumber
+            | Dim::CalendarCellMin
+            | Dim::CalendarDot
+            | Dim::CalendarBar
             | Dim::Ring
             | Dim::Swatch
             | Dim::Label
@@ -779,6 +800,13 @@ impl Dim {
             Dim::StripCell => same(76.0),
             Dim::IconBox => IconSize::Row.sizes(),
             Dim::SignalBar => same(3.0),
+            Dim::CalendarHour => (56.0, 64.0),
+            Dim::CalendarGutter => (56.0, 56.0),
+            Dim::CalendarChip => (20.0, 24.0),
+            Dim::CalendarWeekNumber => same(28.0),
+            Dim::CalendarCellMin => (88.0, 56.0),
+            Dim::CalendarDot => same(5.0),
+            Dim::CalendarBar => same(3.0),
             Dim::Ring => same(2.0),
             Dim::PickerPlane => (168.0, 200.0),
             Dim::PickerKnob => (20.0, 24.0),
@@ -1085,7 +1113,12 @@ pub fn colour_from_hex(text: &str) -> Option<Color> {
     };
     match digits.len() {
         3 => Some(colour_from_argb(255, nibble(8), nibble(4), nibble(0))),
-        4 => Some(colour_from_argb(nibble(0), nibble(12), nibble(8), nibble(4))),
+        4 => Some(colour_from_argb(
+            nibble(0),
+            nibble(12),
+            nibble(8),
+            nibble(4),
+        )),
         6 => Some(colour_from_argb(
             255,
             (value >> 16) as u8,
@@ -1379,7 +1412,10 @@ mod touch_tests {
         }
         // The walk saw the controls it is meant to hold: a catalogue that
         // dropped them would pass with nothing checked.
-        assert!(walked >= 11, "only {walked} touch targets are in the catalogue");
+        assert!(
+            walked >= 11,
+            "only {walked} touch targets are in the catalogue"
+        );
     }
 
     #[test]
@@ -1423,14 +1459,35 @@ mod touch_tests {
         for class in [SizeClass::Regular, SizeClass::Compact] {
             let inset = FIELD_INSET.px_in(class);
             let (bar, button) = (Dim::TabBar.px_in(class), Dim::TabButton.px_in(class));
-            assert_eq!(bar - button, 2.0 * inset, "{class:?}: the end buttons are the bar less two insets");
+            assert_eq!(
+                bar - button,
+                2.0 * inset,
+                "{class:?}: the end buttons are the bar less two insets"
+            );
             // The fill of a tab is as tall as an end button; its close button is that
             // less an inset above and below: 24 px, and the whole 44 px target at compact.
-            let close = if inset > 0.0 { Dim::DenseControl } else { Dim::InlineButton };
-            assert_eq!(button - 2.0 * inset, close.px_in(class), "{class:?}: the close button");
-            assert!(bar >= Dim::Control.px_in(class), "{class:?}: the strip is not shorter than a field");
+            let close = if inset > 0.0 {
+                Dim::DenseControl
+            } else {
+                Dim::InlineButton
+            };
+            assert_eq!(
+                button - 2.0 * inset,
+                close.px_in(class),
+                "{class:?}: the close button"
+            );
+            assert!(
+                bar >= Dim::Control.px_in(class),
+                "{class:?}: the strip is not shorter than a field"
+            );
         }
-        assert_eq!((Dim::TabBar.px_in(SizeClass::Regular), Dim::TabButton.px_in(SizeClass::Regular)), (40.0, 32.0));
+        assert_eq!(
+            (
+                Dim::TabBar.px_in(SizeClass::Regular),
+                Dim::TabButton.px_in(SizeClass::Regular)
+            ),
+            (40.0, 32.0)
+        );
         assert_eq!(Dim::TabBar.px_in(SizeClass::Compact), TOUCH_MIN);
     }
 
@@ -1438,7 +1495,10 @@ mod touch_tests {
     fn a_nested_radius_is_the_outer_less_the_inset() {
         assert_eq!(Radius::Control.nested(0.0), Radius::Control);
         assert_eq!(Radius::Control.nested(4.0), Radius::Inner);
-        assert_eq!(Radius::Card.nested(ROW_INSET.px_in(SizeClass::Regular)), Radius::Inner);
+        assert_eq!(
+            Radius::Card.nested(ROW_INSET.px_in(SizeClass::Regular)),
+            Radius::Inner
+        );
         assert_eq!(Radius::Control.nested(2.0), Radius::Inner);
         assert_eq!(Radius::Mark.nested(2.0), Radius::Mark);
     }

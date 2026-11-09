@@ -133,44 +133,66 @@ pub fn wind_force(kmh: f64) -> &'static str {
     }
 }
 
-/// The conditions now as one paragraph, for the clipboard.
+/// Fragments joined into one sentence: the first with a capital, a comma
+/// between, a full stop at the end. Nothing when there are none.
+fn sentence(parts: Vec<String>) -> Option<String> {
+    if parts.is_empty() {
+        return None;
+    }
+    let mut text = parts.join(", ");
+    text[..1].make_ascii_uppercase();
+    text.push('.');
+    Some(text)
+}
+
+/// The conditions now in three sentences, for the clipboard and for a screen
+/// reader: the place, the temperature and the sky; how it feels and the day's
+/// range; the wind and the humidity.
 pub fn conditions(place: &Place, forecast: &Forecast, units: &Units) -> String {
     let current = &forecast.current;
     let local = current.time;
-    let mut text = place.name.clone();
+    let mut first = place.name.clone();
     if let Some(temperature) = current.temperature {
-        text.push_str(&format!(": {}", units.temperature_with_unit(temperature)));
+        first.push_str(&format!(": {}", units.temperature_with_unit(temperature)));
     }
     if let Some(code) = current.code {
-        text.push_str(&format!(", {}", codes::describe(code).to_lowercase()));
+        first.push_str(&format!(", {}", codes::describe(code).to_lowercase()));
     }
-    text.push('.');
+    first.push('.');
+
+    let mut feel = Vec::new();
     if let Some(apparent) = current.apparent {
-        text.push_str(&format!(
-            " Feels like {}.",
+        feel.push(format!(
+            "feels like {}",
             units.temperature_with_unit(apparent)
         ));
     }
     if let Some(day) = forecast.day_at(local) {
-        if let (Some(high), Some(low)) = (day.high, day.low) {
-            text.push_str(&format!(
-                " High {}, low {}.",
-                units.temperature(high),
-                units.temperature(low)
-            ));
+        if let Some(high) = day.high {
+            feel.push(format!("high {}", units.temperature(high)));
+        }
+        if let Some(low) = day.low {
+            feel.push(format!("low {}", units.temperature(low)));
         }
     }
+
+    let mut air = Vec::new();
     if let Some(speed) = current.wind_speed {
         let from = current
             .wind_direction
-            .map(|degrees| format!(" from the {}", cardinal(degrees)))
+            .map(|degrees| format!(" from the {}", cardinal_long(degrees)))
             .unwrap_or_default();
-        text.push_str(&format!(" Wind {}{from}.", units.speed(speed)));
+        air.push(format!("wind {}{from}", units.speed(speed)));
     }
     if let Some(humidity) = current.humidity {
-        text.push_str(&format!(" Humidity {}%.", humidity.round() as i64));
+        air.push(format!("humidity {}%", humidity.round() as i64));
     }
-    text
+
+    [Some(first), sentence(feel), sentence(air)]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 #[cfg(test)]

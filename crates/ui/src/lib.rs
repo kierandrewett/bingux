@@ -16,6 +16,7 @@ pub mod about;
 pub mod access;
 pub mod app;
 pub mod app_icon;
+pub mod calendar;
 pub mod charts;
 #[cfg(feature = "chat-icons")]
 pub mod chat_icons;
@@ -23,6 +24,8 @@ pub mod component;
 pub mod contrast;
 pub mod contrast_matrix;
 pub mod controls;
+pub mod crop;
+pub mod document;
 pub mod drag;
 pub mod elide;
 #[cfg(all(test, feature = "testing"))]
@@ -32,6 +35,7 @@ pub mod focus;
 pub mod format;
 pub mod group;
 pub mod icons;
+pub mod input;
 pub(crate) mod inspector;
 pub mod layers;
 pub mod layout;
@@ -41,6 +45,7 @@ mod loading_shape_tests;
 pub mod locale;
 #[cfg(feature = "location")]
 pub mod location;
+pub mod media;
 pub mod motion;
 #[cfg(all(test, feature = "testing"))]
 mod motion_stress;
@@ -68,6 +73,7 @@ pub mod surface;
 pub mod table;
 pub mod tabs;
 pub mod task;
+pub mod text_editor;
 pub mod theme;
 pub mod toolbar;
 pub mod typography;

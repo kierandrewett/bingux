@@ -247,7 +247,9 @@ impl Fx {
                             entry.preset = shown;
                         }
                     }),
-                    Err(message) => overlays.toast(message),
+                    Err(raw) => {
+                        super::report(overlays, "Could not save the effects. Try again.", &raw)
+                    }
                 }
                 // A new effect needs a moment to start before its state is known.
                 spawn(async move {
@@ -271,8 +273,8 @@ impl Fx {
                 service::apply(&Store::default(), direction)
             },
             move |result: Result<(), String>| {
-                if let Err(message) = result {
-                    overlays.toast(message);
+                if let Err(raw) = result {
+                    super::report(overlays, "Could not change the effects. Try again.", &raw);
                 }
                 spawn(async move {
                     timer(Duration::from_millis(1200)).await;

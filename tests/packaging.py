@@ -33,12 +33,14 @@ UNITS = (
     "xdg-desktop-portal-bingux.service",
 )
 # The packages: `bingux` is the desktop with every core service; each application is its own package.
-PACKAGES = ("bingux", "bingux-settings", "bingux-files", "bingux-calculator", "bingux-taxonomy")
+PACKAGES = ("bingux", "bingux-settings", "bingux-files", "bingux-preview", "bingux-text-editor", "bingux-calculator", "bingux-taxonomy")
 # Application packages: desktop entry directory and metainfo id.
 APPLICATIONS = {
     "bingux-settings": ("apps/settings", "dev.drewett.bingux.Settings"),
     "bingux-files": ("apps/files", "dev.drewett.bingux.Files"),
     "bingux-calculator": ("apps/calculator", "dev.drewett.bingux.Calculator"),
+    "bingux-text-editor": ("apps/text-editor", "dev.drewett.bingux.TextEditor"),
+    "bingux-preview": ("apps/preview", "dev.drewett.bingux.Preview"),
     "bingux-taxonomy": ("apps/taxonomy", "dev.drewett.bingux.Taxonomy"),
 }
 # The packages `bingux` replaces: the split of 0.1.0.
@@ -46,7 +48,9 @@ OLD_NAMES = ("bingux-config", "bingux-audio-effects", "bingux-preview-host")
 MAN_PAGES = (
     "bingux-settings",
     "bingux-files",
+    "bingux-preview",
     "bingux-calculator",
+    "bingux-text-editor",
     "bingux-taxonomy",
     "bingux-config",
     "bingux-effects",
@@ -170,10 +174,12 @@ class ScriptsTest(unittest.TestCase):
     def test_the_default_version_is_the_makefile_version(self):
         self.assertIn(f'VERSION = arg("VERSION", "{VERSION}")', self.common)
 
-    def test_the_packages_are_the_four_of_the_split(self):
+    def test_the_packages_are_those_of_the_split(self):
         table = re.search(r"^LICENSES = \{(.*?)^\}", self.common, re.M | re.S).group(1)
         self.assertEqual(sorted(re.findall(r'^\s+"([^"]+)":', table, re.M)), sorted(PACKAGES))
-        self.assertEqual(sorted(APPLICATIONS), sorted(re.findall(r'^    "(bingux-[a-z]+)": \{"id"', self.common, re.M)))
+        self.assertEqual(
+            sorted(APPLICATIONS), sorted(re.findall(r'^    "(bingux-[a-z-]+)": \{"id"', self.common, re.M))
+        )
 
     def test_the_core_package_replaces_what_it_absorbed(self):
         for name in OLD_NAMES:

@@ -1,4 +1,4 @@
-# The application packages of Bingux: Settings, Files, Weather and Taxonomy. Each is its own package, holds the files
+# The application packages of Bingux: Settings, Files, Calendar, Preview, Media, Weather and Taxonomy. Each is its own package, holds the files
 # listed for it in common.star (APPS) and depends on `bingux`, which has the core services the apps talk to:
 # the configuration command, the sound effects engine, the preview helper and the search daemon.
 #
@@ -23,9 +23,23 @@ file operations with undo. It opens folders and bingux-files:// addresses.""",
 Weather shows the conditions now, the next 24 hours and ten days for where the computer is and for the cities you add:
 UV index, wind, sunrise and sunset, the moon, humidity, pressure, visibility and the air quality. Data is by Open-Meteo.com
 (CC BY 4.0); it needs no account and no key.""",
+    "bingux-text-editor": """Text and code editor for the Bingux desktop
+Text Editor edits plain text and code in tabs, with colours for about 200 languages, find and replace, any encoding
+and line ending, a Markdown preview and drafts that keep unsaved text across restarts.""",
+    "bingux-preview": """Picture and document viewer for the Bingux desktop
+Preview shows pictures and PDF documents, with the other files of the folder one arrow key away. It zooms, turns and
+crops pictures, plays animated GIFs, runs a slideshow and shows a document's pages and outline. HEIF, AVIF, TIFF,
+HDR, OpenEXR and camera pictures and PDFs are read by the preview helper in the bingux package.""",
+    "bingux-calendar": """Calendar for the Bingux desktop
+Calendar keeps events and reminders in plain calendar files, one folder per calendar. It has day, week, month, year and
+agenda views, repeating events, quick add in plain words, reminders and import of .ics files. It needs no account.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
+    "bingux-media": """Music and video player for the Bingux desktop
+Media plays the music and videos in the Music and Videos folders with nothing to set up: albums, artists, songs and
+videos, a queue, subtitles, chapters, resume, a mini player and the desktop's media controls (MPRIS). Playback is
+mpv's, through libmpv.""",
 }
 
 # Freya draws with Skia on OpenGL and loads the Wayland and keyboard libraries at run time, so nothing finds them
@@ -49,7 +63,28 @@ DEPENDS = {
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2"],
     },
     "bingux-weather": {"rpm": ["xdg-utils"], "deb": ["xdg-utils"], "archlinux": ["xdg-utils"]},
+    "bingux-text-editor": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
+    },
+    "bingux-preview": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
+    },
+    "bingux-calendar": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
+    },
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
+    # libmpv plays everything; SQLite is built in.
+    "bingux-media": {
+        "rpm": ["mpv-libs", "shared-mime-info", "xdg-utils"],
+        "deb": ["libmpv2", "shared-mime-info", "xdg-utils"],
+        "archlinux": ["mpv", "shared-mime-info", "xdg-utils"],
+    },
 }
 
 # Each page of Settings reports a readable error when its backend is missing, so these are recommendations and
@@ -109,10 +144,30 @@ RECOMMENDS = {
             "xdg-desktop-portal: the portal that asks for the position",
         ],
     },
+    "bingux-text-editor": {
+        "rpm": ["adwaita-sans-fonts", "adwaita-mono-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans and Mono fonts"],
+    },
+    "bingux-preview": {
+        "rpm": ["adwaita-sans-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
+    "bingux-calendar": {
+        "rpm": ["adwaita-sans-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
         "archlinux": ["adwaita-fonts: the Adwaita Sans interface font"],
+    },
+    "bingux-media": {
+        "rpm": ["adwaita-sans-fonts", "pipewire-pulseaudio"],
+        "deb": ["pipewire-pulse"],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans interface font", "pipewire-pulse: sound output"],
     },
 }
 
@@ -122,7 +177,11 @@ SUGGESTS = {
     "bingux-calculator": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
     "bingux-weather": {"rpm": [], "deb": [], "archlinux": []},
+    "bingux-text-editor": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
+    "bingux-preview": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
+    "bingux-calendar": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
+    "bingux-media": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
 }
 
 for name in APPS:

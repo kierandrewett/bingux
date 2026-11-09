@@ -58,6 +58,8 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [
     "apps/settings/src",
     "apps/files/src",
+    "apps/weather/src",
+    "crates/weather/src",
     "crates/ui/src",
     "apps/taxonomy/src",
 ]

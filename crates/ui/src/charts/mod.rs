@@ -58,6 +58,8 @@ mod donut_tests;
 mod flame;
 mod format;
 mod geometry;
+#[cfg(all(test, feature = "testing"))]
+mod marker_tests;
 mod palette;
 mod path;
 mod range;

@@ -453,6 +453,7 @@ pub struct IconButton {
     /// The glyph the icon turns into while the flag is set, see
     /// [`IconButton::morph`].
     morph: Option<(Icon, bool)>,
+    semantics: Option<crate::a11y::Semantics>,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -471,6 +472,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         refocus: None,
         pointer_only: false,
         ink: None,
+        semantics: None,
         id: None,
         layers: None,
         morph: None,
@@ -478,6 +480,14 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
 }
 
 impl IconButton {
+    /// Says more than the tooltip, which names it: that it toggles
+    /// (`Semantics::checked`), opens a menu (`Semantics::opens_menu` with
+    /// `expanded`), a hint or a shortcut.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
+    }
+
     pub fn tooltip(mut self, text: &str) -> Self {
         self.tooltip = Some(text.to_string());
         self
@@ -695,6 +705,10 @@ impl Component for IconButton {
             .a11y_role(AccessibilityRole::Button)
             .maybe(self.tooltip.is_some(), |element| {
                 element.a11y_alt(self.tooltip.clone().unwrap_or_default())
+            })
+            .maybe(self.semantics.is_some(), |element| {
+                let semantics = self.semantics.clone().unwrap_or_default();
+                element.a11y_builder(move |node| semantics.apply(node))
             })
             .tw(&tokens, ICON_BUTTON)
             .tw(&tokens, &[w(size), h(size), state, rounded(radius)])

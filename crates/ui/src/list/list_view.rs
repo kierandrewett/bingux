@@ -742,6 +742,8 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for ListView<T, K> {
         let overlays = use_try_consume::<Overlays>();
         let own_selection = use_state(Selection::<K>::new);
         let selection = self.selection.unwrap_or(own_selection);
+        // A change of the selection is read out ("3 selected").
+        crate::a11y::use_collection_announcements(selection.read().len(), None);
         let cursor = use_state(|| None::<usize>);
         let swiped = use_state(|| None::<usize>);
         let typed = use_hook(|| Rc::new(RefCell::new((String::new(), None))));

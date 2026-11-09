@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Text Editor
+Comment=Edit text files and code
+Exec=bingux-text-editor %U
+Icon=bingux-text-editor
+Terminal=false
+Categories=Utility;TextEditor;Development;
+Keywords=Text;Editor;Plain;Code;Markdown;Notes;Write;Programming;
+MimeType=text/plain;text/markdown;text/x-markdown;text/x-log;text/csv;text/tab-separated-values;text/x-csrc;text/x-chdr;text/x-c++src;text/x-c++hdr;text/x-rust;text/x-python;text/x-python3;text/x-go;text/x-java;text/x-kotlin;text/x-csharp;text/x-swift;text/x-lua;text/x-ruby;text/x-perl;text/x-php;text/x-sql;text/x-makefile;text/x-cmake;text/x-tex;text/x-diff;text/x-patch;text/x-yaml;text/x-toml;text/x-ini;text/x-script;text/html;text/css;text/xml;text/javascript;application/javascript;application/typescript;application/json;application/x-shellscript;application/xml;application/x-yaml;application/toml;application/x-desktop;application/x-ruby;application/x-perl;application/x-php;application/sql;x-scheme-handler/bingux-text-editor;
+StartupWMClass=bingux-text-editor
+StartupNotify=true
+Actions=NewDocument;
+
+[Desktop Action NewDocument]
+Name=New Document
+Exec=bingux-text-editor new:

@@ -77,3 +77,8 @@ window_size_peek           # window_size for a handler; same
 # locations list, with the source named.
 file:location/mod.rs     # Locator, Fix, Source and LocateError: a position lookup, no appearance
 file:location/reverse.rs # Named: the town found for a position, no appearance
+
+# The calendar's data modules: dates, overlap maths and colours. Their appearance is the views' (shown on the Calendar page).
+file:calendar/date.rs     # civil dates and clock text for the calendar views: data, no appearance
+file:calendar/layout.rs   # overlap columns, lanes and drag maths of the calendar views: data, no appearance
+file:calendar/palette.rs  # calendar colours and the tints events are drawn in: the views show them

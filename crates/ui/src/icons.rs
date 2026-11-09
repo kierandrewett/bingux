@@ -128,6 +128,8 @@ pub enum Icon {
     ZoomFitBest,
     /// Rotate counter-clockwise.
     ObjectRotateLeft,
+    /// Crop a picture.
+    Crop,
     /// Subtitles.
     MediaViewSubtitles,
     DialogPassword,
@@ -141,7 +143,8 @@ pub enum Icon {
     InputTablet,
     NetworkServer,
     AvatarDefault,
-    FindLocation,
+    /// An arrow pointing up and right: where the computer is (Weather's My Location).
+    LocationArrow,
     MailUnread,
     ApplicationsMultimedia,
     AccessoriesCalculator,
@@ -235,6 +238,26 @@ pub enum Icon {
     FormatQuote,
     /// A link, written as a chain.
     InsertLink,
+    /// Match case, a find option (Text Editor's find bar).
+    FindMatchCase,
+    /// Regular expression, a find option.
+    FindRegex,
+    /// Whole words, a find option.
+    FindWholeWord,
+    /// Save a document.
+    DocumentSave,
+    /// Recent documents.
+    DocumentOpenRecent,
+    /// Shuffle the queue (Media).
+    MediaPlaylistShuffle,
+    /// Repeat the queue (Media).
+    MediaPlaylistRepeat,
+    /// Repeat the item playing (Media).
+    MediaPlaylistRepeatSong,
+    /// The mini player, picture in picture (Media).
+    ViewPip,
+    /// The volume near its top: a speaker with two waves (the Sound page's glyph).
+    AudioVolumeHigh,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -242,7 +265,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 180] = [
+    pub const ALL: [Icon; 191] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -347,6 +370,7 @@ impl Icon {
         Self::ZoomOut,
         Self::ZoomFitBest,
         Self::ObjectRotateLeft,
+        Self::Crop,
         Self::MediaViewSubtitles,
         Self::DialogPassword,
         Self::SendTo,
@@ -359,7 +383,7 @@ impl Icon {
         Self::InputTablet,
         Self::NetworkServer,
         Self::AvatarDefault,
-        Self::FindLocation,
+        Self::LocationArrow,
         Self::MailUnread,
         Self::ApplicationsMultimedia,
         Self::AccessoriesCalculator,
@@ -423,6 +447,16 @@ impl Icon {
         Self::FormatCode,
         Self::FormatQuote,
         Self::InsertLink,
+        Self::FindMatchCase,
+        Self::FindRegex,
+        Self::FindWholeWord,
+        Self::DocumentSave,
+        Self::DocumentOpenRecent,
+        Self::MediaPlaylistShuffle,
+        Self::MediaPlaylistRepeat,
+        Self::MediaPlaylistRepeatSong,
+        Self::ViewPip,
+        Self::AudioVolumeHigh,
     ];
 
     /// The embedded SVG source for this icon.
@@ -561,6 +595,7 @@ impl Icon {
             Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
             Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
             Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
+            Self::Crop => include_bytes!("../icons/crop-symbolic.svg"),
             Self::MediaViewSubtitles => {
                 include_bytes!("../icons/media-view-subtitles-symbolic.svg")
             }
@@ -575,7 +610,7 @@ impl Icon {
             Self::InputTablet => include_bytes!("../icons/input-tablet-symbolic.svg"),
             Self::NetworkServer => include_bytes!("../icons/network-server-symbolic.svg"),
             Self::AvatarDefault => include_bytes!("../icons/avatar-default-symbolic.svg"),
-            Self::FindLocation => include_bytes!("../icons/find-location-symbolic.svg"),
+            Self::LocationArrow => include_bytes!("../icons/location-arrow-symbolic.svg"),
             Self::MailUnread => include_bytes!("../icons/mail-unread-symbolic.svg"),
             Self::ApplicationsMultimedia => {
                 include_bytes!("../icons/applications-multimedia-symbolic.svg")
@@ -659,6 +694,24 @@ impl Icon {
             Self::FormatCode => include_bytes!("../icons/format-code-symbolic.svg"),
             Self::FormatQuote => include_bytes!("../icons/format-quote-symbolic.svg"),
             Self::InsertLink => include_bytes!("../icons/insert-link-symbolic.svg"),
+            Self::FindMatchCase => include_bytes!("../icons/edit-find-match-case-symbolic.svg"),
+            Self::FindRegex => include_bytes!("../icons/edit-find-regex-symbolic.svg"),
+            Self::FindWholeWord => include_bytes!("../icons/edit-find-whole-word-symbolic.svg"),
+            Self::DocumentSave => include_bytes!("../icons/document-save-symbolic.svg"),
+            Self::DocumentOpenRecent => {
+                include_bytes!("../icons/document-open-recent-symbolic.svg")
+            }
+            Self::MediaPlaylistShuffle => {
+                include_bytes!("../icons/media-playlist-shuffle-symbolic.svg")
+            }
+            Self::MediaPlaylistRepeat => {
+                include_bytes!("../icons/media-playlist-repeat-symbolic.svg")
+            }
+            Self::MediaPlaylistRepeatSong => {
+                include_bytes!("../icons/media-playlist-repeat-song-symbolic.svg")
+            }
+            Self::ViewPip => include_bytes!("../icons/view-pip-symbolic.svg"),
+            Self::AudioVolumeHigh => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon

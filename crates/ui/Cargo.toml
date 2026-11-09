@@ -19,6 +19,9 @@ chat-icons = []
 # portal or the network address. It carries an HTTPS client and a D-Bus client,
 # so an application that does not ask where it is leaves it off.
 location = ["dep:ureq"]
+# Syntax highlighting in `text_editor` (syntect and its grammars, about 200
+# languages). Without it the editor and the Markdown preview draw plain text.
+syntax = ["bingux-text/syntax"]
 
 [dependencies]
 # `gif`: the picture viewer plays animated GIFs.
@@ -64,6 +67,9 @@ notify = { version = "8", default-features = false }
 # The decimal type of ICU4X (exact digits, rounding modes), the same version
 # `icu` uses.
 fixed_decimal = "0.7"
+# The text engine behind bingux_ui::text_editor: rope, carets, undo, search,
+# encodings and languages (no UI of its own).
+bingux-text = { path = "../text", default-features = false }
 
 # `location` only: the keyless lookups over HTTPS. The location portal uses the
 # `zbus` above (blocking, on a thread of its own).

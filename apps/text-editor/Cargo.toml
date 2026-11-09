@@ -1,0 +1,64 @@
+[package]
+name = "bingux-text-editor"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Text Editor, the plain text and code editor of the Bingux desktop"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
+
+[[bin]]
+name = "bingux-text-editor"
+path = "src/main.rs"
+
+[features]
+default = []
+# `bingux-text-editor --snapshot DIR` renders the window headlessly to PNG.
+snapshot = ["bingux-ui/testing"]
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+bingux-ui = { path = "../../crates/ui", features = ["syntax"] }
+bingux-text = { path = "../../crates/text" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Desktop scroll feel; see ../../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../../vendor/freya-winit" }
+freya-core = { path = "../../vendor/freya-core" }
+freya-animation = { path = "../../vendor/freya-animation" }
+freya-components = { path = "../../vendor/freya-components" }
+torin = { path = "../../vendor/torin" }
+winit = { path = "../../vendor/winit" }
+
+# A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
+# which makes scrolling visibly slow. Optimise every dependency and bingux-ui;
+# the app itself stays at opt-level 0 so a rebuild after an edit stays quick.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# The text engine does the work on every key and every scroll of a large file.
+[profile.dev.package.bingux-text]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

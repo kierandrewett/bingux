@@ -331,7 +331,7 @@ pub mod check {
         for item in items {
             if validate::ipv4_cidr(&item).is_err() && validate::ipv6_cidr(&item).is_err() {
                 return Err(format!(
-                    "\u{201c}{item}\u{201d} is not an address with a prefix length, such as 10.8.0.2/32."
+                    "\u{201c}{item}\u{201d} needs a prefix length, such as 10.8.0.2/32."
                 ));
             }
         }
@@ -342,7 +342,7 @@ pub mod check {
     pub fn dns_list(text: &str) -> Check {
         let items = parse_list(text);
         if items.is_empty() {
-            return Err("Enter one or more IP addresses, one per line.".to_string());
+            return Err("Enter at least one IP address, one per line.".to_string());
         }
         for item in items {
             if validate::ip(&item).is_err() {
@@ -384,7 +384,7 @@ pub mod check {
         if valid {
             Ok(())
         } else {
-            Err("Enter a number such as 51820 or 0xca6c, or leave it blank.".to_string())
+            Err("Enter a number such as 51820, or leave it empty.".to_string())
         }
     }
 
@@ -433,12 +433,12 @@ pub fn use_has_wg() -> bool {
 
 /// A new private key from `wg genkey`.
 pub fn generate_private_key() -> Result<String, String> {
-    let output = Command::new("wg")
-        .arg("genkey")
-        .output()
-        .map_err(|error| format!("Keys cannot be generated: {error}."))?;
+    let output = Command::new("wg").arg("genkey").output().map_err(|error| {
+        eprintln!("bingux-settings: wg genkey could not start: {error}");
+        "Could not generate a key. Try again.".to_string()
+    })?;
     if !output.status.success() {
-        return Err("wg could not generate a key.".to_string());
+        return Err("Could not generate a key. Try again.".to_string());
     }
     Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
@@ -563,7 +563,10 @@ pub fn import_text(text: &str, display: &str) -> Result<String, String> {
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&directory)
-        .map_err(|error| format!("A private folder for the import could not be made: {error}."))?;
+        .map_err(|error| {
+            eprintln!("bingux-settings: import folder could not be made: {error}");
+            "Could not import the VPN. Check the free space and try again.".to_string()
+        })?;
     let result = (|| {
         let file = directory.join(format!("{}.conf", interface_name(&name)));
         std::fs::OpenOptions::new()
@@ -572,11 +575,14 @@ pub fn import_text(text: &str, display: &str) -> Result<String, String> {
             .mode(0o600)
             .open(&file)
             .and_then(|mut handle| handle.write_all(text.as_bytes()))
-            .map_err(|error| format!("The import file could not be written: {error}."))?;
+            .map_err(|error| {
+                eprintln!("bingux-settings: import file could not be written: {error}");
+                "Could not import the VPN. Check the free space and try again.".to_string()
+            })?;
         let file = file.to_string_lossy().into_owned();
         let added = nm::run(&["connection", "import", "type", "wireguard", "file", &file])?;
         let (_, uuid) = nm::added(&added)
-            .ok_or_else(|| "NetworkManager did not say which profile it made.".to_string())?;
+            .ok_or_else(|| "Could not find the new VPN. Try again.".to_string())?;
         // A new VPN does not connect by itself until the person says so.
         nm::run(&[
             "connection",

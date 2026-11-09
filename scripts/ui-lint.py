@@ -82,6 +82,8 @@ SOURCES = [
     ROOT / "apps/files/src",
     ROOT / "apps/calculator/src",
     ROOT / "apps/weather/src",
+    ROOT / "apps/text-editor/src",
+    ROOT / "apps/calendar/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -118,6 +120,12 @@ SKIP_FILES = {
     ROOT / "crates/ui/src/contrast.rs",
     ROOT / "crates/ui/src/contrast_matrix.rs",
     ROOT / "crates/ui/src/charts/palette.rs",
+    # The colours of highlighted code: derived from tokens per kind of text and
+    # lifted to 4.5:1, as the chart series colours are; the code runs set them.
+    ROOT / "crates/ui/src/text_editor/palette.rs",
+    # Calendar colours are data (a hex colour another program wrote): this is
+    # where they become colours, with the tints an event is drawn in.
+    ROOT / "crates/ui/src/calendar/palette.rs",
     # The tones of the colour file icons are derived from, and checked against,
     # the raw token colours of every ground a row is drawn on.
     ROOT / "crates/ui/src/files/colour.rs",
@@ -352,6 +360,14 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/preview/render_tests.rs": "test fixtures: generated media files and the ffmpeg that makes them, written before the headless window mounts",
     "crates/ui/src/nav/slide_users_tests.rs": "test: reads the source tree to list the slide users, no window",
     "crates/ui/src/preview/host_link.rs": "the supervisor thread spawns and reaps the helper process and polls it there; the UI reads a Feed, never these calls",
+    "crates/ui/src/document/io.rs": "opens, reads and saves a document's file; called only on a worker (spawn_blocking) by the document manager",
+    "crates/ui/src/document/write.rs": "the atomic save: temporary file, flush, rename; called only on a worker",
+    "crates/ui/src/document/stamp.rs": "reads a file's metadata; called only on a worker",
+    "crates/ui/src/document/watch.rs": "the file watch: inotify through notify and a thread of its own that waits out a burst of events; the UI reads a Feed",
+    "crates/ui/src/document/drafts.rs": "the drafts folder; every call is on a worker (spawn_blocking or spawn_detached) by the document manager",
+    "crates/ui/src/document/recents.rs": "recently-used.xbel; every call is on a worker (spawn_blocking or spawn_detached) by the document manager",
+    "crates/ui/src/document/scene.rs": "the scene file: read once in Application::run before the window exists, written by a worker half a second after the last change",
+    "crates/ui/src/document/documents_tests.rs": "test fixtures: files, drafts a crash left and the changes another program makes, made before or beside the headless window and never in render",
 }
 
 
@@ -468,6 +484,7 @@ RESILIENT_APPS = (
     "bingux-files-app",
     "bingux-weather-app",
     "bingux-calculator-app",
+    "bingux-calendar",
 )
 
 
@@ -511,6 +528,7 @@ RAW_PRESS = re.compile(
 RAW_PRESS_ALLOWED = {
     "crates/ui/src/popup_windows/route_tests.rs": "test fixture: a bare box whose press opens a sub-window",
     "crates/ui/src/controls/button.rs": "the button components",
+    "crates/ui/src/text_editor/markdown.rs": "a link inside a paragraph of the Markdown view: the press is hit-tested against the laid-out text to find which run is the link, which no button can do",
     "crates/ui/src/controls/omnibox.rs": "the omnibox's own rows and chips: a row, a chip and the chip of a row, each with hover, highlight and pressed fills no library button draws",
     "crates/ui/src/controls/colour_picker/button.rs": "the colour button: a swatch with hover, pressed and open fills, which no library button draws",
     "crates/ui/src/controls/split_button.rs": "the split button's two parts",
@@ -537,6 +555,9 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/files/search.rs": "a whole row is the button: start or stop the deep search",
     "crates/ui/src/files/address_list.rs": "the address bar's completion list rows",
     "crates/ui/src/files/address_crumbs.rs": "path crumbs, which are navigation, not icon buttons",
+    "crates/ui/src/calendar/month_grid.rs": "a day of the month grid: a cell with a round face and the neutral selection fill, which no library button draws",
+    "crates/ui/src/calendar/month_view.rs": "the month view's day cells and event chips: a cell and a chip fill the way an event does and are not buttons",
+    "crates/ui/src/calendar/time_grid.rs": "the time grid's day headers and bars of whole-day events: parts of one grid, not buttons",
     "crates/ui/src/charts/flame.rs": "chart hit areas",
     "crates/ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
 }

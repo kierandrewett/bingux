@@ -326,7 +326,11 @@ fn load_editing(name: Option<String>) -> Result<Editing, CommandError> {
             let (_, uuid) = parse_gsm_list(&list)
                 .into_iter()
                 .find(|(profile, _)| *profile == name)
-                .ok_or_else(|| CommandError(format!("\"{name}\" no longer exists.")))?;
+                .ok_or_else(|| {
+                    CommandError(format!(
+                        "“{name}” no longer exists. Reload the list and try again."
+                    ))
+                })?;
             Some(show(&uuid, true)?)
         }
     };
@@ -539,7 +543,7 @@ pub fn set_network_id(profiles: &[Profile], code: &str) -> Result<(), CommandErr
 /// 64 characters. An empty APN is allowed; it means no APN.
 pub fn apn_error(text: &str) -> Result<(), String> {
     if text.chars().count() > 64 {
-        return Err("An access point name has at most 64 characters.".to_string());
+        return Err("Use 64 characters or fewer.".to_string());
     }
     if text
         .chars()
@@ -547,7 +551,7 @@ pub fn apn_error(text: &str) -> Result<(), String> {
     {
         Ok(())
     } else {
-        Err("Use letters, digits, dots, hyphens and underscores only.".to_string())
+        Err("Use only letters, numbers, dots, hyphens and underscores.".to_string())
     }
 }
 
@@ -555,7 +559,7 @@ pub fn apn_error(text: &str) -> Result<(), String> {
 fn name_error(name: &str, original: &str, names: &[String]) -> Option<String> {
     let name = name.trim();
     (!name.is_empty() && name != original && names.iter().any(|other| other == name))
-        .then(|| "A connection with this name already exists.".to_string())
+        .then(|| "Use a name that no other connection has.".to_string())
 }
 
 // ---------------------------------------------------------------------------
@@ -613,8 +617,11 @@ impl Component for ApnListPage {
             Some(Err(error)) => {
                 return veiled(
                     page_column().child(PageHead::new()).child(
-                        status(Status::Error(error.0))
-                            .action("Try again", move |_| reload(profiles)),
+                        status(Status::Error(super::super::plain(
+                            &error.0,
+                            "Could not read the access point names. Try again.",
+                        )))
+                        .action("Try again", move |_| reload(profiles)),
                     ),
                     false,
                 );
@@ -690,7 +697,10 @@ fn use_profile(
             let mut busy = busy;
             busy.set(false);
             if let Err(error) = result {
-                ctx.overlays.toast(error.0);
+                ctx.overlays.toast(super::super::plain(
+                    &error.0,
+                    "Could not switch the access point. Try again.",
+                ));
             }
             reload(profiles);
             ctx.reload();
@@ -725,9 +735,13 @@ impl Component for ApnPage {
         match current {
             None => veiled(page_column().child(PageHead::new()), true),
             Some(Err(error)) => veiled(
-                page_column()
-                    .child(PageHead::new())
-                    .child(status(Status::Error(error.0)).action("Try again", move |_| load())),
+                page_column().child(PageHead::new()).child(
+                    status(Status::Error(super::super::plain(
+                        &error.0,
+                        "Could not read the access point. Try again.",
+                    )))
+                    .action("Try again", move |_| load()),
+                ),
                 false,
             ),
             Some(Ok(editing)) => veiled(
@@ -824,7 +838,10 @@ impl Component for ApnForm {
                         let mut busy = busy;
                         busy.set(false);
                         match result {
-                            Err(error) => ctx.overlays.toast(error.0),
+                            Err(error) => ctx.overlays.toast(super::super::plain(
+                                &error.0,
+                                "Could not save the access point. Try again.",
+                            )),
                             Ok(()) => {
                                 reload(profiles);
                                 ctx.reload();
@@ -889,7 +906,7 @@ impl Component for ApnForm {
                     .row(
                         form_field("APN", apn)
                             .placeholder("internet")
-                            .hint("Access point name. Empty means none.")
+                            .hint("Leave empty for none.")
                             .error(apn_message),
                     )
                     .row(form_field("User name", user).optional())
@@ -940,7 +957,7 @@ impl Component for ApnForm {
 }
 
 fn confirm_delete(ctx: NetCtx, profiles: Profiles, profile: Profile) {
-    let title = format!("Delete \"{}\"?", profile.name);
+    let title = format!("Delete “{}”?", profile.name);
     ctx.overlays.show_dialog(
         dialog(
             title,
@@ -958,7 +975,10 @@ fn confirm_delete(ctx: NetCtx, profiles: Profiles, profile: Profile) {
                         ctx.reload();
                         ctx.router.pop();
                     }
-                    Err(error) => ctx.overlays.toast(error.0),
+                    Err(error) => ctx.overlays.toast(super::super::plain(
+                        &error.0,
+                        "Could not delete the access point. Try again.",
+                    )),
                 },
             );
         }),

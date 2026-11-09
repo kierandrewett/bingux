@@ -473,6 +473,14 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for DataTable<T, K> {
         let sort_cache = use_hook(|| Rc::new(RefCell::new(None::<SortCache>)));
         let cells = use_hook(CellIds::default);
 
+        // A change of the selection or the sort is read out ("3 selected",
+        // "Sorted by Name, ascending").
+        let sort_now = (*sort.read()).and_then(|order| {
+            specs.iter().find(|spec| spec.id == order.column).map(|spec| {
+                (spec.title.clone(), order.direction == SortDirection::Ascending)
+            })
+        });
+        crate::a11y::use_collection_announcements(selection.read().len(), sort_now);
         let order = self.ordered(*sort.read(), &sort_cache);
         let count = order.len();
         let mode = self.mode;

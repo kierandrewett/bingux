@@ -15,7 +15,8 @@ pub fn run(args: &[&str]) -> Result<String, String> {
         .output()
         .map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => {
-                "Network settings are not available because nmcli is not installed.".to_string()
+                "Network settings are not available. Restart the computer and try again."
+                    .to_string()
             }
             _ => {
                 eprintln!("bingux-settings: nmcli could not start: {error}");
@@ -29,14 +30,10 @@ pub fn run(args: &[&str]) -> Result<String, String> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let message = clean_error(&stderr);
     if !message.is_empty() {
-        return Err(message);
+        return Err(activation_reason(&message));
     }
     let message = clean_error(&stdout);
-    Err(if message.is_empty() {
-        "Network settings failed without saying why.".to_string()
-    } else {
-        message
-    })
+    Err(activation_reason(&message))
 }
 
 /// nmcli's failure text as a sentence: `Error: ` prefixes and the `Hint:` and
@@ -62,9 +59,9 @@ pub fn clean_error(text: &str) -> String {
     }
 }
 
-/// Why a VPN would not connect, in plain words. `message` is nmcli's cleaned
-/// failure text from `connection up`; a reason this does not know is shown as
-/// nmcli wrote it, so nothing is lost.
+/// Why a VPN command failed, in plain words. `message` is nmcli's cleaned
+/// failure text; a reason this does not know goes to the log and the person
+/// reads a general sentence.
 pub fn activation_reason(message: &str) -> String {
     let lower = message.to_lowercase();
     let has = |needle: &str| lower.contains(needle);
@@ -83,7 +80,7 @@ pub fn activation_reason(message: &str) -> String {
         "The VPN program failed to start. Check its settings, and that its plugin is installed."
             .to_string()
     } else if has("(6)") {
-        "The server did not give the VPN a valid network setup.".to_string()
+        "The server sent no usable network settings. Try again later.".to_string()
     } else if has("no suitable device") || has("not available on device") {
         "There is no network connection to carry the VPN. Connect to a network first.".to_string()
     } else if has("no such connection") || has("unknown connection") || has("(12)") {
@@ -93,9 +90,9 @@ pub fn activation_reason(message: &str) -> String {
     } else if has("not authorized") || has("insufficient privileges") {
         "You are not allowed to change this connection.".to_string()
     } else if message.is_empty() {
-        "The VPN did not connect.".to_string()
+        "The VPN did not connect. Try again.".to_string()
     } else {
-        message.to_string()
+        super::super::plain(message, "Could not change the VPN. Try again.")
     }
 }
 
@@ -219,13 +216,13 @@ mod tests {
             ),
             (
                 "Connection activation failed: (6) IP configuration invalid",
-                "The server did not give the VPN a valid network setup.",
+                "The server sent no usable network settings. Try again later.",
             ),
             (
                 "No suitable device found for this connection (device lo not available)",
                 "There is no network connection to carry the VPN. Connect to a network first.",
             ),
-            ("", "The VPN did not connect."),
+            ("", "The VPN did not connect. Try again."),
         ];
         for (input, expected) in cases {
             assert_eq!(activation_reason(input), expected, "{input}");
@@ -249,10 +246,10 @@ mod tests {
     }
 
     #[test]
-    fn unknown_reason_is_kept_verbatim() {
+    fn unknown_reason_is_not_shown() {
         assert_eq!(
             activation_reason("Something new happened"),
-            "Something new happened"
+            "Could not change the VPN. Try again."
         );
     }
 }

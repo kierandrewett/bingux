@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.drewett.bingux.Preview</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Preview</name>
+  <summary>View pictures and documents</summary>
+  <developer id="dev.drewett">
+    <name>Kieran Drewett</name>
+  </developer>
+  <description>
+    <p>
+      Preview shows pictures and PDF documents. The other files of the same
+      kind in the folder are one arrow key away.
+    </p>
+    <ul>
+      <li>PNG, JPEG, WebP, GIF, SVG, HEIF, AVIF, TIFF, HDR, OpenEXR and the picture inside camera RAW files</li>
+      <li>Zoom, pan, turn and flip, with pinch and double click; animated GIFs play and pause</li>
+      <li>Crop to a shape and save the result as a copy; the original is never changed</li>
+      <li>Documents with page thumbnails, an outline, find and text selection</li>
+      <li>A slideshow of the folder, full screen, and Move to Trash with Undo</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">bingux-preview.desktop</launchable>
+  <url type="homepage">https://github.com/kierandrewett/bingux</url>
+  <url type="bugtracker">https://github.com/kierandrewett/bingux/issues</url>
+  <url type="vcs-browser">https://github.com/kierandrewett/bingux</url>
+  <url type="help">https://github.com/kierandrewett/bingux/tree/main/docs</url>
+  <provides>
+    <binary>bingux-preview</binary>
+    <mediatype>image/png</mediatype>
+    <mediatype>image/jpeg</mediatype>
+    <mediatype>image/gif</mediatype>
+    <mediatype>image/webp</mediatype>
+    <mediatype>image/bmp</mediatype>
+    <mediatype>image/tiff</mediatype>
+    <mediatype>image/avif</mediatype>
+    <mediatype>image/heif</mediatype>
+    <mediatype>image/heic</mediatype>
+    <mediatype>image/svg+xml</mediatype>
+    <mediatype>application/pdf</mediatype>
+  </provides>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Graphics</category>
+    <category>Viewer</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-11-09"/>
+  </releases>
+</component>
