@@ -488,6 +488,8 @@ ui-preview-helper-unreadable = The preview helper sent something unreadable ({ $
 ui-preview-frame-invalid = The preview helper sent a frame that does not fit.
 ui-preview-page-invalid = The preview helper sent a page that does not fit.
 ui-preview-version-mismatch = The preview helper speaks another version.
+ui-preview-open-button = Open
+ui-preview-try-again-button = Try again
 ui-preview-subtitles-tooltip = Subtitles (C)
 ui-preview-playback-speed-tooltip = Playback speed ([ and ])
 # The names in the Info panel of a preview.

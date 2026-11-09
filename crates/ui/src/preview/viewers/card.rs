@@ -200,12 +200,16 @@ impl Component for Card {
                             rect()
                                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
                                 .maybe_child(self.on_open.clone().map(|open| {
-                                    Element::from(primary_button("Open", move |_| open.call(())))
+                                    Element::from(primary_button(
+                                        crate::tr!("ui-preview-open-button"),
+                                        move |_| open.call(()),
+                                    ))
                                 }))
                                 .maybe_child(self.on_retry.clone().map(|retry| {
-                                    Element::from(action_button("Try again", move |_| {
-                                        retry.call(())
-                                    }))
+                                    Element::from(action_button(
+                                        crate::tr!("ui-preview-try-again-button"),
+                                        move |_| retry.call(()),
+                                    ))
                                 })),
                         )
                     }),
