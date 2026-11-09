@@ -1372,6 +1372,7 @@ pub static ENTRIES: &[Entry] = &[
             "app_id",
             "app_title",
             "popup",
+            "choice_sheet",
             "use_popup_actions",
             "WindowLike",
             "WindowParent",

@@ -47,6 +47,8 @@ pub(crate) const GRABBER_HEIGHT: f32 = 4.0;
 pub(crate) const SHEET_MAX_HEIGHT_PERCENT: f32 = 92.0;
 /// The tallest a choice sheet grows, so the dimmed page shows above it.
 pub(crate) const CHOICE_SHEET_MAX_HEIGHT_PERCENT: f32 = 70.0;
+/// The tallest a sheet with no size of its own grows before its rows scroll.
+pub(crate) const UNSIZED_SHEET_MAX_HEIGHT_PERCENT: f32 = 85.0;
 /// How tall the fade at the bottom of a sheet's rows is.
 pub(crate) const SHEET_FADE: f32 = 28.0;
 /// How far a sheet is dragged down before it dismisses on release, or half
@@ -856,6 +858,10 @@ impl Component for Panel {
         let sheet = self.kind == PanelKind::Choice && is_compact();
         let pull = use_state(|| 0.0_f32);
         let release = use_state(Release::default);
+        // A sheet given no size is measured: its rows' height is read once laid
+        // out, and it scrolls past the share of the window it may take.
+        let measured = use_state(|| 0.0_f32);
+        let own_scroll = use_scroll_controller(ScrollConfig::default);
         let drag = use_sheet_drag(pull, release);
         // A sheet that has left forgets its pull, so it opens at rest again. A
         // sheet is not a presence: it is moved by its own clock, and the
@@ -918,7 +924,16 @@ impl Component for Panel {
         let backdrop = if self.kind == PanelKind::Dialog {
             self.centred(&tokens, core, dismiss, progress)
         } else if sheet {
-            let layout = self.sheet_layout(window);
+            let unsized_sheet = self.content_height <= 0.0;
+            let content = if unsized_sheet {
+                *measured.read()
+            } else {
+                self.content_height
+            };
+            let layout = self.sheet_layout(window, content);
+            // A sheet always scrolls its rows: a body taller than the sheet's cap scrolls inside it.
+            let scroll = Some(self.scroll.clone().unwrap_or_else(|| own_scroll.clone()));
+            let measure = unsized_sheet.then_some(measured);
             let dismissed = !self.open && *pull.read() > 0.0;
             let offset = sheet_position(
                 clock,
@@ -937,7 +952,15 @@ impl Component for Panel {
                     scrim_amount(offset, layout.metrics.travel),
                     dismiss.clone(),
                 ))
-                .child(self.sheet(&tokens, &layout, offset, drag, dismiss.clone()))
+                .child(self.sheet(
+                    &tokens,
+                    &layout,
+                    offset,
+                    drag,
+                    dismiss.clone(),
+                    scroll,
+                    measure,
+                ))
         } else if let Some(backend) = &native {
             self.native_backdrop(
                 &tokens,
@@ -980,6 +1003,27 @@ impl Component for Panel {
             .maybe_child(visible.then_some(backdrop))
             .maybe_child(pill)
     }
+}
+
+/// A choice sheet given no size: on a phone it rises from the bottom edge and
+/// is as tall as its rows, up to 85% of the window and then scrolls. On a desktop
+/// it opens at the window's top-left corner, since it has no trigger of its own.
+pub fn choice_sheet(
+    open: bool,
+    title: impl Into<String>,
+    rows: Vec<Element>,
+    on_dismiss: impl Into<EventHandler<()>>,
+) -> Element {
+    Element::from(
+        Panel::new(
+            PanelKind::Choice,
+            open,
+            PanelTrigger::Pointer((0.0, 0.0)),
+            rows,
+        )
+        .title(title)
+        .on_dismiss(on_dismiss),
+    )
 }
 
 impl Panel {
@@ -1124,22 +1168,32 @@ impl Panel {
         inset: bool,
         tail: f32,
         drag: Option<SheetDrag>,
+        scroll: Option<ScrollController>,
+        measure: Option<State<f32>>,
     ) -> Rect {
         let column = rect()
             .width(Size::fill())
             .children(self.children.clone())
             .maybe_child((tail > 0.0).then(|| rect().height(Size::px(tail))));
+        let column = match measure {
+            // An unsized sheet is sized by its rows: their height, without the tail.
+            Some(mut measure) => column.on_sized(move |event: Event<SizedEventData>| {
+                measure.set_if_modified((event.area.height() - tail).max(0.0));
+            }),
+            None => column,
+        };
         let padding = [px(S4)];
         let column = if inset {
             column.tw(tokens, &padding)
         } else {
             column
         };
-        let Some(scroll) = self.scroll.clone() else {
+        let Some(scroll) = scroll else {
             return column;
         };
         let offset = <(i32, i32)>::from(scroll.clone()).1 as f32;
-        let below = -offset + viewport < self.content_height + tail - 0.5;
+        let content = measure.map_or(self.content_height, |measure| *measure.read());
+        let below = -offset + viewport < content + tail - 0.5;
         // A floating list shows that it continues with its scrollbar alone.
         // An edge hairline under the last visible row read as a stray line
         // at the bottom of the panel. A sheet fades its rows out instead.
@@ -1213,7 +1267,15 @@ impl Panel {
             // A press or wheel turn inside the panel never reaches the shield.
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
-            .child(self.body(tokens, viewport, false, 0.0, None));
+            .child(self.body(
+                tokens,
+                viewport,
+                false,
+                0.0,
+                None,
+                self.scroll.clone(),
+                None,
+            ));
         // A popup window never has the keyboard: the window it grew from holds the focus node
         // and the key handler (see `native_backdrop`).
         if local.is_none() {
@@ -1288,7 +1350,7 @@ impl Panel {
     /// rows, the grabber and the title, and the bottom padding that ends its
     /// scroll content, up to the share of the window it may take. The rows
     /// scroll inside what is left.
-    fn sheet_layout(&self, window: (f32, f32)) -> SheetLayout {
+    fn sheet_layout(&self, window: (f32, f32), content: f32) -> SheetLayout {
         let overhang = sheet_overhang();
         let header = if self.title.is_some() {
             Dim::Control.px()
@@ -1297,13 +1359,15 @@ impl Panel {
         };
         let tail = sheet_bottom();
         let chrome = GRABBER_ROW + header;
-        let percent = if self.kind == PanelKind::Choice && !self.tall {
+        let percent = if self.content_height <= 0.0 {
+            UNSIZED_SHEET_MAX_HEIGHT_PERCENT
+        } else if self.kind == PanelKind::Choice && !self.tall {
             CHOICE_SHEET_MAX_HEIGHT_PERCENT
         } else {
             SHEET_MAX_HEIGHT_PERCENT
         };
         let cap = (window.1 * percent / 100.0 - chrome).max(0.0);
-        let viewport = (self.content_height + tail).min(cap);
+        let viewport = (content + tail).min(cap);
         // A device preview holds the page to a phone-wide column in the middle
         // of the window: the sheet rises from the bottom of that column, as the
         // page's own sheets do, not across the whole window.
@@ -1334,10 +1398,12 @@ impl Panel {
         offset: f32,
         drag: SheetDrag,
         dismiss: EventHandler<()>,
+        scroll: Option<ScrollController>,
+        measure: Option<State<f32>>,
     ) -> Rect {
         let overhang = sheet_overhang();
         let metrics = layout.metrics;
-        let scroll = self.scroll;
+        let body_scroll = scroll.clone();
         let card = rect()
             .component("Sheet")
             .tw(
@@ -1398,7 +1464,15 @@ impl Panel {
                             .text_overflow(TextOverflow::Ellipsis),
                     )
             }))
-            .child(self.body(tokens, layout.viewport, true, layout.tail, Some(drag)))
+            .child(self.body(
+                tokens,
+                layout.viewport,
+                true,
+                layout.tail,
+                Some(drag),
+                body_scroll,
+                measure,
+            ))
             .child(rect().height(Size::px(overhang)));
         let (left, width) = layout
             .column
