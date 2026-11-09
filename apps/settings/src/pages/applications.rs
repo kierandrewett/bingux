@@ -43,12 +43,16 @@ const OTHER_ICON_SIZES: [u32; 2] = [40, 128];
 /// first type is the one the choices are read from; every type is set.
 pub(crate) struct Kind {
     pub(crate) title: fn() -> String,
+    /// The English name in the route path: `applications/default/<slug>`. Fixed,
+    /// so the route resolves in every locale.
+    pub(crate) slug: &'static str,
     icon: Icon,
     mimes: &'static [&'static str],
 }
 
 pub(crate) const KINDS: [Kind; 9] = [
     Kind {
+        slug: "web",
         title: || tr!("settings-applications-kind-web"),
         icon: Icon::WebBrowser,
         mimes: &[
@@ -58,41 +62,49 @@ pub(crate) const KINDS: [Kind; 9] = [
         ],
     },
     Kind {
+        slug: "mail",
         title: || tr!("settings-applications-kind-mail"),
         icon: Icon::MailUnread,
         mimes: &["x-scheme-handler/mailto"],
     },
     Kind {
+        slug: "calendar",
         title: || tr!("settings-applications-kind-calendar"),
         icon: Icon::XOfficeCalendar,
         mimes: &["text/calendar"],
     },
     Kind {
+        slug: "files",
         title: || tr!("settings-applications-kind-files"),
         icon: Icon::Folder,
         mimes: &["inode/directory"],
     },
     Kind {
+        slug: "text",
         title: || tr!("settings-applications-kind-text"),
         icon: Icon::DefaultAppText,
         mimes: &["text/plain"],
     },
     Kind {
+        slug: "documents",
         title: || tr!("settings-applications-kind-documents"),
         icon: Icon::DefaultAppDocuments,
         mimes: &["application/pdf"],
     },
     Kind {
+        slug: "photos",
         title: || tr!("settings-applications-kind-photos"),
         icon: Icon::ImageGeneric,
         mimes: &["image/png", "image/jpeg"],
     },
     Kind {
+        slug: "music",
         title: || tr!("settings-applications-kind-music"),
         icon: Icon::ApplicationsMultimedia,
         mimes: &["audio/mpeg", "audio/flac", "audio/ogg"],
     },
     Kind {
+        slug: "video",
         title: || tr!("settings-applications-kind-video"),
         icon: Icon::VideoGeneric,
         mimes: &["video/mp4", "video/x-matroska", "video/webm"],
