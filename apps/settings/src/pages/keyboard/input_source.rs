@@ -11,6 +11,7 @@ use crate::ui::{
     Group, PageHead, Status, page_column, property_row, row, skeleton, status, use_overlays,
     use_window,
 };
+use bingux_ui::prelude::tr;
 
 /// The page for `source`. It reads the list the keyboard page reads, so it
 /// shows the same position and enables the actions the list would.
@@ -46,36 +47,37 @@ impl Component for InputSourcePage {
         let Some(index) = config.sources.iter().position(|s| *s == self.source) else {
             return page_column()
                 .child(PageHead::new())
-                .child(status(Status::Empty(
-                    "This input source is no longer set up.".into(),
-                )));
+                .child(status(Status::Empty(tr!("settings-keyboard-source-gone"))));
         };
         let count = config.sources.len();
 
         let busy_now = *busy.read();
 
-        let details = Group::titled("Details")
-            .row(property_row("Type", kind_label(&self.source.kind)))
+        let details = Group::titled(&tr!("settings-keyboard-details"))
             .row(property_row(
-                "Position",
+                tr!("settings-keyboard-type"),
+                kind_label(&self.source.kind),
+            ))
+            .row(property_row(
+                tr!("settings-keyboard-position"),
                 format!("{} of {}", index + 1, count),
             ));
 
-        let actions = Group::titled("Actions")
+        let actions = Group::titled(&tr!("settings-keyboard-actions"))
             .row(
-                row("Move up")
+                row(tr!("settings-keyboard-move-up"))
                     .leading(Icon::PanUp)
                     .enabled(index > 0 && !busy_now)
                     .on_press(move |_| edits.run(Edit::MoveUp(index))),
             )
             .row(
-                row("Move down")
+                row(tr!("settings-keyboard-move-down"))
                     .leading(Icon::PanDown)
                     .enabled(index + 1 < count && !busy_now)
                     .on_press(move |_| edits.run(Edit::MoveDown(index))),
             )
             .row(
-                row("Remove")
+                row(tr!("settings-keyboard-remove"))
                     .leading(Icon::Delete)
                     .destructive()
                     .enabled(count > 1 && !busy_now)
