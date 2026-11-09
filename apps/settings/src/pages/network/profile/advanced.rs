@@ -10,6 +10,7 @@ use freya::prelude::*;
 use bingux_ui::controls::form::validate::Check;
 use bingux_ui::controls::form_field;
 use bingux_ui::controls::pending_bar;
+use bingux_ui::prelude::tr;
 
 use super::Page;
 use super::draft::{Draft, Values, use_draft};
