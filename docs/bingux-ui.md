@@ -5273,6 +5273,16 @@ that has it. `Command::key_hint` rows list keys controls handle themselves.
 The filter matches titles (fuzzy) and keys (`ctrl+z`). An app no longer
 writes its own shortcuts dialog: the sheet is generated.
 
+**Conventions, checked by `commands::conventions_tests`.** An app builds its
+main menu with `app_menu(items)` and lists its commands with
+`use_window_commands`. `app_menu` already ends with About, so an app never
+adds it again with `about::app_menu_items`, which would show it twice. It
+builds no shortcut sheet of its own: the sheet, the palette and the main menu
+already show every command with its keys.
+A list's own keys (arrows, Enter, Escape, Delete on a row) stay with the
+control and are not commands. The test lists the apps still on the old menu
+in `PENDING`; an app leaves that list when its menu moves to `app_menu`.
+
 ## Undo and redo
 
 `use_undo()` returns the window's `UndoStack`, one for all of its views
