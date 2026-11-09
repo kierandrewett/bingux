@@ -840,8 +840,18 @@ pub fn load_tokens() -> Tokens {
 }
 
 /// The tokens of a settled appearance: the one place an `Appearance` becomes
-/// `Tokens`.
+/// `Tokens`. The accessibility preferences it carries are put in force first,
+/// because `Tokens::new` and every text measurement read them from
+/// [`crate::access`]. Reduce transparency has no appearance source yet, so the
+/// value already in force (its environment pin) is kept.
 fn tokens_for(appearance: &crate::platform::appearance::Appearance) -> Tokens {
+    let current = crate::access::Access::current();
+    crate::access::set(crate::access::Access {
+        reduced_motion: appearance.reduced_motion,
+        high_contrast: appearance.high_contrast,
+        reduce_transparency: current.reduce_transparency,
+        text_scale: appearance.text_scale,
+    });
     Tokens::new(
         appearance.accent,
         appearance.scheme,
