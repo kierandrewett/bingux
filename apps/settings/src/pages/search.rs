@@ -20,19 +20,48 @@ use crate::ui::{
     primary_button, row, slider_row, status, switch, switch_row, text_field, use_overlays,
     use_popup_actions, use_tokens, use_window,
 };
+use bingux_ui::prelude::{i18n_id, tr};
 use bingux_ui::shell::menu_item;
 use bingux_ui::style::*;
 use bingux_ui::window::{PopupFlags, WindowLike, WindowParent};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 const PROVIDERS: [(&str, &str, Icon); 7] = [
-    ("applications", "Applications", Icon::Applications),
-    ("files", "Files", Icon::Folder),
-    ("calculation", "Calculation", Icon::AccessoriesCalculator),
-    ("conversions", "Conversions", Icon::Refresh),
-    ("web", "Web", Icon::WebBrowser),
-    ("web-shortcuts", "Website shortcuts", Icon::Bookmarks),
-    ("external", "Add-on sources", Icon::AddOn),
+    (
+        "applications",
+        i18n_id!("settings-search-provider-applications"),
+        Icon::Applications,
+    ),
+    (
+        "files",
+        i18n_id!("settings-search-provider-files"),
+        Icon::Folder,
+    ),
+    (
+        "calculation",
+        i18n_id!("settings-search-provider-calculation"),
+        Icon::AccessoriesCalculator,
+    ),
+    (
+        "conversions",
+        i18n_id!("settings-search-provider-conversions"),
+        Icon::Refresh,
+    ),
+    (
+        "web",
+        i18n_id!("settings-search-provider-web"),
+        Icon::WebBrowser,
+    ),
+    (
+        "web-shortcuts",
+        i18n_id!("settings-search-provider-web-shortcuts"),
+        Icon::Bookmarks,
+    ),
+    (
+        "external",
+        i18n_id!("settings-search-provider-external"),
+        Icon::AddOn,
+    ),
 ];
 const MIN_MEGABYTES: i64 = 1;
 const MAX_MEGABYTES: i64 = 20;
@@ -273,7 +302,7 @@ impl Parser {
 }
 
 fn missing(_key: &str) -> CommandError {
-    CommandError("Could not read the search settings. Restart Settings and try again.".into())
+    CommandError(tr!("settings-search-read-error"))
 }
 
 fn json_text(object: &Json, key: &str) -> Result<String, CommandError> {
@@ -311,14 +340,10 @@ fn strings(value: Option<&Json>) -> Vec<String> {
 
 /// Reads the `search` and `previews` sections from `bingux-config dump`.
 fn parse_dump(text: &str) -> Result<Model, CommandError> {
-    let root = Json::parse(text).map_err(|_| {
-        CommandError("Could not read the search settings. Restart Settings and try again.".into())
-    })?;
+    let root = Json::parse(text).map_err(|_| CommandError(tr!("settings-search-read-error")))?;
     if let Some(message) = root.get("error").and_then(Json::as_str) {
         eprintln!("settings: bingux-config dump failed: {message}");
-        return Err(CommandError(
-            "Could not read the search settings. Restart Settings and try again.".into(),
-        ));
+        return Err(CommandError(tr!("settings-search-read-error")));
     }
     let data = root.get("data").ok_or_else(|| missing("data"))?;
     let search = data.get("search").ok_or_else(|| missing("search"))?;
@@ -392,9 +417,9 @@ fn load() -> Result<Model, CommandError> {
 const NAUTILUS: &str = "org.gnome.nautilus.preferences";
 const RECURSIVE_SEARCH: &str = "recursive-search";
 const RECURSIVE_SEARCH_OPTIONS: [(&str, &str); 3] = [
-    ("always", "Always"),
-    ("local-only", "Local folders only"),
-    ("never", "Never"),
+    ("always", i18n_id!("settings-search-recursive-always")),
+    ("local-only", i18n_id!("settings-search-recursive-local")),
+    ("never", i18n_id!("settings-search-recursive-never")),
 ];
 
 /// Nautilus's `recursive-search`, read with `gsettings`. `None` without
@@ -516,7 +541,7 @@ fn write_then(ctx: Ctx, args: Vec<String>, after: impl FnOnce(bool) + 'static) {
             Ok(_) => after(true),
             Err(e) => {
                 eprintln!("settings: search write failed: {}", e.0);
-                ctx.overlays.toast("Could not save the change. Try again.");
+                ctx.overlays.toast(tr!("settings-search-save-error"));
                 after(false);
             }
         },
@@ -548,7 +573,7 @@ fn write_engines(ctx: Ctx, default: &str, list: Vec<Engine>) {
         .find(|engine| engine.enabled)
         .map(|engine| engine.id.clone())
     else {
-        ctx.overlays.toast("Keep at least one engine on.");
+        ctx.overlays.toast(tr!("settings-search-keep-one-engine"));
         return;
     };
     write_then(
@@ -640,7 +665,10 @@ impl Component for SearchPage {
             Err(e) => {
                 return page_column()
                     .child(PageHead::new())
-                    .child(status(Status::Error(e.0)).action("Try again", move |_| reload(ctx)))
+                    .child(
+                        status(Status::Error(e.0))
+                            .action(&tr!("settings-search-try-again"), move |_| reload(ctx)),
+                    )
                     .into_element();
             }
         };
@@ -686,13 +714,13 @@ fn placeholder() -> Model {
 fn providers_group(data: &Model, ctx: Ctx) -> Group {
     let disabled = data.disabled_providers.clone();
     PROVIDERS.iter().fold(
-        Group::titled("Search sources"),
+        Group::titled(&tr!("settings-search-sources")),
         |group, (id, label, icon)| {
             let id = id.to_string();
             let enabled = !disabled.contains(&id);
             let current = disabled.clone();
             group.row(
-                switch_row(*label, enabled, move |on: bool| {
+                switch_row(bingux_ui::i18n::text(*label), enabled, move |on: bool| {
                     let mut next: Vec<String> = current
                         .iter()
                         .filter(|provider| provider.as_str() != id)
@@ -720,7 +748,7 @@ fn web_group(data: &Model, ctx: Ctx) -> Group {
         .map(|engine| (engine.id.clone(), engine.name.clone()))
         .collect();
     let default_engine = choice_row(
-        "Default engine",
+        tr!("settings-search-default-engine"),
         enabled_engines,
         &data.default_engine,
         move |id: String| {
@@ -728,7 +756,7 @@ fn web_group(data: &Model, ctx: Ctx) -> Group {
         },
     )
     .dropdown();
-    let mut group = Group::titled("Web search").row(default_engine);
+    let mut group = Group::titled(&tr!("settings-search-web-search")).row(default_engine);
     for engine in &data.engines {
         group = group.row(engine_row(
             engine.clone(),
@@ -774,14 +802,21 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
     let remove_default = default.to_string();
     let remove_list = without.clone();
     let menu = vec![
-        menu_item("Set as default", move |_| {
+        menu_item(tr!("settings-search-set-default"), move |_| {
             commit(ctx, set_args("search.default_engine", toml_string(&set_id)));
         })
         .checked(is_default),
-        menu_item(if enabled { "Turn off" } else { "Turn on" }, move |_| {
-            write_engines(ctx, &toggle_default, toggle_list.clone());
-        }),
-        menu_item("Remove", move |_| {
+        menu_item(
+            if enabled {
+                tr!("settings-search-turn-off")
+            } else {
+                tr!("settings-search-turn-on")
+            },
+            move |_| {
+                write_engines(ctx, &toggle_default, toggle_list.clone());
+            },
+        ),
+        menu_item(tr!("settings-search-remove"), move |_| {
             confirm_remove(ctx, &remove_name, &remove_default, &remove_list);
         })
         .destructive(),
@@ -796,12 +831,15 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
                 icon_button(Icon::Delete, move |_| {
                     confirm_remove(ctx, &engine_name, &default_for_remove, &without);
                 })
-                .tooltip("Remove engine"),
+                .tooltip(&tr!("settings-search-remove-engine")),
             ),
         );
     row(engine.name.clone())
         .leading(Icon::WebBrowser)
-        .subtitle(format!("Shortcut {}", engine.shortcut))
+        .subtitle(&tr!(
+            "settings-search-shortcut",
+            shortcut = &engine.shortcut
+        ))
         .trailing(trailing)
         .trailing_fit()
         .context_menu(menu)
@@ -813,14 +851,16 @@ fn confirm_remove(ctx: Ctx, name: &str, default: &str, without: &[Engine]) {
     let without = without.to_vec();
     ctx.overlays.show_dialog(
         dialog(
-            format!("Remove “{name}”?"),
-            "Its shortcut stops working. You can add the engine again later.",
+            tr!("settings-search-remove-engine-title", name = name),
+            tr!("settings-search-remove-engine-body"),
         )
-        .cancel("Cancel")
+        .cancel(&tr!("settings-search-cancel"))
         .default_action(CANCEL_ID)
-        .response("Remove", ResponseKind::Destructive, move |_| {
-            write_engines(ctx, &default, without.clone())
-        }),
+        .response(
+            &tr!("settings-search-remove"),
+            ResponseKind::Destructive,
+            move |_| write_engines(ctx, &default, without.clone()),
+        ),
     );
 }
 
@@ -862,7 +902,8 @@ impl Component for AddEngine {
             url.set(String::new());
             open_engine_sheet(window, form, engines.clone());
         };
-        row("New search engine").trailing(primary_button("Add…", open).compact())
+        row(tr!("settings-search-new-engine"))
+            .trailing(primary_button(tr!("settings-search-add-engine-button"), open).compact())
     }
 }
 
@@ -878,8 +919,8 @@ struct EngineForm {
 /// Why a shortcut or web address cannot be used. Empty fields are not problems: Add stays off until they are filled in.
 #[derive(Default)]
 struct EngineProblems {
-    shortcut: Option<&'static str>,
-    url: Option<&'static str>,
+    shortcut: Option<String>,
+    url: Option<String>,
 }
 
 fn engine_fields(form: EngineForm) -> (String, String, String) {
@@ -892,22 +933,22 @@ fn engine_fields(form: EngineForm) -> (String, String, String) {
 
 fn engine_problems(shortcut: &str, url: &str, engines: &[Engine]) -> EngineProblems {
     let shortcut_problem = if shortcut.chars().any(char::is_whitespace) {
-        Some("Remove the spaces from the shortcut.")
+        Some(tr!("settings-search-space-in-shortcut"))
     } else if !shortcut.is_empty()
         && engines
             .iter()
             .any(|engine| engine.id == engine_id(shortcut))
     {
-        Some("Another engine already uses this shortcut. Choose a different one.")
+        Some(tr!("settings-search-shortcut-taken"))
     } else {
         None
     };
     let url_problem = if url.is_empty() {
         None
     } else if !(url.starts_with("https://") || url.starts_with("http://")) {
-        Some("Start the address with https:// or http://.")
+        Some(tr!("settings-search-url-scheme"))
     } else if !url.contains("{query}") {
-        Some("Put {query} where the search words go.")
+        Some(tr!("settings-search-url-query", query = "{query}"))
     } else {
         None
     };
@@ -928,7 +969,13 @@ fn engine_ready(name: &str, shortcut: &str, url: &str, engines: &[Engine]) -> bo
 
 /// Opens the add-engine popup. Its body reads the form, so the Add button follows the fields.
 fn open_engine_sheet(window: Window, form: EngineForm, engines: Vec<Engine>) {
-    window.open(popup("Add search engine", EngineBody { form, engines }).flags(PopupFlags::FORM));
+    window.open(
+        popup(
+            tr!("settings-search-add-engine-title"),
+            EngineBody { form, engines },
+        )
+        .flags(PopupFlags::FORM),
+    );
 }
 
 /// Writes the engines with the new one appended. The popup closes only once the write succeeds.
@@ -975,22 +1022,22 @@ impl Component for EngineBody {
         let problems = engine_problems(&shortcut, &url, &self.engines);
         use_popup_actions(PopupActions {
             primary: Some(PopupAction {
-                label: "Add".into(),
+                label: tr!("settings-search-add"),
                 enabled: engine_ready(&name, &shortcut, &url, &self.engines),
                 on_press: EventHandler::new(move |_: ()| add_engine(form, engines.clone(), window)),
             }),
         });
         let fields = Group::new(None::<String>)
             .row(form_row(
-                "Name",
+                tr!("settings-search-field-name"),
                 rect().tw(&tokens, &[w(Dim::Field)]).child(
                     text_field(form.name, |_: String| {})
                         .width(Dim::Field)
-                        .placeholder("Example Search"),
+                        .placeholder(&tr!("settings-search-example-name")),
                 ),
             ))
             .row(form_row(
-                "Shortcut",
+                tr!("settings-search-field-shortcut"),
                 rect().tw(&tokens, &[w(Dim::Field)]).child(
                     text_field(form.shortcut, |_: String| {})
                         .width(Dim::Field)
@@ -998,7 +1045,7 @@ impl Component for EngineBody {
                 ),
             ))
             .row(form_row(
-                "Web address",
+                tr!("settings-search-field-web-address"),
                 rect().tw(&tokens, &[w(Dim::Field)]).child(
                     text_field(form.url, |_: String| {})
                         .width(Dim::Field)
@@ -1007,22 +1054,23 @@ impl Component for EngineBody {
             ));
         // The problem replaces the hint under the fields, so a field never
         // reserves a line of its own and stays level with its label.
-        let hint = problems.shortcut.or(problems.url).unwrap_or(
-            "Type the shortcut in search to use this engine. Put {query} in the address where the search words go.",
-        );
+        let hint = problems
+            .shortcut
+            .or(problems.url)
+            .unwrap_or_else(|| tr!("settings-search-hint", query = "{query}"));
         popup_column().child(fields.footer(hint))
     }
 }
 
 fn files_group(data: &Model, ctx: Ctx) -> Group {
-    let mut group = Group::titled("File search");
+    let mut group = Group::titled(&tr!("settings-search-file-search"));
     if let Some(recursive) = &data.recursive_search {
         let options = RECURSIVE_SEARCH_OPTIONS
             .iter()
-            .map(|(id, label)| (id.to_string(), label.to_string()))
+            .map(|(id, label)| (id.to_string(), bingux_ui::i18n::text(label)))
             .collect();
         group = group.row(choice_row(
-            "Search subfolders",
+            tr!("settings-search-subfolders"),
             options,
             recursive,
             move |value: String| set_recursive_search(ctx, value),
@@ -1030,7 +1078,9 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
     }
     match &data.file_roots {
         None => {
-            group = group.row(row("Folders").value("Home folders"));
+            group = group.row(
+                row(tr!("settings-search-folders")).value(&tr!("settings-search-home-folders")),
+            );
         }
         Some(roots) => {
             for root in roots {
@@ -1038,7 +1088,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                     roots.iter().filter(|item| *item != root).cloned().collect();
                 let folder = root.clone();
                 let menu = vec![
-                    menu_item("Stop searching", {
+                    menu_item(tr!("settings-search-stop-searching"), {
                         let (folder, remaining) = (folder.clone(), remaining.clone());
                         move |_| confirm_remove_folder(ctx, folder.clone(), remaining.clone())
                     })
@@ -1048,7 +1098,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                     icon_button(Icon::Delete, move |_| {
                         confirm_remove_folder(ctx, folder.clone(), remaining.clone());
                     })
-                    .tooltip("Remove folder"),
+                    .tooltip(&tr!("settings-search-remove-folder")),
                 );
                 group = group.row(
                     row(folder_name(root))
@@ -1070,19 +1120,26 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
 fn confirm_remove_folder(ctx: Ctx, folder: String, remaining: Vec<String>) {
     ctx.overlays.show_dialog(
         dialog(
-            format!("Stop searching “{}”?", folder_name(&folder)),
-            "Files in this folder no longer appear in search results.",
+            tr!(
+                "settings-search-stop-folder-title",
+                name = folder_name(&folder)
+            ),
+            tr!("settings-search-stop-folder-body"),
         )
-        .cancel("Cancel")
+        .cancel(&tr!("settings-search-cancel"))
         .default_action(CANCEL_ID)
-        .response("Stop searching", ResponseKind::Destructive, move |_| {
-            let args = if remaining.is_empty() {
-                vec!["unset".into(), "search.file_roots".into()]
-            } else {
-                set_args("search.file_roots", string_array(&remaining))
-            };
-            commit(ctx, args);
-        }),
+        .response(
+            &tr!("settings-search-stop-searching"),
+            ResponseKind::Destructive,
+            move |_| {
+                let args = if remaining.is_empty() {
+                    vec!["unset".into(), "search.file_roots".into()]
+                } else {
+                    set_args("search.file_roots", string_array(&remaining))
+                };
+                commit(ctx, args);
+            },
+        ),
     );
 }
 
@@ -1104,7 +1161,8 @@ impl Component for FileRootAdd {
             let roots = roots.clone();
             crate::ui::files::choose(
                 window,
-                crate::ui::files::ChooserRequest::select_folder().title("Choose a folder"),
+                crate::ui::files::ChooserRequest::select_folder()
+                    .title(&tr!("settings-search-choose-folder-title")),
                 move |chosen| {
                     let Some(path) = chosen.and_then(|chosen| chosen.paths.into_iter().next())
                     else {
@@ -1118,8 +1176,7 @@ impl Component for FileRootAdd {
                             if searchable {
                                 add_folder(ctx, &roots, path);
                             } else {
-                                ctx.overlays
-                                    .toast("Could not add that folder. Choose a different folder.");
+                                ctx.overlays.toast(tr!("settings-search-folder-add-error"));
                             }
                         },
                     );
@@ -1127,7 +1184,8 @@ impl Component for FileRootAdd {
             );
         };
 
-        row("New folder").trailing(primary_button("Choose folder", choose).compact())
+        row(tr!("settings-search-new-folder"))
+            .trailing(primary_button(tr!("settings-search-choose-folder"), choose).compact())
     }
 }
 
@@ -1139,8 +1197,10 @@ fn searchable(path: &str) -> bool {
 /// Adds a checked folder to the file search roots.
 fn add_folder(ctx: Ctx, roots: &[String], path: String) {
     if roots.contains(&path) {
-        ctx.overlays
-            .toast(format!("“{}” is already searched", folder_name(&path)));
+        ctx.overlays.toast(tr!(
+            "settings-search-already-searched",
+            name = folder_name(&path)
+        ));
         return;
     }
     let mut list = roots.to_vec();
@@ -1173,26 +1233,26 @@ fn folder_location(path: &str) -> String {
     let home = std::env::var("HOME").unwrap_or_default();
     if !home.is_empty() {
         if parent == home {
-            return "Home".into();
+            return tr!("settings-search-home");
         }
         if let Some(rest) = parent.strip_prefix(format!("{home}/").as_str()) {
-            return format!("Home/{rest}");
+            return tr!("settings-search-home-path", rest = rest);
         }
     }
     parent
 }
 
 fn previews_group(data: &Model, ctx: Ctx) -> Group {
-    Group::titled("Previews")
+    Group::titled(&tr!("settings-search-previews"))
         .row(switch_row(
-            "Preview files",
+            tr!("settings-search-preview-files"),
             data.previews_enabled,
             move |on: bool| {
                 commit(ctx, set_args("previews.enabled", on.to_string()));
             },
         ))
         .row(switch_row(
-            "Prepare nearby previews",
+            tr!("settings-search-prewarm"),
             data.prewarm,
             move |on: bool| {
                 commit(ctx, set_args("previews.prewarm", on.to_string()));
@@ -1219,7 +1279,7 @@ impl Component for MaxMegabytes {
         let shown = *draft.read();
 
         slider_row(
-            "Largest file to preview",
+            tr!("settings-search-largest-file"),
             percent_from_megabytes(shown),
             move |percent: f64| {
                 let value = megabytes_from_percent(percent);
@@ -1230,7 +1290,7 @@ impl Component for MaxMegabytes {
                 }
             },
         )
-        .value_text(format!("{shown} MB"))
+        .value_text(&tr!("settings-search-megabytes", mb = shown))
     }
 }
 
@@ -1242,12 +1302,12 @@ fn assistant_group(data: &Model, ctx: Ctx) -> Group {
         .unwrap_or_else(|| "none".into());
     let current = data.ai.clone();
     let options = vec![
-        ("none".to_string(), "None".to_string()),
+        ("none".to_string(), tr!("settings-search-none")),
         ("pi".to_string(), "Pi".to_string()),
         ("claude".to_string(), "Claude".to_string()),
     ];
-    let mut group = Group::titled("Assistant").row(choice_row(
-        "Assistant program",
+    let mut group = Group::titled(&tr!("settings-search-assistant")).row(choice_row(
+        tr!("settings-search-assistant-program"),
         options,
         &selected,
         move |harness: String| {
@@ -1294,7 +1354,7 @@ impl Component for AssistantModel {
         let ai = self.ai.clone();
         let ctx = self.ctx;
 
-        row("Model").trailing(
+        row(tr!("settings-search-model")).trailing(
             text_field(draft, move |text: String| {
                 let next = Ai {
                     model: text.trim().to_string(),
