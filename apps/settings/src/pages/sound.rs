@@ -15,7 +15,7 @@ use freya::prelude::*;
 use serde_json::Value;
 
 use bingux_audio_effects as engine;
-use bingux_ui::prelude::{PageHead, Window, popup, use_window};
+use bingux_ui::prelude::{PageHead, Window, popup, tr, use_window};
 use bingux_ui::style::*;
 use bingux_ui::theme::Tokens;
 use bingux_ui::typography::CAPTION;
@@ -62,32 +62,32 @@ impl Kind {
         }
     }
 
-    fn title(self) -> &'static str {
+    fn title(self) -> String {
         match self {
-            Kind::Output => "Output",
-            Kind::Input => "Input",
+            Kind::Output => tr!("sound-kind-output"),
+            Kind::Input => tr!("sound-kind-input"),
         }
     }
 
-    fn none_found(self) -> &'static str {
+    fn none_found(self) -> String {
         match self {
-            Kind::Output => "No output devices found",
-            Kind::Input => "No input devices found",
+            Kind::Output => tr!("sound-kind-none-output"),
+            Kind::Input => tr!("sound-kind-none-input"),
         }
     }
 
-    fn device_title(self) -> &'static str {
+    fn device_title(self) -> String {
         match self {
-            Kind::Output => "Output device",
-            Kind::Input => "Input device",
+            Kind::Output => tr!("sound-kind-device-output"),
+            Kind::Input => tr!("sound-kind-device-input"),
         }
     }
 
     /// The title of this kind's volume slider.
-    fn volume_title(self) -> &'static str {
+    fn volume_title(self) -> String {
         match self {
-            Kind::Output => "Output volume",
-            Kind::Input => "Input volume",
+            Kind::Output => tr!("sound-kind-volume-output"),
+            Kind::Input => tr!("sound-kind-volume-input"),
         }
     }
 }
@@ -198,13 +198,16 @@ fn summary_of(streams: &[Stream]) -> String {
     }
     let mut parts = Vec::new();
     if !playing_to.is_empty() {
-        parts.push(format!("Playing to {}", playing_to.join(", ")));
+        parts.push(tr!("sound-playing-to", devices = playing_to.join(", ")));
     }
     if !recording_from.is_empty() {
-        parts.push(format!("Recording from {}", recording_from.join(", ")));
+        parts.push(tr!(
+            "sound-recording-from",
+            devices = recording_from.join(", ")
+        ));
     }
     if parts.is_empty() {
-        "Paused".to_string()
+        tr!("sound-paused")
     } else {
         parts.join(", ")
     }
@@ -859,7 +862,7 @@ fn set_effects_device(ctx: Ctx, direction: engine::Direction, device: String) {
         move |result: Result<(), String>| {
             end_write();
             if let Err(raw) = result {
-                report(overlays, "Could not start the effects. Try again.", &raw);
+                report(overlays, &tr!("sound-effects-start-failed"), &raw);
             }
             reload(model);
         },
@@ -1019,7 +1022,7 @@ fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
         },
         move |result| {
             if let Err(e) = result {
-                report(overlays, "Could not change the sound. Try again.", &e.0);
+                report(overlays, &tr!("sound-change-failed"), &e.0);
             }
             reload(model);
         },
@@ -1093,7 +1096,7 @@ fn push_volume(queue: VolumeQueue, overlays: Overlays) {
         },
         move |result| {
             if let Err(e) = result {
-                report(overlays, "Could not change the volume. Try again.", &e.0);
+                report(overlays, &tr!("sound-volume-change-failed"), &e.0);
             }
             push_volume(queue, overlays);
         },
@@ -1180,7 +1183,7 @@ fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
     if mix.has(is_left) && mix.has(is_right) {
         rows.push(
             mix_slider(
-                "Balance",
+                &tr!("sound-mix-balance"),
                 (shape.balance + 1.0) * 100.0,
                 move |value: f64| {
                     let balance = centre_snapped(value / 100.0 - 1.0);
@@ -1190,29 +1193,45 @@ fn mix_rows(mix: &Mix, ctx: Ctx) -> Vec<Element> {
             .max(200.0)
             .origin(100.0)
             .mark(100.0)
-            .value_text(side_text(shape.balance, "Left", "Right"))
+            .value_text(side_text(
+                shape.balance,
+                &tr!("sound-side-left"),
+                &tr!("sound-side-right"),
+            ))
             .into(),
         );
     }
     if mix.has(is_front) && mix.has(is_rear) {
         rows.push(
-            mix_slider("Fade", (shape.fade + 1.0) * 50.0, move |value: f64| {
-                let fade = centre_snapped(value / 50.0 - 1.0);
-                update_mix(ctx, move |shape| shape.fade = fade);
-            })
+            mix_slider(
+                &tr!("sound-mix-fade"),
+                (shape.fade + 1.0) * 50.0,
+                move |value: f64| {
+                    let fade = centre_snapped(value / 50.0 - 1.0);
+                    update_mix(ctx, move |shape| shape.fade = fade);
+                },
+            )
             .max(100.0)
             .origin(50.0)
             .mark(50.0)
-            .value_text(side_text(shape.fade, "Rear", "Front"))
+            .value_text(side_text(
+                shape.fade,
+                &tr!("sound-side-rear"),
+                &tr!("sound-side-front"),
+            ))
             .into(),
         );
     }
     if mix.has(is_lfe) {
         rows.push(
-            mix_slider("Subwoofer", shape.sub * 100.0, move |value: f64| {
-                let sub = value / 100.0;
-                update_mix(ctx, move |shape| shape.sub = sub);
-            })
+            mix_slider(
+                &tr!("sound-mix-sub"),
+                shape.sub * 100.0,
+                move |value: f64| {
+                    let sub = value / 100.0;
+                    update_mix(ctx, move |shape| shape.sub = sub);
+                },
+            )
             .value_text(format!("{:.0}%", shape.sub * 100.0))
             .into(),
         );
@@ -1235,7 +1254,7 @@ fn centre_snapped(value: f64) -> f64 {
 /// A slider's value as words: "Centre", or the side with its amount.
 fn side_text(value: f64, low: &str, high: &str) -> String {
     if value.abs() < 0.005 {
-        "Centre".to_string()
+        tr!("sound-centre")
     } else if value < 0.0 {
         format!("{low} {:.0}%", -value * 100.0)
     } else {
@@ -1246,17 +1265,16 @@ fn side_text(value: f64, low: &str, high: &str) -> String {
 /// Name a channel as a person reads it.
 fn channel_label(name: &str) -> String {
     match name {
-        "front-left" => "Front left",
-        "front-right" => "Front right",
-        "front-center" => "Centre",
-        "lfe" => "Subwoofer",
-        "rear-left" => "Rear left",
-        "rear-right" => "Rear right",
-        "side-left" => "Side left",
-        "side-right" => "Side right",
-        other => other,
+        "front-left" => tr!("sound-channel-front-left"),
+        "front-right" => tr!("sound-channel-front-right"),
+        "front-center" => tr!("sound-channel-centre"),
+        "lfe" => tr!("sound-channel-subwoofer"),
+        "rear-left" => tr!("sound-channel-rear-left"),
+        "rear-right" => tr!("sound-channel-rear-right"),
+        "side-left" => tr!("sound-channel-side-left"),
+        "side-right" => tr!("sound-channel-side-right"),
+        other => other.to_string(),
     }
-    .to_string()
 }
 
 /// The short channel names `pw-play` takes, such as "FL".
@@ -1313,7 +1331,7 @@ fn play_tone(sink: &str, names: &[String], lit: usize) -> Result<(), CommandErro
     let path = std::env::temp_dir().join(format!("bingux-sound-test-{}-{lit}.wav", names.len()));
     std::fs::write(&path, tone_wav(names.len(), lit)).map_err(|e| {
         eprintln!("sound: could not write the test tone: {e}");
-        CommandError("Could not play the test sound. Free up disk space and try again.".to_string())
+        CommandError(tr!("sound-test-tone-disk-failed"))
     })?;
     let file = path.to_string_lossy().into_owned();
     let short: Vec<&str> = names.iter().map(|name| short_channel(name)).collect();
@@ -1341,11 +1359,7 @@ fn play_tone(sink: &str, names: &[String], lit: usize) -> Result<(), CommandErro
         TIMEOUT,
     )
     .map(|_| ())
-    .map_err(|_| {
-        CommandError(
-            "Could not play the test sound. Check that sound is working and try again.".to_string(),
-        )
-    })
+    .map_err(|_| CommandError(tr!("sound-test-tone-failed")))
 }
 
 /// Where each speaker sits in the room, in pixels from its centre. The front
@@ -1403,11 +1417,7 @@ fn play_channel(sink: &str, names: &[String], name: &str) -> Result<(), CommandE
         TIMEOUT,
     )
     .map(|_| ())
-    .map_err(|_| {
-        CommandError(
-            "Could not play the test sound. Check that sound is working and try again.".to_string(),
-        )
-    })
+    .map_err(|_| CommandError(tr!("sound-test-tone-failed")))
 }
 
 /// The speaker test: a room with one round button per speaker, each placed
@@ -1433,7 +1443,7 @@ impl Component for SpeakerTest {
         let playing_name = playing.read().clone();
         let label = match &playing_name {
             Some(name) => channel_label(name),
-            None => "Choose a speaker".to_string(),
+            None => tr!("sound-choose-speaker"),
         };
 
         let mut room = rect().tw(
@@ -1504,7 +1514,7 @@ impl Component for SpeakerTest {
 fn open_test(ctx: Ctx, mix: Mix) {
     let overlays = ctx.overlays;
     ctx.window.open(
-        popup("Test speakers", SpeakerTest { mix, overlays })
+        popup(tr!("sound-test-speakers"), SpeakerTest { mix, overlays })
             .width(Dim::SpeakerPopupWidth)
             .flags(PopupFlags::CANCEL | PopupFlags::GRABBER),
     );
@@ -1694,9 +1704,13 @@ fn level_icon(volume: f64, muted: bool) -> Icon {
 
 /// The button that mutes and unmutes. Its icon shows the current level.
 fn mute_button(volume: f64, muted: bool, on_mute: impl Into<EventHandler<()>>) -> IconButton {
-    let label = if muted { "Unmute" } else { "Mute" };
+    let label = if muted {
+        tr!("sound-unmute")
+    } else {
+        tr!("sound-mute")
+    };
     icon_button(level_icon(volume, muted), on_mute)
-        .tooltip(label)
+        .tooltip(label.as_str())
         .size(Dim::Control)
 }
 
@@ -1728,12 +1742,12 @@ fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: C
     for device in devices.iter().filter(|device| !device.is_default) {
         let id = device.id;
         menu.push(menu_item(
-            format!("Use {} as default", device.full_name()),
+            tr!("sound-use-as-default", name = device.full_name()),
             move |_| set_default(ctx, kind, id),
         ));
     }
     if let Some(mix) = test {
-        menu.push(menu_item("Test speakers", move |_| {
+        menu.push(menu_item(tr!("sound-test-speakers"), move |_| {
             open_test(ctx, mix.clone())
         }));
     }
@@ -1757,7 +1771,7 @@ fn channel_group(
     ctx: Ctx,
     tokens: Tokens,
 ) -> Group {
-    let group = Group::titled(kind.title());
+    let group = Group::titled(&kind.title());
     if devices.is_empty() {
         return group.row(status(Status::Empty(kind.none_found().into())));
     }
@@ -1765,7 +1779,10 @@ fn channel_group(
         .filter(|_| kind == Kind::Output)
         .cloned()
         .map(|test_mix| {
-            action_button("Test…", move |_| open_test(ctx, test_mix.clone())).compact()
+            action_button(tr!("sound-test-ellipsis"), move |_| {
+                open_test(ctx, test_mix.clone())
+            })
+            .compact()
         });
     // Both groups carry a meter: without a level to follow it is an idle track.
     let meter = Some(LevelMeter {
@@ -1823,7 +1840,7 @@ fn channel_group(
     // The boost only applies to the output, so the switch is shown there alone.
     if kind == Kind::Output {
         group = group.row(switch_row(
-            "Allow volume above 100%",
+            tr!("sound-allow-above-100"),
             above,
             move |on: bool| set_above_100(ctx, on),
         ));
@@ -1852,11 +1869,11 @@ fn route_items(ctx: Ctx, ids: &[u32], recording: bool) -> Vec<MenuItem> {
             let ids = ids.to_vec();
             let device_id = device.id;
             menu_item(
-                format!(
-                    "{} {}",
-                    if recording { "Record from" } else { "Play to" },
-                    device.full_name()
-                ),
+                if recording {
+                    tr!("sound-record-from-device", device = device.full_name())
+                } else {
+                    tr!("sound-play-to-device", device = device.full_name())
+                },
                 move |_| move_streams(ctx, kind, ids.clone(), device_id),
             )
         })
@@ -1873,7 +1890,7 @@ fn move_streams(ctx: Ctx, kind: Kind, ids: Vec<u32>, device: u32) {
                 let text = system::run("wpctl", &["inspect", &device.to_string()], TIMEOUT)?;
                 let name = property(&text, "node.name").to_string();
                 if name.is_empty() {
-                    return Err(CommandError("The device has no name.".to_string()));
+                    return Err(CommandError(tr!("sound-device-no-name")));
                 }
                 let verb = match kind {
                     Kind::Output => "move-sink-input",
@@ -1889,11 +1906,7 @@ fn move_streams(ctx: Ctx, kind: Kind, ids: Vec<u32>, device: u32) {
         },
         move |result| {
             if let Err(e) = result {
-                report(
-                    ctx.overlays,
-                    "Could not move the sound to that device. Try again.",
-                    &e.0,
-                );
+                report(ctx.overlays, &tr!("sound-move-failed"), &e.0);
             }
             reload(ctx.model);
         },
@@ -1918,10 +1931,15 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx, live: bool) -> Element {
             let menu_mute_ids = ids.clone();
             let reset_ids = ids.clone();
             let mut menu = vec![
-                menu_item(if muted { "Unmute" } else { "Mute" }, move |_| {
-                    toggle_stream_mute(ctx, &menu_mute_ids, muted)
-                }),
-                menu_item("Reset to 100%", move |_| {
+                menu_item(
+                    if muted {
+                        tr!("sound-unmute")
+                    } else {
+                        tr!("sound-mute")
+                    },
+                    move |_| toggle_stream_mute(ctx, &menu_mute_ids, muted),
+                ),
+                menu_item(tr!("sound-reset-volume"), move |_| {
                     set_stream_volume(ctx, &reset_ids, 100, above)
                 }),
             ];
@@ -1931,7 +1949,7 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx, live: bool) -> Element {
             let subtitle = if live {
                 summary_of(streams)
             } else {
-                "Stopped".to_string()
+                tr!("sound-stopped")
             };
             volume_slider(
                 first.name.clone(),
@@ -1963,7 +1981,7 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx, live: bool) -> Element {
             row(first.name.clone())
                 .leading_app(first.icon.clone())
                 .subtitle(summary_of(streams))
-                .value("Fixed volume"),
+                .value(tr!("sound-fixed-volume")),
         ),
     }
 }
@@ -2001,10 +2019,14 @@ fn activity_summary(streams: &[Stream]) -> String {
         .filter(|group| group.iter().any(|stream| !stream.recording_from.is_empty()))
         .count();
     match (playing, recording) {
-        (0, 0) => "Nothing playing".to_string(),
-        (playing, 0) => format!("{playing} playing"),
-        (0, recording) => format!("{recording} recording"),
-        (playing, recording) => format!("{playing} playing, {recording} recording"),
+        (0, 0) => tr!("sound-summary-idle"),
+        (playing, 0) => tr!("sound-summary-playing", count = playing),
+        (0, recording) => tr!("sound-summary-recording", count = recording),
+        (playing, recording) => tr!(
+            "sound-summary-both",
+            playing = playing,
+            recording = recording
+        ),
     }
 }
 
@@ -2084,11 +2106,7 @@ fn set_output_effects(mut shown: State<Option<String>>, overlays: Overlays, on: 
         move |result: Result<Option<String>, String>| match result {
             Ok(summary) => shown.set(summary),
             Err(raw) => {
-                report(
-                    overlays,
-                    "Could not change output effects. Try again.",
-                    &raw,
-                );
+                report(overlays, &tr!("sound-effects-output-failed"), &raw);
                 shown.set(previous);
             }
         },
@@ -2123,7 +2141,8 @@ impl Component for SoundPage {
             Some(Err(e)) => {
                 return revealed(
                     page_column().child(PageHead::new()).child(
-                        status(Status::Error(e.0)).action("Try again", move |_| reload(ctx.model)),
+                        status(Status::Error(e.0))
+                            .action(&tr!("sound-try-again"), move |_| reload(ctx.model)),
                     ),
                     false,
                 );
@@ -2157,19 +2176,19 @@ impl Component for SoundPage {
         page = page.child(
             Group::new(None::<String>)
                 .row(
-                    row("Application volumes")
+                    row(tr!("sound-application-volumes"))
                         .value(activity_summary(&data.streams))
                         .navigates()
                         .on_press(move |_| router.open(routes::sound_applications())),
                 )
                 .row(
-                    row("Effects")
-                        .value(preset.clone().unwrap_or_else(|| "Off".to_string()))
+                    row(tr!("sound-effects"))
+                        .value(preset.clone().unwrap_or_else(|| tr!("sound-off")))
                         .navigates()
                         .on_press(move |_| effects::open(ctx.window)),
                 )
                 .row(switch_row(
-                    "Output effects",
+                    tr!("sound-output-effects"),
                     preset.is_some(),
                     move |on: bool| {
                         set_output_effects(effects_on, overlays, on);
@@ -2205,7 +2224,7 @@ impl Component for AppSound {
         }
         let group = page_column();
         group
-            .child(Group::titled("Sound").rows(
+            .child(Group::titled(&tr!("sound-group")).rows(
                 streams.iter().map(|stream| {
                     app_row(std::slice::from_ref(*stream), data.above_100, ctx, true)
                 }),
