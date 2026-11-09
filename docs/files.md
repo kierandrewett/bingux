@@ -630,11 +630,39 @@ its winit version have no drag-and-drop source or target on Wayland.
 
 ## Drives
 
-The sidebar lists every mounted drive with a usage bar, and each USB stick,
-card and disc that is plugged in and not mounted yet, marked "Not mounted".
-Open one to mount it (through `udisksctl`, with your own rights) and enter it.
-A drive's menu has **Unmount** or **Eject**, which write everything out before
-they detach the drive and say when it is safe to remove.
+The sidebar's **Drives** section starts with the computer itself (its name,
+the whole file system and its free space), then the drives a person uses,
+each with a usage bar, then each USB stick, card and disc that is plugged in
+and not mounted yet, marked "Not mounted". Open one to mount it (through
+`udisksctl`, with your own rights) and enter it. A drive's menu has
+**Unmount** or **Eject**, which write everything out before they detach the
+drive and say when it is safe to remove.
+
+Which mounted drives are listed follows the rules GNOME Files uses, worked
+out from the mount table without GVfs:
+
+| Mounted at                                                   | Listed |
+| ------------------------------------------------------------ | ------ |
+| `/run/media/you/…`, `/media/…` (what udisks mounts)          | Yes    |
+| Inside your home folder, such as `~/Games`                   | Yes    |
+| `/mnt/…`                                                     | Yes    |
+| A network share or FUSE file system outside system folders   | Yes    |
+| A path with a hidden part, such as `/.cache` or `~/.local/…` | No     |
+| Your home folder itself, `/home`, `/boot`, `/var`, `/opt`, … | No     |
+| proc, tmpfs, overlay, squashfs and other system file systems | No     |
+
+To change the answer for one drive, add an option to its line in
+`/etc/fstab`:
+
+```text
+UUID=1234-ABCD  /data       ext4  defaults,x-gvfs-show  0 2
+server:/export  /mnt/cache  nfs4  defaults,x-gvfs-hide  0 0
+```
+
+`x-gvfs-show` lists a drive the rules would leave out; `x-gvfs-hide` (or
+`x-gdu.hide`) leaves one out. Options that `mount` keeps in
+`/run/mount/utab` count too, and a device that udisks' rules mark
+`UDISKS_IGNORE=1` (recovery and system partitions) is never listed.
 
 Copies, moves and deletes on removable media are durable: the data is on the
 device before the operation reports that it is done (see

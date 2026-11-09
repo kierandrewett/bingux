@@ -236,22 +236,41 @@ fn unescape(text: &str) -> String {
     String::from_utf8_lossy(&raw).into_owned()
 }
 
-fn user_media_roots() -> Vec<String> {
-    let user = std::env::var("USER").unwrap_or_default();
-    if user.is_empty() {
-        return vec![];
+/// Where a person's own drives are mounted, and where their home is: what
+/// [`is_listed`] needs to know about the person beyond the mount table.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Viewer {
+    /// `/run/media/$USER/` and `/media/$USER/`.
+    pub media_roots: Vec<String>,
+    /// The home folder, without a trailing slash.
+    pub home: String,
+}
+
+impl Viewer {
+    fn current() -> Viewer {
+        let user = std::env::var("USER").unwrap_or_default();
+        let media_roots = if user.is_empty() {
+            vec![]
+        } else {
+            vec![format!("/run/media/{user}/"), format!("/media/{user}/")]
+        };
+        let home = std::env::var("HOME").unwrap_or_default();
+        Viewer {
+            media_roots,
+            home: home.trim_end_matches('/').to_string(),
+        }
     }
-    vec![format!("/run/media/{user}/"), format!("/media/{user}/")]
 }
 
 /// Parse the text of `/proc/self/mountinfo` into mounts, every one of them,
 /// with `visible` telling which belong in a drive list. Sizes are
 /// [`Usage::Unknown`]. Pure: reads nothing.
 pub fn parse_mountinfo(text: &str) -> Vec<Mount> {
-    parse_with(text, &user_media_roots())
+    parse_with(text, &Viewer::current())
 }
 
-fn parse_with(text: &str, media_roots: &[String]) -> Vec<Mount> {
+fn parse_with(text: &str, viewer: &Viewer) -> Vec<Mount> {
+    let media_roots = &viewer.media_roots;
     let mut mounts: Vec<Mount> = Vec::new();
     for line in text.lines() {
         let mut fields = line.split(' ');
@@ -287,7 +306,7 @@ fn parse_with(text: &str, media_roots: &[String]) -> Vec<Mount> {
             .iter()
             .any(|root| mount_point.starts_with(root.as_str()));
         let kind = classify(&fs_type, &device, under_media);
-        let visible = is_listed(&fs_type, &device, &mount_point, kind, under_media);
+        let visible = is_listed(&fs_type, &mount_point, kind, under_media, &viewer.home);
         mounts.push(Mount {
             id,
             label: label_from_text(&mount_point, &device, kind),
@@ -358,20 +377,53 @@ fn classify(fs_type: &str, device: &str, under_media: bool) -> MountKind {
     }
 }
 
+/// Whether a mount belongs in the sidebar's drives, by the rules GLib's
+/// `g_unix_mount_guess_should_display` and udisks give Nautilus, written out
+/// here because Bingux has no GVfs:
+///
+/// * `/` is always kept: it is the Computer row.
+/// * Pseudo and system file systems (proc, tmpfs, overlay, squashfs) never.
+/// * A mount whose path has a hidden part (`/.cache`, `~/.local/share/x`)
+///   never: something mounted it for its own use.
+/// * Under `/media/` or `/run/media/` (what udisks mounts when a person
+///   plugs something in): yes.
+/// * Inside the home folder (not the home folder itself, nor `/home`): yes.
+/// * Under `/mnt/`, the place a person mounts things by hand: yes.
+/// * A network share or a FUSE file system a person mounted, anywhere but
+///   the system's own folders: yes.
+/// * Anything else (another internal partition at `/data`, `/opt`, `/srv`,
+///   a container's disk at `/.agent37`): no.
+///
+/// The `x-gvfs-show`, `x-gvfs-hide` and `x-gdu.hide` options in `/etc/fstab`
+/// and `UDISKS_IGNORE` in udev's database then override the answer
+/// ([`apply_overrides`]).
 fn is_listed(
     fs_type: &str,
-    device: &str,
     mount_point: &str,
     kind: MountKind,
     under_media: bool,
+    home: &str,
 ) -> bool {
-    if PSEUDO.contains(&fs_type) {
-        return false;
-    }
     if mount_point == "/" {
         return true;
     }
+    if PSEUDO.contains(&fs_type) {
+        return false;
+    }
+    if mount_point
+        .split('/')
+        .any(|part| part.starts_with('.') && part.len() > 1)
+    {
+        return false;
+    }
     if under_media {
+        return true;
+    }
+    if !home.is_empty()
+        && mount_point
+            .strip_prefix(home)
+            .is_some_and(|tail| tail.starts_with('/'))
+    {
         return true;
     }
     if mount_point.starts_with("/run/") {
@@ -385,13 +437,96 @@ fn is_listed(
     }) {
         return false;
     }
+    let by_hand = mount_point.starts_with("/mnt/");
     match kind {
         MountKind::Network | MountKind::Optical | MountKind::Removable => true,
-        MountKind::Local => !device.starts_with("/dev/loop") && !device.starts_with("/dev/zram"),
+        MountKind::Local => by_hand,
         // A FUSE filesystem is listed when a person is likely to have
         // mounted it (not an AppImage's own image).
-        MountKind::Other => fs_type.starts_with("fuse.") && !mount_point.starts_with("/tmp/"),
+        MountKind::Other => fs_type.starts_with("fuse.") || by_hand,
     }
+}
+
+/// What `/etc/fstab` and libmount's `/run/mount/utab` ask of a mount
+/// point's place in a file manager: `true` for `x-gvfs-show`, `false` for
+/// `x-gvfs-hide` or `x-gdu.hide`. Pure.
+pub(crate) fn display_options(fstab: &str, utab: &str) -> HashMap<String, bool> {
+    let mut wanted = HashMap::new();
+    let mut note = |target: &str, options: &str| {
+        for option in options.split(',') {
+            match option {
+                "x-gvfs-show" => {
+                    wanted.insert(unescape(target), true);
+                }
+                "x-gvfs-hide" | "x-gdu.hide" => {
+                    wanted.insert(unescape(target), false);
+                }
+                _ => {}
+            }
+        }
+    };
+    for line in fstab.lines() {
+        let line = line.trim();
+        if line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if let (Some(target), Some(options)) = (fields.get(1), fields.get(3)) {
+            note(target, options);
+        }
+    }
+    // utab lines read `SRC=… TARGET=/mnt/x ROOT=/ OPTS=x-gvfs-show,…`.
+    for line in utab.lines() {
+        let mut target = None;
+        let mut options = None;
+        for field in line.split_whitespace() {
+            if let Some(value) = field.strip_prefix("TARGET=") {
+                target = Some(value);
+            } else if let Some(value) = field.strip_prefix("OPTS=") {
+                options = Some(value);
+            }
+        }
+        if let (Some(target), Some(options)) = (target, options) {
+            note(target, options);
+        }
+    }
+    wanted
+}
+
+/// Apply what the system's configuration says over the listing rules:
+/// `options` from [`display_options`], and `ignored`, whether udev marks a
+/// device `UDISKS_IGNORE`. A pseudo file system stays hidden whatever an
+/// option says, and `/` stays listed.
+pub(crate) fn apply_overrides(
+    mounts: &mut [Mount],
+    options: &HashMap<String, bool>,
+    ignored: impl Fn((u32, u32)) -> bool,
+) {
+    for mount in mounts.iter_mut() {
+        if mount.mount_point == Path::new("/") {
+            continue;
+        }
+        let point = mount.mount_point.to_string_lossy();
+        match options.get(point.as_ref()) {
+            Some(true) => mount.visible = !PSEUDO.contains(&mount.fs_type.as_str()),
+            Some(false) => mount.visible = false,
+            None => {
+                if mount.visible
+                    && mount.device.starts_with("/dev/")
+                    && ignored(mount.device_number)
+                {
+                    mount.visible = false;
+                }
+            }
+        }
+    }
+}
+
+/// Whether udev's database marks the block device `major:minor`
+/// `UDISKS_IGNORE=1`, as udisks' rules do for recovery and system partitions.
+fn udisks_ignored(device: (u32, u32)) -> bool {
+    fs::read_to_string(format!("/run/udev/data/b{}:{}", device.0, device.1))
+        .is_ok_and(|text| text.lines().any(|line| line.trim() == "E:UDISKS_IGNORE=1"))
 }
 
 /// The label for a mount when no volume label is known: the mount point's
@@ -477,6 +612,11 @@ pub(crate) fn sysfs_removable(device_number: (u32, u32)) -> bool {
 fn read_table() -> Vec<Mount> {
     let text = fs::read_to_string("/proc/self/mountinfo").unwrap_or_default();
     let mut mounts = parse_mountinfo(&text);
+    let options = display_options(
+        &fs::read_to_string("/etc/fstab").unwrap_or_default(),
+        &fs::read_to_string("/run/mount/utab").unwrap_or_default(),
+    );
+    apply_overrides(&mut mounts, &options, udisks_ignored);
     let labels = volume_labels();
     for mount in &mut mounts {
         if !mount.visible {
@@ -1141,10 +1281,22 @@ mod tests {
 3002 42 0:150 / /mnt/nas rw shared:5 - fuse.sshfs me@nas:/srv rw,user_id=1000
 3003 42 0:151 / /mnt/enc rw shared:6 - fuse.gocryptfs gocryptfs rw
 3004 42 7:0 / /mnt/snap ro shared:7 - squashfs /dev/loop0 ro
+3005 42 253:48 / /.agent37 ro,nosuid,nodev - ext4 /dev/vdd ro
+3006 42 253:32 / /home/kieran/Games rw,relatime - ext4 /dev/vdc rw
+3007 42 253:16 / /data rw,relatime - ext4 /dev/vdb rw
+3008 42 253:64 / /mnt/backup rw,relatime - ext4 /dev/vde rw
+3009 42 0:152 / /home/kieran/.local/share/containers/x rw - fuse.fuse-overlayfs fuse-overlayfs rw
 ";
 
+    fn viewer() -> Viewer {
+        Viewer {
+            media_roots: vec!["/run/media/kieran/".to_string()],
+            home: "/home/kieran".to_string(),
+        }
+    }
+
     fn parsed() -> Vec<Mount> {
-        parse_with(SAMPLE, &["/run/media/kieran/".to_string()])
+        parse_with(SAMPLE, &viewer())
     }
 
     fn listed(mounts: &[Mount]) -> Vec<(&str, MountKind)> {
@@ -1162,15 +1314,56 @@ mod tests {
             listed(&mounts),
             [
                 ("/", MountKind::Local),
-                ("/home", MountKind::Local),
                 ("/mnt/kieran", MountKind::Network),
                 ("/run/media/kieran/My Disk", MountKind::Removable),
                 ("/run/media/kieran/DISC", MountKind::Optical),
                 ("/mnt/nas", MountKind::Network),
                 ("/mnt/enc", MountKind::Other),
+                ("/home/kieran/Games", MountKind::Local),
+                ("/mnt/backup", MountKind::Local),
             ]
         );
-        assert_eq!(mounts.len(), 15);
+        assert_eq!(mounts.len(), 20);
+    }
+
+    #[test]
+    fn the_root_is_listed_even_as_an_overlay() {
+        let mounts = parse_with(
+            "1 0 0:26 / / rw,relatime - overlay overlay rw\n\
+             2 1 253:32 / /root rw - ext4 /dev/vdc rw\n",
+            &Viewer {
+                media_roots: vec![],
+                home: "/root".to_string(),
+            },
+        );
+        // The home folder itself is reached through Home, not as a drive.
+        assert_eq!(listed(&mounts), [("/", MountKind::Local)]);
+    }
+
+    #[test]
+    fn fstab_and_udev_override_the_rules() {
+        let options = display_options(
+            "# comment x-gvfs-show\n\
+             UUID=1 /data ext4 defaults,x-gvfs-show 0 2\n\
+             192.168.0.39:/ /mnt/kieran nfs4 x-gvfs-hide 0 0\n\
+             /dev/sdb1 /run/media/kieran/My\\040Disk vfat x-gdu.hide 0 0\n",
+            "SRC=/dev/vde TARGET=/mnt/backup ROOT=/ OPTS=x-gvfs-hide\n",
+        );
+        let mut mounts = parsed();
+        apply_overrides(&mut mounts, &options, |device| {
+            device == (8, 17) || device == (253, 32)
+        });
+        let shown: Vec<&str> = listed(&mounts).into_iter().map(|(at, _)| at).collect();
+        assert_eq!(
+            shown,
+            [
+                "/",
+                "/run/media/kieran/DISC",
+                "/mnt/nas",
+                "/mnt/enc",
+                "/data",
+            ]
+        );
     }
 
     #[test]
@@ -1247,7 +1440,7 @@ mod tests {
     fn a_usb_disk_mounted_by_hand_is_removable_by_the_kernel_flag() {
         // Not under /run/media, so the mount table alone says Local.
         let text = "70 42 8:33 / /mnt/usbdisk rw,relatime shared:9 - ext4 /dev/sdc1 rw\n";
-        let mounts = parse_with(text, &[]);
+        let mounts = parse_with(text, &Viewer::default());
         let reason = |hotplug: bool| {
             write_target_in(Path::new("/mnt/usbdisk/a"), &mounts, |_| hotplug).map(|t| t.reason)
         };
@@ -1259,7 +1452,7 @@ mod tests {
     fn fat_exfat_and_ntfs_are_flushed_even_when_internal() {
         for fs_type in ["vfat", "exfat", "ntfs3", "fuseblk"] {
             let text = format!("71 42 8:34 / /mnt/data rw shared:9 - {fs_type} /dev/sdd1 rw\n");
-            let mounts = parse_with(&text, &[]);
+            let mounts = parse_with(&text, &Viewer::default());
             let target = write_target_in(Path::new("/mnt/data/x"), &mounts, |_| false);
             assert_eq!(
                 target.map(|t| t.reason),
