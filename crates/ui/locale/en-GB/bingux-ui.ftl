@@ -1391,3 +1391,9 @@ ui-files-places-bookmarks = Bookmarks
 ui-files-places-drives = Drives
 # $size (String) - the size of a drive that is not mounted
 ui-files-places-not-mounted = Not mounted · { $size }
+ui-files-place-desktop = Desktop
+ui-files-place-documents = Documents
+ui-files-place-downloads = Downloads
+ui-files-place-music = Music
+ui-files-place-pictures = Pictures
+ui-files-place-videos = Videos

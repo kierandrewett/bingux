@@ -85,6 +85,7 @@ mod fake {
 
     use super::{CommandError, CommandResult, TIMEOUT};
     use crate::system;
+    use bingux_ui::prelude::tr;
 
     const INTERFACE: &str = "org.gnome.desktop.interface";
 

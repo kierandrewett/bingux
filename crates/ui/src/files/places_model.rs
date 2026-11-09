@@ -59,6 +59,32 @@ pub(crate) struct Section {
     pub items: Vec<Item>,
 }
 
+/// The row's label: the standard places the backend names in English
+/// (Recent, Home, the user folders, Trash) are read from the catalogue, so they
+/// follow the language. A name that is anything else (a bookmark, a user folder
+/// the person renamed or the desktop already localised) is shown as it is.
+fn place_label(place: &Place) -> String {
+    let named = |english: &str, text: String| {
+        if place.name == english {
+            text
+        } else {
+            place.name.clone()
+        }
+    };
+    match place.kind {
+        PlaceKind::Recent => named("Recent", crate::tr!("ui-files-root-recent")),
+        PlaceKind::Home => named("Home", crate::tr!("ui-files-root-home")),
+        PlaceKind::Trash => named("Trash", crate::tr!("ui-files-root-trash")),
+        PlaceKind::Desktop => named("Desktop", crate::tr!("ui-files-place-desktop")),
+        PlaceKind::Documents => named("Documents", crate::tr!("ui-files-place-documents")),
+        PlaceKind::Downloads => named("Downloads", crate::tr!("ui-files-place-downloads")),
+        PlaceKind::Music => named("Music", crate::tr!("ui-files-place-music")),
+        PlaceKind::Pictures => named("Pictures", crate::tr!("ui-files-place-pictures")),
+        PlaceKind::Videos => named("Videos", crate::tr!("ui-files-place-videos")),
+        _ => place.name.clone(),
+    }
+}
+
 /// The groups, in the order a person looks for them: the places they use
 /// every day, then their bookmarks, then the drives.
 ///
@@ -81,7 +107,7 @@ pub(crate) fn sections(
     };
     let place_item = |place: &Place, kind: ItemKind| Item {
         icon: FileIcon::for_place(place),
-        label: place.name.clone(),
+        label: place_label(place),
         target: match &place.path {
             Some(path) => Where::Folder(path.clone()),
             None => Where::Recent,

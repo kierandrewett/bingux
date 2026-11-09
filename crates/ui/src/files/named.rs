@@ -311,10 +311,17 @@ impl Roots {
             Where::Folder(path) => path,
         };
         let Some((trash, below)) = self.trash.as_deref().zip(self.below_trash(path)) else {
+            // The first crumb is Home or Computer, which the backend names in
+            // English: the catalogue names them here.
             return location::crumbs(path, &self.home)
                 .into_iter()
-                .map(|crumb| Stop {
-                    label: crumb.label,
+                .enumerate()
+                .map(|(index, crumb)| Stop {
+                    label: match index {
+                        0 if crumb.path == self.home => Root::Home.name(),
+                        0 if crumb.path == Path::new("/") => Root::Computer.name(),
+                        _ => crumb.label,
+                    },
                     at: Where::Folder(crumb.path),
                 })
                 .collect();
