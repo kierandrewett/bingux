@@ -56,6 +56,22 @@ pub(crate) struct Target<W> {
     pub id: W,
     pub title: String,
     pub layout: StripLayout,
+    /// The place every drop on this window takes, whatever tab the pointer is
+    /// over: a window of one tab hides its strip, so its header is the strip
+    /// and a tab dropped there goes after the one it has ([`header_strip`]).
+    pub end: Option<usize>,
+}
+
+/// The strip of a window whose tab bar is hidden (it has one tab): the band
+/// across the top of the window, `width` wide and `height` (a header bar) tall.
+/// Dropped there, a tab goes at the end; the window then shows its strip,
+/// with the marker, as the drop's preview.
+pub(crate) fn header_strip(width: f32, height: f32, rtl: bool) -> StripLayout {
+    StripLayout {
+        rail: (0.0, 0.0, width, height),
+        spans: Vec::new(),
+        rtl,
+    }
 }
 
 /// Where the pointer of a window being moved is, and which strip it is over.
@@ -91,7 +107,12 @@ pub(crate) fn hover<W: Copy>(
             target
                 .layout
                 .accepts(local.0, local.1, frame.width, slack)
-                .then(|| (target.id, target.layout.index_at(local.0)))
+                .then(|| {
+                    let at = target
+                        .end
+                        .unwrap_or_else(|| target.layout.index_at(local.0));
+                    (target.id, at)
+                })
         })
 }
 
@@ -269,13 +290,29 @@ fn tick() -> bool {
     let Some(title) = windows::find(dragged).map(|window| window.title.borrow().clone()) else {
         return true;
     };
+    let header = crate::style::Dim::Header.px();
     let targets: Vec<Target<WindowId>> = windows::all()
         .into_iter()
         .filter(|window| window.id != dragged)
-        .map(|window| Target {
-            id: window.id,
-            title: window.title.borrow().clone(),
-            layout: window.probe.layout(),
+        .map(|window| {
+            let shown = window.probe.layout();
+            // A window of one tab has no strip on show (and its probe may
+            // hold the strip of when it had two): its header takes the tab.
+            let count = window.tabs.count();
+            let (layout, end) = if count < 2 {
+                (
+                    header_strip(window.size.get().0, header, shown.rtl),
+                    Some(count),
+                )
+            } else {
+                (shown, None)
+            };
+            Target {
+                id: window.id,
+                title: window.title.borrow().clone(),
+                layout,
+                end,
+            }
         })
         .collect();
     // What is not known (the first answer is not in, or the compositor has
@@ -435,7 +472,42 @@ mod tests {
             id,
             title: title.into(),
             layout: strip(),
+            end: None,
         }
+    }
+
+    #[test]
+    fn a_window_of_one_tab_takes_a_drop_anywhere_on_its_header_at_the_end() {
+        let frames = [
+            frame("A \u{2013} Files", 0.0, 0.0, 600.0, 400.0),
+            frame("B \u{2013} Files (2)", 700.0, 0.0, 600.0, 400.0),
+        ];
+        // B shows one tab: no strip, and its probe may still hold the strip
+        // of when it had two. Its header is the strip.
+        let header = header_strip(600.0, 48.0, false);
+        let height = header.rail.3;
+        let targets = [Target {
+            id: 2,
+            title: "B \u{2013} Files (2)".into(),
+            layout: header,
+            end: Some(1),
+        }];
+        let at = |x: f32, y: f32| hover(&frames, 7, "A \u{2013} Files", (700.0 + x, y), &targets);
+        assert_eq!(
+            at(10.0, height / 2.0),
+            Some((2, 1)),
+            "the left of the header"
+        );
+        assert_eq!(
+            at(590.0, height / 2.0),
+            Some((2, 1)),
+            "the right of the header"
+        );
+        assert_eq!(
+            at(300.0, height * 3.0),
+            None,
+            "the page under it is not a strip"
+        );
     }
 
     #[test]
@@ -578,6 +650,7 @@ mod tests {
             id: 2_u8,
             title: DOCS.into(),
             layout: strip,
+            end: None,
         }];
         let frames = [
             frame(HOME, 1855.0, 78.0, 640.0, 420.0),

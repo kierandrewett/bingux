@@ -34,6 +34,9 @@ pub(crate) trait Carrier {
     /// Put tabs (`Vec<Moved<P>>`, boxed) in at `at`. False when they are not
     /// this window's kind.
     fn insert_moved(&self, at: usize, tabs: Box<dyn Any>) -> bool;
+
+    /// How many tabs the window has.
+    fn count(&self) -> usize;
 }
 
 impl<P: TabContent> Carrier for State<TabSet<P>> {
@@ -50,6 +53,10 @@ impl<P: TabContent> Carrier for State<TabSet<P>> {
         let mut set = *self;
         set.write().insert_moved(at, *tabs);
         true
+    }
+
+    fn count(&self) -> usize {
+        self.peek().tabs().len()
     }
 }
 
