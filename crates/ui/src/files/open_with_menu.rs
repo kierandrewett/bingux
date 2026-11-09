@@ -51,9 +51,11 @@ pub fn open_with_items(
     })
 }
 
-/// Open `path` in the application the system names for its type.
-pub fn open_in_default_application(path: &Path) -> io::Result<()> {
-    open_default(path)
+/// Open `path` in the application the system names for its type. It returns
+/// at once; `failed` is called on the UI thread with what went wrong when
+/// nothing could open the file.
+pub fn open_in_default_application(path: &Path, failed: impl FnOnce(String) + 'static) {
+    open_default(path, failed)
 }
 
 /// Show `path` in its folder, selected, in the Bingux file manager; when that

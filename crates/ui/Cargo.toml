@@ -18,7 +18,7 @@ chat-icons = []
 # `bingux_ui::location`: where the computer is, from the desktop's location
 # portal or the network address. It carries an HTTPS client and a D-Bus client,
 # so an application that does not ask where it is leaves it off.
-location = ["dep:ureq", "dep:zbus"]
+location = ["dep:ureq"]
 
 [dependencies]
 # `gif`: the picture viewer plays animated GIFs.
@@ -51,9 +51,8 @@ toml = "1"
 # with its own time limit. Already in the build through Freya's accessibility.
 zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
 
-# `location` only: the portal over D-Bus (blocking, on a thread of its own) and
-# the keyless lookups over HTTPS.
-zbus = { version = "5.13", default-features = false, features = ["async-io", "blocking-api"], optional = true }
+# `location` only: the keyless lookups over HTTPS. The location portal uses the
+# `zbus` above (blocking, on a thread of its own).
 ureq = { version = "3", optional = true }
 
 [dev-dependencies]
