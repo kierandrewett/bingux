@@ -1,3 +1,4 @@
+// harness: tests/capture-notify-live.py
 import QtQuick
 import Quickshell
 import Quickshell.Io

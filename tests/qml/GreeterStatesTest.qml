@@ -98,4 +98,9 @@ ShellRoot {
             }
         }
     }
+    Timer {
+        interval: 6000
+        running: true
+        onTriggered: console.warn("GREETER_STATES_DONE")
+    }
 }

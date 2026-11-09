@@ -44,4 +44,9 @@ ShellRoot {
             WlrLayershell.layer: WlrLayer.Overlay
         }
     }
+    Timer {
+        interval: 6000
+        running: true
+        onTriggered: console.warn("DOCK_EMPTY_EDIT_DONE")
+    }
 }
