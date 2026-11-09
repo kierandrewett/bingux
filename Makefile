@@ -66,6 +66,7 @@ apps:
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/files/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/calculator/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/weather/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/text-editor/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) build --locked --release -j $(JOBS) --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 
@@ -217,6 +218,8 @@ check: doctor-build native daemons
 	$(CARGO) test --locked --manifest-path services/preview-host/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path crates/search/Cargo.toml
 	$(CARGO) test --locked --manifest-path crates/data-usage/Cargo.toml
+	$(CARGO) test --locked --manifest-path crates/text/Cargo.toml --target-dir $(CARGO_TARGET)
+	$(CARGO) test --locked --manifest-path apps/text-editor/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(CARGO) test --locked --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(MAKE) layout-check overflow-check state-check
 	$(MAKE) copy-check pixel-check stability-check motion-check

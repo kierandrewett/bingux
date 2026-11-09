@@ -93,8 +93,9 @@ doc bingux-settings settings.md
 doc bingux-files files.md
 doc bingux-calculator calculator.md
 doc bingux-weather weather.md
+doc bingux-text-editor text-editor.md
 doc bingux-taxonomy bingux-ui.md
-for package in bingux bingux-settings bingux-files bingux-weather bingux-calculator bingux-taxonomy; do
+for package in bingux bingux-settings bingux-files bingux-text-editor bingux-weather bingux-calculator bingux-taxonomy; do
     install -Dm644 COPYING "$PREFIX_DIR/usr/share/licenses/$package/COPYING"
 done
 # Quickshell is inside the bingux-shell binary; its licence is LGPL.

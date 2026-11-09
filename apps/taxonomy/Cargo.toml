@@ -18,7 +18,9 @@ path = "src/main.rs"
 freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
 # `testing` is always on: `bingux-taxonomy --snapshot DIR` renders every page
 # headlessly (see src/snapshot_mode.rs).
-bingux-ui = { path = "../../crates/ui", features = ["testing"] }
+bingux-ui = { path = "../../crates/ui", features = ["testing", "syntax"] }
+# The text engine, for the text editing specimens.
+bingux-text = { path = "../../crates/text" }
 # A PDF and a WAV written byte by byte, for the preview specimens.
 bingux-preview-core = { path = "../../crates/preview-core" }
 

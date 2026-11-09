@@ -23,6 +23,9 @@ file operations with undo. It opens folders and bingux-files:// addresses.""",
 Weather shows the conditions now, the next 24 hours and ten days for where the computer is and for the cities you add:
 UV index, wind, sunrise and sunset, the moon, humidity, pressure, visibility and the air quality. Data is by Open-Meteo.com
 (CC BY 4.0); it needs no account and no key.""",
+    "bingux-text-editor": """Text and code editor for the Bingux desktop
+Text Editor edits plain text and code in tabs, with colours for about 200 languages, find and replace, any encoding
+and line ending, a Markdown preview and drafts that keep unsaved text across restarts.""",
     "bingux-taxonomy": """Reference window for the Bingux UI components
 Taxonomy shows every component, icon and design token of the Bingux UI library in a running window. It is a
 development tool for people who build Bingux applications; ordinary desktops do not need it.""",
@@ -49,6 +52,11 @@ DEPENDS = {
         "archlinux": ["shared-mime-info", "xdg-utils", "glib2"],
     },
     "bingux-weather": {"rpm": ["xdg-utils"], "deb": ["xdg-utils"], "archlinux": ["xdg-utils"]},
+    "bingux-text-editor": {
+        "rpm": ["shared-mime-info", "xdg-utils"],
+        "deb": ["shared-mime-info", "xdg-utils"],
+        "archlinux": ["shared-mime-info", "xdg-utils"],
+    },
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
 
@@ -109,6 +117,11 @@ RECOMMENDS = {
             "xdg-desktop-portal: the portal that asks for the position",
         ],
     },
+    "bingux-text-editor": {
+        "rpm": ["adwaita-sans-fonts", "adwaita-mono-fonts"],
+        "deb": [],
+        "archlinux": ["adwaita-fonts: the Adwaita Sans and Mono fonts"],
+    },
     "bingux-taxonomy": {
         "rpm": ["adwaita-sans-fonts"],
         "deb": [],
@@ -122,6 +135,7 @@ SUGGESTS = {
     "bingux-calculator": {"rpm": [], "deb": [], "archlinux": []},
     "bingux-files": {"rpm": ["bingux-settings"], "deb": ["bingux-settings"], "archlinux": []},
     "bingux-weather": {"rpm": [], "deb": [], "archlinux": []},
+    "bingux-text-editor": {"rpm": ["bingux-files"], "deb": ["bingux-files"], "archlinux": []},
     "bingux-taxonomy": {"rpm": [], "deb": [], "archlinux": []},
 }
 

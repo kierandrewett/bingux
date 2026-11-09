@@ -13,6 +13,8 @@ CRATE_DIRS = {
     "bingux-calculator-app": "apps/calculator",
     "bingux-calc": "crates/calc",
     "bingux-weather-app": "apps/weather",
+    "bingux-text-editor": "apps/text-editor",
+    "bingux-text": "crates/text",
     "bingux-taxonomy": "apps/taxonomy",
     "bingux-ui": "crates/ui",
     "bingux-files": "crates/files",

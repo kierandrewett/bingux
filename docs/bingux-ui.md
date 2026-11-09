@@ -2412,6 +2412,99 @@ cannot be selected there. While a search marks words in a text, it is a
 paragraph with the marks instead, so it is not selectable until the search
 clears.
 
+## Text editor
+
+`bingux_ui::text_editor` is the multi-line editor: SwiftUI's `TextEditor`
+with what a programmer expects. The engine is the `bingux-text` crate (a rope,
+carets and selections, grouped undo, find, encodings, languages and
+highlighting, no UI); this module draws it and turns keys and pointer presses
+into its commands. The Text Editor app (`docs/text-editor.md`) is built on it,
+and any app that edits more than a line (notes, a log viewer, a config
+editor) uses the same pieces.
+
+```rust
+use bingux_text::Editor;
+use bingux_ui::text_editor::{find_bar, text_editor, use_editor, use_find};
+
+let doc = use_editor(|| Editor::new("hello"));
+let find = use_find();
+rect()
+    .maybe_child(find.open.read().then(|| find_bar(find, doc.clone())))
+    .child(match find.marks() {
+        Some((hits, current)) => text_editor(doc.clone()).matches(hits, current),
+        None => text_editor(doc.clone()),
+    })
+```
+
+| Piece                                  | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `EditorHandle`                         | One document: the `Editor`, a signal that redraws its views, and what the view remembers (scroll position, highlighting). `use_editor(init)` makes one for a component; `EditorHandle::new(editor, signal)` makes one an app keeps (a window of tabs gives all its documents one `State<u64>`). `.read()` subscribes, `.peek()` does not, `.update(f)` changes and redraws, `.scroll()` and `.set_scroll(ScrollPos)` save and restore the place. |
+| `text_editor(handle)`                  | The surface. `.line_numbers`, `.wrap`, `.show_whitespace` (`·` and `→`), `.highlight_line`, `.read_only`, `.syntax_highlighting`, `.zoom(factor, on_zoom)`, `.matches(hits, current)`, `.placeholder(text)` for an empty document, `.label(text)` for assistive technology, `.menu_extra(items)` after Cut, Copy, Paste and Select all.                                                                                                          |
+| `use_find()`, `find_bar(find, handle)` | Find and replace: a query with Match case, Whole words and Regular expression (toggles on a desktop, one menu on a phone), the count (`3 of 12`, `No results`, `10,000+`), previous and next, and a replace row with Replace and Replace all (one undo step). A large document is searched on a worker over a snapshot of the rope.                                                                                                              |
+| `go_to_line_bar(handle, open)`         | Go to `120`, `120:8`, `+5` or `-5`.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `markdown_view(source)`                | Markdown drawn with the type ramp: headings, emphasis, code, lists and task lists, quotes, tables and fenced code highlighted in its language. `.follow(line)` keeps the block of a source line in sight; `.on_link(f)` opens a link.                                                                                                                                                                                                            |
+| `keymap`                               | The keys and the commands: `command_for(key, modifiers)` and `run(editor, command, page_rows, read_only)`, pure and tested.                                                                                                                                                                                                                                                                                                                      |
+| `SyntaxPalette`                        | The colours of highlighted code for the current tokens: a hue a kind of text (keywords pink, strings orange, numbers violet, types teal, functions blue, comments grey italic) lifted to 4.5:1 on the background and the current-line band, so it follows light and dark.                                                                                                                                                                        |
+
+**Drawing.** The view is a grid of monospace cells. Each frame it lays out
+only the rows on screen, from the row at the top down, and draws the
+current-line band, find hits, selections, the bracket at the caret and its
+match, the text, then the carets (a component of their own, so a blink
+redraws only them). Wrapping is the engine's (`bingux_text::layout`): a row
+breaks after a space, a tab runs to the next stop, a wide character takes two
+cells and a control character shows as its picture. A line over 10,000
+characters is laid out a cell a character without reading its text, and only
+its visible part is drawn, so a minified file or a 100 MB log scrolls like a
+short one. Highlighting is lazy: the parser keeps its state every 64 lines
+and parses at most 1,500 lines a frame toward the screen; a document over
+`HIGHLIGHT_LIMIT` (8 MB) is drawn plain. The scroll position is the top line,
+its wrapped row and an offset, so nothing sums the heights of a million lines;
+the scroll bar's thumb is placed by line.
+
+**Keys.**
+
+| Keys                                                                      | Do                                                                                                           |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| arrows, Home, End, Page Up, Page Down, Ctrl+Home, Ctrl+End; with Shift    | move; select                                                                                                 |
+| Ctrl+Left, Ctrl+Right                                                     | by words                                                                                                     |
+| Home                                                                      | the first character after the indentation, then the line's start (on a wrapped row, the row's start first)   |
+| Backspace, Delete; Ctrl+Backspace, Ctrl+Delete; Ctrl+Shift+Backspace      | a character (a whole grapheme, a level of space indentation, an empty pair); a word; to the line's start     |
+| Enter; Ctrl+Enter; Ctrl+Shift+Enter                                       | a new line at this line's indentation, one level deeper after an opening bracket; a line below; a line above |
+| Tab, Shift+Tab                                                            | indent or outdent the selected lines, or indent to the next stop at the caret                                |
+| Ctrl+Z; Ctrl+Shift+Z, Ctrl+Y                                              | undo, a burst of typing at a time; redo                                                                      |
+| Ctrl+X, Ctrl+C, Ctrl+V                                                    | cut, copy, paste; with nothing selected, the whole line, pasted above the caret's line                       |
+| Ctrl+A; Ctrl+L                                                            | select all; select the line, again for the next                                                              |
+| Ctrl+D; Ctrl+Shift+K                                                      | duplicate the line or the selection; delete the line                                                         |
+| Alt+Up, Alt+Down                                                          | move the line                                                                                                |
+| Ctrl+J; Ctrl+/; Ctrl+M                                                    | join the next line; comment or uncomment; go to the matching bracket                                         |
+| Ctrl+Alt+Up, Ctrl+Alt+Down; Ctrl+Shift+D; Ctrl+Shift+L, Alt+F3; Alt+click | a caret above or below; the next occurrence; every occurrence; add or remove a caret                         |
+| Escape                                                                    | back to one caret, then drop the selection, then the window's                                                |
+| Ctrl+=, Ctrl+-, Ctrl+0, Ctrl with the wheel                               | zoom (the view asks `on_zoom`)                                                                               |
+
+Typing an opening bracket or a quote adds its closer (not a quote after a
+letter, so "don't" stays as typed), typing the closer steps over it, a
+selection is wrapped in the pair, and a closing bracket typed on an empty
+line goes back to its opener's indentation. A double click selects a word, a
+triple click a line, a drag in the gutter whole lines, and a drag past the top
+or bottom scrolls. Keys the editor does not use (Ctrl+S, Ctrl+F, Ctrl+Tab) go
+on to the window.
+
+**Input methods.** The keyboard focus is a caret-sized node that moves with
+the primary caret, with the `MultilineTextInput` role and the caret's line as
+its value. Freya places the input method's window at the focused node, so the
+candidate list opens at the caret instead of the editor's corner; the text
+being composed is drawn underlined at the caret. This is a workaround until
+Freya takes a caret rectangle from the focused element.
+
+### Held modifier keys
+
+A wheel, pointer or touch event carries no modifier keys. `input::held_modifiers()`
+reads the window's keyboard now (`ctrl_held()`, `shift_held()` and `alt_held()`
+are the common questions): Ctrl with the wheel zooms, Shift with the wheel
+scrolls sideways, Shift with a click extends a selection and Alt with a click
+adds a caret. No component keeps its own copy of the keys from key-down and
+key-up, which misses a key pressed while another window had the focus.
+
 ## Direction
 
 A window reads left to right or right to left, and the engine does the mirroring, as a

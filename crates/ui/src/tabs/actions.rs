@@ -39,6 +39,9 @@ pub struct Tabs<P: TabContent> {
     window: Window,
     overlays: Overlays,
     guard: fn() -> Option<CloseWarning>,
+    /// A tab whose content this says has unsaved work is not closed: its id
+    /// goes to the list, for the application to ask about.
+    tab_guard: Option<(fn(&P) -> bool, State<Vec<u64>>)>,
 }
 
 impl<P: TabContent> Clone for Tabs<P> {
@@ -62,6 +65,7 @@ impl<P: TabContent> Tabs<P> {
             window,
             overlays,
             guard: nothing_to_lose,
+            tab_guard: None,
         }
     }
 
@@ -70,6 +74,30 @@ impl<P: TabContent> Tabs<P> {
     pub fn guard(mut self, guard: fn() -> Option<CloseWarning>) -> Self {
         self.guard = guard;
         self
+    }
+
+    /// Ask before a tab with unsaved work closes. When `unsaved` says a tab
+    /// has some, closing it (its close button, a middle click, Ctrl+W, Close
+    /// other tabs) adds its id to `asks` instead. The application shows its
+    /// question for the ids there ("Save changes to “Notes”?"), removes them,
+    /// and closes the tabs it may with [`Tabs::close_now`]. A text editor
+    /// uses it; Files does not, as a folder has nothing to save.
+    pub fn guard_tabs(mut self, unsaved: fn(&P) -> bool, asks: State<Vec<u64>>) -> Self {
+        self.tab_guard = Some((unsaved, asks));
+        self
+    }
+
+    /// Whether closing tab `id` must ask first; if so, its id is added to
+    /// the guard's list.
+    fn held_back(self, id: u64) -> bool {
+        let Some((unsaved, mut asks)) = self.tab_guard else {
+            return false;
+        };
+        let held = self.set.peek().content(id).is_some_and(unsaved);
+        if held && !asks.peek().contains(&id) {
+            asks.write().push(id);
+        }
+        held
     }
 
     /// The tabs.
@@ -94,8 +122,17 @@ impl<P: TabContent> Tabs<P> {
     }
 
     /// Close a tab. The tab that takes the selection is the neighbour to its
-    /// right, else the one to its left; the last tab closes the window.
-    pub fn close(mut self, id: u64) {
+    /// right, else the one to its left; the last tab closes the window. A tab
+    /// the guard of [`Tabs::guard_tabs`] holds back is asked about instead.
+    pub fn close(self, id: u64) {
+        if self.held_back(id) {
+            return;
+        }
+        self.close_now(id);
+    }
+
+    /// Close a tab without asking the guard: after the person answered.
+    pub fn close_now(mut self, id: u64) {
         let closed = {
             let set = self.set.peek();
             set.ids().contains(&id).then_some(set.len() == 1)
@@ -138,7 +175,12 @@ impl<P: TabContent> Tabs<P> {
     /// Close the tabs of a menu's *Close other tabs* or *Close tabs to the
     /// right*.
     pub fn close_many(mut self, ids: &[u64]) {
-        self.set.write().close_many(ids);
+        let free: Vec<u64> = ids
+            .iter()
+            .copied()
+            .filter(|id| !self.held_back(*id))
+            .collect();
+        self.set.write().close_many(&free);
     }
 
     /// Open a copy of a tab beside it.

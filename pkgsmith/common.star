@@ -35,6 +35,7 @@ LICENSES = {
     "bingux-files": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-calculator": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-weather": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND CDLA-Permissive-2.0 AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
+    "bingux-text-editor": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-settings": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
     "bingux-taxonomy": "Apache-2.0 AND BSD-2-Clause AND BSD-3-Clause AND GPL-3.0-or-later AND ISC AND MIT AND Unicode-3.0 AND Zlib",
 }
@@ -46,6 +47,7 @@ APPS = {
     "bingux-files": {"id": "dev.drewett.bingux.Files", "extra": []},
     "bingux-calculator": {"id": "dev.drewett.bingux.Calculator", "extra": []},
     "bingux-weather": {"id": "dev.drewett.bingux.Weather", "extra": []},
+    "bingux-text-editor": {"id": "dev.drewett.bingux.TextEditor", "extra": []},
     "bingux-taxonomy": {"id": "dev.drewett.bingux.Taxonomy", "extra": []},
 }
 

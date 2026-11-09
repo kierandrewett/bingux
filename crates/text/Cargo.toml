@@ -1,0 +1,38 @@
+[package]
+name = "bingux-text"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Bingux text engine: a rope with selections, undo, search, encodings, languages and highlighting; no UI"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["syntax"]
+# Syntax highlighting with syntect and the bat syntax set (two-face), pure Rust
+# regexes. Without it every line is plain text and the language is still found.
+syntax = ["dep:syntect", "dep:two-face"]
+
+[dependencies]
+# The text itself: a rope, so an edit anywhere in a 100 MB file is a few
+# microseconds and a snapshot for a background search is a pointer copy.
+ropey = "1.6"
+# Decoding and encoding every WHATWG encoding, and guessing a legacy one.
+encoding_rs = "0.8"
+chardetng = "0.1"
+regex = { version = "1", default-features = false, features = ["std", "perf", "unicode"] }
+memchr = "2"
+unicode-segmentation = "1"
+unicode-width = "0.2"
+# The Markdown preview's model.
+pulldown-cmark = { version = "0.13", default-features = false }
+syntect = { version = "5.2", default-features = false, features = ["parsing", "regex-fancy", "dump-load"], optional = true }
+two-face = { version = "0.4", default-features = false, features = ["syntect-fancy"], optional = true }
+
+[profile.dev]
+panic = "unwind"
+
+[profile.release]
+panic = "unwind"

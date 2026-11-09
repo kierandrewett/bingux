@@ -18,3 +18,4 @@ pub mod navigation;
 pub mod platform;
 pub mod transfer;
 pub mod table;
+pub mod text;

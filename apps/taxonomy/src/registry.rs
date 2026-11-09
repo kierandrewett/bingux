@@ -9,7 +9,7 @@
 use crate::demos::transfer;
 use crate::demos::{
     accessibility, buttons, commands, containers, data, feedback, files, formats, foundations,
-    icon_set, inputs, inspector, navigation, platform, table,
+    icon_set, inputs, inspector, navigation, text, platform, table,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -294,7 +294,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Tabs",
         category: Category::Controls,
         page: "Selection",
-        api: "HeaderBar::tab_slot(strip) holds tab_strip(Vec<TabItem::new(id, title).icon(Icon)>, selected).on_select(f).on_close(f).on_close_many(f).on_duplicate(f).on_reopen(available, f).on_new(f).on_reorder(f).on_hover(f).drop_target(Option<u64>).on_detach(f: Detach { id, pointer, press, grab, released }).insertion(Option<usize>).probe(&StripProbe).fill(bool) (tabs share the whole bar, for a tab bar of its own under a toolbar, as Files has); StripProbe::layout() -> StripLayout { rail, spans, rtl }.index_at(x) / .boundary(index) / .accepts(x, y, right, slack); TearGate::new(strip).update(away(y, top, bottom)) -> Pull::{Docked, Armed, Torn} at ARM_AT, DISARM_AT, TEAR_AT (LONE_SLOP for a lone tab); tab_close::selection_after_close(ids, closed, selected) -> Option<u64>; tab_close::others(ids, keep); tab_close::to_the_left(ids, of); tab_close::to_the_right(ids, of); mirrored in a right-to-left interface. Behind the strip, bingux_ui::tabs: TabSet::<P: TabContent>::new(first) / open(P) / duplicate(id) / select(id) / close(id) -> Closed / close_many(ids) / reopen() / step(by) / nth(i) / reorder(id, to) / update(id, f) / detach(id) / detach_others(keep) / detach_all() / insert_moved(at, Vec<Moved<P>>) / adopt(Vec<Moved<P>>, on_show) (CLOSED_TABS_KEPT closed tabs are remembered in ClosedTabs<P>); Tabs::new(set, use_window(), use_overlays()).guard(fn() -> Option<CloseWarning>) gives .strip(tab_items(tabs, titles, icon), &TabWindow, new_tab) / .shortcuts(new_tab) / .menu_items(new_tab) / .open / .close / .update_if; use_tab_window(set, title) -> TabWindow { .root(rect()) .insertion() .probe() .sized(w, h) .ghosted() } makes the window one of the application's (GHOST_OPACITY while carried); Birth<P>::into_set() is the set of a window opened for torn-off tabs",
+        api: "HeaderBar::tab_slot(strip) holds tab_strip(Vec<TabItem::new(id, title).icon(Icon)>, selected).on_select(f).on_close(f).on_close_many(f).on_duplicate(f).on_reopen(available, f).on_new(f).on_reorder(f).on_hover(f).drop_target(Option<u64>).on_detach(f: Detach { id, pointer, press, grab, released }).insertion(Option<usize>).probe(&StripProbe).fill(bool) (tabs share the whole bar, for a tab bar of its own under a toolbar, as Files has); StripProbe::layout() -> StripLayout { rail, spans, rtl }.index_at(x) / .boundary(index) / .accepts(x, y, right, slack); TearGate::new(strip).update(away(y, top, bottom)) -> Pull::{Docked, Armed, Torn} at ARM_AT, DISARM_AT, TEAR_AT (LONE_SLOP for a lone tab); tab_close::selection_after_close(ids, closed, selected) -> Option<u64>; tab_close::others(ids, keep); tab_close::to_the_left(ids, of); tab_close::to_the_right(ids, of); mirrored in a right-to-left interface. Behind the strip, bingux_ui::tabs: TabSet::<P: TabContent>::new(first) / open(P) / duplicate(id) / select(id) / close(id) -> Closed / close_many(ids) / reopen() / step(by) / nth(i) / reorder(id, to) / update(id, f) / detach(id) / detach_others(keep) / detach_all() / insert_moved(at, Vec<Moved<P>>) / adopt(Vec<Moved<P>>, on_show) (CLOSED_TABS_KEPT closed tabs are remembered in ClosedTabs<P>); Tabs::new(set, use_window(), use_overlays()).guard(fn() -> Option<CloseWarning>).guard_tabs(fn(&P) -> bool, State<Vec<u64>>) (a tab with unsaved work is held back and its id listed for the app's question, then closed with .close_now(id)) gives .strip(tab_items(tabs, titles, icon), &TabWindow, new_tab) / .shortcuts(new_tab) / .menu_items(new_tab) / .open / .close / .close_now / .update_if; use_tab_window(set, title) -> TabWindow { .root(rect()) .insertion() .probe() .sized(w, h) .ghosted() } makes the window one of the application's (GHOST_OPACITY while carried); Birth<P>::into_set() is the set of a window opened for torn-off tabs",
         doc: "components",
         covers: &[
             "TabItem",
@@ -1057,6 +1057,67 @@ pub static ENTRIES: &[Entry] = &[
         doc: "locale",
         covers: &["Locale", "Category"],
         body: Body::States(formats::LOCALE),
+    },
+    // ---- Controls: Text editing ---------------------------------------------
+    Entry {
+        name: "Text editor",
+        category: Category::Controls,
+        page: "Text editing",
+        api: "text_editor(EditorHandle).line_numbers(bool).wrap(bool).show_whitespace(bool).highlight_line(bool).read_only(bool).syntax_highlighting(bool).zoom(f32, on_zoom(ZoomStep)).matches(Rc<Matches>, current).placeholder(text).label(text).a11y_id(id).menu_extra(items).on_focus_change(f); use_editor(|| Editor) or EditorHandle::new(Editor, State<u64>) with .read() / .peek() / .update(f) / .scroll() / .set_scroll(ScrollPos) / .shown_lines(); keymap::command_for(key, modifiers) -> Command, keymap::run(editor, command, page_rows, read_only) -> Effect; select_all_occurrences(editor); SyntaxPalette::new(tokens).ink(TokenKind); caret_caption(editor), status_caption(tokens, text); documents over HIGHLIGHT_LIMIT are drawn plain",
+        doc: "text-editor",
+        covers: &[
+            "TextEditorView",
+            "text_editor",
+            "EditorHandle",
+            "use_editor",
+            "ScrollPos",
+            "Command",
+            "Effect",
+            "ZoomStep",
+            "command_for",
+            "run",
+            "select_all_occurrences",
+            "SyntaxPalette",
+            "caret_caption",
+            "status_caption",
+            "HIGHLIGHT_LIMIT",
+        ],
+        body: Body::States(text::TEXT_EDITOR),
+    },
+    Entry {
+        name: "Find bar",
+        category: Category::Controls,
+        page: "Text editing",
+        api: "use_find() -> FindState { open, replacing, query, replacement, regex, case_sensitive, whole_word } with .marks() / .refresh(handle) / .step(handle, forward) / .select_all(handle) / .replace_one(handle) / .replace_all(handle) -> usize / .open_from(handle, replacing) / .close(); find_bar(find, handle).read_only(bool).on_close(f).on_replaced(f(count)); go_to_line_bar(handle, State<bool>).on_close(f); parse_line_target(text, current, lines) reads 120, 120:8, +5, -5",
+        doc: "text-editor",
+        covers: &[
+            "FindBar",
+            "FindState",
+            "find_bar",
+            "use_find",
+            "GoToLineBar",
+            "go_to_line_bar",
+            "parse_line_target",
+        ],
+        body: Body::States(text::FIND_BAR),
+    },
+    Entry {
+        name: "Markdown view",
+        category: Category::Containers,
+        page: "Text editing",
+        api: "markdown_view(source).follow(line).on_link(f(url)): headings, emphasis, code, lists and task lists, quotes, tables and highlighted code blocks in the type ramp",
+        doc: "text-editor",
+        covers: &["MarkdownView", "markdown_view"],
+        body: Body::States(text::MARKDOWN_VIEW),
+    },
+    Entry {
+        name: "Held modifier keys",
+        category: Category::Controls,
+        page: "Text editing",
+        api: "input::held_modifiers() -> Modifiers; ctrl_held(), shift_held(), alt_held(): the keyboard now, for a wheel, pointer or touch handler, which carries no modifiers",
+        doc: "held-modifier-keys",
+        covers: &["held_modifiers", "ctrl_held", "shift_held", "alt_held"],
+        body: Body::States(text::HELD_MODIFIERS),
     },
     // ---- Icons -------------------------------------------------------------
     Entry {

@@ -202,6 +202,11 @@ def build_payload(source, build, prefix, qml, target, managed=False, cargo=None,
         cargo / "release/bingux-weather": prefix / "bin/bingux-weather",
         source / "apps/weather/bingux-weather.desktop": prefix / "share/applications/bingux-weather.desktop",
         source / "apps/weather/bingux-weather.svg": prefix / "share/icons/hicolor/scalable/apps/bingux-weather.svg",
+        cargo / "release/bingux-text-editor": prefix / "bin/bingux-text-editor",
+        source / "apps/text-editor/bingux-text-editor.desktop": prefix
+        / "share/applications/bingux-text-editor.desktop",
+        source / "apps/text-editor/bingux-text-editor.svg": prefix
+        / "share/icons/hicolor/scalable/apps/bingux-text-editor.svg",
         cargo / "release/bingux-taxonomy": prefix / "bin/bingux-taxonomy",
         # The helper Files runs for films, songs and PDFs; found beside bingux-files.
         cargo / "release/bingux-preview-host": prefix / "bin/bingux-preview-host",
@@ -717,6 +722,7 @@ APPS_PROGRAMS = (
     "bingux-files",
     "bingux-calculator",
     "bingux-weather",
+    "bingux-text-editor",
     "bingux-preview-host",
     "bingux-taxonomy",
     "bingux-effects",
@@ -751,6 +757,7 @@ def apps_payload(source, cargo, prefix):
         ("apps/files", "bingux-files"),
         ("apps/calculator", "bingux-calculator"),
         ("apps/weather", "bingux-weather"),
+        ("apps/text-editor", "bingux-text-editor"),
         ("apps/taxonomy", "bingux-taxonomy"),
     ):
         directory = source / package
@@ -918,7 +925,14 @@ def install_apps(source, prefix, cargo, strip=True, update_caches=True):
                 pass
         raise
     print(f"Installed the Bingux apps under {prefix}")
-    for name in ("bingux-settings", "bingux-files", "bingux-weather", "bingux-calculator", "bingux-taxonomy"):
+    for name in (
+        "bingux-settings",
+        "bingux-files",
+        "bingux-text-editor",
+        "bingux-weather",
+        "bingux-calculator",
+        "bingux-taxonomy",
+    ):
         print(f"  {prefix / 'bin' / name}")
     if update_caches:
         refresh_desktop_caches(prefix)

@@ -82,6 +82,7 @@ SOURCES = [
     ROOT / "apps/files/src",
     ROOT / "apps/calculator/src",
     ROOT / "apps/weather/src",
+    ROOT / "apps/text-editor/src",
     ROOT / "apps/taxonomy/src",
 ]
 
@@ -118,6 +119,9 @@ SKIP_FILES = {
     ROOT / "crates/ui/src/contrast.rs",
     ROOT / "crates/ui/src/contrast_matrix.rs",
     ROOT / "crates/ui/src/charts/palette.rs",
+    # The colours of highlighted code: derived from tokens per kind of text and
+    # lifted to 4.5:1, as the chart series colours are; the code runs set them.
+    ROOT / "crates/ui/src/text_editor/palette.rs",
     # The tones of the colour file icons are derived from, and checked against,
     # the raw token colours of every ground a row is drawn on.
     ROOT / "crates/ui/src/files/colour.rs",
@@ -511,6 +515,7 @@ RAW_PRESS = re.compile(
 RAW_PRESS_ALLOWED = {
     "crates/ui/src/popup_windows/route_tests.rs": "test fixture: a bare box whose press opens a sub-window",
     "crates/ui/src/controls/button.rs": "the button components",
+    "crates/ui/src/text_editor/markdown.rs": "a link inside a paragraph of the Markdown view: the press is hit-tested against the laid-out text to find which run is the link, which no button can do",
     "crates/ui/src/controls/omnibox.rs": "the omnibox's own rows and chips: a row, a chip and the chip of a row, each with hover, highlight and pressed fills no library button draws",
     "crates/ui/src/controls/colour_picker/button.rs": "the colour button: a swatch with hover, pressed and open fills, which no library button draws",
     "crates/ui/src/controls/split_button.rs": "the split button's two parts",
