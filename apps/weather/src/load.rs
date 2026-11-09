@@ -7,8 +7,6 @@ use bingux_ui::prelude::tr;
 use bingux_weather::time::unix_now;
 use bingux_weather::{Failure, Here, Loaded, Place, Settings, Store, units};
 
-use crate::words;
-
 /// What start-up reads: the settings and where the computer was last found.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Boot {
@@ -141,7 +139,7 @@ fn here_of(fix: &Fix) -> Here {
         fix.latitude,
         fix.longitude,
     );
-    place.detail = words::join_list(&detail);
+    place.detail = detail;
     place.timezone = fix.timezone.clone();
     Here {
         place,

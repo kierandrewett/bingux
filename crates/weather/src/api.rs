@@ -374,7 +374,7 @@ pub fn parse_search(body: &str) -> Result<Vec<Place>, Error> {
             }
             Place {
                 name: place.name,
-                detail: detail.join(", "),
+                detail,
                 latitude: place.latitude,
                 longitude: place.longitude,
                 timezone: place.timezone,
@@ -485,8 +485,8 @@ mod tests {
             ]}"#,
         )
         .unwrap();
-        assert_eq!(places[0].full_name(), "London, England, United Kingdom");
-        assert_eq!(places[1].detail, "Singapore");
+        assert_eq!(places[0].detail, ["England", "United Kingdom"]);
+        assert_eq!(places[1].detail, ["Singapore"]);
         assert!(parse_search("{}").unwrap().is_empty());
     }
 

@@ -7,6 +7,7 @@
 
 use std::time::Duration;
 
+use crate::words;
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use bingux_ui::shell::{FORM_HEIGHT, FORM_WIDTH};
@@ -86,7 +87,7 @@ impl Component for Sheet {
                     let rows = places.into_iter().map(|place| {
                         let chosen = place.clone();
                         row(place.name.clone())
-                            .subtitle(place.detail.clone())
+                            .subtitle(words::join_list(&place.detail))
                             .on_press(move |_| {
                                 hub.add(chosen.clone());
                                 overlays.dismiss_dialog();
