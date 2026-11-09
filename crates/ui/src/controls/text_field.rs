@@ -1174,10 +1174,11 @@ impl Component for TextField {
                 )
             }))
             .focusable_invalid(
-                // A text field shows its ring for any focus, pointer or key, and
-                // while its own menu is open (the owner keeps the focus look).
-                if visual.is_focused() && self.display.is_none() {
-                    Focus::Keyboard
+                // The ring is for keyboard focus only (see `shows_ring`): a click
+                // into the field keeps the caret and fill and draws no ring, Tab
+                // into it draws one. A display field never draws a ring.
+                if self.display.is_none() {
+                    visual.focus
                 } else {
                     Focus::Not
                 },

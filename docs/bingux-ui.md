@@ -4200,6 +4200,7 @@ controls still work.
 `step_focus(back)` moves focus to the next or previous stop as Tab does, with no
 host needed. A list answers its Up and Down keys with it, so the arrows walk its
 rows (the inspector's Accessibility list does).
+`focus::shows_ring(focus)` is the one test for drawing a ring: true only for `Focus::Keyboard`, as CSS `:focus-visible`. A press with the pointer or a touch puts the window in pointer mode, so the control keeps its caret or fill and draws no ring; a key move (Tab, F6, arrows) draws one. Every ring (`FocusRing`, `wrap_ring`) asks it, and a control passes its `visual.focus` to `focusable_invalid` rather than forcing `Focus::Keyboard`. A text field draws its ring for keyboard focus only; `focus/modality_tests.rs` checks both paths.
 `focus::text_entry_focused()` is true while the focused node is a text input, so app key handlers (calendar's single-letter shortcuts) can leave typed characters to the field.
 
 ## Taxonomy app

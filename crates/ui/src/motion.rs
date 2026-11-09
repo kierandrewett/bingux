@@ -51,8 +51,8 @@ mod dwell;
 mod icon_morph;
 pub use animated_number::{AnimatedNumber, NumberFormat, animated_number};
 pub use dwell::{Dwell, DwellGate, use_dwell};
-pub use icon_morph::{MORPH_SMALLEST, MORPH_TURN, MorphLayer, icon_morph, morph_layers};
 pub(crate) use icon_morph::MorphGlyph;
+pub use icon_morph::{MORPH_SMALLEST, MORPH_TURN, MorphLayer, icon_morph, morph_layers};
 
 /// The default duration of a motion, in milliseconds, before reduced motion.
 pub const MOVE_MS: u64 = 160;
@@ -728,7 +728,15 @@ fn wrap_focusable(control: Rect, focus: Focus, inside: bool, invalid: bool) -> R
     let tokens = use_tokens();
     let core = use_focus_core();
     let size = use_ring_size();
-    wrap_ring(&tokens, core, control, focus, inside, invalid, RingSize::Measured(size))
+    wrap_ring(
+        &tokens,
+        core,
+        control,
+        focus,
+        inside,
+        invalid,
+        RingSize::Measured(size),
+    )
 }
 
 /// [`wrap_focusable`] with its hooks already taken and the face's size given.
@@ -757,7 +765,13 @@ fn wrap_ring(
 ) -> Rect {
     // The ring's corners are the face's, as painted.
     let radii = Radii::of(&control.get_style().corner_radius);
-    let ring = FocusRing { focus, radii, inside, size, invalid };
+    let ring = FocusRing {
+        focus,
+        radii,
+        inside,
+        size,
+        invalid,
+    };
     // The wrapper claims presses, and records the pressed control, so whatever
     // modal scope the press opens returns focus to it. It measures itself,
     // which is the face's box, for the ring.
@@ -765,7 +779,7 @@ fn wrap_ring(
     let (measured, wanted) = match &ring.size {
         RingSize::Measured(face) => (
             Some(face.size),
-            face.reached(ring.focus == Focus::Keyboard || ring.invalid),
+            face.reached(crate::focus::shows_ring(ring.focus) || ring.invalid),
         ),
         RingSize::Known(..) => (None, true),
     };
@@ -854,11 +868,20 @@ impl Band {
 fn bands(invalid: bool) -> Vec<Band> {
     if invalid {
         vec![
-            Band { gap: FOCUS_GAP, paint: Paint::ErrorRing },
-            Band { gap: FOCUS_GAP + FOCUS_WIDTH, paint: Paint::ErrorHalo },
+            Band {
+                gap: FOCUS_GAP,
+                paint: Paint::ErrorRing,
+            },
+            Band {
+                gap: FOCUS_GAP + FOCUS_WIDTH,
+                paint: Paint::ErrorHalo,
+            },
         ]
     } else {
-        vec![Band { gap: FOCUS_GAP, paint: Paint::FocusRing }]
+        vec![Band {
+            gap: FOCUS_GAP,
+            paint: Paint::FocusRing,
+        }]
     }
 }
 
@@ -903,7 +926,11 @@ impl FocusRing {
             .maybe(main && look.glows(), |node| {
                 node.tw(tokens, &[glow(band.paint, look.blur, look.spread, false)])
             });
-        if main { node.component("FocusRing") } else { node.component("FocusBand") }
+        if main {
+            node.component("FocusRing")
+        } else {
+            node.component("FocusBand")
+        }
     }
 }
 
@@ -916,7 +943,7 @@ impl Component for FocusRing {
         // A window that has lost focus keeps no ring: it blurs out with the rest
         // and comes back when the window does.
         let active = *crate::runtime::window_focus().read();
-        let focused = self.focus == Focus::Keyboard && !inert && active;
+        let focused = crate::focus::shows_ring(self.focus) && !inert && active;
         let in_ms = tokens.motion(FOCUS_IN_MS);
         let out_ms = tokens.motion(FOCUS_OUT_MS);
         // A ring is made when focus first reaches its control (see
@@ -938,7 +965,11 @@ impl Component for FocusRing {
         if self.inside {
             // The ring is drawn within the face's own box, so a clipped
             // container edge cannot cut it off.
-            let paint = if self.invalid { Paint::ErrorRing } else { Paint::FocusRing };
+            let paint = if self.invalid {
+                Paint::ErrorRing
+            } else {
+                Paint::FocusRing
+            };
             return rect()
                 .component("FocusRingInside")
                 .interactive(false)

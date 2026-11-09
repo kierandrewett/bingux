@@ -21,6 +21,8 @@
 //!
 //! [`WindowHost`]: crate::window::WindowHost
 
+#[cfg(all(test, feature = "testing"))]
+mod modality_tests;
 pub mod owner;
 #[cfg(all(test, feature = "testing"))]
 mod ring_anim_tests;
@@ -194,6 +196,16 @@ fn send_dir(dir: Dir) {
 fn set_keyboard_mode() {
     let mut mode = Platform::get().current_window().navigation_mode;
     mode.set(NavigationMode::Keyboard);
+}
+
+/// Whether a control in focus state `focus` draws its focus ring. The ring is
+/// for keyboard users only, as CSS `:focus-visible` is. The window's keyboard
+/// modality is already folded into `focus` by `use_focus`: a press with the
+/// pointer or a touch puts the window in pointer mode, so a control clicked
+/// into (a text field included) keeps its caret and fill and draws no ring,
+/// and a key move (Tab, F6, arrows) draws it. Every ring asks here.
+pub fn shows_ring(focus: Focus) -> bool {
+    focus == Focus::Keyboard
 }
 
 /// Moves keyboard focus to the next focus stop (`back` for the previous), in
