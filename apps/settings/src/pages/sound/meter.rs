@@ -305,9 +305,14 @@ impl Component for LevelMeter {
         let fill = *level.read();
         // A compact bar is a short pill for a heading. Otherwise the bar spans
         // its row, as under an application's slider.
-        let bar = bingux_ui::prelude::level_meter(fill).label("Level");
+        let name = match source {
+            Source::Output => "Output level",
+            Source::Input => "Input level",
+            Source::Stream => "Application level",
+        };
+        let bar = bingux_ui::prelude::level_meter(fill).label(name);
         if self.compact {
-            rect().tw(&tokens, &[w(Dim::Button)]).child(bar)
+            bingux_ui::controls::hover_tip(rect().tw(&tokens, &[w(Dim::Button)]).child(bar), name)
         } else {
             rect().tw(&tokens, &[w_full()]).child(bar)
         }

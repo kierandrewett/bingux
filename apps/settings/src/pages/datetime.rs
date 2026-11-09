@@ -26,8 +26,8 @@ use crate::routes;
 use crate::system::{self, CommandError, CommandResult, background, background_then};
 use crate::ui::{
     Group, Overlays, Status, caption, choice_row, dropdown, form_row, menu_item, page_column,
-    popup_column, row, search_field, skeleton_caption, skeleton_row, skeleton_row_subtitled,
-    status, stepper, styled_label, switch_row, typography, use_overlays, use_page_busy,
+    popup_column, row, search_field, skeleton_caption, skeleton_row, status, stepper, styled_label,
+    switch_row, typography, use_overlays, use_page_busy,
 };
 use bingux_ui::prelude::use_router;
 
@@ -39,9 +39,34 @@ const ZONE_LIMIT: usize = 60;
 
 /// Every zone name, as `timedatectl` lists them. Saved between runs, since the
 /// list rarely changes.
-fn list_zones() -> Result<Vec<String>, CommandError> {
-    backend::run("timedatectl", &["list-timezones"])
-        .map(|text| text.lines().map(str::to_string).collect())
+/// Every zone with its offset from UTC right now (`+01:00`), so the list can
+/// show the offset on every row. A zone whose offset cannot be read shows none.
+fn list_zones() -> Result<Vec<(String, String)>, CommandError> {
+    let names = backend::run("timedatectl", &["list-timezones"])?;
+    Ok(names
+        .lines()
+        .map(|zone| {
+            let offset = backend::date(Some(zone), "+%:z").unwrap_or_default();
+            (zone.to_string(), offset.trim().to_string())
+        })
+        .collect())
+}
+
+/// How well `needle` matches a zone: 0 for a city that starts with it, 1 for a
+/// word that does, 2 for anything else that contains it. Lower comes first.
+fn zone_rank(zone: &str, needle: &str) -> u8 {
+    let label = zone_label(zone).to_lowercase();
+    let city = label.split(',').next().unwrap_or("");
+    if city.starts_with(needle) {
+        0
+    } else if label
+        .split([' ', ',', '/'])
+        .any(|word| word.starts_with(needle))
+    {
+        1
+    } else {
+        2
+    }
 }
 
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -807,7 +832,7 @@ impl Component for TimeZonePage {
         let clock = system::use_cached_persistent("datetime", load);
         let model_ready = clock.read().is_some();
         let zone_list = zones.read().clone();
-        let list: &[String] = match &zone_list {
+        let list: &[(String, String)] = match &zone_list {
             Some(Ok(list)) => list,
             _ => &[],
         };
@@ -817,31 +842,46 @@ impl Component for TimeZonePage {
         };
 
         let needle = query.read().trim().to_lowercase();
-        let mut matching: Vec<&String> = list
+        let mut matching: Vec<&(String, String)> = list
             .iter()
-            .filter(|zone| {
+            .filter(|(zone, _)| {
                 needle.is_empty()
                     || zone.to_lowercase().contains(&needle)
                     || zone_label(zone).to_lowercase().contains(&needle)
             })
             .collect();
+        // A city that starts with what was typed comes before one that only
+        // contains it; the sort is stable, so each rank keeps the list's order.
+        if !needle.is_empty() {
+            matching.sort_by_key(|(zone, _)| zone_rank(zone, &needle));
+        }
         // Before anything is typed, the current zone comes first, so it is in
         // view whichever part of the long list it belongs to.
         if needle.is_empty()
-            && let Some(at) = matching.iter().position(|zone| **zone == current)
+            && let Some(at) = matching.iter().position(|(zone, _)| *zone == current)
         {
             let chosen = matching.remove(at);
             matching.insert(0, chosen);
         }
         let hidden = matching.len().saturating_sub(ZONE_LIMIT);
 
-        let rows = matching.iter().take(ZONE_LIMIT).map(|zone| {
+        let rows = matching.iter().take(ZONE_LIMIT).map(|(zone, zone_offset)| {
             let zone = zone.to_string();
             let chosen = zone == current;
-            let mut item = row(zone_label(&zone)).selected(chosen);
-            if chosen && !offset.is_empty() {
-                item = item.subtitle(format!("UTC{offset}"));
-            }
+            // The chosen zone's offset is the clock's own, which is read after
+            // the list and is right across a change of daylight saving.
+            let shown = if chosen && !offset.is_empty() {
+                &offset
+            } else {
+                zone_offset
+            };
+            let item = row(zone_label(&zone))
+                .selected(chosen)
+                .value(if shown.is_empty() {
+                    String::new()
+                } else {
+                    format!("UTC{shown}")
+                });
             let set = zone.clone();
             let copy = zone.clone();
             let mut set_item = menu_item("Set time zone", move |_| pick_zone(ctx, set.clone()));
@@ -856,9 +896,8 @@ impl Component for TimeZonePage {
                     .context_menu(vec![set_item, copy_item]),
             )
         });
-        // The list is drawn only when both reads are in. The first row is the
-        // chosen zone and carries its UTC offset under the name, so the zone list
-        // alone would draw it one row short and move the rows under it.
+        // The list is drawn only when both reads are in, so the chosen zone is
+        // first and the rows under it never move.
         let mut group = Group::new(None::<String>);
         let mut page_tail: Option<Element> = None;
         match &zone_list {
@@ -875,8 +914,7 @@ impl Component for TimeZonePage {
                 }
             }
             _ => {
-                group = group.row(skeleton_row_subtitled());
-                group = group.rows((1..ZONE_LIMIT).map(|_| skeleton_row()));
+                group = group.rows((0..ZONE_LIMIT).map(|_| skeleton_row()));
                 page_tail = Some(skeleton_caption());
             }
         }

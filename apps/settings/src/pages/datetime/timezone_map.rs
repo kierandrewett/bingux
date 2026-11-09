@@ -216,7 +216,7 @@ impl Component for TimeZoneMap {
                 if previous != Some(zone) {
                     let asked = zone.to_string();
                     background_then(
-                        move || backend::date(Some(&asked), "+%H:%M"),
+                        move || backend::date(Some(&asked), "+%H:%M (UTC%:z)"),
                         move |result| {
                             if let Ok(clock) = result {
                                 local_time.set(Some((zone, clock)));
