@@ -29,11 +29,32 @@ struct Toggle {
     at: (f32, f32),
     off: &'static str,
     on: &'static str,
+    /// Pressing it takes its button away, as a mode switch swaps a footer.
+    vanishes: bool,
+    /// A sibling button before it, which the press takes away too, as the mini
+    /// player takes the Queue button away before its own.
+    queue: bool,
 }
 
 impl Toggle {
     fn new(at: (f32, f32), off: &'static str, on: &'static str) -> Self {
-        Self { at, off, on }
+        Self {
+            at,
+            off,
+            on,
+            vanishes: false,
+            queue: false,
+        }
+    }
+
+    fn vanishing(mut self) -> Self {
+        self.vanishes = true;
+        self
+    }
+
+    fn with_queue(mut self) -> Self {
+        self.queue = true;
+        self
     }
 
     /// The point in the middle of the button.
@@ -58,13 +79,21 @@ impl Toggle {
 impl Component for Toggle {
     fn render(&self) -> impl IntoElement {
         let mut flipped = use_state(|| false);
+        let gone = self.vanishes && flipped();
+        let queue = self.queue && !flipped();
         rect()
             .position(Position::new_absolute().left(self.at.0).top(self.at.1))
-            .child(
+            .direction(Direction::Horizontal)
+            .maybe_child(queue.then(|| {
+                icon_button(Icon::ViewListOrdered, |_: ()| {})
+                    .tooltip("Queue")
+                    .size(Dim::Control)
+            }))
+            .maybe_child((!gone).then(|| {
                 icon_button(Icon::ViewReveal, move |_: ()| flipped.toggle())
                     .tooltip(if flipped() { self.on } else { self.off })
-                    .size(Dim::Control),
-            )
+                    .size(Dim::Control)
+            }))
     }
 }
 
@@ -83,6 +112,8 @@ impl Component for Page {
         // The "c" key opens and closes a choice list or popover, which is a modal of the
         // window's navigation as a `Panel` makes it.
         let mut choice = use_state(|| false);
+        // The "h" key takes the toggles away, as a footer swap does.
+        let mut hidden = use_state(|| false);
         let mut page =
             rect()
                 .expanded()
@@ -91,6 +122,11 @@ impl Component for Page {
                         && key == "c"
                     {
                         choice.toggle();
+                    }
+                    if let Key::Character(key) = &event.key
+                        && key == "h"
+                    {
+                        hidden.toggle();
                     }
                     if let (Some(overlays), Key::Character(key)) = (overlays, &event.key)
                         && key == "m"
@@ -104,7 +140,8 @@ impl Component for Page {
                         activity.pulse();
                     }
                 });
-        for toggle in &self.toggles {
+        let toggles: &[Toggle] = if hidden() { &[] } else { &self.toggles };
+        for toggle in toggles {
             page = page.child(Element::from(toggle.clone()));
         }
         page.child(Element::from(ChoiceStandIn { open: choice() }))
@@ -668,4 +705,156 @@ fn a_pointer_that_arrives_while_the_content_scrolls_opens_no_tip_until_it_is_sti
         "Copy",
         "and it opens once the content is still"
     );
+}
+
+/// Failures the tooltip itself raised since `before`.
+fn tip_failures_since(before: u64) -> Vec<String> {
+    crate::resilience::recent_errors()
+        .into_iter()
+        .filter(|record| record.id > before && record.component == "HoverTip")
+        .map(|record| format!("{:?}: {}", record.kind, record.message))
+        .collect()
+}
+
+/// A tip whose control is taken away while the tip is up must close quietly.
+#[test]
+fn a_tip_whose_control_leaves_the_tree_while_up_fails_nothing() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", "Copy");
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Copy"]);
+
+    shot.key(Key::Character("h".into()));
+    shot.settle(Duration::from_millis(600));
+    assert!(
+        bubbles(&mut shot, &["Copy"]).is_empty(),
+        "the tip outlived its control"
+    );
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
+}
+
+/// A tip whose control is taken away while the tip is still waiting to open must
+/// never open, and must fail nothing when its timer fires.
+#[test]
+fn a_tip_whose_control_leaves_the_tree_while_waiting_fails_nothing() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", "Copy");
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    frame(&mut shot);
+
+    shot.key(Key::Character("h".into()));
+    shot.settle(Duration::from_millis(1200));
+    assert!(
+        bubbles(&mut shot, &["Copy"]).is_empty(),
+        "a tip opened after its control left"
+    );
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
+}
+
+/// The mini player swap: a press changes the control's label, so its anchor
+/// changes size, and the control leaves the tree in the same moment, with its
+/// tip still up. The tip must fail nothing.
+#[test]
+fn a_tip_whose_control_resizes_and_leaves_the_tree_at_once_fails_nothing() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", LONG);
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Copy"]);
+
+    press_at(&mut shot, x, y);
+    shot.key(Key::Character("h".into()));
+    shot.settle(Duration::from_millis(1200));
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
+}
+
+/// A press takes the control away while its tip is up, as the mini player's
+/// button does when the mode it switches leaves the footer. Its tip fails nothing,
+/// even when the pointer moves on afterwards.
+#[test]
+fn a_tip_whose_control_is_pressed_away_fails_nothing() {
+    let toggle = Toggle::new((300.0, 200.0), "Copy", "Copy").vanishing();
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Copy"]);
+
+    press_at(&mut shot, x, y);
+    shot.settle(Duration::from_millis(600));
+    move_to(&mut shot, 40.0, 500.0);
+    shot.settle(Duration::from_millis(1200));
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
+}
+
+/// The mini player's row: Queue sits before the PiP button, and a press on PiP
+/// takes Queue away and flips PiP's label at once, with PiP's tip still up.
+#[test]
+fn a_tip_whose_row_loses_a_sibling_as_its_control_is_pressed_fails_nothing() {
+    let toggle = Toggle::new((300.0, 200.0), "Mini player", "Leave mini player").with_queue();
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let half = Dim::Control.px_in(SizeClass::Regular) / 2.0;
+    let (x, y) = (toggle.at.0 + 2.0 * half, toggle.at.1 + half);
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Mini player"]);
+
+    press_at(&mut shot, x, y);
+    shot.settle(Duration::from_millis(600));
+    move_to(&mut shot, 40.0, 500.0);
+    shot.settle(Duration::from_millis(1200));
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
+}
+
+/// The mini player: the window shrinks to 360 x 400 while a tip is up, the row
+/// loses its Queue button, and the press flips the tip's label. Nothing fails.
+#[test]
+fn a_tip_up_while_the_window_shrinks_and_its_row_swaps_fails_nothing() {
+    let toggle = Toggle::new((200.0, 200.0), "Mini player", "Leave mini player").with_queue();
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let half = Dim::Control.px_in(SizeClass::Regular) / 2.0;
+    let (x, y) = (toggle.at.0 + 2.0 * half, toggle.at.1 + half);
+    shot.hover(x, y);
+    until_shown(&mut shot, &["Mini player"]);
+
+    shot.runner().run_in(|| {
+        let window = Platform::get().current_window();
+        let mut size = window.root_size;
+        size.set(torin::prelude::Size2D::new(360.0, 400.0));
+    });
+    frame(&mut shot);
+    press_at(&mut shot, x, y);
+    shot.settle(Duration::from_millis(600));
+    move_to(&mut shot, 40.0, 350.0);
+    shot.settle(Duration::from_millis(1200));
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
+}
+
+/// The control goes while its tip is still waiting out its rest: the pending timer
+/// then opens a tip whose control is gone. Nothing fails.
+#[test]
+fn a_tip_whose_control_goes_while_it_waits_to_rest_fails_nothing() {
+    let toggle = Toggle::new((200.0, 200.0), "Mini player", "Leave mini player");
+    let mut shot = app(vec![toggle.clone()]);
+    shot.settle(Duration::from_millis(300));
+    let before = crate::resilience::error_count();
+    let (x, y) = toggle.middle();
+    shot.hover(x, y);
+    // Less than the rest delay: the timer is still pending when the control goes.
+    shot.settle(Duration::from_millis(100));
+    shot.key(Key::Character("h".into()));
+    shot.settle(Duration::from_millis(1200));
+    assert_eq!(tip_failures_since(before), Vec::<String>::new());
 }

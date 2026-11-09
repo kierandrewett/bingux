@@ -178,6 +178,30 @@ struct TipHub {
     scroll: Option<ScrollActivity>,
 }
 
+/// Writes `value` into `state`, or does nothing when its scope is gone. A timer or a
+/// handler can outlive the control that made the tip.
+fn put<T: 'static>(state: &mut State<T>, value: T) {
+    if let Some(mut slot) = state.try_write() {
+        *slot = value;
+    }
+}
+
+/// [`put`], skipped when `state` already holds `value`.
+fn put_if_changed<T: PartialEq + 'static>(state: &mut State<T>, value: T) {
+    if state.try_peek().is_some_and(|current| *current == value) {
+        return;
+    }
+    put(state, value);
+}
+
+/// Cancels the open timer a tip is waiting on, if it is still there.
+fn cancel_pending(mut pending: State<Option<TaskHandle>>) {
+    let handle = pending.try_write().and_then(|mut slot| slot.take());
+    if let Some(handle) = handle {
+        handle.cancel();
+    }
+}
+
 impl TipHub {
     fn new() -> Self {
         Self {
@@ -191,10 +215,11 @@ impl TipHub {
 
     /// Whether a tip opens at once: one is up, or the last one went a moment ago.
     fn warm(self) -> bool {
-        self.up.peek().is_some()
+        self.up.try_peek().is_some_and(|up| up.is_some())
             || self
                 .hid_at
-                .peek()
+                .try_peek()
+                .and_then(|at| *at)
                 .is_some_and(|at| at.elapsed() < TOOLTIP_GRACE)
     }
 
@@ -210,16 +235,16 @@ impl TipHub {
 
     /// Makes tip `id` the one that is up. Returns the new stage.
     fn take_over(mut self, id: u64) -> u64 {
-        let stage = *self.stage.peek() + 1;
-        self.stage.set(stage);
-        self.up.set(Some(id));
+        let stage = self.stage.try_peek().map_or(0, |stage| *stage) + 1;
+        put(&mut self.stage, stage);
+        put(&mut self.up, Some(id));
         stage
     }
 
     /// Notes that the tip opened at `stage` is drawn.
     fn drawn_by(mut self, stage: u64) {
-        if stage > *self.drawn.peek() {
-            self.drawn.set(stage);
+        if self.drawn.try_peek().is_some_and(|drawn| stage > *drawn) {
+            put(&mut self.drawn, stage);
         }
     }
 
@@ -293,25 +318,28 @@ impl Tip {
             || crate::nav::try_router().is_some_and(|router| router.modal_open())
     }
 
-    fn cancel_pending(mut self) {
-        if let Some(handle) = self.pending.take() {
-            handle.cancel();
-        }
+    /// Whether the control that owns this tip is still mounted.
+    fn mounted(self) -> bool {
+        self.visible.try_peek().is_some()
+    }
+
+    fn is_visible(self) -> bool {
+        self.visible.try_peek().is_some_and(|visible| *visible)
     }
 
     /// The pointer is over the element: wait for it to rest, or open at once
     /// when another tip is up or has just gone.
     fn rest(mut self) {
-        if *self.visible.peek() {
+        if !self.mounted() || self.is_visible() {
             return;
         }
-        self.cancel_pending();
+        cancel_pending(self.pending);
         if self.blocked() {
             return;
         }
         if self.hub.scrolling_now() {
             // Content is moving under the pointer: wait for it to be still.
-            self.suspended.set_if_modified(true);
+            put_if_changed(&mut self.suspended, true);
             return;
         }
         if self.hub.warm() {
@@ -322,31 +350,31 @@ impl Tip {
             timer(TOOLTIP_DELAY).await;
             self.open(false);
         });
-        self.pending.set(Some(task));
+        put(&mut self.pending, Some(task));
     }
 
     fn open(mut self, handoff: bool) {
-        if self.blocked() {
+        if !self.mounted() || self.blocked() {
             return;
         }
         if self.hub.scrolling_now() {
-            self.suspended.set_if_modified(true);
+            put_if_changed(&mut self.suspended, true);
             return;
         }
-        self.handoff.set_if_modified(handoff);
+        put_if_changed(&mut self.handoff, handoff);
         // The text it was last measured with is from an earlier show.
-        self.measured.set_if_modified(None);
+        put_if_changed(&mut self.measured, None);
         let stage = self.hub.take_over(self.id);
-        self.opened.set(stage);
-        self.visible.set_if_modified(true);
+        put(&mut self.opened, stage);
+        put_if_changed(&mut self.visible, true);
     }
 
     /// The pointer left, or something opened over the element.
     fn close(mut self) {
-        self.cancel_pending();
-        self.suspended.set_if_modified(false);
-        if *self.visible.peek() {
-            self.visible.set(false);
+        cancel_pending(self.pending);
+        put_if_changed(&mut self.suspended, false);
+        if self.is_visible() {
+            put(&mut self.visible, false);
         }
         self.hub.release(self.id, true);
     }
@@ -354,16 +382,16 @@ impl Tip {
     /// Content started to scroll: the tip goes now, and comes back by
     /// [`Tip::resume`] when the content is still, if the pointer is still here.
     fn suspend(mut self) {
-        self.cancel_pending();
-        self.suspended.set_if_modified(true);
-        self.visible.set_if_modified(false);
+        cancel_pending(self.pending);
+        put_if_changed(&mut self.suspended, true);
+        put_if_changed(&mut self.visible, false);
         // The next tip after a scroll waits its full rest: no grace.
         self.hub.release(self.id, false);
     }
 
     /// The content is still: wait for the pointer to rest again.
     fn resume(mut self) {
-        self.suspended.set_if_modified(false);
+        put_if_changed(&mut self.suspended, false);
         self.rest();
     }
 }
@@ -478,7 +506,10 @@ impl Component for HoverTip {
         };
         // An unmounted control takes its tip down with it. This touches the
         // hub only: this component's own state may already be gone.
-        use_drop(move || hub.release(id, true));
+        use_drop(move || {
+            cancel_pending(pending);
+            hub.release(id, true);
+        });
 
         // A menu or dialog that opens while the tip is up takes it down. It is
         // read only while the tip is up, so an idle tip does not render for it.
