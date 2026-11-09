@@ -1655,13 +1655,15 @@ fn window_commands(
             },
         )
         .checked(auto_close)
-        .group(CommandGroup::Other("Editing"))
+        .group(CommandGroup::Other(bingux_ui::prelude::i18n_id!(
+            "text-editor-group-editing"
+        )))
         .section("typing"),
         toggle(
             "editing.trim-on-save",
             tr!("text-editor-cmd-trim-on-save"),
             prefs.trim_on_save,
-            CommandGroup::Other("Editing"),
+            CommandGroup::Other(bingux_ui::prelude::i18n_id!("text-editor-group-editing")),
             |prefs| prefs.trim_on_save = !prefs.trim_on_save,
         )
         .section("saving"),
@@ -1669,7 +1671,7 @@ fn window_commands(
             "editing.final-newline",
             tr!("text-editor-cmd-final-newline"),
             prefs.final_newline,
-            CommandGroup::Other("Editing"),
+            CommandGroup::Other(bingux_ui::prelude::i18n_id!("text-editor-group-editing")),
             |prefs| prefs.final_newline = !prefs.final_newline,
         )
         .section("saving"),

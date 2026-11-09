@@ -122,3 +122,4 @@ text-editor-detect-indent = Detect indentation
 text-editor-encode-as = Encode as
 text-editor-read-again-as = Read again as
 text-editor-bom = Byte order mark
+text-editor-group-editing = Editing

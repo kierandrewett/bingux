@@ -101,6 +101,7 @@ impl CommandGroup {
             CommandGroup::View => crate::tr!("ui-command-group-view"),
             CommandGroup::Go => crate::tr!("ui-command-group-go"),
             CommandGroup::Window => crate::tr!("ui-command-group-window"),
+            CommandGroup::Other(name) if crate::i18n::has(name) => crate::i18n::text(name),
             CommandGroup::Other(name) => name.to_owned(),
             CommandGroup::Help => crate::tr!("ui-command-group-help"),
         }
