@@ -296,7 +296,8 @@ impl Component for Scratch {
                             )
                             .child(action_button("Save", move |_| document.save()).compact())
                             .child(action_button("Close", move |_| document.close()).compact()),
-                    ),
+                    )
+                    .trailing_control(),
             );
         }
         group.into_element()
