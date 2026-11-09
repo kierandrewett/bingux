@@ -774,7 +774,7 @@ fn about_complete() -> AppInfo {
         .name("Files")
         .id("bingux-files")
         .version("0.1.0")
-        .description("Browse and organise files and folders")
+        .description("Browse and organize files and folders")
         .website("https://github.com/kierandrewett/bingux")
         .issues("https://github.com/kierandrewett/bingux/issues")
         .licence("GPL-3.0-or-later")

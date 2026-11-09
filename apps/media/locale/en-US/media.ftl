@@ -1,5 +1,5 @@
 ### Bingux Media.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `media-`.
 
 ## Empty states and status

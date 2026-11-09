@@ -405,7 +405,7 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
             },
         )
     };
-    let behaviour = Group::titled("Behaviour")
+    let behaviour = Group::titled("Behavior")
         .row(priority)
         .row(everyone)
         .row(section_row(page, Section::Options, ""));

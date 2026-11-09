@@ -1145,7 +1145,7 @@ fn a_swatch_chooses_its_colour_keeps_the_opacity_and_is_marked_chosen() {
     assert!(
         names
             .iter()
-            .all(|name| name.starts_with("Colour ") && name.contains('#')),
+            .all(|name| name.starts_with("Color ") && name.contains('#')),
         "{names:?}"
     );
     assert!(

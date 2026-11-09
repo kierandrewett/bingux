@@ -2,7 +2,7 @@
 """Checks every Fluent catalogue (`locale/<language>/<domain>.ftl`) in the tree.
 
 For each catalogue directory (crates/ui/locale, apps/*/locale) the source
-language is en-GB. The check fails on:
+language is en-US. The check fails on:
 
 - syntax: a line that is not a comment, a message, a term, an attribute, a
   variant or the continuation of one; a message with no value and no
@@ -12,7 +12,7 @@ language is en-GB. The check fails on:
   not have, or a variable (`$name`) the source message does not use;
 - a translation file with no source file.
 
-Messages a translation does not have yet fall back to en-GB at run time, so
+Messages a translation does not have yet fall back to en-US at run time, so
 they are listed per language as a count (`--missing` lists them), not an
 error. Which IDs the code uses is checked by `bingux_ui::i18n::check` in
 each crate's tests.
@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = "en-GB"
+SOURCE = "en-US"
 IDENT = r"-?[a-zA-Z][a-zA-Z0-9_-]*"
 ENTRY = re.compile(rf"^({IDENT})\s*=\s?(.*)$")
 ATTRIBUTE = re.compile(r"^\s+\.([a-zA-Z][a-zA-Z0-9_-]*)\s*=\s?(.*)$")

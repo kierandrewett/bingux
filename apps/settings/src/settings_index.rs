@@ -643,7 +643,7 @@ const SETTINGS: &[(PageId, &str, &str, &str)] = &[
         PageId::Desktop,
         "alignment",
         bingux_ui::i18n_id!("settings-setting-desktop-alignment"),
-        "dock centre left right position",
+        "dock center left right position",
     ),
     (
         PageId::Desktop,
@@ -691,7 +691,7 @@ const SETTINGS: &[(PageId, &str, &str, &str)] = &[
         PageId::Desktop,
         "show-system-usage",
         bingux_ui::i18n_id!("settings-setting-desktop-show-system-usage"),
-        "control centre cpu memory graph",
+        "control center cpu memory graph",
     ),
     (
         PageId::Desktop,
@@ -1501,11 +1501,11 @@ mod tests {
         assert_eq!(top(&index, "wifi")[0].0, "Wi-Fi");
         assert_eq!(top(&index, "time zo")[0].0, "Time zone");
         assert_eq!(
-            top(&index, "accent colour")[0].1,
+            top(&index, "accent color")[0].1,
             "bingux-settings://background#accent-colour"
         );
-        // The American spelling finds the British one through a synonym.
-        assert!(top(&index, "color").iter().any(|h| h.0 == "Accent colour"));
+        // The alternate spelling finds the American row through a synonym.
+        assert!(top(&index, "accent colour").iter().any(|h| h.0 == "Accent color"));
         // A synonym.
         assert!(
             top(&index, "monitor")

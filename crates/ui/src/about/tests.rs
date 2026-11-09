@@ -139,7 +139,7 @@ fn the_card_keeps_one_size_on_every_page_at_both_densities() {
         let mut shot = opened(complete(), Page::Main, size);
         let main = card(&mut shot).unwrap_or_else(|| panic!("{label}: the About card is open"));
         assert!(main.width() <= size.0 && main.height() <= size.1, "{label}: the card fits the window: {main:?}");
-        for door in ["Licence", "Credits", "Legal"] {
+        for door in ["License", "Credits", "Legal"] {
             assert!(press(&mut shot, door), "{label}: the {door} door is on the main page: {:?}", labels(&mut shot));
             shot.settle(Duration::from_millis(500));
             let page = card(&mut shot).unwrap_or_else(|| panic!("{label}: {door} keeps the card"));
@@ -176,7 +176,7 @@ fn close_keeps_the_right_inset_of_every_header() {
 fn a_complete_app_shows_its_links_doors_and_details() {
     let mut shot = opened(complete(), Page::Main, DESKTOP);
     let seen = labels(&mut shot);
-    for expected in ["About", "Website", "Report an issue", "Licence", "Credits", "Legal", "Details", "App ID", "Build", "Copy details"] {
+    for expected in ["About", "Website", "Report an issue", "License", "Credits", "Legal", "Details", "App ID", "Build", "Copy details"] {
         assert!(has(&seen, expected), "missing {expected:?} in {seen:?}");
     }
     assert!(has(&seen, "github.com/kierandrewett/bingux"), "the website row shows its address");
@@ -189,7 +189,7 @@ fn a_minimal_app_leaves_out_the_rows_it_has_no_facts_for() {
     for absent in ["Website", "Report an issue", "Build"] {
         assert!(!has(&seen, absent), "{absent:?} has nothing to show: {seen:?}");
     }
-    for kept in ["Licence", "Credits", "Legal", "App ID", "Copy details"] {
+    for kept in ["License", "Credits", "Legal", "App ID", "Copy details"] {
         assert!(has(&seen, kept), "{kept:?} is always there: {seen:?}");
     }
 }

@@ -423,7 +423,7 @@ pub fn crate_catalogue(crate_dir: impl AsRef<Path>, domain: &str) -> Report {
 pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> Report {
     let mut report = Report::default();
     let file_name = format!("{domain}.ftl");
-    let source_path = locale_dir.join("en-GB").join(&file_name);
+    let source_path = locale_dir.join("en-US").join(&file_name);
     let Some(source) = parse(&source_path, &mut report) else {
         return report;
     };
@@ -500,7 +500,7 @@ pub fn check(locale_dir: &Path, domain: &str, sources: &[(String, String)]) -> R
     let mut languages: Vec<PathBuf> = languages
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| path.file_name().is_some_and(|name| name != "en-GB"))
+        .filter(|path| path.file_name().is_some_and(|name| name != "en-US"))
         .map(|dir| dir.join(&file_name))
         .filter(|path| path.is_file())
         .collect();
@@ -579,7 +579,7 @@ mod tests {
         let dir = temp("clean");
         write(
             &dir,
-            "en-GB",
+            "en-US",
             "-brand = Bingux\ndemo-title = { -brand } files\n    .tooltip = Open { $name }\ndemo-items = { $count ->\n    [one] One item\n   *[other] { $count } items\n}\ndemo-dynamic-a = A\n",
         );
         write(&dir, "de", "demo-title = { -brand } Dateien\n");
@@ -599,7 +599,7 @@ mod tests {
         let dir = temp("problems");
         write(
             &dir,
-            "en-GB",
+            "en-US",
             "demo-a = A { $name }\ndemo-a = Again\ndemo-unused = U\ndemo-ref = { -nothing }\n",
         );
         write(

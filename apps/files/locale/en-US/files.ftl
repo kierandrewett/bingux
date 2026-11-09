@@ -1,13 +1,13 @@
 ### Bingux Files.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `files-`.
 ### Only the app's own strings are here. The menus and views of the file
-### manager live in the `bingux-ui` catalogue (`ui-files-`).
+### manager live in the `bingux-ui` catalog (`ui-files-`).
 
 # The app's name, in the window title, the header and the About window.
 files-title = Files
 # One line in the About window.
-files-description = Browse and organise files and folders
+files-description = Browse and organize files and folders
 
 ## Closing a window while a file operation runs
 

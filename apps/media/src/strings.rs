@@ -1,5 +1,5 @@
 //! Every string Media shows, each one a `tr!` of its catalogue message in
-//! `locale/en-GB/media.ftl`. Counts and durations go through the variables of
+//! `locale/en-US/media.ftl`. Counts and durations go through the variables of
 //! those messages; a value that is only a formatted number or time keeps its
 //! `bingux-ui` formatter.
 

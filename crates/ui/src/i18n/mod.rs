@@ -13,7 +13,7 @@
 //! let ask = tr!("files-delete-confirm", name = &file);  // "Delete “notes.txt”?"
 //! ```
 //!
-//! with the source catalogue `locale/en-GB/files.ftl` next to the crate:
+//! with the source catalogue `locale/en-US/files.ftl` next to the crate:
 //!
 //! ```ftl
 //! files-empty-title = Folder is empty
@@ -40,7 +40,7 @@
 //! (`LANGUAGE`, `LC_ALL`, `LC_MESSAGES`, `LANG`, in gettext's order) and are
 //! negotiated against the languages that have a catalogue installed. Each
 //! message is looked up along the resulting chain: the person's languages,
-//! then `en-GB`, the source language (Bingux is written in British English),
+//! then `en-US`, the source language (Bingux is written in American English),
 //! then `en`. A language that has translated half the messages shows its half
 //! and English for the rest; a message ID never reaches the screen.
 //!
@@ -143,14 +143,14 @@ pub fn set_locale(locale: Option<Locale>) {
 }
 
 /// The language the interface is shown in: the first of the chain that has
-/// a catalogue (`de`, `en-GB`). A pseudo-locale names itself (`en-XA`,
+/// a catalogue (`de`, `en-US`). A pseudo-locale names itself (`en-XA`,
 /// `ar-XB`).
 pub fn language() -> String {
     localiser::current().chain()[0].clone()
 }
 
 /// The languages messages are looked up in, in order: the negotiated ones,
-/// then `en-GB`, then `en` when it has a catalogue.
+/// then `en-US`, then `en` when it has a catalogue.
 pub fn languages() -> Vec<String> {
     localiser::current().chain().to_vec()
 }
@@ -225,7 +225,7 @@ macro_rules! i18n_id {
 }
 
 /// The catalogue `<domain>.ftl` of the crate this is written in: its source
-/// (`locale/en-GB/<domain>.ftl`) compiled in, and its `locale/` directory read
+/// (`locale/en-US/<domain>.ftl`) compiled in, and its `locale/` directory read
 /// in debug builds so a translation can be tried without installing it.
 #[macro_export]
 macro_rules! catalogue {
@@ -234,7 +234,7 @@ macro_rules! catalogue {
             $domain,
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/locale/en-GB/",
+                "/locale/en-US/",
                 $domain,
                 ".ftl"
             )),

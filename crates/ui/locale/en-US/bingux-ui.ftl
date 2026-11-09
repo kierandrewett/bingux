@@ -1,6 +1,6 @@
 ### bingux-ui: the strings of the Bingux app SDK itself (dialogs, menus,
 ### the edit bar, window controls, the About window, the file chooser).
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `ui-`.
 
 -brand-name = Bingux
@@ -76,8 +76,8 @@ ui-error-details-not-copied = Could not copy the details. Try again.
 # The name of an app that did not give one, in "Could not show { $name }".
 ui-app-unnamed = The app
 
-ui-window-minimise = Minimise
-ui-window-maximise = Maximise
+ui-window-minimise = Minimize
+ui-window-maximise = Maximize
 ui-window-restore = Restore
 # Tooltip and screen reader name of the window's close button.
 ui-window-close-button = Close
@@ -185,8 +185,8 @@ ui-about-version-commit = Version { $version } ({ $commit })
 ui-about-website = Website
 ui-about-report-issue = Report an issue
 ui-about-link-failed = Could not open the link. Try again.
-ui-about-licence = Licence
-ui-about-licences = Licences
+ui-about-licence = License
+ui-about-licences = Licenses
 ui-about-credits = Credits
 ui-about-legal = Legal
 ui-about-details = Details
@@ -198,18 +198,18 @@ ui-about-built-with = Built with
 # The library every Bingux app's interface is made with (bingux-ui).
 ui-about-interface-library = Interface library
 ui-about-libraries = Libraries
-ui-about-licences-each = Licences of each library
+ui-about-licences-each = Licenses of each library
 # $app (String) - the app's name
-ui-about-no-licence = { $app } does not say which licence it is under.
+ui-about-no-licence = { $app } does not say which license it is under.
 # $app (String) - the app's name
-# $licence (String) - a licence identifier such as GPL-3.0-or-later
-ui-about-licence-without-text = { $app } is licensed under { $licence }. It did not include the text of the licence.
+# $licence (String) - a license identifier such as GPL-3.0-or-later
+ui-about-licence-without-text = { $app } is licensed under { $licence }. It did not include the text of the license.
 # $app (String) - the app's name
 ui-about-no-authors = { $app } does not list its authors.
 # $app (String) - the app's name
-ui-about-no-library-licences = The licences of the libraries { $app } is built from are not listed in this build.
+ui-about-no-library-licences = The licenses of the libraries { $app } is built from are not listed in this build.
 # $path (String) - a folder on the computer
-ui-about-licence-files = The full licence texts are in { $path }.
+ui-about-licence-files = The full license texts are in { $path }.
 
 ## Commands: the menu groups, the command palette and the keyboard
 ## shortcuts sheet every window has
@@ -230,7 +230,7 @@ ui-command-shortcuts = Keyboard shortcuts
     .keywords = keys, help
 # The About command; its title is ui-about-title.
 ui-command-about =
-    .keywords = version, licence, credits
+    .keywords = version, license, credits
 # Title of the command palette dialog.
 ui-palette-title = Commands
 ui-palette-search =
@@ -402,12 +402,12 @@ ui-flame-split-hint = Showing from { $depth } calls down, where the work splits.
 ui-flame-all-calls = All calls
 ui-flame-none-empty = Nothing sampled in this range
 
-## The colour picker
+## The color picker
 
-ui-colour-title = Colour
+ui-colour-title = Color
 ui-colour-done = Done
 ui-colour-hex =
-    .a11y = Hex colour
+    .a11y = Hex color
 ui-colour-opacity = Opacity
 ui-colour-red = Red
 ui-colour-green = Green
@@ -415,32 +415,32 @@ ui-colour-blue = Blue
 ui-colour-hue = Hue
 ui-colour-saturation = Saturation
 ui-colour-lightness = Lightness
-# The V of HSV: how bright the colour is.
+# The V of HSV: how bright the color is.
 ui-colour-value = Value
 ui-colour-recent = Recent
 ui-colour-picker =
-    .a11y = Colour picker
+    .a11y = Color picker
 ui-colour-plane =
     .a11y = Saturation and brightness
 # $saturation (Number) - 0 to 100
 # $brightness (Number) - 0 to 100
 ui-colour-plane-value =
     .a11y = Saturation { $saturation }%, brightness { $brightness }%
-# $old (String) - the colour before, as #rrggbb
-# $new (String) - the colour now
+# $old (String) - the color before, as #rrggbb
+# $new (String) - the color now
 ui-colour-preview =
-    .a11y = Colour, was { $old }, now { $new }
-# $colour (String) - the colour before, as #rrggbb
+    .a11y = Color, was { $old }, now { $new }
+# $colour (String) - the color before, as #rrggbb
 ui-colour-old =
-    .a11y = Restore old colour { $colour }
+    .a11y = Restore old color { $colour }
 # A named swatch, such as "Blue, #3584e4".
-# $name (String) - the colour's name
-# $hex (String) - the colour as #rrggbb
+# $name (String) - the color's name
+# $hex (String) - the color as #rrggbb
 ui-colour-named = { $name }, { $hex }
 # $colour (String) - the swatch's name and hex value
 ui-colour-swatch =
-    .a11y = Colour { $colour }
-ui-colour-hex-missing-error = Enter a hex colour, such as #3584e4.
+    .a11y = Color { $colour }
+ui-colour-hex-missing-error = Enter a hex color, such as #3584e4.
 # $digit (String) - the character that is not 0-9 or a-f
 ui-colour-hex-digit-error = “{ $digit }” is not a hex digit. Use 0 to 9 and A to F.
 # $count (Number) - how many digits were typed
@@ -522,7 +522,7 @@ ui-preview-text-reading = Reading…
 # The menu of the text viewer's toolbar.
 ui-preview-view-menu = View
 ui-preview-text-wrap = Wrap lines
-ui-preview-text-colour = Colour code
+ui-preview-text-colour = Color code
 ui-preview-text-larger = Larger text
 ui-preview-text-smaller = Smaller text
 ui-preview-text-default-size = Default text size
@@ -846,7 +846,7 @@ ui-files-place-remove-bookmark = Remove from bookmarks
 ui-files-place-add-bookmark = Add to bookmarks
 ui-files-place-properties = Properties
 
-# Why a command is greyed out. The reason shows in the status line.
+# Why a command is grayed out. The reason shows in the status line.
 ui-files-action-nothing-made-in-trash = Nothing can be made in the Trash.
 ui-files-action-nothing-to-paste = There is nothing to paste.
 ui-files-action-paste-in-trash-folder = Nothing can be put inside a folder in the Trash.
@@ -1304,7 +1304,7 @@ ui-compress-longest-side = Longest side
 ui-compress-pixels = Pixels
 ui-compress-pictures = Pictures
 ui-compress-remove-location = Remove location and camera data
-ui-compress-exif-hint = Takes out the EXIF, including where and with what it was taken. The colours stay.
+ui-compress-exif-hint = Takes out the EXIF, including where and with what it was taken. The colors stay.
 ui-compress-checking = Checking
 # $kind (String) - the kind of media, such as "Pictures"
 ui-compress-media-cannot = { $kind } cannot be made smaller

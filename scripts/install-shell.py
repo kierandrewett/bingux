@@ -160,7 +160,7 @@ def migrate_legacy_search_launcher(prefix):
 
 def catalogues(source):
     """Every Fluent catalogue (bingux-ui's and each app's) with its path below
-    share/bingux/locale: `<language>/<domain>.ftl`. The en-GB source is compiled
+    share/bingux/locale: `<language>/<domain>.ftl`. The en-US source is compiled
     into each program too; installing it lets a translator compare against it."""
     roots = [source / "crates/ui/locale"] + sorted((source / "apps").glob("*/locale"))
     return [(path, path.relative_to(root)) for root in roots if root.is_dir() for path in sorted(root.glob("*/*.ftl"))]

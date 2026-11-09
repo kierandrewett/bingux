@@ -1,6 +1,6 @@
 //! Every word Preview shows, in one place: menu items, tooltips, the empty
 //! state, toasts and the shortcut list. Each one is a `tr!` over the
-//! `preview-*` messages in `locale/en-GB/preview.ftl`, so it is translated
+//! `preview-*` messages in `locale/en-US/preview.ftl`, so it is translated
 //! as a whole sentence with its variables.
 
 use bingux_ui::prelude::tr;

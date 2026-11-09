@@ -2063,7 +2063,7 @@ it saved with the revision it has).
 
 Every string the manager shows (the chooser titles, the dialogs, the toast, the
 advice of an error, "Untitled") is a `ui-document-*` message in
-`locale/en-GB/bingux-ui.ftl`, so a translation of the catalogue translates them;
+`locale/en-US/bingux-ui.ftl`, so a translation of the catalogue translates them;
 an app that names its documents differently passes `DocumentsConfig::untitled`.
 
 ### The dialogs
@@ -4808,7 +4808,7 @@ hand-rolled formatters that were replaced and the ones that remain.
 
 ### Locale
 
-A `Locale` is a language with its region and script (`en-GB`, `de-CH`,
+A `Locale` is a language with its region and script (`en-US`, `de-CH`,
 `sr-Latn-RS`). `Locale::parse` reads a BCP 47 tag or a POSIX one
 (`de_DE.UTF-8@euro`); `Locale::current()` is the locale of the running
 process.
@@ -4824,7 +4824,7 @@ one that matches what it writes. `Locale::for_category(Category)` does:
 | `Monetary` | `LC_ALL`, `LC_MONETARY`, `LANG`                                   | Currency                                  |
 
 `C`, `POSIX` and `C.UTF-8` name no language, so they read as `Locale::fallback()`,
-British English (the language the Bingux apps are written in); `LANGUAGE` is
+American English (the language the Bingux apps are written in); `LANGUAGE` is
 ignored under them, as `gettext` ignores it. The codeset (`.UTF-8`) is dropped
 and `@latin` and `@cyrillic` set the script. A tag the data does not cover
 (`xx-YY`) is not an error: formatters use the root locale's conventions.
@@ -4984,8 +4984,8 @@ in ten languages.
 
 Every string a person reads comes from a [Project Fluent](https://projectfluent.org)
 catalogue, through `bingux_ui::i18n`. Fluent is the one localisation system of
-bingux-ui apps: no gettext, no hand-made string tables. British English
-(`en-GB`) is the source language.
+bingux-ui apps: no gettext, no hand-made string tables. American English
+(`en-US`) is the source language.
 
 ```rust
 use bingux_ui::prelude::*; // brings `tr!`, `i18n_id!`, `Message`, `Title`
@@ -5008,10 +5008,10 @@ let tip = tr!("calculator-mode.tooltip");
 | `i18n_id!("id")`                                  | An ID kept in a table and asked for later with `i18n::text(id)` or `Message::new(id)`                             |
 | `Message::new(id).arg("name", value).format()`    | A message whose ID is chosen at run time                                                                          |
 | `Arg::text(x)`, `Arg::number(x, least, most)`     | A variable's value: text, a number with fixed decimals; integers, floats and `format::Moment` convert by `Into`   |
-| `catalogue!("domain")`, `i18n::register(..)`      | The app's `locale/en-GB/<domain>.ftl`, compiled in; register it before `Application::run`                         |
+| `catalogue!("domain")`, `i18n::register(..)`      | The app's `locale/en-US/<domain>.ftl`, compiled in; register it before `Application::run`                         |
 | `i18n::text(id)`, `i18n::has(id)`                 | A message with no variables; whether a message exists                                                             |
 | `i18n::set_locale(Some(locale))`                  | Shows every window in another language, now. `None` goes back to the environment's                                |
-| `i18n::language()`, `languages()`, `direction()`  | The language shown, the fallback chain (`de`, `en-GB`), and its reading direction                                 |
+| `i18n::language()`, `languages()`, `direction()`  | The language shown, the fallback chain (`de`, `en-US`), and its reading direction                                 |
 | `i18n::set_pseudo(Some(Pseudo::Accented \| Rtl))` | A pseudo-locale, as `BINGUX_PSEUDO_LOCALE=accented\|rtl` sets it                                                  |
 | `i18n::use_language()`, `revision()`              | A number that changes with the language; window roots are keyed on it, so nothing else has to                     |
 | `i18n::check::crate_catalogue(dir, domain)`       | A test: every `tr!` ID exists with the variables it passes, and the catalogue has no unused message (`Report`)    |
@@ -5021,18 +5021,18 @@ A language switch rebuilds each window's content under its router, so the
 location, scroll and open tabs stay. Shortcut labels (`Ctrl+Shift+P` is
 `Strg+Umschalt+P` in German), the command groups, the palette, the shortcuts
 sheet, undo titles, the About window, previews, charts and the colour picker
-all come from the `bingux-ui` catalogue (`crates/ui/locale/en-GB/bingux-ui.ftl`).
+all come from the `bingux-ui` catalogue (`crates/ui/locale/en-US/bingux-ui.ftl`).
 
 ### Where catalogues live
 
-An app's catalogues sit next to its crate: `apps/calculator/locale/en-GB/calculator.ftl`
+An app's catalogues sit next to its crate: `apps/calculator/locale/en-US/calculator.ftl`
 is the source, `apps/calculator/locale/de/calculator.ftl` a translation. At
 run time a translation is found, first match wins, in each directory of
 `BINGUX_LOCALE_DIR`, the crate's own `locale/` (debug builds), then
 `$XDG_DATA_HOME/bingux/locale/` and `<each $XDG_DATA_DIRS>/bingux/locale/`.
 `make install` (and `scripts/install-shell.py`, `scripts/build-prefix.sh`, the
 RPM and Arch packages) installs every `.ftl` to `<prefix>/share/bingux/locale/<language>/`.
-A message a translation lacks falls back to `en-GB`, never to its ID.
+A message a translation lacks falls back to `en-US`, never to its ID.
 
 ### Conventions
 
@@ -5106,7 +5106,7 @@ attributes, a fallback and isolation in a right-to-left sentence.
 
 ### Migrating an app
 
-1. Make `apps/<app>/locale/en-GB/<app>.ftl` starting with a `###` comment that
+1. Make `apps/<app>/locale/en-US/<app>.ftl` starting with a `###` comment that
    names the app, and register it first thing in `main`:
    `bingux_ui::i18n::register(bingux_ui::catalogue!("<app>"));`.
 2. Give the app's name a message (`<app>-title = Calculator`) and pass
@@ -5128,7 +5128,7 @@ attributes, a fallback and isolation in a right-to-left sentence.
    still a literal) and `rtl`, at desktop width and 390x800.
 
 Calculator is the reference: `apps/calculator/src` and
-`apps/calculator/locale/en-GB/calculator.ftl`.
+`apps/calculator/locale/en-US/calculator.ftl`.
 
 ## Commands
 

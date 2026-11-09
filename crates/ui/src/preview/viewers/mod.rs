@@ -49,7 +49,7 @@
 //! font viewer as the worked example.
 //!
 //! Text a viewer shows goes through `tr!` (`ui-preview-*` in
-//! `locale/en-GB/bingux-ui.ftl`). Work that blocks (reading a file, running a
+//! `locale/en-US/bingux-ui.ftl`). Work that blocks (reading a file, running a
 //! tool) goes through `crate::task`, never the render.
 
 mod archive;

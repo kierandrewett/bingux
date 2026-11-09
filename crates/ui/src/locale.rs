@@ -1,6 +1,6 @@
 //! Which language and regional conventions the person uses.
 //!
-//! A [`Locale`] is a BCP 47 tag (`en-GB`, `de-CH`, `sr-Latn-RS`) with the
+//! A [`Locale`] is a BCP 47 tag (`en-US`, `de-CH`, `sr-Latn-RS`) with the
 //! CLDR data behind it. [`Locale::current`] reads the environment the way a
 //! POSIX program does, and every formatter in [`crate::format`] uses it unless
 //! it is given another with `.locale(..)`.
@@ -20,7 +20,7 @@
 //! `LC_ALL` overrides all of them, and `LANG` is the fallback for each. For
 //! `Messages` a non-empty `LANGUAGE` (a colon separated list, as `gettext`
 //! reads it) names the preferred language first. `C`, `POSIX` and `C.UTF-8`
-//! name no language, so they fall back to [`Locale::fallback`] (`en-GB`, the
+//! name no language, so they fall back to [`Locale::fallback`] (`en-US`, the
 //! source language of Bingux). The codeset (`.UTF-8`) is ignored; the
 //! modifiers `@latin` and `@cyrillic` set the script, others are dropped.
 //!
@@ -80,13 +80,21 @@ static OVERRIDE: RwLock<Option<Locale>> = RwLock::new(None);
 static REVISION: AtomicU64 = AtomicU64::new(0);
 
 impl Locale {
-    /// The language the Bingux apps are written in: British English. Used
+    /// The language the Bingux apps are written in: American English. Used
     /// when the environment names no language.
     pub fn fallback() -> Locale {
+        Locale(Arc::new(icu::locale::locale!("en-US")))
+    }
+
+    /// The regional conventions (dates, times, numbers) used when the
+    /// environment names none: British English, the person's own region. The
+    /// language of the apps is [`Locale::fallback`]; the two are kept apart so
+    /// that a change of source language does not reformat anyone's dates.
+    pub fn regional_fallback() -> Locale {
         Locale(Arc::new(icu::locale::locale!("en-GB")))
     }
 
-    /// The locale for `tag`: a BCP 47 tag (`en-GB`, `zh-Hant-TW`,
+    /// The locale for `tag`: a BCP 47 tag (`en-US`, `zh-Hant-TW`,
     /// `de-u-nu-latn`) or a POSIX one (`de_DE.UTF-8@euro`, `sr_RS@latin`).
     /// `None` when it is neither, or names no language (`C`, `POSIX`).
     pub fn parse(tag: &str) -> Option<Locale> {
@@ -195,10 +203,10 @@ impl Locale {
             .or_else(|| value("LANG"))
             .as_deref()
             .and_then(Locale::parse)
-            .unwrap_or_else(Locale::fallback)
+            .unwrap_or_else(Locale::regional_fallback)
     }
 
-    /// The BCP 47 tag: `en-GB`.
+    /// The BCP 47 tag: `en-US`.
     pub fn tag(&self) -> String {
         self.0.to_string()
     }
@@ -353,9 +361,13 @@ mod tests {
     }
 
     #[test]
-    fn nothing_set_falls_back_to_british_english() {
-        let locale = Locale::from_environment(Category::Time, env(&[]));
-        assert_eq!(locale, Locale::fallback());
+    fn nothing_set_falls_back_to_american_english_and_british_regions() {
+        // The apps are written in American English; the regional conventions
+        // (dates, times, numbers) stay British when the environment names none.
+        let language = Locale::from_environment(Category::Messages, env(&[]));
+        assert_eq!(language, Locale::fallback());
+        let time = Locale::from_environment(Category::Time, env(&[]));
+        assert_eq!(time, Locale::regional_fallback());
         let c = Locale::from_environment(Category::Numeric, env(&[("LANG", "C.UTF-8")]));
         assert_eq!(c.tag(), "en-GB");
     }
@@ -418,7 +430,7 @@ mod tests {
         let c = [("LANG", "C"), ("LANGUAGE", "de")];
         assert_eq!(
             Locale::from_environment(Category::Messages, env(&c)).tag(),
-            "en-GB"
+            "en-US"
         );
     }
 
@@ -445,11 +457,11 @@ mod tests {
 
     #[test]
     fn preferred_is_never_empty_and_ignores_language_under_c() {
-        assert_eq!(preferred(&[]), ["en-GB"]);
+        assert_eq!(preferred(&[]), ["en-US"]);
         assert_eq!(
             preferred(&[("LANG", "C"), ("LANGUAGE", "de:fr")]),
-            ["en-GB"]
+            ["en-US"]
         );
-        assert_eq!(preferred(&[("LANGUAGE", "de")]), ["en-GB"]);
+        assert_eq!(preferred(&[("LANGUAGE", "de")]), ["en-US"]);
     }
 }

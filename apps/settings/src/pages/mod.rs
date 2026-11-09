@@ -158,12 +158,12 @@ impl PageId {
                 "network wifi wi-fi wireless ethernet wired cable internet vpn wireguard openvpn proxy hotspot hidden saved networks airplane mobile cellular wwan modem sim apn roaming data usage dns ip address metered captive portal"
             }
             Self::Bluetooth => "headphones devices pair",
-            Self::Appearance => "wallpaper background accent colour color theme dark light",
+            Self::Appearance => "wallpaper background accent color theme dark light",
             Self::Accessibility => {
                 "accessibility screen reader keyboard sticky slow bounce mouse keys pointer contrast large text cursor animations scrollbars"
             }
             Self::Privacy => "portal permissions screenshot screen capture sharing input access",
-            Self::Desktop => "dock sidebar bar clock control centre layout",
+            Self::Desktop => "dock sidebar bar clock control center layout",
             Self::Search => "providers engines files previews assistant",
             Self::Displays => "monitor screen resolution scale night light",
             Self::Sound => "audio volume speakers microphone mute",

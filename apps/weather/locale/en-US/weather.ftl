@@ -1,5 +1,5 @@
 ### Bingux Weather.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `weather-`.
 
 # The app's name, in the window title and the About window.
@@ -105,10 +105,10 @@ weather-command-days = Look at each day
 weather-command-remove-place = Remove the place in the list
 weather-unit-celsius = Celsius
 weather-unit-fahrenheit = Fahrenheit
-weather-unit-kmh = Kilometres per hour
+weather-unit-kmh = Kilometers per hour
 weather-unit-mph = Miles per hour
-weather-unit-ms = Metres per second
-weather-unit-mm = Millimetres
+weather-unit-ms = Meters per second
+weather-unit-mm = Millimeters
 weather-unit-inches = Inches
 weather-units = Units
 weather-automatic = Automatic

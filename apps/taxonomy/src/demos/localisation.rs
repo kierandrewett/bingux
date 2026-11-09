@@ -11,13 +11,13 @@ use freya::prelude::*;
 use super::common::{rows, with};
 
 /// The choices of the switch.
-const LANGUAGES: [&str; 5] = ["system", "en-GB", "de", "accented", "rtl"];
+const LANGUAGES: [&str; 5] = ["system", "en-US", "de", "accented", "rtl"];
 
 /// How a choice is shown. A language is named in its own language, as a
 /// language menu names it; the others are messages.
 fn language_name(key: &str) -> String {
     match key {
-        "en-GB" => "English (UK)".to_owned(),
+        "en-US" => "English (US)".to_owned(),
         "de" => "Deutsch".to_owned(),
         "accented" => tr!("taxonomy-l10n-accented"),
         "rtl" => tr!("taxonomy-l10n-rtl"),

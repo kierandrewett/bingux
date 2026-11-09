@@ -13,7 +13,7 @@ pub struct Catalogue {
 }
 
 impl Catalogue {
-    /// The catalogue `domain` with `source`, the text of its `en-GB` file.
+    /// The catalogue `domain` with `source`, the text of its `en-US` file.
     pub const fn new(domain: &'static str, source: &'static str) -> Catalogue {
         Catalogue {
             domain,

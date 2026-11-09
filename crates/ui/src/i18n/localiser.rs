@@ -20,7 +20,7 @@ use crate::format::{self, Moment};
 use crate::locale::Locale;
 
 /// The language Bingux is written in.
-pub(super) const SOURCE: &str = "en-GB";
+pub(super) const SOURCE: &str = "en-US";
 
 /// Unicode's first strong isolate and pop directional isolate.
 const FSI: char = '\u{2068}';
@@ -128,7 +128,7 @@ pub(super) fn build(
             }
         }
     }
-    let source = langid(SOURCE).expect("en-GB is a language tag");
+    let source = langid(SOURCE).expect("en-US is a language tag");
     // Directory name for each language that has one: `de`, `pt-BR`.
     let installed: Vec<(LanguageIdentifier, String)> = catalogue::languages(&dirs, catalogues)
         .into_iter()
@@ -216,7 +216,7 @@ fn read(
 }
 
 fn new_bundle(tag: &str, rtl: bool) -> Bundle {
-    let language = langid(tag).unwrap_or_else(|| langid(SOURCE).expect("en-GB is a language tag"));
+    let language = langid(tag).unwrap_or_else(|| langid(SOURCE).expect("en-US is a language tag"));
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
     // Isolation marks around every placeable in a right-to-left language; a
     // left-to-right one isolates only the values that hold right-to-left

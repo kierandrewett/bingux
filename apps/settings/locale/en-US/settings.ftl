@@ -1,5 +1,5 @@
 ### Bingux Settings.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `settings-`.
 ###
 ### Search keywords (`settings_index.rs`) stay literal in the code: they are
@@ -126,7 +126,7 @@ settings-setting-displays-primary-display = Primary display
 settings-setting-displays-enabled = Enabled
 settings-setting-displays-night-light = Night light
 settings-setting-displays-on-a-schedule = On a schedule
-settings-setting-displays-colour-temperature = Colour temperature
+settings-setting-displays-colour-temperature = Color temperature
 settings-setting-sound-volume = Volume
 settings-setting-sound-output-device = Output device
 settings-setting-sound-input-device = Input device
@@ -166,8 +166,8 @@ settings-setting-mouse-off-when-a-mouse-is-connected = Off when a mouse is conne
 settings-setting-mouse-touchpad-pointer-acceleration = Touchpad pointer acceleration
 settings-setting-mouse-primary-button = Primary button
 settings-setting-appearance-wallpaper = Wallpaper
-settings-setting-appearance-accent-colour = Accent colour
-settings-setting-appearance-colour-scheme = Colour scheme
+settings-setting-appearance-accent-colour = Accent color
+settings-setting-appearance-colour-scheme = Color scheme
 settings-setting-appearance-font = Font
 settings-setting-appearance-text-size = Text size
 settings-setting-accessibility-large-text = Large text
@@ -197,7 +197,7 @@ settings-setting-desktop-show-sidebar = Show sidebar
 settings-setting-desktop-show-seconds-in-the-clock = Show seconds in the clock
 settings-setting-desktop-show-system-usage = Show system usage
 settings-setting-desktop-show-my-public-ip-address = Show my public IP address
-settings-setting-desktop-control-centre = Control Centre
+settings-setting-desktop-control-centre = Control Center
 settings-setting-desktop-top-bar = Top bar
 settings-setting-search-search-sources = Search sources
 settings-setting-search-file-search = File search
@@ -305,7 +305,7 @@ displays-group = Displays
 displays-arrangement = Arrangement
 displays-night-light = Night light
 displays-use-night-light = Use night light
-displays-colour-temperature = Colour temperature
+displays-colour-temperature = Color temperature
 displays-on-a-schedule = On a schedule
 displays-from = From
 displays-until = Until
@@ -406,10 +406,10 @@ sound-side-left = Left
 sound-side-right = Right
 sound-side-rear = Rear
 sound-side-front = Front
-sound-centre = Centre
+sound-centre = Center
 sound-channel-front-left = Front left
 sound-channel-front-right = Front right
-sound-channel-centre = Centre
+sound-channel-centre = Center
 sound-channel-subwoofer = Subwoofer
 sound-channel-rear-left = Rear left
 sound-channel-rear-right = Rear right
@@ -708,20 +708,20 @@ settings-accessibility-locate-pointer = Locate pointer
 
 ## Appearance
 
-# The wallpaper, font, accent and colour scheme on the Appearance page.
+# The wallpaper, font, accent and color scheme on the Appearance page.
 settings-appearance-text = Text
 settings-appearance-font = Font
 settings-appearance-text-size = Text size
 settings-appearance-themes = Themes
 settings-appearance-icons = Icons
 settings-appearance-cursor = Cursor
-settings-appearance-accent-colour = Accent colour
-settings-appearance-accent-label = Accent colour { $name }
-settings-appearance-colour-scheme = Colour scheme
+settings-appearance-accent-colour = Accent color
+settings-appearance-accent-label = Accent color { $name }
+settings-appearance-colour-scheme = Color scheme
 settings-appearance-scheme-default = Default
 settings-appearance-scheme-light = Light
 settings-appearance-scheme-dark = Dark
-settings-appearance-gsettings-unavailable = Accent colour and colour scheme are not available on this system.
+settings-appearance-gsettings-unavailable = Accent color and color scheme are not available on this system.
 settings-appearance-wallpaper = Wallpaper
 settings-appearance-choose-wallpaper = Choose a wallpaper
 settings-appearance-filter-pictures = Pictures
@@ -826,7 +826,7 @@ settings-applications-category-other = Other
 
 ## Desktop
 
-# The Desktop and dock page: removable media, privacy, dock, sidebar and Control Centre.
+# The Desktop and dock page: removable media, privacy, dock, sidebar and Control Center.
 settings-desktop-tile-vpn = VPN
 settings-desktop-tile-dnd = Do not disturb
 settings-desktop-tile-night-light = Night light
@@ -858,10 +858,10 @@ settings-desktop-dock = Dock
 settings-desktop-show-dock = Show dock
 settings-desktop-alignment = Alignment
 settings-desktop-align-left = Left
-settings-desktop-align-centre = Centre
+settings-desktop-align-centre = Center
 settings-desktop-align-right = Right
 settings-desktop-align-left-menu = Align left
-settings-desktop-align-centre-menu = Align centre
+settings-desktop-align-centre-menu = Align center
 settings-desktop-align-right-menu = Align right
 settings-desktop-sidebar = Sidebar
 settings-desktop-show-sidebar = Show sidebar
@@ -888,7 +888,7 @@ settings-desktop-scroll-reverse = Reversed
 settings-desktop-top-bar = Top bar
 settings-desktop-show-system-usage = Show system usage
 settings-desktop-show-clock-seconds = Show seconds in the clock
-settings-desktop-control-centre = Control Centre
+settings-desktop-control-centre = Control Center
 
 ## Settings Leftovers
 
@@ -1175,7 +1175,7 @@ network-editor-wifi-security-sae = WPA3 Personal
 network-editor-wifi-security-wpa-eap = WPA & WPA2 Enterprise
 network-editor-wifi-security-wep = WEP
 network-editor-eap-peap = PEAP
-network-editor-eap-ttls = Tunnelled TLS
+network-editor-eap-ttls = Tunneled TLS
 network-editor-eap-tls = TLS
 network-editor-eap-fast = FAST
 network-editor-phase2-mschapv2 = MSCHAPv2
@@ -1800,7 +1800,7 @@ network-hotspot-hint-password = At least 8 characters.
 network-hotspot-field-band = Band
 # Warning that turning on the hotspot disconnects from the current network.
 network-hotspot-disconnects = Turning it on disconnects this computer from { $network }.
-# Description of the hotspot sharing behaviour.
+# Description of the hotspot sharing behavior.
 network-hotspot-shares = Devices that join share this computer's connection.
 # Action to turn the hotspot on.
 network-hotspot-turn-on = Turn on

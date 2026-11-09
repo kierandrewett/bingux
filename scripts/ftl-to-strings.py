@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Exports a Fluent catalogue to the myvoice strings TSV (`kind<TAB>text`).
 
-    scripts/ftl-to-strings.py crates/ui/locale/en-GB/bingux-ui.ftl \\
+    scripts/ftl-to-strings.py crates/ui/locale/en-US/bingux-ui.ftl \\
         | node ~/dev/myvoice/dist/index.js strings - --profile app-copy
 
 The kind of each string comes from its name (docs/bingux-ui.md,

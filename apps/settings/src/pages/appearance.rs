@@ -396,7 +396,7 @@ impl Component for SchemeCard {
             .child(caption.label(&tokens, self.title.clone()));
         focus_stop(
             card,
-            format!("{} colour scheme", self.title),
+            format!("{} color scheme", self.title),
             AccessibilityRole::Button,
             true,
             Radius::Card,

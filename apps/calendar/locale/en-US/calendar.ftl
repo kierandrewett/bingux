@@ -1,5 +1,5 @@
 ### Bingux Calendar.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `calendar-`.
 
 # The app's name, in the window title, the header and the About window.
@@ -121,10 +121,10 @@ calendar-add-calendar = Add calendar
 calendar-import-events = Import events
 calendar-import-events-button = Import Events
 calendar-new-calendar = New calendar
-calendar-new-calendar-description = Events in it share a colour and can be hidden together.
+calendar-new-calendar-description = Events in it share a color and can be hidden together.
 calendar-name-placeholder = Calendar name
 calendar-rename-title = Rename calendar
-calendar-colour = Colour
+calendar-colour = Color
 calendar-files-filter = Calendar files
 calendar-all-files-filter = All files
 calendar-export-title = Export calendar

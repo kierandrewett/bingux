@@ -133,7 +133,7 @@ pub struct Environment {
 /// App ID: bingux-files
 /// Commit: 444fb3b
 /// Built: 2026-10-28
-/// Licence: GPL-3.0-or-later
+/// License: GPL-3.0-or-later
 /// Rust: rustc 1.90.0 (1159e78c4 2025-09-14)
 /// Freya: 0.5.0-rc.10
 /// bingux-ui: 0.1.0
@@ -161,7 +161,7 @@ pub fn details_text(info: &AppInfo, env: &Environment) -> String {
     fact("App ID", &info.id);
     fact("Commit", short_commit(&info.commit));
     fact("Built", &info.built);
-    fact("Licence", &info.licence);
+    fact("License", &info.licence);
     fact("Rust", RUSTC);
     fact("Freya", FREYA);
     fact("bingux-ui", BINGUX_UI);
@@ -281,7 +281,7 @@ mod tests {
             "App ID: bingux-files",
             "Commit: 444fb3b",
             "Built: 2026-10-28",
-            "Licence: GPL-3.0-or-later",
+            "License: GPL-3.0-or-later",
             "OS: Fedora Linux 43",
             "Kernel: 7.2.3",
             "Session: wayland, sway",
@@ -299,7 +299,7 @@ mod tests {
     fn a_fact_that_is_not_known_is_left_out() {
         let text = details_text(&AppInfo::default().name("Files"), &Environment::default());
         assert!(text.starts_with("Files\n"), "{text}");
-        for absent in ["App ID", "Commit", "Built", "Licence", "OS:", "Session", "Display scale", "Graphics", "Theme", "Density"] {
+        for absent in ["App ID", "Commit", "Built", "License", "OS:", "Session", "Display scale", "Graphics", "Theme", "Density"] {
             assert!(!text.contains(absent), "{absent} should be left out of\n{text}");
         }
     }

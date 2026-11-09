@@ -1,5 +1,5 @@
 ### Bingux Preview.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `preview-`.
 
 # The app's name, in the window title, the header and the About window.

@@ -508,11 +508,11 @@ mod tests {
         assert!(
             three
                 .body
-                .starts_with("“note 1.txt”, “note 2.txt” and “note 3.txt” have")
+                .starts_with("“note 1.txt”, “note 2.txt”, and “note 3.txt” have")
         );
         let five = unsaved_changes(&names(5), |_| {});
         assert!(
-            five.body.contains("“note 3.txt” and 2 more have"),
+            five.body.contains("“note 3.txt”, and 2 more have"),
             "{}",
             five.body
         );

@@ -1,5 +1,5 @@
 ### Bingux Taxonomy: the app that shows every bingux-ui component.
-### Source language: British English. Conventions: docs/bingux-ui.md,
+### Source language: American English. Conventions: docs/bingux-ui.md,
 ### "Localisation". Every ID starts with `taxonomy-`.
 
 # The app's name, in the window title and the About window.
@@ -22,8 +22,8 @@ taxonomy-l10n-chain = Fallback order
 taxonomy-l10n-direction = Reading direction
 taxonomy-l10n-direction-ltr = Left to right
 taxonomy-l10n-direction-rtl = Right to left
-# Whether the taxonomy's catalogue matches its code.
-taxonomy-l10n-check = Catalogue check
+# Whether the taxonomy's catalog matches its code.
+taxonomy-l10n-check = Catalog check
 taxonomy-l10n-check-clean-status = No problems
 # The check needs the source tree, which an installed copy does not have.
 taxonomy-l10n-check-unavailable-status = Needs the source tree
@@ -49,9 +49,9 @@ taxonomy-l10n-number = A number
 taxonomy-l10n-size = { $size } MB free
 # A message the German stub has not translated, so it shows in English.
 taxonomy-l10n-fallback = Not yet translated
-taxonomy-l10n-fallback-sample = This line falls back to British English.
+taxonomy-l10n-fallback-sample = This line falls back to American English.
 taxonomy-l10n-shortcut = A shortcut
-# A message from bingux-ui's own catalogue.
+# A message from bingux-ui's own catalog.
 taxonomy-l10n-ui-string = A bingux-ui message
 # A button whose tooltip is an attribute of its message.
 taxonomy-l10n-attribute = A tooltip attribute
