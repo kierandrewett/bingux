@@ -118,6 +118,7 @@ use super::tab_close::{self, Act, Offers, RapidClose, Row};
 use super::tab_geometry::Geometry;
 use super::tab_scroll;
 use super::tab_tear::{self, Detach, Pull, StripLayout, StripProbe, TearGate};
+use crate::a11y::SemanticsExt;
 use crate::component::ComponentName;
 use crate::drag::{Frames, PointerDrag, use_frames, use_pointer_drag};
 use crate::icons::{self, Icon};
