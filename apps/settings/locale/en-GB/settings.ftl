@@ -402,3 +402,126 @@ network-carrier-idle = Search to see the carriers around you.
 network-carrier-searching = Searching for networks…
 network-carrier-empty = No networks found
 network-carrier-search-again = Search again
+
+## Mobile page
+
+# One-line status under the Mobile network row. Shown when Settings cannot tell more.
+# Status when airplane mode is on.
+network-mobile-status-airplane = Off in airplane mode
+# Status when the mobile radio is off.
+network-mobile-status-off = Off
+# Status when the link has no connection.
+network-mobile-status-not-connected = Not connected
+# Status when the SIM is locked with a PIN or PUK.
+network-mobile-status-sim-locked = SIM locked
+# Status when no SIM card is inserted.
+network-mobile-status-no-sim = No SIM card
+# Status while the modem is searching for a network.
+network-mobile-status-searching = Searching for a network
+# Status when the network refused the registration.
+network-mobile-status-refused = Registration refused
+# Status when the modem is not registered on any network.
+network-mobile-status-not-registered = Not registered
+# Fallback network name when the carrier is not known.
+network-mobile-status-network = Mobile network
+# Appended to the status when the modem is roaming.
+network-mobile-status-roaming = Roaming
+# Error when the modem does not become ready in time.
+network-mobile-modem-not-ready = The modem did not become ready. Try again in a moment.
+# Error when mobile data cannot be turned on.
+network-mobile-data-on-error = Could not turn on mobile data. Try again.
+# Error when mobile data cannot be turned off.
+network-mobile-data-off-error = Could not turn off mobile data. Try again.
+# Row that opens the mobile network page.
+network-mobile-row = Mobile network
+# Page subtitle while the modem is loading.
+network-mobile-loading = Loading…
+# Info shown when airplane mode is on.
+network-mobile-airplane-info = Mobile network is off in airplane mode.
+# Button that turns airplane mode off.
+network-mobile-airplane-off = Turn off airplane mode
+# Hint shown when there is no SIM card.
+network-mobile-no-sim-hint = No SIM card. Insert one to use mobile data.
+# Hint shown when the mobile network is switched off.
+network-mobile-off-hint = The mobile network is off. Turn on mobile data to use it.
+# Error title shown when the network status cannot be read.
+network-mobile-status-read-error = Could not read the network status. Try again in a moment.
+# Button that retries a failed load.
+network-mobile-retry = Try again
+# Empty state when no mobile modem is found.
+network-mobile-modem-empty = No mobile modem found
+# Error title shown when the modem cannot be read.
+network-mobile-modem-read-error = Could not read the modem. Try again.
+# Row that opens the advanced mobile settings.
+network-mobile-advanced = Advanced
+# Row showing the carrier name.
+network-mobile-carrier = Carrier
+# Row showing the network technology, such as 4G or 5G.
+network-mobile-network-type = Network type
+# Row showing the signal strength.
+network-mobile-signal = Signal
+# Group title for registration details.
+network-mobile-registration-title = Registration
+# Row showing the registration state.
+network-mobile-registration = Registration
+# Row showing whether the modem is roaming.
+network-mobile-roaming = Roaming
+# Value when roaming is on.
+network-mobile-yes = Yes
+# Value when roaming is off.
+network-mobile-no = No
+# Switch that turns mobile data on or off.
+network-mobile-data = Mobile data
+# Switch that allows data roaming.
+network-mobile-data-roaming = Data roaming
+# Row choosing the preferred network type.
+network-mobile-preferred-type = Preferred network type
+# Value when the carrier is chosen by hand.
+network-mobile-manual = Manual
+# Value when the carrier or APN is chosen automatically.
+network-mobile-automatic = Automatic
+# Value when no APN is set.
+network-mobile-none = None
+# Group title for the network and APN rows.
+network-mobile-network-title = Network
+# Row that opens the carrier choice.
+network-mobile-network = Network
+# Row that opens the access point names.
+network-mobile-apn-row = Access point names
+# Group title for the SIM card.
+network-mobile-sim-title = SIM
+# Row showing the SIM operator.
+network-mobile-sim-operator = Operator
+# Row showing the SIM number.
+network-mobile-sim-number = SIM number
+# Switch that locks the SIM with a PIN.
+network-mobile-sim-lock = Lock SIM with PIN
+# Row that opens the PIN change dialog.
+network-mobile-sim-change-pin = Change PIN…
+# Info when the SIM needs a code that Settings cannot enter.
+network-mobile-sim-other-lock = This SIM needs a code that Settings cannot enter.
+# Info when the SIM is locked with an unknown lock.
+network-mobile-sim-locked = The SIM is locked.
+# Info when the SIM is blocked after too many wrong PINs.
+network-mobile-sim-puk-blocked = The SIM is blocked after too many wrong PINs.
+# Row that opens the PUK unlock dialog.
+network-mobile-sim-unlock-puk = Unlock with PUK
+# Info when the SIM is locked with a PIN.
+network-mobile-sim-pin-locked = The SIM is locked with a PIN.
+# Row that opens the PIN unlock dialog.
+network-mobile-sim-unlock-pin = Unlock with PIN
+# Group title for the modem details.
+network-mobile-modem-title = Modem
+# Modem detail: manufacturer.
+network-mobile-modem-manufacturer = Manufacturer
+# Modem detail: model.
+network-mobile-modem-model = Model
+# Modem detail: firmware revision.
+network-mobile-modem-firmware = Firmware
+# Modem detail: IMEI number.
+# IMEI is an international identifier, not a word to translate.
+network-mobile-modem-imei = IMEI
+# Modem detail: phone numbers.
+network-mobile-modem-phone-number = Phone number
+# Modem detail: primary port.
+network-mobile-modem-port = Port

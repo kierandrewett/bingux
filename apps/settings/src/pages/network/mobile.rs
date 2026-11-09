@@ -25,6 +25,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use bingux_ui::prelude::tr;
 use freya::prelude::*;
 
 use super::model::{self, CONNECT, NetCtx, Overview, QUICK, nmcli, use_net_ctx};
@@ -156,37 +157,41 @@ impl Link {
 /// The one-line state under the title and in the Network page's row.
 fn status_line(modem: Option<&Modem>, link: &Link) -> String {
     if link.airplane {
-        return "Off in airplane mode".to_string();
+        return tr!("network-mobile-status-airplane");
     }
     let Some(modem) = modem else {
         return if !link.radio {
-            "Off".to_string()
+            tr!("network-mobile-status-off")
         } else if link.connected {
             link.connection.clone()
         } else {
-            "Not connected".to_string()
+            tr!("network-mobile-status-not-connected")
         };
     };
     if modem.locked() {
-        return "SIM locked".to_string();
+        return tr!("network-mobile-status-sim-locked");
     }
     if modem.no_sim() {
-        return "No SIM card".to_string();
+        return tr!("network-mobile-status-no-sim");
     }
     if !link.radio || modem.off() {
-        return "Off".to_string();
+        return tr!("network-mobile-status-off");
     }
     if !modem.registered() {
         return match modem.registration.as_str() {
-            "searching" => "Searching for a network".to_string(),
-            "denied" => "Registration refused".to_string(),
-            _ => "Not registered".to_string(),
+            "searching" => tr!("network-mobile-status-searching"),
+            "denied" => tr!("network-mobile-status-refused"),
+            _ => tr!("network-mobile-status-not-registered"),
         };
     }
-    let mut parts = vec![modem.carrier().unwrap_or_else(|| "Mobile network".into())];
+    let mut parts = vec![
+        modem
+            .carrier()
+            .unwrap_or_else(|| tr!("network-mobile-status-network")),
+    ];
     parts.extend(modem.technology().map(str::to_string));
     if modem.roaming() {
-        parts.push("Roaming".to_string());
+        parts.push(tr!("network-mobile-status-roaming"));
     }
     parts.join(" · ")
 }
@@ -217,9 +222,7 @@ fn wait_for_modem_device() -> Result<String, CommandError> {
         }
         std::thread::sleep(Duration::from_secs(1));
     }
-    Err(CommandError(
-        "The modem did not become ready. Try again in a moment.".into(),
-    ))
+    Err(CommandError(tr!("network-mobile-modem-not-ready")))
 }
 
 /// Mobile data on: the radio, then the data connection. Off: the data
@@ -247,10 +250,10 @@ fn set_mobile_data(ctx: NetCtx, link: &Link, on: bool) {
         data_command(device, radio, on).map_err(|error| {
             CommandError(super::plain(
                 &error.0,
-                if on {
-                    "Could not turn on mobile data. Try again."
+                &if on {
+                    tr!("network-mobile-data-on-error")
                 } else {
-                    "Could not turn off mobile data. Try again."
+                    tr!("network-mobile-data-off-error")
                 },
             ))
         })
@@ -275,7 +278,7 @@ pub fn mobile_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element>
     let on = usable && link.data_on();
     let toggle = link.clone();
     Some(Element::from(
-        row("Mobile network")
+        row(tr!("network-mobile-row"))
             .leading_signal(bars, false)
             .subtitle(status_line(known.as_ref(), &link))
             .trailing(
@@ -311,25 +314,23 @@ impl Component for MobilePage {
             .unwrap_or_default();
 
         let head = PageHead::new().subtitle(if loading {
-            "Loading…".to_string()
+            tr!("network-mobile-loading")
         } else {
             status_line(Some(&modem), &link)
         });
         let mut page = page_column().child(head);
 
         if link.airplane {
-            page = page.child(
-                Group::new(None::<String>).row(Element::from(
-                    status(Status::Info(
-                        "Mobile network is off in airplane mode.".into(),
-                    ))
-                    .action("Turn off airplane mode", move |_| {
+            page = page.child(Group::new(None::<String>).row(Element::from(
+                status(Status::Info(tr!("network-mobile-airplane-info").into())).action(
+                    &tr!("network-mobile-airplane-off"),
+                    move |_| {
                         model::toggle_link(ctx, "airplane".to_string(), false, || {
                             model::set_airplane_mode(false)
                         })
-                    }),
-                )),
-            );
+                    },
+                ),
+            )));
         }
 
         if modem.locked() {
@@ -345,7 +346,7 @@ impl Component for MobilePage {
         }
         if modem.no_sim() {
             page = page.child(Group::new(None::<String>).row(Element::from(status(
-                Status::Empty("No SIM card. Insert one to use mobile data.".into()),
+                Status::Empty(tr!("network-mobile-no-sim-hint").into()),
             ))));
             return veiled(page.child(modem_group(&modem)), loading).into();
         }
@@ -353,9 +354,7 @@ impl Component for MobilePage {
         if !link.airplane {
             if off {
                 page = page.child(Group::new(None::<String>).row(Element::from(status(
-                    Status::Info(
-                        "The mobile network is off. Turn on mobile data to use it.".into(),
-                    ),
+                    Status::Info(tr!("network-mobile-off-hint").into()),
                 ))));
             } else {
                 page = page.child(status_group(&modem));
@@ -389,9 +388,9 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
                 page_column().child(PageHead::new()).child(
                     status(Status::Error(super::plain(
                         &error.0,
-                        "Could not read the network status. Try again in a moment.",
+                        &tr!("network-mobile-status-read-error"),
                     )))
-                    .action("Try again", move |_| ctx.reload()),
+                    .action(&tr!("network-mobile-retry"), move |_| ctx.reload()),
                 ),
                 false,
             )
@@ -404,7 +403,9 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
         Err(veiled(
             page_column()
                 .child(PageHead::new())
-                .child(status(Status::Empty("No mobile modem found".into()))),
+                .child(status(Status::Empty(
+                    tr!("network-mobile-modem-empty").into(),
+                ))),
             false,
         )
         .into())
@@ -418,9 +419,11 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
                 page_column().child(PageHead::new()).child(
                     status(Status::Error(super::plain(
                         &error.0,
-                        "Could not read the modem. Try again.",
+                        &tr!("network-mobile-modem-read-error"),
                     )))
-                    .action("Try again", move |_| reload_modem(modem_state)),
+                    .action(&tr!("network-mobile-retry"), move |_| {
+                        reload_modem(modem_state)
+                    }),
                 ),
                 false,
             )
@@ -447,7 +450,7 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
 /// The one row to everything else on the Mobile page.
 fn advanced_row(ctx: NetCtx) -> Group {
     Group::new(None::<String>).row(
-        row("Advanced")
+        row(tr!("network-mobile-advanced"))
             .navigates()
             .on_press(move |_| ctx.router.open(routes::mobile_advanced())),
     )
@@ -529,23 +532,33 @@ fn status_group(modem: &Modem) -> Group {
     };
     Group::new(None::<String>)
         .row(
-            property_row("Carrier", modem.carrier().unwrap_or_else(|| "—".into()))
-                .leading_signal(modem.bars(), false),
+            property_row(
+                tr!("network-mobile-carrier"),
+                modem.carrier().unwrap_or_else(|| "—".into()),
+            )
+            .leading_signal(modem.bars(), false),
         )
         .row(property_row(
-            "Network type",
+            tr!("network-mobile-network-type"),
             modem.technology().unwrap_or("—"),
         ))
-        .row(property_row("Signal", signal))
+        .row(property_row(tr!("network-mobile-signal"), signal))
 }
 
 /// Whether the modem is registered and roaming.
 fn registration_group(modem: &Modem) -> Group {
-    Group::titled("Registration")
-        .row(property_row("Registration", modem.registration_label()))
+    Group::titled(&tr!("network-mobile-registration-title"))
         .row(property_row(
-            "Roaming",
-            if modem.roaming() { "Yes" } else { "No" },
+            tr!("network-mobile-registration"),
+            modem.registration_label(),
+        ))
+        .row(property_row(
+            tr!("network-mobile-roaming"),
+            if modem.roaming() {
+                tr!("network-mobile-yes")
+            } else {
+                tr!("network-mobile-no")
+            },
         ))
 }
 
@@ -560,7 +573,7 @@ fn data_group(
 ) -> Group {
     let usable = can_switch(Some(modem), link);
     let toggle = link.clone();
-    let data = row("Mobile data").trailing(
+    let data = row(tr!("network-mobile-data")).trailing(
         switch(link.data_on() && usable, move |next: bool| {
             set_mobile_data(ctx, &toggle, next)
         })
@@ -570,7 +583,7 @@ fn data_group(
         .read()
         .unwrap_or_else(|| list.iter().all(|profile| !profile.home_only));
     let can_roam = usable && !list.is_empty() && !link.airplane;
-    let roaming = row("Data roaming").trailing({
+    let roaming = row(tr!("network-mobile-data-roaming")).trailing({
         let list = list.to_vec();
         switch(allowed, move |next: bool| {
             let all = list.clone();
@@ -618,7 +631,7 @@ fn network_group(
         .collect();
     let id = modem.id.clone();
     let preferred = choice_row(
-        "Preferred network type",
+        tr!("network-mobile-preferred-type"),
         options,
         &selected,
         move |key: String| {
@@ -642,32 +655,34 @@ fn network_group(
         },
     );
     let carrier_value = if apn::pinned(list) {
-        modem.carrier().unwrap_or_else(|| "Manual".into())
+        modem
+            .carrier()
+            .unwrap_or_else(|| tr!("network-mobile-manual"))
     } else {
-        "Automatic".to_string()
+        tr!("network-mobile-automatic")
     };
     let apn_value = apn::selected(list).map_or_else(
-        || "None".to_string(),
+        || tr!("network-mobile-none"),
         |profile| {
             if profile.apn.is_empty() && profile.auto_config {
-                "Automatic".to_string()
+                tr!("network-mobile-automatic")
             } else if profile.apn.is_empty() {
-                "None".to_string()
+                tr!("network-mobile-none")
             } else {
                 profile.apn.clone()
             }
         },
     );
-    Group::titled("Network")
+    Group::titled(&tr!("network-mobile-network-title"))
         .row(
-            row("Network")
+            row(tr!("network-mobile-network"))
                 .value(carrier_value)
                 .navigates()
                 .on_press(move |_| ctx.router.open(routes::mobile_network())),
         )
         .row(preferred)
         .row(
-            row("Access point names")
+            row(tr!("network-mobile-apn-row"))
                 .value(apn_value)
                 .navigates()
                 .on_press(move |_| ctx.router.open(routes::mobile_apns())),
@@ -676,20 +691,26 @@ fn network_group(
 
 /// The SIM, its PIN lock and the PIN change.
 fn sim_group(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Group {
-    let mut group = Group::titled("SIM");
+    let mut group = Group::titled(&tr!("network-mobile-sim-title"));
     if let Some(sim) = &modem.sim {
         if !sim.operator.is_empty() {
-            group = group.row(property_row("Operator", sim.operator.clone()));
+            group = group.row(property_row(
+                tr!("network-mobile-sim-operator"),
+                sim.operator.clone(),
+            ));
         }
         if !sim.iccid.is_empty() {
-            group = group.row(property_row("SIM number", sim.iccid.clone()));
+            group = group.row(property_row(
+                tr!("network-mobile-sim-number"),
+                sim.iccid.clone(),
+            ));
         }
     }
     let Some(sim_id) = modem.sim_id.clone() else {
         return group;
     };
     let lock = sim_id.clone();
-    group = group.row(row("Lock SIM with PIN").trailing(switch(
+    group = group.row(row(tr!("network-mobile-sim-lock")).trailing(switch(
         modem.pin_lock,
         move |on: bool| {
             let task = if on {
@@ -702,7 +723,7 @@ fn sim_group(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Group {
     )));
     if modem.pin_lock {
         group = group.row(
-            row("Change PIN…")
+            row(tr!("network-mobile-sim-change-pin"))
                 .navigates()
                 .on_press(move |_| sim::open(ctx, modem_state, PinTask::Change, sim_id.clone())),
         );
@@ -726,28 +747,28 @@ fn unlock_groups(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Vec<Gro
         let code = match &modem.lock {
             Lock::Other(code) => {
                 eprintln!("bingux-settings: network: SIM lock {code}");
-                "This SIM needs a code that Settings cannot enter.".to_string()
+                tr!("network-mobile-sim-other-lock")
             }
-            _ => "The SIM is locked.".to_string(),
+            _ => tr!("network-mobile-sim-locked"),
         };
         return vec![note(code)];
     };
     let (text, task, title) = if modem.lock == Lock::Puk {
         (
-            "The SIM is blocked after too many wrong PINs.",
+            tr!("network-mobile-sim-puk-blocked"),
             PinTask::Puk,
-            "Unlock with PUK",
+            tr!("network-mobile-sim-unlock-puk"),
         )
     } else {
         (
-            "The SIM is locked with a PIN.",
+            tr!("network-mobile-sim-pin-locked"),
             PinTask::Unlock,
-            "Unlock with PIN",
+            tr!("network-mobile-sim-unlock-pin"),
         )
     };
     vec![
         note(text.to_string()),
-        Group::titled("SIM").row(
+        Group::titled(&tr!("network-mobile-sim-title")).row(
             row(title)
                 .maybe_subtitle(attempts(task))
                 .navigates()
@@ -776,14 +797,20 @@ fn usage_group(ctx: NetCtx, link: &Link, modem: &Modem) -> Group {
 
 /// What the modem is.
 fn modem_group(modem: &Modem) -> Group {
-    let mut group = Group::titled("Modem");
+    let mut group = Group::titled(&tr!("network-mobile-modem-title"));
     let facts = [
-        ("Manufacturer", modem.manufacturer.clone()),
-        ("Model", modem.model.clone()),
-        ("Firmware", modem.revision.clone()),
-        ("IMEI", modem.imei.clone()),
-        ("Phone number", modem.numbers.join(", ")),
-        ("Port", modem.primary_port.clone()),
+        (
+            tr!("network-mobile-modem-manufacturer"),
+            modem.manufacturer.clone(),
+        ),
+        (tr!("network-mobile-modem-model"), modem.model.clone()),
+        (tr!("network-mobile-modem-firmware"), modem.revision.clone()),
+        (tr!("network-mobile-modem-imei"), modem.imei.clone()),
+        (
+            tr!("network-mobile-modem-phone-number"),
+            modem.numbers.join(", "),
+        ),
+        (tr!("network-mobile-modem-port"), modem.primary_port.clone()),
     ];
     for (title, value) in facts {
         if !value.is_empty() {
@@ -819,6 +846,7 @@ mod tests {
 
     #[test]
     fn status_lines() {
+        crate::register_catalogue_for_tests();
         let ok = parsed(modem::fixtures::MODEM_OK);
         assert_eq!(status_line(Some(&ok), &link()), "Vodafone UK · 5G");
         let roaming = parsed(modem::fixtures::MODEM_ROAMING);
@@ -844,6 +872,7 @@ mod tests {
 
     #[test]
     fn status_line_before_modemmanager_answers() {
+        crate::register_catalogue_for_tests();
         assert_eq!(status_line(None, &link()), "Vodafone");
         let idle = Link {
             connected: false,
@@ -859,6 +888,7 @@ mod tests {
 
     #[test]
     fn an_unregistered_modem_says_so() {
+        crate::register_catalogue_for_tests();
         let mut modem = parsed(modem::fixtures::MODEM_OK);
         modem.registration = "searching".into();
         assert_eq!(
