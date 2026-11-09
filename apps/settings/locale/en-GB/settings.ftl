@@ -374,3 +374,31 @@ network-apn-delete-title = Delete “{ $name }”?
 network-apn-delete-body = Mobile data stops working if no other access point is left.
 network-apn-cancel = Cancel
 network-apn-delete-confirm = Delete
+
+## Mobile carrier
+
+# Availability words shown under a carrier found by a search.
+network-carrier-availability-current = Connected
+network-carrier-availability-forbidden = Not allowed by your SIM
+network-carrier-availability-available = Available
+
+# Errors and toasts.
+network-carrier-error-read = Could not read the modem. Try again.
+network-carrier-error-search = Could not search for networks. Try again.
+network-carrier-error-automatic = Could not switch to automatic network selection. Try again.
+network-carrier-error-join = Could not join that network. Try again.
+network-carrier-retry = Try again
+
+# States of the page.
+network-carrier-modem-empty = No mobile modem found
+network-carrier-locked = Unlock the SIM to choose a carrier.
+network-carrier-no-sim = No SIM card
+network-carrier-off = Mobile network is off
+
+# The page itself.
+network-carrier-automatic = Automatic
+network-carrier-section-title = Networks
+network-carrier-idle = Search to see the carriers around you.
+network-carrier-searching = Searching for networks…
+network-carrier-empty = No networks found
+network-carrier-search-again = Search again
