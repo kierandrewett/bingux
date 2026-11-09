@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use bingux_ui::motion::reveal_block_if;
+use bingux_ui::prelude::tr;
 use bingux_ui::shell::{form_dialog, open_form};
 use bingux_ui::style::*;
 use freya::prelude::*;
@@ -74,7 +75,7 @@ fn processor() -> String {
                 .and_then(|line| line.split_once(':'))
                 .map(|(_, value)| value.trim().to_string())
         })
-        .unwrap_or_else(|| "Unknown".to_string())
+        .unwrap_or_else(|| tr!("settings-about-unknown"))
 }
 
 fn memory() -> String {
@@ -86,8 +87,13 @@ fn memory() -> String {
                 .and_then(|line| line.split_whitespace().nth(1))
                 .and_then(|kb| kb.parse::<f64>().ok())
         })
-        .map(|kb| format!("{:.1} GiB", kb / 1024.0 / 1024.0))
-        .unwrap_or_else(|| "Unknown".to_string())
+        .map(|kb| {
+            tr!(
+                "settings-about-memory-gib",
+                gib = format!("{:.1}", kb / 1024.0 / 1024.0)
+            )
+        })
+        .unwrap_or_else(|| tr!("settings-about-unknown"))
 }
 
 /// The graphics adapter's name from `lspci`, without its revision.
@@ -115,13 +121,13 @@ fn graphics() -> String {
                         .to_string()
                 })
         })
-        .unwrap_or_else(|| "Unknown".to_string())
+        .unwrap_or_else(|| tr!("settings-about-unknown"))
 }
 
 /// The first connected display's mode, such as "2560x1440".
 fn display() -> String {
     let Ok(entries) = crate::system::read_dir("/sys/class/drm") else {
-        return "Unknown".to_string();
+        return tr!("settings-about-unknown");
     };
     let mut modes = entries.flatten().filter_map(|entry| {
         let path = entry.path();
@@ -136,11 +142,11 @@ fn display() -> String {
             .map(str::to_string)
     });
     let Some(first) = modes.next() else {
-        return "Unknown".to_string();
+        return tr!("settings-about-unknown");
     };
     match modes.count() {
         0 => first,
-        more => format!("{first} (+{more} more)"),
+        more => tr!("settings-about-display-more", first = first, more = more),
     }
 }
 
@@ -150,7 +156,7 @@ fn uptime() -> String {
         .ok()
         .and_then(|text| text.split_whitespace().next()?.parse::<f64>().ok())
     else {
-        return "Unknown".to_string();
+        return tr!("settings-about-unknown");
     };
     bingux_ui::format::Timespan::from_secs_f64(seconds.floor() - seconds.floor() % 60.0)
         .width(bingux_ui::format::Width::Long)
@@ -197,15 +203,17 @@ fn gnoblin_version() -> String {
                 .map(str::to_string)
                 .unwrap_or(line)
         })
-        .unwrap_or_else(|| "Not running".to_string())
+        .unwrap_or_else(|| tr!("settings-about-not-running"))
 }
 
 fn collect() -> Facts {
     let model = match (dmi("sys_vendor"), dmi("product_name")) {
         (Some(vendor), Some(product)) => format!("{vendor} {product}"),
-        (vendor, product) => vendor.or(product).unwrap_or_else(|| "Unknown".to_string()),
+        (vendor, product) => vendor
+            .or(product)
+            .unwrap_or_else(|| tr!("settings-about-unknown")),
     };
-    let os = os_release("PRETTY_NAME").unwrap_or_else(|| "Unknown".to_string());
+    let os = os_release("PRETTY_NAME").unwrap_or_else(|| tr!("settings-about-unknown"));
     let facts = Facts {
         hostname: crate::system::read_to_string("/etc/hostname")
             .map(|text| text.trim().to_string())
@@ -244,39 +252,45 @@ fn fake_machine(mut facts: Facts) -> Facts {
 }
 
 /// The rows of the System details group, in reading order.
-fn system_specs(facts: &Facts) -> Vec<(&'static str, String)> {
+fn system_specs(facts: &Facts) -> Vec<(String, String)> {
     vec![
-        ("Operating system", facts.os.clone()),
-        ("Version", facts.os_version.clone()),
-        ("Kernel", facts.kernel.clone()),
-        ("Processor", facts.processor.clone()),
-        ("Memory", facts.memory.clone()),
-        ("Graphics", facts.graphics.clone()),
-        ("Display", facts.display.clone()),
-        ("Uptime", facts.uptime.clone()),
-        ("Desktop", facts.gnoblin.clone()),
-        ("Settings version", env!("CARGO_PKG_VERSION").to_string()),
+        (tr!("settings-about-spec-os"), facts.os.clone()),
+        (tr!("settings-about-spec-version"), facts.os_version.clone()),
+        (tr!("settings-about-spec-kernel"), facts.kernel.clone()),
+        (
+            tr!("settings-about-spec-processor"),
+            facts.processor.clone(),
+        ),
+        (tr!("settings-about-spec-memory"), facts.memory.clone()),
+        (tr!("settings-about-spec-graphics"), facts.graphics.clone()),
+        (tr!("settings-about-spec-display"), facts.display.clone()),
+        (tr!("settings-about-spec-uptime"), facts.uptime.clone()),
+        (tr!("settings-about-spec-desktop"), facts.gnoblin.clone()),
+        (
+            tr!("settings-about-spec-settings-version"),
+            env!("CARGO_PKG_VERSION").to_string(),
+        ),
     ]
 }
 
 /// Every fact as plain text, for the clipboard.
 fn summary(facts: &Facts, name: &str) -> String {
     let mut lines = vec![
-        format!("Device name: {name}"),
-        format!("Hardware model: {}", facts.model),
+        tr!("settings-about-copy-device-name", name = name),
+        tr!("settings-about-copy-model", model = facts.model.as_str()),
     ];
     lines.extend(
         system_specs(facts)
             .into_iter()
-            .map(|(title, value)| format!("{title}: {value}")),
+            .map(|(title, value)| tr!("settings-about-copy-row", title = title, value = value)),
     );
     match facts.disk {
-        Some((used, total)) => lines.push(format!(
-            "Storage: {} used of {}",
-            size_text(used),
-            size_text(total)
+        Some((used, total)) => lines.push(tr!(
+            "settings-about-copy-storage",
+            used = size_text(used),
+            total = size_text(total)
         )),
-        None => lines.push("Storage: Unknown".to_string()),
+        None => lines.push(tr!("settings-about-copy-storage-unknown")),
     }
     lines.join("\n")
 }
@@ -284,8 +298,8 @@ fn summary(facts: &Facts, name: &str) -> String {
 /// Copies `text` and says so, or says that it could not.
 fn copy(text: String, overlays: Overlays) {
     match freya::clipboard::Clipboard::set(text) {
-        Ok(()) => overlays.toast("Copied"),
-        Err(_) => overlays.toast("Could not copy to the clipboard. Try again."),
+        Ok(()) => overlays.toast(tr!("settings-about-copied")),
+        Err(_) => overlays.toast(tr!("settings-about-copy-failed")),
     }
 }
 
@@ -330,7 +344,7 @@ impl RenameSheet {
         error.set(None);
         open_form(
             self.overlays,
-            "Device name",
+            tr!("settings-about-device-name"),
             RenameBody { sheet: self },
             None,
         );
@@ -370,16 +384,16 @@ impl RenameSheet {
 
 /// A device name is a DNS label: letters, digits and hyphens, at most 63
 /// characters, not starting or ending with a hyphen.
-fn valid_hostname(name: &str) -> Result<(), &'static str> {
+fn valid_hostname(name: &str) -> Result<(), String> {
     if name.is_empty() {
-        Err("Enter a device name.")
+        Err(tr!("settings-about-name-empty"))
     } else if name.len() > 63 {
-        Err("Use 63 characters or fewer.")
+        Err(tr!("settings-about-name-too-long"))
     } else if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
         || name.starts_with('-')
         || name.ends_with('-')
     {
-        Err("Use only letters, numbers and hyphens. Do not start or end with a hyphen.")
+        Err(tr!("settings-about-name-invalid"))
     } else {
         Ok(())
     }
@@ -403,21 +417,27 @@ impl Component for RenameBody {
         let field = text_field(sheet.draft, move |_: String| sheet.submit());
         let error = sheet.error.read().clone();
         let body = rect()
-            .tw(&bingux_ui::surface::tokens_now(), &[flex_col(), w_full(), gap(S4)])
+            .tw(
+                &bingux_ui::surface::tokens_now(),
+                &[flex_col(), w_full(), gap(S4)],
+            )
             .child(
                 Group::new(None::<String>)
-                    .row(form_row("Device name", field))
-                    .footer(
-                        "Other devices on your network see this name. Use letters, numbers and hyphens.",
-                    ),
+                    .row(form_row(tr!("settings-about-device-name"), field))
+                    .footer(tr!("settings-about-name-help")),
             )
             .child(reveal_block_if(
                 S6,
                 error.map(|text| Element::from(status(Status::Error(text)))),
             ));
-        form_dialog("Device name", body, "Rename", move |_: ()| sheet.submit())
-            .blocked(empty.then(|| "Enter a device name.".to_string()))
-            .stays_open()
+        form_dialog(
+            tr!("settings-about-device-name"),
+            body,
+            tr!("settings-about-rename"),
+            move |_: ()| sheet.submit(),
+        )
+        .blocked(empty.then(|| tr!("settings-about-name-empty")))
+        .stays_open()
     }
 }
 
@@ -512,9 +532,11 @@ impl Component for AboutPage {
                 .child(
                     rect()
                         .tw(&tokens, &[flex_row(), gap(S2)])
-                        .child(action_button("Rename", move |_| rename.open(name.clone())))
+                        .child(action_button(tr!("settings-about-rename"), move |_| {
+                            rename.open(name.clone())
+                        }))
                         .child(
-                            action_button("Copy system info", move |_| {
+                            action_button(tr!("settings-about-copy-system-info"), move |_| {
                                 copy(copy_text.clone(), overlays)
                             })
                             .suggested(),
@@ -528,19 +550,23 @@ impl Component for AboutPage {
                     let (value, unit) = size_parts(used);
                     (
                         value,
-                        format!("{unit} used"),
-                        format!("{} total", size_text(total)),
+                        tr!("settings-about-storage-used-unit", unit = unit),
+                        tr!("settings-about-storage-total", total = size_text(total)),
                         used as f64 / total.max(1) as f64,
-                        format!("{} used of {}", size_text(used), size_text(total)),
+                        tr!(
+                            "settings-about-storage-used-of",
+                            used = size_text(used),
+                            total = size_text(total)
+                        ),
                     )
                 }
                 // Once the facts have arrived, a disk that could not be read says so.
                 None if arrived => (
-                    "Unknown".to_string(),
+                    tr!("settings-about-unknown"),
                     String::new(),
                     String::new(),
                     0.0,
-                    "Unknown".to_string(),
+                    tr!("settings-about-unknown"),
                 ),
                 None => (
                     "\u{a0}".to_string(),
@@ -551,11 +577,10 @@ impl Component for AboutPage {
                 ),
             };
             let copied = capacity.clone();
-            let capacity_row =
-                property_row("Capacity", or_blank(capacity))
-                    .context_menu(vec![menu_item("Copy", move |_| {
-                        copy(copied.clone(), overlays)
-                    })]);
+            let capacity_row = property_row(tr!("settings-about-capacity"), or_blank(capacity))
+                .context_menu(vec![menu_item(tr!("settings-about-copy"), move |_| {
+                    copy(copied.clone(), overlays)
+                })]);
             rect()
                 .tw(&tokens, &[flex_col(), gap(GUTTER)])
                 // A disk that could not be read has no bar to draw.
@@ -570,7 +595,7 @@ impl Component for AboutPage {
         let details = system_specs(&facts).into_iter().map(|(title, value)| {
             let copied = value.clone();
             property_row(title, or_blank(value))
-                .context_menu(vec![menu_item("Copy", move |_| {
+                .context_menu(vec![menu_item(tr!("settings-about-copy"), move |_| {
                     copy(copied.clone(), overlays)
                 })])
                 .into()
@@ -586,10 +611,10 @@ impl Component for AboutPage {
                     .child(hero)
                     .child(section(
                         &tokens,
-                        "System details",
+                        &tr!("settings-about-system-details"),
                         Group::new(None).rows(details),
                     ))
-                    .child(section(&tokens, "Storage", storage)),
+                    .child(section(&tokens, &tr!("settings-about-storage"), storage)),
             ),
             !arrived,
         )
