@@ -125,6 +125,9 @@ impl Component for SplitPane {
                 (Key::Named(NamedKey::ArrowLeft | NamedKey::ArrowRight), false) => {
                     direction.along(&event.key).unwrap_or(0) as f32 * KEY_STEP
                 }
+                // WAI-ARIA window splitter: Home and End move it all the way.
+                (Key::Named(NamedKey::Home), _) => low - value,
+                (Key::Named(NamedKey::End), _) => high - value,
                 _ => return,
             };
             event.stop_propagation();
@@ -138,13 +141,19 @@ impl Component for SplitPane {
             rect()
                 .width(Size::fill())
                 .height(Size::px(HIT_PX))
-                .tw(&tokens, &[items(Align::Center), justify(Align::Center), lit])
+                .tw(
+                    &tokens,
+                    &[items(Align::Center), justify(Align::Center), lit],
+                )
                 .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
         } else {
             rect()
                 .width(Size::px(HIT_PX))
                 .height(Size::fill())
-                .tw(&tokens, &[items(Align::Center), justify(Align::Center), lit])
+                .tw(
+                    &tokens,
+                    &[items(Align::Center), justify(Align::Center), lit],
+                )
                 .child(rect().tw(&tokens, &[h_full(), w(Dim::Hairline), bg(Paint::Separator)]))
         };
         let divider = hit
@@ -152,6 +161,17 @@ impl Component for SplitPane {
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Splitter)
             .a11y_alt("Pane divider")
+            // Its value is the first pane's share, so a screen reader says where it is.
+            .a11y_builder(move |node| {
+                node.set_numeric_value(f64::from((value * 100.0).round()));
+                node.set_min_numeric_value(f64::from((low * 100.0).round()));
+                node.set_max_numeric_value(f64::from((high * 100.0).round()));
+                node.set_orientation(if vertical {
+                    accesskit::Orientation::Horizontal
+                } else {
+                    accesskit::Orientation::Vertical
+                });
+            })
             .on_key_down(on_key_down)
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))

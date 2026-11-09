@@ -26,7 +26,7 @@ use crate::ui::{
 use bingux_ui::style::*;
 
 /// The note shown when saved changes could not be given to a running tunnel.
-const RECONNECT_NOTE: &str = "Saved. Turn the VPN off and on again to use the new settings.";
+const RECONNECT_NOTE: &str = "Saved. Turn the VPN off and on to apply the changes.";
 
 /// After saving: give the changes to the running tunnel `device`, if any.
 /// Returns whether the person has to reconnect for them to count.
@@ -276,7 +276,7 @@ impl Component for WgTunnel {
         let public_row = if has_wg {
             row("Public key").mono_value(public.read().clone().unwrap_or_default())
         } else {
-            row("Public key").subtitle("The wg tool is not installed")
+            row("Public key").subtitle("Not available")
         };
         let mut interface = Group::titled("Interface")
             .row(
@@ -656,7 +656,7 @@ impl Component for PeerForm {
             .row(
                 form_field("Endpoint", draft.endpoint)
                     .optional()
-                    .hint("Where to reach it, as host:port. Blank if it connects to you.")
+                    .hint("Where to reach it, as host:port. Leave empty if it connects to you.")
                     .placeholder("vpn.example.com:51820")
                     .validate(check::endpoint),
             )
@@ -722,27 +722,24 @@ fn confirm_delete_peer(ctx: NetCtx, form: &PeerForm, label: &str) {
     let uuid = form.profile.uuid.clone();
     let device = form.device.clone();
     ctx.overlays.show_dialog(
-        dialog(
-            format!("Delete {label}?"),
-            "This tunnel stops talking to that peer.",
-        )
-        .cancel("Cancel")
-        .default_action(CANCEL_ID)
-        .response("Delete", ResponseKind::Destructive, move |_| {
-            let (peers, uuid, device) = (peers.clone(), uuid.clone(), device.clone());
-            system::background_then(
-                move || wireguard::save_peers(&uuid, &peers).map(|_| needs_reconnect(&device)),
-                move |result| match result {
-                    Ok(reconnect) => {
-                        if reconnect {
-                            ctx.overlays.toast(RECONNECT_NOTE);
+        dialog(format!("Delete {label}?"), "The tunnel to this peer stops.")
+            .cancel("Cancel")
+            .default_action(CANCEL_ID)
+            .response("Delete", ResponseKind::Destructive, move |_| {
+                let (peers, uuid, device) = (peers.clone(), uuid.clone(), device.clone());
+                system::background_then(
+                    move || wireguard::save_peers(&uuid, &peers).map(|_| needs_reconnect(&device)),
+                    move |result| match result {
+                        Ok(reconnect) => {
+                            if reconnect {
+                                ctx.overlays.toast(RECONNECT_NOTE);
+                            }
+                            ctx.router.pop();
                         }
-                        ctx.router.pop();
-                    }
-                    Err(message) => ctx.overlays.toast(message),
-                },
-            );
-        }),
+                        Err(message) => ctx.overlays.toast(message),
+                    },
+                );
+            }),
     );
 }
 
@@ -1250,7 +1247,7 @@ impl Component for ExtraRow {
             let mut extras = extras;
             extras.set(list);
         })
-        .tooltip("Remove this setting");
+        .tooltip("Remove setting");
         row(key).trailing(
             rect()
                 .tw_layout(&[flex_row(), gap(S2), items(Align::Center)])

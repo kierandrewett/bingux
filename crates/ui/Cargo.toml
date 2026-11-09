@@ -2,7 +2,7 @@
 name = "bingux-ui"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 license = "GPL-3.0-or-later"
 description = "Bingux design system for Freya applications"
 
@@ -15,6 +15,10 @@ default = []
 testing = ["dep:freya-testing", "dep:freya-components"]
 # Every icon of the chat icon fork as `Icon::Chat(..)` (3 MB of outlines): for choosing glyphs.
 chat-icons = []
+# `bingux_ui::location`: where the computer is, from the desktop's location
+# portal or the network address. It carries an HTTPS client and a D-Bus client,
+# so an application that does not ask where it is leaves it off.
+location = ["dep:ureq"]
 # Syntax highlighting in `text_editor` (syntect and its grammars, about 200
 # languages). Without it the editor and the Markdown preview draw plain text.
 syntax = ["bingux-text/syntax"]
@@ -42,14 +46,49 @@ bingux-preview-core = { path = "../preview-core" }
 # The search engine behind bingux_ui::search (documents, index, OpenSearch-shaped
 # responses; no UI of its own).
 bingux-search = { path = "../search" }
+# Appearance from `bingux.toml`, read leniently: a bad key elsewhere in the file
+# must not stop a window taking its colours (`platform::appearance`).
+toml = "1"
+# The session bus for `platform`: portal Settings, OpenURI and Inhibit,
+# Notifications, ScreenSaver, logind. Blocking calls, on worker threads, each
+# with its own time limit. Already in the build through Freya's accessibility.
+zbus = { version = "5", default-features = false, features = ["async-io", "blocking-api"] }
+# Locale data and formatters behind bingux_ui::format (numbers, dates, lists,
+# plurals, relative time, currency): ICU4X, Unicode licence.
+icu = "2.4"
+# The relative time, percent, currency and time unit formatters, which ICU4X
+# has not stabilised: pinned to the minor version.
+icu_experimental = "0.7"
+# Calendar and time zone arithmetic for bingux_ui::format (local time, DST,
+# named zones). The zone database is bundled: no host file is needed.
+jiff = { version = "0.2", features = ["tzdb-bundle-always"] }
+# File change notifications (inotify) behind bingux_ui::document.
+notify = { version = "8", default-features = false }
+# The decimal type of ICU4X (exact digits, rounding modes), the same version
+# `icu` uses.
+fixed_decimal = "0.7"
 # The text engine behind bingux_ui::text_editor: rope, carets, undo, search,
 # encodings and languages (no UI of its own).
 bingux-text = { path = "../text", default-features = false }
 
-[dev-dependencies]
-# A test's clipboard is memory (`controls::select_text::test_clipboard`): the
-# system's belongs to the person at the desk. The version Freya's clipboard uses.
+# `location` only: the keyless lookups over HTTPS. The location portal uses the
+# `zbus` above (blocking, on a thread of its own).
+ureq = { version = "3", optional = true }
+# Drag and drop and the typed clipboard (`dnd`, `clipboard`): the task that
+# hears a window's drag events, and the channels to the Wayland thread.
+futures-channel = "0.3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+# The trait of Freya's clipboard, which `clipboard` implements to route Freya's
+# text fields through the typed clipboard; a test's clipboard is memory
+# (`controls::select_text::test_clipboard`). The version Freya's clipboard uses.
 copypasta = "0.10"
+
+# wl_data_device and the primary selection beside winit, on winit's own
+# connection (`dnd::wayland`). The versions smithay-clipboard, under Freya's
+# clipboard, already brings in.
+[target.'cfg(target_os = "linux")'.dependencies]
+sctk = { package = "smithay-client-toolkit", version = "0.20", default-features = false, features = ["calloop"] }
+wayland-backend = { version = "0.3", features = ["client_system"] }
 
 # Desktop scroll feel; see ../../vendor/README.md.
 [patch.crates-io]

@@ -240,7 +240,7 @@ fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
         match outcome {
             Ok(trashed) => {
                 let moved: Vec<PathBuf> = trashed.iter().map(|item| item.original.clone()).collect();
-                undo::push(Step::Trash(trashed));
+                undo::push(&env, Step::Trash(trashed));
                 let again = env.clone();
                 env.overlays.toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
                     super::transfer::undo(&again)
@@ -311,7 +311,7 @@ fn move_copying(env: &Env, paths: Vec<PathBuf>) {
         match outcome {
             Ok(trashed) => {
                 let moved: Vec<PathBuf> = trashed.iter().map(|item| item.original.clone()).collect();
-                undo::push(Step::Trash(trashed));
+                undo::push(&env, Step::Trash(trashed));
                 let again = env.clone();
                 env.overlays.toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
                     super::transfer::undo(&again)
@@ -593,7 +593,7 @@ fn run_restore(env: &Env, plan: RestorePlan, create_missing: bool) {
             Err(RestoreFailure { done, error }) => {
                 let any = !done.is_empty();
                 if any {
-                    undo::push(Step::Restore(done.clone()));
+                    undo::push(&env, Step::Restore(done.clone()));
                     select_back(&env, &done);
                 }
                 match error {
@@ -620,7 +620,7 @@ fn restored_done(env: &Env, restored: Vec<Restored>) {
     }
     let paths: Vec<PathBuf> = restored.iter().map(|item| item.to.clone()).collect();
     select_back(env, &restored);
-    undo::push(Step::Restore(restored));
+    undo::push(env, Step::Restore(restored));
     let again = env.clone();
     env.overlays
         .toast_with_action(restored_text(&paths), "Undo", move |_: ()| super::transfer::undo(&again));

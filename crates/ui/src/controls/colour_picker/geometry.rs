@@ -129,8 +129,16 @@ mod tests {
     fn a_picker_is_taller_with_alpha_and_recents_and_never_shorter_than_its_parts() {
         for class in [SizeClass::Regular, SizeClass::Compact] {
             let g = Geometry::new(class);
-            let plain = g.total(Shape { alpha: false, swatches: 12, recents: false });
-            let alpha = g.total(Shape { alpha: true, swatches: 12, recents: false });
+            let plain = g.total(Shape {
+                alpha: false,
+                swatches: 12,
+                recents: false,
+            });
+            let alpha = g.total(Shape {
+                alpha: true,
+                swatches: 12,
+                recents: false,
+            });
             let full = g.total(SHAPE);
             assert_eq!(
                 alpha - plain,
@@ -140,11 +148,25 @@ mod tests {
             assert!(full > alpha);
             assert!(plain > g.plane);
             // The palette is one row of swatches more or less.
-            let fewer = g.total(Shape { alpha: false, swatches: 6, recents: false });
+            let fewer = g.total(Shape {
+                alpha: false,
+                swatches: 6,
+                recents: false,
+            });
             assert_eq!(plain - fewer, g.swatch + g.between);
             assert_eq!(
-                g.total(Shape { alpha: false, swatches: 0, recents: false }),
-                g.groups(Shape { alpha: false, swatches: 0, recents: false }).iter().sum::<f32>()
+                g.total(Shape {
+                    alpha: false,
+                    swatches: 0,
+                    recents: false
+                }),
+                g.groups(Shape {
+                    alpha: false,
+                    swatches: 0,
+                    recents: false
+                })
+                .iter()
+                .sum::<f32>()
                     + 2.0 * g.group
             );
         }
@@ -154,8 +176,14 @@ mod tests {
     fn every_target_is_big_enough_for_its_density() {
         let desktop = Geometry::new(SizeClass::Regular);
         let phone = Geometry::new(SizeClass::Compact);
-        assert!(desktop.handle >= 32.0 && desktop.swatch >= 32.0, "{desktop:?}");
-        assert!(phone.handle >= TOUCH_MIN && phone.swatch >= TOUCH_MIN, "{phone:?}");
+        assert!(
+            desktop.handle >= 32.0 && desktop.swatch >= 32.0,
+            "{desktop:?}"
+        );
+        assert!(
+            phone.handle >= TOUCH_MIN && phone.swatch >= TOUCH_MIN,
+            "{phone:?}"
+        );
         assert!(phone.control >= TOUCH_MIN && phone.action >= TOUCH_MIN);
         // The knob is smaller than the target around it.
         assert!(desktop.knob < desktop.handle && phone.knob < phone.handle);

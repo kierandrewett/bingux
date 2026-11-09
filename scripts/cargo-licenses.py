@@ -36,6 +36,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PROGRAMS = {
     "bingux-settings": "bingux-settings",
     "bingux-files": "bingux-files-app",
+    "bingux-calculator": "bingux-calculator-app",
+    "bingux-weather": "bingux-weather-app",
     "bingux-text-editor": "bingux-text-editor",
     "bingux-taxonomy": "bingux-taxonomy",
     "bingux-preview-host": "bingux-preview-host",
@@ -56,6 +58,8 @@ PROGRAMS = {
 PACKAGE_OF = {
     "bingux-settings": "bingux-settings",
     "bingux-files": "bingux-files",
+    "bingux-calculator": "bingux-calculator",
+    "bingux-weather": "bingux-weather",
     "bingux-text-editor": "bingux-text-editor",
     "bingux-taxonomy": "bingux-taxonomy",
     "bingux-preview-host": "bingux",

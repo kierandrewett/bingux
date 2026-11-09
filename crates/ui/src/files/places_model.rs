@@ -116,13 +116,11 @@ pub(crate) fn sections(
     }
 
     let root = Path::new("/");
-    let computer = places
-        .devices
-        .iter()
-        .find(|place| place.kind == PlaceKind::Computer);
+    // The whole file system is "Computer", as in GNOME Files: a host name
+    // (`31modbehw6`, `fsociety`) reads as one more drive.
     let mut drives = vec![Item {
         icon: FileIcon::for_mount(MountKind::Local),
-        label: computer.map_or_else(bingux_files::location::host_name, |place| place.name.clone()),
+        label: "Computer".to_string(),
         target: Where::Folder(root.to_path_buf()),
         kind: ItemKind::Drive,
         mount: mounts
@@ -176,7 +174,10 @@ pub(crate) fn is_trash(item: &Item) -> bool {
 /// nothing in it, from [`FileIcon::for_trash`].
 pub(crate) fn trash_state(sections: &mut [Section], full: bool) {
     super::named::note_trash_full(full);
-    for item in sections.iter_mut().flat_map(|section| section.items.iter_mut()) {
+    for item in sections
+        .iter_mut()
+        .flat_map(|section| section.items.iter_mut())
+    {
         if is_trash(item) {
             item.icon = FileIcon::for_trash(full);
         }
@@ -339,10 +340,11 @@ pub(crate) fn current_name(current: &Where, row: Option<&Item>) -> String {
     match (row, current) {
         (Some(item), _) => item.label.clone(),
         (None, Where::Recent) => "Recent".to_string(),
-        (None, Where::Folder(path)) => path.file_name().map_or_else(
-            bingux_files::location::host_name,
-            |name| name.to_string_lossy().into_owned(),
-        ),
+        (None, Where::Folder(path)) => path
+            .file_name()
+            .map_or_else(bingux_files::location::host_name, |name| {
+                name.to_string_lossy().into_owned()
+            }),
     }
 }
 
@@ -450,13 +452,24 @@ mod tests {
     fn a_folder_inside_the_trash_selects_the_trash_and_not_the_drive_it_is_on() {
         let bin = bingux_files::ops::trash_folder().expect("a data home");
         let mut places = sample();
-        places.standard.push(place(PlaceKind::Trash, "Trash", bin.to_str()));
+        places
+            .standard
+            .push(place(PlaceKind::Trash, "Trash", bin.to_str()));
         let mounts = vec![mount("/", "root", MountKind::Local, known(100, 50))];
         let out = sections(&places, &[], &mounts, &[], true);
         let trash = (0, out[0].items.len() - 1);
         assert_eq!(out[0].items[trash.1].label, "Trash");
-        for at in [bin.clone(), bin.join("Old photos"), bin.join("Old photos/2025/Summer")] {
-            assert_eq!(selected(&out, &Where::Folder(at.clone()), &mounts), Some(trash), "{}", at.display());
+        for at in [
+            bin.clone(),
+            bin.join("Old photos"),
+            bin.join("Old photos/2025/Summer"),
+        ] {
+            assert_eq!(
+                selected(&out, &Where::Folder(at.clone()), &mounts),
+                Some(trash),
+                "{}",
+                at.display()
+            );
         }
     }
 

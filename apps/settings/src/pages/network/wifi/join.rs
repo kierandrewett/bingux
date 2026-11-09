@@ -70,7 +70,7 @@ fn wep_key(text: &str) -> Result<(), String> {
     match text.len() {
         5 | 13 => Ok(()),
         10 | 26 if hex => Ok(()),
-        _ => Err("A WEP key is 5 or 13 characters, or 10 or 26 hexadecimal digits.".into()),
+        _ => Err("Use 5 or 13 characters, or 10 or 26 hexadecimal digits.".into()),
     }
 }
 

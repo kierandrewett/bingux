@@ -12,7 +12,8 @@
 //! * **sway** (and anything that speaks its IPC, `SWAYSOCK`): `GET_TREE`
 //!   answers with every window's rectangle, its title and the process that
 //!   owns it, and it answers while a window is being moved.
-//! * **Gnoblin**: the compositor's control socket (`compositor-v1.sock`,
+//! * **Gnoblin 0.1** (the Mutter session): the compositor's control socket
+//!   (`compositor-v1.sock`,
 //!   newline-delimited JSON) answers `windows.list` with every window's
 //!   `frame`, `app_id`, `title`, workspace and minimized state. Its frames are
 //!   in the compositor's logical pixels, the same unit the window's own
@@ -20,6 +21,11 @@
 //!   application's windows is known by its application id and title. The
 //!   socket has no call for the pointer: its place follows from the dragged
 //!   window's frame, as on sway.
+//! * **Gnoblin 0.2** (the Rust compositor): no control socket. It serves its
+//!   object model over IPC 0.2.0 (`ipc.sock`, binary frames from the
+//!   schema), which this module does not speak, so [`Locator::detect`] finds
+//!   none there, as for the next entry. Nothing here assumes Mutter: the
+//!   dragged window is moved with `xdg_toplevel.move`, a standard request.
 //! * **GNOME Shell (mutter), KDE Plasma, and the rest**: nothing is offered to
 //!   a client, so [`Locator::detect`] finds none, a tab can be torn off but not
 //!   dropped on another window's strip by moving the window over it (see
@@ -284,6 +290,19 @@ impl Locator {
     ) -> Option<Locator> {
         let set = |name: &str| var(name).filter(|value| !value.is_empty());
         let socket = gnoblin_socket(&var);
+        // Gnoblin 0.2, the Rust compositor, has no control socket: it serves
+        // IPC 0.2.0 (binary, `ipc.sock`) and there is nothing here that speaks
+        // it. Without an explicit control socket to ask, a session that has
+        // the one and not the other offers no way to ask where windows are,
+        // and asking a socket that is not there thirty times a second would
+        // only fail. Tabs torn off then behave as on any compositor with no
+        // way to ask.
+        if set("GNOBLIN_COMPOSITOR_SOCKET").is_none()
+            && !exists(&socket)
+            && (set("GNOBLIN_IPC_SOCKET").is_some() || exists(&gnoblin_ipc_socket(&var)))
+        {
+            return None;
+        }
         let says_gnoblin = set("GNOBLIN_COMPOSITOR_SOCKET").is_some()
             || set("XDG_CURRENT_DESKTOP").is_some_and(|desktop| {
                 desktop
@@ -334,13 +353,28 @@ fn gnoblin_socket(var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
     if let Some(path) = var("GNOBLIN_COMPOSITOR_SOCKET").filter(|path| !path.is_empty()) {
         return PathBuf::from(path);
     }
-    let runtime = var("XDG_RUNTIME_DIR")
+    gnoblin_runtime_dir(var).join("compositor-v1.sock")
+}
+
+/// The IPC socket of Gnoblin 0.2, the Rust compositor: `GNOBLIN_IPC_SOCKET`,
+/// else `$XDG_RUNTIME_DIR/gnoblin/ipc.sock`. It speaks a binary protocol, not
+/// the control socket's JSON.
+fn gnoblin_ipc_socket(var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
+    if let Some(path) = var("GNOBLIN_IPC_SOCKET").filter(|path| !path.is_empty()) {
+        return PathBuf::from(path);
+    }
+    gnoblin_runtime_dir(var).join("ipc.sock")
+}
+
+/// `$XDG_RUNTIME_DIR/gnoblin`, or the same under `/run/user/<uid>`.
+fn gnoblin_runtime_dir(var: &impl Fn(&str) -> Option<OsString>) -> PathBuf {
+    var("XDG_RUNTIME_DIR")
         .filter(|dir| !dir.is_empty())
         .map_or_else(
             || PathBuf::from(format!("/run/user/{}", own_uid())),
             PathBuf::from,
-        );
-    runtime.join("gnoblin").join("compositor-v1.sock")
+        )
+        .join("gnoblin")
 }
 
 /// The user id of this process, from the owner of `/proc/self`.
@@ -809,6 +843,50 @@ mod tests {
             .as_deref(),
             Some("sway /s/sway.sock")
         );
+    }
+
+    #[test]
+    fn the_rust_compositor_has_no_control_socket_to_ask() {
+        let (run, desktop) = (
+            ("XDG_RUNTIME_DIR", "/r"),
+            ("XDG_CURRENT_DESKTOP", "Gnoblin"),
+        );
+        // Only `ipc.sock` exists, or only exists as far as the environment says.
+        let none_at = |pairs: &[(&'static str, &'static str)], ipc_file: bool| {
+            Locator::detect_in(env(pairs), move |path| {
+                ipc_file && path.ends_with("ipc.sock")
+            })
+            .is_none()
+        };
+        assert!(none_at(
+            &[run, desktop, ("GNOBLIN_IPC_SOCKET", "/r/gnoblin/ipc.sock")],
+            false
+        ));
+        assert!(
+            none_at(&[run, desktop], true),
+            "its IPC socket is there and no control socket"
+        );
+        assert!(
+            none_at(
+                &[
+                    run,
+                    ("SWAYSOCK", "/s/sway.sock"),
+                    ("GNOBLIN_IPC_SOCKET", "/x")
+                ],
+                false
+            ),
+            "a sway socket inherited into a Gnoblin 0.2 session is not its compositor"
+        );
+        // A control socket named outright is still asked.
+        assert!(!none_at(
+            &[
+                run,
+                desktop,
+                ("GNOBLIN_IPC_SOCKET", "/x"),
+                ("GNOBLIN_COMPOSITOR_SOCKET", "/t/g.sock")
+            ],
+            true
+        ));
     }
 
     #[test]

@@ -132,7 +132,21 @@ impl Component for HeaderBar {
         let mut leading_width = use_state(|| 0.0_f32);
         let mut trailing_width = use_state(|| 0.0_f32);
         let mut title_width = use_state(|| 0.0_f32);
+        let mut bar_width = use_state(|| 0.0_f32);
         let inset = leading_width().max(trailing_width()) + S2.px() + S1.px();
+        // A centred title gives up the room of the wider cluster on both
+        // sides. When that leaves it less than its own width and laying it out
+        // from the start would give it more (a phone header with a menu and
+        // the window buttons on one side), it starts after the leading
+        // controls instead of being cut to "P…".
+        let squeezed = !self.title_start && bar_width() > 0.0 && !self.title.is_empty() && {
+            let content = (bar_width() - 2.0 * S2.px()).max(0.0);
+            let centred = (content - 2.0 * inset).max(0.0);
+            let from_start = (content - leading_width() - trailing_width() - 2.0 * S2.px()).max(0.0);
+            let natural = crate::controls::path_label::text_width(&self.title, EMPHASIS);
+            centred < natural && from_start > centred + 1.0
+        };
+        let title_start = self.title_start || squeezed;
         // The title layer sits in the bar's content box, inside the padding. A
         // bar whose title starts the bar and that has no leading control keeps
         // S3 at the start, so the title is clear of the edge; every other bar
@@ -140,7 +154,7 @@ impl Component for HeaderBar {
         // title is centred on the bar either way: both sides are cleared by the
         // wider padding, not on a content box that is off centre by half the
         // difference.
-        let pad_left = if self.leading.is_empty() && self.title_start {
+        let pad_left = if self.leading.is_empty() && title_start {
             S3
         } else {
             S2
@@ -209,6 +223,9 @@ impl Component for HeaderBar {
                 if !inert && draggable {
                     drag_on_pointer_down(event);
                 }
+            })
+            .on_sized(move |event: Event<SizedEventData>| {
+                bar_width.set_if_modified(event.area.width());
             });
         match &self.tab_slot {
             // A strip of tabs takes the room between the controls, from the
@@ -218,7 +235,7 @@ impl Component for HeaderBar {
                 .maybe_child((!self.leading.is_empty() || self.busy).then(|| leading))
                 .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(strip.clone()))
                 .child(trailing),
-            None if self.title_start => bar
+            None if title_start => bar
                 .child(leading)
                 .child(
                     rect()

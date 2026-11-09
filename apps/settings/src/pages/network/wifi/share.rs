@@ -113,8 +113,8 @@ pub fn secret_row(
             .child(
                 action_button("Copy", move |_| {
                     match freya::clipboard::Clipboard::set(copy.clone()) {
-                        Ok(()) => overlays.toast("Copied."),
-                        Err(_) => overlays.toast("The password could not be copied."),
+                        Ok(()) => overlays.toast("Password copied"),
+                        Err(_) => overlays.toast("Could not copy the password. Try again."),
                     }
                 })
                 .compact()
@@ -161,7 +161,7 @@ impl Component for ShareBody {
 
         let Some(kind) = Kind::of(&target.key_mgmt) else {
             return popup_column().child(status(Status::Info(
-                "This network signs in with an account, so it cannot be shared as a code.".into(),
+                "This network uses an account to sign in. It has no code to share.".into(),
             )));
         };
         let loaded = secret.read().clone();
@@ -177,12 +177,14 @@ impl Component for ShareBody {
                 )));
             }
             Some(Err(error)) => {
-                body = body.child(status(Status::Error(error.0.clone())));
+                body = body.child(status(Status::Error(super::super::plain(
+                    &error.0,
+                    "Could not read the saved password. Try again.",
+                ))));
             }
             Some(Ok(None)) if kind != Kind::Open => {
                 body = body.child(status(Status::Info(
-                    "NetworkManager has no saved password for this network, so there is nothing to share."
-                        .into(),
+                    "This network has no saved password to share.".into(),
                 )));
             }
             Some(Ok(_)) => {

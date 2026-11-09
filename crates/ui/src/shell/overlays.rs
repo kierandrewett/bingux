@@ -342,6 +342,7 @@ impl Component for OverlayHost {
         // The window host below uses this core too, so the menus and dialogs
         // drawn beside it share the page's focus state.
         let _ = crate::focus::provide_focus_core();
+        let announcer = crate::a11y::provide_announcer();
         let scope = current_scope_id();
         let overlays = use_hook(move || Overlays::in_scope(scope));
         use_provide_context(|| overlays);
@@ -356,28 +357,20 @@ impl Component for OverlayHost {
         let page = use_try_consume::<crate::nav::Router>().map(|router| router.use_current_id());
         use_side_effect_with_deps(&page, move |_| overlays.forget_menu());
 
-        // Every application window answers the About shortcut: the main window
-        // of an app that went through `Application::run` (which registered its
-        // facts) and has a router. A gallery, a test host and the inspector's
-        // window have none of the two. A dialog that is already open keeps the
-        // window: it holds a question.
-        let about = page.is_some() && crate::about::registered();
-        rect()
-            .expanded()
-            .maybe(about, |host| {
-                host.on_global_key_down(move |event: Event<KeyboardEventData>| {
-                    if crate::about::is_shortcut(&event) && !overlays.dialog_open() {
-                        event.stop_propagation();
-                        crate::about::open(overlays);
-                    }
-                })
-            })
+        // The window's commands: one router per window answers every
+        // shortcut (the palette, the shortcuts sheet, About, Undo and the
+        // app's own). A host inside another leaves routing to the outer one.
+        let commands = crate::commands::provide_commands();
+        let undo = crate::undo::provide_undo();
+        let router = crate::commands::use_router(commands, overlays, undo, announcer);
+        crate::commands::attach_router(rect().expanded(), commands, overlays, router)
             .child(crate::window::WindowHost::new(self.child.clone()))
             .child(OverlayLayers {
                 overlays,
                 stack: OverlayStack::Window,
                 page,
             })
+            .child(crate::a11y::AnnouncerRegion { announcer })
     }
 }
 
@@ -538,8 +531,11 @@ impl Component for ToastLayer {
                     let elapsed = now.saturating_duration_since(last);
                     last = now;
                     let focus_held = ids.contains(&*focused.peek());
+                    let reading = try_consume_root_context::<ScreenReader>()
+                        .is_some_and(|reader| reader.is_on());
                     let mut clock = clock.borrow_mut();
                     clock.set_focus(focus_held);
+                    clock.set_screen_reader(reading);
                     if clock.tick(elapsed) {
                         break;
                     }

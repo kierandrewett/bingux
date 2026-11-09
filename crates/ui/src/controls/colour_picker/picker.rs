@@ -149,16 +149,22 @@ impl ColourPicker {
                 colour: *colour,
                 name: None,
             })),
-            None => entries.extend(PRESETS.iter().filter_map(|hex| {
-                colour_from_hex(hex).map(|colour| Entry { colour, name: None })
-            })),
+            None => {
+                entries.extend(PRESETS.iter().filter_map(|hex| {
+                    colour_from_hex(hex).map(|colour| Entry { colour, name: None })
+                }))
+            }
         }
         entries
     }
 
     /// What the picker shows, as far as its height goes.
     fn shape(&self) -> Shape {
-        let accents = if self.accents { accent_names().count() } else { 0 };
+        let accents = if self.accents {
+            accent_names().count()
+        } else {
+            0
+        };
         let presets = self.presets.as_ref().map_or(PRESETS.len(), Vec::len);
         Shape {
             alpha: self.alpha,
@@ -192,9 +198,7 @@ impl Component for ColourPicker {
         let out = use_hook(|| Rc::new(RefCell::new(self.on_change.clone())));
         let held = use_hook(|| Rc::new(Cell::new(false)));
         let dirty = use_hook(|| Rc::new(Cell::new(false)));
-        let ended = use_hook(|| {
-            Rc::new(RefCell::new(EventHandler::new(|_: Color| {})))
-        });
+        let ended = use_hook(|| Rc::new(RefCell::new(EventHandler::new(|_: Color| {}))));
         let own = use_recents(self.recent.clone(), self.recents);
         let recents = self.shared.clone().unwrap_or(own);
         *out.borrow_mut() = self.on_change.clone();
@@ -236,16 +240,13 @@ impl Component for ColourPicker {
         let alpha_strip = alpha.then(|| {
             let alpha_link = link.clone();
             let solid = shown.opaque();
-            slider(
-                alpha_percent(shown.alpha) as f64,
-                move |percent: f64| {
-                    alpha_link.set(
-                        alpha_link
-                            .current()
-                            .with_alpha(alpha_from_percent(percent.round() as i32)),
-                    );
-                },
-            )
+            slider(alpha_percent(shown.alpha) as f64, move |percent: f64| {
+                alpha_link.set(
+                    alpha_link
+                        .current()
+                        .with_alpha(alpha_from_percent(percent.round() as i32)),
+                );
+            })
             .step(1.0)
             .fill()
             .large()
@@ -310,12 +311,10 @@ impl Component for ColourPicker {
                     mode_link.settle();
                 }),
             })
-            .maybe_child((!entries.is_empty()).then(|| {
-                Palette {
-                    entries,
-                    editing: shown.colour(),
-                    link: link.clone(),
-                }
+            .maybe_child((!entries.is_empty()).then(|| Palette {
+                entries,
+                editing: shown.colour(),
+                link: link.clone(),
             }))
             .maybe_child(recents.enabled().then(|| Recent {
                 colours: recents.list(),

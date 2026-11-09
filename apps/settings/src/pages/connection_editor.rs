@@ -351,8 +351,8 @@ pub const IPV4_METHODS: Choices = &[
     ("auto", "Automatic (DHCP)"),
     ("manual", "Manual"),
     ("link-local", "Link-local only"),
-    ("shared", "Shared to other computers"),
-    ("disabled", "Disabled"),
+    ("shared", "Shared with other computers"),
+    ("disabled", "Off"),
 ];
 
 /// The IPv6 method names, with the label shown to the user.
@@ -361,23 +361,23 @@ pub const IPV6_METHODS: Choices = &[
     ("dhcp", "Automatic, DHCP only"),
     ("manual", "Manual"),
     ("link-local", "Link-local only"),
-    ("shared", "Shared to other computers"),
+    ("shared", "Shared with other computers"),
     ("ignore", "Ignore"),
-    ("disabled", "Disabled"),
+    ("disabled", "Off"),
 ];
 
 /// The methods a VPN offers: it has no link to share or limit to the local network.
 pub const VPN_IPV4_METHODS: Choices = &[
     ("auto", "Automatic (DHCP)"),
     ("manual", "Manual"),
-    ("disabled", "Disabled"),
+    ("disabled", "Off"),
 ];
 
 pub const VPN_IPV6_METHODS: Choices = &[
     ("auto", "Automatic"),
     ("manual", "Manual"),
     ("ignore", "Ignore"),
-    ("disabled", "Disabled"),
+    ("disabled", "Off"),
 ];
 
 /// The methods offered for IP `version` (4 or 6) on a profile of `kind`.
@@ -432,7 +432,7 @@ pub fn shown(version: u8, method: &str) -> Shown {
 /// The IPv6 privacy extension choices. Keys are the `ipv6.ip6-privacy` numbers.
 pub const IP6_PRIVACY_CHOICES: Choices = &[
     ("-1", "Default"),
-    ("0", "Disabled"),
+    ("0", "Off"),
     ("1", "Prefer public addresses"),
     ("2", "Prefer temporary addresses"),
 ];
@@ -440,7 +440,7 @@ pub const IP6_PRIVACY_CHOICES: Choices = &[
 /// How an IPv6 address is made from the hardware address.
 pub const ADDR_GEN_CHOICES: Choices = &[
     ("default", "Default"),
-    ("stable-privacy", "Stable, private"),
+    ("stable-privacy", "Stable and private"),
     ("eui64", "From the hardware address"),
 ];
 
@@ -735,7 +735,7 @@ pub fn wep_key(text: &str) -> Check {
     if hex || ascii {
         Ok(())
     } else {
-        Err("A WEP key is 5 or 13 characters, or 10 or 26 hexadecimal digits.".to_string())
+        Err("Use 5 or 13 characters, or 10 or 26 hexadecimal digits.".to_string())
     }
 }
 

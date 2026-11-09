@@ -1,12 +1,13 @@
 //! Full-colour application icons, found the way the shell finds them.
 //!
 //! The dock, search and the window switcher resolve an icon name through the
-//! GTK icon theme. This module does the same lookup from the Icon Theme
-//! Specification, so a row in Settings shows the icon the dock shows: the
-//! current GTK icon theme and the themes it inherits, then `hicolor`, then
-//! `/usr/share/pixmaps`. A name that is an absolute path is used as it is.
-//! An icon that cannot be found is drawn as a tile with the generic
-//! application glyph, never as an empty gap.
+//! icon theme. This module does the same lookup from the Icon Theme
+//! Specification, reading the theme's files itself (no GTK, no GIO), so a row
+//! in Settings shows the icon the dock shows: the theme the desktop names
+//! ([`crate::platform::appearance::icon_theme`]) and the themes it inherits,
+//! then `hicolor`, then `/usr/share/pixmaps`. A name that is an absolute path
+//! is used as it is. An icon that cannot be found is drawn as a tile with the
+//! generic application glyph, never as an empty gap.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -31,7 +32,9 @@ pub struct IconFile {
 impl IconFile {
     fn new(path: PathBuf, vector: bool) -> Option<Self> {
         let svg = if vector {
-            Some(Bytes::from(with_view_box(crate::runtime::read_file(&path).ok()?)))
+            Some(Bytes::from(with_view_box(
+                crate::runtime::read_file(&path).ok()?,
+            )))
         } else {
             None
         };
@@ -224,20 +227,11 @@ fn parse_theme(name: &str, roots: &[PathBuf]) -> Theme {
     theme
 }
 
-/// The icon theme GTK applications use, from GSettings; Adwaita otherwise.
+/// The icon theme the desktop names (`platform::appearance`: the portal,
+/// `bingux.toml`, GTK's settings files, gsettings); Adwaita otherwise. Read
+/// once.
 fn current_theme() -> String {
-    static NAME: LazyLock<String> = LazyLock::new(|| {
-        crate::runtime::assert_off_ui_thread("gsettings icon-theme");
-        std::process::Command::new("gsettings")
-            .args(["get", "org.gnome.desktop.interface", "icon-theme"])
-            .output()
-            .ok()
-            .filter(|output| output.status.success())
-            .and_then(|output| String::from_utf8(output.stdout).ok())
-            .map(|text| text.trim().trim_matches('\'').to_string())
-            .filter(|name| !name.is_empty())
-            .unwrap_or_else(|| "Adwaita".to_string())
-    });
+    static NAME: LazyLock<String> = LazyLock::new(crate::platform::appearance::icon_theme);
     NAME.clone()
 }
 
@@ -437,10 +431,10 @@ impl Component for AppIcon {
                     .height(Size::px(size)),
                 Paint::Text.color(&tokens),
             )
-                // Rasterised on a worker, and keyed on the text colour from
-                // the first draw, so the viewer does not rasterise a second
-                // time when it learns the inherited colour.
-                .into_element(),
+            // Rasterised on a worker, and keyed on the text colour from
+            // the first draw, so the viewer does not rasterise a second
+            // time when it learns the inherited colour.
+            .into_element(),
             Some(Some(IconFile { path, svg: None })) => ImageViewer::new(path)
                 .width(Size::px(size))
                 .height(Size::px(size))
@@ -559,7 +553,9 @@ mod enforcement_tests {
     ];
 
     fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
-        let Ok(entries) = fs::read_dir(dir) else { return };
+        let Ok(entries) = fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             let name = entry.file_name();
@@ -594,19 +590,29 @@ mod enforcement_tests {
         assert!(files.len() > 100, "the workspace sources were found");
         let mut problems = Vec::new();
         for path in files {
-            let relative = path.strip_prefix(&root).unwrap_or(&path).to_string_lossy().into_owned();
+            let relative = path
+                .strip_prefix(&root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .into_owned();
             let text = fs::read_to_string(&path).unwrap_or_default();
             let code = code(&text);
             if !relative.ends_with("controls/dropdown.rs") && code.contains("OptionIcon::App(") {
-                problems.push(format!("{relative}: OptionIcon::App outside the dropdown; use app_dropdown"));
+                problems.push(format!(
+                    "{relative}: OptionIcon::App outside the dropdown; use app_dropdown"
+                ));
             }
             if !relative.ends_with("app_icon.rs") && code.contains(".app_icons(") {
-                problems.push(format!("{relative}: .app_icons(..) was removed; use app_dropdown(Vec<AppChoice>, ..)"));
+                problems.push(format!(
+                    "{relative}: .app_icons(..) was removed; use app_dropdown(Vec<AppChoice>, ..)"
+                ));
             }
             let reads_apps = APP_SOURCES.iter().any(|token| code.contains(token));
             let builds_lists = LIST_BUILDERS.iter().any(|token| code.contains(token));
             let has_icons = ICON_PATHS.iter().any(|token| code.contains(token));
-            let allowed = NOT_APP_LISTS.iter().any(|(file, _)| relative.ends_with(file));
+            let allowed = NOT_APP_LISTS
+                .iter()
+                .any(|(file, _)| relative.ends_with(file));
             if reads_apps && builds_lists && !has_icons && !allowed {
                 problems.push(format!(
                     "{relative}: reads applications and builds a menu or dropdown without app icons; \

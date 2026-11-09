@@ -126,7 +126,10 @@ fn app(log: Log, line: bool, count: usize, size: (f32, f32)) -> Snapshot {
 
 /// The middle of a box.
 fn mid(area: &Area) -> (f32, f32) {
-    (area.min_x() + area.width() / 2.0, area.min_y() + area.height() / 2.0)
+    (
+        area.min_x() + area.width() / 2.0,
+        area.min_y() + area.height() / 2.0,
+    )
 }
 
 /// The text of a label or a paragraph.
@@ -134,16 +137,19 @@ fn text_of(element: &dyn ElementExt) -> Option<String> {
     if let Some(label) = Label::try_downcast(element) {
         return Some(label.text.to_string());
     }
-    Paragraph::try_downcast(element)
-        .map(|paragraph| paragraph.spans.iter().map(|span| span.text.to_string()).collect())
+    Paragraph::try_downcast(element).map(|paragraph| {
+        paragraph
+            .spans
+            .iter()
+            .map(|span| span.text.to_string())
+            .collect()
+    })
 }
 
 /// A label's box.
 fn label(shot: &mut Snapshot, text: &str) -> Area {
     shot.runner()
-        .find_many(|node, element| {
-            (text_of(element)? == text).then(|| node.layout().area)
-        })
+        .find_many(|node, element| (text_of(element)? == text).then(|| node.layout().area))
         .into_iter()
         .next()
         .unwrap_or_else(|| panic!("no label {text:?}"))
@@ -174,12 +180,21 @@ fn drawn(shot: &mut Snapshot, at: (f32, f32)) -> (f32, f32) {
         let effect = element.effect()?;
         let area = node.layout().area;
         let inside = area.contains((at.0, at.1).into());
-        (inside && (effect.scale.is_some() || effect.opacity.is_some()) && effect.opacity != Some(0.0))
-            .then(|| (effect.scale.map_or(1.0, |scale| scale.x), effect.opacity.unwrap_or(1.0)))
+        (inside
+            && (effect.scale.is_some() || effect.opacity.is_some())
+            && effect.opacity != Some(0.0))
+        .then(|| {
+            (
+                effect.scale.map_or(1.0, |scale| scale.x),
+                effect.opacity.unwrap_or(1.0),
+            )
+        })
     });
     found
         .into_iter()
-        .fold((1.0, 1.0), |(scale, opacity), (s, o)| (scale * s, opacity * o))
+        .fold((1.0, 1.0), |(scale, opacity), (s, o)| {
+            (scale * s, opacity * o)
+        })
 }
 
 struct Grip {
@@ -261,7 +276,10 @@ fn the_grip_is_a_small_icon_in_a_row_button_slot_at_the_end_of_a_standard_row() 
                     && grip.area.contains(mid(&area).into()))
                 .then_some(area)
             });
-            assert!(!drawn.is_empty(), "{size:?} {name}: no {glyph} px glyph inside the grip");
+            assert!(
+                !drawn.is_empty(),
+                "{size:?} {name}: no {glyph} px glyph inside the grip"
+            );
             assert!(
                 (mid(&drawn[0]).0 - grip.centre.0).abs() < 0.51
                     && (mid(&drawn[0]).1 - grip.centre.1).abs() < 0.51,
@@ -278,8 +296,16 @@ fn the_grip_is_a_small_icon_in_a_row_button_slot_at_the_end_of_a_standard_row() 
         }
         // The content of every row starts at the same place, one gutter
         // inside the card.
-        let lefts: Vec<f32> = NAMES.iter().map(|name| label(&mut shot, name).min_x()).collect();
-        assert!(lefts.windows(2).all(|pair| (pair[0] - pair[1]).abs() < 0.01), "{lefts:?}");
+        let lefts: Vec<f32> = NAMES
+            .iter()
+            .map(|name| label(&mut shot, name).min_x())
+            .collect();
+        assert!(
+            lefts
+                .windows(2)
+                .all(|pair| (pair[0] - pair[1]).abs() < 0.01),
+            "{lefts:?}"
+        );
         assert!(
             (lefts[0] - (pad + 1.0 + GUTTER.px_in(class))).abs() < 1.01,
             "{size:?}: the text starts at {}",
@@ -349,23 +375,46 @@ fn a_dragged_row_lifts_follows_the_pointer_and_the_next_row_slides_up() {
     );
 
     // It follows the pointer.
-    assert!((seen.last().unwrap().0 - (home + 80.0)).abs() < 1.0, "{:?}", seen.last());
+    assert!(
+        (seen.last().unwrap().0 - (home + 80.0)).abs() < 1.0,
+        "{:?}",
+        seen.last()
+    );
     // It is lifted: bigger and a little translucent, once held.
     let (scale, opacity) = seen.last().unwrap().3;
-    assert!(scale > 1.01 && scale <= 1.021, "the held row grows to ~1.02, not {scale}");
-    assert!(opacity < 1.0 && opacity > 0.9, "and fades a little, to {opacity}");
+    assert!(
+        scale > 1.01 && scale <= 1.021,
+        "the held row grows to ~1.02, not {scale}"
+    );
+    assert!(
+        opacity < 1.0 && opacity > 0.9,
+        "and fades a little, to {opacity}"
+    );
     // Nothing outside the list moves, in any frame.
-    assert!(seen.iter().all(|frame| (frame.2 - footer).abs() < 0.01), "the footer moved: {seen:?}");
+    assert!(
+        seen.iter().all(|frame| (frame.2 - footer).abs() < 0.01),
+        "the footer moved: {seen:?}"
+    );
     // The row it passes slides out of the way by one row height, smoothly:
     // never a jump of more than a row, monotone, arriving after a few frames.
     let slid: Vec<f32> = seen.iter().map(|frame| frame.1).collect();
-    assert!(slid.windows(2).all(|pair| pair[1] <= pair[0] + 0.01), "not monotone: {slid:?}");
-    assert!((slid.last().unwrap() - (next - row_height)).abs() < 1.0, "{slid:?}");
     assert!(
-        slid.iter().any(|y| *y < next - 1.0 && *y > next - row_height + 1.0),
+        slid.windows(2).all(|pair| pair[1] <= pair[0] + 0.01),
+        "not monotone: {slid:?}"
+    );
+    assert!(
+        (slid.last().unwrap() - (next - row_height)).abs() < 1.0,
+        "{slid:?}"
+    );
+    assert!(
+        slid.iter()
+            .any(|y| *y < next - 1.0 && *y > next - row_height + 1.0),
         "no part-way frame: {slid:?}"
     );
-    assert!(log.moves.borrow().is_empty(), "nothing is reported while it is held");
+    assert!(
+        log.moves.borrow().is_empty(),
+        "nothing is reported while it is held"
+    );
 
     // Letting go settles into place with the shadow gone, then reports once.
     shot.release(end);
@@ -377,14 +426,27 @@ fn a_dragged_row_lifts_follows_the_pointer_and_the_next_row_slides_up() {
     }
     frames(&mut shot, 6);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Sound", "Power", "Keyboard"]));
-    assert!((label(&mut shot, "Network").min_y() - home).abs() < 0.6, "settled {settled:?}");
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Sound", "Power", "Keyboard"])
+    );
+    assert!(
+        (label(&mut shot, "Network").min_y() - home).abs() < 0.6,
+        "settled {settled:?}"
+    );
     assert!((label(&mut shot, "Sound").min_y() - next).abs() < 0.6);
     assert!((label(&mut shot, AFTER).min_y() - footer).abs() < 0.01);
     let at = label(&mut shot, "Sound");
     let (scale, opacity) = drawn(&mut shot, mid(&at));
-    assert!((scale - 1.0).abs() < 0.001 && (opacity - 1.0).abs() < 0.001, "the lift is gone");
-    assert!(log.pressed.borrow().is_empty(), "the drop pressed no row: {:?}", log.pressed.borrow());
+    assert!(
+        (scale - 1.0).abs() < 0.001 && (opacity - 1.0).abs() < 0.001,
+        "the lift is gone"
+    );
+    assert!(
+        log.pressed.borrow().is_empty(),
+        "the drop pressed no row: {:?}",
+        log.pressed.borrow()
+    );
 }
 
 #[test]
@@ -393,14 +455,24 @@ fn dropping_where_it_started_reports_nothing_and_escape_takes_it_home() {
     let home = label(&mut shot, "Sound").min_y();
     let next = label(&mut shot, "Network").min_y();
     let (_, end) = pull_down(&mut shot, 90.0, 6);
-    assert!(label(&mut shot, "Network").min_y() < next, "row 1 has started to slide");
+    assert!(
+        label(&mut shot, "Network").min_y() < next,
+        "row 1 has started to slide"
+    );
     shot.key(Key::Named(NamedKey::Escape));
     frames(&mut shot, 30);
     shot.release(end);
     frames(&mut shot, 20);
-    assert!(log.moves.borrow().is_empty(), "Escape reports nothing: {:?}", log.moves.borrow());
+    assert!(
+        log.moves.borrow().is_empty(),
+        "Escape reports nothing: {:?}",
+        log.moves.borrow()
+    );
     assert_eq!(order(&mut shot), names(&NAMES));
-    assert!((label(&mut shot, "Sound").min_y() - home).abs() < 0.6, "it is home again");
+    assert!(
+        (label(&mut shot, "Sound").min_y() - home).abs() < 0.6,
+        "it is home again"
+    );
     assert!((label(&mut shot, "Network").min_y() - next).abs() < 0.6);
     // And nothing is held: a hover over the list does not move anything.
     let target = grip(&mut shot, "Power").centre;
@@ -416,7 +488,10 @@ fn a_drag_across_two_rows_moves_two_places() {
     shot.release(end);
     frames(&mut shot, 45);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 2)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Power", "Sound", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Power", "Sound", "Keyboard"])
+    );
 }
 
 #[test]
@@ -436,38 +511,63 @@ fn up_and_down_on_a_focused_grip_slide_the_swap_and_focus_follows_the_item() {
     let mut path = Vec::new();
     for _ in 0..14 {
         frames(&mut shot, 1);
-        path.push((label(&mut shot, "Sound").min_y(), label(&mut shot, "Network").min_y()));
+        path.push((
+            label(&mut shot, "Sound").min_y(),
+            label(&mut shot, "Network").min_y(),
+        ));
     }
     assert!(
-        path.iter().any(|(sound, network)| *sound > home + 1.0 && *sound < next - 1.0 && *network < next - 1.0 && *network > home + 1.0),
+        path.iter().any(|(sound, network)| *sound > home + 1.0
+            && *sound < next - 1.0
+            && *network < next - 1.0
+            && *network > home + 1.0),
         "no frame between the two places: {path:?}"
     );
-    assert!(path.windows(2).all(|pair| pair[1].0 >= pair[0].0 - 0.01), "Sound only moves down: {path:?}");
+    assert!(
+        path.windows(2).all(|pair| pair[1].0 >= pair[0].0 - 0.01),
+        "Sound only moves down: {path:?}"
+    );
     frames(&mut shot, 10);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Sound", "Power", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Sound", "Power", "Keyboard"])
+    );
     // The move is announced, politely, to assistive technology.
     let announced: Vec<bool> = shot.runner().find_many(|_, element| {
         let data = element.accessibility();
         (data.builder.label() == Some("Sound moved to position 2 of 4"))
             .then(|| data.builder.live() == Some(accesskit::Live::Polite))
     });
-    assert_eq!(announced, vec![true], "a polite live region says where the item went");
+    assert_eq!(
+        announced,
+        vec![true],
+        "a polite live region says where the item went"
+    );
     // The focus ring is on the moved item's grip: Down again moves it on.
     shot.key(Key::Named(NamedKey::ArrowDown));
     frames(&mut shot, 25);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1), (1, 2)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Power", "Sound", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Power", "Sound", "Keyboard"])
+    );
     // Home sends it to the start and End to the end, and the ends stop.
     shot.key(Key::Named(NamedKey::Home));
     frames(&mut shot, 25);
-    assert_eq!(order(&mut shot), names(&["Sound", "Network", "Power", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Sound", "Network", "Power", "Keyboard"])
+    );
     shot.key(Key::Named(NamedKey::ArrowUp));
     frames(&mut shot, 25);
     assert_eq!(log.moves.borrow().len(), 3, "the first item cannot go up");
     shot.key(Key::Named(NamedKey::End));
     frames(&mut shot, 25);
-    assert_eq!(order(&mut shot), names(&["Network", "Power", "Keyboard", "Sound"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Power", "Keyboard", "Sound"])
+    );
 }
 
 #[test]
@@ -477,13 +577,19 @@ fn alt_and_an_arrow_on_a_focused_row_move_it() {
     shot.key_with(Key::Named(NamedKey::ArrowDown), Modifiers::ALT);
     frames(&mut shot, 25);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Sound", "Power", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Sound", "Power", "Keyboard"])
+    );
     // The focus is now on the moved item's grip, so the arrow, with or
     // without Alt, goes on moving it.
     shot.key_with(Key::Named(NamedKey::ArrowDown), Modifiers::ALT);
     frames(&mut shot, 25);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1), (1, 2)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Power", "Sound", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Power", "Sound", "Keyboard"])
+    );
 }
 
 #[test]
@@ -497,15 +603,23 @@ fn a_finger_on_the_grip_lifts_at_once_and_a_held_row_lifts_after_a_beat() {
     }
     // The grip: a touch picks the row up with no wait.
     let grip_at = grip(&mut shot, "Sound").centre;
-    shot.run_script(&format!("touch_down {},{}", grip_at.0, grip_at.1), "settings")
-        .unwrap();
+    shot.run_script(
+        &format!("touch_down {},{}", grip_at.0, grip_at.1),
+        "settings",
+    )
+    .unwrap();
     for step in 1..=12 {
         let y = grip_at.1 + 1.0 + (row_height * 1.4) * step as f32 / 12.0;
-        shot.run_script(&format!("touch_move {},{y}", grip_at.0), "settings").unwrap();
+        shot.run_script(&format!("touch_move {},{y}", grip_at.0), "settings")
+            .unwrap();
         frames(&mut shot, 1);
     }
     let held = label(&mut shot, "Sound");
-    assert!(held.min_y() > home + row_height, "the row follows the finger: {}", held.min_y());
+    assert!(
+        held.min_y() > home + row_height,
+        "the row follows the finger: {}",
+        held.min_y()
+    );
     shot.run_script(
         &format!("touch_up {},{}", grip_at.0, grip_at.1 + row_height * 1.4),
         "settings",
@@ -513,25 +627,41 @@ fn a_finger_on_the_grip_lifts_at_once_and_a_held_row_lifts_after_a_beat() {
     .unwrap();
     frames(&mut shot, 40);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1)]);
-    assert!(log.pressed.borrow().is_empty(), "lifting the finger pressed no row");
+    assert!(
+        log.pressed.borrow().is_empty(),
+        "lifting the finger pressed no row"
+    );
 
     // The row: a finger resting for half a second picks it up.
-    let row_at = (label(&mut shot, "Power").min_x() + 20.0, mid(&label(&mut shot, "Power")).1);
-    shot.run_script(&format!("touch_down {},{}", row_at.0, row_at.1), "settings").unwrap();
+    let row_at = (
+        label(&mut shot, "Power").min_x() + 20.0,
+        mid(&label(&mut shot, "Power")).1,
+    );
+    shot.run_script(&format!("touch_down {},{}", row_at.0, row_at.1), "settings")
+        .unwrap();
     frames(&mut shot, 6);
     let before = drawn(&mut shot, row_at);
     assert!(before.0 <= 1.0, "not lifted yet");
     shot.settle(Duration::from_millis(560));
     let after = drawn(&mut shot, row_at);
     assert!(after.0 > 1.01, "held for a beat, the row lifts: {after:?}");
-    shot.run_script(&format!("touch_move {},{}", row_at.0, row_at.1 - row_height * 1.8), "settings")
-        .unwrap();
+    shot.run_script(
+        &format!("touch_move {},{}", row_at.0, row_at.1 - row_height * 1.8),
+        "settings",
+    )
+    .unwrap();
     frames(&mut shot, 3);
-    shot.run_script(&format!("touch_up {},{}", row_at.0, row_at.1 - row_height * 1.8), "settings")
-        .unwrap();
+    shot.run_script(
+        &format!("touch_up {},{}", row_at.0, row_at.1 - row_height * 1.8),
+        "settings",
+    )
+    .unwrap();
     frames(&mut shot, 40);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 1), (2, 0)]);
-    assert!(log.pressed.borrow().is_empty(), "the finger that moved a row did not press it");
+    assert!(
+        log.pressed.borrow().is_empty(),
+        "the finger that moved a row did not press it"
+    );
 }
 
 #[test]
@@ -573,12 +703,20 @@ fn a_long_list_shows_a_line_and_leaves_the_other_rows_still() {
     });
     assert!(!lines.is_empty(), "no drop line");
     let line = lines[0];
-    let expected = label(&mut shot, "Power").min_y() + row_height - (label(&mut shot, "Power").height() - row_height).max(0.0);
-    assert!((mid(&line).1 - expected).abs() <= 6.0 || mid(&line).1 > third, "line at {}", mid(&line).1);
+    let expected = label(&mut shot, "Power").min_y() + row_height
+        - (label(&mut shot, "Power").height() - row_height).max(0.0);
+    assert!(
+        (mid(&line).1 - expected).abs() <= 6.0 || mid(&line).1 > third,
+        "line at {}",
+        mid(&line).1
+    );
     shot.release(end);
     frames(&mut shot, 10);
     assert_eq!(log.moves.borrow().as_slice(), &[(0, 2)]);
-    assert_eq!(order(&mut shot), names(&["Network", "Power", "Sound", "Keyboard"]));
+    assert_eq!(
+        order(&mut shot),
+        names(&["Network", "Power", "Sound", "Keyboard"])
+    );
 }
 
 /// A page that scrolls: the list sits `ABOVE` px down, with room below it.
@@ -599,7 +737,12 @@ impl Component for Scrolling {
             scroll,
             compact: false,
         });
-        let mut order = use_state(|| NAMES.iter().map(|name| name.to_string()).collect::<Vec<_>>());
+        let mut order = use_state(|| {
+            NAMES
+                .iter()
+                .map(|name| name.to_string())
+                .collect::<Vec<_>>()
+        });
         let names = order.read().clone();
         let moves = self.log.moves.clone();
         let rows = names.iter().map(|name| row(name.clone()).into()).collect();
@@ -635,7 +778,9 @@ fn a_row_held_at_the_bottom_edge_scrolls_the_page_and_stays_under_the_pointer() 
             impl Component for Host {
                 fn render(&self) -> impl IntoElement {
                     let _tokens = provide_tokens();
-                    WindowHost::new(Scrolling { log: self.0.clone() })
+                    WindowHost::new(Scrolling {
+                        log: self.0.clone(),
+                    })
                 }
             }
             Host(page.clone()).into_element()
@@ -657,7 +802,10 @@ fn a_row_held_at_the_bottom_edge_scrolls_the_page_and_stays_under_the_pointer() 
     }
     frames(&mut shot, 30);
     let scrolled = last_before - label(&mut shot, "Keyboard").min_y();
-    assert!(scrolled > 60.0, "the page scrolled {scrolled} px while the row was held at the edge");
+    assert!(
+        scrolled > 60.0,
+        "the page scrolled {scrolled} px while the row was held at the edge"
+    );
     // The held row is still under the pointer, not left behind with the page.
     let held = label(&mut shot, "Sound");
     assert!(
@@ -670,7 +818,10 @@ fn a_row_held_at_the_bottom_edge_scrolls_the_page_and_stays_under_the_pointer() 
     frames(&mut shot, 5);
     let still = label(&mut shot, "Keyboard").min_y();
     frames(&mut shot, 10);
-    assert!((label(&mut shot, "Keyboard").min_y() - still).abs() < 0.5, "the page kept scrolling");
+    assert!(
+        (label(&mut shot, "Keyboard").min_y() - still).abs() < 0.5,
+        "the page kept scrolling"
+    );
     shot.key(Key::Named(NamedKey::Escape));
     frames(&mut shot, 30);
     assert!(log.moves.borrow().is_empty());

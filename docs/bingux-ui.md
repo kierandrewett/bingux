@@ -423,7 +423,7 @@ system's: a location is a URI, and `use_location()` reads it.
 Every application has an About window, made by `Application::run`. It is a
 card over the window (the same card on a phone) with the application icon,
 name, version, a one-line description, the website and "Report an issue" as
-links (opened with `xdg-open`), Licence, Credits and Legal pages, the app id and
+links (opened through `platform::open`), Licence, Credits and Legal pages, the app id and
 build, and **Copy details**, which puts a plain-text block for a bug report on
 the clipboard: name and version, app id, commit and build date, licence, the
 Rust, Freya and bingux-ui versions, OS, kernel and session, display scale, the
@@ -472,20 +472,21 @@ include_str!(..)` (Bingux's apps embed the repository's `COPYING`).
   directory, for a build tree). Nothing is read until the page is opened.
 - **It cannot be forgotten.** `Application::run` registers the window whatever
   `main` says, so a bare `Application::new("id")` still has one, named after its
-  id and title with no version, and the shortcut and `about::open` work.
+  id and title with no version, and the palette's About and `about::open` work.
   `scripts/ui-lint.py` fails an app crate whose `src/main.rs` starts an
   `Application` without `.about(` and `app_info!`.
-- **The shortcut is Ctrl+Shift+?** in the main window of every application
-  (`about::is_shortcut`). It does nothing while a dialog is open: that dialog
-  holds a question. `about::open(overlays)` opens it from code, and the
-  headless runner's script command `key ctrl+shift+?` reaches it the way a
-  person does.
+- **It has no shortcut of its own**, as in GNOME: Ctrl+? is the
+  [keyboard shortcuts sheet](#the-keyboard-shortcuts-sheet). The command
+  palette (Ctrl+Shift+P) has **About <name>** (the window's `app.about`
+  command), so it is still a few keys away. `about::open(overlays)` opens it
+  from code.
 - **The main menu ends with "About <name>"** from `about::app_menu_items(overlays)`
-  (a separator and the item, with the shortcut shown). An app whose menu is a
-  list it builds appends them; an app with no menu puts `app_menu(items)` in
-  its header (`NavigationSplitView::header_trailing`). Settings, Files and
-  Taxonomy do. Settings' **System > About** page is about the computer; the
-  window the menu opens is about Settings.
+  (a separator and the item). An app whose menu is a list it builds appends
+  them; an app with no menu puts `app_menu(items)` in its header
+  (`NavigationSplitView::header_trailing`), which also lists the window's
+  [commands](#commands). Settings, Files and Taxonomy do. Settings' **System >
+  About** page is about the computer; the window the menu opens is about
+  Settings.
 - The page behind it is inert while it is open, Escape and a press on the scrim
   close it, Alt+Left goes back from a page to the main one, and the focus returns to
   where it was. The card has one size on every page.
@@ -681,6 +682,8 @@ _unknown option_ (a message and the usage on stderr, status 2, nothing
 opened), and every other argument is an address, in order, so a flag can never
 become a location. An application's `normalise` turns each address into the
 text of a location and may refuse it by returning an empty address.
+
+`Application::address_option("--mode")` declares a value option that is another way to write an address: `--mode convert` and `--mode=convert` name the address `convert`, in order with the bare arguments, on a first launch and in a copy that is already running. A missing value is an error (status 2). It is how a desktop entry's actions reach a page: `Exec=bingux-calculator --mode convert`. `use_try_location()` is `use_location()` for a view that also runs with no router (a headless capture): `None` there.
 
 ### Guidelines
 
@@ -956,7 +959,7 @@ Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compac
 When a tab closes the host picks the tab that takes the selection: `tab_close::selection_after_close(ids, closed, selected)` is the browser's rule (the neighbour to the right, else the left; the selection stays if another tab closed), and `tab_close::others`, `tab_close::to_the_left` and `tab_close::to_the_right` give the sets for the three menu items. The rest is `bingux_ui::tabs`, the same for every application with tabs:
 
 - **`TabSet<P: TabContent>`** is the tabs as plain data (tested without a window): a new tab opens beside the one on show; `ClosedTabs<P>` is the stack behind Reopen closed tab (the last `CLOSED_TABS_KEPT`, 10, with their place and their content, and a closed group comes back left to right at its places); `duplicate` asks the content for a copy (`TabContent::duplicate`); `detach`, `detach_others`, `detach_all`, `insert_moved` and `adopt` move tabs between windows without losing or duplicating one, and tell the content it is leaving (`TabContent::depart`). What a tab shows is the application's `P`: Files' is `files::FileTab` (a place and its `TabMemory`, so Back and Forward come back with a reopened or moved tab).
-- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.menu_items(new_tab)` are the menu's New tab, Close tab and Reopen closed tab. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
+- **`Tabs::new(set, use_window(), use_overlays())`** is the set put on screen, `Copy` so every handler takes its own: `.strip(items, &tab_window, new_tab)` is the tab strip wired to open, select, close, close several, duplicate, reopen, reorder and tear off; `.shortcuts(new_tab)` is the key handler (Ctrl+T, Ctrl+Shift+T, Ctrl+W, Ctrl+Tab, Ctrl+Page Down and Up, Alt+1 to 9); `.commands(new_tab)` are the window commands New tab, Close tab, Reopen closed tab, Next tab and Previous tab (see [Commands](#commands)), for the main menu, the palette and the shortcuts sheet. Closing the last tab closes the window; `.guard(f)` makes it ask first when `f` returns a `CloseWarning` (Files asks only if `files::operations_running()`: a copy, move or compression is going).
 - **`use_tab_window(set, title)`** makes the window one of the application's windows: the compositor's title follows the tab on show (with the application's name and, for a second window, its number), the windows know one another so a tab torn off its strip (`Detach`) can be dropped on another window's strip, and `TabWindow::root(rect())` fades the carried window and ends the carry when the pointer comes back. The compositor questions it asks (sway's IPC, Gnoblin's control socket) are `bingux_ui::window::compositor`; the whole behaviour and what each compositor allows is `design/tab-tearoff.md`.
 - A second application's tabs are another `TabContent` and nothing else: no copy of the set, the window registry or the tear-off.
 
@@ -1268,6 +1271,8 @@ A form field row is as tall as any row: `FIELD_ROW_INSET` (10 px, 8 px on a phon
 
 Every action in a text field (the password reveal, the clear button of a search field) is the standard `IconButton`, `Dim::InlineButton` square, which is the field height less twice `FIELD_INSET` (4 px; 0 at compact density, where the button is the whole 44 px touch target). It sits that inset from the field's top, bottom and trailing edge, its radius is the field's less the inset (`Radius::nested`), and it has the hover and pressed fill, focus ring, tooltip and name every icon button has. After a press the focus returns to the field (`IconButton::refocus`). A dense or flat field is shorter than a button, so it uses a `Dim::Box5` button. `RowAction` and the tab close button are the same component with `pointer_only()` (out of the Tab order).
 
+**A field that reads as text.** `text_field(..).display(style, align)` is an editable line with no fill, edge, inset or focus ring, drawn in `style` (a size, a weight and an ink) and aligned in its width. The caret and the selection show where the keyboard is. It is for a line that is part of a display, such as the calculator's expression above its result; caret, selection, Copy and Paste, the touch handles and the context menu are the field's own.
+
 `scripts/ui-lint.py` fails on a press handler of Freya's own (`|event: Event<PressEventData>|`) on a bare box outside the modules listed in `RAW_PRESS_ALLOWED`, each with its reason.
 
 ### Tooltips
@@ -1277,6 +1282,7 @@ Every action in a text field (the password reveal, the clear button of a search 
 - **A new label does not move the bubble.** The bubble draws the text it was last measured with, at that size. The new text is laid out in a hidden copy first, and once its size is known the bubble swaps to the new text and the new place in one frame, so no frame draws text at the size of other text. The bubble stays on the same side of its control, centred on it, with the edge that touches the control in the same place: it grows away from the control.
 - **Where it sits** is one pure decision, `shell/tooltip_place.rs`: `decide(anchor, size, window, previous_side) -> Placement { x, y, side }`. It opens below the control, else above, right, then left, centred on the control along its edge, `PANEL_GAP` away and `PANEL_EDGE` inside the window. It is never over the control. The side is remembered while the tip is up and kept while it has room: it leaves a side only when staying would put it outside the window. Near an edge the side therefore cannot flip back and forth, and a bubble does not move while the pointer rests. Only when no side has room (a window smaller than control and bubble together) does it take the roomiest side and run past the window edge, still off the control.
 - **The bubble is as wide as its text, never as wide as what it hangs from.** On one line up to `Dim::TooltipMax` (280 px) or the window less its `PANEL_EDGE` margins, whichever is less; longer text wraps inside that onto at most four lines, then is cut with an ellipsis. The size comes from the hidden copy, so the wrap never reflows after the bubble is drawn. A text element wraps at the room its ancestors give it, and an element placed absolutely is given the room of the nearest ancestor that has a size of its own: a 36 px icon button, or the clipped cell of the tab strip's New tab button. So the bubble (and the hidden copy) sits in a _slot_, a `room` wide box of its own (`controls/tooltip.rs`, `slot`), and nothing it hangs from can narrow it. The bug this closed drew "New tab", "Close Home" and "Search" as one-to-three letters a line. Never lay a bubble, or any overlay that holds text, out directly under a sized control: give the overlay a width of its own. The text cache (`freya-core`'s `TextCache`) already keys a paragraph by its width, so it was not at fault.
+- **A tip around a child that flexes.** `hover_tip(child, text)` puts the child in a box that sizes from its content. A child that is sized by its parent (a key of a keypad with `Size::flex(span)`, a control that fills a column) would shrink to its label inside it and the row would stop filling. `hover_tip_sized(child, text, width, height)` gives the box that size (the child fills it, in a flex row, so its own flex width still applies). `KeypadKey::tooltip` uses it.
 - **One clock per window.** While a tip is up, and for 300 ms after the last one went, the next control's tip opens at once, in full, instead of waiting 500 ms. The tip it replaces stays as it was until the new bubble has its size and is drawn, and goes in that same frame: moving along a row of controls is one bubble that changes place, with no frame between them that draws nothing and none that draws two. After 300 ms with no tip, the 500 ms rest applies again. `WindowHost` provides the shared state (`provide_tooltips`); a tip with no host keeps its own.
 - **Never over a menu.** No tip opens while a menu or dialog is open, and one that is up goes when it opens (`Overlays::menu_open`).
 - **Scrolling takes tips down.** Content that scrolls moves under a resting pointer, so no tip is up while anything scrolls. Every `ScrollView` and `VirtualScrollView` tells its window, through one window-level signal (`ScrollActivity`, vendored in `freya-components`, provided by `WindowHost` and read by the tooltip hub), when its content moves: from a wheel notch, and from every frame in which the content has a new position (a glide, a scrollbar drag, the keys, a drag of the content). The window is scrolling from then until the content has stood still for 200 ms (`SCROLL_STILL`). A tip that is up goes in the frame the signal rises, with no fade. A tip that was waiting for the pointer to rest, or whose pointer arrives meanwhile, opens no bubble while it is set; when it clears, a tip whose pointer is still on its control waits the usual 500 ms rest (no 300 ms grace after a scroll) and opens. Tips subscribe to the signal only while they are up or waiting, so an idle tip does not render for it. A host that does not provide the signal (a test that mounts a view bare) never scrolls, as before.
@@ -1286,6 +1292,30 @@ Every action in a text field (the password reveal, the clear button of a search 
 `controls/tooltip_layout_tests.rs` is the size rule: a 44 px icon button in the open, in a 40 px clipped box, in a scrolled box, in the tab strip (its New tab button), in a window corner and in a window narrower than the text, with five labels (`New tab`, `Refresh (F5)`, `Move to Trash`, a 76-character one, non-ASCII) and a 60-character one. For each it checks that the bubble is as wide as the text on one line (or the room, wrapped on two to four lines with at least three characters a line), one line high for a short label, inside the window and off its control, and that its pixels are painted. Every case runs a second time after the same text was laid out at 20 px in the same window. Wide, tall controls in a free place cannot see this bug; these can.
 
 `scripts/tooltip-check.py` is the same rule on the real windows: with `BINGUX_UI_TOOLTIP_CHECK=FILE`, every capture the headless apps save first hovers each named icon button of its frame (`Snapshot::tooltip_findings`, `controls/tooltip_check.rs`) and records a bubble that wraps while narrower than the cap, a column of letters, a bubble outside the window or over its control. It runs every Settings page and popup at both sizes, every taxonomy page and the Files window (`bingux-files --snapshot`). Run it after changing a tooltip, an icon button or a header.
+
+### Keypad
+
+`keypad(columns, keys)` (`controls/keypad.rs`) is a grid of keys for a calculator, a PIN entry, a dialler or a lock screen. A key is `keypad_key(label, on_press)` with a short face label, and the builders below. Keys fill rows in order, `columns` to a row, and a key's `span` counts as that many columns; a row that does not fill leaves its right side empty (a dialler's bottom row) instead of stretching its keys. Every key shares the width of its row and every row shares the height the keypad is given, so a keypad sits in a box with a height (`Size::flex(1.0)` in a column, or `Size::px(..)`), and its keys never go below `Dim::Control` (`Dim::Box7` when `.dense()`).
+
+| Call                  | What it does                                                                                                                                                           |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.name(text)`         | What a screen reader says ("Divide" for `÷`). Without it the label is the name, which suits a digit                                                                    |
+| `.tone(KeyTone)`      | `Digit` (control fill), `Plain` (quiet, smaller label), `Operator` (accent on a soft fill), `Suggested` (accent fill: equals, Call), `Destructive` (danger ink: clear) |
+| `.span(n)`            | A wide key (a zero that spans two columns)                                                                                                                             |
+| `.enabled(bool)`      | Off keys are drawn at half strength, out of the Tab order and announced as disabled                                                                                    |
+| `.active(bool)`       | A toggle that is on: accent fill, as a bit of a bit grid                                                                                                               |
+| `.icon(Icon)`         | A glyph in place of the label (Backspace, Swap). The name is still what is announced                                                                                   |
+| `.tooltip(text)`      | Shown once the pointer rests on the key: the name and its shortcut ("Delete (Backspace)"). A digit needs none                                                          |
+| `Keypad::refocus(id)` | After each press, hand the keyboard to that control (a text field's `a11y_id`), so typing carries on                                                                   |
+| `Keypad::dense()`     | Tighter gaps, smaller labels and shorter keys, for a grid of many keys                                                                                                 |
+
+Each key is one Tab stop with the focus ring, and Enter or Space presses it; a press never takes keyboard focus from the control that `refocus` names, so a touch keyboard does not rise. A keypad types into a text field through `TextField::edits(State<Option<FieldEdit>>)`: `FieldEdit::Type(text)` inserts at the caret and replaces a selection, `Backspace` deletes the selection or the character before the caret.
+
+A key with a tooltip is laid out in a box of its own (`hover_tip_sized`, see [Tooltips](#tooltips)) that takes the key's flex share of the row. `controls/keypad.rs` holds a test that mounts a row of keys with and without tooltips and checks they are drawn alike.
+
+### Readout
+
+`readout(text)` (`controls/readout.rs`) is one large line of figures that always fits: a calculator's result, a counter, a stopwatch. The text starts at `HERO` times `.scale(f32)` and is scaled down, never below `.min_scale(f32)` (0.45 of the full size), to fit the width it is given. A value that would need to be smaller keeps that size and scrolls sideways, so two hundred digits stay readable and none is cut. It is selectable, and a right click offers Copy (`.copy_text(text)` when the clipboard should hold something other than what is shown, a number without its group marks). It is a live region: a screen reader announces the new value politely, as `.spoken(text)` ("one thousand two hundred") or the text itself; `.silent()` turns the announcement off for a value that changes every second. `.style(TextStyle)` picks another start size and `.align(TextAlign)` where text that does not fill the line sits (`End` by default, as a calculator's does). `Readout::fit` is pure and tested: `text_that_fits_is_full_size`, `text_that_does_not_fit_shrinks_to_fit`, `text_that_would_get_too_small_scrolls_at_the_smallest_size`, `an_unmeasured_box_changes_nothing`.
 
 ### Panel
 
@@ -1768,7 +1798,7 @@ thumbnail only when its row scrolls in. The views are ordinary components:
 
 ### The file view in a window
 
-`files::browse(Browse::new(memory))` is the dialog's body, unchanged, in an application window: the same toolbar, sidebar, address bar, list or grid, search, previews and operations. The dialog and the window are one component, `ChooserBody`, with a host: a dialog answers a request; a window has none to answer. In a window there is no Cancel or accept button, no file type filter, no name field and no choices, and what opening a file means changes: it opens in the application `xdg-open` names for its type, where a dialog answers with it. `Capabilities::FILES_APP` turns on **Open with**, **Open in new tab** and a middle click on a folder.
+`files::browse(Browse::new(memory))` is the dialog's body, unchanged, in an application window: the same toolbar, sidebar, address bar, list or grid, search, previews and operations. The dialog and the window are one component, `ChooserBody`, with a host: a dialog answers a request; a window has none to answer. In a window there is no Cancel or accept button, no file type filter, no name field and no choices, and what opening a file means changes: it opens in the application the desktop names for its type (`platform::open`: the portal, else the default desktop entry, else `xdg-open`), where a dialog answers with it. `Capabilities::FILES_APP` turns on **Open with**, **Open in new tab** and a middle click on a folder.
 
 ```rust
 let memory = TabMemory::new(Where::Folder(home));    // one per tab
@@ -2121,6 +2151,30 @@ the walker has read a folder. The engine is for records an app owns (settings,
 applications, contacts, notes, devices), up to about a million short
 documents.
 
+## Media
+
+`bingux_ui::media` holds the parts a music or film player is made of. None of
+them plays anything: a player (`crates/media`, which drives mpv, or any
+other decoder) owns the sound and the picture, and these draw it and hand back
+what the person asked for. The Media app is built from them; the Files
+preview or a podcast app could use the same parts.
+
+| Part                                      | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `video_surface(VideoFrames)`              | Draws the newest frame a decoder pushed from its own thread. The surface writes the device pixels it covers into `VideoFrames::size()`, so the decoder renders exactly that size (letterboxed, subtitles drawn at screen resolution); `on_resize` tells it to render a paused frame again. A frame is wrapped, not copied. `on_press` and `on_double_press` (play and pause, full screen)                                                                                                     |
+| `timeline(position, duration, on_seek)`   | The seek bar, `SeekSlider.qml` made for time. Buffered stretches, chapter gaps, A-B points, a hover bubble with the time, the chapter and an optional picture (`on_hover` + `preview`). A drag asks for fast seeks (`Seek { done: false }`) and one exact seek on release. `times()` adds the time played and the time left; a press on the time left shows the length. Keys: Left and Right 5 s (Shift 30 s), Page Up and Down a minute, Home, End, `,` and `.` the chapter before and after |
+| `transport(playing, on_action)`           | Shuffle, previous, play or pause, next, repeat (`RepeatMode`), or back and forward 10 s with `skips()`. Always left to right, even in a right-to-left interface                                                                                                                                                                                                                                                                                                                               |
+| `volume_control(level, muted, on_change)` | The speaker shows the level; the wheel over it or the slider steps by 5                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `artwork(path, seed)`                     | Cover art or a film's frame, cropped to fill. Without one, a gradient made from the name with the kind's glyph, so an album keeps its colours everywhere. Artists are round, films 16:9                                                                                                                                                                                                                                                                                                       |
+| `now_playing_bar(title, subtitle)`        | Artwork (or a live `picture`), the transport over the timeline, the volume and the app's buttons. On a phone it is one row under a thin progress line                                                                                                                                                                                                                                                                                                                                         |
+| `format_time(seconds)`                    | `0:07`, `3:45`, `1:02:03`, `-0:42`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+
+```rust
+let frames = use_hook(VideoFrames::new); // hand a clone to the decoder
+rect().child(video_surface(frames.clone()).on_double_press(go_full_screen))
+    .child(timeline(status.position, status.duration, move |seek: Seek| player.seek(seek.to, seek.done)).times())
+```
+
 ## Charts
 
 `charts` draws sparklines, line and area charts, bar charts, rings and
@@ -2155,6 +2209,9 @@ line_chart([Series::new("Charge", points)])
 | `donut(segments)`      | A share of a whole, with a legend. `unit`, `caption`, `label`.                                  |
 | `timeline_chart(bars)` | Bars along a time axis, a limit line and a draggable range.                                     |
 | `flame_graph(tree)`    | Weighted calls as stacked bars, widest first.                                                   |
+| `range_bar(from, to)`  | A span on a scale, with a marker. `span`, `marker`, `colours`, `label`.                         |
+| `compass(bearing)`     | A rose with a pointer and a value in the middle. `centre`, `label`.                             |
+| `day_arc(progress)`    | The sun's path from sunrise to sunset. `times`, `label`.                                        |
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
@@ -2212,6 +2269,20 @@ ellipsis; the detail line beneath gives the full name and shares of the whole.
 A click zooms into a bar, Escape zooms out, and the view starts past the calls
 at the top that only call one thing. Down, Up, Left and Right walk the tree.
 
+**Range bar, compass and day arc.** `range_bar(from, to)` is a pill track for a
+scale. `span(low, high)` fills the part of it a value takes (a day's low and
+high among the week's), `marker(value)` puts a dot on it (now) and `colours`
+gives the colours along the _scale_ as `(position, colour)` pairs: the fill is
+that gradient cut to the span, so a column of bars that share the stops reads
+as one picture. A span narrower than a twentieth of the track is widened so a
+single value still shows. The bar fills the width it is given and is as tall as
+its marker. `compass(bearing)` draws a 132 px rose, north up, with a pointer on
+the rim at the bearing (degrees clockwise from north) and `centre(value,
+caption)` in the middle. `day_arc(Some(progress))` draws the sun on its path,
+0 at sunrise and 1 at sunset; `None` draws the path with no sun, for the
+night. `times(from, to)` writes the two ends. Dials are not mirrored in a
+right-to-left interface. Weather uses all three.
+
 `Unit` formats values: `Number`, `Percent` (values already in percent),
 `Bytes` (binary units, `3.2 GiB`), `DecimalBytes` (decimal units, `3.2 GB`,
 with ticks on round decimal numbers), `Duration` (seconds as `2 h 15 min`) and
@@ -2243,6 +2314,52 @@ a swipe that scrolls the page over a chart shows nothing.
 
 Keyboard: a chart with points is focusable. Left and Right move between
 points, Home and End jump to the ends, and the tooltip follows the point.
+
+## Location
+
+`bingux_ui::location` finds where the computer is, for an application that needs
+a position (Weather today; a map or a calendar's time zone later). It needs the
+`location` feature, which carries an HTTPS client and a D-Bus client that other
+applications leave out:
+
+```toml
+bingux-ui = { path = "../../crates/ui", features = ["location"] }
+```
+
+```rust
+use bingux_ui::location::{LocateError, Locator};
+
+// In a `spawn` task. The lookup blocks, so it runs on the background pool.
+match Locator::new().locate_async().await {
+    Ok(fix) => use_position(fix.latitude, fix.longitude, fix.name, fix.source.describe()),
+    Err(LocateError::Denied) => ask_for_a_city(),
+    Err(_) => ask_for_a_city(),
+}
+```
+
+`Locator::locate` tries, in order:
+
+1. **The location portal** (`org.freedesktop.portal.Location`, which GeoClue
+   serves where it is installed). The desktop asks the person once. A refusal
+   ends the search (`LocateError::Denied`): the network address is never used to
+   get round a "no". A missing portal, or none that answers within the timeout,
+   moves on.
+2. **The network address**, looked up with keyless services (ipwho.is, then
+   geojs.io, then ipapi.co). The position is about as good as the city, so
+   `Fix::accuracy` is 25 km. The service sees the computer's address, which is
+   why `Source::Network` exists: show `Source::describe()` ("Approximate, from
+   the network address") next to a position that came this way.
+3. **Nothing**: `LocateError::Offline` when no service could be reached,
+   `Unavailable` when some answered and none gave a position, `Disabled` when
+   the caller turned both sources off (`portal(false)`, `network(false)`).
+   The application asks for a city and keeps working.
+
+A fix that has no town name is named from its coordinates with OpenStreetMap's
+Nominatim (one request; `name_places(false)` skips it). `timeout` sets how long
+each source gets (ten seconds by default); the portal exchange runs on a thread
+of its own, so a portal that never answers costs a parked thread, never a hung
+window. The module keeps nothing: an application stores the last `Fix` itself
+and offers "use my location" as one entry among the places a person chose.
 
 ## Typography
 
@@ -2582,6 +2699,195 @@ compact)`.
 The class is one `State` created once per thread, so it survives every
 re-render. The root writes it before any child renders, so a frame that
 changes the class is consistent: no child sees a mix of densities.
+
+## Platform
+
+`bingux_ui::platform` is what an application asks of the desktop it runs on:
+how windows should look, opening a link or a file, a notification, keeping the
+screen awake. bingux-ui makes no assumption about the session. It runs under
+Gnoblin's compositor, sway or GNOME's Mutter, with or without
+xdg-desktop-portal, `gsettings`, GVfs or a notification daemon. Every call asks
+the standard freedesktop interface first, falls back to files and programs the
+XDG specifications describe, and fails with a reason the caller can show when
+nothing answers, in a few seconds at most and usually at once. An application
+never waits on a service that is not there.
+
+| Module       | Asks                                                       | Falls back to                                |
+| ------------ | ---------------------------------------------------------- | -------------------------------------------- |
+| `appearance` | the Settings portal                                        | `bingux.toml`, GTK settings files, gsettings |
+| `open`       | the OpenURI portal                                         | the default desktop entry, then `xdg-open`   |
+| `notify`     | `org.freedesktop.Notifications`                            | an error: no daemon, no notification         |
+| `inhibit`    | the Inhibit portal                                         | `org.freedesktop.ScreenSaver`, then logind   |
+| `apps`       | desktop entries and `mimeapps.list` in the XDG directories | nothing: it reads files                      |
+| `services()` | the session and system buses                               | every field `false` without a bus            |
+
+Calls that can wait are blocking and report `[ui-blocking]` when made on the
+UI thread, like `runtime`. Call them inside `runtime::background_then`, or use
+the `_then` form each comes with, which runs the call on the worker pool and
+hands the result to a closure on the UI thread. That is the form for an event
+handler.
+
+### Appearance
+
+`platform::appearance::current()` settles six values (colour scheme, accent,
+higher contrast, reduced motion, text size, icon theme). Each value is decided
+on its own by the first source that has an opinion on it:
+
+| #   | Source        | Where it reads                                                                                                                    |
+| --- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `Environment` | `BINGUX_COLOR_SCHEME`, `BINGUX_ACCENT`, `BINGUX_REDUCED_MOTION`, `BINGUX_HIGH_CONTRAST`, `BINGUX_TEXT_SCALE`, `BINGUX_ICON_THEME` |
+| 2   | `Portal`      | `org.freedesktop.portal.Settings` `ReadAll` on the session bus                                                                    |
+| 3   | `Config`      | `[appearance]` in `bingux.toml`                                                                                                   |
+| 4   | `GtkSettings` | `gtk-4.0/settings.ini`, then `gtk-3.0/settings.ini`                                                                               |
+| 5   | `Gsettings`   | `gsettings` for `org.gnome.desktop.interface` and `org.gnome.desktop.a11y.interface`, when installed                              |
+| 6   | `Default`     | dark, blue, normal contrast, motion on, text at 100 %                                                                             |
+
+The portal answers in the vocabulary every toolkit reads, which Gnoblin's
+portal backend publishes from its configuration:
+
+| Portal key                                          | Becomes                                                                |
+| --------------------------------------------------- | ---------------------------------------------------------------------- |
+| `org.freedesktop.appearance` `color-scheme`         | scheme: 1 dark, 2 light                                                |
+| `org.freedesktop.appearance` `accent-color`         | the nearest of the nine accents (a component outside 0..1 means unset) |
+| `org.freedesktop.appearance` `contrast`             | higher contrast: 1                                                     |
+| `org.freedesktop.appearance` `reduced-motion`       | reduced motion: 1                                                      |
+| `org.gnome.desktop.interface` `enable-animations`   | reduced motion when `false`                                            |
+| `org.gnome.desktop.interface` `text-scaling-factor` | text size                                                              |
+| `org.gnome.desktop.interface` `icon-theme`          | icon theme                                                             |
+
+"No preference" (0) is not an opinion: the next source is asked. A source that
+knows the scheme but not the accent leaves the accent to the next one, so a
+portal that publishes only a colour scheme still lets `bingux.toml` choose the
+accent. A text size outside 50 % to 300 % is taken for a mistake and ignored.
+
+The config source reads these keys, leniently: a key it does not understand
+costs that value and not the file. `bingux-config set appearance.accent purple`
+writes them.
+
+```toml
+[appearance]
+color_scheme  = "light"      # "dark", "light", "default", or "auto" to ask the next source
+accent        = "purple"     # one of: blue teal green yellow orange red pink purple slate
+high_contrast = false
+reduced_motion = false
+text_scale    = 1.0          # 0.5 to 3.0
+icon_theme    = "Papirus"
+font_family   = "Cantarell"  # read once at start
+```
+
+`provide_tokens()` does all of this for a window: the first frame is drawn with
+`appearance::startup()` (the environment and the defaults, no I/O, so a pinned
+scheme is right from frame one), the sources are read on the worker pool and
+the tokens change when the answer arrives, and `watch_appearance` follows
+changes afterwards. `load_tokens()` is `current()` turned into `Tokens`.
+`appearance::watch(on_change)` is what listens: the portal's `SettingChanged`
+signal; `gsettings monitor` only when there is no portal to ask; and the folder
+of `bingux.toml`. Each sleeps until something changes, and dropping the
+returned `Watch` stops all of them.
+
+`BINGUX_APPEARANCE_SOURCES=config,gsettings` restricts which sources are read
+(the environment always is), to try one layer on a machine that has all of
+them. `BINGUX_APPEARANCE_MONITOR=0` starts no listener. A process that has
+called `runtime::isolate_system_settings` (a capture, a sweep) never asks the
+portal or `gsettings`, so its tokens do not depend on the person's desktop.
+
+### Opening links and files
+
+```rust
+// off the UI thread
+platform::open::open_uri("https://bingux.org")?;
+platform::open::open_file(Path::new("/home/a/report.pdf"))?;
+
+// from an event handler
+platform::open::open_uri_then(url, move |result| {
+    if result.is_err() {
+        overlays.toast("The link could not be opened.");
+    }
+});
+```
+
+Three ways, in order; the first that works ends the search and a failure
+never opens two windows. The OpenURI portal (`OpenFile` for a file, which
+passes a descriptor) is asked first. Then the desktop entry that
+`mimeapps.list` names for the type (a link by `x-scheme-handler/<scheme>`, a
+file by its MIME type, a folder by `inode/directory`) is started directly,
+with its `Exec` field codes expanded: no GIO, no `xdg-open`. Then `xdg-open`,
+if it is installed. A `file:` URI opens as the file it names. The error is
+`OpenError::{Invalid, NoApplication, Failed}` and its text is a sentence to
+show. About's links and the file view's double click use this.
+
+`platform::apps` is the reading of the specifications underneath, for an
+application that needs it: `default_for(&Dirs::from_env(), "image/png")`,
+`find_entry`, `scan`, `expand_exec` and `spawn`. It follows the MIME
+Applications specification: desktop-specific lists first, `[Default
+Applications]` before `[Added Associations]`, removals respected, ids whose
+`TryExec` program is missing skipped, then `mimeinfo.cache`, then the entries'
+own `MimeType`.
+
+### Notifications
+
+```rust
+let sent = platform::notify::send(
+    &Notification::new("Download finished")
+        .body("report.pdf is in Downloads.")
+        .icon("folder-download")
+        .desktop_entry("bingux-files")
+        .action("open", "Open Folder"),
+)?;
+platform::notify::send_then(note, move |result| { /* ... */ });
+```
+
+`Notification` is a builder over `org.freedesktop.Notifications.Notify`:
+urgency, expiry, replacing an earlier `Sent` in place, a category, `transient`.
+With no daemon `send` fails at once with the bus's reason; a notification is
+never the only place a result is shown. `capabilities()` asks what the daemon
+can do.
+
+### Keeping the screen awake
+
+```rust
+let hold = platform::inhibit::inhibit("Media", "Playing a video", What::IDLE)?;
+// the screen stays on while `hold` lives
+drop(hold);
+```
+
+The hold lasts as long as the `Inhibitor`, and a process that crashes loses it
+with its bus connection. The portal is asked first (idle and suspend), then
+`org.freedesktop.ScreenSaver` (idle only), then logind on the system bus (idle
+and suspend, the hold is a file descriptor). A service that takes part of what
+was asked is kept and the rest is asked of the next. `Inhibitor::covers()` says
+what the hold really does, and `via()` which services hold it.
+
+### Services and the session bus
+
+`platform::services()` says which of the portal, the notification daemon, the
+screensaver and logind are there, for a page that shows the state or a feature
+that hides its button. No call needs it first: each degrades by itself.
+`BINGUX_PORTAL=0` keeps a process off the session bus and `BINGUX_PORTAL=1`
+forces it on (a test process is off by default). Every call is made on its own
+thread with its own time limit, so a service that never answers costs the
+caller its limit and nothing more.
+
+### Icons and compositors
+
+`app_icon` finds an icon by the Icon Theme Specification from the theme files
+(no GTK, no GIO), in the theme `appearance::icon_theme()` names, the themes it
+inherits, `hicolor` and `/usr/share/pixmaps`.
+
+A tab torn off a window is carried with the standard `xdg_toplevel.move`. Where
+the compositor can be asked where windows are (sway's IPC, Gnoblin 0.1's
+control socket), the tab can be dropped on another window's strip; Gnoblin 0.2
+(the Rust compositor) serves its windows over its binary IPC 0.2.0, which this
+layer does not speak yet, so there, as under GNOME Shell and KDE, the tab is
+carried and a release leaves the window where it is.
+
+### Testing platform code
+
+`platform/testing.rs` starts a private `dbus-daemon` for a test, puts a fake
+portal, notification daemon, screensaver or logind on it and calls the real
+code over the wire. The tests skip, saying so, on a machine with no
+`dbus-daemon`. The order of the appearance sources is a pure function,
+`appearance::resolve`, tested without a bus.
 
 ## Rules
 
@@ -3042,6 +3348,128 @@ by eye. The levels used:
 
 APCA (the WCAG 3 candidate) is reported beside every ratio as `apca`, signed Lc.
 It is advisory: it never fails a pair.
+
+### Accessibility APIs
+
+Every control says its role, name, value and state to screen readers (Orca,
+through AccessKit and AT-SPI) with no app code. An app adds to that only where
+it knows more than the control.
+
+**Names come from what is on screen.** A button, tab, check box, menu item,
+list option or heading is named by all the text inside it, however deep; the
+text and icons inside a control are not read a second time, and an icon on its
+own is decoration. A name given with `a11y_alt` is never replaced. A control in
+a row or form line is named by the row's title and described by its subtitle
+(`FieldLabel`): `switch_row("Wi-Fi", ..).subtitle("Connected")` reads "Wi-Fi,
+switch, on, Connected". Switches, dropdowns (whose value is the choice shown),
+sliders, steppers, segmented controls, check boxes without text and text fields
+(whose value is their text, and whose placeholder is a placeholder, not a name)
+all do this. A row that is itself a control is named by its title, with its
+subtitle and value as the description.
+
+**Structure.** Page titles are level 1 headings, group and sidebar section
+titles level 2 (`section_label`, `heading`). A titled `Group` is a named group,
+`radio_rows` a radio group, a segmented control a radio group of radio
+buttons, the sidebar a navigation landmark holding a list of pages with the
+current one selected. Banners and toasts are live: read when they appear, an
+error at once (`Alert`, assertive), anything else politely.
+
+**`Semantics`** says more on any element, or on a control that takes it
+(`Switch`, `TextField`, `Group`):
+
+```rust
+rect().semantics(
+    Semantics::new()
+        .group("Battery")
+        .value("82 %, charging")
+        .hint("About 5 hours left"),
+);
+switch(on, toggle).semantics(Semantics::new().label("Airplane mode"));
+label().text("Recent").a11y_heading(2);
+decoration.a11y_hidden();
+```
+
+Its parts: `label`, `hint` (description), `value`, `role`, `hidden`, `group`,
+`heading(level)`, `checked`, `expanded`, `selected`, `busy`, `required`,
+`invalid`, `read_only`, `shortcut("Ctrl+R")`, `live(Politeness)`,
+`labelled_by(id)`, `described_by(id)`, `error_message(id)`, `controls(id)` and
+`position(index, count)`.
+
+**Announcements.** `use_announcer()` gives a `Copy` handle; `announce(text)`
+is read after what is being read, `announce_now(text)` at once. Use it for what
+has no element of its own ("Link copied", "3 results"). Outside a window host
+it does nothing.
+
+**Preferences** (`bingux_ui::access`). `Access { reduced_motion,
+high_contrast, reduce_transparency, text_scale }` is process-wide; the
+platform source calls `access::set`, and until it has, `BINGUX_REDUCED_MOTION=1`,
+`BINGUX_HIGH_CONTRAST=1`, `BINGUX_REDUCE_TRANSPARENCY=1` and
+`BINGUX_TEXT_SCALE=1.5` set it. `Tokens::new` follows it, `Tokens::with_access`
+takes it explicitly, and `tokens.access()` gives a second palette the same
+preferences.
+
+| Preference          | What changes                                                                                                                                                                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Reduce motion       | Every animation is instant                                                                                                                                                                                                                                   |
+| Increase contrast   | Text, secondary text and links at 7:1 on every ground and state; large text at 4.5:1; separators and outlines that show; a 4.5:1 focus ring; an outline on every control fill; ink on accent, success and warning fills at 7:1 (the fill moves in lightness) |
+| Reduce transparency | The frosted header over a scrolled page is opaque                                                                                                                                                                                                            |
+| Text size           | The whole type ramp, 75 % to 300 % (Settings offers 80 % to 200 %); works in release builds                                                                                                                                                                  |
+
+The contrast matrix measures every pair under both contrasts
+(`light+`, `dark+` in its table). The taxonomy's header has a Contrast menu
+beside Text size, and Foundations > Accessibility shows these APIs.
+
+**Keyboard patterns** (WAI-ARIA APG). A menu is a `Menu` that keeps the
+focus and names the highlighted row as its active descendant; rows are named
+by their label, carry their shortcut as the keyboard shortcut (Orca reads
+"Copy, Ctrl+C"), a checkable row is a check item, and a submenu row says it has
+a popup and whether it is open. A menu button and a split button's arrow say
+they open a menu. A dropdown is a combo box that keeps the focus while the
+arrows move through its list; its options are list options with the chosen one
+selected and the reached one the active descendant. Sliders, steppers and
+faders take the arrows, Page Up and Page Down, Home and End; a pane divider
+(`Splitter`) takes the arrows and Home and End, and says its position as a
+value. Dialogs trap the focus and give it back (Keyboard focus, above).
+The command palette's field keeps the focus and names the highlighted result
+as its active descendant (`SearchField::semantics` with `Semantics::controls`
+and `active_descendant`, for any field over a list of results); each result is
+named by its title with its shortcut as its keyboard shortcut and its group as
+its description, and how many match is read out once typing pauses. In the
+shortcuts sheet each line is one list item named by the command, its keys its
+shortcut and description. Undo and Redo from the keyboard or a menu say what
+they did ("Undid rename"). A data table and a list view read out a change of
+their selection ("3 selected", "Nothing selected") and of their sort ("Sorted
+by Name, ascending") with `a11y::use_collection_announcements(selected,
+sort)`, which a collection of an app's own should call too. A toolbar's
+toggles say whether they are on, and its menu buttons and the overflow
+button that they open a menu and whether it is open (`IconButton::semantics`
+with `Semantics::checked`, `opens_menu` and `expanded`).
+
+**Notices stay.** A toast does not go while the pointer is over it, a finger
+is on it or one of its buttons has the focus, and while a screen reader runs it
+stays at least 20 seconds after it is left alone (WCAG 2.2.1).
+
+**Text size reaches the boxes.** A row, control, button, menu item, sidebar
+item, row button and header grow with the text (`Dim::holds_text`,
+`access::grow`: the designed height plus one body line per 100 % of extra
+text), so 200 % text is not clipped. A banner whose action would leave its
+message less than its floor puts the action under the message, as a form
+line does (`controls::adaptive`).
+
+**Checking it.** `scripts/a11y-run.sh --app NAME --out FILE -- CMD` runs an app
+with the accessibility bus on and writes what a screen reader sees
+(`scripts/atspi-tree.py`: role, name, description, states, value, relations,
+actions), ending with findings such as an unnamed control;
+`BINGUX_A11Y_MIN_TARGET=24` (44 at phone width) also lists focusable controls
+smaller than that.
+
+Keys in a headless sway: `wtype` makes a virtual keyboard for each call and
+drops it when it exits, and the window then loses its keyboard focus, so a
+focus ring blurs out before a screenshot. Keep one keyboard alive for the run
+and give each call time for its keymap:
+`(wtype -s 60000 -k Shift_L &); sleep 1; wtype -s 300 -k Tab`. It needs
+`at-spi2-core`, `python3-gi` and `gir1.2-atspi-2.0`. `src/a11y_tests.rs` holds
+the names and roles above with real tree updates.
 
 ### The rule: ink on a coloured surface is a darkened version of it
 
@@ -3838,3 +4266,774 @@ Environment variables for tests and screenshots:
 ### Form dialogs
 
 `open_form(overlays, title, content, on_closed)` shows a form in a framed dialog (a sheet that fills the window on a phone); `content` is a component that renders `form_dialog(title, body, action, on_action)`, so the action, `.blocked(reason)` and `.busy(message)` follow the form state. The card is one size (`FORM_WIDTH` x `FORM_HEIGHT`) whatever the body holds: a standard `HeaderBar` with Close, a scrolling body, a footer with a one-line reason and Cancel / action (the action carries the Return key cap; on a phone the buttons stack, action on top). Enter runs the action unless a control inside takes it; Escape closes. Options that come and go use `reveal_block`, so nothing jumps. Used by Compress and Extract in Files; any settings dialog with a few fields and one action is the second use. `Dropdown::unavailable(vec![(key, reason)])` lists an option that cannot be chosen, dimmed, with its reason. `files::compress_preview(CompressPreview)` renders the Compress dialog in a fixed world for the taxonomy and tests (`COMPRESS_PNG_DIR=dir cargo test --features testing compress_tests` writes every state at 1100x820 and 390x800).
+
+### Zoomable view
+
+`ZoomView::new(natural, draw)` places any content in a box and lets the person zoom, pan, turn and flip it. `natural` is the content's size in its own pixels (`None` when it fits itself) and `draw(width, height)` makes the content at the size the view chose. The picture viewer of Quick Look and the Preview app use it; a map, a page or album artwork can too.
+
+| Input              | Effect                                                           |
+| ------------------ | ---------------------------------------------------------------- |
+| `+`, `-`           | zoom a quarter step about the middle                             |
+| `0`, `1`           | fit the box, actual size (one picture pixel on one device pixel) |
+| `R`, `Shift+R`     | turn a quarter right, left                                       |
+| `H`, `V`           | flip left to right, top to bottom, as seen                       |
+| Shift and an arrow | pan a zoomed view; a bare arrow is the owner's                   |
+| Ctrl and wheel     | zoom about the pointer                                           |
+| wheel, touchpad    | pan a zoomed view                                                |
+| drag               | pan; letting go while moving glides on and slows down            |
+| double click       | actual size at the pointer, then back to fit                     |
+| two fingers        | zoom about their middle and pan with it                          |
+
+Zooming, turning and flipping animate; reduced motion makes every move instant and turns the glide off. A resize keeps what was last asked for: fitted content stays fitted and content at actual size stays at actual size. `.start(FitMode)` says how content opens, `.orientation(turns, mirrored)` how it comes (a photograph stored on its side), and `.on_mode(f)` reports when the person chooses fit or actual size so an owner can remember it per kind of content. `use_zoom_handle()` returns a `ZoomHandle` that a toolbar, a menu or a Save a copy command drives and reads (`rotate`, `flip_horizontal`, `fit`, `turns`, `mirrored`, `percent`). The arithmetic is `View`, tested without a window.
+
+## Drag and drop
+
+`bingux_ui::dnd` moves data by dragging: inside a window, between windows of an
+app and between apps. One set of types covers all three, so a view takes a
+file from Files, from another window of its own app or from any other Wayland
+app in the same way.
+
+| Piece                                | What it is for                                                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `drop_target(view)`                  | A view that takes drops. Draws an accent ring and tint while a drag it takes is over it              |
+| `use_drop_target(DropTarget::new())` | The same for a view that draws its own highlight (a list marks the row under the pointer)            |
+| `drag_source(view, \|_\| payload)`   | A view that can be dragged. Press, move past `DRAG_SLOP` (6 px) and the drag starts                  |
+| `use_drag()` / `Dragger::here()`     | Start a drag from a view with its own gesture (Files keeps its in-window drag and hands it over)     |
+| `Payload`                            | What a drag or a copy offers, in one or more MIME types; lazy parts are made only when someone drops |
+| `Received`                           | What a drop or a paste brought, read as text, URIs, files, a picture or bytes                        |
+| `Format`                             | A kind of data: `Uris`, `Text`, `Html`, `Image`, `Mime(type)`                                        |
+
+### A drop target
+
+```rust
+use bingux_ui::dnd::{drop_target, Dropped, Format, SPRING_DELAY};
+
+drop_target(status_page(Icon::Music, "No music").description("Drop music here."))
+    // Read as the first of these the drag offers.
+    .accepts([Format::Uris])
+    // Copy and Move unless set; Ask is settled before on_drop (see below).
+    .actions(DragActions::COPY_MOVE)
+    // Optional: take only some drags, from where the pointer is.
+    .accept_if(|info: DragInfo| info.formats.contains(&Format::Uris))
+    // Optional: open after a drag rests here (a folder, a tab, a sidebar place).
+    .spring_loaded(SPRING_DELAY, move |_| open_library())
+    .on_drop(move |dropped: Dropped| add_files(dropped.data.files()))
+```
+
+- **Which target.** The pointer picks the smallest enabled target under it
+  that takes one of the formats the drag offers and whose `accept_if` agrees.
+  A list can be one target and decide per row from `DragInfo::position`
+  (from the target's top-left).
+- **Which action.** Of the actions both sides allow, the target's `preferred`
+  callback chooses; without one, Copy, Move with Shift held, Copy with Ctrl
+  held. The compositor has the last word on Wayland, and `DragInfo::action`
+  is what a drop would do now (for a badge). `Dropped::action` is Copy or
+  Move: when a source asks the target to choose (Wayland's `ask`), bingux-ui
+  takes the target's preferred action.
+- **Spring loading.** `spring_loaded(delay, open)` runs `open` once a drag has
+  rested on the target for `delay` (`SPRING_DELAY` is 700 ms, Finder's medium).
+  Moving more than 6 px starts the count again.
+- **Highlight.** `drop_target` draws `Paint::AccentSoft` with a 2 px accent
+  ring. `.highlight(false)` turns it off; `use_drop_target` returns a
+  `DropHandle` whose `over()` (reactive) is the drag over it, to draw your own.
+  Give the handle the view's box with `.track(rect)` or `.set_area(area)`.
+
+### A drag source
+
+```rust
+use bingux_ui::dnd::{drag_source, DragActions, DragEnd, Payload};
+
+drag_source(track_row(&track), move |_| Payload::files([track.path.clone()]))
+    .actions(DragActions::COPY)
+    .on_end(|end: DragEnd| if let DragEnd::Dropped(DragAction::Move) = end { /* remove ours */ })
+```
+
+- The payload closure runs when the drag starts. Parts made with
+  `Payload::lazy(mime, f)` run `f` only when a target asks for that type.
+- The picture under the pointer is the view itself as drawn (faded to 85%),
+  held where it was pressed. `.image(DragImage::None)` leaves the plain cursor.
+- `on_end` says how it went: `Dropped(Copy | Move)` or `Cancelled`. After a
+  Move of anything but files the source removes its own copy. A file manager
+  that takes a move of files moves them itself, so a source of files does
+  nothing.
+- A view with its own gesture calls `Dragger::start(DragRequest::new(payload,
+press_point).area(box))` while the button is held. It returns `true` when
+  the system has the drag: the window then gets no pointer events until the
+  drag ends. Files keeps its own drag (chip, rows, sidebar and tabs) inside
+  the window and calls `start` when the pointer leaves the window, if
+  `Dragger::reaches_other_programs()`.
+
+### Payloads
+
+| Builder                               | Types offered                                                                                    |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `.text(t)`                            | `text/plain;charset=utf-8`, `text/plain`, `UTF8_STRING`, `TEXT`, `STRING`                        |
+| `.html(h)`                            | `text/html` (add `.text` for apps that take only text)                                           |
+| `.uris(list)`                         | `text/uri-list`                                                                                  |
+| `Payload::files(paths)`               | `text/uri-list` and the paths as text, one a line                                                |
+| `Payload::copied_files(paths, cut)`   | As `files`, plus `x-special/gnome-copied-files` and, for a cut, `application/x-kde-cutselection` |
+| `.image(mime, bytes)`, `.bytes(m, b)` | That type                                                                                        |
+| `.lazy(mime, \|\| bytes)`             | That type, made when asked for                                                                   |
+| `.local(value)`                       | Nothing outside the app: a drop in this app gets `value` from `Received::local::<T>()`           |
+
+`Received` reads what came: `text()`, `uris()`, `files()` (local `file:` URIs,
+percent-decoded), `is_cut()` for copied files, `image()`, `bytes()`, `mime()`.
+A drop from this app is handed over in memory (`is_local()`), with its
+`local` value; it never goes through a pipe.
+
+### How it works on Wayland
+
+winit 0.30 has no `wl_data_device` on Wayland, and Freya's clipboard is plain
+text. `dnd::wayland` adds the protocol without patching either: a thread of its
+own with its own event queue on winit's `wl_display` (the way `smithay-clipboard`
+works), with a `wl_data_device`, a primary selection device and its own pointer
+and keyboard objects, which it uses only to learn the serials a drag and a
+selection must quote. `WindowHost` registers each window's `wl_surface` with it,
+so drag events go to the window they are over. Data is written and read on
+threads of their own, and a drag's data is made on the UI thread when a target
+asks, so a drop on a window of the same app cannot deadlock.
+
+With no Wayland (a test, X11) and for touch, a drag stays in its window and
+reaches that window's targets.
+
+What the compositor needs: `wl_data_device_manager` (version 3 for actions),
+`wl_shm` and `wl_compositor` for the drag picture, and
+`zwp_primary_selection_device_manager_v1` for the primary selection (optional).
+
+### The clipboard
+
+`bingux_ui::clipboard::Clipboard` is the typed clipboard. Copy a `Payload`,
+paste the `Format` you want:
+
+```rust
+use bingux_ui::clipboard::Clipboard;
+use bingux_ui::dnd::{Format, Payload};
+
+Clipboard::general().write(Payload::new().html(html).text(plain));
+Clipboard::general().write(Payload::copied_files(&paths, true)); // Cut
+let files = Clipboard::general().read(Format::Uris).map(|data| data.files());
+let picture = Clipboard::general().read_async(Format::Image).await;
+Clipboard::primary().write_text(selected); // middle-click paste
+```
+
+| Call                              | What it does                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `general()` / `primary()`         | The clipboard of Copy and Paste, or the selection a middle click pastes        |
+| `write(payload)`, `write_text(t)` | Own the clipboard with every type of the payload, made now                     |
+| `read(format)`                    | Read it in that format; waits at most `READ_TIMEOUT` (1.5 s) for the other app |
+| `read_async(format)`              | The same on a worker thread, for a picture or anything large                   |
+| `read_text()`                     | Plain text or `None`                                                           |
+| `formats()`, `has(&format)`       | What is on it now: enable Paste from this                                      |
+| `clear()`                         | Give it up                                                                     |
+
+Once the Wayland connection is up, Freya's own clipboard calls (the text
+field's Copy, Cut and Paste, `freya::clipboard::Clipboard`) go through this
+clipboard too, so there is one clipboard per app. What the app copied is read
+back from memory. With no Wayland the general clipboard's text goes through
+Freya's clipboard (a test's memory clipboard included) and the other types,
+and the primary selection, stay in the app.
+
+## Locale and formats
+
+Text that holds a number, a date, a size or a list is written for the person's
+language and region, not for the programmer's. `bingux_ui::locale::Locale` says
+which, and `bingux_ui::format` writes the values. Nothing here reaches for the
+system: the data (Unicode CLDR through ICU4X, Unicode licence) and the time
+zone database (the IANA one, through `jiff`) are compiled in, so an app formats
+the same on every host and needs no file from the distribution.
+
+Do not format by hand. `format!("{:.1} MB", bytes / 1e6)`, a month table in the
+app or a comparison with `== 1` for a plural each say "English" in a place
+where the person may not read it. The last table of the section lists the
+hand-rolled formatters that were replaced and the ones that remain.
+
+### Locale
+
+A `Locale` is a language with its region and script (`en-GB`, `de-CH`,
+`sr-Latn-RS`). `Locale::parse` reads a BCP 47 tag or a POSIX one
+(`de_DE.UTF-8@euro`); `Locale::current()` is the locale of the running
+process.
+
+POSIX has one variable for each family of conventions, and a program reads the
+one that matches what it writes. `Locale::for_category(Category)` does:
+
+| Category   | Variables read, first one set wins                                | Used by                                   |
+| ---------- | ----------------------------------------------------------------- | ----------------------------------------- |
+| `Messages` | `LC_ALL`, `LC_MESSAGES`, `LANG`; `LANGUAGE` ranks languages first | Language, plurals, lists, time unit names |
+| `Numeric`  | `LC_ALL`, `LC_NUMERIC`, `LANG`                                    | Numbers, percentages, sizes, units        |
+| `Time`     | `LC_ALL`, `LC_TIME`, `LANG`                                       | Dates, times, relative times              |
+| `Monetary` | `LC_ALL`, `LC_MONETARY`, `LANG`                                   | Currency                                  |
+
+`C`, `POSIX` and `C.UTF-8` name no language, so they read as `Locale::fallback()`,
+British English (the language the Bingux apps are written in); `LANGUAGE` is
+ignored under them, as `gettext` ignores it. The codeset (`.UTF-8`) is dropped
+and `@latin` and `@cyrillic` set the script. A tag the data does not cover
+(`xx-YY`) is not an error: formatters use the root locale's conventions.
+
+`Locale::preferred()` is every language the person asked for, most wanted
+first, for matching against the languages an app is translated into (a
+message catalogue negotiates over it). `Locale::set_current(Some(locale))`
+makes every default answer `locale` (the taxonomy's locale switch, tests;
+`None` reads the environment again) and `Locale::revision()` changes when it
+is called, so what was built from the locale can tell it must be built again.
+
+### Numbers and money
+
+```rust
+use bingux_ui::format::{Compact, Currency, Number, Percent, Quantity};
+
+Number::new(1234567.891).to_string();                       // 1,234,567.891 (de-DE: 1.234.567,891)
+Number::new(0.125).max_fraction_digits(2).to_string();      // 0.13
+Number::new(1_234_567).compact(Compact::Short).to_string(); // 1.2M
+Percent::new(0.256).to_string();                            // 26%
+Currency::new(1234.5, "GBP").to_string();                   // £1,234.50
+Number::new(Quantity::parse("12.50").unwrap()).fraction_digits(2, 2); // exact decimals keep every digit
+```
+
+Every formatter is a builder over one value, is `Display`, reads the person's
+locale unless given `.locale(&Locale)`, and has `.format()` for a `String`.
+
+- **Rounding is half away from zero on the decimal text**, as people round:
+  `1.005` to two digits is `1.01` and `-2.5` to none is `-3`. A float is read
+  by its shortest decimal text, so `0.1 + 0.2` is `0.3` and `0.1f32` is `0.1`,
+  never `0.10000000149`. A negative that rounds to nothing is `0`, not `-0`.
+- **Digits.** An integer is whole; a float or an exact decimal shows up to three
+  fraction digits. `fraction_digits(least, most)`, `max_fraction_digits(n)` and
+  `significant_digits(n)` change that. `Grouping::{Auto, Never, Min2}` (Auto
+  follows the language: Spanish groups from five digits, Hindi groups the last
+  three then twos) and `Sign::{Minus, Always, ExceptZero, Never}`.
+- **NaN and infinity** are written (`NaN`, `∞`), never an empty string.
+- **Money** uses the currency's own digits (two for pounds, none for yen) and
+  symbols. `CurrencyDisplay::{Symbol, Narrow, Code, Name}`, and `.accounting()`
+  for `($12.50)`. A code that is not a currency is written after the number.
+  Amounts that must not touch binary floating point (a price) pass
+  `Quantity::parse("12.50")`.
+
+### Sizes, units and time spans
+
+```rust
+use bingux_ui::format::{Bytes, Measure, Timespan, Unit};
+
+Bytes::new(2_400_000).to_string();                 // 2.4 MB
+Bytes::new(2_400_000).binary().to_string();        // 2.3 MiB
+Measure::new(21.5, Unit::Celsius).to_string();     // 21.5°C (de-DE: 21,5 °C)
+Timespan::new(Duration::from_secs(3825)).to_string(); // 1 hr, 3 min
+Timespan::new(Duration::from_secs(3825)).digital().to_string(); // 1:03:45
+```
+
+- **`Bytes`** picks the largest unit that keeps the value at 1 or more, one
+  decimal under 10 and none above (`2.4 MB`, `19 kB`, `340 kB`), without a
+  trailing `.0`, a no-break space between number and unit, and carries
+  correctly: 999 500 bytes is `1 MB`, not `1000 kB`. `.binary()` counts in
+  1024 (`KiB`). French writes octets (`2,4 Mo`); English alone has `.words()`
+  (`512 bytes`, `1 byte`).
+- **`Measure`** writes a number with a unit: temperature, length, mass, volume,
+  speed, pressure, power, energy, frequency, angle, a percentage and the units
+  of time. Time units and the percentage come from the language's data (words,
+  plurals, spacing). The others use the international symbol, which every
+  language writes, a no-break space from the number (`12 km/h`), except
+  degrees, which touch the number in English and East Asian languages. ICU4X
+  has no data for these units yet; the language-specific names (`12 kilometres
+per hour`) are not offered rather than guessed.
+- **`Timespan`** writes a length of time to the nearest second: worded
+  (`1 hr, 3 min`, `Width::Long` `1 hour, 3 minutes`, `Width::Narrow` `1h 3m`)
+  with at most `max_units` units (two by default, zero units left out), or as
+  a clock (`.digital()`: `3:45`, `1:03:45`, `25:00:00`). 59.6 seconds is
+  `1 min`.
+
+### Dates, times and zones
+
+A `Moment` is a point in time with no zone (`Moment::now()`,
+`Moment::from_unix(secs)`, `Moment::from(SystemTime)`). A `Zone` reads it as a
+wall clock: `Zone::Local` (the system's, with its daylight saving rules; the
+default), `Zone::Utc`, `Zone::Offset(seconds)` or `Zone::named("Europe/Paris")`
+(`None` for a zone that does not exist). `zone.civil(moment)` is the reading
+(`Civil`), `zone.moment_of(civil)` the other way (the first reading of a repeated
+hour, the moment after the gap in a skipped one) and `zone.offset_at(moment)` the
+offset then.
+
+```rust
+use bingux_ui::format::{Date, DatePart, Moment, Time, TimePrecision, YearDisplay};
+
+Date::new(moment).to_string();                              // 9 Nov 2025 (en-US: Nov 9, 2025)
+Date::new(moment).long().weekday().to_string();             // Sunday, 9 November 2025
+Date::new(moment).with_time(TimePrecision::Minutes);        // 9 Nov 2025, 14:53
+Date::new(moment).year(YearDisplay::IfNotCurrent);          // 9 Nov, then 9 Nov 2024 last year
+Date::new(moment).part(DatePart::MonthYear);                // Nov 2025
+Date::civil(2025, 4, 30);                                   // an all day event: no time, no zone
+Time::new(moment).hour_cycle(HourCycle::Hours24);           // 14:53
+```
+
+The order of day, month and year, the month and weekday names, the
+calendar (Thai years are 2568, Persian ones 1404) and the 12 or 24 hour clock
+come from the locale; `HourCycle` overrides the clock. A date that does not
+exist (`Date::civil(2025, 2, 29)`) is written `Invalid date`, never a wrong
+one. A moment beyond the years -9999 to 9999 is clamped to the edge.
+
+### Relative times
+
+`Relative::new(moment)` tells a time from now: `2 minutes ago`, `in 2 hours`,
+`yesterday`, `2 weeks ago`, `in 3 months`, `now` for under five seconds. The
+unit is the largest whole one; from a day on, days, weeks and months are
+calendar ones on the wall clock of `.zone(..)`, so "yesterday" is decided by
+the calendar and not by 24 hours. `.width(Width::Short | Narrow)` (`2 min. ago`,
+`2m ago`) and `.numeric()` (`1 day ago`, never `yesterday`). Pass the same
+`.now(moment)` for every row of a list so they agree.
+
+`Recent::new(moment)` is the cell of a list of files or messages: `Now` under a
+minute, the time (`14:03`) earlier today, `Yesterday` (`Tomorrow`), then the
+date without the current year (`12 Oct`) and with it for another (`12 Oct 2024`).
+
+### Lists and counts
+
+`List::and(items)`, `List::or(items)` and `List::units(items)` join with the
+language's own separators and conjunction: `A, B and C`, `A, B, and C`
+(`en-US`), `x e Ibiza` (Spanish before an `i`), `A、B、C`.
+
+`plural_category(count, PluralKind::Cardinal | Ordinal, locale)` is the class of
+a count in the language: English has `One` and `Other`; Russian `One`, `Few`,
+`Many` and `Other`; Arabic all six; Japanese only `Other`. `Plural::new(n,
+"{n} files").none("No files").one("{n} file")` picks the wording by that class
+and writes the count in. **Text that is translated does not use this**:
+messages with counts and dates inside live in the app's Fluent catalogue, where
+each language writes its own forms; `format` writes the values that go into
+them.
+
+### Where hand-rolled formatting was replaced, and where it stays
+
+| Was                                                      | Is                                                                                                            |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `NumberFormat::for_locale` (a table of twenty languages) | The marks `Number` writes for the locale, with Latin digits (`Locale::latin_digits`): every language CLDR has |
+| Settings: `applications::size_text`, `about::size_text`  | `Bytes`                                                                                                       |
+| Settings: `about::uptime`                                | `Timespan` (`3 days, 4 hours`, in the person's language)                                                      |
+| Settings: `power::duration_label` (`5 minutes`)          | `Measure` with a `TimeUnit`                                                                                   |
+
+These are still their own, for a reason each. The Network usage page keeps a
+fixed English format so that a screenshot reads the same everywhere
+(`pages/network/usage/format.rs`). The chart axes (`charts/format.rs`) pick
+their decimals from the spacing of the ticks and have their own `Unit`; they
+move to `format` with the chart work that needs a unit it does not have. Files'
+columns and the file sizes in `bingux_files::display` belong to the Files
+app, which adopts `Bytes` and `Recent` (`bingux_files` cannot depend on
+bingux-ui).
+
+The taxonomy's Foundations > Numbers and money, Sizes and units, Dates and
+times, Relative times, Lists and counts and Locale pages show every formatter
+in ten languages.
+
+## Commands
+
+A command is one thing an application can do: an id, a title, an optional
+icon, its keyboard shortcuts, whether it is enabled or checked, the menu
+group and section it belongs to, and what it runs. An app declares its
+commands where their state lives, and every window gets, with no more code:
+
+| Built from the commands      | What it is                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------ |
+| Keyboard shortcuts           | One router per window. A shortcut runs its command; a disabled command takes the key.      |
+| The main menu                | `app_menu` in the header: a submenu per group (File, Edit, View...), then General, About.  |
+| Context menus                | `commands.context_menu(&[&[ids], ..])`: unavailable commands left out, no shortcuts shown. |
+| The keyboard shortcuts sheet | Ctrl+? or Ctrl+/: every shortcut the window answers, by group, with a filter.              |
+| The command palette          | Ctrl+Shift+P: fuzzy search over the enabled commands, the ones run last first.             |
+
+```rust
+use bingux_ui::prelude::*;
+
+// Commands for the whole window, available wherever the focus is. Call it on
+// every render with the commands as they are now.
+use_window_commands(vec![
+    Command::new("file.new-window", "New window", move |_| open_window())
+        .shortcut("Ctrl+N")
+        .group(CommandGroup::File),
+    Command::new("view.hidden", "Show hidden files", move |_| hidden.toggle())
+        .shortcut("Ctrl+H")
+        .checked(hidden())            // a tick in the menu
+        .group(CommandGroup::View)
+        .keywords(["dotfiles"]),      // the palette finds it by these too
+]);
+
+// Commands of a view, ahead of the window's while the focus is inside it.
+command_scope(
+    "File list",
+    vec![
+        Command::new("file.rename", "Rename…", move |_| rename())
+            .shortcut("F2")
+            .enabled(selection.len() == 1)
+            .group(CommandGroup::File)
+            .section("change"),
+    ],
+    list,
+)
+.fill()
+```
+
+| Builder                                         | Effect                                                                                                                         |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `.shortcut("Ctrl+Shift+P")`                     | Adds a shortcut. Several are allowed; menus show the first. Text that is not a shortcut panics in debug.                       |
+| `.enabled(false)`                               | Dimmed in menus, left out of context menus and the palette; its shortcut does nothing.                                         |
+| `.checked(bool)`                                | A state the command toggles: a tick in menus.                                                                                  |
+| `.group(CommandGroup::Edit)`                    | The menu it is in: `App` (top level, "General" in the sheet), `File`, `Edit`, `View`, `Go`, `Window`, `Other("Name")`, `Help`. |
+| `.section("clipboard")`                         | Commands of one section sit together, with a separator between sections.                                                       |
+| `.icon(Icon)`                                   | Shown in the palette.                                                                                                          |
+| `.keywords([..])`                               | Other words the palette finds it by.                                                                                           |
+| `.destructive()`                                | Its menu item is coloured as destructive.                                                                                      |
+| `.hidden_from_menu()`, `.hidden_from_palette()` | Leaves it out of one of them; it still answers its shortcut.                                                                   |
+| `Command::key_hint(id, title, "Alt+1 to 9")`    | A key a control handles itself, listed in the sheet only.                                                                      |
+
+**Scopes, as a responder chain.** `use_window_commands` adds commands that
+are always available. `command_scope(name, commands, child)` wraps a view;
+its commands apply while the keyboard focus is inside it, and scopes nest. The
+innermost scope that holds the focus wins: its Ctrl+A shadows the window's,
+and a command id it shares with an outer scope replaces that command. The
+router learns which scopes hold the focus from the key itself, which travels
+from the focused control up through every scope it is in, so a view's
+shortcut never runs while the focus is elsewhere. Menus and the palette list
+the commands of the view that last had the focus (by keyboard or a click
+inside it), so opening the header menu with the pointer keeps them.
+
+**What the router leaves alone.** A control that handles a key stops it, and
+no command sees it: a text field keeps its own Ctrl+Z, Ctrl+C and Ctrl+A,
+and a list keeps its arrows. While a dialog or a menu is open, the router
+stands aside (the palette and the sheet are dialogs).
+
+**Shortcuts.** `Shortcut::parse` reads what people write: modifiers then the
+key, joined by `+` (`Ctrl+Shift+P`, `F2`, `Alt+Left`, `Ctrl+?`, `Ctrl+Plus`,
+`Page Down`, `Space`). Ctrl, Alt and Super must be held exactly as written,
+and Shift too for a letter, digit or named key. A symbol is the character the
+layout types, so `Ctrl+?` works whether the layout needs Shift for `?` or
+not; write the symbol, not `Ctrl+Shift+/`. A layout with no Latin letters
+reaches `Ctrl+C` by the key's position. `label()` is the text menus show
+(`Ctrl+Shift+P`, GNOME's order: Ctrl, Alt, Shift, Super), `caps()` the key
+caps, and `key_caps(&shortcut)` draws them.
+
+**Checks in a debug build.** Two commands of one scope (or of two window
+scopes) with one shortcut are reported on stderr once, as is a window command
+on a bare key (a letter with no Ctrl or Alt), which must belong to a view
+(WCAG 2.1.4, character key shortcuts).
+
+**Every window has** `app.command-palette` (Ctrl+Shift+P),
+`app.shortcuts` (Ctrl+? and Ctrl+/) and, in an `Application`, `app.about`
+(the palette's About; the main menu ends with About). A window whose
+components call `use_undo` also has `edit.undo` and `edit.redo` (below). An
+app's own command with one of these ids replaces it.
+
+`use_commands()` returns the window's registry: `run(id)`, `get(id)`,
+`all()`, `recent()`, `main_menu_items()`, `context_menu(..)`,
+`show_palette()` and `show_shortcuts()`. The registry and the router live in
+the window's `OverlayHost` (and `Application::run` provides the registry, so
+the app's root component may declare commands above its host). A host inside
+another leaves routing to the outer one, so a key never runs a command twice.
+`MenuButton::items_on_open(f)` builds items when the menu opens, which is how
+`app_menu` reads titles such as "Undo rename" that change without a redraw.
+
+### The command palette
+
+Ctrl+Shift+P, `commands.show_palette()` or `open_palette(overlays, commands)`.
+A card with a search field and the window's enabled commands: with nothing
+typed, the ones run last first and then the rest in menu order; typing
+filters by fuzzy match ("tgsb" finds "Toggle sidebar"), letters together and
+at the starts of words first, with the matched letters marked. Keywords and
+the group name find a command too, ranked below title matches. Each row shows
+the icon, title, group and shortcut, so the palette teaches the keys. Up and
+Down move the highlight, Enter or a click runs it, Escape closes. The command
+runs after the palette has closed and the focus is back, so a command that
+opens a dialog or starts a rename finds the window as it left it.
+
+### The keyboard shortcuts sheet
+
+Ctrl+? or Ctrl+/, `commands.show_shortcuts()` or
+`open_shortcuts(overlays, commands)`. A card titled "Keyboard shortcuts" with
+a filter and a group per menu (General, File, Edit...), each row the title and
+its shortcuts as key caps. It lists the focused view's commands and the
+window's; a shortcut an inner view has taken is listed once, under the command
+that has it. `Command::key_hint` rows list keys controls handle themselves.
+The filter matches titles (fuzzy) and keys (`ctrl+z`). An app no longer
+writes its own shortcuts dialog: the sheet is generated.
+
+## Undo and redo
+
+`use_undo()` returns the window's `UndoStack`, one for all of its views
+(AppKit's `NSUndoManager`). A change that can be taken back is pushed as an
+`UndoStep`: a name as people read it, what undoes it and what does it again.
+
+```rust
+let undo = use_undo();
+let old = name.peek().clone();
+name.set(new.clone());
+undo.push(UndoStep::new(
+    "Rename",
+    move || name.set(old.clone()),
+    move || name.set(new.clone()),
+));
+```
+
+| Call                                                  | What it does                                                                                                      |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `undo.push(step)`                                     | Remembers a change and empties the redo stack.                                                                    |
+| `UndoStep::new(name, undo, redo)`                     | A step. The name is a verb and its object in sentence case ("Move to Trash").                                     |
+| `UndoStep::undo_only(name, undo)`                     | A step that cannot be redone. Undoing it drops the redo history behind it.                                        |
+| `.coalesce(key)`                                      | Steps with one key, pushed within `COALESCE` (1.5 s) of each other, are one step: a run of typing.                |
+| `undo.group(name, \|\| ..)`                           | Every step pushed inside is one step called `name`. Groups nest.                                                  |
+| `undo.undo()`, `undo.redo()`                          | Take back or do again; return the step's name.                                                                    |
+| `undo.undo_title()`, `redo_title()`                   | "Undo rename" / "Redo rename", or "Undo" / "Redo" with nothing to do. Reading them in `render` redraws on change. |
+| `can_undo()`, `can_redo()`, `set_limit(n)`, `clear()` | State, the depth (`DEFAULT_LIMIT`, 100), and forgetting everything after a save that cannot be undone.            |
+| `UndoStack::detached()`                               | A stack of its own: one per document in a window of several.                                                      |
+
+**Edit > Undo and Redo follow the stack.** A window whose components call
+`use_undo` has the commands `edit.undo` ("Undo rename", Ctrl+Z) and
+`edit.redo` ("Redo rename", Ctrl+Shift+Z and Ctrl+Y) in its Edit menu, its
+palette (while there is something to undo) and its shortcuts sheet, disabled
+with nothing to take back. A window that never calls it shows neither.
+
+**Text fields keep their own undo.** Ctrl+Z in a text field undoes typing in
+that field, and the field stops the key, so the window's Undo runs only while
+the focus is elsewhere.
+
+**Work that takes time.** The closures run on the UI thread and return at
+once. A step that moves files starts the work on a worker and reports when it
+is done, as anything else on the UI thread does. A step pushed while the stack
+runs a step is ignored, so an undo that goes through the app's own code path
+does not record itself.
+
+## Data table
+
+`data_table(rows, columns, key)` shows any number of rows in typed columns, as a
+list view and the file list do, for any app that has rows with attributes: apps,
+devices, processes, connections, transactions. Only the rows in view are built,
+so a hundred thousand scroll as smoothly as ten.
+
+```rust
+let rows = use_hook(|| Rc::new(load_apps()));          // Rc<Vec<App>>
+let columns = use_hook(|| Rc::new(vec![
+    Column::text("name", "Name", |app: &App| app.name.clone())
+        .flex().priority(0).sort_by_text().editable(),
+    Column::text("size", "Size", |app: &App| format_size(app.bytes))
+        .width(96.0).numeric().priority(1).sort_by_key(|app| app.bytes),
+    Column::text("opened", "Last opened", |app: &App| app.opened.clone())
+        .width(130.0).priority(2).muted().sort_by_text(),
+]));
+let selection = use_state(Selection::<AppId>::new);
+
+data_table(&rows, columns, |app: &App| app.id)
+    .id("apps")                        // remember columns and sort
+    .label("Installed apps")
+    .selection(selection)
+    .sorted_by("name", SortDirection::Ascending)
+    .row_menu(|keys| vec![menu_item("Uninstall", move |()| uninstall(&keys))])
+    .on_activate(open)
+```
+
+The table fills its parent, so give the parent a height. It draws a heading row
+that stays in place and scrolls its rows beneath. Keep `rows` and `columns` in a
+hook or a state: an `Rc` that is the same allocation as last time means "same
+rows", and the visible rows are not drawn again.
+
+### Rows and columns
+
+- **`Rows<T>`** is where the rows come from, and is never copied. A `Vec<T>`,
+  `Rc<Vec<T>>` or `Rc<[T]>` converts to it; a model that pages from a database
+  implements `RowSource<T>` (`len`, `get`).
+- **`key`** is a row's identity (an id, a path), not its place. The selection and
+  the keyboard cursor follow keys, so a sort or a reload leaves them on the same
+  rows.
+- **`Column::text(id, title, f)`** is a column of one line of text. **`Column::new(id,
+title, f)`** draws an element (an icon and a name, a bar, a switch); add
+  `.summary(f)` to say its value in words. The `id` names the column in the saved
+  layout and the sort, so it never changes.
+- `.flex()` takes what the fixed columns leave; `.width(px)` is a fixed width;
+  `.min_width(px)`; `.numeric()` aligns to the end in figures of one width;
+  `.muted()` for secondary information; `.fixed()` stops the person resizing it.
+- `.priority(n)`: when the table is too narrow for every shown column, the
+  highest number goes first and a column of 0 stays (and cannot be hidden). The
+  person can bring a dropped column back by widening the window.
+- `.sort_by(cmp)`, `.sort_by_key(f)` and `.sort_by_text()` make a column
+  sortable. The sort is stable, in both directions. `natural_cmp` compares text
+  the way a person reads it: case ignored, numbers by value.
+- `.editable()` lets F2, or a double click, edit the cell's text in place. Enter
+  calls the table's `on_edit(CellEdit { key, column, text })`, Escape or clicking
+  elsewhere drops the edit. The table never changes the rows itself.
+
+### What the person can do
+
+| With                              | Result                                                                            |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| Click a heading                   | Sorts by it; again turns it round. An arrow shows the sort.                       |
+| Drag a heading's edge             | Resizes the column. A double click on the edge fits it to its widest cell.        |
+| Drag a heading                    | Moves the column; a line shows where it will land.                                |
+| Right-click a heading             | Lists the columns to show or hide, and Reset columns.                             |
+| Click, Ctrl+click, Shift+click    | Selects a row, toggles one, selects the range from the last click.                |
+| Double click, Enter               | Opens the row (`on_activate`).                                                    |
+| Right click, long press, Menu key | The row's menu (`row_menu`), acting on the whole selection when the row is in it. |
+
+With an `id` the order, widths, visibility and sort are saved in
+the app's `ui.json` under `$XDG_STATE_HOME/bingux/<app id>/` and read back at the
+next start. A column added by an update joins at its place; one that went away is
+ignored.
+
+### Keyboard
+
+The table is one Tab stop and a WAI-ARIA grid. A ring marks the cell that holds
+the keyboard.
+
+| Key                 | Action                                                               |
+| ------------------- | -------------------------------------------------------------------- |
+| Arrow keys          | Move the cursor one cell; the row it reaches is selected             |
+| Home, End           | First and last cell of the row                                       |
+| Ctrl+Home, Ctrl+End | First cell of the first row, last of the last                        |
+| Page Up, Page Down  | A page of rows                                                       |
+| Shift+arrow         | Extend the selection from the anchor                                 |
+| Ctrl+arrow          | Move the cursor without changing the selection                       |
+| Space               | Toggles the row in a multiple selection (selects it in a single one) |
+| Enter               | Open the row                                                         |
+| F2                  | Edit the cell                                                        |
+| Ctrl+A, Escape      | Select every row, clear the selection                                |
+| Menu, Shift+F10     | The row's menu, or the columns menu on a heading                     |
+| Letters             | Jump to the next row whose first column starts with them             |
+
+From a heading (Up from the first row): Enter or Space sorts; Shift+Left and
+Shift+Right move the column; Ctrl+Left and Ctrl+Right resize it.
+
+The table tells assistive technology it is a grid with row and column counts,
+a multi-select flag, a row index and a selected state on each row, column
+headers with a sort direction, and cells with a column index.
+
+### Selection
+
+`Selection<K>` holds the selected keys and the anchor a range grows from, and is
+a `State` the app owns: `.selection(state)`. `SelectionMode` is `None`, `Single`
+or `Multiple` (the default): `.selection_mode(mode)`. `Selection::apply` carries
+out a `Gesture` (`Replace`, `Toggle`, `Extend`, `ExtendAdd`) for a mode; the
+pointer and the keyboard both use it, so Shift+click and Shift+arrow agree. The
+list view uses the same type.
+
+`.marks()` starts each row with a selection mark and puts a select-all mark in
+the heading (not on a phone). `.batch_actions(vec![batch_action("Uninstall", f)
+.icon(icon).destructive()])` shows a bar above the table while two or more rows
+(one on a phone) are selected: "3 selected", the actions, and a button that
+clears. Each action is called with the selected keys in the order the rows are
+shown. Name actions with a verb for the result.
+
+### States, density and width
+
+- `.status(TableStatus::Loading)` shows quiet placeholder rows under the real
+  headings. `.status(TableStatus::failed("Could not load the apps").detail(next
+step).retry(f))` shows what failed and a Try again button. With no rows, the
+  table shows `.empty_state(status_page(..))` or a plain "Nothing to show";
+  give it one short title, one line and one action.
+- `.density(RowDensity::Compact | Comfortable | Spacious)` is the row height:
+  36, 40 or 56 px on a desktop; a phone's rows are as tall as a finger needs.
+- `.striped()` puts every other row on a faint fill. `.headerless()` leaves out
+  the heading row.
+- On a phone there is no heading row. A row is two lines: its first column
+  (or that column's element), then the text of the other columns in one muted
+  line, with a chevron when it opens something. A button above the rows opens the
+  sort menu. A tap opens the row, or, while rows are selected, joins or leaves
+  the selection; a long press selects a row (when the table has batch actions) or
+  opens its menu.
+
+To replace the Files list with it later: Files' `ColumnLayout` and `Plan`
+correspond to the table's saved layout and plan, its `Rows` to a `RowSource`,
+and its cells to `Column::new` elements. Files keeps its rubber band, drag and
+thumbnails by wrapping the rows it draws; the table supplies the header, sort,
+columns, selection and keyboard.
+
+## List view
+
+`list_view(rows, row, key)` is the single-column list: contacts, saved networks, a
+queue. Rows come from a `Rows<T>` source (see "Data table") and only the rows in
+view are built. `row` turns an item into a `ListRow`: `list_row(title)` with
+`.subtitle(text)`, `.icon(icon)` or `.leading(element)`, `.value(text)` at the end,
+`.chevron()` for a row that opens something, `.enabled(false)` and `.actions(..)`.
+
+```rust
+list_view(
+    &contacts,
+    |c: &Contact| list_row(c.name.clone()).icon(Icon::Avatar).value(c.role),
+    |c| c.id,
+)
+.selection_mode(SelectionMode::Multiple)
+.selection(selected)
+.sections(|c| Some(c.initial.to_string()))
+.on_activate(open)
+```
+
+- **Selection.** A list starts with `SelectionMode::None`, where a press opens the
+  row (`on_activate`). With `Single` or `Multiple` a press selects and a double
+  press, or Enter, opens. Shift and Ctrl work as in the table, `Selection<K>` is
+  the same type, and `.marks()` draws a selection mark at the start of each row (a
+  phone shows marks by itself while rows are selected).
+- **Sections.** `.sections(|item| Some(title))` puts a header before each run of
+  rows with the same title; `None` has no header. A header is as tall as a row,
+  because a long list needs one row height to scroll without measuring.
+- **Two lines.** Every row is one height. `.two_line()` makes it tall enough for a
+  subtitle and shows the subtitle.
+- **Menu.** `.row_menu(|keys| ..)` is the right click, long press and Menu key
+  menu. A row's `actions` are added to it, so a desktop reaches them there.
+- **Swipe.** On a phone a row with actions slides open to show them as buttons
+  (76 px each) when swiped; swiping back, tapping the row or pressing Escape
+  closes it, and only one row is open.
+- **Reorder.** `.on_reorder(|from, to| ..)` gives each row a grip and the keys of
+  `sortable` (drag the grip, Alt+Up and Alt+Down). The caller owns the order; see
+  `reorder.rs` for the contract. A reorderable list builds every row, so it is for
+  a few dozen rows, and has neither sections nor selection.
+- **Keyboard.** One Tab stop. Up and Down move a cursor (headers are skipped) and
+  select as they go; Shift extends; Ctrl moves without selecting; Home, End, Page
+  Up, Page Down; Space toggles; Enter opens; Ctrl+A selects all; Escape clears;
+  letters jump to the row whose title starts with them.
+- `.empty_state(element)` is what shows with no rows.
+
+## Toolbar
+
+`toolbar()` lays items out in groups and keeps them legible at any width.
+
+```rust
+toolbar()
+    .id("main")                    // where the customisation is saved
+    .customizable()
+    .group(toolbar_group(vec![
+        toolbar_item("back", "Back", Icon::GoPrevious, back).leading(),
+        toolbar_item("forward", "Forward", Icon::GoNext, forward).leading(),
+    ]).linked())
+    .group(toolbar_group(vec![
+        toolbar_item("add", "Add", Icon::ListAdd, add).shortcut("Ctrl+N"),
+        toolbar_item("share", "Share", Icon::EditCopy, share).secondary(),
+    ]))
+    .group(toolbar_group(vec![
+        toolbar_item("open", "Open", Icon::DocumentOpen, open).prominent(),
+    ]))
+```
+
+- **Items.** `toolbar_item(id, label, icon, on_press)` is a button; `.toggled(bool)`
+  makes it a toggle. `toolbar_menu(id, label, icon, items)` opens a menu under
+  itself. `toolbar_element(id, label, element, width)` is an element of your own, a
+  search field or a path bar. The `id` never changes once shipped, because the
+  saved customisation uses it. The `label` is the tooltip, the accessible name and
+  the row in the overflow menu: a verb for an action, a noun for a toggle.
+- **Groups.** A group sets its items apart from the next with a wider gap; keep to
+  three. `.linked()` joins its buttons in one rounded bar with hairlines, as Back
+  and Forward are or the choices of a view switch; `button_group(vec![group_button(
+icon, label, on_press).active(bool)])` is the same bar on its own.
+- **Placement.** `.leading()` puts an item before the title and keeps it longest,
+  the default puts it after the title, `.secondary()` after it and first to go.
+  `.prominent()` is one labelled accent button at the trailing end that never goes
+  into the menu; use it for what most people open the window to do.
+- **Overflow.** When the bar is narrower than its items, the rest go into a More
+  button's menu: secondary items first, then primary, then leading, the last of
+  each rank first, with a separator where the group changes, toggles as ticks and
+  menu items as submenus. An element item never goes into the menu.
+- **Every item is a menu command.** `ToolbarItem::menu_item()` and
+  `Toolbar::menu_items()` give the rows, so people who hide or customise the bar
+  still reach everything, and the app's own menu can list the same ones.
+- **Customising.** With `.customizable()` and an `.id(..)`, a right click on the
+  bar, or "Customise toolbar" in the More menu, lists every item with a tick and a
+  Reset toolbar. The hidden items are saved by id in the app's `ui.json`; an item
+  added by an update shows by default.
+- **The window's title.** `.title(text)` and `.subtitle(text)` are the window's
+  own: short (about fifteen characters), never the app's name. In a bar they sit
+  between the clusters. `.header()` draws the whole toolbar as the window's
+  `HeaderBar`: leading items, the centred title and subtitle, trailing items and
+  (`.window_controls()`) the window buttons. The items give way before the title
+  is cut.
+- **Keyboard.** The buttons are one Tab stop. Left and Right (mirrored in a
+  right-to-left window), Home and End move between them, and Tab leaves the bar.
+  Menu buttons and the prominent action keep their own stops.

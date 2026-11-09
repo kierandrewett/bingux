@@ -149,35 +149,22 @@ impl Component for Content {
             return rect().into_element();
         };
 
-        let body: Element = files::browse(
-            Browse::new(tab.content.memory.clone())
-                .on_location({
-                    let id = tab.id;
-                    move |at: Where| {
-                        let now = at.clone();
-                        tabs.update_if(id, move |tab| tab.at != now, move |tab| tab.at = at);
-                    }
-                })
-                .on_new_tab(move |path: std::path::PathBuf| {
-                    tabs.open(FileTab::new(Where::Folder(path)));
-                }),
-        );
-
-        // The tabs are the header bar's title: separate rounded tabs from the
-        // left, the window's buttons at the other end. The header bar is the
-        // strip's height, so the window has no row above its tabs.
+        // The tab bar shows once the window has a second tab, as in Finder
+        // and Safari, and while a tab from another window is held over this
+        // one, so there is somewhere to drop it. Its tabs share the width.
         let titles = tab_titles(&shown);
-        let header = HeaderBar::new(title)
-            .trailing(menu_button("Main menu", main_menu(tabs, overlays)).icon(Icon::OpenMenu))
-            .trailing(WindowControls)
-            .tab_slot(
+        use_window_commands(window_commands(tabs));
+        let commands = use_commands();
+        let strip = (shown.len() > 1 || tab_window.insertion().is_some()).then(|| {
+            Element::from(
                 tabs.strip(
                     tab_items(&shown, titles, |tab| tab_icon(&tab.at).glyph),
                     &tab_window,
                     move |_: ()| {
-                        tabs.open(FileTab::new(home()));
+                        tabs.open(FileTab::new(here(tabs)));
                     },
                 )
+                .fill(true)
                 .on_hover(move |(id, entered): (u64, bool)| {
                     let mut over_tab = over_tab;
                     let folder = set.peek().content(id).and_then(|tab| match &tab.at {
@@ -200,7 +187,31 @@ impl Component for Content {
                     Some(drag) if drag.active() => *over_tab.read(),
                     _ => None,
                 }),
-            );
+            )
+        });
+
+        // The header bar, the sidebar and the tab bar are the file view's:
+        // the window is laid out as Settings is, with the places down the
+        // whole left side and the header over the files.
+        let body: Element = files::browse(
+            Browse::new(tab.content.memory.clone())
+                .on_location({
+                    let id = tab.id;
+                    move |at: Where| {
+                        let now = at.clone();
+                        tabs.update_if(id, move |tab| tab.at != now, move |tab| tab.at = at);
+                    }
+                })
+                .on_new_tab(move |path: std::path::PathBuf| {
+                    tabs.open(FileTab::new(Where::Folder(path)));
+                })
+                .menu({
+                    let mut items = commands.main_menu_items();
+                    items.extend(bingux_ui::about::app_menu_items(overlays));
+                    items
+                })
+                .tab_bar(strip),
+        );
 
         let shortcuts = tabs.shortcuts(move |_: ()| {
             tabs.open(FileTab::new(here(tabs)));
@@ -217,7 +228,6 @@ impl Component for Content {
                     remember_size(event.area.width(), event.area.height());
                 }
             })
-            .child(header)
             // Not keyed by tab: one body, mounted once, shows whichever tab
             // is on show (its memory is in `body`).
             .child(
@@ -241,36 +251,57 @@ fn here(tabs: Tabs<FileTab>) -> Where {
         .map_or_else(home, |tab| tab.content.at.clone())
 }
 
-/// What the shortcuts dialog says. The file view's keys are the chooser's.
-const SHORTCUTS: &str = "\
-Ctrl+T  New tab\n\
-Ctrl+W  Close tab (a middle click on a tab too)\n\
-Ctrl+Shift+T  Reopen the tab closed last\n\
-Ctrl+Tab  Next tab\n\
-Alt+1 to 9  Go to a tab\n\
-Alt+Left, Alt+Right, Alt+Up  Back, Forward, parent folder\n\
-Ctrl+L  Edit the path\n\
-Ctrl+F  Search\n\
-Ctrl+H  Show hidden files\n\
-Ctrl+Shift+N  New folder\n\
-F2  Rename\n\
-Delete  Move to the Trash\n\
-Shift+Delete  Delete permanently\n\
-Ctrl+C, Ctrl+X, Ctrl+V  Copy, cut, paste\n\
-Ctrl+Z  Undo\n\
-Space  Preview\n\
-Alt+Enter  Properties\n\
-Ctrl+Shift+?  About Files";
-
-fn main_menu(tabs: Tabs<FileTab>, overlays: Overlays) -> Vec<MenuItem> {
-    let mut items = tabs.menu_items(move |_: ()| {
+/// The window's commands: the tab commands, and the keys the file view
+/// answers itself, for the main menu, the palette and the shortcuts sheet
+/// (Ctrl+?).
+fn window_commands(tabs: Tabs<FileTab>) -> Vec<Command> {
+    let mut commands = tabs.commands(move |_: ()| {
         tabs.open(FileTab::new(here(tabs)));
     });
-    items.push(menu_separator());
-    items.push(menu_item("Keyboard shortcuts", move |_: ()| {
-        overlays.show_dialog(dialog("Keyboard shortcuts", SHORTCUTS).cancel("Close"));
-    }));
-    // Every application's menu ends with About.
-    items.extend(bingux_ui::about::app_menu_items(overlays));
-    items
+    for (id, title, keys, group) in [
+        (
+            "files.back",
+            "Back, forward, parent folder",
+            "Alt+Left, Alt+Right, Alt+Up",
+            CommandGroup::Go,
+        ),
+        ("files.path", "Edit the path", "Ctrl+L", CommandGroup::Go),
+        ("files.search", "Search", "Ctrl+F", CommandGroup::Edit),
+        (
+            "files.hidden",
+            "Show hidden files",
+            "Ctrl+H",
+            CommandGroup::View,
+        ),
+        (
+            "files.new-folder",
+            "New folder",
+            "Ctrl+Shift+N",
+            CommandGroup::File,
+        ),
+        ("files.rename", "Rename", "F2", CommandGroup::File),
+        ("files.trash", "Move to Trash", "Delete", CommandGroup::File),
+        (
+            "files.delete",
+            "Delete permanently",
+            "Shift+Delete",
+            CommandGroup::File,
+        ),
+        (
+            "files.clipboard",
+            "Copy, cut, paste",
+            "Ctrl+C, Ctrl+X, Ctrl+V",
+            CommandGroup::Edit,
+        ),
+        ("files.preview", "Preview", "Space", CommandGroup::View),
+        (
+            "files.properties",
+            "Properties",
+            "Alt+Enter",
+            CommandGroup::File,
+        ),
+    ] {
+        commands.push(Command::key_hint(id, title, keys).group(group));
+    }
+    commands
 }

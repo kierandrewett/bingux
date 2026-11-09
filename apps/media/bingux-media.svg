@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg height="128px" viewBox="0 0 128 128" width="128px" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+        <linearGradient id="back" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0" stop-color="#e01b24"/>
+            <stop offset="1" stop-color="#a51d2d"/>
+        </linearGradient>
+        <linearGradient id="disc" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#deddda"/>
+        </linearGradient>
+    </defs>
+    <!-- The tile, rounded as the other Bingux app icons, lower edge darker for depth. -->
+    <rect fill="#77111c" height="104" rx="24" width="104" x="12" y="16"/>
+    <rect fill="url(#back)" height="104" rx="24" width="104" x="12" y="12"/>
+    <!-- A disc with its centre, for music. -->
+    <circle cx="64" cy="64" fill="url(#disc)" r="38"/>
+    <circle cx="64" cy="64" fill="none" r="28" stroke="#c0bfbc" stroke-width="2"/>
+    <circle cx="64" cy="64" fill="#c01c28" r="15"/>
+    <!-- A play mark over its centre, for films. -->
+    <path d="M59 56.5v15a2 2 0 0 0 3 1.7l12-7.5a2 2 0 0 0 0-3.4l-12-7.5a2 2 0 0 0-3 1.7z" fill="#ffffff"/>
+</svg>

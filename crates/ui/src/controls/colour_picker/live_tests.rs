@@ -18,8 +18,8 @@ use super::{RECENT_MAX, colour_button, colour_picker};
 use crate::controls::action_button;
 use crate::controls::capture::Point;
 use crate::inspector::snapshot::Snapshot as Tree;
-use crate::shell::overlays::{OverlayHost, use_overlays};
 use crate::shell::dialog::dialog;
+use crate::shell::overlays::{OverlayHost, use_overlays};
 use crate::snapshot::Snapshot;
 use crate::style::*;
 use crate::theme::provide_tokens;
@@ -35,7 +35,11 @@ const BLUE: (u8, u8, u8) = (53, 132, 228);
 /// pointer can go well outside the control and still be in the window, and 16
 /// on a phone, where the control fills the width less that margin.
 fn at_for(window: (f32, f32)) -> Point {
-    if window.0 < 600.0 { (16.0, 16.0) } else { (60.0, 60.0) }
+    if window.0 < 600.0 {
+        (16.0, 16.0)
+    } else {
+        (60.0, 60.0)
+    }
 }
 
 thread_local! {
@@ -105,7 +109,9 @@ impl Component for Host {
                     kept.set(list);
                 })
                 .into_element(),
-            Kind::Button => colour_button(colour(), report).title("Accent colour").into_element(),
+            Kind::Button => colour_button(colour(), report)
+                .title("Accent colour")
+                .into_element(),
             Kind::ButtonLive => colour_button(colour(), report)
                 .live(true)
                 .title("Accent colour")
@@ -143,7 +149,10 @@ fn logged() -> Vec<Color> {
 }
 
 fn last() -> Color {
-    logged().last().copied().expect("the control reported nothing")
+    logged()
+        .last()
+        .copied()
+        .expect("the control reported nothing")
 }
 
 fn channels(colour: Color) -> (u8, u8, u8) {
@@ -198,11 +207,23 @@ impl Rig {
         let at = at_for(window);
         let width = window.0 - 2.0 * at.0;
         let shot = Snapshot::with_scale(
-            move || Root(Host { start, at, width, kind }).into_element(),
+            move || {
+                Root(Host {
+                    start,
+                    at,
+                    width,
+                    kind,
+                })
+                .into_element()
+            },
             window,
             scale,
         );
-        let mut rig = Self { shot, scale, window };
+        let mut rig = Self {
+            shot,
+            scale,
+            window,
+        };
         rig.frames(6);
         rig
     }
@@ -343,16 +364,23 @@ impl Rig {
 
     /// The name of the element that has keyboard focus, if any.
     fn focused(&mut self) -> Option<String> {
-        let id = self
-            .shot
-            .runner()
-            .run_in(|| *Platform::get().current_window().focused_accessibility_id.peek());
+        let id = self.shot.runner().run_in(|| {
+            *Platform::get()
+                .current_window()
+                .focused_accessibility_id
+                .peek()
+        });
         let mut tree = self.tree();
         tree.mark_focused(id);
         tree.nodes
             .iter()
             .find(|node| node.a11y.focused)
-            .and_then(|node| node.a11y.name.clone().or_else(|| node.a11y.component.clone()))
+            .and_then(|node| {
+                node.a11y
+                    .name
+                    .clone()
+                    .or_else(|| node.a11y.component.clone())
+            })
     }
 
     /// The pixel at a window point of the frame as drawn.
@@ -376,7 +404,10 @@ impl Rig {
     /// Clicks the hex field and replaces its text.
     fn type_hex(&mut self, text: &str) {
         let hex = self.area("ColourHex");
-        self.click((hex.min_x() + 30.0, hex.min_y() + Dim::Control.px_in(self.class()) / 2.0));
+        self.click((
+            hex.min_x() + 30.0,
+            hex.min_y() + Dim::Control.px_in(self.class()) / 2.0,
+        ));
         self.clear_field();
         self.type_text(text);
     }
@@ -390,7 +421,11 @@ impl Rig {
     }
 
     fn class(&self) -> SizeClass {
-        if self.window.0 < 600.0 { SizeClass::Compact } else { SizeClass::Regular }
+        if self.window.0 < 600.0 {
+            SizeClass::Compact
+        } else {
+            SizeClass::Regular
+        }
     }
 }
 
@@ -458,21 +493,43 @@ fn the_corners_of_the_plane_are_white_black_and_the_pure_hue() {
         rig.release(to);
         rig.frames(2);
     };
-    drag(&mut rig, (plane.min_x() + 7.0, plane.min_y() + 7.0), (plane.min_x() - 50.0, plane.min_y() - 50.0));
+    drag(
+        &mut rig,
+        (plane.min_x() + 7.0, plane.min_y() + 7.0),
+        (plane.min_x() - 50.0, plane.min_y() - 50.0),
+    );
     assert_eq!(channels(last()), (255, 255, 255), "top left is white");
-    drag(&mut rig, (plane.max_x() - 7.0, plane.min_y() + 7.0), (plane.max_x() + 100.0, plane.min_y() - 50.0));
+    drag(
+        &mut rig,
+        (plane.max_x() - 7.0, plane.min_y() + 7.0),
+        (plane.max_x() + 100.0, plane.min_y() - 50.0),
+    );
     let pure = Hsva::new(hue, 1.0, 1.0, 255).rgb();
     assert_eq!(channels(last()), pure, "top right is the pure hue");
-    drag(&mut rig, (plane.min_x() + 7.0, plane.max_y() - 7.0), (plane.min_x() - 50.0, plane.max_y() + 100.0));
+    drag(
+        &mut rig,
+        (plane.min_x() + 7.0, plane.max_y() - 7.0),
+        (plane.min_x() - 50.0, plane.max_y() + 100.0),
+    );
     assert_eq!(channels(last()), (0, 0, 0), "bottom left is black");
-    drag(&mut rig, (plane.max_x() - 7.0, plane.max_y() - 7.0), (plane.max_x() + 100.0, plane.max_y() + 100.0));
+    drag(
+        &mut rig,
+        (plane.max_x() - 7.0, plane.max_y() - 7.0),
+        (plane.max_x() + 100.0, plane.max_y() + 100.0),
+    );
     assert_eq!(channels(last()), (0, 0, 0), "bottom right is black");
 }
 
 #[test]
 fn what_you_click_in_the_plane_is_the_colour_you_see_there() {
     for scale in [1.0, 1.25, 2.0] {
-        for (fx, fy) in [(0.2_f32, 0.2_f32), (0.7, 0.35), (0.5, 0.5), (0.2, 0.8), (0.8, 0.8)] {
+        for (fx, fy) in [
+            (0.2_f32, 0.2_f32),
+            (0.7, 0.35),
+            (0.5, 0.5),
+            (0.2, 0.8),
+            (0.8, 0.8),
+        ] {
             let mut rig = Rig::new(Kind::PickerAlpha, blue(), DESKTOP, scale);
             let plane = rig.area("ColourPlane");
             let at = within(plane, fx, fy);
@@ -495,10 +552,26 @@ fn the_plane_has_no_seam_and_its_corners_are_the_colours_it_says() {
     let hue = Hsva::new(hue_of(blue()), 1.0, 1.0, 255).rgb();
     let inset = 7.0;
     // The knob of the blue sits mid plane, so the corners are clear.
-    assert!(near(rig.pixel((plane.min_x() + inset, plane.min_y() + inset)), (255, 255, 255), 24));
-    assert!(near(rig.pixel((plane.max_x() - inset, plane.min_y() + inset)), hue, 24));
-    assert!(near(rig.pixel((plane.min_x() + inset, plane.max_y() - inset)), (0, 0, 0), 24));
-    assert!(near(rig.pixel((plane.max_x() - inset, plane.max_y() - inset)), (0, 0, 0), 24));
+    assert!(near(
+        rig.pixel((plane.min_x() + inset, plane.min_y() + inset)),
+        (255, 255, 255),
+        24
+    ));
+    assert!(near(
+        rig.pixel((plane.max_x() - inset, plane.min_y() + inset)),
+        hue,
+        24
+    ));
+    assert!(near(
+        rig.pixel((plane.min_x() + inset, plane.max_y() - inset)),
+        (0, 0, 0),
+        24
+    ));
+    assert!(near(
+        rig.pixel((plane.max_x() - inset, plane.max_y() - inset)),
+        (0, 0, 0),
+        24
+    ));
     // Along the top edge the colour only moves from white to the hue, one
     // monotonic step at a time: no band, no jump.
     let y = plane.min_y() + 6.0;
@@ -525,16 +598,26 @@ fn the_handle_is_a_double_ring_that_shows_on_any_colour() {
         let radius = knob.width() / 2.0;
         // The ring is white between the core and the outline.
         let white = rig.pixel((cx + radius - 2.5, cy));
-        assert!(near(white, (255, 255, 255), 40), "({fx}, {fy}): the ring is {white:?}");
+        assert!(
+            near(white, (255, 255, 255), 40),
+            "({fx}, {fy}): the ring is {white:?}"
+        );
         // The core is the colour that was chosen.
         let core = rig.pixel((cx, cy));
-        assert!(near(core, channels(last()), 6), "({fx}, {fy}): the core is {core:?}, not {:?}", channels(last()));
+        assert!(
+            near(core, channels(last()), 6),
+            "({fx}, {fy}): the core is {core:?}, not {:?}",
+            channels(last())
+        );
         // The outline is darker than the plane just outside the knob, or the
         // plane is black there already.
         let outline = rig.pixel((cx + radius - 0.5, cy));
         let outside = rig.pixel((cx + radius + 3.0, cy));
         let sum = |c: (u8, u8, u8)| c.0 as i32 + c.1 as i32 + c.2 as i32;
-        assert!(sum(outline) < 3 * 230, "({fx}, {fy}): the outline is {outline:?} against {outside:?}");
+        assert!(
+            sum(outline) < 3 * 230,
+            "({fx}, {fy}): the outline is {outline:?} against {outside:?}"
+        );
     }
 }
 
@@ -549,7 +632,10 @@ fn a_touch_drag_follows_one_finger_and_ends_with_it() {
     rig.touch(TouchEventName::TouchMove, end, 1);
     rig.frames(3);
     let at = rig.knob();
-    assert!((at.0 - end.0).abs() < 1.5 && (at.1 - end.1).abs() < 1.5, "{at:?} against {end:?}");
+    assert!(
+        (at.0 - end.0).abs() < 1.5 && (at.1 - end.1).abs() < 1.5,
+        "{at:?} against {end:?}"
+    );
     rig.touch(TouchEventName::TouchEnd, end, 1);
     rig.frames(2);
     let ended = logged().len();
@@ -594,17 +680,29 @@ fn arrow_keys_move_the_handle_one_percent_and_shift_ten() {
     let from = rig.knob();
     rig.key(Key::Named(NamedKey::ArrowRight));
     let right = rig.knob();
-    assert!((right.0 - from.0 - 0.01 * travel_x).abs() < 0.7, "{from:?} {right:?}");
+    assert!(
+        (right.0 - from.0 - 0.01 * travel_x).abs() < 0.7,
+        "{from:?} {right:?}"
+    );
     assert!((right.1 - from.1).abs() < 0.5);
     rig.key_with(Key::Named(NamedKey::ArrowRight), Modifiers::SHIFT);
     let shifted = rig.knob();
-    assert!((shifted.0 - right.0 - 0.10 * travel_x).abs() < 1.2, "{right:?} {shifted:?}");
+    assert!(
+        (shifted.0 - right.0 - 0.10 * travel_x).abs() < 1.2,
+        "{right:?} {shifted:?}"
+    );
     rig.key(Key::Named(NamedKey::ArrowUp));
     let up = rig.knob();
-    assert!((shifted.1 - up.1 - 0.01 * travel_y).abs() < 0.7, "{shifted:?} {up:?}");
+    assert!(
+        (shifted.1 - up.1 - 0.01 * travel_y).abs() < 0.7,
+        "{shifted:?} {up:?}"
+    );
     rig.key_with(Key::Named(NamedKey::ArrowDown), Modifiers::SHIFT);
     let down = rig.knob();
-    assert!((down.1 - up.1 - 0.10 * travel_y).abs() < 1.2, "{up:?} {down:?}");
+    assert!(
+        (down.1 - up.1 - 0.10 * travel_y).abs() < 1.2,
+        "{up:?} {down:?}"
+    );
 }
 
 #[test]
@@ -651,9 +749,17 @@ fn the_hue_strip_takes_arrows_in_degrees_and_shift_ten() {
     assert_eq!(rig.focused().as_deref(), Some("Hue"));
     let start = hue_of(last());
     rig.key(Key::Named(NamedKey::ArrowRight));
-    assert!(hue_gap(hue_of(last()), start + 1.0) < 1.5, "{} from {start}", hue_of(last()));
+    assert!(
+        hue_gap(hue_of(last()), start + 1.0) < 1.5,
+        "{} from {start}",
+        hue_of(last())
+    );
     rig.key_with(Key::Named(NamedKey::ArrowLeft), Modifiers::SHIFT);
-    assert!(hue_gap(hue_of(last()), start - 9.0) < 1.5, "{} from {start}", hue_of(last()));
+    assert!(
+        hue_gap(hue_of(last()), start - 9.0) < 1.5,
+        "{} from {start}",
+        hue_of(last())
+    );
     rig.key(Key::Named(NamedKey::Home));
     assert!(hue_gap(hue_of(last()), 0.0) < 1.5);
 }
@@ -669,9 +775,15 @@ fn a_drag_on_the_hue_strip_follows_the_pointer_and_changes_only_the_hue() {
     for fraction in [0.1_f32, 0.35, 0.8, 0.95] {
         let at = within(strip, fraction, 0.5);
         rig.tap(at);
-        let wanted = ((at.0 - strip.min_x() - thumb / 2.0) / (strip.width() - thumb)).clamp(0.0, 1.0) * 360.0;
+        let wanted = ((at.0 - strip.min_x() - thumb / 2.0) / (strip.width() - thumb))
+            .clamp(0.0, 1.0)
+            * 360.0;
         let now = Hsva::from_colour(last());
-        assert!(hue_gap(now.hue, wanted) < 3.0, "{fraction}: hue {} against {wanted}", now.hue);
+        assert!(
+            hue_gap(now.hue, wanted) < 3.0,
+            "{fraction}: hue {} against {wanted}",
+            now.hue
+        );
         // Saturation and value are the colour's own, to within a channel.
         assert!((now.sat - before.sat).abs() < 0.03 && (now.val - before.val).abs() < 0.03);
     }
@@ -715,8 +827,14 @@ fn the_opacity_strip_fades_in_from_a_checkerboard_and_sets_only_the_alpha() {
     // neighbouring cells differ.
     let a = rig.pixel((strip.min_x() + 13.0, y - 3.0));
     let b = rig.pixel((strip.min_x() + 13.0 + 7.0, y - 3.0));
-    assert!(!near(a, (200, 30, 30), 40), "the transparent end is the solid colour: {a:?}");
-    assert!(!near(a, b, 4) || !near(a, (200, 30, 30), 60), "no checkerboard: {a:?} {b:?}");
+    assert!(
+        !near(a, (200, 30, 30), 40),
+        "the transparent end is the solid colour: {a:?}"
+    );
+    assert!(
+        !near(a, b, 4) || !near(a, (200, 30, 30), 60),
+        "no checkerboard: {a:?} {b:?}"
+    );
     rig.tap(within(strip, 0.5, 0.5));
     let now = last();
     assert!((now.a() as i32 - 128).abs() < 12, "alpha {}", now.a());
@@ -727,7 +845,10 @@ fn the_opacity_strip_fades_in_from_a_checkerboard_and_sets_only_the_alpha() {
 
 #[test]
 fn every_target_is_at_least_32_px_on_a_desktop_and_44_px_on_a_phone() {
-    for (window, class, least) in [(DESKTOP, SizeClass::Regular, 32.0), (PHONE, SizeClass::Compact, 44.0)] {
+    for (window, class, least) in [
+        (DESKTOP, SizeClass::Regular, 32.0),
+        (PHONE, SizeClass::Compact, 44.0),
+    ] {
         let mut rig = Rig::new(Kind::PickerAlpha, blue(), window, 1.0);
         let g = Geometry::new(class);
         let handle = rig.area("ColourHandle");
@@ -739,12 +860,22 @@ fn every_target_is_at_least_32_px_on_a_desktop_and_44_px_on_a_phone() {
         );
         assert_eq!((handle.width(), handle.height()), (g.handle, g.handle));
         let knob = rig.area("ColourKnob");
-        assert!(knob.width() < handle.width(), "the knob is smaller than its target");
+        assert!(
+            knob.width() < handle.width(),
+            "the knob is smaller than its target"
+        );
         let (cx, cy) = centre(handle);
         let (kx, ky) = centre(knob);
-        assert!((cx - kx).abs() < 0.6 && (cy - ky).abs() < 0.6, "the target is centred on the knob");
+        assert!(
+            (cx - kx).abs() < 0.6 && (cy - ky).abs() < 0.6,
+            "the target is centred on the knob"
+        );
         for strip in rig.named("Hue").into_iter().chain(rig.named("Opacity")) {
-            assert!(strip.height() >= least, "{class:?}: a strip's row is {}", strip.height());
+            assert!(
+                strip.height() >= least,
+                "{class:?}: a strip's row is {}",
+                strip.height()
+            );
         }
         let swatches = rig.areas("ColourSwatch");
         assert!(!swatches.is_empty());
@@ -757,7 +888,11 @@ fn every_target_is_at_least_32_px_on_a_desktop_and_44_px_on_a_phone() {
             );
         }
         for field in rig.areas("ColourNumber") {
-            assert!(field.height() >= least, "{class:?}: a box is {} high", field.height());
+            assert!(
+                field.height() >= least,
+                "{class:?}: a box is {} high",
+                field.height()
+            );
         }
     }
 }
@@ -812,13 +947,19 @@ fn the_plane_is_centred_in_the_picker_so_it_reads_the_same_either_way_round() {
             if name == "ColourPlane" {
                 let left = part.min_x() - picker.min_x();
                 let right = picker.max_x() - part.max_x();
-                assert!((left - right).abs() < 0.6, "{window:?}: the plane is {left} from the left, {right} from the right");
+                assert!(
+                    (left - right).abs() < 0.6,
+                    "{window:?}: the plane is {left} from the left, {right} from the right"
+                );
             }
         }
         for strip in rig.named("Hue") {
             let left = strip.min_x() - picker.min_x();
             let right = picker.max_x() - strip.max_x();
-            assert!((left - right).abs() < 0.6, "{window:?}: the hue strip is off centre");
+            assert!(
+                (left - right).abs() < 0.6,
+                "{window:?}: the hue strip is off centre"
+            );
         }
     }
 }
@@ -833,7 +974,11 @@ fn a_typed_hex_is_the_colour_in_every_form() {
     rig.type_hex("0f0");
     assert_eq!(last(), argb(255, 0, 255, 0), "three digits");
     rig.type_hex("#0000ff80");
-    assert_eq!(last(), argb(0x80, 0, 0, 255), "eight digits say their own alpha");
+    assert_eq!(
+        last(),
+        argb(0x80, 0, 0, 255),
+        "eight digits say their own alpha"
+    );
     rig.type_hex("#ff08");
     assert_eq!(last(), argb(0x88, 255, 255, 0), "four digits are rgba");
 }
@@ -847,21 +992,34 @@ fn a_wrong_hex_says_why_and_changes_neither_the_colour_nor_the_layout() {
     let chosen = last();
     // Clearing the field passes through colours (#aabb is one), so look after.
     let hex = rig.area("ColourHex");
-    rig.click((hex.min_x() + 30.0, hex.min_y() + Dim::Control.px_in(rig.class()) / 2.0));
+    rig.click((
+        hex.min_x() + 30.0,
+        hex.min_y() + Dim::Control.px_in(rig.class()) / 2.0,
+    ));
     rig.clear_field();
     let reports = logged().len();
     let chosen = last();
     rig.type_text("#12");
     let message = rig.area("ColourHexMessage");
     let said = rig.texts_in(message);
-    assert!(said.iter().any(|text| text.contains("digits")), "the message is {said:?}");
-    assert_eq!(logged().len(), reports, "a hex that is not a colour reports nothing");
+    assert!(
+        said.iter().any(|text| text.contains("digits")),
+        "the message is {said:?}"
+    );
+    assert_eq!(
+        logged().len(),
+        reports,
+        "a hex that is not a colour reports nothing"
+    );
     assert_eq!(last(), chosen);
     assert_eq!(rig.area("ColourPicker").height(), before.height());
     rig.type_hex("#12x456");
     let message = rig.area("ColourHexMessage");
     let said = rig.texts_in(message);
-    assert!(said.iter().any(|text| text.contains("not a hex digit")), "{said:?}");
+    assert!(
+        said.iter().any(|text| text.contains("not a hex digit")),
+        "{said:?}"
+    );
     // A good entry clears it.
     rig.type_hex("#123456");
     let message = rig.area("ColourHexMessage");
@@ -882,11 +1040,18 @@ fn the_mode_switch_shows_the_same_colour_as_rgb_hsl_or_hsv() {
         for (index, area) in boxes.iter().take(3).enumerate() {
             let texts = rig.texts_in(*area);
             assert!(
-                texts.iter().any(|text| text.trim() == want[index].to_string()),
+                texts
+                    .iter()
+                    .any(|text| text.trim() == want[index].to_string()),
                 "{mode:?} box {index}: {texts:?} should show {}",
                 want[index]
             );
-            assert!(texts.iter().any(|text| text.trim() == mode.letters()[index]), "{mode:?}: its letter");
+            assert!(
+                texts
+                    .iter()
+                    .any(|text| text.trim() == mode.letters()[index]),
+                "{mode:?}: its letter"
+            );
         }
     }
 }
@@ -901,7 +1066,12 @@ fn a_number_typed_in_a_box_edits_the_colour_and_arrows_step_it() {
     rig.click((red.min_x() + 14.0, red.min_y() + 10.0));
     rig.clear_field();
     rig.type_text("255");
-    assert_eq!(channels(last()), (255, BLUE.1, BLUE.2), "log {:?}", logged());
+    assert_eq!(
+        channels(last()),
+        (255, BLUE.1, BLUE.2),
+        "log {:?}",
+        logged()
+    );
     // A number past the end is the end; a box that is not a number moves nothing.
     rig.clear_field();
     rig.type_text("999");
@@ -936,7 +1106,12 @@ fn the_opacity_box_is_a_percentage() {
 
 #[test]
 fn a_swatch_chooses_its_colour_keeps_the_opacity_and_is_marked_chosen() {
-    let mut rig = Rig::new(Kind::PickerAlpha, argb(100, BLUE.0, BLUE.1, BLUE.2), DESKTOP, 1.0);
+    let mut rig = Rig::new(
+        Kind::PickerAlpha,
+        argb(100, BLUE.0, BLUE.1, BLUE.2),
+        DESKTOP,
+        1.0,
+    );
     let swatches = rig.areas("ColourSwatch");
     // The palette's swatches that are marked chosen: the recent row repeats
     // the colour once it is chosen, so only the palette's own are counted.
@@ -946,7 +1121,11 @@ fn a_swatch_chooses_its_colour_keeps_the_opacity_and_is_marked_chosen() {
             .nodes
             .iter()
             .filter(|node| node.a11y.component.as_deref() == Some("ColourSwatch"))
-            .filter(|node| node.area.is_some_and(|area| area.min_y() >= palette.min_y() && area.max_y() <= palette.max_y()))
+            .filter(|node| {
+                node.area.is_some_and(|area| {
+                    area.min_y() >= palette.min_y() && area.max_y() <= palette.max_y()
+                })
+            })
             .filter(|node| node.a11y.selected == Some(true))
             .count()
     };
@@ -963,8 +1142,16 @@ fn a_swatch_chooses_its_colour_keeps_the_opacity_and_is_marked_chosen() {
         .filter_map(|node| node.a11y.name.clone())
         .collect();
     assert!(!names.is_empty());
-    assert!(names.iter().all(|name| name.starts_with("Colour ") && name.contains('#')), "{names:?}");
-    assert!(names.iter().any(|name| name.contains("Blue")), "the accents are named: {names:?}");
+    assert!(
+        names
+            .iter()
+            .all(|name| name.starts_with("Colour ") && name.contains('#')),
+        "{names:?}"
+    );
+    assert!(
+        names.iter().any(|name| name.contains("Blue")),
+        "the accents are named: {names:?}"
+    );
 }
 
 #[test]
@@ -1015,8 +1202,13 @@ fn recent_colours_without_a_list_of_the_apps_own_are_kept_in_memory() {
         shot: Snapshot::with_scale(
             move || {
                 let at = at_for(DESKTOP);
-                Root(Host { start: blue(), at, width: DESKTOP.0 - 2.0 * at.0, kind: Kind::Picker })
-                    .into_element()
+                Root(Host {
+                    start: blue(),
+                    at,
+                    width: DESKTOP.0 - 2.0 * at.0,
+                    kind: Kind::Picker,
+                })
+                .into_element()
             },
             DESKTOP,
             1.0,
@@ -1051,13 +1243,23 @@ fn the_old_colour_is_restored_by_a_press_on_its_half() {
 fn a_colour_from_outside_is_taken_in_without_losing_the_hue() {
     let mut rig = Rig::picker();
     let hue = hue_of(blue());
-    VALUE.with(|value| value.borrow().expect("the host's colour").clone().set(argb(255, 128, 128, 128)));
+    VALUE.with(|value| {
+        value
+            .borrow()
+            .expect("the host's colour")
+            .clone()
+            .set(argb(255, 128, 128, 128))
+    });
     rig.frames(6);
     // The plane now shows a grey; the hue is still the blue's, so the pure
     // right edge is blue again, not red.
     let plane = rig.area("ColourPlane");
     rig.tap((plane.max_x() - 7.0, plane.min_y() + 7.0));
-    assert!(hue_gap(hue_of(last()), hue) < 3.0, "{} against {hue}", hue_of(last()));
+    assert!(
+        hue_gap(hue_of(last()), hue) < 3.0,
+        "{} against {hue}",
+        hue_of(last())
+    );
 }
 
 // ---- The button ----------------------------------------------------------------
@@ -1087,17 +1289,31 @@ fn the_button_opens_a_popover_under_it_on_a_desktop() {
     let mut rig = open_button(Kind::Button, DESKTOP);
     let button = rig.area("ColourButton");
     let popover = rig.area("ColourPopover");
-    assert!(popover.min_y() >= button.max_y(), "{popover:?} under {button:?}");
+    assert!(
+        popover.min_y() >= button.max_y(),
+        "{popover:?} under {button:?}"
+    );
     assert!(popover.min_x() >= 0.0 && popover.max_x() <= DESKTOP.0);
     assert!(popover.max_y() <= DESKTOP.1);
     assert!(rig.has("ColourPlane") && rig.has("ColourHex"));
     // The popover is the picker and a Cancel and Done row, no taller.
     let picker = rig.area("ColourPicker");
     let g = Geometry::new(SizeClass::Regular);
-    assert!((popover.height() - (picker.height() + g.actions())).abs() < 1.5, "{popover:?} {picker:?}");
+    assert!(
+        (popover.height() - (picker.height() + g.actions())).abs() < 1.5,
+        "{popover:?} {picker:?}"
+    );
     // The picker is as tall as it says.
-    let said = g.total(Shape { alpha: false, swatches: 12, recents: true });
-    assert!((picker.height() - said).abs() < 0.6, "{} against {said}", picker.height());
+    let said = g.total(Shape {
+        alpha: false,
+        swatches: 12,
+        recents: true,
+    });
+    assert!(
+        (picker.height() - said).abs() < 0.6,
+        "{} against {said}",
+        picker.height()
+    );
 }
 
 #[test]
@@ -1107,11 +1323,17 @@ fn the_button_opens_a_bottom_sheet_on_a_phone() {
     let picker = rig.area("ColourPicker");
     assert!(popover.min_x() >= 0.0 && popover.max_x() <= PHONE.0);
     // The sheet's content fills its width less the sheet's padding on each side.
-    assert!((popover.width() - (PHONE.0 - 2.0 * S4.px_in(SizeClass::Compact))).abs() < 1.5, "{popover:?}");
+    assert!(
+        (popover.width() - (PHONE.0 - 2.0 * S4.px_in(SizeClass::Compact))).abs() < 1.5,
+        "{popover:?}"
+    );
     assert!((picker.width() - popover.width()).abs() < 1.5);
     // It is at the bottom of the window.
     assert!(popover.max_y() > PHONE.1 * 0.5);
-    assert!(rig.areas("ColourHeader").len() == 1, "Cancel, the title and Done sit at the top");
+    assert!(
+        rig.areas("ColourHeader").len() == 1,
+        "Cancel, the title and Done sit at the top"
+    );
     // Its targets are fingers' size.
     let handle = rig.area("ColourHandle");
     assert!(handle.width() >= 44.0);
@@ -1125,8 +1347,15 @@ fn escape_closes_the_popover_and_drops_the_draft() {
         rig.tap(within(plane, 0.2, 0.3));
         rig.key(Key::Named(NamedKey::Escape));
         rig.frames(30);
-        assert!(!rig.has("ColourPopover"), "{window:?}: still open after Escape");
-        assert!(logged().is_empty(), "{window:?}: a draft was reported: {:?}", logged());
+        assert!(
+            !rig.has("ColourPopover"),
+            "{window:?}: still open after Escape"
+        );
+        assert!(
+            logged().is_empty(),
+            "{window:?}: a draft was reported: {:?}",
+            logged()
+        );
     }
 }
 
@@ -1138,7 +1367,10 @@ fn a_press_outside_closes_the_popover_and_drops_the_draft() {
         rig.tap(within(plane, 0.2, 0.3));
         rig.click((window.0 - 4.0, 4.0));
         rig.frames(30);
-        assert!(!rig.has("ColourPopover"), "{window:?}: still open after a press outside");
+        assert!(
+            !rig.has("ColourPopover"),
+            "{window:?}: still open after a press outside"
+        );
         assert!(logged().is_empty(), "{window:?}: {:?}", logged());
     }
 }
@@ -1150,7 +1382,10 @@ fn done_reports_the_draft_once_and_closes() {
         let plane = rig.area("ColourPlane");
         rig.tap(within(plane, 0.2, 0.3));
         rig.tap(within(plane, 0.6, 0.6));
-        assert!(logged().is_empty(), "{window:?}: nothing is reported before Done");
+        assert!(
+            logged().is_empty(),
+            "{window:?}: nothing is reported before Done"
+        );
         rig.shot.click_text("Done");
         rig.frames(30);
         assert_eq!(logged().len(), 1, "{window:?}: {:?}", logged());
@@ -1158,7 +1393,11 @@ fn done_reports_the_draft_once_and_closes() {
         // The button now holds the colour.
         let button = rig.area("ColourButton");
         let pixel = rig.pixel(centre(button));
-        assert!(near(pixel, channels(last()), 12), "{pixel:?} against {:?}", channels(last()));
+        assert!(
+            near(pixel, channels(last()), 12),
+            "{pixel:?} against {:?}",
+            channels(last())
+        );
     }
 }
 
@@ -1177,18 +1416,28 @@ fn cancel_reports_nothing_and_the_next_opening_starts_from_the_colour_the_button
     rig.click(centre(button));
     rig.frames(16);
     let again = rig.knob();
-    assert!((again.0 - start.0).abs() < 1.0 && (again.1 - start.1).abs() < 1.0, "{again:?} against {start:?}");
+    assert!(
+        (again.0 - start.0).abs() < 1.0 && (again.1 - start.1).abs() < 1.0,
+        "{again:?} against {start:?}"
+    );
 }
 
 #[test]
 fn a_live_button_reports_every_colour_as_it_is_dragged_and_done_adds_nothing() {
     let mut rig = open_button(Kind::ButtonLive, DESKTOP);
-    assert!(rig.shot.click_text("Cancel") == false, "a live popover has no Cancel");
+    assert!(
+        rig.shot.click_text("Cancel") == false,
+        "a live popover has no Cancel"
+    );
     let plane = rig.area("ColourPlane");
     rig.press(within(plane, 0.3, 0.3));
     rig.frames(2);
     for step in 0..6 {
-        rig.move_to(within(plane, 0.3 + 0.1 * step as f32, 0.3 + 0.1 * step as f32));
+        rig.move_to(within(
+            plane,
+            0.3 + 0.1 * step as f32,
+            0.3 + 0.1 * step as f32,
+        ));
         rig.frames(3);
     }
     rig.release(within(plane, 0.8, 0.8));
@@ -1197,7 +1446,11 @@ fn a_live_button_reports_every_colour_as_it_is_dragged_and_done_adds_nothing() {
     assert!(reported >= 6, "a colour a frame: {reported}");
     rig.shot.click_text("Done");
     rig.frames(30);
-    assert_eq!(logged().len(), reported, "Done adds nothing: it was already reported");
+    assert_eq!(
+        logged().len(),
+        reported,
+        "Done adds nothing: it was already reported"
+    );
     assert!(!rig.has("ColourPopover"));
 }
 
@@ -1214,7 +1467,10 @@ fn the_button_works_inside_a_dialog() {
     let plane = rig.area("ColourPlane");
     // The popover takes the pointer over the dialog's scrim: a live drag reports.
     rig.tap(within(plane, 0.2, 0.2));
-    assert!(!logged().is_empty(), "the popover under a dialog took no press");
+    assert!(
+        !logged().is_empty(),
+        "the popover under a dialog took no press"
+    );
     rig.key(Key::Named(NamedKey::Escape));
     rig.frames(30);
     assert!(!rig.has("ColourPlane"), "Escape closes the popover");
@@ -1237,7 +1493,10 @@ fn a_dense_button_is_a_tools_row_high_and_a_finger_gets_the_full_size() {
             colour_button(argb(255, 1, 2, 3), |_| {}).dense()
         }
     }
-    for (window, side) in [(DESKTOP, Dim::DenseControl.px_in(SizeClass::Regular)), (PHONE, 44.0)] {
+    for (window, side) in [
+        (DESKTOP, Dim::DenseControl.px_in(SizeClass::Regular)),
+        (PHONE, 44.0),
+    ] {
         let mut shot = Snapshot::with_scale(move || Dense.into_element(), window, 1.0);
         shot.runner().poll_n(FRAME, 6);
         let area = Tree::capture_headless(shot.runner(), 1.0)
@@ -1264,5 +1523,3 @@ fn the_button_opens_from_the_keyboard() {
     rig.frames(16);
     assert!(rig.has("ColourPopover"));
 }
-
-

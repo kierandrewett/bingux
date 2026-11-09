@@ -20,7 +20,12 @@ pub fn signal_bars(level: u8, secured: bool, tokens: &Tokens) -> impl IntoElemen
 
 /// [`signal_bars`] with an accessible `label`, such as "Signal: strong", so a
 /// screen reader announces the strength. Without one the bars are decoration.
-pub fn signal_bars_labelled(level: u8, secured: bool, label: Option<String>, tokens: &Tokens) -> impl IntoElement {
+pub fn signal_bars_labelled(
+    level: u8,
+    secured: bool,
+    label: Option<String>,
+    tokens: &Tokens,
+) -> impl IntoElement {
     let level = level.min(BARS);
     let _ = secured;
     let mut row = rect().tw(

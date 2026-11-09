@@ -845,6 +845,11 @@ fn validate_previews(previews: &Value) -> Result<(), Error> {
     Ok(())
 }
 
+/// The accent names bingux-ui draws (`bingux_ui::theme::accent_names`).
+const ACCENTS: [&str; 9] = [
+    "blue", "teal", "green", "yellow", "orange", "red", "pink", "purple", "slate",
+];
+
 fn validate_appearance(appearance: &Value) -> Result<(), Error> {
     let Some(family) = appearance["font_family"].as_str() else {
         return Err(invalid(
@@ -856,6 +861,55 @@ fn validate_appearance(appearance: &Value) -> Result<(), Error> {
         return Err(invalid(
             "appearance.font_family",
             "Font family must be at most 128 characters with no control characters.",
+        ));
+    }
+    // The optional keys bingux-ui's platform layer reads. Absent means the
+    // desktop's other sources decide.
+    let optional = |key: &str| appearance.get(key).filter(|value| !value.is_null());
+    if let Some(value) = optional("color_scheme")
+        && !matches!(value.as_str(), Some("dark" | "light" | "default" | "auto"))
+    {
+        return Err(invalid(
+            "appearance.color_scheme",
+            "Colour scheme must be \"dark\", \"light\", \"default\" or \"auto\".",
+        ));
+    }
+    if let Some(value) = optional("accent")
+        && !value.as_str().is_some_and(|name| ACCENTS.contains(&name))
+    {
+        return Err(invalid(
+            "appearance.accent",
+            "Accent must be blue, teal, green, yellow, orange, red, pink, purple or slate.",
+        ));
+    }
+    for key in ["high_contrast", "reduced_motion"] {
+        if let Some(value) = optional(key)
+            && !value.is_boolean()
+        {
+            return Err(invalid(
+                &format!("appearance.{key}"),
+                "Invalid toggle value.",
+            ));
+        }
+    }
+    if let Some(value) = optional("text_scale")
+        && !value
+            .as_f64()
+            .is_some_and(|scale| (0.5..=3.0).contains(&scale))
+    {
+        return Err(invalid(
+            "appearance.text_scale",
+            "Text scale must be a number from 0.5 to 3.",
+        ));
+    }
+    if let Some(value) = optional("icon_theme")
+        && !value
+            .as_str()
+            .is_some_and(|name| name.chars().count() <= 128 && !name.chars().any(char::is_control))
+    {
+        return Err(invalid(
+            "appearance.icon_theme",
+            "Icon theme must be at most 128 characters with no control characters.",
         ));
     }
     Ok(())

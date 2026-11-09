@@ -105,6 +105,24 @@ pub fn hover_tip(child: impl IntoElement, text: impl Into<String>) -> Element {
     Element::from(HoverTip {
         child: child.into_element(),
         text: text.into(),
+        size: None,
+    })
+}
+
+/// [`hover_tip`] for a child that is sized by its parent (a flex width, a
+/// filled height) rather than by its content: the box that carries the tip
+/// takes `width` and `height`, and the child fills it. Without this a flexing
+/// child shrinks to its content inside the tip's box.
+pub fn hover_tip_sized(
+    child: impl IntoElement,
+    text: impl Into<String>,
+    width: Size,
+    height: Size,
+) -> Element {
+    Element::from(HoverTip {
+        child: child.into_element(),
+        text: text.into(),
+        size: Some((width, height)),
     })
 }
 
@@ -322,6 +340,30 @@ impl Tip {
 struct HoverTip {
     child: Element,
     text: String,
+    /// The width and height the child is laid out with in its parent, when
+    /// the child does not size from its content.
+    size: Option<(Size, Size)>,
+}
+
+/// The box around a tip and its child, with the size the child asked for.
+fn fit_outer(shell: Rect, size: Option<(Size, Size)>) -> Rect {
+    match size {
+        Some((width, height)) => shell.width(width).height(height),
+        None => shell,
+    }
+}
+
+/// The box the child sits in: as big as the shell, and a flex row so that a
+/// child with a flex width shares it.
+fn fit_inner(wrapper: Rect, tokens: &Tokens, sized: bool) -> Rect {
+    if sized {
+        wrapper
+            .width(Size::fill())
+            .height(Size::fill())
+            .tw(tokens, &[flex_row(), grow_children()])
+    } else {
+        wrapper
+    }
 }
 
 /// One bubble: the tooltip surface around `text`. Its size is the size of the
@@ -332,7 +374,10 @@ struct HoverTip {
 fn bubble(tokens: &Tokens, text: &str, full: bool) -> Rect {
     rect()
         .tw(tokens, TOOLTIP)
-        .tw(tokens, &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))])
+        .tw(
+            tokens,
+            &[border(Line::Stroke(Dim::Hairline, Paint::FloatingOutline))],
+        )
         .maybe(full, |bubble| bubble.width(Size::fill()))
         .interactive(false)
         .child(
@@ -347,7 +392,9 @@ fn bubble(tokens: &Tokens, text: &str, full: bool) -> Rect {
 /// The width a bubble is laid out in: `Dim::TooltipMax`, or the window's width
 /// less the edge margins when that is less.
 fn room(window_width: f32) -> f32 {
-    Dim::TooltipMax.px().min((window_width - 2.0 * PANEL_EDGE).max(0.0))
+    Dim::TooltipMax
+        .px()
+        .min((window_width - 2.0 * PANEL_EDGE).max(0.0))
 }
 
 /// The box a bubble is laid out in. A text element wraps at the room its
@@ -358,11 +405,17 @@ fn room(window_width: f32) -> f32 {
 /// never as wide as what it hangs from. It is placed (and raised) as the
 /// bubble is; the bubble inside it is what is drawn.
 fn slot(room: f32, bubble: Rect) -> Rect {
-    rect().width(Size::px(room)).interactive(false).child(bubble)
+    rect()
+        .width(Size::px(room))
+        .interactive(false)
+        .child(bubble)
 }
 
 impl Component for HoverTip {
     fn render(&self) -> impl IntoElement {
+        // The box the tip lives in takes the size the child asked for, so a
+        // child that flexes (a key of a keypad) still shares its row.
+        let shell = || fit_outer(rect(), self.size.clone());
         let tokens = use_tokens();
         let hub = use_hub();
         let id = use_hook(next_tip_id);
@@ -417,7 +470,7 @@ impl Component for HoverTip {
             }
         });
 
-        let wrapper = rect()
+        let wrapper = fit_inner(rect(), &tokens, self.size.is_some())
             .on_sized(move |e: Event<SizedEventData>| {
                 anchor.set_if_modified(Some(e.area));
             })
@@ -446,12 +499,12 @@ impl Component for HoverTip {
         // draws a bubble beside content that moved.
         if !visible() && suspended() {
             side.set(None);
-            return rect().child(wrapper).into_element();
+            return shell().child(wrapper).into_element();
         }
         if !visible() {
             if progress <= 0.0 {
                 side.set(None);
-                return rect().child(wrapper).into_element();
+                return shell().child(wrapper).into_element();
             }
             // Fading out. Another tip may have opened since this one hid.
             let stage = *hub.stage.read();
@@ -466,7 +519,7 @@ impl Component for HoverTip {
                 } else if replaced || since > 1 {
                     // Two bubbles are never drawn together.
                     side.set(None);
-                    return rect().child(wrapper).into_element();
+                    return shell().child(wrapper).into_element();
                 }
             }
         }
@@ -502,7 +555,7 @@ impl Component for HoverTip {
 
         let shown = anchor().zip(measured.read().clone());
         let Some((area, shown)) = shown else {
-            return rect().child(wrapper).child(probe).into_element();
+            return shell().child(wrapper).child(probe).into_element();
         };
         let placed = decide(
             PanelRect::from_area(&area),
@@ -525,7 +578,11 @@ impl Component for HoverTip {
                 .top(placed.y - area.min_y()),
         );
 
-        rect().child(wrapper).child(probe).child(label).into_element()
+        shell()
+            .child(wrapper)
+            .child(probe)
+            .child(label)
+            .into_element()
     }
 }
 

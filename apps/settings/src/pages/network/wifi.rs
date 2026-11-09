@@ -20,7 +20,7 @@ use freya::prelude::*;
 use super::model::{self, NetCtx, Overview, use_net_ctx};
 use super::profile::ProfileSettings;
 use super::usage::connection_usage_row;
-use super::{Owner, Section};
+use super::{Owner, Section, plain};
 use crate::icons::{self, Icon};
 use crate::pages::loading::veiled;
 use crate::routes;
@@ -223,7 +223,7 @@ fn use_ui() -> Ui {
 }
 
 fn connecting_label(ssid: &str) -> String {
-    format!("Connecting to {ssid}.")
+    format!("Connecting to {ssid}…")
 }
 
 impl Ui {
@@ -266,6 +266,7 @@ impl Ui {
     fn act(
         self,
         label: &str,
+        failed: impl FnOnce(&CommandError) -> String + 'static,
         work: impl FnOnce() -> Result<(), CommandError> + Send + 'static,
         on_success: impl FnOnce() + 'static,
     ) {
@@ -279,14 +280,19 @@ impl Ui {
             busy.set(None);
             match result {
                 Ok(()) => on_success(),
-                Err(error) => self.ctx.overlays.toast(error.0),
+                Err(error) => self.ctx.overlays.toast(failed(&error)),
             }
             reload_all();
         });
     }
 
     fn disconnect(self, uuid: String) {
-        self.act("Disconnecting.", move || nm::disconnect(&uuid), || {});
+        self.act(
+            "Disconnecting…",
+            |error| plain(&error.0, "Could not disconnect. Try again."),
+            move || nm::disconnect(&uuid),
+            || {},
+        );
     }
 
     /// Join a network: at once when it is saved or open, after asking for
@@ -298,13 +304,23 @@ impl Ui {
         match (&target.uuid, target.security) {
             (Some(uuid), _) => {
                 let uuid = uuid.clone();
-                self.act(&label, move || nm::connect_saved(&uuid), || {});
+                self.act(
+                    &label,
+                    |error| nm::join_error(error),
+                    move || nm::connect_saved(&uuid),
+                    || {},
+                );
             }
             (None, Security::Enterprise) => join::open_enterprise(window, ssid),
             (None, security) if security.needs_password() => {
                 join::open_password(window, ssid, security)
             }
-            (None, _) => self.act(&label, move || nm::connect_new(&ssid, None), || {}),
+            (None, _) => self.act(
+                &label,
+                |error| nm::join_error(error),
+                move || nm::connect_new(&ssid, None),
+                || {},
+            ),
         }
     }
 
@@ -315,14 +331,20 @@ impl Ui {
             move || nm::saved_secret(&uuid, &key_mgmt),
             move |result| match result {
                 Ok(Some(password)) => match freya::clipboard::Clipboard::set(password) {
-                    Ok(()) => self.ctx.overlays.toast("Copied."),
-                    Err(_) => self.ctx.overlays.toast("The password could not be copied."),
+                    Ok(()) => self.ctx.overlays.toast("Password copied"),
+                    Err(_) => self
+                        .ctx
+                        .overlays
+                        .toast("Could not copy the password. Try again."),
                 },
                 Ok(None) => self
                     .ctx
                     .overlays
-                    .toast("This network has no saved password."),
-                Err(error) => self.ctx.overlays.toast(error.0),
+                    .toast("No saved password for this network"),
+                Err(error) => self.ctx.overlays.toast(plain(
+                    &error.0,
+                    "Could not read the saved password. Try again.",
+                )),
             },
         );
     }
@@ -338,7 +360,7 @@ impl Ui {
         let router = self.ctx.router;
         self.ctx.overlays.show_dialog(
             dialog(
-                format!("Forget \"{name}\"?"),
+                format!("Forget “{name}”?"),
                 "The saved password is removed. Connecting again asks for it.",
             )
             .cancel("Cancel")
@@ -346,7 +368,8 @@ impl Ui {
             .response("Forget", ResponseKind::Destructive, move |_| {
                 let uuid = uuid.clone();
                 self.act(
-                    "Forgetting the network.",
+                    "Forgetting…",
+                    |error| plain(&error.0, "Could not forget the network. Try again."),
                     move || nm::forget(&uuid),
                     move || {
                         if leave {
@@ -463,11 +486,12 @@ fn network_count(count: usize) -> String {
     }
 }
 
-/// A screen that could not ask NetworkManager: the reason and Try again.
+/// A screen that could not read the networks: what failed and Try again.
 fn failure(ui: Ui, error: CommandError, head: Option<PageHead>) -> Rect {
+    let message = plain(&error.0, "Could not read the Wi-Fi networks. Try again.");
     page_column()
         .maybe_child(head)
-        .child(status(Status::Error(error.0)).action("Try again", move |_| ui.reload_all()))
+        .child(status(Status::Error(message)).action("Try again", move |_| ui.reload_all()))
 }
 
 /// The right-click menu of a network: connect or disconnect, what a saved
@@ -546,7 +570,7 @@ fn wifi_subtitle(radio: Radio, model: &Model) -> String {
     match radio {
         Radio::Missing => "No Wi-Fi hardware".to_string(),
         Radio::Airplane => "Off in airplane mode".to_string(),
-        Radio::Blocked => "Wi-Fi hardware is disabled".to_string(),
+        Radio::Blocked => "Off by hardware switch".to_string(),
         Radio::Off => "Off".to_string(),
         Radio::On => match model.current() {
             Some((Some(network), _)) => format!("Connected to {}", network.ssid),
@@ -582,8 +606,8 @@ fn link_line(network: Option<&Network>) -> String {
 fn radio_status(ui: Ui, radio: Radio) -> Option<Element> {
     let message = match radio {
         Radio::On => return None,
-        Radio::Missing => Status::Empty("This computer has no Wi-Fi hardware.".into()),
-        Radio::Blocked => Status::Info("Wi-Fi hardware is disabled.".into()),
+        Radio::Missing => Status::Empty("This computer has no Wi-Fi adapter.".into()),
+        Radio::Blocked => Status::Info("A hardware switch has turned Wi-Fi off.".into()),
         Radio::Airplane => Status::Info(
             "Wi-Fi is off because airplane mode is on. Turn airplane mode off on the Network page."
                 .into(),
@@ -705,10 +729,10 @@ fn available_group(ui: Ui, data: &Data, tokens: Tokens) -> Element {
         let block = if scanning {
             status(Status::Loading("Scanning for Wi-Fi networks…".into()))
         } else if data.model.current().is_some() {
-            status(Status::Empty("No other Wi-Fi networks found.".into()))
+            status(Status::Empty("No other Wi-Fi networks found".into()))
                 .action("Scan again", move |_| ui.refresh(true))
         } else {
-            status(Status::Empty("No Wi-Fi networks found.".into()))
+            status(Status::Empty("No Wi-Fi networks found".into()))
                 .action("Scan again", move |_| ui.refresh(true))
         };
         return Element::from(
@@ -826,7 +850,7 @@ impl Component for SavedNetworksPage {
         }
         if count == 0 && !data.loading {
             return page_column().child(head).child(status(Status::Empty(
-                "No saved networks. A network you join is saved here.".into(),
+                "No saved networks. Networks you join appear here.".into(),
             )));
         }
 
@@ -842,7 +866,7 @@ impl Component for SavedNetworksPage {
                 if saved.autoconnect {
                     "Connects automatically"
                 } else {
-                    "Manual"
+                    "Connects manually"
                 }
                 .to_string(),
             );
@@ -1121,7 +1145,7 @@ pub fn wifi_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element> {
     let subtitle = if airplane {
         "Off in airplane mode".to_string()
     } else if !ov.wifi_usable() {
-        "Wi-Fi hardware is disabled".to_string()
+        "Off by hardware switch".to_string()
     } else if !on {
         "Off".to_string()
     } else {

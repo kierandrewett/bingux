@@ -16,7 +16,7 @@ use super::model::{
 };
 use super::profile::{ProfileSettings, SectionPage, speed_text};
 use super::usage::{UsagePage, connection_usage_row};
-use super::{Device, Owner, Section, UsageScope, device_icon, failure_page};
+use super::{Device, Owner, Section, UsageScope, device_icon, failure_page, plain};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes;
@@ -125,7 +125,18 @@ fn with_address(device: &Device, state: String) -> String {
 fn set_link(ctx: NetCtx, device: String, on: bool) {
     toggle_link(ctx, link_key(&device), on, move || {
         let action = if on { "connect" } else { "disconnect" };
-        nmcli(&["device", action, &device], CONNECT).map(|_| ())
+        nmcli(&["device", action, &device], CONNECT)
+            .map(|_| ())
+            .map_err(|error| {
+                CommandError(plain(
+                    &error.0,
+                    if on {
+                        "Could not connect. Check the cable and try again."
+                    } else {
+                        "Could not disconnect. Try again."
+                    },
+                ))
+            })
     });
 }
 
@@ -181,7 +192,6 @@ pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
         }
     }
     if !spare.is_empty() {
-        let plural = if spare.len() == 1 { "" } else { "s" };
         let children: Vec<Element> = spare
             .iter()
             .map(|device| {
@@ -197,7 +207,11 @@ pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
             .collect();
         shown.push(Element::from(
             expander_row(
-                format!("{} other wired adapter{plural}", spare.len()),
+                if spare.len() == 1 {
+                    "1 other wired adapter".to_string()
+                } else {
+                    format!("{} other wired adapters", spare.len())
+                },
                 children,
             )
             .subtitle("Cable unplugged"),
@@ -510,7 +524,10 @@ fn act(
     background_then(work, move |result| {
         match result {
             Ok(_) => then(),
-            Err(error) => ctx.overlays.toast(error.0),
+            Err(error) => ctx.overlays.toast(plain(
+                &error.0,
+                "Could not change the connection. Try again.",
+            )),
         }
         ctx.reload();
         reload_profiles(&name, &hwaddr);
@@ -522,8 +539,8 @@ fn act(
 fn confirm_delete(ctx: NetCtx, device: Device, name: String, uuid: Option<String>, leave: bool) {
     ctx.overlays.show_dialog(
         dialog(
-            format!("Delete \"{name}\"?"),
-            "The profile and its saved settings are removed from this computer.",
+            format!("Delete “{name}”?"),
+            "This removes the profile and its saved settings.",
         )
         .cancel("Cancel")
         .default_action(CANCEL_ID)
@@ -804,7 +821,10 @@ impl Component for ProfilesPage {
             Some(Err(error)) => {
                 return page_column()
                     .child(head)
-                    .child(status(Status::Error(error.0.clone())))
+                    .child(status(Status::Error(plain(
+                        &error.0,
+                        "Could not read the connection profiles. Try again.",
+                    ))))
                     .into();
             }
             Some(Ok(profiles)) => profiles.clone(),
@@ -907,7 +927,7 @@ impl NewProfileBody {
             return;
         }
         if self.taken.contains(&name) {
-            error.set(Some("A profile with this name already exists.".to_string()));
+            error.set(Some("Use a name that no other profile has.".to_string()));
             return;
         }
         window.close();

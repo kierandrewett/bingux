@@ -65,10 +65,16 @@ pub enum Change {
     UseGlobal,
 }
 
+/// Log what the recorder said and return the sentence the person sees.
+fn unsaved(error: &dyn std::fmt::Display) -> String {
+    eprintln!("bingux-settings: data usage limit: {error}");
+    "Could not save the data limit. Try again.".to_string()
+}
+
 /// Writes a change. `connection` is the connection whose own limits change,
 /// or `None` for the limits for all connections. Blocks: not for the UI thread.
 pub fn store(change: Change, connection: Option<&str>) -> Result<(), String> {
-    let settings = Settings::open_default().map_err(|error| error.to_string())?;
+    let settings = Settings::open_default().map_err(|error| unsaved(&error))?;
     let done = match change {
         Change::BillingDay(day) => settings.set_billing_day(day, connection),
         Change::Limit(bytes) => settings.set_monthly_limit(bytes, connection),
@@ -77,7 +83,7 @@ pub fn store(change: Change, connection: Option<&str>) -> Result<(), String> {
             .into_iter()
             .try_for_each(|key| settings.clear(key, connection)),
     };
-    done.map_err(|error| error.to_string())
+    done.map_err(|error| unsaved(&error))
 }
 
 /// The Limit group: the day the cycle starts, the monthly limit and the

@@ -8,6 +8,8 @@ use bingux_files::Kind;
 use bingux_preview_core::PreviewSource;
 use freya::prelude::*;
 
+use std::rc::Rc;
+
 use super::info::InfoRow;
 use super::keys::Keyboard;
 use super::mode::Mode;
@@ -21,6 +23,37 @@ use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
 use crate::typography::{BODY, CAPTION, Ink, SECTION};
+use crate::zoom_view::{FitMode, ZoomHandle};
+
+/// What a person's last choice of fit or actual size was for a kind of
+/// picture, kept by the owner: pixel art and icons are wanted at actual size,
+/// photographs fitted. The picture viewer asks `recall` with the file's MIME
+/// type when it opens and tells `remember` when the person chooses.
+#[derive(Clone)]
+pub struct ZoomMemory {
+    recall: Rc<dyn Fn(&str) -> Option<FitMode>>,
+    remember: EventHandler<(String, FitMode)>,
+}
+
+impl ZoomMemory {
+    pub fn new(recall: impl Fn(&str) -> Option<FitMode> + 'static, remember: impl Into<EventHandler<(String, FitMode)>>) -> Self {
+        ZoomMemory { recall: Rc::new(recall), remember: remember.into() }
+    }
+
+    pub(super) fn recall(&self, mime: &str) -> Option<FitMode> {
+        (self.recall)(mime)
+    }
+
+    pub(super) fn remember(&self, mime: &str, mode: FitMode) {
+        self.remember.call((mime.to_owned(), mode));
+    }
+}
+
+impl PartialEq for ZoomMemory {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.recall, &other.recall) && self.remember == other.remember
+    }
+}
 
 /// What the owner of a preview gives it: where it is in a list, what the
 /// buttons do. Every handler is optional except Close; a button whose handler
@@ -49,6 +82,20 @@ pub struct PreviewNav {
     /// Give the keyboard back to the owner's list (a pane's Escape).
     pub on_release: Option<EventHandler<()>>,
     pub on_close: EventHandler<()>,
+    /// The owner drives the picture's zoom, turn and flip (its toolbar, its
+    /// menu), through this handle.
+    pub zoom: Option<ZoomHandle>,
+    /// The owner remembers fit or actual size for each kind of picture.
+    pub zoom_memory: Option<ZoomMemory>,
+    /// The owner shows the Info panel: it holds the state, and the title line
+    /// it draws has the button.
+    pub info: Option<State<bool>>,
+    /// The owner shows the page thumbnails and outline of a document: it holds
+    /// the state, and its title line has the button.
+    pub sidebar: Option<State<bool>>,
+    /// Whether an animated picture is playing, kept by the owner so its title
+    /// line can show Play and Pause.
+    pub playing: Option<State<bool>>,
 }
 
 impl PreviewNav {
@@ -66,7 +113,42 @@ impl PreviewNav {
             keyboard: Keyboard::always(),
             on_release: None,
             on_close: on_close.into(),
+            zoom: None,
+            zoom_memory: None,
+            info: None,
+            sidebar: None,
+            playing: None,
         }
+    }
+
+    /// Drive the picture's zoom, turn and flip from outside the viewer.
+    pub fn zoom(mut self, handle: ZoomHandle) -> Self {
+        self.zoom = Some(handle);
+        self
+    }
+
+    /// Keep each kind of picture's choice of fit or actual size.
+    pub fn zoom_memory(mut self, memory: ZoomMemory) -> Self {
+        self.zoom_memory = Some(memory);
+        self
+    }
+
+    /// Own the Info panel's state.
+    pub fn info(mut self, shown: State<bool>) -> Self {
+        self.info = Some(shown);
+        self
+    }
+
+    /// Own the state of a document's page thumbnails and outline.
+    pub fn sidebar(mut self, shown: State<bool>) -> Self {
+        self.sidebar = Some(shown);
+        self
+    }
+
+    /// Own whether an animated picture is playing.
+    pub fn playing(mut self, playing: State<bool>) -> Self {
+        self.playing = Some(playing);
+        self
     }
 
     /// Whether a popup takes the keyboard when it opens. It does by default;
@@ -193,7 +275,7 @@ pub(super) fn header(
     if let Some(switch) = nav.on_mode.clone().filter(|_| !compact && nav.dock) {
         let (icon, tip, to) = match mode {
             Mode::Pane => (Icon::WindowNew, "Open as a popup (Alt+P)", Mode::Popup),
-            Mode::Popup | Mode::Fullscreen => (Icon::SidebarShow, "Dock to the side (Alt+P)", Mode::Pane),
+            Mode::Popup | Mode::Fullscreen | Mode::Window => (Icon::SidebarShow, "Dock to the side (Alt+P)", Mode::Pane),
         };
         bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(tip));
     }

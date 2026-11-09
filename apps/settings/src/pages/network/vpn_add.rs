@@ -70,7 +70,7 @@ fn name_problem(name: &str, taken: &[String]) -> Option<String> {
     if name.is_empty() {
         None
     } else if taken.iter().any(|other| other == name) {
-        Some("A connection with this name already exists.".to_string())
+        Some("Use a name that no other connection has.".to_string())
     } else {
         None
     }
@@ -272,7 +272,7 @@ impl Component for WireguardForm {
                 .hint(if has_wg {
                     "Stays on this computer. Generate one, or paste your own."
                 } else {
-                    "Paste the key from your VPN provider, or make one with the wg genkey command."
+                    "Paste the key from your VPN provider."
                 })
                 .validate(check::key),
         );
@@ -391,7 +391,7 @@ fn parse_lines(text: &str) -> Result<Vec<(String, String)>, String> {
                 entries.push((key.trim().to_string(), value.trim().to_string()))
             }
             _ => {
-                return Err(format!("Line {} needs the form name = value.", number + 1));
+                return Err(format!("Write line {} as name = value.", number + 1));
             }
         }
     }
@@ -418,7 +418,7 @@ impl Component for PluginAdd {
         match list.into_iter().find(|plugin| plugin.short == self.short) {
             Some(plugin) => page_column().child(PluginAddForm { plugin }),
             None => page_column().child(status(Status::Empty(format!(
-                "{} is not installed on this computer.",
+                "{} is not installed. Install its plugin to add this VPN.",
                 plugins::display_name(&self.short)
             )))),
         }
@@ -638,7 +638,7 @@ fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, S
         .find(|plugin| plugin.short == kind)
         .ok_or_else(|| {
             format!(
-                "{} is not installed on this computer.",
+                "{} is not installed. Install its plugin to add this VPN.",
                 plugins::display_name(&kind)
             )
         })?;
@@ -858,7 +858,7 @@ mod tests {
         );
         assert_eq!(
             parse_lines("gateway = a\nnonsense\n").unwrap_err(),
-            "Line 2 needs the form name = value."
+            "Write line 2 as name = value."
         );
         assert!(parse_lines("= value").is_err());
         assert!(check_lines("").is_ok());

@@ -26,11 +26,20 @@ use crate::shell::overlays::Overlays;
 use crate::shell::panel::{Panel, PanelRect, PanelTrigger, text_bar_rect};
 use crate::style::*;
 use crate::surface::{surface_color, use_enabled, use_tokens};
-use crate::typography::{BODY, CAPTION, Ink, mono_family};
+use crate::typography::{BODY, CAPTION, Ink, TextStyle, mono_family};
 
 /// What a password field shows for each character: a bullet, as the system's
 /// password fields do. Freya's own default is an asterisk.
 const MASK: char = '\u{2022}';
+
+/// An edit that something outside a [`TextField`] asks of it, through
+/// [`TextField::edits`]: `FieldEdit::Type(text)` types at the caret (replacing
+/// the selection), `FieldEdit::Backspace` deletes, and
+/// `FieldEdit::SelectRange { start, end }` puts the caret or the selection
+/// where you say. `Type` and `Backspace` do not take the keyboard focus, so a
+/// keypad on screen can type into a field the person has focus on, or into one
+/// they have not touched, without a keyboard appearing on a touch screen.
+pub type FieldEdit = InputRequest;
 
 /// A multiline field is this many controls high.
 const MULTILINE_ROWS: f32 = 3.0;
@@ -48,6 +57,7 @@ pub struct TextField {
     well: bool,
     dense: bool,
     flat: bool,
+    display: Option<(TextStyle, TextAlign)>,
     password: bool,
     multiline: bool,
     /// How many control heights a multiline field is tall.
@@ -90,6 +100,9 @@ pub struct TextField {
     alt_digit: Option<(usize, EventHandler<usize>)>,
     /// Apps' own entries, appended to the full edit menu after the general ones.
     edit_extra: Vec<MenuItem>,
+    semantics: Option<crate::a11y::Semantics>,
+    /// The state an outside control writes its edits to, in place of the field's own.
+    edits: Option<State<Option<FieldEdit>>>,
 }
 
 /// `value` is the live draft; `on_submit` fires on Enter with the text.
@@ -101,6 +114,7 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         fill: false,
         well: false,
         flat: false,
+        display: None,
         dense: false,
         password: false,
         multiline: false,
@@ -129,6 +143,8 @@ pub fn text_field(value: State<String>, on_submit: impl Into<EventHandler<String
         on_enter_modifiers: None,
         alt_digit: None,
         edit_extra: Vec::new(),
+        semantics: None,
+        edits: None,
     }
 }
 
@@ -178,6 +194,16 @@ impl TextField {
     /// strip docked in a pane such as a find bar.
     pub fn flat(mut self) -> Self {
         self.flat = true;
+        self
+    }
+
+    /// An editable line that reads as text, not as a box: no fill, edge,
+    /// inset or focus ring (the caret and the selection show where the
+    /// keyboard is), drawn in `style` and `align`ed in its width. For a line
+    /// that is part of a display, such as a calculator's expression above its
+    /// result. Caret, selection, Copy and Paste work as in any field.
+    pub fn display(mut self, style: TextStyle, align: TextAlign) -> Self {
+        self.display = Some((style, align));
         self
     }
 
@@ -322,6 +348,15 @@ impl TextField {
         self
     }
 
+    /// The field's name and hint for assistive technology, for a field outside
+    /// a row or form line (which name it from their title). The label, hint,
+    /// invalid, controls and active descendant parts are read; the text is
+    /// always the field's value.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
+    }
+
     /// Give the field an accessibility id, so a window can focus it.
     pub fn a11y_id(mut self, id: AccessibilityId) -> Self {
         self.a11y_id = Some(id);
@@ -383,6 +418,15 @@ impl TextField {
         self.edit_extra = items;
         self
     }
+
+    /// Let an outside control edit the field: write `Some(FieldEdit::Type("7".into()))`
+    /// to `edits` and the field types it at the caret, then clears it. A
+    /// [`Keypad`](crate::controls::keypad::Keypad) or a picker of emoji types
+    /// this way.
+    pub fn edits(mut self, edits: State<Option<FieldEdit>>) -> Self {
+        self.edits = Some(edits);
+        self
+    }
 }
 
 /// Whether the clipboard holds text, so the touch bar offers Paste.
@@ -402,6 +446,8 @@ impl Component for TextField {
         // A form line that is too narrow for the field's width asks it to
         // fill what it has instead.
         let fills = self.fill || crate::controls::adaptive::use_line_fill();
+        // A display field is a flat one that also draws no ring and no inset.
+        let flat = self.flat || self.display.is_some();
         let mut value = self.value;
         let on_submit = self.on_submit.clone();
         let on_change = self.on_change.clone();
@@ -414,6 +460,23 @@ impl Component for TextField {
         let alt_digit = self.alt_digit.clone();
         let multiline = self.multiline;
         let invalid = self.invalid.is_some() || self.danger_outline;
+        let field = crate::a11y::use_field_label();
+        let a11y_label = self
+            .semantics
+            .as_ref()
+            .and_then(|semantics| semantics.label.clone())
+            .or_else(|| field.as_ref().map(|field| field.title.clone()));
+        let a11y_hint = self
+            .semantics
+            .as_ref()
+            .and_then(|semantics| semantics.hint.clone())
+            .or_else(|| field.and_then(|field| field.hint))
+            .or_else(|| self.invalid.clone());
+        let a11y_invalid = invalid
+            || self
+                .semantics
+                .as_ref()
+                .is_some_and(|semantics| semantics.invalid);
         let own_id = use_a11y();
         let input_id = self.a11y_id.unwrap_or(own_id);
         let visual = use_visual_focus(input_id);
@@ -430,9 +493,10 @@ impl Component for TextField {
             }
         });
         let select_range = self.select_range;
-        let mut request = use_state::<Option<InputRequest>>(|| {
+        let own_requests = use_state::<Option<InputRequest>>(|| {
             select_range.map(|(start, end)| InputRequest::SelectRange { start, end })
         });
+        let mut request = self.edits.unwrap_or(own_requests);
         let mut bar_open = use_state(|| false);
         let bar_size = use_state::<Option<(f32, f32)>>(|| None);
         let mut field_origin = use_state(|| (0.0_f32, 0.0_f32));
@@ -447,7 +511,7 @@ impl Component for TextField {
         // the tokens are resolved here: the CONTROL recipe's radius and
         // inset, the control or well fill, and the danger edge when invalid.
         let paint = |paint: Paint| Preference::Specific(paint.color(&tokens));
-        let fill = if self.flat {
+        let fill = if flat {
             Paint::Transparent
         } else if self.well {
             Paint::Card
@@ -460,12 +524,12 @@ impl Component for TextField {
         // source of truth for "is this focused".
         // A field under the pointer takes the control's hover layer, as every
         // other control does; a focused one keeps its focus fill under the ring.
-        let rest = if self.flat {
+        let rest = if flat {
             Paint::Transparent.color(&tokens)
         } else {
             fill.color(&tokens)
         };
-        let hover = if self.flat || self.read_only {
+        let hover = if flat || self.read_only {
             rest
         } else {
             surface_color(&tokens, rest, true, false, false)
@@ -475,11 +539,16 @@ impl Component for TextField {
             focus_background: Some(paint(fill)),
             border_fill: Some(paint(Paint::Transparent)),
             focus_border_fill: Some(paint(Paint::Transparent)),
-            color: Some(paint(Paint::Text)),
+            color: Some(match self.display {
+                Some((style, _)) => Preference::Specific(style.ink.color(&tokens)),
+                None => paint(Paint::Text),
+            }),
             placeholder_color: Some(paint(Paint::Muted)),
         };
         // The inset: S2 above and below and S3 across, or S0_5 and S2 when dense.
-        let (pad_vertical, pad_horizontal) = if self.flat {
+        let (pad_vertical, pad_horizontal) = if self.display.is_some() {
+            (S0, S0)
+        } else if flat {
             (S0, S2)
         } else if self.dense {
             (S0_5, S2)
@@ -493,7 +562,7 @@ impl Component for TextField {
         } else {
             pad_horizontal
         };
-        let radius = if self.flat { 0.0 } else { Radius::Control.px() };
+        let radius = if flat { 0.0 } else { Radius::Control.px() };
         let layout = InputLayoutThemePartial {
             corner_radius: Some(Preference::Specific(CornerRadius::new_all(radius))),
             padding: Some(Preference::Specific(Gaps::new(
@@ -504,7 +573,7 @@ impl Component for TextField {
             ))),
         };
         let width = self.width.px();
-        let control_height = if self.flat {
+        let control_height = if flat {
             Dim::FlatField.px()
         } else if self.dense {
             Dim::DenseControl.px()
@@ -573,6 +642,10 @@ impl Component for TextField {
             .enabled(enabled)
             .theme_colors(colors)
             .theme_layout(layout)
+            .text_align(
+                self.display
+                    .map_or(TextAlign::default(), |(_, align)| align),
+            )
             .hover_background(hover)
             .mode(mode)
             .focus_within(visual.within_owner)
@@ -581,6 +654,20 @@ impl Component for TextField {
             .probe(probe)
             .request(request)
             .a11y_id(input_id)
+            .maybe(a11y_label.is_some(), |input| {
+                input.a11y_label(a11y_label.unwrap_or_default())
+            })
+            .maybe(a11y_hint.is_some(), |input| {
+                input.a11y_description(a11y_hint.unwrap_or_default())
+            })
+            .a11y_invalid(a11y_invalid)
+            .a11y_active_descendant(
+                self.semantics.as_ref().and_then(|semantics| semantics.active_descendant),
+                self.semantics
+                    .as_ref()
+                    .map(|semantics| semantics.controls.clone())
+                    .unwrap_or_default(),
+            )
             .on_submit(move |text: String| on_submit.call(text))
             .auto_focus(self.autofocus)
             .on_pre_key_down(move |event: Event<KeyboardEventData>| {
@@ -783,7 +870,7 @@ impl Component for TextField {
             // tall: the inset is half of what the button leaves of the
             // height, so it is the same on the cross axis and from the end.
             // Its corner is the field's less the inset.
-            let small = self.flat || self.dense;
+            let small = flat || self.dense;
             let (button, nested) = if small {
                 (Dim::Box5, Radius::Mark)
             } else {
@@ -968,7 +1055,7 @@ impl Component for TextField {
                 &tokens,
                 &[rounded_on(
                     Radius::Control,
-                    if self.flat { Corners::None } else { Corners::All },
+                    if flat { Corners::None } else { Corners::All },
                     0.0,
                 )],
             )
@@ -1065,7 +1152,7 @@ impl Component for TextField {
             .focusable_invalid(
                 // A text field shows its ring for any focus, pointer or key, and
                 // while its own menu is open (the owner keeps the focus look).
-                if visual.is_focused() {
+                if visual.is_focused() && self.display.is_none() {
                     Focus::Keyboard
                 } else {
                     Focus::Not
@@ -1076,7 +1163,14 @@ impl Component for TextField {
 
         rect()
             .component("TextField")
-            .tw(&tokens, &[flex_col(), gap(S1), font(BODY)])
+            .tw(
+                &tokens,
+                &[
+                    flex_col(),
+                    gap(S1),
+                    font(self.display.map_or(BODY, |(style, _)| style)),
+                ],
+            )
             .child(field)
             .maybe(self.validates, |column| {
                 column.child(

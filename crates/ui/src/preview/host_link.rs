@@ -227,6 +227,15 @@ impl HostLink {
         request
     }
 
+    /// Ask the helper to decode the picture `file`, a camera file when `raw`.
+    /// The answer is `Opened` with the picture's size, then pixels for each
+    /// `RenderPage` of page 0.
+    pub fn open_image(&self, file: &Path, raw: bool) -> u32 {
+        let request = 1;
+        self.inner.push(Outgoing::OpenFiles { packet: Packet { request, message: Message::OpenImage { raw } }, file: file.to_owned() });
+        request
+    }
+
     /// Queue a packet. Repeated seeks, sizes and volumes replace the one that
     /// is still waiting; the queue is bounded.
     pub fn send(&self, packet: Packet) {

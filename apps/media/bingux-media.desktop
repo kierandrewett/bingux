@@ -1,0 +1,22 @@
+[Desktop Entry]
+Type=Application
+Name=Media
+Comment=Play music and videos
+Exec=bingux-media %U
+Icon=bingux-media
+Terminal=false
+Categories=AudioVideo;Audio;Video;Player;
+Keywords=Music;Video;Film;Movie;Song;Album;Player;Playlist;
+MimeType=audio/mpeg;audio/flac;audio/x-flac;audio/ogg;audio/x-vorbis+ogg;audio/x-opus+ogg;audio/opus;audio/mp4;audio/x-m4a;audio/aac;audio/wav;audio/x-wav;audio/x-aiff;audio/x-ape;audio/x-wavpack;audio/x-musepack;audio/x-ms-wma;audio/x-matroska;video/mp4;video/x-matroska;video/webm;video/x-msvideo;video/quicktime;video/x-ms-wmv;video/x-flv;video/mpeg;video/mp2t;video/ogg;video/3gpp;x-scheme-handler/bingux-media;
+StartupWMClass=bingux-media
+StartupNotify=true
+DBusActivatable=false
+Actions=Songs;Videos;
+
+[Desktop Action Songs]
+Name=Songs
+Exec=bingux-media bingux-media://songs
+
+[Desktop Action Videos]
+Name=Videos
+Exec=bingux-media bingux-media://videos

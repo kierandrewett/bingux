@@ -1,23 +1,35 @@
-//! The pill over a file view: how many items there are, how many are
-//! selected, and what the view is doing.
+//! What a file view says about itself: how many items there are, how many
+//! are selected, how much room the drive has, and what the view is doing.
 //!
-//! It floats over the bottom-right corner of the list, sized to its text, like
-//! a browser's link preview, so it takes no row from the list. The surface,
-//! border and padding are the tooltip's, and the fill is opaque, so a row under
-//! it never shows through. It says as little as it can: `95 items`, or
-//! `1 of 95 selected (19 kB)` once something is selected. What the view hides (dot files, the file type filter)
-//! is not its business: the view menu and the empty state say that.
+//! It is said in one of two places:
 //!
-//! It keeps out of the pointer's way. The pointer is followed on the whole
-//! window, not only over the pill, because the list swallows pointer events and
-//! a pill under a row that is being pressed would never see one. When the
-//! pointer comes within a small margin of the pill it slides to the opposite
-//! bottom corner; it returns to the default corner when the pointer leaves the
-//! list. A running operation replaces the text with its label, a progress bar
-//! and a cancel button, and stays put so the button can be pressed. Nothing
-//! shows when there is nothing to say. Figures use tabular digits, so a count
-//! that ticks up while a big folder loads does not shimmer.
+//! * **The status bar** ([`status_bar`]), in a window that browses files: a
+//!   quiet line along the bottom of the view, under a hairline, as Finder's
+//!   status bar is. Its text is centred and muted (`4 items, 98 GB free`,
+//!   `1 of 4 selected (19 kB)`); a running operation replaces it
+//!   with its label, a progress bar and a Cancel button at the start. It is
+//!   always there, so the list never jumps when it starts saying something.
+//! * **The pill** ([`status_line`]), in a file chooser, whose footer is its
+//!   own: it floats over the bottom-right corner of the list, sized to its
+//!   text, like a browser's link preview, so it takes no row from the list.
+//!   The surface, border and padding are the tooltip's, and the fill is
+//!   opaque, so a row under it never shows through.
+//!
+//! Both say as little as they can. What the view hides (dot files, the file
+//! type filter) is not their business: the view menu and the empty state say
+//! that.
+//!
+//! The pill keeps out of the pointer's way. The pointer is followed on the
+//! whole window, not only over the pill, because the list swallows pointer
+//! events and a pill under a row that is being pressed would never see one.
+//! When the pointer comes within a small margin of the pill it slides to the
+//! opposite bottom corner; it returns to the default corner when the pointer
+//! leaves the list. A running operation stays put so the button can be
+//! pressed. Nothing shows when there is nothing to say. Figures use tabular
+//! digits, so a count that ticks up while a big folder loads does not
+//! shimmer.
 
+use crate::layout::divider;
 use bingux_files::display;
 use freya::prelude::*;
 
@@ -62,6 +74,8 @@ pub(super) struct StatusInfo {
     /// The read of the folder was stopped (Stop, Escape): what is shown is
     /// what had been read.
     pub stopped: bool,
+    /// The bytes free on the drive, when it was asked (the status bar).
+    pub free: Option<u64>,
 }
 
 /// `1204` as `1,204`.
@@ -108,6 +122,11 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
     if info.selected_bytes > 0 {
         size = format!(" ({})", display::size(info.selected_bytes));
     }
+    // The drive's free space follows the count, not a selection: a selection
+    // has its own size to say.
+    let free = info.free.map_or_else(String::new, |free| {
+        format!(", {} free", display::size(free))
+    });
     match () {
         _ if info.selected > 0 => format!(
             "{}{} of {} selected{size}{}",
@@ -119,7 +138,84 @@ pub(super) fn status_text(info: &StatusInfo) -> String {
                 .map_or_else(String::new, |target| format!(" · Link to {target}"))
         ),
         _ if info.trash => format!("Trash · {}", item_count(info.shown)),
-        _ => item_count(info.shown),
+        _ => format!("{}{free}", item_count(info.shown)),
+    }
+}
+
+/// The status bar along the bottom of a window's file view; see the module
+/// documentation.
+pub(super) fn status_bar(info: StatusInfo, ui: Ui) -> Element {
+    StatusBar { info, ui }.into()
+}
+
+#[derive(PartialEq)]
+struct StatusBar {
+    info: StatusInfo,
+    ui: Ui,
+}
+
+impl Component for StatusBar {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let busy = self.ui.busy.read().clone();
+        let notice = self.ui.notice.read().clone();
+        let line = rect().a11y_role(AccessibilityRole::Status).tw(
+            &tokens,
+            &[
+                flex_row(),
+                grow_children(),
+                items(Align::Center),
+                w_full(),
+                h(Dim::TabButton),
+                px(S3),
+                gap(S2),
+            ],
+        );
+        let line = if let Some(busy) = busy {
+            let cancel = busy.cancel.clone();
+            line.child(
+                rect().tw(&tokens, &[w_flex()]).child(
+                    STATUS
+                        .in_ink(Ink::Text)
+                        .label(&tokens, busy.label)
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                ),
+            )
+            .child(
+                rect()
+                    .tw(&tokens, &[w(Dim::Field)])
+                    .child(progress_bar(busy.fraction.map(f64::from))),
+            )
+            .maybe_child(cancel.map(|cancel| {
+                icon_button(Icon::WindowClose, move |_| cancel.cancel())
+                    .size(Dim::DenseControl)
+                    .tooltip("Cancel")
+            }))
+        } else {
+            let (text, ink) = match notice {
+                Some(notice) => (
+                    notice.text,
+                    if notice.error { Ink::Danger } else { Ink::Text },
+                ),
+                None if has_news(&self.info) => (status_text(&self.info), Ink::Muted),
+                None => (String::new(), Ink::Muted),
+            };
+            line.child(rect().tw(&tokens, &[w_flex()]))
+                .child(
+                    STATUS
+                        .in_ink(ink)
+                        .label(&tokens, text)
+                        .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis),
+                )
+                .child(rect().tw(&tokens, &[w_flex()]))
+        };
+        rect()
+            .component("StatusBar")
+            .tw(&tokens, &[flex_col(), w_full()])
+            .child(divider(&tokens))
+            .child(line)
     }
 }
 
@@ -400,6 +496,20 @@ mod tests {
             ..info(95)
         };
         assert_eq!(status_text(&folders), "1 of 95 selected");
+    }
+
+    #[test]
+    fn the_status_bar_says_how_much_room_the_drive_has_until_something_is_selected() {
+        let roomy = StatusInfo {
+            free: Some(96_000_000_000),
+            ..info(5)
+        };
+        assert_eq!(status_text(&roomy), "5 items, 96 GB free");
+        let picked = StatusInfo {
+            selected: 1,
+            ..roomy
+        };
+        assert_eq!(status_text(&picked), "1 of 5 selected");
     }
 
     #[test]

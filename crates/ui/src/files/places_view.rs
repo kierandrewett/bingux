@@ -25,13 +25,17 @@ use freya::prelude::*;
 use super::directory::Where;
 use super::drives::{Drives, use_drives};
 use super::file_icon::{FileIcon, file_icon_view};
-use super::place_menu::{PlaceCmd, PlaceEnv, PlaceFacts, Subject, key_command, offered, place_menu};
+use super::place_menu::{
+    PlaceCmd, PlaceEnv, PlaceFacts, Subject, key_command, offered, place_menu,
+};
 use super::places_model::{
     Item, ItemKind, Release, Section, UsageLine, current_name, release_for, sections, selected,
     type_ahead, usage_line, volume_text,
 };
 use crate::component::ComponentName;
-use crate::controls::{StopRing, focus_stop_press, focus_stop_pressed, path_label, text_field, usage_bar};
+use crate::controls::{
+    StopRing, focus_stop_press, focus_stop_pressed, icon_button, path_label, text_field, usage_bar,
+};
 use crate::focus::{focus_node, step_focus};
 use crate::icons::{self, Icon};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
@@ -110,7 +114,13 @@ impl Component for PlacesSidebar {
         let list = drives.list();
         let bookmarks = use_bookmarks(self.reload);
         let shown = bookmarks.current(&self.places.bookmarks);
-        let mut groups = sections(&self.places, &shown, &list.mounts, &list.volumes, self.recent);
+        let mut groups = sections(
+            &self.places,
+            &shown,
+            &list.mounts,
+            &list.volumes,
+            self.recent,
+        );
         // The Trash row follows what the Trash holds, looked at every couple of
         // seconds on a worker (a move to the Trash may come from any window).
         let mut trash_full = use_state(|| false);
@@ -169,6 +179,7 @@ pub struct PlacesMenu {
     on_open: EventHandler<Where>,
     on_open_new_tab: Option<EventHandler<Where>>,
     reload: Option<State<u32>>,
+    icon_only: bool,
 }
 
 impl PlacesMenu {
@@ -181,6 +192,7 @@ impl PlacesMenu {
             on_open: on_open.into(),
             on_open_new_tab: None,
             reload: None,
+            icon_only: false,
         }
     }
 
@@ -201,6 +213,14 @@ impl PlacesMenu {
         self.reload = Some(reload);
         self
     }
+
+    /// Draw the button as a header's icon button (the sidebar mark) instead
+    /// of a field with the place's name: for a header whose address bar
+    /// already names the place, such as the Files window on a phone.
+    pub fn icon_only(mut self, icon_only: bool) -> Self {
+        self.icon_only = icon_only;
+        self
+    }
 }
 
 impl Component for PlacesMenu {
@@ -216,7 +236,13 @@ impl Component for PlacesMenu {
         let list = drives.list();
         let bookmarks = use_bookmarks(self.reload);
         let shown = bookmarks.current(&self.places.bookmarks);
-        let groups = sections(&self.places, &shown, &list.mounts, &list.volumes, self.recent);
+        let groups = sections(
+            &self.places,
+            &shown,
+            &list.mounts,
+            &list.volumes,
+            self.recent,
+        );
         let chosen = selected(&groups, &self.current, &list.mounts);
         let row = chosen.map(|(group, item)| &groups[group].items[item]);
         let name = current_name(&self.current, row);
@@ -262,15 +288,25 @@ impl Component for PlacesMenu {
                 IconSize::Mark,
                 Paint::Muted.color(&tokens),
             ));
-        let button = focus_stop_press(
-            content,
-            "Places",
-            AccessibilityRole::Button,
-            true,
-            Radius::Control,
-            move |_: ()| open.set(!open()),
-            pressing,
-        );
+        let button = if self.icon_only {
+            rect()
+                .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
+                .child(
+                    icon_button(Icon::SidebarShow, move |_: ()| open.set(!open()))
+                        .active(open())
+                        .tooltip("Places"),
+                )
+        } else {
+            focus_stop_press(
+                content,
+                "Places",
+                AccessibilityRole::Button,
+                true,
+                Radius::Control,
+                move |_: ()| open.set(!open()),
+                pressing,
+            )
+        };
 
         let close = {
             let on_open = self.on_open.clone();
@@ -325,7 +361,7 @@ impl Component for PlacesMenu {
 
         rect()
             .component("PlacesMenuHost")
-            .tw(&tokens, &[w_full()])
+            .maybe(!self.icon_only, |host| host.tw(&tokens, &[w_full()]))
             .child(button)
             .child(Element::from(panel))
     }
@@ -499,12 +535,13 @@ impl PlaceList {
         // root has none) and a drive, which has its label.
         let properties_name = match Subject::of(item) {
             Subject::Trash | Subject::Computer | Subject::Drive => item.label.clone(),
-            _ => path
-                .as_deref()
-                .and_then(Path::file_name)
-                .map_or_else(|| item.label.clone(), |name| name.to_string_lossy().into_owned()),
+            _ => path.as_deref().and_then(Path::file_name).map_or_else(
+                || item.label.clone(),
+                |name| name.to_string_lossy().into_owned(),
+            ),
         };
-        let (bookmarks, source, drives) = (self.bookmarks, self.bookmark_source.clone(), self.drives);
+        let (bookmarks, source, drives) =
+            (self.bookmarks, self.bookmark_source.clone(), self.drives);
         let mount = item.mount.clone();
         let on_new_tab = actions.on_open_new_tab.clone();
         let on_empty_trash = actions.on_empty_trash.clone();
@@ -580,7 +617,9 @@ impl PlaceList {
                         path.clone(),
                         properties_name.clone(),
                         overlays,
-                        EventHandler::new(move |folder: PathBuf| on_open.call(Where::Folder(folder))),
+                        EventHandler::new(move |folder: PathBuf| {
+                            on_open.call(Where::Folder(folder))
+                        }),
                         EventHandler::new(move |()| focus_node(id)),
                     );
                 }
@@ -663,7 +702,14 @@ impl Component for PlaceList {
                         None => EventHandler::new(move |_: ()| handler.call(target.clone())),
                     }
                 };
-                let (facts, act) = self.commands(item, on_open.clone(), release, busy, rename_draft, ids[index]);
+                let (facts, act) = self.commands(
+                    item,
+                    on_open.clone(),
+                    release,
+                    busy,
+                    rename_draft,
+                    ids[index],
+                );
                 let menu = place_menu(PlaceEnv {
                     facts: facts.clone(),
                     act: act.clone(),
@@ -803,7 +849,11 @@ impl Component for PlaceRow {
             _ => false,
         };
         let silent = matches!(self.usage, UsageLine::NotResponding);
-        let icon = if silent { self.icon.dimmed() } else { self.icon };
+        let icon = if silent {
+            self.icon.dimmed()
+        } else {
+            self.icon
+        };
         let ink = if silent { Ink::Muted } else { Ink::Text };
         let name: Element = match self.kind {
             ItemKind::Place => BODY
@@ -906,11 +956,12 @@ impl Component for PlaceRow {
                 let selected = self.selected;
                 move |builder| builder.set_selected(selected)
             })
-            .child(
-                rect()
-                    .tw(&tokens, NAV_ICON)
-                    .child(file_icon_view(&tokens, &icon, IconSize::Row, self.selected)),
-            )
+            .child(rect().tw(&tokens, NAV_ICON).child(file_icon_view(
+                &tokens,
+                &icon,
+                IconSize::Row,
+                self.selected,
+            )))
             .child(
                 rect()
                     .tw(&tokens, &[flex_col(), w_flex(), gap(S0_5)])

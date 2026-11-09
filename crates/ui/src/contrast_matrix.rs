@@ -370,6 +370,9 @@ pub fn pairs() -> Vec<Pair> {
 pub struct Row {
     pub pair: Pair,
     pub scheme: Scheme,
+    /// Measured in the increase-contrast palette, where text is held to 7:1
+    /// and large text and edges to 4.5:1.
+    pub high_contrast: bool,
     pub accent: &'static str,
     pub fg: Color,
     pub bg: Color,
@@ -381,7 +384,11 @@ pub struct Row {
 
 impl Row {
     pub fn required(&self) -> f32 {
-        self.pair.need.min()
+        if self.high_contrast {
+            self.pair.need.min_high_contrast()
+        } else {
+            self.pair.need.min()
+        }
     }
 
     pub fn passes(&self) -> bool {
@@ -409,7 +416,12 @@ impl Row {
     }
 
     pub fn theme(&self) -> &'static str {
-        if self.scheme.is_dark() { "dark" } else { "light" }
+        match (self.scheme.is_dark(), self.high_contrast) {
+            (false, false) => "light",
+            (true, false) => "dark",
+            (false, true) => "light+",
+            (true, true) => "dark+",
+        }
     }
 }
 
@@ -430,6 +442,7 @@ pub fn evaluate(tokens: &Tokens) -> Vec<Row> {
             }
             Row {
                 scheme: tokens.scheme,
+                high_contrast: tokens.high_contrast,
                 accent: tokens.accent_name,
                 ratio: contrast::ratio_opaque(fg, bg),
                 apca: contrast::apca(fg, bg),
@@ -441,12 +454,19 @@ pub fn evaluate(tokens: &Tokens) -> Vec<Row> {
         .collect()
 }
 
-/// Both schemes, with an accent: the tokens the matrix covers.
+/// Both schemes, at standard and increased contrast, with every accent: the
+/// tokens the matrix covers.
 pub fn all_tokens() -> Vec<Tokens> {
     let mut out = Vec::new();
-    for scheme in [Scheme::PreferLight, Scheme::PreferDark] {
-        for accent in accent_names() {
-            out.push(Tokens::new(accent, scheme, false));
+    for high_contrast in [false, true] {
+        for scheme in [Scheme::PreferLight, Scheme::PreferDark] {
+            for accent in accent_names() {
+                let access = crate::access::Access {
+                    high_contrast,
+                    ..crate::access::Access::default()
+                };
+                out.push(Tokens::with_access(accent, scheme, access));
+            }
         }
     }
     out
@@ -546,11 +566,17 @@ mod tests {
     fn deriving_tokens_is_fast_for_every_scheme_and_accent() {
         // Each derive is a handful of bounded searches; a regression that
         // loops shows here instead of at window start-up.
-        for scheme in [Scheme::PreferLight, Scheme::PreferDark] {
-            for accent in accent_names() {
-                let started = std::time::Instant::now();
-                let _ = Tokens::derive(accent, scheme, false);
-                assert!(started.elapsed().as_millis() < 500, "{accent} {scheme:?} took {:?}", started.elapsed());
+        for high_contrast in [false, true] {
+            for scheme in [Scheme::PreferLight, Scheme::PreferDark] {
+                for accent in accent_names() {
+                    let started = std::time::Instant::now();
+                    let _ = Tokens::derive(accent, scheme, false, high_contrast);
+                    assert!(
+                        started.elapsed().as_millis() < 500,
+                        "{accent} {scheme:?} contrast {high_contrast} took {:?}",
+                        started.elapsed()
+                    );
+                }
             }
         }
     }

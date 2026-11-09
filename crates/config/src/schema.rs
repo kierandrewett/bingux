@@ -33,6 +33,12 @@ impl Config {
         config.desktop.control_centre = Some(ControlCentre::default());
         config.desktop.control_order = Some(Vec::new());
         config.desktop.control_layout = Some(ControlLayout::default());
+        config.appearance.color_scheme = Some(String::new());
+        config.appearance.accent = Some(String::new());
+        config.appearance.high_contrast = Some(false);
+        config.appearance.reduced_motion = Some(false);
+        config.appearance.text_scale = Some(1.0);
+        config.appearance.icon_theme = Some(String::new());
         config
     }
 }
@@ -248,6 +254,26 @@ pub struct Appearance {
     /// Adwaita Sans, or the fontconfig default sans-serif when that family
     /// is not installed.
     pub font_family: String,
+    /// `"dark"`, `"light"`, `"default"` or `"auto"`: the colour scheme
+    /// Bingux applications take when the desktop's portal states none.
+    /// Absent follows the desktop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color_scheme: Option<String>,
+    /// One of the nine accent names. Absent follows the desktop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
+    /// Use the higher contrast palette. Absent follows the desktop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub high_contrast: Option<bool>,
+    /// Stop animations. Absent follows the desktop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reduced_motion: Option<bool>,
+    /// Text size, 0.5 to 3. Absent follows the desktop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text_scale: Option<f64>,
+    /// Icon theme name. Absent follows the desktop.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon_theme: Option<String>,
 }
 
 /// Privacy choices: outbound network requests and what the login screen shows.
@@ -387,6 +413,36 @@ pub const KEY_DOCS: &[KeyDoc] = &[
         section: "appearance",
         key: "font_family",
         accepted: "Installed font family name, for example \"Cantarell\". \"\" uses Adwaita Sans, or the system sans-serif when that is missing.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "color_scheme",
+        accepted: "\"dark\", \"light\", \"default\" or \"auto\". Colour scheme of Bingux applications when the desktop's portal does not say. Remove the key, or use \"auto\", to follow the desktop.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "accent",
+        accepted: "blue, teal, green, yellow, orange, red, pink, purple or slate. Accent colour when the desktop's portal does not say.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "high_contrast",
+        accepted: "true or false. Use the higher contrast palette when the desktop's portal does not ask for it.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "reduced_motion",
+        accepted: "true or false. Stop animations when the desktop's portal does not ask for it.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "text_scale",
+        accepted: "Number from 0.5 to 3. Text size, 1 is the system's own size.",
+    },
+    KeyDoc {
+        section: "appearance",
+        key: "icon_theme",
+        accepted: "Installed icon theme name, for example \"Papirus\". Remove the key to use the desktop's, or Adwaita.",
     },
     KeyDoc {
         section: "privacy",

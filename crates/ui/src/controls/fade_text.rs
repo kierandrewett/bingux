@@ -98,7 +98,13 @@ pub fn fade_alpha(x: f32, natural: f32, room: f32, fade: f32) -> f32 {
 /// room, positions in percent of the line's own width as a gradient has them.
 /// Left to right the line begins at its left edge and is cut on the right;
 /// right to left it ends at the room's right edge and is cut on the left.
-fn fade_paint(ink: Color, natural: f32, room: f32, fade: f32, direction: Direction) -> LinearGradient {
+fn fade_paint(
+    ink: Color,
+    natural: f32,
+    room: f32,
+    fade: f32,
+    direction: Direction,
+) -> LinearGradient {
     let percent = |at: f32| (at / natural * 100.0).clamp(0.0, 100.0);
     let clear = ink.with_a(0);
     let ramp = fade.min(room);
@@ -144,7 +150,10 @@ impl Component for FadeText {
         .max_lines(1);
         rect()
             .component("FadeText")
-            .tw(&tokens, &[if self.grow { w_flex() } else { w_full() }, clip()])
+            .tw(
+                &tokens,
+                &[if self.grow { w_flex() } else { w_full() }, clip()],
+            )
             .on_sized(move |event: Event<SizedEventData>| {
                 room.set_if_modified(Some(event.area.width()));
             })
@@ -167,11 +176,18 @@ mod tests {
         assert_eq!(fade_alpha(76.0, 200.0, 100.0, 24.0), 1.0);
         assert_eq!(fade_alpha(88.0, 200.0, 100.0, 24.0), 0.5);
         assert_eq!(fade_alpha(100.0, 200.0, 100.0, 24.0), 0.0);
-        assert_eq!(fade_alpha(150.0, 200.0, 100.0, 24.0), 0.0, "what is past the room is not seen");
+        assert_eq!(
+            fade_alpha(150.0, 200.0, 100.0, 24.0),
+            0.0,
+            "what is past the room is not seen"
+        );
         let mut last = 1.0;
         for x in 0..=100 {
             let alpha = fade_alpha(x as f32, 200.0, 100.0, 24.0);
-            assert!(alpha <= last, "the ramp only goes down: {alpha} after {last} at {x}");
+            assert!(
+                alpha <= last,
+                "the ramp only goes down: {alpha} after {last} at {x}"
+            );
             last = alpha;
         }
     }

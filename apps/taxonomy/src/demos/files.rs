@@ -1070,3 +1070,38 @@ pub const DOCUMENT_CONTROLS: &[Spec] = &[
     .page(120.0)
     .script("wait 800; save {out}"),
 ];
+
+/// A zoomable view of a drawn 800 x 500 picture, to try the pointer, the keys
+/// and the pill on.
+fn zoom_demo() -> Element {
+    use bingux_ui::zoom_view::{ZoomView, use_zoom_handle};
+    let handle = use_zoom_handle();
+    rect()
+        .width(Size::fill())
+        .height(Size::px(360.0))
+        .child(
+            ZoomView::new(Some((800.0, 500.0)), |width, height| {
+                rect()
+                    .width(Size::px(width))
+                    .height(Size::px(height))
+                    .background((40, 110, 220))
+                    .child(
+                        rect()
+                            .position(Position::new_absolute().left(width * 0.1).top(height * 0.2))
+                            .width(Size::px(width * 0.3))
+                            .height(Size::px(height * 0.4))
+                            .background((250, 200, 60)),
+                    )
+                    .into()
+            })
+            .handle(handle)
+            .label("A drawn picture"),
+        )
+        .into_element()
+}
+
+pub const ZOOM: &[Spec] = &[Spec::live(
+    "Picture: Ctrl and wheel zooms, drag pans, R turns, H flips, 0 fits, 1 is actual size",
+    zoom_demo,
+)
+.page(400.0)];

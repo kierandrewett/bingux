@@ -24,6 +24,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use freya::animation::*;
 use freya::prelude::*;
 
+use crate::a11y::SemanticsExt;
+
 use crate::component::{ComponentName, Prop, Published};
 use crate::controls::press::{is_touch, use_press};
 use crate::controls::{action_button, search_field};
@@ -130,7 +132,9 @@ impl Component for SidebarRow {
             )
             .a11y_id(a11y_id)
             .a11y_focusable(true)
-            .a11y_role(AccessibilityRole::Tab)
+            // A sidebar is a list of pages with the one on screen selected, as
+            // GTK's sidebar list reads: "Network, list item, selected".
+            .a11y_role(AccessibilityRole::ListBoxOption)
             .a11y_builder(move |builder| builder.set_selected(selected))
             // A finger that lands on a row is not hovering it: the highlight
             // is the pressed state only, so it cannot stay behind.
@@ -868,6 +872,7 @@ fn title_row(
     let name = |title: String| -> Element {
         let label = PAGE_TITLE
             .label(tokens, title)
+            .a11y_heading(1)
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
         match large {
@@ -1983,6 +1988,8 @@ impl Component for Sidebar {
                     rect()
                         .tw(&tokens, SIDEBAR_LIST)
                         .tw(&tokens, &[pt(S2)])
+                        .a11y_role(AccessibilityRole::ListBox)
+                        .a11y_alt(if typing { "Results" } else { "Pages" })
                         .children(entries)
                         .maybe_child(no_matches.then(|| {
                             rect()
@@ -1992,6 +1999,8 @@ impl Component for Sidebar {
                 ),
             );
         shell
+            .a11y_role(AccessibilityRole::Navigation)
+            .a11y_alt("Sidebar")
             .on_press({
                 let press = region.clone();
                 move |event: Event<PressEventData>| press.press(&event)
@@ -2088,6 +2097,7 @@ fn group_label(tokens: &Tokens, group: &str) -> Element {
     }
     rect()
         .tw_layout(NAV_LABEL)
+        .a11y_heading(2)
         .child(CAPTION.label(tokens, name))
         .into()
 }

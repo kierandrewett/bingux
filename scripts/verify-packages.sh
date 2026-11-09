@@ -28,7 +28,7 @@ GNOBLIN_SOURCE="${GNOBLIN_SOURCE:-stub}"
 CHANNEL="${CHANNEL:-nightly}"
 ARCH="${ARCH:-$(case "$(uname -m)" in x86_64) echo amd64 ;; aarch64) echo arm64 ;; *) uname -m ;; esac)}"
 ID="$(. /etc/os-release && echo "$ID")"
-ALL="bingux bingux-settings bingux-files bingux-taxonomy"
+ALL="bingux bingux-settings bingux-files bingux-weather bingux-calculator bingux-taxonomy"
 OLD="bingux-config bingux-audio-effects bingux-preview-host"
 
 stubs="$(mktemp -d)"

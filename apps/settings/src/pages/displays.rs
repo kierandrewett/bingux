@@ -653,10 +653,14 @@ fn load_displays() -> Result<Displays, CommandError> {
     // The editable layout is not available here, so show the read-only list.
     match load_gnoblin() {
         Ok(records) => Ok(Displays::ReadOnly {
-            reason: "Display settings cannot be changed right now.".to_string(),
+            reason:
+                "Display settings are read-only right now. The list shows the connected displays."
+                    .to_string(),
             records,
         }),
-        Err(_) => Err(CommandError("Display settings could not be read.".into())),
+        Err(_) => Err(CommandError(
+            "Could not read the display settings. Try again in a moment.".into(),
+        )),
     }
 }
 
@@ -876,7 +880,7 @@ fn parse_record(record: &Json) -> Result<Record, String> {
     let rows = [
         ("Port", name.to_string()),
         (
-            "Enabled",
+            "In use",
             yes_no(record.get("enabled").and_then(Json::boolean)),
         ),
         (
@@ -912,7 +916,9 @@ fn load_night() -> Result<Night, CommandError> {
         .split_whitespace()
         .last()
         .and_then(|value| value.parse::<u32>().ok())
-        .ok_or_else(|| CommandError("Night light settings could not be read.".into()))?;
+        .ok_or_else(|| {
+            CommandError("Could not read the night light settings. Try again in a moment.".into())
+        })?;
     Ok(Night {
         enabled: enabled.trim() == "true",
         kelvin,
@@ -924,9 +930,9 @@ fn load_night() -> Result<Night, CommandError> {
 
 /// Reads a schedule hour such as `18.0`.
 fn hours(text: &str) -> Result<f64, CommandError> {
-    text.trim()
-        .parse::<f64>()
-        .map_err(|_| CommandError("Night light settings could not be read.".into()))
+    text.trim().parse::<f64>().map_err(|_| {
+        CommandError("Could not read the night light settings. Try again in a moment.".into())
+    })
 }
 
 /// Maps 1700..4700 K onto the slider's 0..100.
@@ -1008,7 +1014,7 @@ fn set_enabled(monitors: &mut [Monitor], index: usize, on: bool) -> Result<(), S
         return Ok(());
     }
     if monitors.iter().filter(|monitor| monitor.enabled).count() <= 1 {
-        return Err("Keep at least one display enabled.".to_string());
+        return Err("Keep at least one display on.".to_string());
     }
     let was_primary = monitors[index].primary;
     monitors[index].enabled = false;
@@ -1023,7 +1029,7 @@ fn set_enabled(monitors: &mut [Monitor], index: usize, on: bool) -> Result<(), S
 
 fn set_primary(monitors: &mut [Monitor], index: usize) -> Result<(), String> {
     if !monitors[index].enabled {
-        return Err("Enable this display before making it primary.".to_string());
+        return Err("Turn on this display to make it the primary display.".to_string());
     }
     for (position, monitor) in monitors.iter_mut().enumerate() {
         monitor.primary = position == index && monitor.enabled;
@@ -1281,14 +1287,14 @@ fn settled_point(monitors: &[Monitor], index: usize, x: i32, y: i32) -> Option<(
 
 fn validate(monitors: &[Monitor]) -> Result<(), String> {
     if !monitors.iter().any(|monitor| monitor.enabled) {
-        return Err("Enable at least one display.".to_string());
+        return Err("Turn on at least one display.".to_string());
     }
     let primaries = monitors
         .iter()
         .filter(|monitor| monitor.enabled && monitor.primary)
         .count();
     if primaries != 1 {
-        return Err("Choose exactly one primary display.".to_string());
+        return Err("Choose one primary display.".to_string());
     }
     Ok(())
 }
@@ -1338,7 +1344,8 @@ fn apply(ctx: Ctx) {
     let mut error = ctx.error;
     if fake_layout().is_some() {
         error.set(Some(
-            "The test layout is for previewing only and cannot be applied.".to_string(),
+            "Could not apply the preview layout. Restart Settings without the test layout."
+                .to_string(),
         ));
         return;
     }
@@ -1363,11 +1370,16 @@ fn apply(ctx: Ctx) {
             // The layout changed under the draft, so reload and ask the user to redo it.
             Err(failure) if failure.0.contains("Access denied") => {
                 error.set(Some(
-                    "The display layout changed since it was loaded. It has been reloaded; apply again.".to_string(),
+                    "The display layout changed. Make your changes again.".to_string(),
                 ));
                 reload(ctx.model);
             }
-            Err(failure) => error.set(Some(failure.0)),
+            Err(failure) => {
+                eprintln!("displays: applying the layout failed: {}", failure.0);
+                error.set(Some(
+                    "Could not apply the display layout. Try again.".to_string(),
+                ));
+            }
         },
     );
 }
@@ -1442,7 +1454,10 @@ fn keep_layout(ctx: Ctx, draft: Vec<Monitor>) {
                 reload(model);
             }
             Err(failure) => {
-                error.set(Some(failure.0));
+                eprintln!("displays: saving the layout failed: {}", failure.0);
+                error.set(Some(
+                    "Could not save the display layout. Try again.".to_string(),
+                ));
                 reload(model);
             }
         },
@@ -1463,7 +1478,10 @@ fn revert_layout(ctx: Ctx, before: Vec<Monitor>) {
         move |result| match result {
             Ok(_) => reload(model),
             Err(failure) => {
-                error.set(Some(failure.0));
+                eprintln!("displays: restoring the layout failed: {}", failure.0);
+                error.set(Some(
+                    "Could not restore the previous layout. Try again.".to_string(),
+                ));
                 reload(model);
             }
         },
@@ -1493,7 +1511,8 @@ fn write_night(
         move |result| match result {
             Ok(_) => error.set(None),
             Err(failure) => {
-                error.set(Some(failure.0));
+                eprintln!("displays: writing night light failed: {}", failure.0);
+                error.set(Some("Could not change night light. Try again.".to_string()));
                 reload(model);
             }
         },
@@ -1609,7 +1628,11 @@ struct Countdown {
 impl Component for Countdown {
     fn render(&self) -> impl IntoElement {
         let seconds = *self.remaining.read();
-        caption(format!("Reverts in {seconds} seconds unless you keep it."))
+        if seconds == 1 {
+            caption("Reverting in 1 second…")
+        } else {
+            caption(format!("Reverting in {seconds} seconds…"))
+        }
     }
 }
 
@@ -1686,7 +1709,7 @@ impl Component for Arrangement {
                         None => {
                             monitors[drag.index].x = drag.origin.0;
                             monitors[drag.index].y = drag.origin.1;
-                            Err("Keep each display touching another one.".to_string())
+                            Err("Could not move the display. Drop it next to another display and try again.".to_string())
                         }
                     }
                 });
@@ -1837,7 +1860,7 @@ impl Component for Tile {
 /// The right-click menu for a display box. Each action stages a change in the
 /// draft, the same as the controls below it, so it waits for Apply.
 fn monitor_menu(ctx: Ctx, router: Router, index: usize, monitor: &Monitor) -> Vec<MenuItem> {
-    let mut make_main = menu_item("Make main", move |_| {
+    let mut make_main = menu_item("Make primary", move |_| {
         edit(ctx.model, ctx.error, move |monitors| {
             set_primary(monitors, index)
         });
@@ -1854,7 +1877,7 @@ fn monitor_menu(ctx: Ctx, router: Router, index: usize, monitor: &Monitor) -> Ve
                 set_transform(monitors, index, &next.to_string())
             });
         }),
-        menu_item("Disable", move |_| {
+        menu_item("Turn off", move |_| {
             edit(ctx.model, ctx.error, move |monitors| {
                 set_enabled(monitors, index, false)
             });
@@ -1898,7 +1921,7 @@ fn monitor_group(
         .description(monitor_state(monitor))
         .row(row("Port").value(monitor.connector.clone()))
         .row(
-            switch_row("Enabled", enabled, move |on: bool| {
+            switch_row("Use this display", enabled, move |on: bool| {
                 edit(model, error, move |monitors| {
                     set_enabled(monitors, index, on)
                 });
@@ -2046,9 +2069,13 @@ fn temperature_control(kelvin: u32, on_moved: impl Into<EventHandler<f64>>) -> E
 fn night_group(ctx: Ctx, night: &Night) -> Group {
     let model = ctx.model;
     Group::titled("Night light")
-        .row(switch_row("Enabled", night.enabled, move |on: bool| {
-            set_night_enabled(ctx, on);
-        }))
+        .row(switch_row(
+            "Use night light",
+            night.enabled,
+            move |on: bool| {
+                set_night_enabled(ctx, on);
+            },
+        ))
         .row(
             row("Colour temperature")
                 .subtitle(temperature_word(night.kelvin))
@@ -2098,7 +2125,7 @@ fn monitor_state(monitor: &Monitor) -> &'static str {
 /// last row of a display's page, and it only appears once the layout changed.
 fn apply_row(ctx: Ctx) -> Element {
     action_row(
-        Some("Asks you to keep the layout after it is applied."),
+        Some("After you apply, choose whether to keep the new layout."),
         primary_button("Apply", move |_| apply(ctx)).compact(),
     )
 }
@@ -2209,9 +2236,7 @@ impl Component for DisplaysPage {
                 status(Status::Error(failure.0)).action("Try again", move |_| reload(model)),
             ),
             Ok(Displays::ReadOnly { reason, records }) => {
-                let mut page = page.child(status(Status::Info(format!(
-                    "{reason} Showing the connected displays."
-                ))));
+                let mut page = page.child(status(Status::Info(reason)));
                 let mut group = Group::titled("Displays");
                 for (index, record) in records.iter().enumerate() {
                     let title = record.title.clone();
@@ -2270,8 +2295,7 @@ impl Component for DisplayPage {
             Ok(Displays::ReadOnly { records, .. }) => match records.get(self.index) {
                 Some(record) => page
                     .child(status(Status::Info(
-                        "This display cannot be changed while the display service is unavailable."
-                            .to_string(),
+                        "This display is read-only right now.".to_string(),
                     )))
                     .child(record_group(record)),
                 None => page.child(status(Status::Info(

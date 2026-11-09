@@ -166,7 +166,8 @@ impl Component for SelectTextView {
         let label = text.copy_label;
         let items = move || {
             let copy = copy.clone();
-            overlays.map(|overlays| vec![menu_item(label, move |_| copy_text(overlays, copy.clone()))])
+            overlays
+                .map(|overlays| vec![menu_item(label, move |_| copy_text(overlays, copy.clone()))])
         };
         let touch_items = items.clone();
         let right_items = items;
@@ -210,7 +211,11 @@ impl Component for SelectTextView {
             .child(if text.breaks_anywhere {
                 // The Layout checks read this box as "a word may break
                 // anywhere here".
-                rect().component("BreaksAnywhere").width(Size::fill()).child(body).into_element()
+                rect()
+                    .component("BreaksAnywhere")
+                    .width(Size::fill())
+                    .child(body)
+                    .into_element()
             } else {
                 body
             })
@@ -278,11 +283,14 @@ mod tests {
     impl Component for Scene {
         fn render(&self) -> impl IntoElement {
             let tokens = crate::theme::provide_tokens();
-            rect().expanded().tw(&tokens, &[p(S4)]).child(crate::shell::OverlayHost::new(
-                rect()
-                    .tw(&tokens, &[w_full()])
-                    .child(Element::from(select_text(TEXT))),
-            ))
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
+                    rect()
+                        .tw(&tokens, &[w_full()])
+                        .child(Element::from(select_text(TEXT))),
+                ))
         }
     }
 

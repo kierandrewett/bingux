@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Weather
+Comment=Forecasts for where you are and the cities you add
+Exec=bingux-weather
+Icon=bingux-weather
+Terminal=false
+Categories=Utility;
+Keywords=Forecast;Temperature;Rain;Wind;Climate;Sunrise;Sunset;Moon;Air quality;UV;
+StartupWMClass=bingux-weather
+StartupNotify=true

@@ -38,7 +38,7 @@ use crate::window::Window;
 use crate::task::spawn_blocking;
 
 pub(super) use names::{check_name, stem_chars};
-pub(super) use open_with::{App, apps_for, launch, open_default};
+pub(super) use open_with::{App, apps_for, launch, open_default, warm as warm_open_with};
 pub(super) use clipboard::is_cut;
 
 /// The sidebar's Empty Trash asks the file view beside it to empty the Trash:
@@ -221,6 +221,8 @@ pub(super) struct Env {
     /// The window the view is in, for a dialog it opens (Restore to… asks for
     /// a folder). `None` where there is no window.
     pub window: Option<Window>,
+    /// The window's undo stack: every change is a step on it.
+    pub undo: crate::undo::UndoStack,
 }
 
 /// A thing a person can ask for.
@@ -345,8 +347,8 @@ pub(super) struct Facts {
     pub can_compress: bool,
     /// Entries on show.
     pub shown: usize,
-    /// The label of the change Ctrl+Z would take back.
-    pub undo: Option<&'static str>,
+    /// The title of the change Ctrl+Z would take back: "Undo rename".
+    pub undo: Option<String>,
     /// Whether the folder on show is in the Trash.
     pub trash: TrashView,
 }
@@ -373,7 +375,7 @@ impl Facts {
                 && !selected.is_empty()
                 && bingux_files::ops::Format::ALL.iter().any(|format| format.is_available()),
             shown: env.order.len(),
-            undo: undo::next_label(),
+            undo: env.undo.can_undo().then(|| env.undo.undo_title()),
             trash: TrashView::of(env.folder.as_deref()),
         }
     }
@@ -907,7 +909,7 @@ fn create(env: &Env, folder: bool) {
         .await;
         match outcome {
             Ok(path) => {
-                undo::push(undo::Step::Create {
+                undo::push(&env, undo::Step::Create {
                     path: path.clone(),
                     folder,
                 });
@@ -981,7 +983,7 @@ fn create_from_template(env: &Env, template: PathBuf) {
         .await;
         match outcome {
             Ok(path) => {
-                undo::push(undo::Step::Create {
+                undo::push(&env, undo::Step::Create {
                     path: path.clone(),
                     folder: false,
                 });
@@ -1024,7 +1026,7 @@ pub(super) fn rename(
                 if selection.peek().contains(&from) {
                     selection.write().select_only(&to);
                 }
-                undo::push(undo::Step::Rename {
+                undo::push(&env, undo::Step::Rename {
                     from,
                     to: to.clone(),
                 });
@@ -1245,7 +1247,7 @@ mod tests {
         let mut file = facts(Capabilities::FILES_APP, 1, 0);
         assert!(matches!(state(&file, Command::Undo), Availability::Disabled(_)));
         assert_eq!(state(&file, Command::Extract), Availability::Hidden);
-        file.undo = Some("Undo rename");
+        file.undo = Some("Undo rename".to_owned());
         file.extractable = true;
         assert!(state(&file, Command::Undo).is_enabled());
         assert!(state(&file, Command::Extract).is_enabled());

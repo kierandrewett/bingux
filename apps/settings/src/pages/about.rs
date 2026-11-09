@@ -153,17 +153,9 @@ fn uptime() -> String {
     else {
         return "Unknown".to_string();
     };
-    let minutes = (seconds / 60.0) as u64;
-    let (days, hours, minutes) = (minutes / 1440, minutes % 1440 / 60, minutes % 60);
-    let plural =
-        |count: u64, word: &str| format!("{count} {word}{}", if count == 1 { "" } else { "s" });
-    if days > 0 {
-        format!("{}, {}", plural(days, "day"), plural(hours, "hour"))
-    } else if hours > 0 {
-        format!("{}, {}", plural(hours, "hour"), plural(minutes, "minute"))
-    } else {
-        plural(minutes, "minute")
-    }
+    bingux_ui::format::Timespan::from_secs_f64(seconds.floor() - seconds.floor() % 60.0)
+        .width(bingux_ui::format::Width::Long)
+        .format()
 }
 
 fn disk() -> Option<(u64, u64)> {
@@ -194,8 +186,7 @@ fn size_parts(bytes: u64) -> (String, &'static str) {
 }
 
 fn size_text(bytes: u64) -> String {
-    let (value, unit) = size_parts(bytes);
-    format!("{value} {unit}")
+    bingux_ui::format::Bytes::new(bytes).format()
 }
 
 fn gnoblin_version() -> String {
@@ -294,8 +285,8 @@ fn summary(facts: &Facts, name: &str) -> String {
 /// Copies `text` and says so, or says that it could not.
 fn copy(text: String, overlays: Overlays) {
     match freya::clipboard::Clipboard::set(text) {
-        Ok(()) => overlays.toast("Copied."),
-        Err(_) => overlays.toast("The text could not be copied."),
+        Ok(()) => overlays.toast("Copied"),
+        Err(_) => overlays.toast("Could not copy the text. Try again."),
     }
 }
 
@@ -383,12 +374,12 @@ fn valid_hostname(name: &str) -> Result<(), &'static str> {
     if name.is_empty() {
         Err("Enter a device name.")
     } else if name.len() > 63 {
-        Err("The device name is longer than 63 characters.")
+        Err("Use 63 characters or fewer.")
     } else if !name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
         || name.starts_with('-')
         || name.ends_with('-')
     {
-        Err("Use only letters, numbers and hyphens, and do not start or end with a hyphen.")
+        Err("Use only letters, numbers and hyphens. Do not start or end with a hyphen.")
     } else {
         Ok(())
     }
@@ -423,7 +414,7 @@ impl Component for RenameBody {
                 Group::new(None::<String>)
                     .row(form_row("Device name", field))
                     .footer(
-                        "Other devices on your network use this name. Letters, numbers and hyphens, up to 63 characters.",
+                        "Other devices on your network see this name. Use letters, numbers and hyphens.",
                     ),
             )
             .child(reveal_block_if(

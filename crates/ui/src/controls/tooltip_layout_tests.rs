@@ -148,8 +148,11 @@ impl Component for Page {
                 .position(Position::new_absolute().left(0.0).top(0.0))
                 .width(Size::px(self.window.0))
                 .child(
-                    tab_strip(vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents")], 1)
-                        .on_new(|_| {}),
+                    tab_strip(
+                        vec![TabItem::new(1, "Home"), TabItem::new(2, "Documents")],
+                        1,
+                    )
+                    .on_new(|_| {}),
                 )
                 .into_element(),
             // The banner's own dismiss cross, flush beside an Open button:
@@ -257,13 +260,19 @@ impl Pixels {
     fn of(shot: &mut Snapshot) -> Self {
         let png = shot.runner().render();
         let image = SkImage::from_encoded(SkData::new_copy(&png)).expect("the frame decodes");
-        let mut surface = raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
+        let mut surface =
+            raster_n32_premul((image.width(), image.height())).expect("a surface to read from");
         surface.canvas().draw_image(&image, (0, 0), None);
         let info = surface.canvas().image_info();
         let row = info.min_row_bytes();
         let mut bytes = vec![0u8; info.compute_byte_size(row)];
         assert!(surface.canvas().read_pixels(&info, &mut bytes, row, (0, 0)));
-        Self { bytes, row, width: image.width() as usize, height: image.height() as usize }
+        Self {
+            bytes,
+            row,
+            width: image.width() as usize,
+            height: image.height() as usize,
+        }
     }
 
     fn at(&self, x: f32, y: f32) -> [u8; 3] {
@@ -284,7 +293,12 @@ fn reference(text: &str) -> (f32, f32) {
     if let Some(known) = KNOWN.with(|known| known.borrow().get(text).copied()) {
         return known;
     }
-    let mut shot = mount(Page { text: text.to_owned(), place: Place::Wide, poison: false, window: WINDOW });
+    let mut shot = mount(Page {
+        text: text.to_owned(),
+        place: Place::Wide,
+        poison: false,
+        window: WINDOW,
+    });
     shot.settle(Duration::from_millis(300));
     shot.runner().move_cursor((400.0, 142.0));
     let found = wait_for(&mut shot, text);
@@ -302,7 +316,12 @@ fn check(label: &str, place: Place, poison: bool, window: (f32, f32)) {
     };
     let name = format!("{place:?} {text:?} poison={poison} window={window:?}");
     let (free_width, free_height) = reference(text);
-    let page = Page { text: label.to_owned(), place, poison, window };
+    let page = Page {
+        text: label.to_owned(),
+        place,
+        poison,
+        window,
+    };
     let (x, y) = page.at();
     let mut shot = mount(page);
     shot.settle(Duration::from_millis(300));
@@ -321,7 +340,8 @@ fn check(label: &str, place: Place, poison: bool, window: (f32, f32)) {
             .area
     };
     let before = Pixels::of(&mut shot);
-    shot.runner().move_cursor((anchor.center().x as f64, anchor.center().y as f64));
+    shot.runner()
+        .move_cursor((anchor.center().x as f64, anchor.center().y as f64));
     let found = wait_for(&mut shot, text);
     let bubble = found.bubble;
     let room = Dim::TooltipMax.px().min(window.0 - 2.0 * EDGE);
@@ -345,7 +365,12 @@ fn check(label: &str, place: Place, poison: bool, window: (f32, f32)) {
             "{name}: the bubble is {:.1} wide, the text on one line is {free_width:.1}",
             bubble.width()
         );
-        assert_eq!(lines, 1, "{name}: the text wrapped onto {lines} lines in a bubble {:.1} wide", bubble.width());
+        assert_eq!(
+            lines,
+            1,
+            "{name}: the text wrapped onto {lines} lines in a bubble {:.1} wide",
+            bubble.width()
+        );
         assert!(
             (bubble.height() - free_height).abs() <= 1.0,
             "{name}: one line is {free_height:.1} high, the bubble is {:.1}",
@@ -354,10 +379,21 @@ fn check(label: &str, place: Place, poison: bool, window: (f32, f32)) {
     } else {
         // Too long for one line: it wraps inside the room, on at most four
         // lines, with a line fuller than three characters.
-        assert!(bubble.width() <= room + 0.5, "{name}: {:.1} wide, the room is {room:.1}", bubble.width());
-        assert!(bubble.width() >= room * 0.5, "{name}: {:.1} wide is narrow for a long text", bubble.width());
+        assert!(
+            bubble.width() <= room + 0.5,
+            "{name}: {:.1} wide, the room is {room:.1}",
+            bubble.width()
+        );
+        assert!(
+            bubble.width() >= room * 0.5,
+            "{name}: {:.1} wide is narrow for a long text",
+            bubble.width()
+        );
         assert!((2..=4).contains(&lines), "{name}: {lines} lines");
-        assert!(text.chars().count() / lines >= 3, "{name}: a column of letters");
+        assert!(
+            text.chars().count() / lines >= 3,
+            "{name}: a column of letters"
+        );
     }
     assert!(
         bubble.min_x() >= EDGE - 0.5
@@ -366,7 +402,10 @@ fn check(label: &str, place: Place, poison: bool, window: (f32, f32)) {
             && bubble.max_y() <= window.1 - EDGE + 0.5,
         "{name}: the bubble {bubble:?} leaves the {window:?} window"
     );
-    assert!(!bubble.intersects(&anchor), "{name}: the bubble {bubble:?} covers its control {anchor:?}");
+    assert!(
+        !bubble.intersects(&anchor),
+        "{name}: the bubble {bubble:?} covers its control {anchor:?}"
+    );
 
     // It is painted: just inside its left edge, where the padding is, the
     // pixel is the bubble's and not what was there before it opened.
@@ -381,7 +420,13 @@ fn check(label: &str, place: Place, poison: bool, window: (f32, f32)) {
 
 #[test]
 fn a_bubble_is_as_wide_as_its_text_not_its_control() {
-    for place in [Place::Wide, Place::Plain, Place::Clipped, Place::Scrolled, Place::Corner] {
+    for place in [
+        Place::Wide,
+        Place::Plain,
+        Place::Clipped,
+        Place::Scrolled,
+        Place::Corner,
+    ] {
         for label in LABELS.into_iter().chain([SIXTY]) {
             check(label, place, false, WINDOW);
         }
@@ -469,20 +514,38 @@ fn the_check_catches_the_bubble_the_bug_drew() {
     assert_eq!(report.controls, 1);
     assert_eq!(report.shown, 1, "the fixture's bubble is found: {report:?}");
     let rules: Vec<_> = report.findings.iter().map(|found| found.rule).collect();
-    assert!(rules.contains(&"wrapped narrow"), "a column of letters is found: {report:?}");
+    assert!(
+        rules.contains(&"wrapped narrow"),
+        "a column of letters is found: {report:?}"
+    );
 }
 
 #[test]
 fn the_check_passes_every_control_of_the_cases() {
-    for place in [Place::Plain, Place::Clipped, Place::Scrolled, Place::Strip, Place::Banner, Place::Toast] {
-        let mut shot = mount(Page { text: LABELS[0].to_owned(), place, poison: false, window: WINDOW });
+    for place in [
+        Place::Plain,
+        Place::Clipped,
+        Place::Scrolled,
+        Place::Strip,
+        Place::Banner,
+        Place::Toast,
+    ] {
+        let mut shot = mount(Page {
+            text: LABELS[0].to_owned(),
+            place,
+            poison: false,
+            window: WINDOW,
+        });
         shot.settle(Duration::from_millis(300));
         if place == Place::Scrolled {
             shot.scroll(220.0, 200.0, -240.0);
             shot.settle(Duration::from_millis(400));
         }
         let report = shot.tooltip_findings();
-        assert!(report.shown >= 1, "{place:?}: no bubble was measured: {report:?}");
+        assert!(
+            report.shown >= 1,
+            "{place:?}: no bubble was measured: {report:?}"
+        );
         assert!(report.findings.is_empty(), "{place:?}: {report:?}");
     }
 }

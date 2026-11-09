@@ -274,9 +274,7 @@ impl Capture {
             .on_capture_global_pointer_move(move |event: Event<PointerEventData>| {
                 moving.moved(&event)
             })
-            .on_capture_global_pointer_up(move |event: Event<PointerEventData>| {
-                up.released(&event)
-            })
+            .on_capture_global_pointer_up(move |event: Event<PointerEventData>| up.released(&event))
             .on_touch_cancel(move |event: Event<TouchEventData>| {
                 cancel.cancelled(Source::Touch(event.finger_id))
             })

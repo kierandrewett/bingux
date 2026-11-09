@@ -168,8 +168,7 @@ fn set_link(ctx: NetCtx, name: String, up: bool) {
             // message, not a killed process, is what comes back.
             match nm::run(&["--wait", "60", "connection", "up", "id", &name]) {
                 Ok(_) => Ok(()),
-                Err(message) => {
-                    let reason = nm::activation_reason(&message);
+                Err(reason) => {
                     set_failure(&name, Some(reason.clone()));
                     Err(CommandError(reason))
                 }
@@ -186,8 +185,8 @@ fn set_link(ctx: NetCtx, name: String, up: bool) {
 fn confirm_delete(ctx: NetCtx, name: String) {
     ctx.overlays.show_dialog(
         dialog(
-            format!("Delete \"{name}\"?"),
-            "The VPN is deleted from this computer, with the keys and passwords saved in it.",
+            format!("Delete “{name}”?"),
+            "This removes the VPN and the keys and passwords saved in it.",
         )
         .cancel("Cancel")
         .default_action(CANCEL_ID)
@@ -290,7 +289,7 @@ pub fn load_profile(name: &str) -> Result<Profile, String> {
     match nm::show(name, &["connection.type"])?[0].as_str() {
         "wireguard" => wireguard::load(name).map(Profile::Wireguard),
         "vpn" => data::load(name).map(Profile::Plugin),
-        _ => Err(format!("\"{name}\" is not a VPN.")),
+        _ => Err(format!("“{name}” is not a VPN.")),
     }
 }
 
@@ -378,7 +377,11 @@ impl Component for VpnPage {
             Some(Ok(ov)) => ov,
             Some(Err(failure)) => {
                 return page_column().child(
-                    status(Status::Error(failure.0)).action("Try again", move |_| ctx.reload()),
+                    status(Status::Error(super::plain(
+                        &failure.0,
+                        "Could not read the network status. Try again in a moment.",
+                    )))
+                    .action("Try again", move |_| ctx.reload()),
                 );
             }
             None => {

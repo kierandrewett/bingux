@@ -244,7 +244,16 @@ fn data_command(device: Option<String>, radio_on: bool, on: bool) -> Result<(), 
 fn set_mobile_data(ctx: NetCtx, link: &Link, on: bool) {
     let (device, radio) = (link.device.clone(), link.radio);
     model::toggle_link(ctx, "wwan".to_string(), on, move || {
-        data_command(device, radio, on)
+        data_command(device, radio, on).map_err(|error| {
+            CommandError(super::plain(
+                &error.0,
+                if on {
+                    "Could not turn on mobile data. Try again."
+                } else {
+                    "Could not turn off mobile data. Try again."
+                },
+            ))
+        })
     });
 }
 
@@ -371,7 +380,11 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
         Some(Err(error)) => {
             return Err(veiled(
                 page_column().child(PageHead::new()).child(
-                    status(Status::Error(error.0)).action("Try again", move |_| ctx.reload()),
+                    status(Status::Error(super::plain(
+                        &error.0,
+                        "Could not read the network status. Try again in a moment.",
+                    )))
+                    .action("Try again", move |_| ctx.reload()),
                 ),
                 false,
             )
@@ -384,7 +397,7 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
         Err(veiled(
             page_column()
                 .child(PageHead::new())
-                .child(status(Status::Empty("No mobile broadband device.".into()))),
+                .child(status(Status::Empty("No mobile modem found".into()))),
             false,
         )
         .into())
@@ -396,8 +409,11 @@ fn read_mobile(ctx: NetCtx, modem_state: ModemState) -> Result<(Modem, Link, boo
         (Some(Err(error)), Some(link)) if link.present => {
             return Err(veiled(
                 page_column().child(PageHead::new()).child(
-                    status(Status::Error(error.0))
-                        .action("Try again", move |_| reload_modem(modem_state)),
+                    status(Status::Error(super::plain(
+                        &error.0,
+                        "Could not read the modem. Try again.",
+                    )))
+                    .action("Try again", move |_| reload_modem(modem_state)),
                 ),
                 false,
             )
@@ -701,7 +717,10 @@ fn unlock_groups(ctx: NetCtx, modem_state: ModemState, modem: &Modem) -> Vec<Gro
         matches!(modem.lock, Lock::Pin | Lock::Puk),
     ) else {
         let code = match &modem.lock {
-            Lock::Other(code) => format!("The SIM asks for a code Settings cannot enter ({code})."),
+            Lock::Other(code) => {
+                eprintln!("bingux-settings: network: SIM lock {code}");
+                "This SIM needs a code that Settings cannot enter.".to_string()
+            }
             _ => "The SIM is locked.".to_string(),
         };
         return vec![note(code)];

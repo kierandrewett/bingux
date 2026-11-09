@@ -1,0 +1,16 @@
+[package]
+name = "bingux-weather"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "Weather data for Bingux: the Open-Meteo client, forecast model, units, astronomy and the cache; no UI"
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# HTTPS with rustls: no system TLS library, no key. The data is Open-Meteo's.
+ureq = "3"

@@ -83,7 +83,7 @@ fn select(fx: Fx, name: String) {
                 data.write().preset = preset;
                 fx.commit_now(direction);
             }
-            Err(message) => overlays.toast(message),
+            Err(raw) => super::super::report(overlays, "Could not switch preset. Try again.", &raw),
         },
     );
 }
@@ -153,7 +153,10 @@ fn change(
         move |result| match result {
             Ok(Some(name)) => select(fx, name),
             Ok(None) => fx.reload(),
-            Err(message) => overlays.toast(message),
+            Err(message) if message.starts_with("A preset called") => overlays.toast(message),
+            Err(raw) => {
+                super::super::report(overlays, "Could not change the preset. Try again.", &raw)
+            }
         },
     );
 }
@@ -162,7 +165,9 @@ fn new_preset(fx: Fx) {
     ask_name(fx, "New preset", "", "Create", move |name| {
         change(fx, move |store, direction| {
             if store.exists(direction, &name) {
-                return Err(format!("A preset called \"{name}\" already exists."));
+                return Err(format!(
+                    "A preset called “{name}” already exists. Choose another name."
+                ));
             }
             store
                 .save(&Preset::new(name.clone(), direction))
@@ -191,32 +196,29 @@ fn rename(fx: Fx, name: String) {
 
 fn confirm_delete(fx: Fx, name: String) {
     fx.overlays.show_dialog(
-        dialog(
-            format!("Delete \"{name}\"?"),
-            "The preset file is removed. Other presets are not changed.",
-        )
-        .cancel("Cancel")
-        .default_action(CANCEL_ID)
-        .response("Delete", ResponseKind::Destructive, move |_| {
-            let name = name.clone();
-            change(fx, move |store, direction| {
-                store.delete(direction, &name).map_err(|e| e.0)?;
-                // Fall back to Flat, or the first preset left.
-                let next = ["Flat".to_string()]
-                    .into_iter()
-                    .chain(store.list(direction))
-                    .find(|candidate| store.exists(direction, candidate));
-                match next {
-                    Some(next) => Ok(Some(next)),
-                    None => {
-                        store
-                            .save(&Preset::new("Flat", direction))
-                            .map_err(|e| e.0)?;
-                        Ok(Some("Flat".to_string()))
+        dialog(format!("Delete “{name}”?"), "You cannot undo this.")
+            .cancel("Cancel")
+            .default_action(CANCEL_ID)
+            .response("Delete", ResponseKind::Destructive, move |_| {
+                let name = name.clone();
+                change(fx, move |store, direction| {
+                    store.delete(direction, &name).map_err(|e| e.0)?;
+                    // Fall back to Flat, or the first preset left.
+                    let next = ["Flat".to_string()]
+                        .into_iter()
+                        .chain(store.list(direction))
+                        .find(|candidate| store.exists(direction, candidate));
+                    match next {
+                        Some(next) => Ok(Some(next)),
+                        None => {
+                            store
+                                .save(&Preset::new("Flat", direction))
+                                .map_err(|e| e.0)?;
+                            Ok(Some("Flat".to_string()))
+                        }
                     }
-                }
-            });
-        }),
+                });
+            }),
     );
 }
 
@@ -224,7 +226,7 @@ fn import_file(fx: Fx) {
     choose(
         fx.window,
         ChooserRequest::open()
-            .title("Import a preset")
+            .title("Import preset")
             .filter_spec("Presets", "*.json *.txt")
             .filter_spec("All files", "*"),
         move |answer| {
@@ -275,8 +277,8 @@ fn import_path(fx: Fx, path: PathBuf) {
                         unmapped.iter().map(|line| format!("- {line}")).collect();
                     fx.overlays.show_dialog(
                         dialog(
-                            format!("Imported \"{stem}\""),
-                            format!("These settings have no equivalent and were left out or approximated:\n{}", lines.join("\n")),
+                            format!("“{stem}” imported"),
+                            format!("Some settings have no exact match. They were left out or approximated:\n{}", lines.join("\n")),
                         )
                         .cancel("Close"),
                     );
@@ -286,7 +288,11 @@ fn import_path(fx: Fx, path: PathBuf) {
                     None => fx.reload(),
                 }
             }
-            Err(message) => overlays.toast(message),
+            Err(raw) => super::super::report(
+                overlays,
+                "Could not import the preset. Check that the file is a preset, then try again.",
+                &raw,
+            ),
         },
     );
 }
@@ -297,7 +303,7 @@ fn export_file(fx: Fx, name: String) {
     let file_name = format!("{name}.json");
     choose(
         fx.window,
-        ChooserRequest::save(file_name).title("Export the preset"),
+        ChooserRequest::save(file_name).title("Export preset"),
         move |answer| {
             let Some(path) = answer.and_then(|answer| answer.paths.into_iter().next()) else {
                 return;
@@ -310,8 +316,12 @@ fn export_file(fx: Fx, name: String) {
                         .map_err(|e| e.0)
                 },
                 move |result| match result {
-                    Ok(()) => overlays.toast("Preset exported."),
-                    Err(message) => overlays.toast(message),
+                    Ok(()) => overlays.toast("Preset exported"),
+                    Err(raw) => super::super::report(
+                        overlays,
+                        "Could not export the preset. Check the folder, then try again.",
+                        &raw,
+                    ),
                 },
             );
         },

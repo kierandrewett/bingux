@@ -1,0 +1,75 @@
+.TH BINGUX-CALCULATOR 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-calculator \- calculator for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-calculator
+.SH DESCRIPTION
+.B bingux-calculator
+opens the Calculator window with four modes: Basic, Scientific, Programmer
+and Convert.
+Type on the keyboard or press the keys.
+The result shows as you type, and Enter finishes the calculation and adds it
+to the history.
+.PP
+Arithmetic is exact: 0.1 + 0.2 is 0.3, and 100! shows all of its digits.
+A result with no exact value, such as the square root of 2, shows to 16
+significant digits; the Precision menu sets 10 to 50.
+.PP
+Only one Calculator window runs.
+A second launch raises the window that is open.
+.SH MODES
+.TP
+.B Basic
+The four operations, percent as in a till (200 + 10% is 220), and the answer
+carried on: after Enter, an operator continues from the result.
+.TP
+.B Scientific
+Brackets, powers, roots, logarithms, trigonometry in degrees or radians
+(an inverse set under 2nd), hyperbolic functions, factorials, constants and a
+memory (mc, m+, m\-, mr).
+.TP
+.B Programmer
+Whole numbers of 8, 16, 32 or 64 bits, signed or unsigned, in binary, octal,
+decimal and hexadecimal at once, with a grid of bits to flip.
+Results wrap to the word size, as they do in hardware.
+.TP
+.B Convert
+Length, mass, temperature, volume, area, speed, time, data, energy, power,
+pressure, angle, fuel economy and currency.
+The expression field in Basic and Scientific also converts: type
+.B 5 km to miles .
+.SH CURRENCY
+Rates are the European Central Bank's daily reference rates, downloaded once
+a half day and kept in the cache.
+Without a network the last download is used, or the rates built into the
+program, and the window says which.
+.SH KEYBOARD
+.TP
+.B Enter
+Finish the calculation.
+.TP
+.B Escape
+Clear the entry; again, clear the answer.
+.TP
+.B Ctrl+1 to Ctrl+4
+Switch mode.
+.TP
+.B Ctrl+H
+Show or hide the history.
+.TP
+.B Ctrl+Shift+C
+Copy the result.
+.SH FILES
+.TP
+.I $XDG_STATE_HOME/bingux-calculator/state.json
+The history, the mode and the settings.
+.TP
+.I $XDG_CACHE_HOME/bingux-calculator/rates.json
+The exchange rates last downloaded.
+.SH SEE ALSO
+.BR bingux\-files (1),
+.BR bingux\-settings (1)
+.PP
+Documentation: docs/calculator.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

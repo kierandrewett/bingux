@@ -718,6 +718,12 @@ impl Component for Content {
             prefs,
             editor_id,
         };
+        // The tab commands (New, Close, Reopen, Next, Previous) live in the
+        // window's command set, so the palette and shortcuts sheet list them.
+        bingux_ui::commands::use_window_commands(
+            actions.tabs.commands(move |_: ()| actions.new_document()),
+        );
+        let tab_menu = bingux_ui::commands::use_commands().main_menu_items();
         let find = use_find();
         let mut go_to_open = use_state(|| false);
         let preview_on_phone = use_state(|| false);
@@ -834,7 +840,7 @@ impl Component for Content {
                 .busy(saving),
             )
             .trailing(
-                menu_button("Main menu", main_menu(actions, find, go_to_open, doc_id))
+                menu_button("Main menu", main_menu(tab_menu, actions, find, go_to_open, doc_id))
                     .icon(Icon::OpenMenu),
             )
             .trailing(WindowControls)
@@ -1406,6 +1412,7 @@ fn case_items(handle: EditorHandle) -> Vec<MenuItem> {
 
 /// The main menu.
 fn main_menu(
+    tab_menu: Vec<MenuItem>,
     actions: Actions,
     find: bingux_ui::text_editor::FindState,
     go_to_open: State<bool>,
@@ -1414,7 +1421,7 @@ fn main_menu(
     let prefs = actions.prefs.read().clone();
     let handle = document::handle(id);
     let has_path = document::with(id, |doc| doc.path.is_some()).unwrap_or(false);
-    let mut items = actions.tabs.menu_items(move |_: ()| actions.new_document());
+    let mut items = tab_menu;
     items.push(menu_separator());
     items.push(menu_item("Open…", move |_| actions.open_dialog()).shortcut("Ctrl+O"));
     let recent = session::recent();

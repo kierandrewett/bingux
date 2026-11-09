@@ -69,6 +69,7 @@ impl Component for Stepper {
         let direction = use_direction();
         let a11y_id = use_a11y();
         let focus = use_focus(a11y_id);
+        let field = crate::a11y::use_field_label();
         let value = self.value.clamp(self.min, self.max);
         let (min, max, step) = (self.min, self.max, self.step);
         let enabled = use_enabled(self.enabled);
@@ -134,6 +135,7 @@ impl Component for Stepper {
                 builder.set_min_numeric_value(min as f64);
                 builder.set_max_numeric_value(max as f64);
                 builder.set_numeric_value_step(step as f64);
+                crate::a11y::label_from_field(builder, field.as_ref());
             })
             .tw(
                 &tokens,
@@ -159,7 +161,8 @@ impl Component for Stepper {
             .child(step_button(Icon::ListAdd, can_increment, move |_| {
                 increment();
                 a11y_id.request_focus();
-            })).focusable(focus())
+            }))
+            .focusable(focus())
     }
 }
 
@@ -246,11 +249,12 @@ mod geometry {
         fn render(&self) -> impl IntoElement {
             let tokens = crate::theme::provide_tokens();
             let text = self.0;
-            rect().expanded().tw(&tokens, &[p(S4)]).child(
-                crate::shell::OverlayHost::new(
+            rect()
+                .expanded()
+                .tw(&tokens, &[p(S4)])
+                .child(crate::shell::OverlayHost::new(
                     stepper(1000, |_| {}).range(0, 5000).suffix(text),
-                ),
-            )
+                ))
         }
     }
 

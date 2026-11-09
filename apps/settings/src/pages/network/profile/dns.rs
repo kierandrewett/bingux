@@ -133,7 +133,7 @@ impl Component for DnsBody {
         let (v4_allowed, v6_allowed) = families_allowed(&page.saved);
         if !v4_allowed && !v6_allowed {
             return page_column().child(status(Status::Empty(
-                "IPv4 and IPv6 are both set so that this connection has no DNS servers. Change a method to use them."
+                "IPv4 and IPv6 are both off for this connection. Turn one on to set DNS servers."
                     .into(),
             )));
         }

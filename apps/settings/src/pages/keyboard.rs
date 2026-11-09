@@ -165,7 +165,7 @@ fn fake_shortcuts() -> Option<ShortcutList> {
     Some(ShortcutList {
         shortcuts: vec![
             shortcut("wm", "Close window", "Super+Q"),
-            shortcut("wm", "Toggle fullscreen", "Super+F11"),
+            shortcut("wm", "Full screen", "Super+F11"),
             shortcut("wm", "Move window to the left", "Super+Left"),
             shortcut("shell", "Open the launcher", "Super"),
             shortcut("shell", "Lock the screen", "Super+L"),

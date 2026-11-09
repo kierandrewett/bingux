@@ -1,9 +1,9 @@
 //! Buttons: `ActionButton`, the accent primary button, the small row pill
 //! and the square `IconButton`.
 
+use super::default_mark::{Face, default_mark};
 use super::press::{is_right_click, use_hold, use_press};
 use super::tooltip::hover_tip;
-use super::default_mark::{Face, default_mark};
 use crate::shell::menu::MenuItem;
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{PanelRect, PanelTrigger};
@@ -198,13 +198,15 @@ impl Component for ActionButton {
         } else {
             Face::Plain
         };
-        let corner = self
-            .radius
-            .unwrap_or(if fitted { Radius::Inner } else { Radius::Control });
+        let corner = self.radius.unwrap_or(if fitted {
+            Radius::Inner
+        } else {
+            Radius::Control
+        });
         // The keycap is for a window with a keyboard: a phone shows the focus
         // ring alone.
-        let mark = (self.default_action && enabled && !is_compact())
-            .then(|| default_mark(&tokens, face));
+        let mark =
+            (self.default_action && enabled && !is_compact()).then(|| default_mark(&tokens, face));
         rect()
             .component("ActionButton")
             .published(|| {
@@ -241,7 +243,9 @@ impl Component for ActionButton {
             .maybe(!self.flat, |element| {
                 element.tw(&tokens, &[min_w(Dim::Box9)])
             })
-            .maybe(self.grow || self.fill, |element| element.tw(&tokens, &[w_flex()]))
+            .maybe(self.grow || self.fill, |element| {
+                element.tw(&tokens, &[w_flex()])
+            })
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(enabled, |element| {
                 element
@@ -294,7 +298,8 @@ impl Component for ActionButton {
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
             )
-            .maybe_child(mark).focusable(focus())
+            .maybe_child(mark)
+            .focusable(focus())
             // The focus wrapper is what the row lays out, so it grows too.
             .maybe(self.grow, |wrapper| {
                 wrapper.tw(&tokens, &[w_flex(), grow_children()])
@@ -416,7 +421,8 @@ impl Component for RowButton {
                     .in_ink(Ink::Text)
                     .label(&tokens, self.text.clone())
                     .max_lines(1),
-            ).focusable(focus())
+            )
+            .focusable(focus())
     }
 }
 
@@ -447,6 +453,7 @@ pub struct IconButton {
     /// The glyph the icon turns into while the flag is set, see
     /// [`IconButton::morph`].
     morph: Option<(Icon, bool)>,
+    semantics: Option<crate::a11y::Semantics>,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -465,6 +472,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         refocus: None,
         pointer_only: false,
         ink: None,
+        semantics: None,
         id: None,
         layers: None,
         morph: None,
@@ -472,6 +480,14 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
 }
 
 impl IconButton {
+    /// Says more than the tooltip, which names it: that it toggles
+    /// (`Semantics::checked`), opens a menu (`Semantics::opens_menu` with
+    /// `expanded`), a hint or a shortcut.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
+        self
+    }
+
     pub fn tooltip(mut self, text: &str) -> Self {
         self.tooltip = Some(text.to_string());
         self
@@ -690,16 +706,12 @@ impl Component for IconButton {
             .maybe(self.tooltip.is_some(), |element| {
                 element.a11y_alt(self.tooltip.clone().unwrap_or_default())
             })
+            .maybe(self.semantics.is_some(), |element| {
+                let semantics = self.semantics.clone().unwrap_or_default();
+                element.a11y_builder(move |node| semantics.apply(node))
+            })
             .tw(&tokens, ICON_BUTTON)
-            .tw(
-                &tokens,
-                &[
-                    w(size),
-                    h(size),
-                    state,
-                    rounded(radius),
-                ],
-            )
+            .tw(&tokens, &[w(size), h(size), state, rounded(radius)])
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .maybe(!usable, |element| element.opacity(0.5))
             .maybe(usable, |element| {
@@ -768,7 +780,8 @@ impl Component for IconButton {
                     }),
                     None => icons::icon(self.icon, IconSize::Control, ink).into(),
                 }
-            }).focusable(focus());
+            })
+            .focusable(focus());
         match &self.tooltip {
             Some(text) => hover_tip(button, text.clone()),
             None => Element::from(button),

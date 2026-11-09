@@ -161,6 +161,11 @@ pub struct Input {
     text_align: TextAlign,
     font_family: Option<&'static str>,
     a11y_id: Option<AccessibilityId>,
+    a11y_label: Option<Cow<'static, str>>,
+    a11y_description: Option<Cow<'static, str>>,
+    a11y_invalid: bool,
+    a11y_active_descendant: Option<AccessibilityId>,
+    a11y_controls: Vec<AccessibilityId>,
     leading: Option<Element>,
     role: Option<AccessibilityRole>,
     hover_background: Option<Color>,
@@ -207,7 +212,9 @@ pub struct InputProbe {
 }
 
 /// An edit the surrounding UI asks of an [`Input`] through [`Input::request`]. The input clears it after running it.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// `Type` and `Backspace` edit the text at the caret without taking the keyboard focus (an on-screen keypad
+/// types this way); the others place the caret or the selection, and take it.
+#[derive(Clone, Debug, PartialEq)]
 pub enum InputRequest {
     /// Select the word under this window point.
     SelectWordAt { x: f32, y: f32 },
@@ -217,6 +224,10 @@ pub enum InputRequest {
     DragSelectionEnd { start: bool },
     /// Select the characters from `start` to `end` (character positions, not bytes), such as a file name without its extension.
     SelectRange { start: usize, end: usize },
+    /// Type this text at the caret, replacing the selection, as the keyboard would.
+    Type(String),
+    /// Delete the selection, or the character before the caret, as Backspace would.
+    Backspace,
 }
 
 /// Runs one key edit on `editable` and writes the text to `value`, unless
@@ -309,6 +320,11 @@ impl Input {
             text_align: TextAlign::default(),
             font_family: None,
             a11y_id: None,
+            a11y_label: None,
+            a11y_description: None,
+            a11y_invalid: false,
+            a11y_active_descendant: None,
+            a11y_controls: Vec::new(),
             leading: None,
             role: None,
             hover_background: None,
@@ -473,6 +489,37 @@ impl Input {
 
     pub fn a11y_id(mut self, a11y_id: impl Into<AccessibilityId>) -> Self {
         self.a11y_id = Some(a11y_id.into());
+        self
+    }
+
+    /// Bingux patch: the field's name for assistive technology ("Address"), read with the
+    /// text as its value. Without one the placeholder names it.
+    pub fn a11y_label(mut self, label: impl Into<Cow<'static, str>>) -> Self {
+        self.a11y_label = Some(label.into());
+        self
+    }
+
+    /// Bingux patch: the help line under the field, read after its name.
+    pub fn a11y_description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
+        self.a11y_description = Some(description.into());
+        self
+    }
+
+    /// Bingux patch: the result the arrows have reached in a list this field
+    /// drives while it keeps the focus (WAI-ARIA combobox), and that list.
+    pub fn a11y_active_descendant(
+        mut self,
+        active: Option<AccessibilityId>,
+        controls: Vec<AccessibilityId>,
+    ) -> Self {
+        self.a11y_active_descendant = active;
+        self.a11y_controls = controls;
+        self
+    }
+
+    /// Bingux patch: the text is wrong (the field shows an error).
+    pub fn a11y_invalid(mut self, invalid: bool) -> Self {
+        self.a11y_invalid = invalid;
         self
     }
 
@@ -739,6 +786,8 @@ impl Component for Input {
         });
         let mut value_for_command = value.clone();
         let on_validate_for_command = on_validate.clone();
+        let value_for_request = value.clone();
+        let on_validate_for_request = on_validate.clone();
 
         let on_key_down = move |e: Event<KeyboardEventData>| {
             let key = e.key.clone();
@@ -826,11 +875,11 @@ impl Component for Input {
         // Runs a request set by the surrounding UI, such as selecting the word under a touch.
         let request_state = self.request;
         let pending_request = match self.request {
-            Some(request) => *request.read(),
+            Some(request) => request.read().clone(),
             None => None,
         };
         use_side_effect_with_deps(&pending_request, move |pending| {
-            let Some(request) = *pending else {
+            let Some(request) = pending.clone() else {
                 return;
             };
             if let Some(mut state) = request_state {
@@ -838,8 +887,12 @@ impl Component for Input {
             }
             // The edit runs in its own task: reads in it must not subscribe this
             // effect, or the writes it makes would rerun the effect for ever.
+            let mut value_for_request = value_for_request.clone();
+            let on_validate_for_request = on_validate_for_request.clone();
             spawn(async move {
-                a11y_id.request_focus();
+                if !matches!(request, InputRequest::Type(_) | InputRequest::Backspace) {
+                    a11y_id.request_focus();
+                }
                 let mut editable = editable;
                 match request {
                     InputRequest::SelectWordAt { x, y } => {
@@ -889,6 +942,32 @@ impl Component for Input {
                             .write()
                             .set_selection((start.min(length), end.min(length)));
                         follow_cursor();
+                    }
+                    InputRequest::Type(text) => {
+                        let changed = apply_key_edit(
+                            &mut editable,
+                            &mut value_for_request,
+                            on_validate_for_request.as_ref(),
+                            &Key::Character(text),
+                            Modifiers::empty(),
+                            &holder.peek(),
+                        );
+                        if !changed {
+                            follow_cursor();
+                        }
+                    }
+                    InputRequest::Backspace => {
+                        let changed = apply_key_edit(
+                            &mut editable,
+                            &mut value_for_request,
+                            on_validate_for_request.as_ref(),
+                            &Key::Named(NamedKey::Backspace),
+                            Modifiers::empty(),
+                            &holder.peek(),
+                        );
+                        if !changed {
+                            follow_cursor();
+                        }
                     }
                 }
             });
@@ -1079,11 +1158,19 @@ impl Component for Input {
         };
 
         let value = self.value.read();
-        let a11y_text: Cow<str> = match (self.mode, &self.placeholder) {
-            (_, Some(ph)) if display_placeholder => Cow::Borrowed(ph.as_ref()),
-            (InputMode::Hidden(ch), _) => Cow::Owned(ch.to_string().repeat(value.len())),
-            (InputMode::Shown, _) => Cow::Borrowed(value.as_ref()),
+        // Bingux patch: the text is the value, the field's name the label, the placeholder a
+        // placeholder (upstream read the text, or the placeholder, as the name).
+        let a11y_text: String = match self.mode {
+            InputMode::Hidden(ch) => ch.to_string().repeat(value.chars().count()),
+            InputMode::Shown => value.to_string(),
         };
+        let a11y_label = self.a11y_label.clone().or_else(|| self.placeholder.clone());
+        let a11y_placeholder = self.placeholder.clone();
+        let a11y_description = self.a11y_description.clone();
+        let a11y_invalid = self.a11y_invalid;
+        let a11y_read_only = self.read_only;
+        let a11y_active = self.a11y_active_descendant;
+        let a11y_controls = self.a11y_controls.clone();
 
         let a11_role = match (self.role, self.mode) {
             (Some(role), _) => role,
@@ -1098,8 +1185,31 @@ impl Component for Input {
             .a11y_enabled(self.enabled)
             .a11y_focusable(self.enabled)
             .a11y_auto_focus(self.auto_focus)
-            .a11y_alt(a11y_text)
             .a11y_role(a11_role)
+            .a11y_builder(move |node| {
+                node.set_value(a11y_text);
+                if let Some(label) = a11y_label {
+                    node.set_label(label.into_owned());
+                }
+                if let Some(placeholder) = a11y_placeholder {
+                    node.set_placeholder(placeholder.into_owned());
+                }
+                if let Some(description) = a11y_description {
+                    node.set_description(description.into_owned());
+                }
+                if a11y_invalid {
+                    node.set_invalid(accesskit::Invalid::True);
+                }
+                if a11y_read_only {
+                    node.set_read_only();
+                }
+                if let Some(active) = a11y_active {
+                    node.set_active_descendant(active);
+                }
+                for id in a11y_controls {
+                    node.push_controlled(id);
+                }
+            })
             .maybe(self.enabled, |el| {
                 el.on_key_up(on_key_up)
                     .on_key_down(on_key_down)

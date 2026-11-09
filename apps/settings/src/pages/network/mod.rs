@@ -165,7 +165,7 @@ fn summary(ov: &Overview, airplane: bool) -> String {
             _ => "Online through Ethernet".to_string(),
         },
         None if ov.state == "connected" || ov.state.starts_with("connected") => {
-            "Connected, no internet route".to_string()
+            "Connected, no internet".to_string()
         }
         None => "Offline".to_string(),
     }
@@ -247,7 +247,10 @@ fn open_portal(ctx: NetCtx) {
         || system::run("xdg-open", &[portal_uri().as_str()], QUICK),
         move |result| {
             if let Err(error) = result {
-                ctx.overlays.toast(error.0);
+                ctx.overlays.toast(plain(
+                    &error.0,
+                    "Could not open the sign-in page. Try again.",
+                ));
             }
         },
     );
@@ -322,8 +325,12 @@ impl Component for NetworkPage {
             None => placeholder(),
             Some(Ok(ov)) => ov,
             Some(Err(failure)) => {
+                let message = plain(
+                    &failure.0,
+                    "Could not read the network status. Try again in a moment.",
+                );
                 return page_column().child(PageHead::new()).child(
-                    status(Status::Error(failure.0)).action("Try again", move |_| ctx.reload()),
+                    status(Status::Error(message)).action("Try again", move |_| ctx.reload()),
                 );
             }
         };
@@ -342,7 +349,7 @@ impl Component for NetworkPage {
         connections.extend(mobile::mobile_row(ctx, &ov, airplane));
         let connections = if connections.is_empty() {
             Group::titled("Connections").row(Element::from(status(Status::Empty(
-                "No network devices.".into(),
+                "No network devices".into(),
             ))))
         } else {
             Group::titled("Connections").rows(connections)
@@ -367,9 +374,16 @@ impl Component for NetworkPage {
     }
 }
 
-/// The error a screen shows when NetworkManager cannot be asked.
+/// Log what a command said and return the sentence the person sees instead.
+pub fn plain(raw: &str, message: &str) -> String {
+    eprintln!("bingux-settings: network: {message} ({raw})");
+    message.to_string()
+}
+
+/// The error a screen shows when the network settings cannot be read.
 pub fn failure_page(error: CommandError, retry: impl Fn() + 'static) -> Element {
+    let message = plain(&error.0, "Could not read the network settings. Try again.");
     page_column()
-        .child(status(Status::Error(error.0)).action("Try again", move |_| retry()))
+        .child(status(Status::Error(message)).action("Try again", move |_| retry()))
         .into()
 }

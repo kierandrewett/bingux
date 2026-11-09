@@ -734,7 +734,11 @@ impl Component for TreeRow {
 
         // One chevron that turns, so opening and closing read as one motion.
         let turn = use_tween(
-            if self.row.branch == Branch::Open { 1.0 } else { 0.0 },
+            if self.row.branch == Branch::Open {
+                1.0
+            } else {
+                0.0
+            },
             tokens.motion(MOVE_MS),
         );
         let chevron = (self.row.branch != Branch::Leaf).then_some(Icon::PanEnd);
@@ -862,7 +866,11 @@ impl Component for TreeRow {
             );
         }
 
-        let height = if self.code { Dim::CodeRow } else { Dim::MenuItem };
+        let height = if self.code {
+            Dim::CodeRow
+        } else {
+            Dim::MenuItem
+        };
         rect()
             .a11y_role(AccessibilityRole::TreeItem)
             .a11y_builder({
@@ -945,10 +953,11 @@ fn guide_column(tokens: &Tokens, level: f32) -> Element {
         .tw(tokens, &[flex_row(), h_full()])
         .width(Size::px(level))
         .child(rect().width(Size::px(middle)))
-        .child(rect().component("TreeGuide").tw(
-            tokens,
-            &[w(Dim::Hairline), h_full(), bg(Paint::MutedFaint)],
-        ))
+        .child(
+            rect()
+                .component("TreeGuide")
+                .tw(tokens, &[w(Dim::Hairline), h_full(), bg(Paint::MutedFaint)]),
+        )
         .into()
 }
 

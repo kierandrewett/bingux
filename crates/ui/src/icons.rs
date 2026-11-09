@@ -44,6 +44,8 @@ pub enum Icon {
     Check,
     ListAdd,
     ListRemove,
+    /// Two arrows, one each way: swap two values (the units of a converter).
+    Swap,
     PanDown,
     PanUp,
     PanEnd,
@@ -243,6 +245,16 @@ pub enum Icon {
     DocumentSave,
     /// Recent documents.
     DocumentOpenRecent,
+    /// Shuffle the queue (Media).
+    MediaPlaylistShuffle,
+    /// Repeat the queue (Media).
+    MediaPlaylistRepeat,
+    /// Repeat the item playing (Media).
+    MediaPlaylistRepeatSong,
+    /// The mini player, picture in picture (Media).
+    ViewPip,
+    /// The volume near its top: a speaker with two waves (the Sound page's glyph).
+    AudioVolumeHigh,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -250,7 +262,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 184] = [
+    pub const ALL: [Icon; 190] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -281,6 +293,7 @@ impl Icon {
         Self::Check,
         Self::ListAdd,
         Self::ListRemove,
+        Self::Swap,
         Self::PanDown,
         Self::PanUp,
         Self::PanEnd,
@@ -435,6 +448,11 @@ impl Icon {
         Self::FindWholeWord,
         Self::DocumentSave,
         Self::DocumentOpenRecent,
+        Self::MediaPlaylistShuffle,
+        Self::MediaPlaylistRepeat,
+        Self::MediaPlaylistRepeatSong,
+        Self::ViewPip,
+        Self::AudioVolumeHigh,
     ];
 
     /// The embedded SVG source for this icon.
@@ -472,6 +490,7 @@ impl Icon {
             Self::Check => include_bytes!("../icons/object-select-symbolic.svg"),
             Self::ListAdd => include_bytes!("../icons/list-add-symbolic.svg"),
             Self::ListRemove => include_bytes!("../icons/list-remove-symbolic.svg"),
+            Self::Swap => include_bytes!("../icons/swap-horizontal-symbolic.svg"),
             Self::PanDown => include_bytes!("../icons/pan-down-symbolic.svg"),
             Self::PanUp => include_bytes!("../icons/pan-up-symbolic.svg"),
             Self::PanEnd => include_bytes!("../icons/pan-end-symbolic.svg"),
@@ -677,6 +696,17 @@ impl Icon {
             Self::DocumentOpenRecent => {
                 include_bytes!("../icons/document-open-recent-symbolic.svg")
             }
+            Self::MediaPlaylistShuffle => {
+                include_bytes!("../icons/media-playlist-shuffle-symbolic.svg")
+            }
+            Self::MediaPlaylistRepeat => {
+                include_bytes!("../icons/media-playlist-repeat-symbolic.svg")
+            }
+            Self::MediaPlaylistRepeatSong => {
+                include_bytes!("../icons/media-playlist-repeat-song-symbolic.svg")
+            }
+            Self::ViewPip => include_bytes!("../icons/view-pip-symbolic.svg"),
+            Self::AudioVolumeHigh => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon

@@ -321,7 +321,7 @@ fn gsettings_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
     raw.trim()
         .strip_prefix("uint32 ")
         .and_then(|number| number.parse().ok())
-        .ok_or_else(|| CommandError("This setting could not be read.".into()))
+        .ok_or_else(|| CommandError("Could not read this setting. Try again in a moment.".into()))
 }
 
 /// Automatic suspend for `source` (`ac` or `battery`). Missing keys hide the
@@ -366,15 +366,13 @@ fn battery_state(value: &str) -> String {
 }
 
 fn duration_label(seconds: u32) -> String {
-    if seconds % 60 == 0 {
-        let minutes = seconds / 60;
-        format!(
-            "{minutes} {}",
-            if minutes == 1 { "minute" } else { "minutes" }
-        )
+    use bingux_ui::format::{Measure, TimeUnit, Width};
+    let (count, unit) = if seconds % 60 == 0 {
+        (seconds / 60, TimeUnit::Minute)
     } else {
-        format!("{seconds} seconds")
-    }
+        (seconds, TimeUnit::Second)
+    };
+    Measure::new(count, unit).width(Width::Long).format()
 }
 
 /// Timeout choices in seconds, with `zero` as the label for 0. A current
@@ -871,7 +869,7 @@ impl Component for PowerPage {
                 ("nothing", "Do nothing"),
                 ("suspend", "Suspend"),
                 ("hibernate", "Hibernate"),
-                ("interactive", "Show power off dialog"),
+                ("interactive", "Ask what to do"),
                 ("shutdown", "Power off"),
             ]
             .into_iter()
@@ -881,7 +879,7 @@ impl Component for PowerPage {
                 options.push((current.clone(), sentence(&current)));
             }
             page = page.child(Group::titled("Power button").row(choice_row(
-                "When the power button is pressed",
+                "When pressed",
                 options,
                 &picked(picks, "power-button", &current),
                 move |key: String| {

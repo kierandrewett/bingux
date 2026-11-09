@@ -50,8 +50,8 @@ use crate::layout::divider;
 use crate::motion::{Dwell, use_dwell};
 use crate::nav::{HistoryItem, NavModel, Outcome};
 use crate::shell::{
-    CANCEL_ID, MenuItem, Overlays, ResponseKind, dialog, history_menu_with, menu_item,
-    menu_separator, use_overlays,
+    CANCEL_ID, HeaderBar, MenuItem, Overlays, ResponseKind, WindowControls, dialog,
+    history_menu_with, menu_button, menu_item, menu_separator, use_overlays,
 };
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -391,9 +391,9 @@ impl Session {
             Host::Dialog(_) => self.finish(vec![path]),
             Host::Browser(_) => {
                 let mut problem = self.nav.problem;
-                if let Err(error) = open_default(&path) {
-                    problem.set(Some(format!("Could not open the file: {error}.")));
-                }
+                open_default(&path, move |why| {
+                    problem.set(Some(format!("Could not open the file. {why}")));
+                });
             }
         }
     }
@@ -1059,6 +1059,7 @@ impl Component for ChooserBody {
         };
 
         let footer = footer(&tokens, compact, &session, saving, problem);
+        let footer_none = footer.is_none();
         // A browser window's view reaches the window's bottom edge when no
         // footer sits below it, so it paints the window's radius at the corners
         // that touch the window; its focus ring follows. Beside the sidebar
@@ -1095,9 +1096,7 @@ impl Component for ChooserBody {
             active_filter.is_some(),
             corners,
         );
-        let toolbar = toolbar(
-            &tokens,
-            compact,
+        let parts = toolbar_parts(
             &session,
             &places.value().cloned().unwrap_or_default(),
             editing,
@@ -1114,13 +1113,54 @@ impl Component for ChooserBody {
             chooser_filter.clone(),
             mount,
         );
+        let browse = match &self.host {
+            Host::Browser(browse) => Some(browse.clone()),
+            Host::Dialog(_) => None,
+        };
+        let toolbar = match &browse {
+            Some(browse) => browser_header(&tokens, compact, parts, &browse.menu, stopping),
+            None => dialog_toolbar(&tokens, compact, parts),
+        };
+        let tab_bar = browse.as_ref().and_then(|browse| browse.tab_bar.clone());
+
+        let sidebar = (!compact).then(|| {
+            let places = places.value().cloned().unwrap_or_default();
+            let nav = nav;
+            let sidebar = PlacesSidebar::new(places, current.clone(), move |to: Where| nav.go(to))
+                .recent(request.action == Action::Open)
+                .reload(places_rev)
+                .on_empty_trash(move |_: ()| super::actions::request_empty_trash(empty_trash));
+            match &browse {
+                Some(browse) => {
+                    let on_new_tab = browse.on_new_tab.clone();
+                    sidebar.on_open_new_tab(move |to: Where| {
+                        if let Where::Folder(path) = to {
+                            on_new_tab.call(path);
+                        }
+                    })
+                }
+                None => sidebar,
+            }
+        });
+        let files = rect()
+            .tw(&tokens, &[flex_col(), w_flex(), h_full(), grow_children()])
+            .child(
+                rect()
+                    .tw(&tokens, &[w_full(), h_flex(), grow_children()])
+                    .child(main),
+            )
+            .maybe_child(footer.map(|footer| {
+                rect()
+                    .tw(&tokens, &[flex_col(), w_full()])
+                    .child(divider(&tokens))
+                    .child(footer)
+            }));
 
         // A phone's sheet reaches the screen's bottom edge, so with no footer
         // the list keeps its own clearance.
-        let bottom_clearance = compact && footer.is_none();
-        rect()
+        let bottom_clearance = compact && footer_none && browse.is_none();
+        let root = rect()
             .component("FileChooser")
-            .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
             .maybe(bottom_clearance, |root| root.tw(&tokens, &[pb(S4)]))
             .on_key_down(shortcuts)
             // The mouse's Back and Forward buttons (8 and 9) walk the history.
@@ -1132,58 +1172,68 @@ impl Component for ChooserBody {
                         _ => {}
                     }
                 }
-            })
+            });
+
+        if browse.is_some() {
+            // A window: the places run the window's full height on the
+            // sidebar surface, the first place on the header bar's row (no
+            // empty band above it), and the content pane beside them has
+            // the header bar, the tab bar and the files, as in Settings.
+            let pane = rect()
+                .tw(
+                    &tokens,
+                    &[
+                        flex_col(),
+                        grow_children(),
+                        w_flex(),
+                        h_full(),
+                        bg(Paint::Bg),
+                    ],
+                )
+                .child(toolbar)
+                .maybe_child(tab_bar.map(|strip| {
+                    rect()
+                        .component("FileTabBar")
+                        .tw(&tokens, &[flex_col(), w_full()])
+                        .child(rect().tw(&tokens, &[w_full(), px(S2)]).child(strip))
+                        .child(divider(&tokens))
+                }))
+                .child(files);
+            return root
+                .tw(
+                    &tokens,
+                    &[
+                        flex_row(),
+                        grow_children(),
+                        w_full(),
+                        h_full(),
+                        bg(if compact { Paint::Bg } else { Paint::Sidebar }),
+                    ],
+                )
+                .maybe_child(sidebar.map(|sidebar| {
+                    rect()
+                        .tw(&tokens, &[flex_row(), h_full(), w(Dim::PlacesColumn)])
+                        .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(sidebar))
+                        .child(rect().tw(&tokens, SPLIT_HAIRLINE))
+                }))
+                .child(pane)
+                .into_element();
+        }
+        root.tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
             .child(toolbar)
             .child(divider(&tokens))
             .child(
                 rect()
                     .tw(&tokens, &[flex_row(), grow_children(), w_full(), h_flex()])
-                    .maybe_child((!compact).then(|| {
-                        let places = places.value().cloned().unwrap_or_default();
-                        let nav = nav;
+                    .maybe_child(sidebar.map(|sidebar| {
                         rect()
                             .tw(&tokens, &[flex_row(), h_full(), w(Dim::PlacesColumn)])
-                            .child(rect().tw(&tokens, &[w_flex(), h_full()]).child({
-                                let sidebar = PlacesSidebar::new(
-                                    places,
-                                    current.clone(),
-                                    move |to: Where| nav.go(to),
-                                )
-                                .recent(request.action == Action::Open)
-                                .reload(places_rev)
-                                .on_empty_trash(move |_: ()| {
-                                    super::actions::request_empty_trash(empty_trash)
-                                });
-                                match &self.host {
-                                    Host::Browser(browse) => {
-                                        let on_new_tab = browse.on_new_tab.clone();
-                                        sidebar.on_open_new_tab(move |to: Where| {
-                                            if let Where::Folder(path) = to {
-                                                on_new_tab.call(path);
-                                            }
-                                        })
-                                    }
-                                    Host::Dialog(_) => sidebar,
-                                }
-                            }))
+                            .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(sidebar))
                             .child(rect().tw(&tokens, SPLIT_HAIRLINE))
                     }))
-                    .child(
-                        rect()
-                            .tw(&tokens, &[flex_col(), w_flex(), h_full(), grow_children()])
-                            .child(
-                                rect()
-                                    .tw(&tokens, &[w_full(), h_flex(), grow_children()])
-                                    .child(main),
-                            )
-                            .maybe_child(footer.map(|footer| {
-                                rect()
-                                    .tw(&tokens, &[flex_col(), w_full()])
-                                    .child(divider(&tokens))
-                                    .child(footer)
-                            })),
-                    ),
+                    .child(files),
             )
+            .into_element()
     }
 }
 
@@ -1310,6 +1360,7 @@ fn main_area(
     if let Host::Browser(browse) = &session.host {
         view = view
             .caps(Capabilities::FILES_APP)
+            .status_bar(true)
             .on_open_new_tab(browse.on_new_tab.clone())
             .remember_for(browse.memory.id());
     }
@@ -1334,13 +1385,30 @@ fn middle_click(
     }
 }
 
-/// Back, Forward, Up, the address bar, the view switch and the view menu; on
-/// a phone the places menu comes first and the address bar takes a line of
-/// its own.
+/// The toolbar's controls, built once and laid out by the host: a row under a
+/// dialog's header ([`dialog_toolbar`]), or a window's header bar
+/// ([`browser_header`]).
+struct ToolbarParts {
+    back: Element,
+    forward: Element,
+    parent: Element,
+    refresh: Element,
+    path_bar: Element,
+    search: Element,
+    empty_trash: Option<Element>,
+    create: Element,
+    pane: Element,
+    view: Element,
+    places: Element,
+    filter: Option<Element>,
+    /// The view menu's items, for a phone's main menu.
+    view_items: Vec<MenuItem>,
+}
+
+/// Back, Forward, Up, the address bar, the view switch and the view menu,
+/// and on a phone the places menu.
 #[allow(clippy::too_many_arguments)]
-fn toolbar(
-    tokens: &crate::theme::Tokens,
-    compact: bool,
+fn toolbar_parts(
     session: &Session,
     places: &bingux_files::Places,
     editing: State<bool>,
@@ -1356,7 +1424,7 @@ fn toolbar(
     filter: Option<Element>,
     chooser_filter: Option<Filter>,
     mount: bingux_files::mounts::MountKind,
-) -> Element {
+) -> ToolbarParts {
     let nav = session.nav;
     let mut places_rev = session.places_rev;
     let current = nav.current();
@@ -1424,7 +1492,9 @@ fn toolbar(
     .on_close_edit(move |_: ()| {
         let next = *focus.peek() + 1;
         focus.set(next);
-    });
+    })
+    // A window's phone header names the folder as its title.
+    .title(matches!(session.host, Host::Browser(_)) && is_compact());
 
     // A right click or a hold lists the places the button would take.
     let back = icon_button(Icon::GoPrevious, move |_: ()| nav.back())
@@ -1474,8 +1544,28 @@ fn toolbar(
             .size(Dim::Control)
             .tooltip("Empty Trash")
         });
-    // The switch between a list and a grid, and the menu of the view's other
-    // choices (sort, hidden files), in one control.
+    let browser = matches!(session.host, Host::Browser(_));
+    let pane_shown = *preview_pane.read();
+    let mut items = view_items(nav, sort, show_hidden);
+    if browser {
+        // A window's header keeps its buttons to what a person reaches for
+        // most; the rest of the view's choices are in its menu.
+        let reload = session.reload.clone();
+        items.push(
+            menu_item("Show preview pane", move |_: ()| {
+                let shown = *preview_pane.peek();
+                preview_pane.set(!shown);
+            })
+            .checked(pane_shown)
+            .shortcut("Alt+P"),
+        );
+        items.push(menu_separator());
+        items.push(
+            menu_item("Reload", move |_: ()| reload.run())
+                .shortcut("F5")
+                .icon(Icon::Refresh),
+        );
+    }
     let view = SplitButton::new(if use_grid {
         Icon::ViewList
     } else {
@@ -1499,7 +1589,7 @@ fn toolbar(
         level.set(next);
         nav.remember_level(next);
     })
-    .menu(view_items(nav, sort, show_hidden));
+    .menu(items.clone());
 
     // The search is made in the address bar's field; the button is how a
     // person who does not know Ctrl+F finds it.
@@ -1512,7 +1602,6 @@ fn toolbar(
 
     // The docked preview pane: it shows the selected file beside the list and
     // follows the selection. A phone has no room for it.
-    let pane_shown = *preview_pane.read();
     let pane = icon_button(Icon::SidebarShow, move |_: ()| {
         let shown = *preview_pane.peek();
         preview_pane.set(!shown);
@@ -1521,6 +1610,74 @@ fn toolbar(
     .active(pane_shown)
     .tooltip("Preview pane (Alt+P)");
 
+    // A phone's main menu holds what its header has no room for: making a
+    // folder, the other kind of view and the view's choices.
+    let mut view_items_for_menu = Vec::new();
+    if can_create {
+        view_items_for_menu.push(
+            menu_item("New folder", move |_: ()| {
+                let next = *new_folder.peek() + 1;
+                new_folder.set(next);
+            })
+            .shortcut("Ctrl+Shift+N")
+            .icon(Icon::FolderNew),
+        );
+    }
+    view_items_for_menu.push(
+        menu_item(
+            if use_grid {
+                "Show as list"
+            } else {
+                "Show as grid"
+            },
+            move |_: ()| {
+                let next = switch_kind(
+                    *level.peek(),
+                    if use_grid {
+                        ViewKind::List
+                    } else {
+                        ViewKind::Grid
+                    },
+                );
+                level.set(next);
+                nav.remember_level(next);
+            },
+        )
+        .icon(if use_grid {
+            Icon::ViewList
+        } else {
+            Icon::ViewGrid
+        }),
+    );
+    view_items_for_menu.push(menu_separator());
+    view_items_for_menu.extend(view_items(nav, sort, show_hidden));
+
+    let places_menu = PlacesMenu::new(places.clone(), current.clone(), move |to: Where| nav.go(to))
+        .recent(session.request.action == Action::Open)
+        .reload(session.places_rev)
+        .icon_only(browser);
+
+    ToolbarParts {
+        back: back.into(),
+        forward: forward.into(),
+        parent: parent.into(),
+        refresh: refresh.into(),
+        path_bar: path_bar.into(),
+        search: search_button.into(),
+        empty_trash: empty_trash.map(Into::into),
+        create: create.into(),
+        pane: pane.into(),
+        view: view.into(),
+        places: places_menu.into(),
+        filter,
+        view_items: view_items_for_menu,
+    }
+}
+
+/// A dialog's toolbar, under its header: Back, Forward, Up, Refresh, the
+/// address bar and the view's buttons. On a phone the places menu comes first
+/// and the address bar takes a line of its own.
+fn dialog_toolbar(tokens: &crate::theme::Tokens, compact: bool, parts: ToolbarParts) -> Element {
     if compact {
         let first = rect()
             .tw(
@@ -1533,17 +1690,11 @@ fn toolbar(
                     gap(S2),
                 ],
             )
-            .child(
-                rect().tw(tokens, &[w_flex()]).child(
-                    PlacesMenu::new(places.clone(), current.clone(), move |to: Where| nav.go(to))
-                        .recent(session.request.action == Action::Open)
-                        .reload(session.places_rev),
-                ),
-            )
-            .child(search_button)
-            .maybe_child(empty_trash)
-            .child(create)
-            .child(view);
+            .child(rect().tw(tokens, &[w_flex()]).child(parts.places))
+            .child(parts.search)
+            .maybe_child(parts.empty_trash)
+            .child(parts.create)
+            .child(parts.view);
         // Up goes beside the address bar: with five buttons in the first row the place's name had
         // 58 px of a phone chooser (and 5 px of the taxonomy's), too little for any of its letters.
         let second = rect()
@@ -1557,8 +1708,8 @@ fn toolbar(
                     gap(S2),
                 ],
             )
-            .child(parent)
-            .child(rect().tw(tokens, &[w_flex()]).child(path_bar));
+            .child(parts.parent)
+            .child(rect().tw(tokens, &[w_flex()]).child(parts.path_bar));
         return rect()
             .tw(tokens, &[flex_col(), w_full(), p(S2), gap(S2)])
             .child(first)
@@ -1577,18 +1728,88 @@ fn toolbar(
                 gap(S2),
             ],
         )
-        .child(back)
-        .child(forward)
-        .child(parent)
-        .child(refresh)
-        .child(rect().tw(tokens, &[w_flex()]).child(path_bar))
-        .maybe_child(filter)
-        .child(search_button)
-        .maybe_child(empty_trash)
-        .child(create)
-        .child(pane)
-        .child(view)
+        .child(parts.back)
+        .child(parts.forward)
+        .child(parts.parent)
+        .child(parts.refresh)
+        .child(rect().tw(tokens, &[w_flex()]).child(parts.path_bar))
+        .maybe_child(parts.filter)
+        .child(parts.search)
+        .maybe_child(parts.empty_trash)
+        .child(parts.create)
+        .child(parts.pane)
+        .child(parts.view)
         .into()
+}
+
+/// A window's header bar: the toolbar in the window's title bar, as Finder
+/// and GNOME Files have it.
+///
+/// | Width | Start | Middle | End |
+/// | --- | --- | --- | --- |
+/// | Desktop | Back, Forward | the address bar | Search · New folder (Empty Trash in the Trash) · the view switch and its menu · the main menu, the window buttons |
+/// | Phone | the places menu | the address bar | Search · the main menu (with the view's choices on top), the window buttons |
+///
+/// Up is Alt+Up and the address bar's crumbs, Reload is F5 and the view
+/// menu, the preview pane is Alt+P and the view menu: a header with every
+/// button at one weight had nothing to find first. While a slow read is
+/// running, the Stop button joins the start so it can be pressed.
+fn browser_header(
+    tokens: &crate::theme::Tokens,
+    compact: bool,
+    parts: ToolbarParts,
+    menu: &[MenuItem],
+    stopping: bool,
+) -> Element {
+    // A gap between groups of buttons, twice the gap inside a group.
+    let gap_between = || Element::from(rect().tw(tokens, &[px(S1)]));
+    let address = rect()
+        .tw(
+            tokens,
+            &[flex_row(), grow_children(), items(Align::Center), w_full()],
+        )
+        // A phone's title needs every pixel for the folder's name.
+        .maybe(!compact, |row| row.tw(tokens, &[px(S1)]))
+        .child(rect().tw(tokens, &[w_flex()]).child(parts.path_bar));
+    if compact {
+        let mut items = parts.view_items;
+        if !menu.is_empty() {
+            items.push(menu_separator());
+            items.extend(menu.iter().cloned());
+        }
+        return HeaderBar::new(String::new())
+            .fill(Paint::Bg)
+            .title_start(true)
+            .leading(parts.places)
+            .title_slot(address)
+            .trailing(parts.search)
+            .trailing(menu_button("Main menu", items).icon(Icon::OpenMenu))
+            .trailing(WindowControls)
+            .into();
+    }
+    let mut header = HeaderBar::new(String::new())
+        .fill(Paint::Bg)
+        .title_start(true)
+        .leading(parts.back)
+        .leading(parts.forward);
+    if stopping {
+        header = header.leading(parts.refresh);
+    }
+    header = header
+        .title_slot(address)
+        .trailing(parts.search)
+        .trailing(gap_between());
+    header = match parts.empty_trash {
+        Some(empty) => header.trailing(empty),
+        None => header.trailing(parts.create),
+    };
+    header = header.trailing(gap_between()).trailing(parts.view);
+    if !menu.is_empty() {
+        header = header
+            .trailing(gap_between())
+            .trailing(menu_button("Main menu", menu.to_vec()).icon(Icon::OpenMenu));
+    }
+    header.trailing(WindowControls).into()
 }
 
 /// The sort and hidden-file choices of the view menu.
@@ -1631,7 +1852,8 @@ fn view_items(nav: Nav, mut sort: State<Sort>, mut show_hidden: State<bool>) -> 
             let shown = *show_hidden.peek();
             show_hidden.set(!shown);
         })
-        .checked(*show_hidden.read()),
+        .checked(*show_hidden.read())
+        .shortcut("Ctrl+H"),
     ]
 }
 

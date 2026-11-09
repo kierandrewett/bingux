@@ -470,6 +470,15 @@ Chrome budget (controls on screen at rest, popup, `preview::behaviour_tests`):
 picture 4 (the header's), text 4, folder 4, card 5, document 9 (4 + page field,
 zoom out, menu, zoom in, find), song 10.
 
+## 7b. The Preview application
+
+`apps/preview` (`bingux-preview`, `docs/preview-app.md`) is a window around the same viewers: `PreviewHost` in `Mode::Window` (no title line of its own; Space and Escape do not close it; Enter and Properties leave it open), a title line drawn by the app, and a list of the neighbouring files. What it added to the design:
+
+- `bingux_ui::zoom_view`: `ZoomView` and `ZoomHandle`, the general zoomable, pannable, turnable view the picture viewer now uses. Pictures are turned upright by EXIF orientation in the view, because Freya's decoders do not.
+- Helper protocol additions (still version 1): `OpenImage { raw }` (a picture decoded whole in the helper, drawn through `RenderPage` on page 0, `OpenedKind::Image`, `feature::IMAGE`) and `Outline` / `OutlineIs` (a PDF's table of contents, read through poppler's C interface because `poppler-rs` has no safe reader). HEIF and AVIF use libheif, TIFF, HDR and EXR the `image` crate, RAW the largest embedded JPEG; high dynamic range is tone mapped (`tonemap.rs`).
+- The document viewer's page gap was never applied between pages (the spacing sat on a one-child scroll view); it is now.
+- Not done: crop and markup, a sidebar on phone width, EXIF orientation for the host's TIFF in Save a copy beyond what the `image` crate applies.
+
 ## 8. What is not done, and open questions
 
 - Animated WebP and APNG (first frame only); HEIF/RAW without a Skia codec.

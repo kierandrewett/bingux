@@ -2,7 +2,7 @@
 
 Copies of `freya-core`, `freya-winit`, `freya-components` and `freya-animation` 0.5.0-rc.10, used
 through `[patch.crates-io]` in `crates/ui`, `apps/settings`,
-`apps/taxonomy` and `apps/files`. Every app lists all four, so the whole
+`apps/taxonomy`, `apps/files` and `apps/preview`. Every app lists all four, so the whole
 Freya stack resolves one `freya-core`; a manifest that patches only some of them fails to build.
 The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel for a desktop:
 
@@ -43,6 +43,16 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   graphics driver that cannot be rebuilt goes through `guard::unrecoverable`: the app gets its
   chance to relaunch, and the window closes if it is still here.
 
+- `freya-core/src/accessibility/tree.rs`: **accessible names.** A name an element was given
+  (`a11y_alt`) is never replaced by its first child's text (upstream overwrote it). A node whose
+  role is named by its content (button, tab, check box, menu item, option, heading, combo box,
+  cell, status) and has no name is named by all the visible text inside it, however deep,
+  leaving out nested controls; a change deep inside renames it. Text and pictures inside a
+  control whose children are presentational (WAI-ARIA), or inside a text field, are hidden, and an
+  unnamed SVG or image is decoration. Held by `bingux-ui`'s `a11y_tests.rs`.
+- `freya-components/src/input.rs`: an input's text is its accessible *value*, its placeholder a
+  placeholder, and `a11y_label`, `a11y_description` and `a11y_invalid` give its name, help and
+  error state (upstream read the text or the placeholder as the name).
 - `freya-winit/src/bingux_scroll.rs` and `renderer.rs`: the wheel step is 64 px
   per notch (upstream 53) and touchpad movement is 1x (upstream 2x).
   `BINGUX_WHEEL_STEP` and `BINGUX_TOUCHPAD_FACTOR` override them.
@@ -115,6 +125,9 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   it; it clears after `SCROLL_STILL` (200 ms) without a pulse. Bingux tooltips
   and the file view's detail card stay down while it is set. A view with no
   provider above it does nothing (upstream has no such signal).
+- `freya-components/src/gif_viewer.rs`: `GifViewer::pause(GifPause)` holds an animated GIF on the
+  frame it shows while the flag is set and lets it go on from there when it is cleared (upstream
+  has no pause). The Preview app's Play and Pause use it.
 - `freya-components/src/input.rs`: the text field reports its caret and
   selection to the app. `Input::probe(State<InputProbe>)` writes the focus,
   the field's window area, the caret rectangle and the selection ends on each

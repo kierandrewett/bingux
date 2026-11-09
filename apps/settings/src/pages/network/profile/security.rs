@@ -181,7 +181,7 @@ fn wep_phrase(text: &str) -> Check {
     if (1..=64).contains(&text.len()) && printable {
         Ok(())
     } else {
-        Err("A WEP passphrase is 1 to 64 letters, digits or symbols.".to_string())
+        Err("Use 1 to 64 letters, numbers or symbols.".to_string())
     }
 }
 
@@ -642,7 +642,7 @@ fn wifi_page(column: Rect, draft: &Draft, window: Window) -> Rect {
     let needs: Vec<Element> = match kind.as_str() {
         "wpa-psk" | "sae" => vec![
             form_field("Password", draft.text("psk"))
-                .hint("8 to 63 characters, or 64 hexadecimal digits.")
+                .hint("Use 8 to 63 characters, or 64 hexadecimal digits.")
                 .password()
                 .validate(validate::wpa_passphrase)
                 .into(),

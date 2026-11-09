@@ -37,7 +37,11 @@ pub enum Direction {
 /// The environment's direction: `BINGUX_DIRECTION` when set, else the first of
 /// the locale variables that has a value.
 static SYSTEM: LazyLock<Direction> = LazyLock::new(|| {
-    let var = |name: &str| std::env::var(name).ok().filter(|value| !value.trim().is_empty());
+    let var = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+    };
     if let Some(forced) = var("BINGUX_DIRECTION") {
         return match forced.trim().to_ascii_lowercase().as_str() {
             "rtl" | "right-to-left" => Direction::Rtl,
@@ -178,7 +182,9 @@ impl Component for Directed {
     fn render(&self) -> impl IntoElement {
         let direction = self.direction;
         use_provide_context(move || direction);
-        let root = rect().text_direction(direction.text()).child(self.child.clone());
+        let root = rect()
+            .text_direction(direction.text())
+            .child(self.child.clone());
         if self.fill {
             root.width(Size::fill()).height(Size::fill())
         } else {
@@ -187,14 +193,21 @@ impl Component for Directed {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn right_to_left_languages_read_from_the_right() {
-        for tag in ["ar", "ar_EG.UTF-8", "he_IL", "iw", "fa-IR", "ur_PK@arabic", "ckb"] {
+        for tag in [
+            "ar",
+            "ar_EG.UTF-8",
+            "he_IL",
+            "iw",
+            "fa-IR",
+            "ur_PK@arabic",
+            "ckb",
+        ] {
             assert_eq!(Direction::from_language(tag), Direction::Rtl, "{tag}");
         }
         for tag in ["en_GB.UTF-8", "de", "C", "", "ja_JP", "es-419", "ru"] {

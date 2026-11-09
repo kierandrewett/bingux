@@ -340,7 +340,7 @@ impl Component for AccountDetails {
         let password_group = account.current.then(|| {
             Element::from(
                 Group::titled("Password").row(
-                    row("Your password")
+                    row("Password")
                         .trailing(action_button("Change password", move |_| password.open())),
                 ),
             )

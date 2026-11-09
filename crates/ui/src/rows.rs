@@ -54,10 +54,6 @@ struct RowFit(State<bool>);
 pub(crate) fn use_row_fitted() -> bool {
     use_try_consume::<RowFit>().is_some_and(|flag| (flag.0)())
 }
-/// The title of the [`Row`] being rendered, for its descendants. A dropdown
-/// with no explicit `.title()` uses it as its phone sheet header.
-#[derive(Clone, Copy, PartialEq)]
-pub(crate) struct RowTitle(pub(crate) State<String>);
 
 /// Whether this component sits inside a row that takes presses. Text there is
 /// plain, never selectable: a press anywhere on the row opens it, and a text
@@ -627,6 +623,13 @@ impl Component for Row {
         // its own), else the width the last row of this window had, else the
         // window's own. A value is never cut.
         let hint = use_try_consume::<RowWidthHint>().map(|hint| (hint.0)());
+        // The title and the subtitle share one column, as wide as the wider of
+        // them asks: measured on the title alone, a subtitle longer than its
+        // title was wrapped at the title's width, a word to a line.
+        let text_facts = match &self.subtitle {
+            Some(subtitle) => LabelFacts::measure(&self.title, BODY).wider(LabelFacts::measure(subtitle, CAPTION)),
+            None => LabelFacts::measure(&self.title, BODY),
+        };
         let value_line = self.value.as_ref().map(|value| {
             let face = if face_size().0 > 0.0 {
                 face_size().0
@@ -647,7 +650,7 @@ impl Component for Row {
             choose_value_line(
                 (inner_of(face) - beyond).max(0.0),
                 S3.px() + S1.px(),
-                LabelFacts::measure(&self.title, BODY),
+                text_facts,
                 ValueFacts::measure(&value.text, value.style(), value.breaks_anywhere()),
                 is_compact(),
             )
@@ -684,8 +687,9 @@ impl Component for Row {
         fitting.0.set_if_modified(fit);
         let mut value_flow = use_provide_context(|| ValueFlow(State::create(false)));
         value_flow.0.set_if_modified(stacked);
-        let mut row_title = use_provide_context(|| RowTitle(State::create(self.title.clone())));
-        row_title.0.set_if_modified(self.title.clone());
+        // The control in the row (a switch, a dropdown, a field) is named by
+        // the title and described by the subtitle.
+        crate::a11y::provide_field_label(&self.title, self.subtitle.as_deref());
         // Only a row that opens something, such as one with a chevron, lights
         // on hover and press. A switch, slider or value row does not.
         let activatable = interactive && self.activatable;
@@ -1105,6 +1109,27 @@ impl Component for Row {
                 let checked = radio.is_some_and(|choice| choice.selected);
                 element.a11y_builder(move |builder| builder.set_toggled(Toggled::from(checked)))
             })
+            // A row that is a control is named by its title alone; the
+            // subtitle and the value are its description ("Wi-Fi, button,
+            // Connected"), not part of its name.
+            .maybe(interactive || radio.is_some(), |element| {
+                let title = self.title.clone();
+                let details: Vec<String> = [
+                    self.subtitle.clone(),
+                    self.value.as_ref().map(|value| value.text.clone()),
+                    self.badge.clone(),
+                ]
+                .into_iter()
+                .flatten()
+                .filter(|text| !text.trim().is_empty())
+                .collect();
+                element.a11y_builder(move |builder| {
+                    builder.set_label(title);
+                    if !details.is_empty() {
+                        builder.set_description(details.join(", "));
+                    }
+                })
+            })
             .tw(
                 &tokens,
                 match (split, single_line) {
@@ -1425,6 +1450,7 @@ impl Component for LevelRow {
         let menu = self.context_menu.clone();
         let value = self.value.clamp(0.0, self.max);
         provide_enabled(self.enabled);
+        crate::a11y::provide_field_label(&self.title, self.subtitle.as_deref());
         let row_hit = search_highlight::current().as_deref().is_some_and(|query| {
             search_highlight::hits(query, &self.title)
                 || self
@@ -1746,7 +1772,9 @@ impl Component for RadioRows {
             }
             Element::from(row)
         });
+        // One choice of several: a radio group, named by the card's title.
         crate::group::Group::new(self.title.clone())
+            .semantics(crate::a11y::Semantics::new().role(AccessibilityRole::RadioGroup))
             .rows(rows)
             .rows(self.extra.clone())
     }

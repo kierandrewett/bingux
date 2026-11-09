@@ -1,36 +1,30 @@
 //! Opening a link from the About window, and finding the licence files a
 //! package installed.
 
-use std::process::{Command, Stdio};
-
 /// Whether `url` is one the About window opens: a web page or a mail address.
 /// Anything else (a `file:` path, a `javascript:` string, a custom scheme) is
 /// not a link an application's metadata should be able to launch.
 pub(crate) fn is_openable(url: &str) -> bool {
-    ["https://", "http://", "mailto:"].iter().any(|scheme| url.starts_with(scheme))
+    ["https://", "http://", "mailto:"]
+        .iter()
+        .any(|scheme| url.starts_with(scheme))
 }
 
-/// Open `url` with `xdg-open`, which asks the desktop for the user's browser
-/// or mail client. The child runs on its own and its output is dropped; a
-/// thread reaps it. Returns whether it started. Call it from an event
-/// handler, never from render.
-pub(crate) fn open(url: &str) -> bool {
+/// Open `url` in the person's browser or mail client (`crate::platform::open`:
+/// the portal, else the default application, else `xdg-open`). It returns at
+/// once; `failed` is called on the UI thread when the link is not one About
+/// opens or nothing could open it. Call it from an event handler, never from
+/// render.
+pub(crate) fn open(url: &str, failed: impl FnOnce() + 'static) {
     if !is_openable(url) {
-        return false;
+        failed();
+        return;
     }
-    let Ok(mut child) = Command::new("xdg-open")
-        .arg(url)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-    else {
-        return false;
-    };
-    std::thread::spawn(move || {
-        let _ = child.wait();
+    crate::platform::open::open_uri_then(url.to_owned(), move |result| {
+        if result.is_err() {
+            failed();
+        }
     });
-    true
 }
 
 /// "github.com/kierandrewett/bingux": a link without its scheme and trailing
@@ -74,7 +68,10 @@ pub(crate) fn find_third_party(lookup: Lookup) -> Result<Legal, String> {
         return Err(String::new());
     }
     if !lookup.given.is_empty() {
-        return Ok(Legal { text: lookup.given, path: None });
+        return Ok(Legal {
+            text: lookup.given,
+            path: None,
+        });
     }
     let file = format!("{}.LICENSE.dependencies", lookup.id);
     let mut places: Vec<String> = Vec::new();
@@ -85,7 +82,10 @@ pub(crate) fn find_third_party(lookup: Lookup) -> Result<Legal, String> {
     places.push(format!("/usr/local/share/licenses/{}/{file}", lookup.id));
     for path in places {
         if let Ok(text) = std::fs::read_to_string(&path) {
-            return Ok(Legal { text, path: Some(path) });
+            return Ok(Legal {
+                text,
+                path: Some(path),
+            });
         }
     }
     Err(format!("{file} is not installed"))
@@ -100,22 +100,41 @@ mod tests {
         for ok in ["https://github.com/x", "http://example.org", "mailto:a@b.c"] {
             assert!(is_openable(ok), "{ok}");
         }
-        for bad in ["file:///etc/passwd", "javascript:alert(1)", "bingux-files://x", "github.com", ""] {
+        for bad in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "bingux-files://x",
+            "github.com",
+            "",
+        ] {
             assert!(!is_openable(bad), "{bad}");
         }
     }
 
     #[test]
     fn a_link_is_shown_without_its_scheme() {
-        assert_eq!(shown("https://github.com/kierandrewett/bingux/"), "github.com/kierandrewett/bingux");
+        assert_eq!(
+            shown("https://github.com/kierandrewett/bingux/"),
+            "github.com/kierandrewett/bingux"
+        );
         assert_eq!(shown("mailto:a@b.c"), "a@b.c");
     }
 
     #[test]
     fn the_supplied_text_is_the_answer_and_nothing_is_read_before_the_page_is_open() {
-        let lookup = |wanted, given: &str| Lookup { wanted, id: "bingux-none".into(), given: given.into() };
+        let lookup = |wanted, given: &str| Lookup {
+            wanted,
+            id: "bingux-none".into(),
+            given: given.into(),
+        };
         assert_eq!(find_third_party(lookup(false, "x")), Err(String::new()));
-        assert_eq!(find_third_party(lookup(true, "x")), Ok(Legal { text: "x".into(), path: None }));
+        assert_eq!(
+            find_third_party(lookup(true, "x")),
+            Ok(Legal {
+                text: "x".into(),
+                path: None
+            })
+        );
         assert!(find_third_party(lookup(true, "")).is_err());
     }
 }

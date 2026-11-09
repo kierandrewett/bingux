@@ -1,0 +1,62 @@
+.TH BINGUX-WEATHER 1 "2026-11-09" "Bingux 0.1.0" "Bingux"
+.SH NAME
+bingux-weather \- forecasts for the Bingux desktop
+.SH SYNOPSIS
+.B bingux-weather
+.SH DESCRIPTION
+.B bingux-weather
+opens the Weather window: the conditions now, the next 24 hours, ten days, the
+UV index, wind, sunrise and sunset, the moon, humidity, pressure, visibility and
+the air quality, for the computer's position and for the cities that were added.
+.PP
+Only one Weather window runs.
+A second launch raises the running window.
+.PP
+The forecast, the air quality and the city search are Open-Meteo's
+(https://open-meteo.com), licensed CC BY 4.0, and need no key.
+.SH POSITION
+"My Location" is found with the desktop's location service
+(the Location portal) when there is one, and otherwise from the network
+address, which is accurate to about the city.
+The window says which.
+Turn "Use my location" off in the menu to use only the cities that were added.
+.SH UNITS
+Units follow the locale (\fBLC_ALL\fR, \fBLC_MEASUREMENT\fR, then \fBLANG\fR)
+until they are chosen under Units in the menu.
+.SH KEYS
+.TP
+.B Ctrl+R, F5
+Refresh.
+.TP
+.B Ctrl+N
+Add a location.
+.TP
+.B Ctrl+Shift+C
+Copy the conditions.
+.TP
+.B Ctrl+Page Down, Ctrl+Page Up
+Next and previous place.
+.SH ENVIRONMENT
+.TP
+.B BINGUX_WEATHER_DIR
+Keep the settings and the cached forecasts under this folder (\fIconfig/\fR and
+\fIcache/\fR) instead of the XDG folders.
+.TP
+.B HTTPS_PROXY
+The proxy the requests go through.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/bingux/weather/settings.json
+The saved places, the units and the place on show.
+.TP
+.I $XDG_CONFIG_HOME/bingux/weather/here.json
+Where the computer was last found.
+.TP
+.I $XDG_CACHE_HOME/bingux/weather/forecast-*.json
+The last forecast of each place, shown with its age when there is no network.
+.SH SEE ALSO
+.BR bingux\-settings (1)
+.PP
+Documentation: docs/weather.md in the Bingux source.
+.SH AUTHORS
+Kieran Drewett and the Bingux contributors.

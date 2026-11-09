@@ -66,8 +66,11 @@ impl Component for MobileNetworkPage {
             Some(Err(error)) => {
                 return veiled(
                     page_column().child(PageHead::new()).child(
-                        status(Status::Error(error.0))
-                            .action("Try again", move |_| reload_modem(modem_state)),
+                        status(Status::Error(super::super::plain(
+                            &error.0,
+                            "Could not read the modem. Try again.",
+                        )))
+                        .action("Try again", move |_| reload_modem(modem_state)),
                     ),
                     false,
                 );
@@ -76,7 +79,7 @@ impl Component for MobileNetworkPage {
                 return veiled(
                     page_column()
                         .child(PageHead::new())
-                        .child(status(Status::Empty("No mobile broadband device.".into()))),
+                        .child(status(Status::Empty("No mobile modem found".into()))),
                     false,
                 );
             }
@@ -86,9 +89,9 @@ impl Component for MobileNetworkPage {
             let text = if modem.locked() {
                 "Unlock the SIM to choose a carrier."
             } else if modem.no_sim() {
-                "No SIM card."
+                "No SIM card"
             } else {
-                "Mobile network is off."
+                "Mobile network is off"
             };
             return veiled(
                 page_column()
@@ -117,7 +120,10 @@ impl Component for MobileNetworkPage {
                         let mut search = search;
                         search.set(match result {
                             Ok(found) => Search::Found(found),
-                            Err(error) => Search::Failed(error.0),
+                            Err(error) => Search::Failed(super::super::plain(
+                                &error.0,
+                                "Could not search for networks. Try again.",
+                            )),
                         });
                     },
                 );
@@ -147,7 +153,10 @@ impl Component for MobileNetworkPage {
                         if let Err(error) = result {
                             let mut manual = manual;
                             manual.set(Some(true));
-                            ctx.overlays.toast(error.0);
+                            ctx.overlays.toast(super::super::plain(
+                                &error.0,
+                                "Could not switch to automatic network selection. Try again.",
+                            ));
                         }
                         apn::reload(profiles);
                         reload_modem(modem_state);
@@ -171,7 +180,7 @@ impl Component for MobileNetworkPage {
                     .into(),
                 Search::Searching => Group::titled("Networks")
                     .row(Element::from(status(Status::Loading(
-                        "Searching for networks. This can take a minute or two.".into(),
+                        "Searching for networks…".into(),
                     ))))
                     .into(),
                 Search::Failed(text) => Group::titled("Networks")
@@ -179,7 +188,7 @@ impl Component for MobileNetworkPage {
                     .into(),
                 Search::Found(found) if found.is_empty() => Group::titled("Networks")
                     .row(Element::from(status(Status::Empty(
-                        "No networks were found.".into(),
+                        "No networks found".into(),
                     ))))
                     .into(),
                 Search::Found(found) => {
@@ -282,7 +291,10 @@ fn choose(
                             .collect(),
                     ));
                 }
-                Err(error) => ctx.overlays.toast(error.0),
+                Err(error) => ctx.overlays.toast(super::super::plain(
+                    &error.0,
+                    "Could not join that network. Try again.",
+                )),
             }
             apn::reload(profiles);
             reload_modem(modem_state);

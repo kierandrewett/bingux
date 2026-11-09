@@ -13,12 +13,14 @@
 //! `BINGUX_BUILD_COMMIT` and `BINGUX_BUILD_DATE`. Everything after that is a
 //! reachable About window, made by [`Application::run`](crate::app::Application::run):
 //!
-//! * the shortcut **Ctrl+Shift+?** opens it in the main window (see
-//!   [`is_shortcut`]);
 //! * the application's main menu ends with **About <name>**, from
 //!   [`app_menu_items`], or is [`app_menu`] when it has no menu of its own;
-//! * [`open`] opens it from code, and the headless runner's script command
-//!   `key ctrl+shift+?` does the same, so a test reaches it as a person does.
+//! * the command palette (Ctrl+Shift+P) has **About <name>**, as the
+//!   window's `app.about` command (see [`crate::commands`]);
+//! * [`open`] opens it from code.
+//!
+//! It has no shortcut of its own: Ctrl+? is the keyboard shortcuts sheet, as
+//! in GNOME.
 //!
 //! An application that never calls `about` still has the window, with the
 //! name it launched with and no version; `scripts/ui-lint.py` fails an app
@@ -61,25 +63,10 @@ use crate::icons::Icon;
 use crate::shell::menu::{MenuItem, menu_button, menu_item, menu_separator};
 use crate::shell::overlays::{Overlays, use_overlays};
 
-/// The shortcut text menus show next to About.
-pub const SHORTCUT: &str = "Ctrl+Shift+?";
-
 /// Open the application's About window in the window `overlays` belongs to.
 /// Call it from an event handler.
 pub fn open(overlays: Overlays) {
     open_with(overlays, info());
-}
-
-/// Whether `event` is the About shortcut: Ctrl+Shift+? (the key that types `?`
-/// with Shift held, whichever layout puts it there, or `/` for a layout that
-/// reports the unshifted key). Alt and Meta are not held.
-pub fn is_shortcut(event: &KeyboardEventData) -> bool {
-    let modifiers = event.modifiers;
-    modifiers.contains(Modifiers::CONTROL)
-        && modifiers.contains(Modifiers::SHIFT)
-        && !modifiers.contains(Modifiers::ALT)
-        && !modifiers.contains(Modifiers::META)
-        && matches!(&event.key, Key::Character(text) if text == "?" || text == "/")
 }
 
 /// The items every application's main menu ends with: a separator and
@@ -92,7 +79,7 @@ pub fn is_shortcut(event: &KeyboardEventData) -> bool {
 pub fn app_menu_items(overlays: Overlays) -> Vec<MenuItem> {
     vec![
         menu_separator(),
-        menu_item(format!("About {}", info().name), move |_: ()| open(overlays)).shortcut(SHORTCUT),
+        menu_item(format!("About {}", info().name), move |_: ()| open(overlays)),
     ]
 }
 
@@ -113,15 +100,33 @@ pub struct AppMenu {
 impl Component for AppMenu {
     fn render(&self) -> impl IntoElement {
         let overlays = use_overlays();
-        let mut items = self.items.clone();
-        let mut about = app_menu_items(overlays);
-        if items.is_empty() {
-            // Nothing before it to separate from.
-            about.remove(0);
-        }
-        items.extend(about);
-        menu_button("Main menu", items).icon(Icon::OpenMenu)
+        let commands = crate::commands::use_commands();
+        let own = self.items.clone();
+        // The window's commands are read when the menu opens, so a title
+        // such as "Undo rename" is the one that applies then.
+        menu_button("Main menu", Vec::new())
+            .icon(Icon::OpenMenu)
+            .items_on_open(move || main_menu(own.clone(), commands.main_menu_items(), overlays))
     }
+}
+
+/// The main menu: the app's own items, then the window's commands, then
+/// About, with a separator between each part that has items.
+fn main_menu(own: Vec<MenuItem>, commands: Vec<MenuItem>, overlays: Overlays) -> Vec<MenuItem> {
+    let mut items = own;
+    if !commands.is_empty() {
+        if !items.is_empty() {
+            items.push(menu_separator());
+        }
+        items.extend(commands);
+    }
+    let mut about = app_menu_items(overlays);
+    if items.is_empty() {
+        // Nothing before it to separate from.
+        about.remove(0);
+    }
+    items.extend(about);
+    items
 }
 
 #[cfg(all(test, feature = "testing"))]

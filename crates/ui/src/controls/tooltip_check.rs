@@ -107,7 +107,11 @@ impl Snapshot {
         let (width, height) = window(self);
         // A snapshot has no window context to read the size class from: the
         // phone size is the compact one.
-        let class = if width < COMPACT_BELOW { SizeClass::Compact } else { SizeClass::Regular };
+        let class = if width < COMPACT_BELOW {
+            SizeClass::Compact
+        } else {
+            SizeClass::Regular
+        };
         let line = CAPTION.size.px_in(class) * CAPTION.leading;
         let cap = Dim::TooltipMax.px_in(class);
         let mut report = TooltipReport::default();
@@ -129,7 +133,8 @@ impl Snapshot {
             report.controls += 1;
 
             let before = labels(self, &name);
-            self.runner().move_cursor((centre.x as f64, centre.y as f64));
+            self.runner()
+                .move_cursor((centre.x as f64, centre.y as f64));
             let mut found = None;
             for _ in 0..FRAMES_TO_SHOW {
                 self.runner().poll_n(FRAME, 1);
@@ -171,7 +176,9 @@ impl Snapshot {
                 if lines > 1 && characters / lines < MIN_PER_LINE {
                     flag(
                         "vertical",
-                        format!("{characters} characters on {lines} lines: under {MIN_PER_LINE} a line"),
+                        format!(
+                            "{characters} characters on {lines} lines: under {MIN_PER_LINE} a line"
+                        ),
                     );
                 }
                 if bubble.min_x() < EDGE - 0.5
@@ -191,12 +198,16 @@ impl Snapshot {
                     );
                 }
                 if bubble.intersects(&area) {
-                    flag("over its control", "the bubble covers the control".to_string());
+                    flag(
+                        "over its control",
+                        "the bubble covers the control".to_string(),
+                    );
                 }
             }
             // Off the control and past the grace time: the next one waits its rest
             // like a person's pointer arriving, and no bubble is left to confuse it.
-            self.runner().move_cursor(((width - 1.0) as f64, (height - 1.0) as f64));
+            self.runner()
+                .move_cursor(((width - 1.0) as f64, (height - 1.0) as f64));
             self.runner().poll(FRAME, Duration::from_millis(450));
         }
         report
