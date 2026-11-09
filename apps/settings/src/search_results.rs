@@ -118,7 +118,13 @@ impl Component for SearchResults {
                 None => groups.push((page, vec![hit])),
             }
         }
-        for (page, hits) in groups {
+        for (page, mut hits) in groups {
+            // The group heading already names the page: a hit that is only the
+            // page itself adds a second row saying the same, so it is left out
+            // whenever something more specific matched.
+            if hits.len() > 1 {
+                hits.retain(|hit| hit.breadcrumb().len() > 1 || hit.title() != Some(page.title()));
+            }
             let rows: Vec<Element> = hits
                 .into_iter()
                 .take(MAX_ROWS_PER_PAGE)

@@ -558,7 +558,7 @@ impl Component for DesktopPage {
         }
         let page = page
             .child(dock)
-            .child(
+            .maybe_child(m.dock.then(|| {
                 Group::titled("Dock mouse actions")
                     .row(menu_row(
                         "Click",
@@ -601,8 +601,8 @@ impl Component for DesktopPage {
                         move |key: String| {
                             write(ctx, Change::Set("desktop.dock_scroll_direction", key))
                         },
-                    )),
-            )
+                    ))
+            }))
             .child(sidebar)
             .child(
                 Group::titled("Top bar")
