@@ -4,7 +4,7 @@ Text Editor (`bingux-text-editor`) edits plain text and code. It opens with a
 blank document ready to type in, or with the documents you had open last
 time, including any changes you had not saved.
 
-![Text Editor with a Rust file](images/text-editor.webp)
+![Text Editor finding "Range" in a Rust file](images/text-editor.webp)
 
 ## Open and save
 
