@@ -149,7 +149,7 @@ mod fake {
     }
 
     fn refuse() -> CommandResult {
-        Err(CommandError("The change could not be saved.".into()))
+        Err(CommandError("Could not save the change. Try again.".into()))
     }
 
     /// The Unix time of the wall-clock `text` (`YYYY-MM-DD HH:MM:SS`) in `zone`.
@@ -162,7 +162,7 @@ mod fake {
         String::from_utf8_lossy(&output.stdout)
             .trim()
             .parse()
-            .map_err(|_| CommandError("The time could not be set.".into()))
+            .map_err(|_| CommandError("Could not set the time. Try again.".into()))
     }
 
     pub fn run(program: &str, args: &[&str]) -> CommandResult {

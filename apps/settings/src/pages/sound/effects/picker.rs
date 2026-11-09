@@ -44,7 +44,7 @@ impl Component for Picker {
         let Some(catalog) = catalog else {
             return page.child(
                 Group::new(None::<String>)
-                    .row(status(Status::Loading("Looking for plugins.".to_string()))),
+                    .row(status(Status::Loading("Looking for effects…".to_string()))),
             );
         };
         let mut any = false;
@@ -84,7 +84,7 @@ impl Component for Picker {
         if !any {
             page = page.child(
                 Group::new(None::<String>)
-                    .row(status(Status::Empty("No effects match.".to_string()))),
+                    .row(status(Status::Empty("No matching effects".to_string()))),
             );
         }
         page

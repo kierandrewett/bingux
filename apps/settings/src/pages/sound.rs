@@ -71,8 +71,8 @@ impl Kind {
 
     fn none_found(self) -> &'static str {
         match self {
-            Kind::Output => "No output devices found.",
-            Kind::Input => "No input devices found.",
+            Kind::Output => "No output devices found",
+            Kind::Input => "No input devices found",
         }
     }
 
@@ -153,7 +153,7 @@ impl Device {
         if detail.is_empty() || detail == self.name {
             self.name.clone()
         } else {
-            format!("{} - {detail}", self.name)
+            format!("{}, {detail}", self.name)
         }
     }
 }
@@ -206,7 +206,7 @@ fn summary_of(streams: &[Stream]) -> String {
     if parts.is_empty() {
         "Paused".to_string()
     } else {
-        parts.join("; ")
+        parts.join(", ")
     }
 }
 
@@ -858,8 +858,8 @@ fn set_effects_device(ctx: Ctx, direction: engine::Direction, device: String) {
         },
         move |result: Result<(), String>| {
             end_write();
-            if let Err(message) = result {
-                overlays.toast(message);
+            if let Err(raw) = result {
+                report(overlays, "Could not start the effects. Try again.", &raw);
             }
             reload(model);
         },
@@ -998,6 +998,14 @@ fn reload(model: ModelState) {
     );
 }
 
+/// Log what failed and tell the person in a plain sentence.
+pub(crate) fn report(overlays: Overlays, message: &str, raw: &str) {
+    if !raw.is_empty() {
+        eprintln!("sound: {message} {raw}");
+    }
+    overlays.toast(message);
+}
+
 /// Run a `wpctl` write on a background thread, then toast a failure and
 /// reload the model so the page shows what the backend now reports.
 fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
@@ -1011,7 +1019,7 @@ fn apply(args: Vec<String>, model: ModelState, overlays: Overlays) {
         },
         move |result| {
             if let Err(e) = result {
-                overlays.toast(e.0);
+                report(overlays, "Could not change the sound. Try again.", &e.0);
             }
             reload(model);
         },
@@ -1085,7 +1093,7 @@ fn push_volume(queue: VolumeQueue, overlays: Overlays) {
         },
         move |result| {
             if let Err(e) = result {
-                overlays.toast(e.0);
+                report(overlays, "Could not change the volume. Try again.", &e.0);
             }
             push_volume(queue, overlays);
         },
@@ -1301,8 +1309,10 @@ fn tone_wav(channels: usize, lit: usize) -> Vec<u8> {
 /// `pw-play` is missing or fails.
 fn play_tone(sink: &str, names: &[String], lit: usize) -> Result<(), CommandError> {
     let path = std::env::temp_dir().join(format!("bingux-sound-test-{}-{lit}.wav", names.len()));
-    std::fs::write(&path, tone_wav(names.len(), lit))
-        .map_err(|e| CommandError(format!("Could not write the test tone: {e}")))?;
+    std::fs::write(&path, tone_wav(names.len(), lit)).map_err(|e| {
+        eprintln!("sound: could not write the test tone: {e}");
+        CommandError("Could not play the test sound. Free up disk space and try again.".to_string())
+    })?;
     let file = path.to_string_lossy().into_owned();
     let short: Vec<&str> = names.iter().map(|name| short_channel(name)).collect();
     let map = short.join(",");
@@ -1329,7 +1339,11 @@ fn play_tone(sink: &str, names: &[String], lit: usize) -> Result<(), CommandErro
         TIMEOUT,
     )
     .map(|_| ())
-    .map_err(|_| CommandError("Install pw-play or paplay to test the speakers.".to_string()))
+    .map_err(|_| {
+        CommandError(
+            "Could not play the test sound. Check that sound is working and try again.".to_string(),
+        )
+    })
 }
 
 /// Where each speaker sits in the room, in pixels from its centre. The front
@@ -1387,7 +1401,11 @@ fn play_channel(sink: &str, names: &[String], name: &str) -> Result<(), CommandE
         TIMEOUT,
     )
     .map(|_| ())
-    .map_err(|_| CommandError("Install pw-play or paplay to test the speakers.".to_string()))
+    .map_err(|_| {
+        CommandError(
+            "Could not play the test sound. Check that sound is working and try again.".to_string(),
+        )
+    })
 }
 
 /// The speaker test: a room with one round button per speaker, each placed
@@ -1413,7 +1431,7 @@ impl Component for SpeakerTest {
         let playing_name = playing.read().clone();
         let label = match &playing_name {
             Some(name) => channel_label(name),
-            None => "Select a speaker".to_string(),
+            None => "Choose a speaker".to_string(),
         };
 
         let mut room = rect().tw(
@@ -1454,7 +1472,7 @@ impl Component for SpeakerTest {
                     move |result| {
                         playing.set(None);
                         if let Err(e) = result {
-                            overlays.toast(e.0);
+                            report(overlays, &e.0, "");
                         }
                     },
                 );
@@ -1708,7 +1726,7 @@ fn device_dropdown_row(kind: Kind, devices: &[Device], test: Option<Mix>, ctx: C
     for device in devices.iter().filter(|device| !device.is_default) {
         let id = device.id;
         menu.push(menu_item(
-            format!("Set as default: {}", device.full_name()),
+            format!("Use {} as default", device.full_name()),
             move |_| set_default(ctx, kind, id),
         ));
     }
@@ -1868,7 +1886,11 @@ fn move_streams(ctx: Ctx, kind: Kind, ids: Vec<u32>, device: u32) {
         },
         move |result| {
             if let Err(e) = result {
-                ctx.overlays.toast(e.0);
+                report(
+                    ctx.overlays,
+                    "Could not move the sound to that device. Try again.",
+                    &e.0,
+                );
             }
             reload(ctx.model);
         },
@@ -1938,7 +1960,7 @@ fn app_row(streams: &[Stream], above: bool, ctx: Ctx, live: bool) -> Element {
             row(first.name.clone())
                 .leading_app(first.icon.clone())
                 .subtitle(summary_of(streams))
-                .value("Volume cannot be changed"),
+                .value("Fixed volume"),
         ),
     }
 }
@@ -2058,8 +2080,12 @@ fn set_output_effects(mut shown: State<Option<String>>, overlays: Overlays, on: 
         },
         move |result: Result<Option<String>, String>| match result {
             Ok(summary) => shown.set(summary),
-            Err(message) => {
-                overlays.toast(message);
+            Err(raw) => {
+                report(
+                    overlays,
+                    "Could not change output effects. Try again.",
+                    &raw,
+                );
                 shown.set(previous);
             }
         },

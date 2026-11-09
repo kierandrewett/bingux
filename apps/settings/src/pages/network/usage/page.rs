@@ -75,10 +75,10 @@ fn notices(snapshot: &Snapshot, scope: &UsageScope) -> Vec<Element> {
         };
         warnings.push(Element::from(warning(row(NOT_RUNNING).subtitle(detail))));
     }
-    if let Some(what) = &snapshot.unsupported {
-        notices.push(Element::from(status(Status::Info(format!(
-            "The history source cannot answer this: {what}."
-        )))));
+    if snapshot.unsupported.is_some() {
+        notices.push(Element::from(status(Status::Info(
+            "Data usage history is not available here.".into(),
+        ))));
     }
     // An interface is compared with no limit: limits belong to the whole
     // computer or to one connection.
@@ -151,7 +151,7 @@ fn chart_group(snapshot: &Snapshot, period: Period, custom_missing: bool) -> Gro
         ))));
     }
     match &snapshot.series {
-        Err(why) => group.row(Element::from(status(Status::Info(format!("{why}."))))),
+        Err(why) => group.row(Element::from(status(Status::Info(why.clone())))),
         Ok(buckets) if !chart::has_traffic(buckets) => group.row(Element::from(status(
             Status::Empty(if snapshot.source.is_none() {
                 "Nothing has been recorded yet.".into()

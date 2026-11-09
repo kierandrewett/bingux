@@ -33,10 +33,7 @@ pub(super) fn options_with(choices: &[(&str, &str)], current: &str) -> Vec<(Stri
 /// The DHCP client ID: any text, without spaces at either end.
 fn client_id(text: &str) -> Check {
     if text.trim() != text || text.len() > 255 {
-        Err(
-            "Enter mac, duid or a hex string, up to 255 characters, without spaces at either end."
-                .to_string(),
-        )
+        Err("Use up to 255 characters, with no space at either end.".to_string())
     } else {
         Ok(())
     }
@@ -48,7 +45,7 @@ fn route_metric(text: &str) -> Check {
     metric(text)?;
     match text.parse::<u32>() {
         Ok(number) if number.to_string() == text => Ok(()),
-        _ => Err("Enter a whole number, or leave the field empty for automatic.".to_string()),
+        _ => Err("Enter a whole number, or leave it empty for automatic.".to_string()),
     }
 }
 

@@ -193,7 +193,10 @@ pub fn reconnect(ctx: NetCtx, name: String) {
         move || nmcli(&["connection", "up", "id", &name], CONNECT),
         move |result| {
             if let Err(error) = result {
-                ctx.overlays.toast(error.0);
+                ctx.overlays.toast(super::super::plain(
+                    &error.0,
+                    "Could not reconnect. Try again.",
+                ));
             }
             ctx.reload();
         },
@@ -223,7 +226,10 @@ pub fn apply_now(ctx: NetCtx, owner: &Owner, state: ProfileState, changes: Chang
             Err(error) => {
                 let mut shown = state;
                 shown.set(Some(Ok(current)));
-                ctx.overlays.toast(error.0);
+                ctx.overlays.toast(super::super::plain(
+                    &error.0,
+                    "Could not save the change. Try again.",
+                ));
             }
         },
     );
@@ -270,7 +276,10 @@ pub fn apply_batch(
                     ctx.reload();
                     on_saved();
                 }
-                Err(error) => ctx.overlays.toast(error.0),
+                Err(error) => ctx.overlays.toast(super::super::plain(
+                    &error.0,
+                    "Could not save the settings. Try again.",
+                )),
             }
         },
     );

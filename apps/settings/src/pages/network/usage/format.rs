@@ -76,7 +76,7 @@ pub fn parse_size(text: &str, unit: LimitUnit) -> Result<u64, String> {
     }
     let bytes = (number * unit.factor()).round();
     if bytes > MAX_LIMIT {
-        return Err("That is more than any plan.".into());
+        return Err("Enter a smaller size.".into());
     }
     Ok(bytes as u64)
 }
@@ -157,7 +157,8 @@ pub fn parse_date(text: &str) -> Result<Date, String> {
     let (Ok(year), Ok(month), Ok(day)) = (year.parse(), month.parse(), day.parse()) else {
         return Err(invalid());
     };
-    Date::new(year, month, day).ok_or_else(|| "That date does not exist.".to_string())
+    Date::new(year, month, day)
+        .ok_or_else(|| "Enter a date that exists, such as 2026-10-01.".to_string())
 }
 
 /// The check the custom range fields run.

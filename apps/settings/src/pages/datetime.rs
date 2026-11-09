@@ -281,6 +281,7 @@ fn reload(ctx: Ctx) {
 /// success reloads the model from the backend.
 fn apply(
     ctx: Ctx,
+    failed: &'static str,
     edit: impl FnOnce(&mut Model),
     work: impl FnOnce() -> CommandResult + Send + 'static,
 ) {
@@ -294,7 +295,12 @@ fn apply(
         Some(ctx.overlays),
         Some(Ok(model)),
         Some(Ok(value)),
-        move || work().map(|_| ()),
+        move || {
+            work().map(|_| ()).map_err(|error| {
+                eprintln!("datetime: {failed} {}", error.0);
+                CommandError(failed.into())
+            })
+        },
         move || reload(ctx),
     );
 }
@@ -307,6 +313,7 @@ fn toggle_item(on: bool, set: impl Fn(bool) + 'static) -> MenuItem {
 fn set_ntp(ctx: Ctx, on: bool) {
     apply(
         ctx,
+        "Could not change automatic time. Try again.",
         move |model| model.ntp = on,
         move || backend::run("timedatectl", &["set-ntp", flag(on)]),
     );
@@ -316,6 +323,7 @@ fn set_clock_format(ctx: Ctx, key: String) {
     let quoted = format!("'{key}'");
     apply(
         ctx,
+        "Could not change the clock format. Try again.",
         move |model| model.clock_format = key,
         move || backend::gsettings_set(INTERFACE, "clock-format", &quoted),
     );
@@ -324,6 +332,7 @@ fn set_clock_format(ctx: Ctx, key: String) {
 fn set_seconds(ctx: Ctx, on: bool) {
     apply(
         ctx,
+        "Could not change the seconds setting. Try again.",
         move |model| model.clock_seconds = Some(on),
         move || {
             backend::run(
@@ -337,6 +346,7 @@ fn set_seconds(ctx: Ctx, on: bool) {
 fn set_weekday(ctx: Ctx, on: bool) {
     apply(
         ctx,
+        "Could not change the weekday setting. Try again.",
         move |model| model.show_weekday = Some(on),
         move || backend::gsettings_set(INTERFACE, "clock-show-weekday", flag(on)),
     );
@@ -345,6 +355,7 @@ fn set_weekday(ctx: Ctx, on: bool) {
 fn set_show_date(ctx: Ctx, on: bool) {
     apply(
         ctx,
+        "Could not change the date setting. Try again.",
         move |model| model.show_date = Some(on),
         move || backend::gsettings_set(INTERFACE, "clock-show-date", flag(on)),
     );
@@ -353,6 +364,7 @@ fn set_show_date(ctx: Ctx, on: bool) {
 fn set_auto_zone(ctx: Ctx, on: bool) {
     apply(
         ctx,
+        "Could not change automatic time zone. Try again.",
         move |model| model.auto_zone = Some(on),
         move || backend::gsettings_set(DATETIME, "automatic-timezone", flag(on)),
     );
@@ -361,6 +373,7 @@ fn set_auto_zone(ctx: Ctx, on: bool) {
 fn set_week_numbers(ctx: Ctx, on: bool) {
     apply(
         ctx,
+        "Could not change the week numbers setting. Try again.",
         move |model| model.week_numbers = Some(on),
         move || backend::gsettings_set(CALENDAR, "show-weekdate", flag(on)),
     );
@@ -371,6 +384,7 @@ fn pick_zone(ctx: Ctx, zone: String) {
     let work = zone.clone();
     apply(
         ctx,
+        "Could not set the time zone. Try again.",
         move |model| model.timezone = zone,
         move || set_timezone(&work),
     );
@@ -380,7 +394,7 @@ fn pick_zone(ctx: Ctx, zone: String) {
 fn copy_text(overlays: Overlays, text: String, done: &'static str) {
     match freya::clipboard::Clipboard::set(text) {
         Ok(()) => overlays.toast(done),
-        Err(_) => overlays.toast("The text could not be copied."),
+        Err(_) => overlays.toast("Could not copy the time zone"),
     }
 }
 
@@ -469,7 +483,12 @@ fn apply_date(form: DateForm, window: Window) {
                     window.close();
                     reload(form.ctx);
                 }
-                Err(failure) => form.ctx.overlays.toast(failure.0),
+                Err(failure) => {
+                    eprintln!("datetime: setting the time failed: {}", failure.0);
+                    form.ctx
+                        .overlays
+                        .toast("Could not set the date and time. Try again.");
+                }
             }
         },
     );
@@ -541,7 +560,9 @@ impl Component for DateBody {
             .child(reveal_block_if(
                 S6,
                 setting().then(|| {
-                    Element::from(status(Status::Loading("Setting the clock…".to_string())))
+                    Element::from(status(Status::Loading(
+                        "Setting the date and time…".to_string(),
+                    )))
                 }),
             ))
     }
@@ -673,8 +694,8 @@ impl Component for DateTimePage {
                 menu_item("Change time zone", move |_| {
                     router.open(routes::time_zone())
                 }),
-                menu_item("Copy time zone name", move |_| {
-                    copy_text(overlays, zone.clone(), "Time zone name copied.")
+                menu_item("Copy time zone", move |_| {
+                    copy_text(overlays, zone.clone(), "Time zone copied")
                 }),
             ]);
 
@@ -827,8 +848,8 @@ impl Component for TimeZonePage {
             if chosen {
                 set_item = set_item.disabled();
             }
-            let copy_item = menu_item("Copy time zone name", move |_| {
-                copy_text(overlays, copy.clone(), "Time zone name copied.")
+            let copy_item = menu_item("Copy time zone", move |_| {
+                copy_text(overlays, copy.clone(), "Time zone copied")
             });
             Element::from(
                 item.on_press(move |_| pick_zone(ctx, zone.clone()))
@@ -847,12 +868,10 @@ impl Component for TimeZonePage {
             Some(Ok(_)) if model_ready => {
                 group = group.rows(rows);
                 if matching.is_empty() {
-                    group = group.row(status(Status::Empty("Nothing matches.".to_string())));
+                    group = group.row(status(Status::Empty("No matching cities".to_string())));
                 }
                 if hidden > 0 {
-                    page_tail = Some(caption(format!(
-                        "{hidden} more. Keep typing to narrow the list."
-                    )));
+                    page_tail = Some(caption(format!("{hidden} more. Type to narrow the list.")));
                 }
             }
             _ => {
@@ -865,11 +884,7 @@ impl Component for TimeZonePage {
         page_column()
             .child(PageHead::new())
             .child(TimeZoneMap::new(current.clone(), ctx))
-            .child(
-                search_field(query, |_| {})
-                    .placeholder("Search for a city")
-                    .fill_width(),
-            )
+            .child(search_field(query, |_| {}).placeholder("City").fill_width())
             .child(group)
             .maybe_child(page_tail)
     }
