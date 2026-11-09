@@ -113,7 +113,7 @@ pub fn load(name: &str) -> Result<PluginProfile, String> {
         ],
     )?;
     let [uuid, service, user_name, data, secrets] = <[String; 5]>::try_from(values)
-        .map_err(|_| "NetworkManager returned an unexpected answer.".to_string())?;
+        .map_err(|_| "Could not read this VPN. Try again.".to_string())?;
     Ok(PluginProfile {
         uuid,
         service,

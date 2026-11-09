@@ -608,10 +608,7 @@ fn radio_status(ui: Ui, radio: Radio) -> Option<Element> {
         Radio::On => return None,
         Radio::Missing => Status::Empty("This computer has no Wi-Fi adapter.".into()),
         Radio::Blocked => Status::Info("A hardware switch has turned Wi-Fi off.".into()),
-        Radio::Airplane => Status::Info(
-            "Wi-Fi is off because airplane mode is on. Turn airplane mode off on the Network page."
-                .into(),
-        ),
+        Radio::Airplane => Status::Info("Wi-Fi is off because airplane mode is on.".into()),
         Radio::Off => Status::Empty("Wi-Fi is off. Turn it on to see networks.".into()),
     };
     let block = status(message);
@@ -621,7 +618,11 @@ fn radio_status(ui: Ui, radio: Radio) -> Option<Element> {
                 model::set_wifi_radio(true)
             })
         }),
-        Radio::Airplane => block.action("Back", move |_| ui.ctx.router.pop()),
+        Radio::Airplane => block.action("Turn off airplane mode", move |_| {
+            model::toggle_link(ui.ctx, "airplane".to_string(), false, || {
+                model::set_airplane_mode(false)
+            })
+        }),
         _ => block,
     };
     Some(Element::from(
@@ -669,7 +670,7 @@ fn connecting_to(ui: Ui, ov: &Overview, ssid: &str, profile: Option<&Saved>) -> 
 /// The signal icon leads, with a lock on a secured network. Pressing a
 /// network that is not saved joins it; a saved one says "Saved" and opens its
 /// page. A spinner shows while a network connects.
-fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
+fn network_rows(ui: Ui, data: &Data) -> Vec<Element> {
     data.model
         .networks
         .iter()
@@ -682,18 +683,13 @@ fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
             let connecting = connecting_to(ui, &data.ov, &network.ssid, profile);
             let key = profile.map_or_else(|| network.ssid.clone(), |saved| saved.name.clone());
 
+            // The signal icon already carries the padlock of a secured network,
+            // so the trailing slot holds one thing: the spinner while joining,
+            // otherwise "Saved".
             let mut trailing = hstack(S2);
             if connecting {
                 trailing = trailing.child(Element::from(spinner(SpinnerSize::Small)));
-            }
-            if network.security.secured() {
-                trailing = trailing.child(Element::from(icons::icon(
-                    Icon::NetworkWirelessEncrypted,
-                    IconSize::Control,
-                    Paint::Muted.color(&tokens),
-                )));
-            }
-            if profile.is_some() {
+            } else if profile.is_some() {
                 trailing = trailing.child(caption("Saved"));
             }
             let target = join_target(&data.model, network);
@@ -715,7 +711,7 @@ fn network_rows(ui: Ui, data: &Data, tokens: Tokens) -> Vec<Element> {
 }
 
 /// The available networks group, with its scan state.
-fn available_group(ui: Ui, data: &Data, tokens: Tokens) -> Element {
+fn available_group(ui: Ui, data: &Data) -> Element {
     let title = "Available networks";
     let scanning = *ui.scanning.read();
     let trailing = if scanning {
@@ -724,11 +720,17 @@ fn available_group(ui: Ui, data: &Data, tokens: Tokens) -> Element {
         // A blank box the size of the spinner, so the heading does not shift.
         Element::from(rect().tw_layout(&[w(Dim::IconBox), h(Dim::IconBox)]))
     };
-    let rows = network_rows(ui, data, tokens);
+    let rows = network_rows(ui, data);
     if rows.is_empty() {
-        let block = if scanning {
-            status(Status::Loading("Scanning for Wi-Fi networks…".into()))
-        } else if data.model.current().is_some() {
+        if scanning {
+            // The heading's spinner is the only one: the body just says so.
+            return Element::from(
+                Group::titled(title)
+                    .trailing(trailing)
+                    .row(row("Looking for networks…")),
+            );
+        }
+        let block = if data.model.current().is_some() {
             status(Status::Empty("No other Wi-Fi networks found".into()))
                 .action("Scan again", move |_| ui.refresh(true))
         } else {
@@ -789,7 +791,6 @@ pub struct WifiPage;
 impl Component for WifiPage {
     fn render(&self) -> impl IntoElement {
         let ui = use_ui();
-        let tokens = use_tokens();
         use_polling(ui, true);
         use_page_busy(ui.busy.read().is_some());
         let data = data(ui);
@@ -824,7 +825,7 @@ impl Component for WifiPage {
         blocks.extend(radio_status(ui, radio));
         if radio == Radio::On {
             blocks.extend(connected_block(ui, &data.model));
-            blocks.push(available_group(ui, &data, tokens));
+            blocks.push(available_group(ui, &data));
         }
         if radio != Radio::Missing {
             blocks.push(manage_group(ui, &data, radio));

@@ -6,7 +6,7 @@
 //! (`vpn::plugins`). A new profile is made by `nmcli`: a WireGuard tunnel from
 //! a wg-quick file written for the one call, a plugin VPN with
 //! `connection add type vpn`, and an imported file with `connection import`.
-//! The message of a failed `nmcli` is shown in the form as it came.
+//! A failed `nmcli` is logged as it came; the form shows a plain sentence.
 
 use std::path::Path;
 
@@ -75,6 +75,9 @@ fn name_problem(name: &str, taken: &[String]) -> Option<String> {
         None
     }
 }
+
+const ADD_FAILED: &str = "Could not add the VPN. Check the details and try again.";
+const IMPORT_FAILED: &str = "Could not import the VPN. Check the file and try again.";
 
 /// Run `work`, which makes a VPN and returns its name, then open that VPN's
 /// screen. The overview is read again first, so the screen finds the new
@@ -572,7 +575,7 @@ fn add_plugin_profile(short: &str, name: &str, profile: &PluginProfile) -> Resul
     if !profile.user_name.is_empty() {
         args.extend(["vpn.user-name", &profile.user_name]);
     }
-    nm::run(&args)?;
+    nm::run(&args).map_err(|raw| super::plain(&raw, ADD_FAILED))?;
     Ok(name.to_string())
 }
 
@@ -643,9 +646,10 @@ fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, S
             )
         })?;
     let existing = nm::connection_names()?;
-    let added = nm::run(&["connection", "import", "type", &plugin.short, "file", path])?;
+    let added = nm::run(&["connection", "import", "type", &plugin.short, "file", path])
+        .map_err(|raw| super::plain(&raw, IMPORT_FAILED))?;
     let (made, uuid) = nm::added(&added)
-        .ok_or_else(|| "NetworkManager did not say which profile it made.".to_string())?;
+        .ok_or_else(|| "The new VPN could not be found. Try again.".to_string())?;
     // Two profiles with one name cannot be told apart by `nmcli ... id`.
     let name = wireguard::unique_name(&made, &existing);
     nm::run(&[
@@ -657,7 +661,8 @@ fn import_file(path: &str, kind: &str, installed: &[Plugin]) -> Result<String, S
         &name,
         "connection.autoconnect",
         "no",
-    ])?;
+    ])
+    .map_err(|raw| super::plain(&raw, IMPORT_FAILED))?;
     Ok(name)
 }
 

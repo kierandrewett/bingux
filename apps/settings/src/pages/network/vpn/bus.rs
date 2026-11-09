@@ -59,7 +59,7 @@ pub fn connection_path(uuid: &str) -> Result<String, String> {
     text.split('"')
         .nth(1)
         .map(str::to_string)
-        .ok_or_else(|| "NetworkManager gave no path for this connection.".to_string())
+        .ok_or_else(|| "Could not find this connection. Try again.".to_string())
 }
 
 /// A call whose one result is `a{sa{sv}}`, as the dictionary inside.
@@ -76,12 +76,12 @@ fn settings_call(path: &str, method: &str, argument: Option<&str>) -> Result<Val
 /// The dictionary in a `busctl --json=short` reply of one `a{sa{sv}}`.
 fn parse_reply(text: &str) -> Result<Value, String> {
     let reply: Value = serde_json::from_str(text)
-        .map_err(|_| "NetworkManager gave an answer this app cannot read.".to_string())?;
+        .map_err(|_| "Could not read this connection. Try again.".to_string())?;
     reply
         .get("data")
         .and_then(|data| data.get(0))
         .cloned()
-        .ok_or_else(|| "NetworkManager gave an answer this app cannot read.".to_string())
+        .ok_or_else(|| "Could not read this connection. Try again.".to_string())
 }
 
 /// All settings of the connection at `path`, without secrets.
