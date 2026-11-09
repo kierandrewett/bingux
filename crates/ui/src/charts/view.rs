@@ -91,6 +91,8 @@ pub struct LineChart {
     area: bool,
     label: Option<String>,
     height: f32,
+    /// A rule at an x value, with a name beside it. See [`LineChart::marker`].
+    marker: Option<(f64, String)>,
 }
 
 /// Bars over the distinct x values of its series. Several series are drawn
@@ -146,6 +148,7 @@ pub fn line_chart(series: impl IntoIterator<Item = Series>) -> LineChart {
         area: false,
         label: None,
         height: DEFAULT_HEIGHT,
+        marker: None,
     }
 }
 
@@ -243,6 +246,14 @@ impl LineChart {
 
     pub fn curve(mut self, curve: Curve) -> Self {
         self.curve = curve;
+        self
+    }
+
+    /// A rule across the plot at the x value `at`, named `label` at its top
+    /// (a chart of the day marks "Now"), and a dot on each line where it
+    /// crosses one. Nothing is drawn when `at` is outside the data.
+    pub fn marker(mut self, at: f64, label: impl Into<String>) -> Self {
+        self.marker = Some((at, label.into()));
         self
     }
 
@@ -592,12 +603,15 @@ impl Component for Chart {
 /// Where a label sits: `Centre` and `Right` name the edge at `x`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Align {
+    /// The text starts at `x`.
+    Left,
     Centre,
     Right,
 }
 
 fn text_align(align: Align) -> TextAlign {
     match align {
+        Align::Left => TextAlign::Left,
         Align::Centre => TextAlign::Center,
         Align::Right => TextAlign::Right,
     }
@@ -654,6 +668,7 @@ pub(super) fn anchored(
     bounds: f32,
 ) -> Text {
     let left = match align {
+        Align::Left => x,
         Align::Centre => x - width / 2.0,
         Align::Right => x - width,
     };
@@ -1302,6 +1317,32 @@ fn line_scene(
             .collect(),
     );
 
+    // The marker is read only where it falls inside the plot.
+    let marker = chart
+        .marker
+        .as_ref()
+        .filter(|(at, _)| (x_domain.lo..=x_domain.hi).contains(at))
+        .map(|(at, name)| (*at, name, crisp(x.map(*at))));
+    if let Some((_, name, mx)) = marker {
+        svg.push(svg::stroke_line(
+            mx,
+            plot.top,
+            mx,
+            plot.bottom,
+            Paint::Muted.color(tokens).with_af32(CROSSHAIR_OPACITY),
+            HAIRLINE,
+        ));
+        texts.push(anchored(
+            CAPTION,
+            name.clone(),
+            mx + S1.px(),
+            plot.top,
+            POINT_LABEL_WIDTH,
+            Align::Left,
+            width,
+        ));
+    }
+
     let reveal = svg.id("reveal");
     svg.def(clip_rect(&reveal, width * progress, height));
     svg.push(format!(r#"<g clip-path="url(#{reveal})">"#));
@@ -1338,6 +1379,19 @@ fn line_scene(
                     cx,
                     cy,
                     radius,
+                    colour,
+                    Some((Paint::Card.color(tokens), LINE_WIDTH)),
+                ));
+            }
+        }
+    }
+    if let Some((at, _, mx)) = marker {
+        for (points, &colour) in cleaned.iter().zip(&colours) {
+            if let Some(reading) = data::value_at(points, at) {
+                svg.push(svg::dot(
+                    mx,
+                    y.map(reading),
+                    ACTIVE_RADIUS,
                     colour,
                     Some((Paint::Card.color(tokens), LINE_WIDTH)),
                 ));

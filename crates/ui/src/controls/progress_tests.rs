@@ -21,7 +21,7 @@ use torin::prelude::Area;
 
 use super::progress::{SpinnerSize, progress_bar, spinner};
 use crate::component::ComponentName;
-use crate::motion::use_cycle;
+use crate::motion::{use_ambient_cycle, use_cycle};
 use crate::snapshot::Snapshot;
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -42,6 +42,8 @@ enum Scene {
     /// A determinate bar.
     Done,
     Spinner(SpinnerSize),
+    /// The clock of a decoration, read into [`AMBIENT`].
+    Ambient,
 }
 
 /// The window root: the tokens of a dark window, with reduced motion or not.
@@ -76,6 +78,7 @@ impl Component for Page {
                 .into(),
             Scene::Done => progress_bar(0.5).into(),
             Scene::Spinner(size) => spinner(size).into(),
+            Scene::Ambient => AmbientClock.into(),
         };
         rect()
             .expanded()
@@ -470,4 +473,37 @@ fn the_cycle_runs_from_nothing_to_one_and_starts_over() {
         let starts_over = pair[0] > 0.99 && pair[1] < 0.01;
         assert!(rises || starts_over, "every step moves on, or starts the next cycle from 0: {phases:?}");
     }
+}
+
+thread_local! {
+    /// The phase the last [`AmbientClock`] drew with.
+    static AMBIENT: Cell<f32> = const { Cell::new(f32::NAN) };
+}
+
+#[derive(PartialEq)]
+struct AmbientClock;
+
+impl Component for AmbientClock {
+    fn render(&self) -> impl IntoElement {
+        AMBIENT.with(|phase| phase.set(use_ambient_cycle(800)));
+        rect()
+    }
+}
+
+fn ambient_phases(reduced: bool) -> Vec<f32> {
+    let mut shot = open(Scene::Ambient, reduced);
+    (0..10)
+        .map(|_| {
+            step(&mut shot);
+            AMBIENT.with(Cell::get)
+        })
+        .collect()
+}
+
+#[test]
+fn a_decoration_loops_and_stands_still_under_reduced_motion() {
+    let moving = ambient_phases(false);
+    assert!(moving.iter().any(|&p| p > 0.2), "an ambient cycle runs: {moving:?}");
+    let still = ambient_phases(true);
+    assert!(still.iter().all(|&p| p == 0.0), "under reduced motion it stays at 0: {still:?}");
 }

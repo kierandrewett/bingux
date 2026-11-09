@@ -982,7 +982,10 @@ sortable(
 )
 .labels(names)          // grips are named "Reorder <label>"; moves are announced
 .drop_indicator()       // long lists: a line instead of sliding rows
+.selected(Some(index))  // the item whose row says .selected(true): see below
 ```
+
+A row draws its selection (and its hover) under itself, and the grip is outside the row, so the row's fill alone would stop short of the grip and the end inset. `.selected(index)` makes the list fill that tail (a `SortableTail`, the grip and the inset after it) with the same selection fill, so the selection covers the whole row to the card's edge. A row that is only hovered still lights over the row alone. `controls/sortable_tests.rs` measures it.
 
 `on_reorder(from, to)` is called **once**, after the move has settled, with indexes into the list _before_ the move: remove the item at `from`, insert it at `to`. It is never called with `from == to`, with an index out of range, or after Escape. The pure rules live in `reorder.rs` (`Stack::landing`, `Stack::offsets`, `key_target`, the `Reorder` state machine) and are unit-tested; the pointer capture is `drag.rs` (`PointerDrag`, `Frames`), shared with anything else that carries an item.
 
@@ -2149,7 +2152,7 @@ line_chart([Series::new("Charge", points)])
 | Builder                | Use                                                                                             |
 | ---------------------- | ----------------------------------------------------------------------------------------------- |
 | `sparkline(values)`    | A small trend with no axes. `colour`, `unit`, `format`, `area`, `label`.                        |
-| `line_chart(series)`   | Several series over x. `y_unit`, `y_format`, `x_unit`, `curve`, `area`, `label`, `height`.      |
+| `line_chart(series)`   | Several series over x. `y_unit`, `y_format`, `x_unit`, `curve`, `area`, `marker(x, name)`, `label`, `height`. |
 | `bar_chart(series)`    | Grouped bars, or `stacked()`. `categories`, `details`, `y_unit`, `y_format`, `label`, `height`. |
 | `ring(value)`          | A 0 to 1 gauge with a centre caption. `caption`, `colour`, `label`.                             |
 | `donut(segments)`      | A share of a whole, with a legend. `unit`, `caption`, `label`.                                  |
@@ -2161,6 +2164,13 @@ line_chart([Series::new("Charge", points)])
 
 `Series::new(name, points)` takes `(x, y)` pairs, and `Series::values` reads
 values by position. `Segment::new(name, value)` is one slice of a donut.
+
+A `line_chart` of more than one series shows a legend (a swatch and a name a
+series) under the plot, and a pointer or a touch on a point shows a tooltip
+with each series' value. `marker(x, name)` adds a hairline across the plot at
+`x`, the name at its top and a dot where the rule meets each line: a chart of
+the day marks "Now" with it. It draws nothing when `x` is not one of the
+chart's own x values.
 
 **Donut.** Unlike the other charts a donut has no fixed height: it is its ring
 and its legend rows, so it depends on the width it is given. The ring is
@@ -2595,7 +2605,13 @@ own QML, not a reference app: `shell/bingux/Theme.qml`, `ControlRow.qml`,
   that wraps to three lines and trailing content. A row with a subtitle grows to
   fit it. `subtitle_one_line()` keeps the subtitle to one line, so the row has
   its natural height, `Dim::RowSubtitle` (63 px at mouse density). A list that
-  mounts rows lazily sizes its slots with that token.
+  mounts rows lazily sizes its slots with that token. `second_line(text)` adds a
+  second caption line under the subtitle for a row that says two things that
+  must not run together (a place, then its conditions): the subtitle and the
+  second line are each held to one line and cut with their own ellipsis.
+  `selection_fill_only()` makes a selected row show the fill and no checkmark,
+  for a list whose selection is the place on show (a sidebar), so the trailing
+  content of every row ends at the same edge.
 - **Row hover.** Only an activatable row shows a hover fill and a pointer: one
   that navigates (a chevron), has `on_press`, or opens something. A switch,
   slider, dropdown, segmented, value-only or entry row shows neither. A switch
@@ -3293,6 +3309,11 @@ animation so motion never shifts the layout around it. Each keeps layout stable:
   progress indicator that stood still looks frozen); the caller picks a
   longer, gentler cycle instead. The spinner and the indeterminate bar are
   built on it (see Progress bars and spinners).
+- `use_ambient_cycle(ms)` is the same clock for decoration (a drift of cloud, a
+  slow shimmer): anything that is there to be pleasant and that nothing depends
+  on. Under reduced motion it does not run: the phase is 0 and no animation
+  task is started, so the picture stands still and draws no frames. A loop
+  that is not a progress indicator uses this, not `use_cycle`.
 
 Durations go through `tokens.motion(MOVE_MS)`, so reduced motion makes every
 motion an instant change. `use_presence` is the hook under `presence`; overlays,

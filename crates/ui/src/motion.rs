@@ -20,6 +20,8 @@
 //! - [`use_cycle`] is the clock of every loop (a spinner, an indeterminate
 //!   bar): a phase from 0 to 1 that starts over, owned by the component that
 //!   calls it. It is the one motion reduced motion does not stop.
+//!   [`use_ambient_cycle`] is the same clock for decoration, and it stands
+//!   still (phase 0, no task) under reduced motion.
 //! - [`icon_morph`] turns one icon into another inside one fixed square: the
 //!   first quarter-turns, shrinks and fades as the second turns to rest,
 //!   grows and fades in. `IconButton::morph` drives it from [`use_tween`], so
@@ -103,6 +105,31 @@ pub fn use_cycle(ms: u64) -> f32 {
             .ease(Ease::InOut)
     });
     animation.get().value()
+}
+
+/// [`use_cycle`] for decoration: a drift of cloud, a slow shimmer, anything
+/// that is there to be pleasant and that nothing depends on. Under reduced
+/// motion it does not run: the phase is 0 and no animation task is started,
+/// so the picture stands still and costs no frames. Use this, not
+/// [`use_cycle`], for a loop that is not a progress indicator.
+pub fn use_ambient_cycle(ms: u64) -> f32 {
+    let tokens = use_tokens();
+    let still = tokens.reduced_motion;
+    let animation = use_animation_with_dependencies(&(ms.max(1), still), |conf, &(ms, still)| {
+        if still {
+            conf.on_creation(OnCreation::Nothing);
+            conf.on_change(OnChange::Reset);
+        } else {
+            conf.on_creation(OnCreation::Run);
+            conf.on_change(OnChange::Rerun);
+            conf.on_finish(OnFinish::restart());
+        }
+        AnimNum::new(0.0, 1.0)
+            .time(ms)
+            .function(Function::Linear)
+            .ease(Ease::InOut)
+    });
+    if still { 0.0 } else { animation.get().value() }
 }
 
 /// [`use_tween`] along another curve than the standard one, such as the

@@ -139,7 +139,8 @@ pub enum Icon {
     InputTablet,
     NetworkServer,
     AvatarDefault,
-    FindLocation,
+    /// An arrow pointing up and right: where the computer is (Weather's My Location).
+    LocationArrow,
     MailUnread,
     ApplicationsMultimedia,
     AccessoriesCalculator,
@@ -356,7 +357,7 @@ impl Icon {
         Self::InputTablet,
         Self::NetworkServer,
         Self::AvatarDefault,
-        Self::FindLocation,
+        Self::LocationArrow,
         Self::MailUnread,
         Self::ApplicationsMultimedia,
         Self::AccessoriesCalculator,
@@ -571,7 +572,7 @@ impl Icon {
             Self::InputTablet => include_bytes!("../icons/input-tablet-symbolic.svg"),
             Self::NetworkServer => include_bytes!("../icons/network-server-symbolic.svg"),
             Self::AvatarDefault => include_bytes!("../icons/avatar-default-symbolic.svg"),
-            Self::FindLocation => include_bytes!("../icons/find-location-symbolic.svg"),
+            Self::LocationArrow => include_bytes!("../icons/location-arrow-symbolic.svg"),
             Self::MailUnread => include_bytes!("../icons/mail-unread-symbolic.svg"),
             Self::ApplicationsMultimedia => {
                 include_bytes!("../icons/applications-multimedia-symbolic.svg")
