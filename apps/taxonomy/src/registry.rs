@@ -7,12 +7,50 @@
 //! taxonomy entry" in `docs/bingux-ui.md`.
 
 use crate::demos::{
-    buttons, containers, data, feedback, files, foundations, icon_set, inputs, inspector,
+    accessibility, buttons, containers, data, feedback, files, foundations, icon_set, inputs, inspector,
     navigation,
 };
 use crate::model::{Body, Category, Entry};
 
 pub static ENTRIES: &[Entry] = &[
+    // ---- Foundations: Accessibility ---------------------------------------
+    Entry {
+        name: "Semantics and announcements",
+        category: Category::Foundations,
+        page: "Accessibility",
+        api: "rect().semantics(Semantics::new().label(..).hint(..).value(..).heading(n).checked(..).expanded(..).busy(..).shortcut(..).labelled_by(id).controls(id)); a11y_hint / a11y_hidden / a11y_heading; use_announcer().announce(text); FieldLabel names a row's control",
+        doc: "accessibility-apis",
+        covers: &[
+            "Semantics",
+            "SemanticsExt",
+            "Politeness",
+            "Announcer",
+            "use_announcer",
+            "FieldLabel",
+            "provide_field_label",
+            "use_field_label",
+            "label_from_field",
+        ],
+        body: Body::States(accessibility::SEMANTICS),
+    },
+    Entry {
+        name: "Accessibility preferences",
+        category: Category::Foundations,
+        page: "Accessibility",
+        api: "access::Access { reduced_motion, high_contrast, reduce_transparency, text_scale }; access::set(..); Access::current(); access::text_scale(); access::grow(px); Tokens::with_access(accent, scheme, access)",
+        doc: "accessibility-apis",
+        covers: &[
+            "Access",
+            "TEXT_SCALES",
+            "TEXT_SCALE_RANGE",
+            "clamp_scale",
+            "grow",
+            "set",
+            "set_text_scale",
+            "text_scale",
+        ],
+        body: Body::States(accessibility::PREFERENCES),
+    },
     // ---- Controls: Buttons -------------------------------------------------
     Entry {
         name: "Button",

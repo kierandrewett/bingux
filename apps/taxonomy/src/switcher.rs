@@ -1,5 +1,5 @@
 //! The header switcher: colour scheme, accent, density, display scale, text
-//! size and pseudo-localised strings for the whole window.
+//! size, contrast and pseudo-localised strings for the whole window.
 //!
 //! Text size and strings are the stress switches of `bingux_ui::stress`: a
 //! specimen can be looked at with every string 40 % longer and the type ramp
@@ -34,7 +34,7 @@ impl Component for Switcher {
             icon_button(Icon::Appearance, move |_| {
                 window.open(popup("Display", SwitcherSheet).width(Dim::PopupNarrow));
             })
-            .tooltip("Theme, accent, density and scale")
+            .tooltip("Theme, accent, density, scale and contrast")
             .into_element()
         } else {
             hstack(S2).child(Choices { dense: true }).into_element()
@@ -139,6 +139,18 @@ impl Component for Choices {
             },
         )
         .title("Strings");
+        let contrast = dropdown(
+            vec![
+                ("standard".to_string(), "Contrast: standard".to_string()),
+                ("high".to_string(), "Contrast: high".to_string()),
+            ],
+            if now.high_contrast { "high" } else { "standard" },
+            move |key: String| {
+                env.write().high_contrast = key == "high";
+                apply_window(*env.peek());
+            },
+        )
+        .title("Contrast");
         if self.dense {
             hstack(S2)
                 .child(theme.dense())
@@ -146,6 +158,7 @@ impl Component for Choices {
                 .child(density.dense())
                 .child(scale.dense())
                 .child(text.dense())
+                .child(contrast.dense())
                 .child(strings.dense())
                 .into_element()
         } else {
@@ -155,6 +168,7 @@ impl Component for Choices {
                 .row(form_row("Density", density))
                 .row(form_row("Scale", scale))
                 .row(form_row("Text size", text))
+                .row(form_row("Contrast", contrast))
                 .row(form_row("Strings", strings))
                 .into_element()
         }

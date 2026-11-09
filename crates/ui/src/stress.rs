@@ -1,6 +1,7 @@
-//! Stress switches for the overflow checks: pseudo-localisation and a text
-//! scale, applied where text is made so that every label, paragraph and span
-//! of every app feels them.
+//! Stress switches for the overflow checks: pseudo-localisation, applied
+//! where text is made so that every label, paragraph and span of every app
+//! feels it. The text scale the checks also use is a real preference now
+//! ([`crate::access`], `BINGUX_TEXT_SCALE`).
 //!
 //! * **Pseudo-locale** (`BINGUX_PSEUDO_LOCALE=expand`): every string that has
 //!   a letter is rewritten to an accented, 40 % longer one, `Network name`
@@ -11,24 +12,18 @@
 //!   Hebrew instead ([`in_script`]), so the text is right to left, with the
 //!   digits and punctuation of the original among it; run with
 //!   `BINGUX_DIRECTION=rtl` to see a window read right to left.
-//! * **Text scale** (`BINGUX_TEXT_SCALE=2`): every text size of the type ramp
-//!   is multiplied by the factor (the largest the accessibility page offers
-//!   is 2), rounded by the label to a quarter pixel.
 //!
-//! Both are read from the environment once and can be set at run time with
-//! [`set_pseudo_locale`] and [`set_text_scale`], as the taxonomy's header
-//! switcher does; an app must then redraw. They exist in debug builds and in
-//! builds with the `testing` feature (the snapshot and taxonomy binaries);
-//! in a release build the functions are constants and cost nothing.
+//! It is read from the environment once and can be set at run time with
+//! [`set_pseudo_locale`], as the taxonomy's header switcher does; an app must
+//! then redraw. It exists in debug builds and in builds with the `testing`
+//! feature (the snapshot and taxonomy binaries); in a release build the
+//! functions are constants and cost nothing.
 //! `scripts/overflow-check.py` runs every page under them.
 
 use std::borrow::Cow;
 
 /// How much longer pseudo-localised text is than the original.
 pub const EXPANSION: f32 = 0.4;
-
-/// The text scales the stress tools offer, as the accessibility page does.
-pub const TEXT_SCALES: [f32; 4] = [1.0, 1.25, 1.5, 2.0];
 
 /// The width every popup is opened at when it asks for more
 /// (`BINGUX_POPUP_WIDTH=320`, the narrowest a popup can be dragged to), so
@@ -53,7 +48,7 @@ pub fn popup_width() -> Option<f32> {
 #[cfg(any(debug_assertions, feature = "testing"))]
 mod switches {
     use super::Script;
-    use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
     use std::sync::LazyLock;
 
     static PSEUDO: LazyLock<AtomicBool> = LazyLock::new(|| {
@@ -65,14 +60,6 @@ mod switches {
             Ok("he") => 2,
             _ => 0,
         })
-    });
-    static SCALE: LazyLock<AtomicU32> = LazyLock::new(|| {
-        let scale = std::env::var("BINGUX_TEXT_SCALE")
-            .ok()
-            .and_then(|value| value.trim().parse::<f32>().ok())
-            .filter(|scale| (0.5..=4.0).contains(scale))
-            .unwrap_or(1.0);
-        AtomicU32::new(scale.to_bits())
     });
 
     pub fn pseudo() -> bool {
@@ -99,14 +86,6 @@ mod switches {
         };
         SCRIPT.store(code, Ordering::Relaxed);
     }
-
-    pub fn scale() -> f32 {
-        f32::from_bits(SCALE.load(Ordering::Relaxed))
-    }
-
-    pub fn set_scale(scale: f32) {
-        SCALE.store(scale.clamp(0.5, 4.0).to_bits(), Ordering::Relaxed);
-    }
 }
 
 #[cfg(not(any(debug_assertions, feature = "testing")))]
@@ -121,10 +100,6 @@ mod switches {
         None
     }
     pub fn set_script(_: Option<Script>) {}
-    pub fn scale() -> f32 {
-        1.0
-    }
-    pub fn set_scale(_: f32) {}
 }
 
 /// Whether text is pseudo-localised now.
@@ -136,17 +111,6 @@ pub fn pseudo_locale() -> bool {
 /// ignores it.
 pub fn set_pseudo_locale(on: bool) {
     switches::set_pseudo(on);
-}
-
-/// The factor the type ramp is multiplied by now, 1 when off.
-pub fn text_scale() -> f32 {
-    switches::scale()
-}
-
-/// Sets the text scale, 0.5 to 4. Debug and `testing` builds only; a release build ignores
-/// it.
-pub fn set_text_scale(scale: f32) {
-    switches::set_scale(scale);
 }
 
 /// `text` as it should be drawn: itself, or its pseudo-localised form when
@@ -367,13 +331,10 @@ mod tests {
     }
 
     #[test]
-    fn the_switches_are_off_unless_set() {
-        // The environment of a test run sets neither.
+    fn the_switch_is_off_unless_set() {
+        // The environment of a test run does not set it.
         if std::env::var_os("BINGUX_PSEUDO_LOCALE").is_none() {
             assert_eq!(localise("Network name"), "Network name");
-        }
-        if std::env::var_os("BINGUX_TEXT_SCALE").is_none() {
-            assert_eq!(text_scale(), 1.0);
         }
     }
 

@@ -1,6 +1,7 @@
 //! The demos the registry points at, one module per area. Each module holds
 //! the `const` lists of [`Spec`](crate::model::Spec)s its entries show.
 
+pub mod accessibility;
 pub mod buttons;
 pub mod common;
 pub mod containers;

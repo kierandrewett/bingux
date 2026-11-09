@@ -2950,6 +2950,83 @@ by eye. The levels used:
 APCA (the WCAG 3 candidate) is reported beside every ratio as `apca`, signed Lc.
 It is advisory: it never fails a pair.
 
+### Accessibility APIs
+
+Every control says its role, name, value and state to screen readers (Orca,
+through AccessKit and AT-SPI) with no app code. An app adds to that only where
+it knows more than the control.
+
+**Names come from what is on screen.** A button, tab, check box, menu item,
+list option or heading is named by all the text inside it, however deep; the
+text and icons inside a control are not read a second time, and an icon on its
+own is decoration. A name given with `a11y_alt` is never replaced. A control in
+a row or form line is named by the row's title and described by its subtitle
+(`FieldLabel`): `switch_row("Wi-Fi", ..).subtitle("Connected")` reads "Wi-Fi,
+switch, on, Connected". Switches, dropdowns (whose value is the choice shown),
+sliders, steppers, segmented controls, check boxes without text and text fields
+(whose value is their text, and whose placeholder is a placeholder, not a name)
+all do this. A row that is itself a control is named by its title, with its
+subtitle and value as the description.
+
+**Structure.** Page titles are level 1 headings, group and sidebar section
+titles level 2 (`section_label`, `heading`). A titled `Group` is a named group,
+`radio_rows` a radio group, a segmented control a radio group of radio
+buttons, the sidebar a navigation landmark holding a list of pages with the
+current one selected. Banners and toasts are live: read when they appear, an
+error at once (`Alert`, assertive), anything else politely.
+
+**`Semantics`** says more on any element, or on a control that takes it
+(`Switch`, `TextField`, `Group`):
+
+```rust
+rect().semantics(
+    Semantics::new()
+        .group("Battery")
+        .value("82 %, charging")
+        .hint("About 5 hours left"),
+);
+switch(on, toggle).semantics(Semantics::new().label("Airplane mode"));
+label().text("Recent").a11y_heading(2);
+decoration.a11y_hidden();
+```
+
+Its parts: `label`, `hint` (description), `value`, `role`, `hidden`, `group`,
+`heading(level)`, `checked`, `expanded`, `selected`, `busy`, `required`,
+`invalid`, `read_only`, `shortcut("Ctrl+R")`, `live(Politeness)`,
+`labelled_by(id)`, `described_by(id)`, `error_message(id)`, `controls(id)` and
+`position(index, count)`.
+
+**Announcements.** `use_announcer()` gives a `Copy` handle; `announce(text)`
+is read after what is being read, `announce_now(text)` at once. Use it for what
+has no element of its own ("Link copied", "3 results"). Outside a window host
+it does nothing.
+
+**Preferences** (`bingux_ui::access`). `Access { reduced_motion,
+high_contrast, reduce_transparency, text_scale }` is process-wide; the
+platform source calls `access::set`, and until it has, `BINGUX_REDUCED_MOTION=1`,
+`BINGUX_HIGH_CONTRAST=1`, `BINGUX_REDUCE_TRANSPARENCY=1` and
+`BINGUX_TEXT_SCALE=1.5` set it. `Tokens::new` follows it, `Tokens::with_access`
+takes it explicitly, and `tokens.access()` gives a second palette the same
+preferences.
+
+| Preference          | What changes                                                                                                                                                            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Reduce motion       | Every animation is instant                                                                                                                                              |
+| Increase contrast   | Text, secondary text and links at 7:1 on every ground and state; large text at 4.5:1; separators and outlines that show; a 4.5:1 focus ring; an outline on every control fill; ink on accent, success and warning fills at 7:1 (the fill moves in lightness) |
+| Reduce transparency | The frosted header over a scrolled page is opaque                                                                                                                       |
+| Text size           | The whole type ramp, 75 % to 300 % (Settings offers 80 % to 200 %); works in release builds                                                                             |
+
+The contrast matrix measures every pair under both contrasts
+(`light+`, `dark+` in its table). The taxonomy's header has a Contrast menu
+beside Text size, and Foundations > Accessibility shows these APIs.
+
+**Checking it.** `scripts/a11y-run.sh --app NAME --out FILE -- CMD` runs an app
+with the accessibility bus on and writes what a screen reader sees
+(`scripts/atspi-tree.py`: role, name, description, states, value, relations,
+actions), ending with findings such as an unnamed control. It needs
+`at-spi2-core`, `python3-gi` and `gir1.2-atspi-2.0`. `src/a11y_tests.rs` holds
+the names and roles above with real tree updates.
+
 ### The rule: ink on a coloured surface is a darkened version of it
 
 Text and icons on the accent, on a suggested (primary) button, on a
