@@ -239,25 +239,22 @@ Item {
                                 Layout.fillWidth: true
                             }
                         }
-                        Text {
+                        StateMessage {
+                            objectName: "publicNetworkError"
+                            compact: true
                             visible: root.publicNetwork.status === "error"
-                            Layout.fillWidth: true
-                            text: root.publicNetwork.error || "Public connection details unavailable."
-                            wrapMode: Text.Wrap
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: Theme.fontSmall
+                            tone: "danger"
+                            title: root.publicNetwork.error || "Could not load public connection details."
                         }
                     }
                 }
-                Text {
+                StateMessage {
+                    objectName: "vpnEmpty"
+                    compact: true
                     visible: root.page === "vpn" && root.services.vpns.length === 0
-                    Layout.fillWidth: true
-                    Layout.margins: 8
-                    text: "No VPN service or saved VPN connections found."
-                    color: Theme.muted
-                    wrapMode: Text.Wrap
-                    font.pixelSize: Theme.fontSmall
+                    iconName: "network-vpn-symbolic"
+                    title: "No VPN connections"
+                    detail: "Add one in Network settings."
                 }
                 Repeater {
                     model: root.page === "power" && root.services.state.power ? root.services.state.power.profiles : []
@@ -303,13 +300,12 @@ Item {
                 }
             }
         }
-        Text {
-            Layout.fillWidth: true
+        StateMessage {
+            objectName: "controlsError"
+            compact: true
             visible: root.services.error !== ""
-            text: root.services.error
-            wrapMode: Text.Wrap
-            color: Theme.muted
-            font.pixelSize: Theme.fontSmall
+            tone: "danger"
+            title: root.services.error
         }
         Rectangle {
             visible: !root.tailscaleOpen && (root.page === "vpn" || root.page === "power")

@@ -122,6 +122,11 @@ QtObject {
     // Shared inner edge used by bars, cards, dock/sidebar surfaces, and
     // controls. Match Gnoblin's native window border at 75% opacity.
     readonly property color outline: flatSurfaces ? flatten(Qt.rgba(0.314, 0.314, 0.314, 0.75), popupSurface) : Qt.rgba(0.314, 0.314, 0.314, 0.75)
+    // The off state of a switch: an opaque track and an edge that reads at 3:1
+    // or better against the popup surface (WCAG 1.4.11, non-text contrast).
+    // tests/shell-contrast.test.py keeps this pair honest.
+    readonly property color controlOffTrack: "#ff3c3c40"
+    readonly property color controlOffOutline: "#ff9b9ba0"
     readonly property color contentShadow: flatSurfaces ? "transparent" : Qt.rgba(0, 0, 0, 0.34)
     readonly property color text: "#fafafa"
     readonly property color muted: "#b0b0b0"
@@ -136,6 +141,9 @@ QtObject {
     readonly property color success: "#8ff0a4"
     readonly property color warning: "#f9f06b"
     readonly property color danger: "#ff7b63"
+    // Danger ink for text and glyphs set on a danger-tinted fill: a lighter
+    // danger, so the tint does not pull it under 4.5:1.
+    readonly property color dangerInk: "#ffffad90"
     function usageColor(percent, normal = text) {
         if (typeof percent !== "number" || !isFinite(percent))
             return normal;
@@ -213,6 +221,8 @@ QtObject {
     readonly property int mediaActionMotion: reducedMotion ? 0 : 180
     readonly property color recordingIndicator: "#c01c28"
     readonly property color privacyIndicator: "#ff7800"
+    // A recording that has stopped and is being written to disk.
+    readonly property color savingIndicator: "#5a5a60"
     readonly property color notificationBadge: "#e52f3c"
     readonly property int notificationWidth: 384
     readonly property int notificationPadding: 16
@@ -239,6 +249,9 @@ QtObject {
     readonly property int osdPadding: 16
     readonly property int osdIconSize: 24
     readonly property int osdIconTileSize: 48
+    // Every OSD card has the height of the tallest one: the icon tile, the gap
+    // and the level bar, inside the padding.
+    readonly property int osdHeight: osdPadding * 2 + osdIconTileSize + padding + sliderActiveTrackHeight
     readonly property int osdPercentSize: 20
     readonly property int osdCloseMotion: reducedMotion ? 0 : 180
     readonly property int osdLevelMotion: reducedMotion ? 0 : 120

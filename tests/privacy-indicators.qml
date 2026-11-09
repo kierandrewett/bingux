@@ -31,6 +31,7 @@ ShellRoot {
         readonly property bool recording: state === "recording"
         readonly property bool busy: ["starting", "recording", "finalizing"].includes(state)
         property string elapsedText: "1:23"
+        property int countdown: 3
         function stop() {
             test.stopped++;
             state = "finalizing";
@@ -155,7 +156,10 @@ ShellRoot {
                 test.check(location.tooltipDetails.length === 1 && location.tooltipDetails[0].app === "Firefox", "Location tooltip carries the owning app identity");
                 recording.clicked();
                 test.check(test.stopped === 1 && recording.label === "Saving…" && !recording.interactive, "Stop finalises once and disables repeated clicks");
+                test.check(recording.activityColor.toString() === Theme.savingIndicator.toString() && recording.activityColor.toString() !== Theme.recordingIndicator.toString(), "Saving is neutral, not the recording colour");
             } else if (test.phase === 2) {
+                fixtureCapture.state = "countdown";
+                test.check(recording.label === "Starting in 3" && recording.iconName === "media-record-symbolic", "The countdown says what is counting, with an icon");
                 fixtureCapture.state = "idle";
                 fixturePrivacy.recording = true;
             } else if (test.phase === 3) {

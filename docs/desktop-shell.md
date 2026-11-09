@@ -109,7 +109,10 @@ against the current monitor snapshot, and publishes one newline-delimited UTF-8
 JSON record to `$XDG_RUNTIME_DIR/bingux/osd-v2.sock`. Gnoblin does not draw an
 OSD surface, so Bingux needs no OSD-disable setting. The compositor event
 contains no level value, so statusd sends `-1` for the level and maximum; the
-shell displays a status-only OSD without a level bar.
+shell displays a status-only OSD without a level bar. Every OSD card has the same
+height (`Theme.osdHeight`), with or without a level bar or a detail line. An action
+the hardware cannot do shows the same card with the glyph and a title that says so
+("Brightness unavailable", or "Action unavailable" when the request names no control).
 
 Gnoblin raises no OSD event for volume or microphone changes. Its default key
 bindings run `wpctl` and nothing else. `bingux-statusd` therefore follows the
@@ -259,6 +262,25 @@ When Qt reports OpenGL, Bingux checks the session's Xwayland renderer with
 the normal appearance. Set
 `BINGUX_SOFTWARE_RENDERING=1` or `0` in the shell launch environment to force a
 mode. `BINGUX_REDUCED_MOTION=1` continues to disable motion independently.
+
+## Shared shell components
+
+These QML components carry the look of every popup, dialog and message in the
+shell. Use them instead of drawing a new bubble, a new grey line of text or a new
+set of buttons. `shell/bingux/qmldir` lists them.
+
+| Component | Use it for |
+| --- | --- |
+| `StateMessage` | Nothing here, still loading and that failed, in a popup, a list or a sidebar panel. One glyph (a spinner while loading), a title, an optional detail line and an optional action. `compact` sets it inside a list; stacked and centred it stands for a whole panel (`fill`). Tones: `neutral`, `success`, `warning`, `danger`. Control Centre, the calendar, Tailscale, the sidebar panels (Media, Tasks, Calendar), the search overlay, the services panel and the power options all use it. |
+| `ShellNotice` | A boxed message with a title and a body: a warning, a danger note, a confirmation or a plain fact. The tone sets the edge, the tint and a glyph, so the meaning never rests on colour alone. The installer's `InstallerNotice` is this component scaled with the installer card. |
+| `ShellDialog` | A dialog over everything: one layer window, centred, with a `ShellDialogCard` (title, body, content, secondary and primary buttons). `tone: "danger"` makes the primary button destructive and puts keyboard focus on the safe one. Escape emits `dismissed`. Not Responding, the shortcut approval and the first-login introduction are all `ShellDialog`s. |
+| `ActionButton` | `tone: "primary"` is the accent button for the one action a dialog is for; `tone: "danger"` is a tinted button with danger ink for an action that destroys or interrupts something. |
+| `ControlRow`, `SessionRow` | `destructive: true` gives a row the danger glyph, title and a faint tint (Log Out, Restart, Shut Down). |
+| `SessionSlider` | The one slider: `from`, `to`, `value`, an optional caption and value text above the track, arrow, Page, Home and End keys, a focus ring. White on the lock screen and greeter, the accent where it sets a value (the installer's shrink slider). |
+
+Off-state switches draw an opaque track and an edge at 3:1 or better against the
+popup surface (`Theme.controlOffTrack`, `Theme.controlOffOutline`;
+`tests/shell-contrast.test.py` holds the ratio).
 
 ## Desktop UI rules
 
@@ -608,8 +630,8 @@ Gnoblin reports a client that stops answering liveness pings as `unresponsive` o
 sends `gnoblin.window.changed`. Bingux listens for that change and shows one dialog at a time with
 two choices: **Wait** hides it until the window changes state again, and **Force Quit** runs
 `gnoblinctl window kill ID`, which sends SIGKILL to the application. The dialog closes when the
-window recovers or goes away. If the kill command fails, the dialog stays open and the shell logs the
-exit code. The dialog needs Gnoblin with `window.kill`; the ping timeout is
+window recovers or goes away. Force Quit is the dialog's destructive button; Escape is the same as
+Wait. If the kill command fails, the dialog stays open and the shell logs the exit code. The dialog needs Gnoblin with `window.kill`; the ping timeout is
 `window_management.check_alive_timeout`.
 
 ## First-login introduction
@@ -618,7 +640,7 @@ exit code. The dialog needs Gnoblin with `window.kill`; the ping timeout is
 Super for search, Super+period for emoji, Alt+S for capture, Alt+Tab and Super+Tab
 for windows, Super+Space for input sources, Super+Z for snap layouts, and the
 wallpaper, clock and indicator menus. **Open Settings** opens Bingux Settings and
-**Got it** closes it; Escape is the same as Got it. The card is an overlay that
+**Got it** closes it; Escape is the same as Got it. The card is a `ShellDialog`. The card is an overlay that
 takes keyboard focus only while open and never delays startup or shortcuts.
 
 Completion is stored as `first-login/intro.json` in the shell's Quickshell state

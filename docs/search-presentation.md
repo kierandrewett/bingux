@@ -66,8 +66,14 @@ opens a real search and requires its browser window to become active, not merely
 a successful spawn or portal response.
 
 Search opens as an input above screen center and expands below it as results arrive.
-The 660px-wide surface uses 19px input text; there is no footer. Loading, empty, and failure states appear
-inside the input. Entrance, dismissal, resizing, and row colors respect
+The 660px-wide surface uses 19px input text; there is no footer. Progress that passes
+(Searching, Opening, Answering) is one muted word at the end of the input. Lasting
+states have a message under the input, the shell's `StateMessage`: **Search is not
+available** while the search service is not connected, **No results** for a finished
+query that found nothing, and a failure with a **Try again** action. When an
+activation fails, its own row says why, with a danger glyph, and the rest of the
+list stays. When some sources fail but others answered, a warning above the list
+says so. Entrance, dismissal, resizing, and row colors respect
 `BINGUX_REDUCED_MOTION=1`.
 
 The input has a clear button; Ctrl+L selects the query. Arrow keys navigate

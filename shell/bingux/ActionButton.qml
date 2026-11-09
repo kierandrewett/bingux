@@ -6,6 +6,14 @@ import Quickshell
 AbstractButton {
     id: root
     property bool flat: false
+    // "": the quiet button. "primary": the accent fill, for the one action a
+    // dialog or form wants done. "danger": a tinted fill and danger ink, for an
+    // action that destroys or interrupts something. Ink on a filled tone is a
+    // darkened version of the fill, never plain white.
+    property string tone: ""
+    readonly property bool toned: tone !== "" && enabled
+    readonly property color ink: !enabled ? Theme.muted : tone === "primary" ? Qt.darker(Theme.accent, 4.5) : tone === "danger" ? Theme.dangerInk : Theme.text
+    readonly property color dangerFill: Qt.rgba(Theme.danger.r, Theme.danger.g, Theme.danger.b, down ? 0.3 : hovered ? 0.26 : 0.2)
     property bool alignLeft: false
     property string iconName: ""
     property string trailingIconName: ""
@@ -25,9 +33,9 @@ AbstractButton {
     Accessible.name: displayedText
     background: Rectangle {
         radius: root.cornerRadius
-        color: root.down ? Theme.pressed : root.hovered ? Theme.hover : root.flat ? "transparent" : Theme.elevated
+        color: root.toned && root.tone === "primary" ? (root.down ? Qt.darker(Theme.accent, 1.15) : root.hovered ? Qt.lighter(Theme.accent, 1.1) : Theme.accent) : root.toned && root.tone === "danger" ? root.dangerFill : root.down ? Theme.pressed : root.hovered ? Theme.hover : root.flat ? "transparent" : Theme.elevated
         border.width: root.showFocusRing && root.activeFocus ? 2 : 0
-        border.color: Theme.accent
+        border.color: root.tone === "primary" ? Theme.text : Theme.accent
     }
     contentItem: Item {
         RowLayout {
@@ -42,7 +50,7 @@ AbstractButton {
                 Layout.alignment: Qt.AlignVCenter
                 implicitSize: Theme.iconSize
                 source: root.displayedIcon ? BinguxIcons.source(root.displayedIcon) : ""
-                color: root.enabled ? Theme.text : Theme.muted
+                color: root.ink
             }
             Text {
                 id: label
@@ -53,7 +61,7 @@ AbstractButton {
                 textFormat: Text.PlainText
                 wrapMode: root.wrapLabel ? Text.Wrap : Text.NoWrap
                 elide: root.wrapLabel ? Text.ElideNone : Text.ElideRight
-                color: root.enabled ? Theme.text : Theme.muted
+                color: root.ink
                 font.family: Theme.fontFamily
                 font.pixelSize: Theme.fontSize
                 horizontalAlignment: Text.AlignHCenter
@@ -66,7 +74,7 @@ AbstractButton {
                 Layout.alignment: Qt.AlignVCenter
                 implicitSize: Theme.iconSize
                 source: root.trailingIconName ? BinguxIcons.source(root.trailingIconName) : ""
-                color: root.enabled ? Theme.text : Theme.muted
+                color: root.ink
             }
         }
     }

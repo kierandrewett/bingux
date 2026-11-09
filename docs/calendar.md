@@ -39,6 +39,13 @@ Calendar is used when no default is set.
 Events load automatically on opening/month changes and update through service
 signals; there is no manual refresh button. No-calendar and empty-day states
 are distinct; an empty response does not prove a remote account is synced.
+The agenda draws its states with the shell's `StateMessage`: **Loading events…**
+with a spinner, **No events** for an empty day, **No calendar connected** when the
+calendar service has no source, and **Could not load events** when it fails. In the
+sidebar the last two carry an **Open Calendar** action that starts the default
+calendar app, where accounts are added. In the year and decade pickers the cell
+before and the cell after the range in the title are dimmed: they belong to the
+neighbouring range and still navigate there.
 
 ## Checks
 

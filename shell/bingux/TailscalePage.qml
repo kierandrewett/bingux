@@ -495,13 +495,13 @@ Item {
                         })
                     }
                 }
-                Text {
+                StateMessage {
+                    objectName: "tailscalePreferencesError"
+                    compact: true
                     visible: Object.keys(root.preferences).length === 0
-                    Layout.fillWidth: true
-                    text: "Preferences could not be read. Check Tailscale permissions."
-                    color: Theme.muted
-                    wrapMode: Text.Wrap
-                    font.pixelSize: Theme.fontSmall
+                    tone: "danger"
+                    title: "Could not read Tailscale preferences"
+                    detail: "Check that your account may change Tailscale settings."
                 }
             }
         }

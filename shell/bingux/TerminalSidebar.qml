@@ -1085,7 +1085,7 @@ Scope {
                     options: ["left", "top", "right"]
                     currentValue: root.edge
                     implicitHeight: 40
-                    accessiblePrefix: ""
+                    accessiblePrefix: "Sidebar on the "
                     Layout.fillWidth: true
                     Layout.leftMargin: Theme.spaceSmall
                     Layout.rightMargin: Theme.spaceSmall

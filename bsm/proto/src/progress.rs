@@ -73,8 +73,8 @@ impl Stage {
         match self {
             Stage::AuthAccepted => "Authenticating",
             Stage::PamSession => "Opening your session",
-            Stage::HostConnected => "Starting Gnoblin",
-            Stage::GnoblinReady => "Starting Gnoblin",
+            Stage::HostConnected => "Starting the desktop",
+            Stage::GnoblinReady => "Starting the desktop",
             Stage::OutputsConfigured => "Preparing displays",
             Stage::BinguxLaunched => "Starting Bingux",
             Stage::SurfacesMapped => "Waiting for Bingux surfaces",

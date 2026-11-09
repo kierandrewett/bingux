@@ -1,9 +1,7 @@
 import QtQuick
-import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
-import Quickshell.Wayland
 
 // Approval for the org.gnoblin.Shell.GlobalShortcutsProvider owner in bingux-portal. The provider
 // asks for one request, polls its result, and cancels it when the portal caller goes away. One
@@ -212,106 +210,54 @@ Scope {
         }
     }
 
-    PanelWindow {
-        id: dialog
-        visible: root.active !== null
-        color: "transparent"
-        implicitWidth: 460
-        implicitHeight: card.implicitHeight + Theme.padding * 2
-        exclusionMode: ExclusionMode.Ignore
-        WlrLayershell.layer: WlrLayer.Overlay
-        WlrLayershell.namespace: "bingux-shortcuts"
-        WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    ShellDialog {
+        namespace: "bingux-shortcuts"
+        dialogWidth: 460
+        open: root.active !== null
+        title: root.active ? (root.active.mode === "configure" ? "Change shortcuts for " : "Allow shortcuts for ") + root.active.name : ""
+        body: "Pressing an allowed shortcut sends it to this application, even when another window has focus."
+        secondaryText: "Deny"
+        primaryText: "Allow"
+        primaryEnabled: root.approvable
+        onSecondaryTriggered: root.deny()
+        onPrimaryTriggered: root.approve()
+        onDismissed: root.deny()
 
-        Rectangle {
-            id: card
-            anchors.centerIn: parent
-            width: parent.width - Theme.padding * 2
-            implicitHeight: content.implicitHeight + Theme.padding * 2
-            height: implicitHeight
-            radius: Theme.shellRadius
-            color: Theme.shellSurface
-            border.width: 1
-            border.color: Theme.outline
-            focus: dialog.visible
-            Keys.onEscapePressed: root.deny()
-
-            ColumnLayout {
-                id: content
-                anchors.fill: parent
-                anchors.margins: Theme.padding
+        Repeater {
+            model: root.active ? root.active.shortcuts : []
+            delegate: RowLayout {
+                id: row
+                required property var modelData
+                required property int index
+                Layout.fillWidth: true
                 spacing: Theme.gap
-
-                Text {
+                ColumnLayout {
                     Layout.fillWidth: true
-                    text: root.active ? (root.active.mode === "configure" ? "Change shortcuts for " : "Allow shortcuts for ") + root.active.name : ""
-                    textFormat: Text.PlainText
-                    color: Theme.text
-                    font.pixelSize: Theme.fontSize + 2
-                    font.bold: true
-                    wrapMode: Text.WordWrap
-                    maximumLineCount: 2
-                    elide: Text.ElideRight
-                }
-                Text {
-                    Layout.fillWidth: true
-                    text: "Pressing an allowed shortcut sends it to this application, even when another window has focus."
-                    color: Theme.muted
-                    font.pixelSize: Theme.fontSize
-                    wrapMode: Text.WordWrap
-                }
-                Repeater {
-                    model: root.active ? root.active.shortcuts : []
-                    delegate: RowLayout {
-                        id: row
-                        required property var modelData
-                        required property int index
+                    spacing: 2
+                    Text {
                         Layout.fillWidth: true
-                        spacing: Theme.gap
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
-                            Text {
-                                Layout.fillWidth: true
-                                text: row.modelData.description || row.modelData.id
-                                textFormat: Text.PlainText
-                                color: Theme.text
-                                font.pixelSize: Theme.fontSize
-                                wrapMode: Text.WordWrap
-                                elide: Text.ElideRight
-                            }
-                            Text {
-                                Layout.fillWidth: true
-                                text: row.modelData.accelerator || "No shortcut suggested"
-                                textFormat: Text.PlainText
-                                color: Theme.muted
-                                font.pixelSize: Theme.fontSize - 1
-                                elide: Text.ElideRight
-                            }
-                        }
-                        ControlSwitch {
-                            enabled: row.modelData.accelerator !== ""
-                            checked: root.checkedRows[row.index] ?? false
-                            onToggled: root.setChecked(row.index, checked)
-                        }
+                        text: row.modelData.description || row.modelData.id
+                        textFormat: Text.PlainText
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize
+                        wrapMode: Text.WordWrap
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: row.modelData.accelerator || "No shortcut suggested"
+                        textFormat: Text.PlainText
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.fontSize - 1
+                        elide: Text.ElideRight
                     }
                 }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.topMargin: Theme.gap
-                    spacing: Theme.gap
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                    ActionButton {
-                        text: "Deny"
-                        onClicked: root.deny()
-                    }
-                    ActionButton {
-                        text: "Allow"
-                        enabled: root.approvable
-                        onClicked: root.approve()
-                    }
+                ControlSwitch {
+                    enabled: row.modelData.accelerator !== ""
+                    checked: root.checkedRows[row.index] ?? false
+                    onToggled: root.setChecked(row.index, checked)
                 }
             }
         }

@@ -201,27 +201,41 @@ KioskScreen {
                     name: root.accountDisplayName
                 }
 
-                RowLayout {
+                // The status line sits above the password field, except when a
+                // username field is shown: there it goes under the password
+                // field, so "Enter your password" never reads as the caption of
+                // the username above it.
+                Component {
+                    id: statusLine
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignHCenter
+                        spacing: 8
+                        BusyIndicator {
+                            implicitWidth: 18
+                            implicitHeight: 18
+                            running: root.authentication.finishing || (root.authentication.active && !root.authentication.responseRequired)
+                            visible: running
+                        }
+                        Text {
+                            textFormat: Text.PlainText
+                            objectName: "greeterStatus"
+                            Layout.fillWidth: true
+                            text: root.statusText
+                            color: root.authentication.statusIsError ? Theme.danger : Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.fontSmall
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+                Loader {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignHCenter
-                    spacing: 8
-                    BusyIndicator {
-                        implicitWidth: 18
-                        implicitHeight: 18
-                        running: root.authentication.finishing || (root.authentication.active && !root.authentication.responseRequired)
-                        visible: running
-                    }
-                    Text {
-                        textFormat: Text.PlainText
-                        objectName: "greeterStatus"
-                        Layout.fillWidth: true
-                        text: root.statusText
-                        color: root.authentication.statusIsError ? Theme.danger : Theme.muted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Theme.fontSmall
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                    }
+                    active: !root.customUser
+                    visible: active
+                    sourceComponent: statusLine
                 }
 
                 TextField {
@@ -297,6 +311,14 @@ KioskScreen {
                             duration: Theme.motion / 2
                         }
                     }
+                }
+
+                Loader {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    active: root.customUser
+                    visible: active
+                    sourceComponent: statusLine
                 }
 
                 RowLayout {
