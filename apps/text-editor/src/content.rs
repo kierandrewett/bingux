@@ -22,6 +22,8 @@ pub struct EditorContent {
     pub notices: RefCell<Vec<Notice>>,
     /// The bytes of the file as read, kept for Reopen with Encoding when small.
     pub raw: RefCell<Option<Rc<Vec<u8>>>>,
+    /// The text belongs to the tab's own loader: the manager's load is ignored.
+    text_from_tab: bool,
 }
 
 impl EditorContent {
@@ -31,6 +33,18 @@ impl EditorContent {
             format: RefCell::new(FileFormat::default()),
             notices: RefCell::new(Vec::new()),
             raw: RefCell::new(None),
+            text_from_tab: false,
+        }
+    }
+
+    /// A document over a tab's own editor, which already holds the text.
+    pub fn over_tab(handle: EditorHandle, format: FileFormat) -> Self {
+        Self {
+            handle,
+            format: RefCell::new(format),
+            notices: RefCell::new(Vec::new()),
+            raw: RefCell::new(None),
+            text_from_tab: true,
         }
     }
 }
@@ -52,6 +66,9 @@ impl DocumentContent for EditorContent {
     }
 
     fn load(&self, bytes: Vec<u8>, _reason: LoadReason) {
+        if self.text_from_tab {
+            return;
+        }
         let decoded = encoding::decode_vec(bytes);
         *self.format.borrow_mut() = decoded.format;
         self.handle

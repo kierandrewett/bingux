@@ -127,21 +127,25 @@ fn restore(prefs: &Prefs, session: Session, documents: Documents) -> TabSet<DocT
 /// The tab for a saved tab, with its file in the shared manager too.
 fn restore_tab(prefs: &Prefs, saved: &SavedTab, documents: Documents) -> Option<DocTab> {
     let doc = restore_doc(prefs, saved)?;
-    let shared = saved.path.as_deref().map(|path| {
-        // A draft holds unsaved text: the shared copy is edited too.
-        share(documents, path, saved.draft.is_some())
-    });
+    // A draft holds unsaved text: the shared copy is edited too.
+    let shared = saved
+        .path
+        .as_deref()
+        .and_then(|path| share(documents, path, doc, saved.draft.is_some()));
     Some(DocTab { doc, shared })
 }
 
-/// Puts `path` in the shared document manager and returns its id. `edited`
-/// marks it unsaved, as the old registry's draft does.
-fn share(documents: Documents, path: &Path, edited: bool) -> DocumentId {
-    let document = documents.open_or_create(path);
+/// Puts `path` in the shared document manager, over the text of tab document
+/// `doc`, and returns its id. `edited` marks it unsaved, as the old registry's
+/// draft does.
+fn share(documents: Documents, path: &Path, doc: u64, edited: bool) -> Option<DocumentId> {
+    let (handle, format) = document::with(doc, |doc| (doc.handle.clone(), doc.format.clone()))?;
+    let content = Rc::new(EditorContent::over_tab(handle, format));
+    let document = documents.open_path_with(path, content);
     if edited {
         document.set_edited(true);
     }
-    document.id()
+    Some(document.id())
 }
 
 fn restore_doc(prefs: &Prefs, saved: &SavedTab) -> Option<u64> {
@@ -362,7 +366,7 @@ impl Actions {
                 document::new_draft_name(),
             )
         };
-        let shared = share(self.documents, &path, false);
+        let shared = share(self.documents, &path, id, false);
         session::add_recent(&path);
         let blank = self.current().filter(|current| {
             document::with(*current, |doc| {
@@ -378,16 +382,13 @@ impl Actions {
                     |_| true,
                     move |content| {
                         content.doc = id;
-                        content.shared = Some(shared);
+                        content.shared = shared;
                     },
                 );
                 document::remove(old);
             }
             _ => {
-                self.tabs.open(DocTab {
-                    doc: id,
-                    shared: Some(shared),
-                });
+                self.tabs.open(DocTab { doc: id, shared });
             }
         }
         self.focus_editor();
