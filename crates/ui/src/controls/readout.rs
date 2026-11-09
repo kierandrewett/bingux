@@ -124,7 +124,7 @@ impl Component for Readout {
         // Quarter pixels, as `label_scaled` rounds, so the size does not
         // wander with every pixel of the window.
         let size = (self.style.size.px() * scale * 4.0).round() / 4.0;
-        let line = self.style.leading * self.style.size.px() * self.scale;
+        let line = self.style.leading * self.style.size.px() * scale;
         let shown = self.text.clone();
         let spoken = self.spoken.clone().unwrap_or_else(|| self.text.clone());
         let copy = self.copy.clone().unwrap_or_else(|| self.text.clone());
