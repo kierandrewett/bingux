@@ -86,7 +86,7 @@ pub fn no_results_state(
     }
     let (title, description) = match running {
         Some(true) => (
-            "Searching…".to_string(),
+            "Searching".to_string(),
             "Nothing has matched yet.".to_string(),
         ),
         _ if words.trim().is_empty() => (

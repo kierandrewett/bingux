@@ -19,6 +19,7 @@ use crate::controls::adaptive::{
 };
 use crate::controls::dropdown::dropdown;
 use crate::controls::path_label::text_width;
+use crate::controls::path_label::path_label;
 use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
 use crate::controls::segmented::segmented;
@@ -125,6 +126,9 @@ pub struct Row {
     disclosure: Option<(bool, EventHandler<bool>)>,
     /// The options of a choice row, set by [`choice_row`], so [`Row::dropdown`] can rebuild it.
     choice: Option<Choice>,
+    /// Set by [`Row::title_middle`]: the title stays on one line and is cut in
+    /// the middle to fit.
+    title_middle: bool,
 }
 
 pub fn row(title: impl Into<String>) -> Row {
@@ -162,6 +166,7 @@ pub fn row(title: impl Into<String>) -> Row {
         subtitle_marks: None,
         disclosure: None,
         choice: None,
+        title_middle: false,
     }
 }
 
@@ -271,6 +276,14 @@ impl Row {
     /// typo tolerance, not what a substring test would.
     pub fn title_marks(mut self, ranges: Vec<Range<usize>>) -> Self {
         self.title_marks = Some(ranges);
+        self
+    }
+
+    /// The title stays on one line and is cut in the middle when it does not
+    /// fit, as in `report-…-final.pdf`. The full title is the tooltip while it
+    /// is cut. For names, where the start and the end both matter.
+    pub fn title_middle(mut self) -> Self {
+        self.title_middle = true;
         self
     }
 
@@ -960,6 +973,7 @@ impl Component for Row {
             TextOverflow::Ellipsis
         };
         let title_line: Element = match &self.badge {
+            None if self.title_middle => path_label(self.title.clone()).ink(ink).middle().into(),
             None if wrapped => search_highlight::marked(BODY.in_ink(ink), &tokens, &self.title)
                 .unwrap_or_else(|| BODY.in_ink(ink).paragraph(&tokens, self.title.clone()))
                 .width(Size::fill())
