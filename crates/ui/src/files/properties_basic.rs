@@ -307,7 +307,11 @@ fn volume_group(volume: &Option<Volume>, known: bool) -> Group {
             total_bytes: Some(total),
             free_bytes: Some(free),
             ..
-        }) => format!("{} free of {}", display::size(*free), display::size(*total)),
+        }) => crate::tr!(
+            "ui-files-usage-free",
+            free = display::size(*free),
+            total = display::size(*total)
+        ),
         // The line is always one line high, so the bar does not move.
         _ => " ".to_owned(),
     };

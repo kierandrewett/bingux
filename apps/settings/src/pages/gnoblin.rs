@@ -298,7 +298,8 @@ impl Parser<'_> {
     }
 }
 
-fn parse_error(_error: String) -> CommandError {
+fn parse_error(error: String) -> CommandError {
+    eprintln!("[gnoblin] reply could not be parsed: {error}");
     CommandError(tr!("settings-gnoblin-read-error"))
 }
 

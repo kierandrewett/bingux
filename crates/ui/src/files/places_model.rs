@@ -269,7 +269,11 @@ pub(crate) fn volume_text(volume: &Volume) -> String {
 
 /// `230 GB free of 465 GB`.
 pub(crate) fn usage_text(free: u64, total: u64) -> String {
-    format!("{} free of {}", display::size(free), display::size(total))
+    crate::tr!(
+        "ui-files-usage-free",
+        free = display::size(free),
+        total = display::size(total)
+    )
 }
 
 /// The usage line of `mount`. `settled` is whether the sizes have been asked

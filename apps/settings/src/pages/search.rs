@@ -663,6 +663,7 @@ impl Component for SearchPage {
         let data = match loaded {
             Ok(data) => data,
             Err(e) => {
+                eprintln!("[search] could not load: {}", e.0);
                 return page_column()
                     .child(PageHead::new())
                     .child(

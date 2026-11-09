@@ -448,6 +448,7 @@ impl Component for AppearancePage {
         let model_value = match loaded {
             Ok(value) => value,
             Err(failure) => {
+                eprintln!("[appearance] could not load: {}", failure.0);
                 return page_column().child(PageHead::new()).child(
                     status(Status::Error(failure.0))
                         .action(&tr!("settings-appearance-try-again"), move |_| {

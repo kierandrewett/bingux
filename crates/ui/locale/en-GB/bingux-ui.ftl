@@ -1499,6 +1499,9 @@ ui-files-places-bookmarks = Bookmarks
 ui-files-places-drives = Drives
 # $size (String) - the size of a drive that is not mounted
 ui-files-places-not-mounted = Not mounted · { $size }
+# $free (String) - the free space on a drive, e.g. "230 GB"
+# $total (String) - the whole size of that drive, e.g. "465 GB"
+ui-files-usage-free = { $free } free of { $total }
 ui-files-place-desktop = Desktop
 ui-files-place-documents = Documents
 ui-files-place-downloads = Downloads
