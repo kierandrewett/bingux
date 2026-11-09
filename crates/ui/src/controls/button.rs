@@ -3,7 +3,7 @@
 
 use super::default_mark::{Face, default_mark};
 use super::press::{is_right_click, use_hold, use_press};
-use super::tooltip::hover_tip;
+use super::tooltip::{TipSide, hover_tip, hover_tip_in};
 use crate::shell::menu::MenuItem;
 use crate::shell::overlays::Overlays;
 use crate::shell::panel::{PanelRect, PanelTrigger};
@@ -446,6 +446,10 @@ pub struct IconButton {
     /// `None` takes the header's size inside a header bar, else a button's.
     size: Option<Dim>,
     tooltip: Option<String>,
+    /// The side the tooltip opens on when it fits, see [`IconButton::tooltip_side`].
+    tooltip_side: Option<TipSide>,
+    /// The area the tooltip is placed against, see [`IconButton::tooltip_region`].
+    tooltip_region: Option<State<Option<Area>>>,
     on_press: EventHandler<()>,
     danger: bool,
     filled: bool,
@@ -474,6 +478,8 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         icon,
         size: None,
         tooltip: None,
+        tooltip_side: None,
+        tooltip_region: None,
         on_press: on_press.into(),
         danger: false,
         filled: false,
@@ -503,6 +509,22 @@ impl IconButton {
 
     pub fn tooltip(mut self, text: &str) -> Self {
         self.tooltip = Some(text.to_string());
+        self
+    }
+
+    /// Opens the tooltip on `side` when it fits (for a bar at the foot of a
+    /// window, `TipSide::Above`, so the tip does not cover the bar's timeline).
+    pub fn tooltip_side(mut self, side: TipSide) -> Self {
+        self.tooltip_side = Some(side);
+        self
+    }
+
+    /// Places the tooltip against `region` (a measured area, say a footer's
+    /// whole bar) instead of the button, on the side set by
+    /// [`IconButton::tooltip_side`]. Until the region is measured it is the button.
+    /// `None` keeps the button as the anchor.
+    pub fn tooltip_region(mut self, region: Option<State<Option<Area>>>) -> Self {
+        self.tooltip_region = region;
         self
     }
 
@@ -796,7 +818,10 @@ impl Component for IconButton {
             })
             .focusable(focus());
         match &self.tooltip {
-            Some(text) => hover_tip(button, text.clone()),
+            Some(text) => match self.tooltip_side {
+                Some(side) => hover_tip_in(button, text.clone(), side, self.tooltip_region),
+                None => hover_tip(button, text.clone()),
+            },
             None => Element::from(button),
         }
     }

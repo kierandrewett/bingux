@@ -10,6 +10,7 @@
 use std::time::Duration;
 
 use bingux_media::{Kind, PlayState, Precision, Repeat, Sleep, SleepLeft, Status};
+use bingux_ui::controls::TipSide;
 use bingux_ui::files::{ChooserRequest, Filter, choose};
 use bingux_ui::media::{
     ArtworkKind, RepeatMode, Seek, TransportAction, VideoFrame, VideoFrames, VolumeChange, artwork,
@@ -27,6 +28,8 @@ use crate::strings as text;
 
 /// How long the controls stay over a playing film after the pointer stops.
 const HIDE_AFTER: Duration = Duration::from_millis(2500);
+/// A stage narrower than this is a phone: the footer drops the volume slider.
+const NARROW_STAGE: f32 = 480.0;
 /// The seek preview's longer side, in pixels.
 const PREVIEW_SIDE: u32 = 192;
 
@@ -75,6 +78,18 @@ pub fn run_volume(change: VolumeChange) {
     });
 }
 
+/// Flips full screen. The read of the current value ends before the write.
+pub fn toggle_fullscreen(ui: Ui) {
+    let on = !*ui.fullscreen.peek();
+    set_fullscreen(ui, on);
+}
+
+/// Flips the mini player. The read of the current value ends before the write.
+pub fn toggle_mini(ui: Ui) {
+    let on = !*ui.mini.peek();
+    set_mini(ui, on);
+}
+
 /// Turns full screen on or off.
 pub fn set_fullscreen(ui: Ui, on: bool) {
     let mut fullscreen = ui.fullscreen;
@@ -93,6 +108,9 @@ pub fn set_mini(ui: Ui, on: bool) {
     let (width, height) = if on { (360.0, 400.0) } else { (1100.0, 760.0) };
     Platform::get().with_window(Platform::window_id(), move |window| {
         let _ = window.request_inner_size(freya::winit::dpi::LogicalSize::new(width, height));
+        // Winit applies the new size at once but sends no resize event for it, so the
+        // redraw is what lays the mini layout out at the new size.
+        window.request_redraw();
     });
 }
 
@@ -269,7 +287,7 @@ impl Component for FilmStage {
         let picture = video_surface(engine().frames.clone())
             .label(title.clone())
             .on_press(|_| engine().player.toggle())
-            .on_double_press(move |_| set_fullscreen(ui, !*ui.fullscreen.peek()));
+            .on_double_press(move |_| toggle_fullscreen(ui));
 
         let path = status.item.as_ref().map(|item| item.path.clone());
         let preview = (*previewing.read()).then(|| {
@@ -341,8 +359,9 @@ impl Component for FilmStage {
         }
         tools = tools
             .child(
-                icon_button(Icon::ViewPip, move |_| set_mini(ui, !*ui.mini.peek()))
+                icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
                     .active(mini)
+                    .tooltip_side(TipSide::Above)
                     .tooltip(if mini {
                         text::LEAVE_MINI_PLAYER
                     } else {
@@ -350,15 +369,14 @@ impl Component for FilmStage {
                     }),
             )
             .child(
-                icon_button(Icon::ViewFullscreen, move |_| {
-                    set_fullscreen(ui, !*ui.fullscreen.peek())
-                })
-                .morph(Icon::ViewRestore, fullscreen)
-                .tooltip(if fullscreen {
-                    text::LEAVE_FULL_SCREEN
-                } else {
-                    text::FULL_SCREEN
-                }),
+                icon_button(Icon::ViewFullscreen, move |_| toggle_fullscreen(ui))
+                    .morph(Icon::ViewRestore, fullscreen)
+                    .tooltip_side(TipSide::Above)
+                    .tooltip(if fullscreen {
+                        text::LEAVE_FULL_SCREEN
+                    } else {
+                        text::FULL_SCREEN
+                    }),
             );
         let card = |content: Rect| {
             content.tw(
@@ -371,11 +389,25 @@ impl Component for FilmStage {
                 ],
             )
         };
+        // Each bar is pinned to its own edge. An absolute box is not given
+        // its parent's height, so the bottom bar is placed from the measured
+        // heights of the stage and of the bar.
+        let mut stage_size = use_state(|| (0.0f32, 0.0f32));
+        let (stage_width, stage_height) = *stage_size.read();
+        // A phone-width stage keeps the mute button and drops the slider, so
+        // the slider cannot collide with the transport. Volume keys still work.
+        let narrow = stage_width > 0.0 && stage_width < NARROW_STAGE;
+        // The footer's measured area: the transport's tips open above the whole
+        // bar, clear of the timeline, not just above their own button.
+        let mut controls_area = use_state(|| None::<Area>);
         let controls = card(
             rect()
                 .width(Size::fill())
                 .tw(&tokens, &[flex_col(), gap(S1)]),
         )
+        .on_sized(move |event: Event<SizedEventData>| {
+            controls_area.set_if_modified(Some(event.area))
+        })
         .child(seek_bar)
         .child(
             rect()
@@ -386,14 +418,16 @@ impl Component for FilmStage {
                 )
                 .child(
                     transport(playing, action)
+                        .tooltips_over(controls_area)
                         .skips()
                         .can_next(live.queue.read().upcoming().len() > 0)
                         .compact_if(mini),
                 )
                 .child(rect().width(Size::flex(1.0)))
-                .maybe_child(
-                    (!mini).then(|| volume_control(status.volume, status.muted, run_volume)),
-                )
+                .maybe_child((!mini).then(|| {
+                    let volume = volume_control(status.volume, status.muted, run_volume);
+                    if narrow { volume.compact() } else { volume }
+                }))
                 .child(tools),
         );
         let top = card(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)]))
@@ -406,11 +440,6 @@ impl Component for FilmStage {
             );
         let fade = use_tween(if visible { 1.0 } else { 0.0 }, tokens.motion(200));
         let margin = if mini { S2 } else { S4 };
-        // Each bar is pinned to its own edge. An absolute box is not given
-        // its parent's height, so the bottom bar is placed from the measured
-        // heights of the stage and of the bar.
-        let mut stage_size = use_state(|| (0.0f32, 0.0f32));
-        let (stage_width, stage_height) = *stage_size.read();
         let edge = |position: Position| {
             rect()
                 .position(position)
@@ -548,7 +577,7 @@ impl Component for SongStage {
                         .tooltip(text::QUEUE)
                     }))
                     .child(
-                        icon_button(Icon::ViewPip, move |_| set_mini(ui, !*ui.mini.peek()))
+                        icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
                             .active(mini)
                             .tooltip(if mini {
                                 text::LEAVE_MINI_PLAYER

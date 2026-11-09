@@ -36,6 +36,7 @@ use crate::engine::{engine, use_live};
 use crate::pages::{SearchResults, Ui, add_folder, location};
 use crate::stage::{
     Stage, close_stage, repeat_mode, run_seek, run_transport, run_volume, set_fullscreen, set_mini,
+    toggle_fullscreen, toggle_mini,
 };
 use crate::strings as text;
 
@@ -237,7 +238,7 @@ fn window_commands(
         .group(CommandGroup::View)
         .keywords(["now playing"]),
         Command::new("view.mini-player", text::MENU_MINI, move |_| {
-            set_mini(ui, !*ui.mini.peek())
+            toggle_mini(ui)
         })
         .shortcut("Ctrl+Shift+M")
         .checked(mini)
@@ -248,7 +249,7 @@ fn window_commands(
             if !*ui.stage.peek() {
                 open_stage(ui);
             }
-            set_fullscreen(ui, !*ui.fullscreen.peek())
+            toggle_fullscreen(ui)
         })
         .shortcut("F11")
         .checked(fullscreen)
@@ -412,7 +413,7 @@ impl Component for Content {
                     "l" | "L" if !shift => player.seek_by(10.0),
                     "L" | "l" => player.cycle_loop(),
                     "m" | "M" => run_volume(VolumeChange::Mute(!status.muted)),
-                    "f" | "F" => set_fullscreen(ui, !*ui.fullscreen.peek()),
+                    "f" | "F" => toggle_fullscreen(ui),
                     "[" => player.set_speed(status.speed - 0.25),
                     "]" => player.set_speed(status.speed + 0.25),
                     "s" | "S" if status.has_video => save_frame(overlays),

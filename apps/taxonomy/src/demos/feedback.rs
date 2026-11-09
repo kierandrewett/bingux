@@ -2,7 +2,9 @@
 
 use bingux_ui::controls::avatar::current_user;
 use bingux_ui::controls::sortable::sortable;
-use bingux_ui::controls::{EccLevel, elide_middle, elide_name, elide_path, path_label_trace};
+use bingux_ui::controls::{
+    EccLevel, TipSide, elide_middle, elide_name, elide_path, hover_tip_preferring, path_label_trace,
+};
 use bingux_ui::elide::distinguish;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
@@ -26,9 +28,10 @@ pub const PROGRESS: &[Spec] = &[
     Spec::live("Indeterminate", || {
         progress_bar(None).width(Size::fill()).into_element()
     }),
-    Spec::live("Indeterminate, reduced motion (breathes, does not travel)", || {
-        Reduced(|| progress_bar(None).width(Size::fill()).into_element()).into_element()
-    }),
+    Spec::live(
+        "Indeterminate, reduced motion (breathes, does not travel)",
+        || Reduced(|| progress_bar(None).width(Size::fill()).into_element()).into_element(),
+    ),
     Spec::live("Indeterminate in a dialog", || {
         let overlays = use_overlays();
         action_button("Open dialog", move |_| {
@@ -138,10 +141,18 @@ pub const TOOLTIP: &[Spec] = &[
         // button, and the bubble never jumps.
         let mut shown = use_state(|| false);
         icon_button(
-            if shown() { Icon::ViewConceal } else { Icon::ViewReveal },
+            if shown() {
+                Icon::ViewConceal
+            } else {
+                Icon::ViewReveal
+            },
             move |_| shown.toggle(),
         )
-        .tooltip(if shown() { "Hide password" } else { "Show password" })
+        .tooltip(if shown() {
+            "Hide password"
+        } else {
+            "Show password"
+        })
         .into_element()
     }),
     Spec::live("Neighbours: the second opens at once", || {
@@ -149,7 +160,11 @@ pub const TOOLTIP: &[Spec] = &[
         hstack(S1)
             .child(
                 icon_button(
-                    if muted() { Icon::AudioVolumeMuted } else { Icon::AudioVolumeMedium },
+                    if muted() {
+                        Icon::AudioVolumeMuted
+                    } else {
+                        Icon::AudioVolumeMedium
+                    },
                     move |_| muted.toggle(),
                 )
                 .tooltip(if muted() { "Unmute" } else { "Mute" }),
@@ -157,6 +172,17 @@ pub const TOOLTIP: &[Spec] = &[
             .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
             .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete"))
             .into_element()
+    }),
+    Spec::live("Opens above when there is room", || {
+        hover_tip_preferring(
+            icon(
+                Icon::DialogInformation,
+                IconSize::Row,
+                Paint::Muted.color(&use_tokens()),
+            ),
+            "Opens above the icon. Below it when there is no room above.",
+            TipSide::Above,
+        )
     }),
     Spec::live("Long text wraps", || {
         hover_tip(
@@ -179,9 +205,21 @@ pub const TOOLTIP: &[Spec] = &[
                 .into_element()
         };
         hstack(S1)
-            .child(cell(icon_button(Icon::ListAdd, |_| {}).tooltip("New tab").into_element()))
-            .child(cell(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh (F5)").into_element()))
-            .child(cell(icon_button(Icon::Delete, |_| {}).tooltip("Move to Trash").into_element()))
+            .child(cell(
+                icon_button(Icon::ListAdd, |_| {})
+                    .tooltip("New tab")
+                    .into_element(),
+            ))
+            .child(cell(
+                icon_button(Icon::Refresh, |_| {})
+                    .tooltip("Refresh (F5)")
+                    .into_element(),
+            ))
+            .child(cell(
+                icon_button(Icon::Delete, |_| {})
+                    .tooltip("Move to Trash")
+                    .into_element(),
+            ))
             .into_element()
     }),
     Spec::live("A long label on a small control", || {
@@ -267,12 +305,11 @@ pub const PATH_LABEL: &[Spec] = &[
             )
             .child(
                 rect()
-                    .tw(&tokens, &[p(S2), rounded(Radius::Control), bg(Paint::Control)])
-                    .child(
-                        rect()
-                            .width(Size::px(room))
-                            .child(path_label(WIDE_PATH)),
-                    ),
+                    .tw(
+                        &tokens,
+                        &[p(S2), rounded(Radius::Control), bg(Paint::Control)],
+                    )
+                    .child(rect().width(Size::px(room)).child(path_label(WIDE_PATH))),
             )
             .child(caption(format!("{room:.0} px, {step:?}: {shown}")))
             .into_element()
@@ -286,7 +323,10 @@ pub const PATH_LABEL: &[Spec] = &[
             column = column
                 .child(
                     rect()
-                        .tw(&tokens, &[p(S1), rounded(Radius::Control), bg(Paint::Control)])
+                        .tw(
+                            &tokens,
+                            &[p(S1), rounded(Radius::Control), bg(Paint::Control)],
+                        )
                         .child(rect().width(Size::px(room)).child(path_label(WIDE_PATH))),
                 )
                 .child(caption(format!("{room:.0} px: {step:?}")));
@@ -315,7 +355,11 @@ pub const PATH_LABEL: &[Spec] = &[
         rows(
             distinguish(&paths)
                 .iter()
-                .map(|label| row(label.name.clone()).subtitle(label.context.clone()).into_element())
+                .map(|label| {
+                    row(label.name.clone())
+                        .subtitle(label.context.clone())
+                        .into_element()
+                })
                 .collect(),
         )
     }),
@@ -555,9 +599,16 @@ pub const SORTABLE: &[Spec] = &[
     }),
     Spec::live("A long list: a line shows where it lands", || {
         let mut order = use_state(|| (1..=12).collect::<Vec<u32>>());
-        let names: Vec<String> = order.read().iter().map(|n| format!("Profile {n}")).collect();
+        let names: Vec<String> = order
+            .read()
+            .iter()
+            .map(|n| format!("Profile {n}"))
+            .collect();
         sortable(
-            names.iter().map(|name| row(name.clone()).into_element()).collect(),
+            names
+                .iter()
+                .map(|name| row(name.clone()).into_element())
+                .collect(),
             move |(from, to): (usize, usize)| reordered(&mut order.write(), from, to),
         )
         .labels(names.clone())
@@ -589,19 +640,22 @@ impl Component for DeliberateFailure {
 }
 
 pub const ERROR_BOUNDARY: &[Spec] = &[
-    Spec::live("A test of the boundary: press to make the part fail", || {
-        let mut broken = use_state(|| false);
-        vstack(S3)
-            .child(action_button(
-                "Break this part (a test of the error boundary)",
-                move |_| broken.set(true),
-            ))
-            .child(error_boundary(
-                "Boundary test",
-                DeliberateFailure { broken: broken() },
-            ))
-            .into_element()
-    }),
+    Spec::live(
+        "A test of the boundary: press to make the part fail",
+        || {
+            let mut broken = use_state(|| false);
+            vstack(S3)
+                .child(action_button(
+                    "Break this part (a test of the error boundary)",
+                    move |_| broken.set(true),
+                ))
+                .child(error_boundary(
+                    "Boundary test",
+                    DeliberateFailure { broken: broken() },
+                ))
+                .into_element()
+        },
+    ),
     Spec::live("As one row of a list", || {
         let mut broken = use_state(|| false);
         let tokens = use_tokens();
@@ -619,10 +673,9 @@ pub const ERROR_BOUNDARY: &[Spec] = &[
             .into_element()
     }),
     Spec::live("An event handler that panics: a toast, no card", || {
-        action_button(
-            "Panic in an event handler (a test of the guard)",
-            |_| panic!("deliberate panic in an event handler, a test of the guard"),
-        )
+        action_button("Panic in an event handler (a test of the guard)", |_| {
+            panic!("deliberate panic in an event handler, a test of the guard")
+        })
         .into_element()
     }),
 ];
