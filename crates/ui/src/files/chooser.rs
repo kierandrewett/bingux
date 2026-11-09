@@ -392,7 +392,10 @@ impl Session {
             Host::Browser(_) => {
                 let mut problem = self.nav.problem;
                 open_default(&path, move |why| {
-                    problem.set(Some(format!("Could not open the file. {why}")));
+                    problem.set(Some(crate::tr!(
+                        "ui-files-chooser-open-failed",
+                        reason = why.to_string()
+                    )));
                 });
             }
         }
@@ -418,21 +421,16 @@ impl Session {
     }
 
     fn confirm_replace(&self, existing: Vec<PathBuf>) {
-        let title = if existing.len() == 1 {
-            "Replace file?".to_string()
-        } else {
-            "Replace files?".to_string()
-        };
+        let count = existing.len();
+        let title = crate::tr!("ui-files-chooser-replace-title", count = count);
         let body = match existing.as_slice() {
-            [only] => format!(
-                "A file called “{}” already exists in this folder. Replacing it overwrites its contents.",
-                only.file_name()
+            [only] => crate::tr!(
+                "ui-files-chooser-replace-body-one",
+                name = only
+                    .file_name()
                     .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
             ),
-            many => format!(
-                "{} files with these names already exist in this folder. Replacing them overwrites their contents.",
-                many.len()
-            ),
+            many => crate::tr!("ui-files-chooser-replace-body", count = many.len()),
         };
         let session = self.clone();
         let paths = match self.request.action {
@@ -446,11 +444,13 @@ impl Session {
         };
         self.overlays.show_dialog(
             dialog(title, body)
-                .cancel("Cancel")
+                .cancel(crate::tr!("ui-files-chooser-cancel"))
                 .default_action(CANCEL_ID)
-                .response("Replace", ResponseKind::Destructive, move |_: ()| {
-                    session.finish(paths.clone())
-                }),
+                .response(
+                    crate::tr!("ui-files-chooser-replace"),
+                    ResponseKind::Destructive,
+                    move |_: ()| session.finish(paths.clone()),
+                ),
         );
     }
 
@@ -1278,70 +1278,104 @@ fn browser_commands(
         ("Alt+Left", "Alt+Right")
     };
     vec![
-        Command::new("files.back", "Back", move |_| nav.back())
-            .shortcut(back_key)
-            .enabled(can_back)
-            .icon(Icon::GoPrevious)
-            .group(CommandGroup::Go)
-            .section("history"),
-        Command::new("files.forward", "Forward", move |_| nav.forward())
-            .shortcut(forward_key)
-            .enabled(can_forward)
-            .icon(Icon::GoNext)
-            .group(CommandGroup::Go)
-            .section("history"),
-        Command::new("files.up", "Parent folder", move |_| nav.up())
-            .shortcut("Alt+Up")
-            .enabled(has_parent)
-            .icon(Icon::PanUp)
-            .group(CommandGroup::Go)
-            .section("places"),
-        Command::new("files.home", "Home", move |_| {
-            nav.go(Where::Folder(home.clone()))
-        })
+        Command::new(
+            "files.back",
+            crate::tr!("ui-files-chooser-back"),
+            move |_| nav.back(),
+        )
+        .shortcut(back_key)
+        .enabled(can_back)
+        .icon(Icon::GoPrevious)
+        .group(CommandGroup::Go)
+        .section("history"),
+        Command::new(
+            "files.forward",
+            crate::tr!("ui-files-chooser-forward"),
+            move |_| nav.forward(),
+        )
+        .shortcut(forward_key)
+        .enabled(can_forward)
+        .icon(Icon::GoNext)
+        .group(CommandGroup::Go)
+        .section("history"),
+        Command::new(
+            "files.up",
+            crate::tr!("ui-files-chooser-parent"),
+            move |_| nav.up(),
+        )
+        .shortcut("Alt+Up")
+        .enabled(has_parent)
+        .icon(Icon::PanUp)
+        .group(CommandGroup::Go)
+        .section("places"),
+        Command::new(
+            "files.home",
+            crate::tr!("ui-files-chooser-home"),
+            move |_| nav.go(Where::Folder(home.clone())),
+        )
         .shortcut("Alt+Home")
         .icon(Icon::UserHome)
         .group(CommandGroup::Go)
         .section("places"),
-        Command::new("files.location", "Go to location…", move |_| {
-            let mut draft = draft;
-            draft.set(AddressBar::text_of(&nav.here()));
-            editing.set(true);
-        })
+        Command::new(
+            "files.location",
+            crate::tr!("ui-files-chooser-go-to-location"),
+            move |_| {
+                let mut draft = draft;
+                draft.set(AddressBar::text_of(&nav.here()));
+                editing.set(true);
+            },
+        )
         .shortcut("Ctrl+L")
         .group(CommandGroup::Go)
         .section("places")
         .keywords(["path", "address"]),
-        Command::new("files.search", "Search", move |_| search.start_search(""))
-            .shortcut("Ctrl+F")
-            .icon(Icon::Search)
-            .group(CommandGroup::Edit)
-            .section("find"),
-        Command::new("files.hidden", "Show hidden files", move |_| {
-            let shown = *show_hidden.peek();
-            show_hidden.set(!shown);
-        })
+        Command::new(
+            "files.search",
+            crate::tr!("ui-files-chooser-search"),
+            move |_| search.start_search(""),
+        )
+        .shortcut("Ctrl+F")
+        .icon(Icon::Search)
+        .group(CommandGroup::Edit)
+        .section("find"),
+        Command::new(
+            "files.hidden",
+            crate::tr!("ui-files-chooser-hidden"),
+            move |_| {
+                let shown = *show_hidden.peek();
+                show_hidden.set(!shown);
+            },
+        )
         .shortcut("Ctrl+H")
         .checked(hidden)
         .group(CommandGroup::View)
         .section("show")
         .keywords(["dotfiles"]),
-        Command::new("files.preview-pane", "Show preview pane", move |_| {
-            let shown = *preview_pane.peek();
-            preview_pane.set(!shown);
-        })
+        Command::new(
+            "files.preview-pane",
+            crate::tr!("ui-files-chooser-show-preview"),
+            move |_| {
+                let shown = *preview_pane.peek();
+                preview_pane.set(!shown);
+            },
+        )
         .shortcut("Alt+P")
         .checked(pane)
         .group(CommandGroup::View)
         .section("show")
         .keys_handled_by_view(),
-        Command::new("files.reload", "Reload", move |_| reload.run())
-            .shortcut("F5")
-            .shortcut("Ctrl+R")
-            .enabled(in_folder)
-            .icon(Icon::Refresh)
-            .group(CommandGroup::View)
-            .section("reload"),
+        Command::new(
+            "files.reload",
+            crate::tr!("ui-files-chooser-reload"),
+            move |_| reload.run(),
+        )
+        .shortcut("F5")
+        .shortcut("Ctrl+R")
+        .enabled(in_folder)
+        .icon(Icon::Refresh)
+        .group(CommandGroup::View)
+        .section("reload"),
     ]
 }
 
@@ -1505,11 +1539,11 @@ impl Component for PartialListing {
             .tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
             .child(
                 rect().tw(&tokens, &[w_full(), px(S3), pt(S2)]).child(
-                    crate::shell::banner(
-                        "Loading stopped before every item was read. Reload to see them all.",
-                    )
-                    .kind(crate::shell::BannerKind::Warning)
-                    .action("Reload", move |_: ()| reload.run()),
+                    crate::shell::banner(crate::tr!("ui-files-chooser-partial"))
+                        .kind(crate::shell::BannerKind::Warning)
+                        .action(crate::tr!("ui-files-chooser-reload"), move |_: ()| {
+                            reload.run()
+                        }),
                 ),
             )
             .child(
@@ -1649,18 +1683,18 @@ fn toolbar_parts(
     // A right click or a hold lists the places the button would take.
     let back = icon_button(Icon::GoPrevious, move |_: ()| nav.back())
         .size(Dim::Control)
-        .tooltip("Back")
+        .tooltip(&crate::tr!("ui-files-chooser-back"))
         .enabled(can_go_back)
         .context_menu(back_items);
     let forward = icon_button(Icon::GoNext, move |_: ()| nav.forward())
         .size(Dim::Control)
-        .tooltip("Forward")
+        .tooltip(&crate::tr!("ui-files-chooser-forward"))
         .enabled(can_go_forward)
         .context_menu(forward_items);
     let has_parent = super::history::parent(&current).is_some();
     let parent = icon_button(Icon::PanUp, move |_: ()| nav.up())
         .size(Dim::Control)
-        .tooltip("Parent folder")
+        .tooltip(&crate::tr!("ui-files-chooser-parent"))
         .enabled(has_parent);
     // Recent has no folder to read again.
     let refresh = reload_button(
@@ -1673,16 +1707,17 @@ fn toolbar_parts(
     let roots = super::named::Roots::at_home(&session.home);
     let in_trash = roots.inside_of(&current) == Some(super::named::Root::Trash);
     let can_create = matches!(current, Where::Folder(_)) && !in_trash;
+    let create_tip = if in_trash {
+        crate::tr!("ui-files-chooser-no-new-trash")
+    } else {
+        crate::tr!("ui-files-chooser-new-folder")
+    };
     let create = icon_button(Icon::FolderNew, move |_: ()| {
         let next = *new_folder.peek() + 1;
         new_folder.set(next);
     })
     .size(Dim::Control)
-    .tooltip(if in_trash {
-        "Nothing can be made in the Trash"
-    } else {
-        "New folder"
-    })
+    .tooltip(&create_tip)
     .enabled(can_create);
     let empty_trash = (roots.root_of(&current) == Some(super::named::Root::Trash))
         .then(|| try_consume_root_context::<super::actions::EmptyTrashRequest>())
@@ -1692,7 +1727,7 @@ fn toolbar_parts(
                 super::actions::request_empty_trash(request)
             })
             .size(Dim::Control)
-            .tooltip("Empty Trash")
+            .tooltip(&crate::tr!("ui-files-chooser-empty-trash"))
         });
     let browser = matches!(session.host, Host::Browser(_));
     let pane_shown = *preview_pane.read();
@@ -1702,7 +1737,7 @@ fn toolbar_parts(
         // most; the rest of the view's choices are in its menu.
         let reload = session.reload.clone();
         items.push(
-            menu_item("Show preview pane", move |_: ()| {
+            menu_item(crate::tr!("ui-files-chooser-show-preview"), move |_: ()| {
                 let shown = *preview_pane.peek();
                 preview_pane.set(!shown);
             })
@@ -1711,22 +1746,25 @@ fn toolbar_parts(
         );
         items.push(menu_separator());
         items.push(
-            menu_item("Reload", move |_: ()| reload.run())
-                .shortcut("F5")
-                .icon(Icon::Refresh),
+            menu_item(crate::tr!("ui-files-chooser-reload"), move |_: ()| {
+                reload.run()
+            })
+            .shortcut("F5")
+            .icon(Icon::Refresh),
         );
     }
+    let view_tip = if use_grid {
+        crate::tr!("ui-files-chooser-show-list")
+    } else {
+        crate::tr!("ui-files-chooser-show-grid")
+    };
     let view = SplitButton::new(if use_grid {
         Icon::ViewList
     } else {
         Icon::ViewGrid
     })
-    .tooltip(if use_grid {
-        "Show a list"
-    } else {
-        "Show a grid"
-    })
-    .menu_label("View options")
+    .tooltip(&view_tip)
+    .menu_label(&crate::tr!("ui-files-chooser-view-options"))
     .on_press(move |_: ()| {
         let next = switch_kind(
             *level.peek(),
@@ -1747,7 +1785,7 @@ fn toolbar_parts(
         let session = session.clone();
         icon_button(Icon::Search, move |_: ()| session.start_search(""))
             .size(Dim::Control)
-            .tooltip("Search (Ctrl+F)")
+            .tooltip(&crate::tr!("ui-files-chooser-search-tooltip"))
     };
 
     // The docked preview pane: it shows the selected file beside the list and
@@ -1758,14 +1796,14 @@ fn toolbar_parts(
     })
     .size(Dim::Control)
     .active(pane_shown)
-    .tooltip("Preview pane (Alt+P)");
+    .tooltip(&crate::tr!("ui-files-chooser-preview-tooltip"));
 
     // A phone's main menu holds what its header has no room for: making a
     // folder, the other kind of view and the view's choices.
     let mut view_items_for_menu = Vec::new();
     if can_create {
         view_items_for_menu.push(
-            menu_item("New folder", move |_: ()| {
+            menu_item(crate::tr!("ui-files-chooser-new-folder"), move |_: ()| {
                 let next = *new_folder.peek() + 1;
                 new_folder.set(next);
             })
@@ -1776,9 +1814,9 @@ fn toolbar_parts(
     view_items_for_menu.push(
         menu_item(
             if use_grid {
-                "Show as list"
+                crate::tr!("ui-files-chooser-show-as-list")
             } else {
-                "Show as grid"
+                crate::tr!("ui-files-chooser-show-as-grid")
             },
             move |_: ()| {
                 let next = switch_kind(
@@ -1933,7 +1971,9 @@ fn browser_header(
             .leading(parts.places)
             .title_slot(address)
             .trailing(parts.search)
-            .trailing(menu_button("Main menu", items).icon(Icon::OpenMenu))
+            .trailing(
+                menu_button(crate::tr!("ui-files-chooser-main-menu"), items).icon(Icon::OpenMenu),
+            )
             .trailing(WindowControls)
             .into();
     }
@@ -1955,9 +1995,10 @@ fn browser_header(
     };
     header = header.trailing(gap_between()).trailing(parts.view);
     if !menu.is_empty() {
-        header = header
-            .trailing(gap_between())
-            .trailing(menu_button("Main menu", menu.to_vec()).icon(Icon::OpenMenu));
+        header = header.trailing(gap_between()).trailing(
+            menu_button(crate::tr!("ui-files-chooser-main-menu"), menu.to_vec())
+                .icon(Icon::OpenMenu),
+        );
     }
     header.trailing(WindowControls).into()
 }
@@ -1983,22 +2024,28 @@ fn view_items(nav: Nav, mut sort: State<Sort>, mut show_hidden: State<bool>) -> 
         .checked(now.key == key)
     };
     vec![
-        by("Sort by name", SortKey::Name),
-        by("Sort by size", SortKey::Size),
-        by("Sort by type", SortKey::Kind),
-        by("Sort by modified", SortKey::Modified),
-        menu_item("Reverse order", move |_: ()| {
-            let current = *sort.peek();
-            let next = Sort {
-                descending: !current.descending,
-                ..current
-            };
-            sort.set(next);
-            nav.remember_sort(next);
-        })
+        by(&crate::tr!("ui-files-chooser-sort-name"), SortKey::Name),
+        by(&crate::tr!("ui-files-chooser-sort-size"), SortKey::Size),
+        by(&crate::tr!("ui-files-chooser-sort-type"), SortKey::Kind),
+        by(
+            &crate::tr!("ui-files-chooser-sort-modified"),
+            SortKey::Modified,
+        ),
+        menu_item(
+            crate::tr!("ui-files-chooser-reverse-order"),
+            move |_: ()| {
+                let current = *sort.peek();
+                let next = Sort {
+                    descending: !current.descending,
+                    ..current
+                };
+                sort.set(next);
+                nav.remember_sort(next);
+            },
+        )
         .checked(now.descending),
         menu_separator(),
-        menu_item("Show hidden files", move |_: ()| {
+        menu_item(crate::tr!("ui-files-chooser-hidden"), move |_: ()| {
             let shown = *show_hidden.peek();
             show_hidden.set(!shown);
         })
@@ -2028,7 +2075,7 @@ fn footer(
         Element::from(
             text_field(session.name, |_: String| {})
                 .fill_width()
-                .placeholder("File name")
+                .placeholder(&crate::tr!("ui-files-chooser-file-name"))
                 .autofocus(),
         )
     });
@@ -2055,7 +2102,7 @@ fn footer(
                         px(S2),
                     ],
                 )
-                .child(BODY.label(tokens, "File type"))
+                .child(BODY.label(tokens, &crate::tr!("ui-files-chooser-file-type")))
                 .child(rect().tw(tokens, &[w_flex()]))
                 .child(filter_control(session)),
         );
@@ -2087,7 +2134,7 @@ fn filter_control(session: &Session) -> Element {
         let mut selection = nav.selection;
         selection.write().clear();
     })
-    .title("File type")
+    .title(&crate::tr!("ui-files-chooser-file-type"))
     .into()
 }
 

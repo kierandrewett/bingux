@@ -512,3 +512,160 @@ ui-info-style = Style
 ui-info-version = Version
 ui-info-designer = Designer
 ui-info-glyphs = Glyphs
+
+## Files: properties, chooser and address bar
+
+# $count (Number) - bytes
+ui-files-props-bytes = { $count } bytes
+# $size (String) - the size so far
+ui-files-props-size-stopped = At least { $size } (stopped)
+# $size (String) - the size so far
+ui-files-props-size-so-far = { $size } so far…
+# $size (String) - the size so far
+ui-files-props-size-at-least = At least { $size }
+# $count (Number) - items counted
+ui-files-props-items = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+# $count (Number) - items counted
+ui-files-props-items-stopped = { $count ->
+    [one] At least { $count } item (stopped)
+   *[other] At least { $count } items (stopped)
+}
+# $count (Number) - items counted
+ui-files-props-items-so-far = { $count ->
+    [one] { $count } item so far…
+   *[other] { $count } items so far…
+}
+# $count (Number) - items counted
+ui-files-props-items-at-least = { $count ->
+    [one] At least { $count } item
+   *[other] At least { $count } items
+}
+# $name (String) - kind name, $count (Number) - how many
+ui-files-props-kind-count = { $name } ({ $count })
+# $name (String) - the name, $id (String) - the numeric id
+ui-files-props-named-id = { $name } ({ $id })
+# $size (String) - the size on the drive
+ui-files-props-on-disk = { $size } on disk
+# $size (String), $count (Number) - folder size and item count
+ui-files-props-folder-size = { $size }, { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+# $done (String), $total (String), $percent (String)
+ui-files-props-read = { $done } of { $total } ({ $percent }%)
+# $count (Number) - items changed
+ui-files-props-changed = Changed { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+# $count (Number) - items changed, $failed (Number) - items that failed
+ui-files-props-changed-failed = Changed { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}; { $failed } could not be changed
+# $reason (String) - why the file would not open
+ui-files-chooser-open-failed = Could not open the file. { $reason }
+# $count (Number) - files that would be replaced
+ui-files-chooser-replace-title = { $count ->
+    [one] Replace file?
+   *[other] Replace files?
+}
+# $name (String) - the existing file's name
+ui-files-chooser-replace-body-one = A file called “{ $name }” already exists in this folder. Replacing it overwrites its contents.
+# $count (Number) - files that would be replaced
+ui-files-chooser-replace-body = { $count } files with these names already exist in this folder. Replacing them overwrites their contents.
+ui-files-chooser-cancel = Cancel
+ui-files-chooser-replace = Replace
+ui-files-chooser-back = Back
+ui-files-chooser-forward = Forward
+ui-files-chooser-parent = Parent folder
+ui-files-chooser-home = Home
+ui-files-chooser-go-to-location = Go to location…
+ui-files-chooser-search = Search
+ui-files-chooser-search-tooltip = Search (Ctrl+F)
+ui-files-chooser-hidden = Show hidden files
+ui-files-chooser-show-preview = Show preview pane
+ui-files-chooser-preview-tooltip = Preview pane (Alt+P)
+ui-files-chooser-reload = Reload
+ui-files-chooser-partial = Loading stopped before every item was read. Reload to see them all.
+ui-files-chooser-no-new-trash = Nothing can be made in the Trash
+ui-files-chooser-new-folder = New folder
+ui-files-chooser-empty-trash = Empty Trash
+ui-files-chooser-show-list = Show a list
+ui-files-chooser-show-grid = Show a grid
+ui-files-chooser-view-options = View options
+ui-files-chooser-show-as-list = Show as list
+ui-files-chooser-show-as-grid = Show as grid
+ui-files-chooser-main-menu = Main menu
+ui-files-chooser-sort-name = Sort by name
+ui-files-chooser-sort-size = Sort by size
+ui-files-chooser-sort-type = Sort by type
+ui-files-chooser-sort-modified = Sort by modified
+ui-files-chooser-reverse-order = Reverse order
+ui-files-chooser-file-name = File name
+ui-files-chooser-file-type = File type
+ui-files-omni-not-a-folder = That is a file, not a folder.
+# $problem (String) - why the path cannot be used, $shown (String) - the path as typed
+ui-files-omni-problem-shown = { $problem }: { $shown }
+ui-files-omni-checking = Checking…
+ui-files-omni-searching = Searching…
+ui-files-omni-more-matches = More matches. Keep typing to narrow them.
+ui-files-omni-folder-ellipsis = Folder…
+ui-files-omni-in-this-folder = In this folder
+ui-files-omni-places = Places
+ui-files-omni-bookmark = Bookmark
+ui-files-omni-recent-search = Recent search
+# $search (String) - the search text
+ui-files-omni-search-for = Search for { $search }
+# $phrase (String) - the search text in the folder heading
+ui-files-omni-search-in = Search in { $phrase }
+# $folder (String) - the folder that cannot be searched
+ui-files-omni-no-folder = There is no folder “{ $folder }” to look in
+ui-files-omni-show-in-folder = Show in folder
+ui-files-omni-no-results-filters = No results. Try fewer filters.
+ui-files-omni-no-results = No results
+ui-files-omni-placeholder = Type a path or search
+ui-files-omni-label = Location and search
+ui-files-omni-close-action = Show the path as folders
+ui-files-places-title = Places
+# $name (String) - the bookmark's name
+ui-files-places-removed = Removed { $name } from the bookmarks.
+ui-files-places-undo = Undo
+# $error (String) - why the change failed
+ui-files-places-change-failed = The bookmarks could not be changed: { $error }.
+# $error (String) - why the rename failed
+ui-files-places-rename-failed = The bookmark could not be renamed: { $error }.
+ui-files-places-rename-title = Rename bookmark
+ui-files-places-bookmark-name = Bookmark name
+ui-files-places-cancel = Cancel
+ui-files-places-rename = Rename
+ui-files-places-copied = Copied.
+ui-files-places-copy-failed = The path could not be copied.
+ui-files-places-not-responding = Not responding
+ui-files-address-location = Location
+ui-files-address-remove-bookmark = Remove from bookmarks
+ui-files-address-bookmark-remove-failed = The bookmark could not be removed.
+ui-files-address-add-bookmark = Add to bookmarks
+ui-files-address-bookmark-save-failed = The bookmark could not be saved.
+ui-files-address-copy-location = Copy location
+ui-files-address-copy-path = Copy path
+ui-files-address-open = Open
+ui-files-address-copied = Copied.
+ui-files-address-copy-failed = The path could not be copied.
+ui-files-address-hidden-folders = Hidden folders
+# $title (String) - the folder whose subfolders are listed
+ui-files-address-folders-in = Folders in { $title }
+ui-files-address-loading = Loading…
+ui-files-address-no-subfolders = No subfolders
+ui-files-address-more-folders = More folders. Type the path to reach them.
+ui-files-address-type-path = Type a path
+ui-files-address-problem-not-found = Not found
+ui-files-address-problem-not-a-folder = Not a folder
+ui-files-address-problem-no-permission = No permission
+ui-files-address-problem-not-responding = Not responding
+ui-files-reload-stop = Stop (Esc)
+ui-files-reload-refresh = Refresh (F5)
+ui-files-launch-not-responding = not responding

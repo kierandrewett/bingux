@@ -51,7 +51,7 @@ pub(super) fn reload_button(reload: &Reload, stopping: bool, enabled: bool) -> I
     };
     icon_button(Icon::Refresh, on_press)
         .size(Dim::Control)
-        .tooltip(label(stopping))
+        .tooltip(&label(stopping))
         .enabled(enabled)
         .morph(Icon::MediaPlaybackStop, stopping)
 }

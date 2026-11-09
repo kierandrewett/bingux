@@ -18,7 +18,7 @@ mod snapshot_mode;
 mod window_size;
 
 use bingux_ui::files::launch;
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 const USAGE: &str = "Usage: bingux-files [--] [FOLDER | FILE | URI]...\n\
 \n\
@@ -41,9 +41,10 @@ fn main() {
         return;
     }
     let (width, height) = window_size::remembered();
+    bingux_ui::i18n::register(bingux_ui::catalogue!("files"));
     Application::new("bingux-files")
         .routes(bingux_ui::files::folder_table())
-        .title("Files")
+        .title(Message::new(i18n_id!("files-title")))
         .size(width, height)
         .borderless()
         // The window being carried by a tab torn off it is drawn faded over
@@ -51,9 +52,19 @@ fn main() {
         .transparent()
         .normalise(launch::normalise)
         .about(bingux_ui::app_info!(
-            description = "Browse and organise files and folders",
+            description = tr!("files-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
         .run(|| app::App);
+}
+
+#[cfg(test)]
+mod catalogue_tests {
+    /// Every `tr!` of the app has its message, with the right variables, and
+    /// the catalogue holds nothing the code does not use.
+    #[test]
+    fn the_catalogue_matches_the_code() {
+        bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "files").assert_clean();
+    }
 }

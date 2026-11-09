@@ -198,7 +198,7 @@ fn exists(path: &Path) -> Result<(), String> {
             let text = error.to_string();
             Err(text.split(" (os error").next().unwrap_or(&text).to_string())
         }
-        Err(_) => Err("not responding".to_string()),
+        Err(_) => Err(crate::tr!("ui-files-launch-not-responding")),
     }
 }
 
