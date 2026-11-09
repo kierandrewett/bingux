@@ -9,6 +9,7 @@ is short; the Cargo package and the installed program keep their full names.
 | `settings/`   | `bingux-settings`       | `bingux-settings`   | The Settings application. See `docs/settings.md`.           |
 | `files/`      | `bingux-files-app`      | `bingux-files`      | The Files application. See `docs/files.md`.                 |
 | `calculator/` | `bingux-calculator-app` | `bingux-calculator` | The Calculator application. See `docs/calculator.md`.       |
+| `weather/`    | `bingux-weather-app`    | `bingux-weather`    | The Weather application. See `docs/weather.md`.             |
 | `taxonomy/`   | `bingux-taxonomy`       | `bingux-taxonomy`   | Every component, icon and token of the design system, live. |
 
 Background programs belong in `services/`, and code that apps share belongs in

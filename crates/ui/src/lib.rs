@@ -36,6 +36,8 @@ pub mod layers;
 pub mod layout;
 #[cfg(all(test, feature = "testing"))]
 mod loading_shape_tests;
+#[cfg(feature = "location")]
+pub mod location;
 pub mod motion;
 #[cfg(all(test, feature = "testing"))]
 mod motion_stress;
@@ -75,7 +77,8 @@ pub mod prelude {
     pub use crate::app::Application;
     pub use crate::app_icon::{AppChoice, AppIcon, app_icon};
     pub use crate::charts::{
-        Curve, Segment, Series, Unit, bar_chart, donut, line_chart, ring, sparkline,
+        Curve, Segment, Series, Unit, bar_chart, compass, day_arc, donut, line_chart, range_bar,
+        ring, sparkline,
     };
     pub use crate::controls::*;
     pub use crate::files::{self, ChooserRequest, Chosen};

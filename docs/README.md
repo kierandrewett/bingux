@@ -9,6 +9,7 @@ product and how to build it.
 | ---------------------------------------------------- | ------------------------------------------ |
 | [settings.md](settings.md)                           | The Settings application and its addresses |
 | [files.md](files.md)                                 | The Files application and the file chooser |
+| [weather.md](weather.md)                             | The Weather application and its data       |
 | [calendar.md](calendar.md)                           | The calendar popout                        |
 | [capture.md](capture.md)                             | Screenshots and screen recording           |
 | [emoji-picker.md](emoji-picker.md)                   | The emoji picker                           |

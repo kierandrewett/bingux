@@ -553,13 +553,14 @@ impl Component for Chart {
         };
 
         let alt = spec.alt();
-        let legend = (!scene.legend.is_empty())
-            .then(|| legend_row(&tokens, &scene.legend, scene.plot_left));
+        let legend =
+            (!scene.legend.is_empty()).then(|| legend_row(&tokens, &scene.legend, scene.plot_left));
         let tip = scene
             .tip
             .as_ref()
             .map(|tip| tooltip(&tokens, tip, width, height, tip_content));
-        let outline = interactive.then(|| focus_outline(&tokens, focus_core, focus(), width, height));
+        let outline =
+            interactive.then(|| focus_outline(&tokens, focus_core, focus(), width, height));
 
         let chart = drawing(scene, &tokens, width, height)
             .width(Size::fill())
@@ -739,6 +740,19 @@ fn build(spec: &Spec, tokens: &Tokens, width: f32, progress: f32, active: Option
 /// other way from the curve. The legend under it follows the page.
 fn drawing(scene: Scene, tokens: &Tokens, width: f32, height: f32) -> Rect {
     let Scene { svg, texts, .. } = scene;
+    canvas(svg, texts, tokens, width, height)
+}
+
+/// A box of `width` by `height` px holding an SVG, with `texts` laid over it.
+/// The drawing of every chart, and what the charts of the sibling modules
+/// (`dial`) build on.
+pub(super) fn canvas(
+    svg: String,
+    texts: Vec<Text>,
+    tokens: &Tokens,
+    width: f32,
+    height: f32,
+) -> Rect {
     let mut area = rect()
         .text_direction(TextDirection::Ltr)
         .width(Size::px(width))
@@ -888,9 +902,7 @@ fn tip_size(tip: &Tip, lines: usize) -> (f32, f32) {
         .iter()
         .map(|row| (&row.name, &row.value))
         .chain(tip.total.as_ref().map(|(name, value)| (name, value)))
-        .map(|(name, value)| {
-            SWATCH + S2.px() + em(name, CAPTION) + S5.px() + em(value, TIP_VALUE)
-        })
+        .map(|(name, value)| SWATCH + S2.px() + em(name, CAPTION) + S5.px() + em(value, TIP_VALUE))
         .fold(0.0, f32::max);
     // The title and the total are semibold, so a little wider than measured.
     let width = pad * 2.0 + (title.max(widest) * SEMIBOLD_SLACK).max(TIP_MIN_WIDTH);
@@ -919,7 +931,11 @@ fn legend_row(tokens: &Tokens, entries: &[(Color, String)], inset: f32) -> Rect 
             rect()
                 .tw(
                     tokens,
-                    &[flex_row(), gap(S2), crate::style::items(crate::style::Align::Center)],
+                    &[
+                        flex_row(),
+                        gap(S2),
+                        crate::style::items(crate::style::Align::Center),
+                    ],
                 )
                 .child(palette::swatch(*colour))
                 .child(LEGEND.label(tokens, name.clone())),
@@ -1051,12 +1067,7 @@ pub(super) fn baseline(
 }
 
 /// X labels at `(pixel, text)`, thinned so none collide.
-pub(super) fn x_labels(
-    texts: &mut Vec<Text>,
-    plot: Plot,
-    width: f32,
-    labels: Vec<(f32, String)>,
-) {
+pub(super) fn x_labels(texts: &mut Vec<Text>, plot: Plot, width: f32, labels: Vec<(f32, String)>) {
     let mut last: Option<(f32, f32)> = None;
     for (px, name) in labels {
         let box_width = text_width(&name, TextSize::Sm.px()) + LABEL_PAD;
@@ -1628,11 +1639,7 @@ fn bars_scene(
             anchor: x_centre(index),
             reach: band / 2.0,
             top: plot.top,
-            title: chart
-                .details
-                .get(index)
-                .unwrap_or(&names[index].1)
-                .clone(),
+            title: chart.details.get(index).unwrap_or(&names[index].1).clone(),
             rows,
             total: (chart.stacked && chart.series.len() > 1)
                 .then(|| ("Total".to_string(), chart.y.value(stacks[index]))),
@@ -1822,8 +1829,16 @@ fn centre_texts(
     ];
     if let (Some((style, text)), Some(slot)) = (caption, centre.caption) {
         texts.push(
-            anchored(style, text, middle, slot.top, slot.width, Align::Centre, size)
-                .scaled(slot.scale),
+            anchored(
+                style,
+                text,
+                middle,
+                slot.top,
+                slot.width,
+                Align::Centre,
+                size,
+            )
+            .scaled(slot.scale),
         );
     }
     texts
