@@ -18,8 +18,8 @@ use crate::controls::adaptive::{
     choose_line, choose_value_line, label_cell_width,
 };
 use crate::controls::dropdown::dropdown;
-use crate::controls::path_label::text_width;
 use crate::controls::path_label::path_label;
+use crate::controls::path_label::text_width;
 use crate::controls::press::{Press, use_press};
 use crate::controls::radio::{RadioMark, next_enabled};
 use crate::controls::segmented::segmented;
@@ -2758,7 +2758,7 @@ mod phone_fields {
     fn buttons_line(title: &'static str, size: (f32, f32)) -> (Area, Area, Area) {
         let mut shot = Snapshot::new(move || Buttons(title).into(), size);
         shot.settle(Duration::from_millis(500));
-        let found = |text: &'static str| {
+        let mut found = |text: &'static str| {
             shot.runner()
                 .find_many(|node, element| {
                     let shown: String = match Label::try_downcast(element) {
