@@ -8,11 +8,11 @@ The shell's calendar popout (`docs/calendar.md`) is a separate, smaller thing.
 
 ## Where the code is
 
-| Part      | Crate                                            | What it holds                                                                                                                                                                       |
-| --------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The model | `crates/calendar` (`bingux-calendar-core`)       | Events, iCalendar reading and writing, recurrence, the folder store, quick add, reminders, preferences. No UI. Its module docs list the failure modes and the tests that hold them. |
-| The views | `crates/ui/src/calendar` (`bingux_ui::calendar`) | The time grid, the month view, the month grid, the date and time pickers. See "Calendar views" in `docs/bingux-ui.md`; the taxonomy's Calendar page shows each.                     |
-| The app   | `apps/calendar`                                  | Pages and the backend: the window, the header, the sidebar, the editor, quick add, calendar management, the views' data.                                                            |
+| Part      | Crate                                            | What it holds                                                                                                                                                            |
+| --------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| The model | `crates/calendar` (`bingux-calendar-core`)       | Events, iCalendar reading and writing, recurrence, the folder store, reminders, preferences. No UI. Its module docs list the failure modes and the tests that hold them. |
+| The views | `crates/ui/src/calendar` (`bingux_ui::calendar`) | The time grid, the month view, the month grid, the date and time pickers. See "Calendar views" in `docs/bingux-ui.md`; the taxonomy's Calendar page shows each.          |
+| The app   | `apps/calendar`                                  | Pages and the backend: the window, the header, the sidebar, the editor, calendar management, the views' data.                                                            |
 
 ## Views
 
@@ -34,7 +34,7 @@ otherwise. Press T to go to today and scroll to the time now.
 
 ### Making and changing events
 
-- Press N, or the New event button, for quick add (below).
+- Press N, or the New event button, to add an event for today in the editor.
 - Drag over empty time in a week or day to make an event of that length.
 - Press a day twice in the month to make an event on it.
 - Drag an event to move it, or its top or bottom edge to change when it starts
@@ -47,7 +47,7 @@ otherwise. Press T to go to today and scroll to the time now.
 | Key                | Does                                                                                                                                        |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | T                  | Go to today                                                                                                                                 |
-| N                  | Quick add                                                                                                                                   |
+| N                  | New event                                                                                                                                   |
 | 1 to 5             | Day, Week, Month, Year, Agenda                                                                                                              |
 | Left, Right        | Previous, next day, week or month, as the view counts                                                                                       |
 | Up, Down           | Week, Day: choose the previous or next event. Month: a week back or ahead, or, with an event chosen, the previous or next event of that day |
@@ -59,18 +59,6 @@ otherwise. Press T to go to today and scroll to the time now.
 
 Window keys never act under a menu, a dialog or a sheet (`bingux_ui::nav::modal_open()`),
 and a key typed in a text field goes to the field.
-
-## Quick add
-
-`N` opens a field. Type "Lunch with Sam at Nando's tomorrow 1pm" and the
-title, place, day and time are shown as you type. Enter adds the event;
-**More Options** opens the editor with what was understood. The text is read on
-this computer from a short list of English phrases: weekdays, "tomorrow",
-"next friday", "in 3 days", dates ("24 march", "3/4"), times ("1pm", "17:30",
-"noon"), ranges ("2-3pm"), lengths ("for 45 minutes"), repeats ("every
-weekday", "every other week") and reminders ("remind me 2 hours before").
-Nothing is guessed that the text does not say. A date alone makes an all-day
-event.
 
 ## The editor
 

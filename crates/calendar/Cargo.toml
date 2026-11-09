@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-or-later"
-description = "Bingux Calendar model: events, iCalendar files, recurrence, the local store, quick add, reminders; no UI"
+description = "Bingux Calendar model: events, iCalendar files, recurrence, the local store, reminders; no UI"
 
 [lib]
 path = "src/lib.rs"

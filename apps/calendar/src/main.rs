@@ -2,7 +2,7 @@
 //!
 //! Calendars are folders of `.ics` files under `~/.local/share/bingux-calendar`,
 //! so the app needs no account, no service and no setup. The model, the
-//! files, repeating events, quick add and reminders are `bingux-calendar-core`;
+//! files, repeating events and reminders are `bingux-calendar-core`;
 //! the views and gestures are `bingux_ui::calendar`. This crate is the window:
 //! its header, sidebar, event editor and what it does with a launch argument.
 //!
@@ -15,7 +15,6 @@ mod convert;
 mod editor;
 mod header;
 mod model;
-mod quick;
 mod sidebar;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;

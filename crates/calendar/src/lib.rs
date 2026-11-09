@@ -1,5 +1,5 @@
 //! The Bingux Calendar model: events, iCalendar files, recurrence, the local
-//! store, quick add and reminders. No UI; the app is `apps/calendar`.
+//! store and reminders. No UI; the app is `apps/calendar`.
 //!
 //! The pieces, from the file up:
 //!
@@ -10,7 +10,6 @@
 //!   of one, the following or all of them.
 //! - [`store`]: calendars as folders of `.ics` files, and the in-memory
 //!   [`store::Snapshot`] the views read.
-//! - [`quickadd`]: "Lunch with Sam tomorrow 1pm" as an event.
 //! - [`alarm`]: reminders, shown once, through the notification service.
 //! - [`prefs`]: preferences; the locale's week and clock are passed in.
 //! - [`watch`]: what a running window needs: ordered writes, a minute clock,
@@ -20,7 +19,6 @@ pub mod alarm;
 pub mod event;
 pub mod ics;
 pub mod prefs;
-pub mod quickadd;
 pub mod recur;
 pub mod store;
 pub mod watch;
