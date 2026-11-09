@@ -142,9 +142,18 @@ impl Component for Shell {
                 Resource::Ready(_) | Resource::Refreshing(_) | Resource::Loading => {
                     cached.clone().map_or(HereView::Locating, HereView::Found)
                 }
-                Resource::Error(code) => cached
-                    .clone()
-                    .map_or_else(|| HereView::Failed(code.clone()), HereView::Found),
+                Resource::Error(code) => cached.clone().map_or_else(
+                    || {
+                        // Without the network lookup a failed portal has
+                        // nothing to retry: the card asks instead.
+                        if !network && code != load::DENIED {
+                            HereView::Off
+                        } else {
+                            HereView::Failed(code.clone())
+                        }
+                    },
+                    HereView::Found,
+                ),
             })
         };
 
