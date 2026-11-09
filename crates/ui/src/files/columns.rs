@@ -1191,10 +1191,11 @@ impl Component for ColumnHeaders {
 
         // The row's own two paddings: the list's edge, then the inset inside
         // a row's fill (see `file_list.rs`), so every heading sits over its
-        // column.
+        // column. A hairline under the headings, inset to the list's edge as
+        // a row's fill is, closes them off from the rows.
         rect()
             .component("ColumnHeaders")
-            .tw(&tokens, &[flex_row(), w_full(), h(Dim::Control), px(LIST_EDGE)])
+            .tw(&tokens, &[w_full(), px(LIST_EDGE)])
             .on_capture_global_pointer_move(on_move)
             .on_global_pointer_up(on_up)
             .child(
@@ -1206,7 +1207,7 @@ impl Component for ColumnHeaders {
                             grow_children(),
                             items(Align::Center),
                             w_full(),
-                            h_full(),
+                            h(Dim::Control),
                             px(FILE_ROW_INSET),
                         ],
                     )
@@ -1214,6 +1215,7 @@ impl Component for ColumnHeaders {
                     .child(cell_of(Column::Name, None))
                     .child(strip),
             )
+            .child(crate::layout::divider(&tokens))
     }
 }
 
@@ -1252,6 +1254,14 @@ impl Component for HeaderCell {
             Some(Drag::Resize { column: sized, .. }) if sized == column
         );
 
+        // The heading's type is the sidebar's group label (a caption in the
+        // muted ink); the column the list is sorted by is in the text ink, and
+        // its mark with it.
+        let ink = if sorted.is_some() {
+            Ink::Text
+        } else {
+            Ink::Muted
+        };
         let arrow = sorted.map(|descending| {
             icons::icon(
                 if descending {
@@ -1260,14 +1270,22 @@ impl Component for HeaderCell {
                     Icon::PanUp
                 },
                 IconSize::Mark,
-                Paint::Muted.color(&tokens),
+                Paint::Text.color(&tokens),
             )
         });
         let label = CAPTION
-            .in_ink(if sorted.is_some() { Ink::Text } else { Ink::Muted })
+            .in_ink(ink)
             .label(&tokens, column.title())
             .max_lines(1)
             .text_overflow(TextOverflow::Ellipsis);
+        // The label keeps the edge its column's text keeps: a right-aligned
+        // column (sizes) has its mark before the label, so the label ends where
+        // the numbers do; every other column has it after.
+        let (before, after) = if column.right_aligned() {
+            (arrow, None)
+        } else {
+            (None, arrow)
+        };
 
         // The pointer-down handler lives on this child, not on the focus
         // stop: the stop keeps its own and swallows the event after this
@@ -1314,8 +1332,9 @@ impl Component for HeaderCell {
                         _ => {}
                     }
                 })
+                .maybe_child(before)
                 .child(label)
-                .maybe_child(arrow)
+                .maybe_child(after)
         };
 
         let content = rect()
