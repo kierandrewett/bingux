@@ -38,6 +38,9 @@
 pub(crate) mod compositor;
 pub(crate) mod popup;
 
+#[cfg(all(test, feature = "testing"))]
+mod popup_escape_tests;
+
 use freya::prelude::*;
 
 use crate::component::ComponentName;

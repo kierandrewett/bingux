@@ -27,6 +27,7 @@ use crate::shell::panel::{Panel, PanelRect, PanelTrigger, text_bar_rect};
 use crate::style::*;
 use crate::surface::{surface_color, use_enabled, use_tokens};
 use crate::typography::{BODY, CAPTION, Ink, TextStyle, mono_family};
+use crate::window::{Window, WindowLike};
 
 /// What a password field shows for each character: a bullet, as the system's
 /// password fields do. Freya's own default is an asterisk.
@@ -411,7 +412,8 @@ impl TextField {
     /// Escape is the owner's: `on_escape` runs, and the field neither restores
     /// its `revert_to` text nor gives up focus. The owner closes what the
     /// field is in, or keeps typing going, as it decides. A field with no
-    /// `on_escape` reverts and gives up focus.
+    /// `on_escape` reverts, gives up focus, and closes the popup it is in (if
+    /// any): the popup's own Escape handler never sees the key.
     pub fn on_escape(mut self, on_escape: impl Into<EventHandler<()>>) -> Self {
         self.on_escape = Some(on_escape.into());
         self
@@ -531,6 +533,7 @@ impl Component for TextField {
         let mut pressed_at = use_state(|| (0.0_f32, 0.0_f32));
         let mut last_tap = use_state::<Option<(Instant, (f32, f32))>>(|| None);
         let overlays: Option<Overlays> = try_consume_context::<Overlays>();
+        let window = try_consume_context::<Window>();
         let focus_core = use_focus_core();
         // Freya's Input takes its look as theme values, not a box style, so
         // the tokens are resolved here: the CONTROL recipe's radius and
@@ -723,6 +726,11 @@ impl Component for TextField {
                         }
                         event.stop_propagation();
                         bar_open.set(false);
+                        // A field in a popup closes that popup: the popup's own Escape
+                        // handler sits above this field and never sees the key.
+                        if let Some(Window::Popup(popup)) = window {
+                            popup.close();
+                        }
                         input_id.request_unfocus();
                         false
                     }
