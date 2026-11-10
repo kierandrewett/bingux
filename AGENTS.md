@@ -42,6 +42,10 @@
   why.
 - Apps contain pages and backends only; look, layout, controls and behaviour
   come from bingux-ui and its tokens.
+- Build every window with `Screen` (or `NavigationSplitView`) and pass the
+  review checklist in `design/boundaries.md`: a control that chooses what the
+  content shows lives in the chrome (`HeaderBar::switcher`, the sidebar, the
+  strip, the pager), never inside the content, and the shell paints the tiers.
 
 ## The taxonomy
 
