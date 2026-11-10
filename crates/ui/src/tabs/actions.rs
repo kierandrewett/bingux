@@ -56,6 +56,14 @@ fn nothing_to_lose() -> Option<CloseWarning> {
     None
 }
 
+/// Takes a key the tab set answers: stops it bubbling and cancels the
+/// window's command router, which would otherwise answer the same key again
+/// (Ctrl+T opened two tabs). A key the set does not answer is left alone.
+fn take_key(event: &Event<KeyboardEventData>) {
+    event.stop_propagation();
+    event.prevent_default();
+}
+
 impl<P: TabContent> Tabs<P> {
     /// The tabs of `set` in `window`, which the dialogs of `overlays` ask
     /// through.
@@ -164,9 +172,11 @@ impl<P: TabContent> Tabs<P> {
                     .cancel(crate::tr!("ui-window-keep-open"))
                     .default_action(CANCEL_ID)
                     .icon(DialogIcon::Warning)
-                    .response(crate::tr!("ui-window-close"), ResponseKind::Destructive, move |_: ()| {
-                        window.close()
-                    }),
+                    .response(
+                        crate::tr!("ui-window-close"),
+                        ResponseKind::Destructive,
+                        move |_: ()| window.close(),
+                    ),
             ),
             None => window.close(),
         }
@@ -296,8 +306,8 @@ impl<P: TabContent> Tabs<P> {
     /// | Ctrl+Tab, Ctrl+Shift+Tab, Ctrl+Page Down, Ctrl+Page Up | the next or previous tab |
     /// | Alt+1 to Alt+9 | the tab at that place (9 is the last) |
     ///
-    /// The handler takes the key it uses (`stop_propagation`) and leaves the
-    /// rest to the view.
+    /// The handler takes the key it uses (see [`take_key`]) and leaves the
+    /// rest to the view and the window's commands.
     pub fn shortcuts(
         self,
         new_tab: impl Into<EventHandler<()>>,
@@ -311,36 +321,36 @@ impl<P: TabContent> Tabs<P> {
                 Key::Character(text)
                     if ctrl && !alt && !shift && text.eq_ignore_ascii_case("t") =>
                 {
-                    event.stop_propagation();
+                    take_key(&event);
                     new_tab.call(());
                 }
                 Key::Character(text) if ctrl && !alt && shift && text.eq_ignore_ascii_case("t") => {
-                    event.stop_propagation();
+                    take_key(&event);
                     self.reopen();
                 }
                 Key::Character(text)
                     if ctrl && !alt && !shift && text.eq_ignore_ascii_case("w") =>
                 {
-                    event.stop_propagation();
+                    take_key(&event);
                     self.close_active();
                 }
                 Key::Named(NamedKey::Tab) if ctrl && !alt => {
-                    event.stop_propagation();
+                    take_key(&event);
                     self.step(if shift { -1 } else { 1 });
                 }
                 Key::Named(NamedKey::PageDown) if ctrl && !alt => {
-                    event.stop_propagation();
+                    take_key(&event);
                     self.step(1);
                 }
                 Key::Named(NamedKey::PageUp) if ctrl && !alt => {
-                    event.stop_propagation();
+                    take_key(&event);
                     self.step(-1);
                 }
                 Key::Character(text) if alt && !ctrl && !shift => {
                     if let Some(digit) = text.chars().next().and_then(|c| c.to_digit(10))
                         && digit >= 1
                     {
-                        event.stop_propagation();
+                        take_key(&event);
                         self.nth(if digit == 9 {
                             usize::MAX
                         } else {

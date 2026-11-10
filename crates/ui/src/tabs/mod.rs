@@ -29,6 +29,8 @@
 mod actions;
 mod set;
 mod tearoff;
+#[cfg(test)]
+mod tests;
 mod windows;
 
 pub use actions::{CloseWarning, Tabs, tab_items};
