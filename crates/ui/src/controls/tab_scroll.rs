@@ -165,12 +165,13 @@ mod tests {
     #[test]
     fn the_selected_tab_is_scrolled_in_by_the_least_distance() {
         let geometry = Geometry::in_class(SizeClass::Regular);
-        // Tabs of 96 with 4 px between, in a region 250 wide: a step is 100.
+        // Tabs of 96 a gap apart, in a region 250 wide.
+        let step = 96.0 + geometry.gap();
         let view = |index, current| into_view(index, geometry, 96.0, 250.0, current);
         assert_eq!(view(1, 0.0), 0.0, "a tab in view does not scroll");
         assert_eq!(
             view(3, 0.0),
-            3.0 * 100.0 + 96.0 - 250.0,
+            3.0 * step + 96.0 - 250.0,
             "the tab's far edge comes to the edge"
         );
         assert_eq!(
@@ -179,7 +180,7 @@ mod tests {
             "a tab before the region scrolls back to it"
         );
         // A region too narrow for a tab shows the tab's start, not its end.
-        assert_eq!(into_view(2, geometry, 96.0, 90.0, 0.0), 2.0 * 100.0);
+        assert_eq!(into_view(2, geometry, 96.0, 90.0, 0.0), 2.0 * step);
         assert_eq!(into_view(0, geometry, 96.0, 100.0, 0.0), 0.0);
     }
 }

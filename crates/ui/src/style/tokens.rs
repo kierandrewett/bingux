@@ -153,6 +153,9 @@ pub enum Radius {
     Inner,
     /// Controls, rows and sidebar items.
     Control,
+    /// A tab of a strip of tabs: a floating tile, a little rounder than a
+    /// button is square (10 px).
+    Tab,
     /// Group cards and tiles.
     Card,
     /// Dialogs, popups, menus, popovers and toasts.
@@ -171,6 +174,7 @@ impl Radius {
         match self {
             Radius::Mark => 4.0,
             Radius::Control => 12.0,
+            Radius::Tab => 10.0,
             Radius::Inner => 8.0,
             Radius::Card => 16.0,
             Radius::Overlay => 20.0,
@@ -407,20 +411,31 @@ pub enum Dim {
     Box9,
     Box11,
     Box24,
-    /// The narrowest a tab of a tab strip gets before the strip scrolls: 96 px,
-    /// 128 px on a phone, where the close slot is a whole 44 px touch target
-    /// and a title still needs room beside it. The widest is [`Dim::Field`].
+    /// The narrowest a tab of a tab strip gets before the strip scrolls: 36 px,
+    /// a favicon with its tile's padding; 44 px on a phone, where it is a whole
+    /// touch target. Tabs get here by sharing the strip when they no longer fit
+    /// at their natural width, losing the title first.
     TabMin,
+    /// The widest a tab of a tab strip is, however long its title: 200 px. A
+    /// tab is as wide as its icon, title and close button need, up to this.
+    TabMax,
+    /// A tab narrower than this has no room for a title: 96 px, 120 px on a
+    /// phone. It shows its icon, and its close button on the selected tab and
+    /// under the pointer.
+    TabTitleMin,
     /// The height of a strip of tabs, which is the window's title bar when it
     /// holds them: 40 px, 44 px at compact density, where a tab is the whole
     /// touch target. It is taller than a field ([`Dim::Control`]) so the tabs
     /// and the window's buttons have room.
     TabBar,
-    /// A button at the end of a strip of tabs (New tab, the tab list) and in
-    /// its bar: the strip less [`FIELD_INSET`] above and below, so it is the
-    /// same distance from the strip's top, bottom and trailing edge: 32 px,
-    /// 44 px at compact density, where there is no inset.
+    /// A tab, and a button at the end of a strip of tabs (New tab, the tab
+    /// list) or in its bar: 30 px in the 40 px strip, so it floats 5 px from the
+    /// strip's top and bottom, and the whole 44 px touch target at compact
+    /// density, where there is no band.
     TabButton,
+    /// The close button of a tab, a circle: 16 px; the whole 44 px touch
+    /// target at compact density.
+    TabClose,
     /// How far the end of a line of text that does not fit fades out, instead
     /// of ending in an ellipsis: 24 px, at the end of the line in the reading
     /// direction (see `controls::fade_text`).
@@ -623,6 +638,7 @@ impl Dim {
             | Dim::RowButton
             | Dim::TabBar
             | Dim::TabButton
+            | Dim::TabClose
             | Dim::SpeakerButton => true,
             Dim::MenuSeparator
             | Dim::NavIcon
@@ -664,6 +680,8 @@ impl Dim {
             | Dim::Box11
             | Dim::Box24
             | Dim::TabMin
+            | Dim::TabMax
+            | Dim::TabTitleMin
             | Dim::TextFade
             | Dim::PreviewWidth
             | Dim::PreviewHeight
@@ -775,9 +793,12 @@ impl Dim {
             Dim::Box9 => same(36.0),
             Dim::Box11 => same(44.0),
             Dim::Box24 => same(96.0),
-            Dim::TabMin => (96.0, 128.0),
+            Dim::TabMin => (36.0, TOUCH_MIN),
+            Dim::TabMax => same(200.0),
+            Dim::TabTitleMin => (96.0, 120.0),
             Dim::TabBar => (40.0, TOUCH_MIN),
-            Dim::TabButton => (32.0, TOUCH_MIN),
+            Dim::TabButton => (30.0, TOUCH_MIN),
+            Dim::TabClose => (16.0, TOUCH_MIN),
             Dim::TextFade => same(24.0),
             Dim::PreviewWidth => same(144.0),
             Dim::PreviewHeight => same(96.0),
@@ -1459,32 +1480,26 @@ mod touch_tests {
         }
     }
 
-    /// A strip of tabs stands on its bottom edge, a field inset below the top
-    /// of the bar; its end buttons and the fill of a hovered tab are the bar
-    /// less the inset above and below, and a tab's close button is inset again
-    /// inside that fill: so every button in the strip is the same distance
-    /// from the strip's top and bottom, and nests in the one outside it.
+    /// A tab and the end buttons of its strip are the bar less an even band above
+    /// and below, the same band, so every one floats the same distance from the
+    /// strip's top and bottom; a finger's tab is the whole strip, and the close
+    /// circle fits in a tab.
     #[test]
-    fn the_tab_bar_and_its_buttons_share_one_inset() {
+    fn the_tab_bar_and_its_buttons_share_one_band() {
         for class in [SizeClass::Regular, SizeClass::Compact] {
-            let inset = FIELD_INSET.px_in(class);
             let (bar, button) = (Dim::TabBar.px_in(class), Dim::TabButton.px_in(class));
-            assert_eq!(
-                bar - button,
-                2.0 * inset,
-                "{class:?}: the end buttons are the bar less two insets"
+            assert!(
+                (bar - button) % 2.0 == 0.0,
+                "{class:?}: an even band above and below a tab"
             );
-            // The fill of a tab is as tall as an end button; its close button is that
-            // less an inset above and below: 24 px, and the whole 44 px target at compact.
-            let close = if inset > 0.0 {
-                Dim::DenseControl
-            } else {
-                Dim::InlineButton
-            };
-            assert_eq!(
-                button - 2.0 * inset,
-                close.px_in(class),
-                "{class:?}: the close button"
+            assert!(
+                Dim::TabClose.px_in(class) <= button,
+                "{class:?}: the close circle fits"
+            );
+            assert!(
+                Dim::TabMin.px_in(class) < Dim::TabTitleMin.px_in(class)
+                    && Dim::TabTitleMin.px_in(class) < Dim::TabMax.px_in(class),
+                "{class:?}: icon only, then titled, then the widest tab"
             );
             assert!(
                 bar >= Dim::Control.px_in(class),
@@ -1494,11 +1509,17 @@ mod touch_tests {
         assert_eq!(
             (
                 Dim::TabBar.px_in(SizeClass::Regular),
-                Dim::TabButton.px_in(SizeClass::Regular)
+                Dim::TabButton.px_in(SizeClass::Regular),
+                Dim::TabClose.px_in(SizeClass::Regular),
+                Dim::TabMin.px_in(SizeClass::Regular),
+                Dim::TabMax.px_in(SizeClass::Regular),
             ),
-            (40.0, 32.0)
+            (40.0, 30.0, 16.0, 36.0, 200.0)
         );
         assert_eq!(Dim::TabBar.px_in(SizeClass::Compact), TOUCH_MIN);
+        assert_eq!(Dim::TabButton.px_in(SizeClass::Compact), TOUCH_MIN);
+        assert_eq!(Dim::TabClose.px_in(SizeClass::Compact), TOUCH_MIN);
+        assert_eq!(Dim::TabMin.px_in(SizeClass::Compact), TOUCH_MIN);
     }
 
     #[test]

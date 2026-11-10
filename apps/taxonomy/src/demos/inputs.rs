@@ -596,7 +596,7 @@ pub const TABS: &[Spec] = &[
     })
     .page(FRAME_HEIGHT),
     Spec::forced(
-        "First tab selected: the selection fill, as a sidebar row's",
+        "First tab selected: the raised tile; the others have no fill at rest",
         || framed(three(1)),
     )
     .page(FRAME_HEIGHT),
@@ -607,30 +607,13 @@ pub const TABS: &[Spec] = &[
     )
     .page(FRAME_HEIGHT),
     Spec::forced(
-        "Nine tabs: the strip scrolls, the selected tab in view",
-        || {
-            framed(
-                tab_strip(
-                    [
-                        "Home",
-                        "Documents",
-                        "Downloads",
-                        "Pictures",
-                        "Music",
-                        "Videos",
-                        "Projects",
-                        "Archive",
-                        "Backups",
-                    ]
-                    .iter()
-                    .enumerate()
-                    .map(|(index, name)| TabItem::new(index as u64 + 1, *name))
-                    .collect(),
-                    5,
-                )
-                .on_new(|_| {}),
-            )
-        },
+        "Nine tabs: they share the strip and shrink together, the titles fade, then each is its favicon",
+        || framed(crowd(9, 5)),
+    )
+    .page(FRAME_HEIGHT),
+    Spec::forced(
+        "Thirty tabs: favicons at the floor, the strip scrolls and the tab list joins New tab at its end",
+        || framed(crowd(30, 12)),
     )
     .page(FRAME_HEIGHT),
     Spec::forced("Long titles", || {
@@ -746,8 +729,9 @@ pub const FADE_TEXT: &[Spec] = &[
 ];
 
 /// `strip` as an application uses tabs: the strip is the window's top row on
-/// its own tone, the toolbar under it is the chrome tone the selected tab
-/// joins, and the page below is the content tone.
+/// its own tone, the toolbar under it is the chrome tone, and the page below
+/// is the content tone. The tabs float on the strip; nothing joins them to the
+/// toolbar.
 fn framed(strip: TabStrip) -> Element {
     let tokens = use_tokens();
     let bar = rect()
@@ -755,15 +739,49 @@ fn framed(strip: TabStrip) -> Element {
         .child(strip);
     let toolbar = rect().tw(&tokens, &[w_full(), h(Dim::Header), bg(Paint::Sidebar)]);
     let page = rect()
-        .tw(&tokens, &[w_full(), h_flex(), flex_col(), bg(Paint::Bg), p(S4), gap(S1)])
+        .tw(
+            &tokens,
+            &[
+                w_full(),
+                h_flex(),
+                flex_col(),
+                bg(Paint::Bg),
+                p(S4),
+                gap(S1),
+            ],
+        )
         .child(caption("The page the selected tab opens."))
-        .child(caption("The selected tab is the toolbar's colour and runs into it; the strip is a colour of its own."));
+        .child(caption(
+            "The tabs are tiles on a strip of their own; none of them joins the toolbar.",
+        ));
     rect()
         .tw(&tokens, &[w_full(), h_full(), flex_col()])
         .child(bar)
         .child(toolbar)
         .child(page)
         .into_element()
+}
+
+/// `count` tabs with icons and short names, `selected` chosen.
+fn crowd(count: u64, selected: u64) -> TabStrip {
+    const NAMES: [&str; 9] = [
+        "Home",
+        "Documents",
+        "Downloads",
+        "Pictures",
+        "Music",
+        "Videos",
+        "Projects",
+        "Archive",
+        "Backups",
+    ];
+    tab_strip(
+        (1..=count)
+            .map(|id| TabItem::new(id, NAMES[(id as usize - 1) % NAMES.len()]).icon(Icon::Folder))
+            .collect(),
+        selected,
+    )
+    .on_new(|_| {})
 }
 
 /// A strip that adds, selects, closes and reorders its own tabs, starting

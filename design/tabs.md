@@ -7,20 +7,31 @@ The component's own behaviour (keys, menus, overflow) is in the module comment o
 
 ## Design thesis
 
-1. **Tabs float.** A tab is a rounded tile of `Radius::Control`, the corner of
-   a button, a sidebar row and a segmented control. The selected one is a
-   raised tile (`Paint::Raised`), the pointer's fill is `Paint::Hover`, a press
-   is `Paint::Pressed`, and accent colour is used for nothing but a drop
-   target. No tab joins the toolbar or the page.
+1. **Tabs float.** A tab is a neutral tile of `Radius::Tab` (10 px, a little
+   rounder than a button is square), no border, `Dim::TabButton` (30 px) tall
+   in the 40 px strip. The chosen one is the raised tile (`Paint::Raised`);
+   the others have no fill at rest and a faint hover layer (`Paint::Hover`);
+   a press is `Paint::Pressed`; accent colour is used for nothing but a drop
+   target. No tab joins the toolbar or the page: a tile never grows to the
+   strip's height and never takes the chrome colour.
 2. **The strip is its own tier.** The tabs stand on `Paint::Strip`, a tone off
    both the chrome (`Paint::Sidebar`) and the content (`Paint::Bg`), because
-   they sit outside the browsing frame (`design/boundaries.md`). The page runs
-   square to the window's edges, so it has no corner of its own to match. The
-   window's rounding is the compositor's.
-3. **Quiet and dense.** An unselected tab is muted ink on the bare strip, a tab
-   is 32 px tall, 4 px from the strip's edges, 4 px from its neighbour. Tabs
-   share the room up to `Dim::Field` (240 px) each, left-aligned, shrink
-   together to `Dim::TabMin` when they no longer fit, then the strip scrolls.
+   they sit outside the browsing frame (`design/boundaries.md`).
+3. **Natural width, left-aligned, never stretched.** A tab is as wide as its
+   icon (16), title and close circle need, `Dim::TabMax` (200 px) at most. All
+   tabs of a strip share one width (the widest title's), so the stride is even
+   for reordering and scrolling. With few tabs the strip stops after the New tab
+   button, which follows the last tab, and the rest of the bar is empty and
+   drags the window. Only when the tabs no longer fit do they share the strip
+   and shrink together: the title fades first (`fade_text`, never an ellipsis),
+   then, under `Dim::TabTitleMin` (96 px), each tab is its favicon only (the
+   close circle shows on the chosen tab and under the pointer, in the favicon's
+   place when the two do not fit side by side), down to `Dim::TabMin` (36 px),
+   and then the strip scrolls with fade edges while New tab moves to a fixed place
+   at the strip's end beside a tab-list button.
+4. **A faint hairline** (1 px, 16 px tall) stands in the gap between two
+   adjacent tabs when neither is chosen, hovered, pressed, a drop target or
+   arriving or leaving; it is hidden while a tab is dragged.
 
 ## What it replaced, and why
 
@@ -31,60 +42,64 @@ frame was that darker colour round an inset, rounded _card_. Kieran's verdict on
 it was that it looked out of place next to the rest of Bingux and that the card's
 corners (square where the first tab joined them, round elsewhere, a different
 radius from the window's and from every other surface) were not consistent.
-Rounded corners that depend on which tab is selected cannot be made consistent:
-the join under the selected tab, the card's two top corners, the window-edge
-corners and the sidebar's edge are four treatments of one corner. Of the two
-honest options, truly connected (with a concave join, no seam, and corners that
-follow the selection) or clearly separate, we took the second, because every
-other surface in the shell (the Settings page, a dialog, a popover, the segmented
-control above a page) is separate from what it controls.
+Rounded corners that depend on which tab is selected cannot be made consistent.
+Of the two honest options, truly connected or clearly separate, we took the
+second, because every other surface in the shell is separate from what it
+controls. A later pass tried the first again (the selected tab grown to the
+strip's height in the toolbar's colour); the final model is the second option
+only: floating tiles that never connect.
 
-| Chromium                                                            | Here                                                                 | Why                                                                                        |
-| ------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Selected tab is the content's surface with flares into it           | A rounded rectangle with the selection fill, an inset above the page | The rest of the shell does not join a selection to its content                             |
-| Strip one step darker than the page                                 | The bar is `Paint::Surface`, the page's colour                       | One window surface; the selected fill carries the state                                    |
-| Inset rounded card                                                  | Full-bleed page, square to the window                                | One corner treatment: the window's                                                         |
-| Separator between inactive tabs                                     | None                                                                 | The gap and the muted ink separate them; a hover fill appears on the one under the pointer |
-| Close button on the active tab and under the pointer                | Same                                                                 |                                                                                            |
-| Width: shrink to a minimum, then scroll                             | Same: `Dim::Field` at most, `Dim::TabMin` at least                   |                                                                                            |
-| Scrollable strip with a tab list, new tab button after the last tab | Same                                                                 |                                                                                            |
-| Drag follows the pointer, others slide; tear-out                    | Same, on `crate::reorder` and `crate::drag`                          | `design/tab-tearoff.md`                                                                    |
-| Rapid closure, close-tab menu, reopen closed tab                    | Same                                                                 |                                                                                            |
-| Pinned tabs, groups, split tabs                                     | No                                                                   | No caller needs them                                                                       |
+| Chromium                                                            | Here                                                                                      | Why                                                                     |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Selected tab is the content's surface with flares into it           | A raised neutral tile on the strip, 5 px from its top and bottom                          | The rest of the shell does not join a selection to its content          |
+| Tabs share the whole strip up to a cap                              | Natural width up to 200 px, left-aligned; they share the strip only when it is full       | A few tabs are not stretched into slabs; the empty bar drags the window |
+| Narrowest tab keeps a title                                         | Favicon only under 96 px, down to 36 px, then scroll                                      | The icon identifies a site at any width                                 |
+| Inset rounded card                                                  | Full-bleed page, square to the window                                                     | One corner treatment: the window's                                      |
+| Separator between inactive tabs                                     | A faint 1 px, 16 px hairline, hidden beside the chosen or hovered tab                     | Tabs read as separate with no fill at rest                              |
+| Close button on the active tab and under the pointer                | A 16 px close circle (`Dim::TabClose`), same rule                                         |                                                                         |
+| Scrollable strip with a tab list, new tab button after the last tab | Same: New tab follows the last tab; when scrolling it is fixed at the end with a tab list |                                                                         |
+| Drag follows the pointer, others slide; tear-out                    | Same, on `crate::reorder` and `crate::drag`                                               | `design/tab-tearoff.md`                                                 |
+| Rapid closure, close-tab menu, reopen closed tab                    | Same                                                                                      |                                                                         |
+| Pinned tabs, groups, split tabs                                     | No                                                                                        | No caller needs them                                                    |
 
 ## Geometry
 
 Every length is a token. The strip is `Dim::TabBar` tall and _is_ the window's
 title bar: the `HeaderBar` that holds it is that tall too, so the window carries
-no second row above its tabs. A tab is `Dim::TabButton`: the strip less
-`FIELD_INSET` above and below, so it is as tall as an end button, and at compact
-density, where there is no inset, the whole 44 px touch target. Numbers are
-logical pixels at mouse density, then compact.
+no second row above its tabs. A tab is `Dim::TabButton` (30 px, centred, 5 px
+above and below, which still drag the window); at compact density, where there is
+no band, the whole 44 px touch target. Numbers are logical pixels at mouse
+density, then compact.
 
-| Name                                          | Token                                                                                   | Mouse     | Compact    |
-| --------------------------------------------- | --------------------------------------------------------------------------------------- | --------- | ---------- |
-| Strip (title bar) height                      | `Dim::TabBar`                                                                           | 40        | 44         |
-| Tab height                                    | `Dim::TabButton`, the strip less two `FIELD_INSET`                                      | 32        | 44         |
-| Band above and below a tab (drags the window) | `FIELD_INSET`                                                                           | 4         | 0          |
-| Tab corner                                    | `Radius::Control`                                                                       | 12        | 12         |
-| Gap between tabs                              | `S1`                                                                                    | 4         | 4          |
-| Width                                         | `Dim::TabMin` .. `Dim::Field`                                                           | 96 .. 240 | 128 .. 168 |
-| Icon                                          | `IconSize::Control`                                                                     | 16        | 18         |
-| Title                                         | `CAPTION`, the small type step                                                          | 13        | 13         |
-| Close button                                  | `Dim::DenseControl` / `Dim::InlineButton`, corner `Radius::Control.nested(FIELD_INSET)` | 24        | 44         |
-| New tab and tab list buttons                  | `Dim::TabButton`, the corner of a tab, in a cluster with an inset each end              | 32        | 44         |
-| Icon buttons elsewhere in the bar             | `Dim::TabButton` (`InTabBar`)                                                           | 32        | 44         |
-| Start edge                                    | the header bar's padding, `S2`                                                          | 8         | 8          |
-| Overflow fade                                 | `Dim::Box5`, into `Paint::Surface`                                                      | 20        | 20         |
+| Name                                          | Token                                         | Mouse  | Compact |
+| --------------------------------------------- | --------------------------------------------- | ------ | ------- |
+| Strip (title bar) height                      | `Dim::TabBar`                                 | 40     | 44      |
+| Tab (tile) height, and an end button's side   | `Dim::TabButton`                              | 30     | 44      |
+| Band above and below a tab (drags the window) | (strip less tab) / 2                          | 5      | 0       |
+| Tab corner                                    | `Radius::Tab`                                 | 10     | 10      |
+| Gap between tabs                              | `S0_5`                                        | 2      | 2       |
+| Widest                                        | `Dim::TabMax`                                 | 200    | 200     |
+| Icon-only under                               | `Dim::TabTitleMin`                            | 96     | 120     |
+| Narrowest (favicon)                           | `Dim::TabMin`                                 | 36     | 44      |
+| Icon                                          | `IconSize::Control`                           | 16     | 16      |
+| Title                                         | `CAPTION`, the small type step                | 13     | 13      |
+| Close circle                                  | `Dim::TabClose`, `Radius::Pill`, 12 px glyph  | 16     | 44      |
+| Hairline between tabs                         | `Dim::Hairline` wide, `SEPARATOR_HEIGHT` tall | 1 x 16 | 1 x 16  |
+| New tab and tab list buttons                  | `Dim::TabButton`, in a cluster                | 30     | 44      |
+| Start edge                                    | the header bar's padding, `S2`                | 8      | 8       |
+| Overflow fade                                 | `Dim::Box5`, into `Paint::Strip`              | 20     | 20      |
 
-A strip of `n` tabs of width `w` has content `n (w + gap) - gap` wide. A tab is
-laid out and painted in the same box: what takes the pointer and the focus is
-what is drawn, so the gap between two tabs drags the window.
+A strip of `n` tabs of width `w` has content `n (w + gap) - gap` wide; a tab's
+natural width is `lead (8) + icon + gaps (4) + title + close circle + the band
+round it (7)`, the widest title's, at most 200 (`Geometry::natural`,
+`natural_width`). A tab is laid out and painted in the same box: what takes the
+pointer and the focus is what is drawn, so the gap between two tabs drags the
+window.
 
-The close button is centred in the tab and `FIELD_INSET` from its edges, and its
-corner is the tab's less that inset (`Radius::Inner`, 8 px inside 12 px):
-concentric, the nesting rule of every other control in the shell. The focus ring
-is the tab's own rounded rectangle.
+The close circle is centred in the tile, the same distance (7 px) from its top,
+bottom and end, so it is concentric with the tile. The focus ring is the tab's
+own rounded rectangle and shows for keyboard focus only (a click or a tap
+leaves the keyboard where it was).
 
 ## Colours
 
@@ -93,16 +108,15 @@ is the tab's own rounded rectangle.
 | Unselected           | none (the bar)                                                               | `Ink::Muted`               |
 | Hovered (mouse only) | `Paint::Hover`, fading in over `MOVE_MS`                                     | `Ink::Text` once past half |
 | Pressed              | `Paint::Pressed`, at once                                                    | `Ink::Text`                |
-| Selected             | `Paint::Selection` over the bar                                              | `Ink::Text`                |
+| Selected             | `Paint::Raised`, the raised tile                                             | `Ink::Text`                |
 | Drop target          | `Paint::AccentSoft`                                                          | `Ink::Text`                |
 | Held by a drag       | its own fill, lifted over the others (faint once going on would tear it off) |                            |
 
-The selected tab's fill is the selection layer composed over the bar _as one
-opaque colour_: the tab in the hand of a drag slides over its neighbours' titles
-and must hide them, which a translucent layer would not. Contrast: unselected
-titles are `Ink::Muted` on the bar and under the hover and pressed fills; the
-selected title is `Ink::Text` on the selection fill; `tabs.rs` tests every
-ground in both schemes.
+The selected tab's fill is `Paint::Raised`, one opaque colour: the tab in the
+hand of a drag slides over its neighbours' titles and must hide them, which a
+translucent layer would not. Contrast: unselected titles are `Ink::Muted` on the
+strip and under the hover and pressed fills; the selected title is `Ink::Text` on
+the raised tile; `tabs.rs` tests every ground in both schemes.
 
 ## The page under the tabs
 
@@ -128,7 +142,7 @@ input: (1) a lone tab, which is what Files opens with, had no close slot at all
 (`closable = tabs > 1`), its middle click did nothing, and Ctrl+W with the focus
 on the tab was swallowed by the strip, which stops propagation before the window
 shortcut can close the window; (2) an unselected tab showed its button only
-under a _mouse_ pointer; (3) the button was 20 px. With two or more tabs and a
+under a _mouse_ pointer; (3) the button was 20 px (it is now a 16 px circle, `Dim::TabClose`, with the whole 44 px target at compact). With two or more tabs and a
 mouse the X worked (checked). All three are fixed at the source: the strip no
 longer special-cases a lone tab (Files closes the window for it), the button
 shows on every tab at touch and compact density, and it is a 24 px icon button
@@ -209,8 +223,13 @@ tab's.
   back after each wheel notch.)
 - **Titles.** `fade_text` replaces the ellipsis: the glyphs' alpha ramps to
   nothing over the last `Dim::TextFade` (24 px) at the end of the reading
-  direction, so it is right on the hover fill, the selected fill and the bar, and
-  the close button is never touched.
+  direction, so it is right on the hover fill, the raised tile and the strip,
+  and the close circle is never touched. Under `Dim::TabTitleMin` the title is
+  dropped altogether (`Geometry::icon_only`) when the strip has cut it.
+- **The row's offset.** The scrolled tabs are placed by an absolute `left` of the
+  row, not by `offset_x` of its parent: Torin applied `offset_x` again, on top,
+  whenever one tab under it was laid out alone (the pointer entering a tab), which
+  moved the whole strip by half the scroll.
 - **Layers.** Paint order in Freya is the layer, which is the depth in the
   tree, so a dragged tab is lifted by `HELD_LAYER` or it would be drawn under a
   neighbour's title.

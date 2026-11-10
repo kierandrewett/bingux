@@ -357,8 +357,10 @@ and outline panels.
 | Content | The file view; column headers sort the list                         |
 
 Tabs float: each is a rounded tile on the strip, the selected one raised.
-A tab is at most `Dim::Field` (240 px) wide, left-aligned. When the tabs no
-longer fit they shrink together to `Dim::TabMin`, then the strip scrolls.
+A tab is as wide as its icon, title and close circle need, `Dim::TabMax` (200
+px) at most, left-aligned, never stretched. When the tabs no longer fit they
+share the strip and shrink together (the title fades, then each is its favicon
+only, down to `Dim::TabMin`), then the strip scrolls.
 
 New tab follows the last tab. The Text Editor and the Browser use the same
 model.

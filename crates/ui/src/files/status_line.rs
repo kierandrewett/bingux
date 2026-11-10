@@ -153,7 +153,7 @@ impl Component for StatusBar {
                 grow_children(),
                 items(Align::Center),
                 w_full(),
-                h(Dim::TabButton),
+                h(Dim::WindowControlTarget),
                 px(S3),
                 gap(S2),
             ],

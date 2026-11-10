@@ -50,6 +50,8 @@ struct Case {
     header: bool,
     /// The interface reads from the right.
     rtl: bool,
+    /// Every tab has a favicon.
+    icons: bool,
 }
 
 impl Case {
@@ -63,6 +65,7 @@ impl Case {
             selected: 1,
             header: false,
             rtl: false,
+            icons: false,
         }
     }
 
@@ -108,10 +111,15 @@ impl Component for Host {
         let tabs = (0..case.count)
             .map(|index| {
                 let id = index as u64 + 1;
-                if case.long && index == 0 {
+                let item = if case.long && index == 0 {
                     TabItem::new(id, LONG)
                 } else {
                     TabItem::new(id, format!("Folder {id}"))
+                };
+                if case.icons {
+                    item.icon(crate::icons::Icon::Folder)
+                } else {
+                    item
                 }
             })
             .collect();
@@ -387,7 +395,7 @@ fn check(window: f32, case: Case) {
             tab.max_x() - close.max_x()
         };
         assert!(
-            near(from_end, g.inset),
+            near(from_end, g.pad()),
             "{what}: the close slot is {from_end} from the tab's end"
         );
         assert!(
@@ -584,7 +592,7 @@ fn in_a_header_bar_the_selected_tab_is_in_view_at_either_density_and_direction()
 fn at_compact_density_every_target_is_the_touch_minimum() {
     let mut shot = start(COMPACT, Case::new(4, 360.0));
     let g = geometry_for(COMPACT);
-    assert_eq!(g.inset, 0.0, "no inset at compact density");
+    assert_eq!(g.top, 0.0, "no band at compact density");
     for tab in named(&mut shot, "Tab") {
         assert!(
             near(tab.height(), 44.0),
@@ -625,8 +633,8 @@ fn at_compact_density_every_target_is_the_touch_minimum() {
 // ---- The bar ---------------------------------------------------------------
 
 #[test]
-fn the_bar_is_a_tab_bar_tall_and_the_tabs_stand_four_pixels_from_its_top() {
-    for (window, strip, tab, top) in [(REGULAR, 40.0, 32.0, 4.0), (COMPACT, 44.0, 44.0, 0.0)] {
+fn the_bar_is_a_tab_bar_tall_and_the_tabs_float_in_it_thirty_pixels_tall() {
+    for (window, strip, tab, top) in [(REGULAR, 40.0, 30.0, 5.0), (COMPACT, 44.0, 44.0, 0.0)] {
         let mut shot = start(window, Case::new(3, 600.0));
         let (bar, page) = (one(&mut shot, "TabBar"), one(&mut shot, "Page"));
         let tabs = named(&mut shot, "Tab");
@@ -779,26 +787,26 @@ fn the_new_tab_button_is_the_same_distance_from_the_top_the_bottom_the_last_tab_
                 cluster.max_x() - new.max_x(),
             );
             assert!(
-                near(top, g.inset),
+                near(top, g.top),
                 "{what}: {top} from the strip's top, not {}",
-                g.inset
+                g.top
             );
             assert!(
-                near(bottom, g.inset),
+                near(bottom, g.top),
                 "{what}: {bottom} from the strip's bottom, not {}",
-                g.inset
+                g.top
             );
             assert!(
-                near(before, g.inset),
-                "{what}: {before} from what comes before it"
+                near(before, g.gap()),
+                "{what}: {before} from what comes before it, not the gap between tabs"
             );
             assert!(
-                near(after, g.inset),
+                near(after, g.top),
                 "{what}: {after} from the strip's trailing edge"
             );
             assert!(
-                near(top, bottom) && near(bottom, before) && near(before, after),
-                "{what}: the four insets are one: {top} {bottom} {before} {after}"
+                near(top, bottom) && near(bottom, after),
+                "{what}: the band is one on the top, the bottom and the trailing edge: {top} {bottom} {after}"
             );
             assert!(
                 near(new.width(), new.height()) && near(new.width(), g.button()),
@@ -817,7 +825,7 @@ fn the_new_tab_button_is_the_same_distance_from_the_top_the_bottom_the_last_tab_
             if buttons.len() == 1 {
                 let from_tab = new.min_x() - tabs.last().unwrap().max_x();
                 assert!(
-                    near(from_tab, g.inset),
+                    near(from_tab, g.gap()),
                     "{what}: {from_tab} from the last tab's end"
                 );
             }
@@ -919,7 +927,7 @@ fn the_new_tab_buttons_hover_fill_is_its_square() {
         same(frame.pixel(middle.0, new.max_y() + 1.5), bar_colour, 1.0),
         "and below"
     );
-    // Its corners are a tab's: round at Radius::Control, not square.
+    // Its corners are a tab's: round at Radius::Tab, not square.
     assert!(
         same(
             frame.pixel(new.min_x() + 0.5, new.min_y() + 0.5),
@@ -932,9 +940,9 @@ fn the_new_tab_buttons_hover_fill_is_its_square() {
 
 /// A tab's fill at its corners and in its middle, in a frame, in the colours
 /// the tab should have. The corner pixel is the bar's: the radius is
-/// `Radius::Control`, which is 12 px on a 32 px tab.
+/// `Radius::Tab`, which is 10 px on a 30 px tab.
 fn assert_pill(frame: &Frame, tab: &Area, fill: Color, ground: Color, what: &str) {
-    let r = Radius::Control.px();
+    let r = Radius::Tab.px();
     // The middle, away from the title and the icon.
     let middle = frame.pixel(tab.min_x() + tab.width() * 0.5, tab.min_y() + 2.0);
     assert!(
@@ -1154,7 +1162,7 @@ fn the_tab_is_not_joined_to_the_page_under_it() {
             );
             if !compact(window) {
                 assert!(
-                    page.min_y() - tab.max_y() >= geometry_for(window).inset - 0.5,
+                    page.min_y() - tab.max_y() >= geometry_for(window).top - 0.5,
                     "{what}: a gap of the inset between tab and page"
                 );
             }
@@ -1608,7 +1616,7 @@ fn a_lone_tab_has_a_close_button_and_every_way_to_close_it_asks() {
 }
 
 #[test]
-fn every_tab_has_a_24px_close_button_inset_in_it_and_an_unselected_one_shows_it_on_hover() {
+fn every_tab_has_a_16px_close_circle_inset_in_it_and_an_unselected_one_shows_it_on_hover() {
     let mut shot = live(600.0);
     let before = close_buttons(&mut shot);
     assert_eq!(
@@ -1622,8 +1630,8 @@ fn every_tab_has_a_24px_close_button_inset_in_it_and_an_unselected_one_shows_it_
         "the button is the selected tab's"
     );
     assert!(
-        near(before[0].width(), 24.0) && near(before[0].height(), 24.0),
-        "the button is {}x{}, not 24",
+        near(before[0].width(), 16.0) && near(before[0].height(), 16.0),
+        "the button is {}x{}, not 16",
         before[0].width(),
         before[0].height()
     );
@@ -1966,14 +1974,16 @@ fn close_tabs_to_the_left_is_greyed_out_on_the_first_tab_and_closes_the_tabs_bef
 
 #[test]
 fn the_tabs_keep_their_width_while_the_pointer_closes_tab_after_tab_and_grow_when_it_leaves() {
-    // 600 px for three tabs, less the New tab cluster (40) and two 4 px gaps: each is 184 wide; for two they would be 240.
-    let mut shot = live(600.0);
+    // 300 px is too little for three tabs at their natural width, so they share it; two of them
+    // fit, so once one is closed the others grow back to their natural width.
+    let natural = natural_tab_width();
+    let mut shot = live(300.0);
     let before = named(&mut shot, "Tab");
     let held = before[0].width();
     let g = geometry_for(REGULAR);
-    let room = 600.0 - g.cluster(1);
+    let room = 300.0 - g.cluster(1);
     assert!(
-        near(held, g.tab_in(room, 3.0)) && near(held, 184.0),
+        near(held, g.tab_in(room, 3.0)) && held < natural - 10.0,
         "three tabs share the room: {held}"
     );
     let first = before[0];
@@ -2009,32 +2019,49 @@ fn the_tabs_keep_their_width_while_the_pointer_closes_tab_after_tab_and_grow_whe
     rest(&mut shot);
     let grown = named(&mut shot, "Tab")[0];
     assert!(
-        grown.width() > held + 20.0,
+        grown.width() > held + 10.0,
         "the tab grew when the pointer left: {} from {held}",
         grown.width()
     );
     assert!(
-        near(grown.width(), geometry_for(REGULAR).max),
-        "to the widest a tab is: {}",
+        (grown.width() - natural).abs() < 2.0,
+        "to what a tab needs, no more: {} not {natural}",
         grown.width()
     );
 }
 
+/// The width a tab has with room to spare in the live strip: what its widest title needs.
+fn natural_tab_width() -> f32 {
+    let mut shot = live(900.0);
+    let tabs = named(&mut shot, "Tab");
+    assert!(
+        tabs.iter().all(|tab| near(tab.width(), tabs[0].width())),
+        "the tabs have one width"
+    );
+    assert!(tabs[0].width() < geometry_for(REGULAR).max, "a short title");
+    tabs[0].width()
+}
+
 #[test]
 fn closing_with_the_keyboard_does_not_hold_the_widths() {
-    let mut shot = live(600.0);
+    let natural = natural_tab_width();
+    let mut shot = live(300.0);
     shot.key(Key::Named(NamedKey::Tab));
     shot.key(Key::Named(NamedKey::Delete));
     rest(&mut shot);
     let width = named(&mut shot, "Tab")[0].width();
-    assert!(near(width, 240.0), "two tabs fill the room: {width}");
+    assert!(
+        near(width, natural),
+        "two tabs are as wide as they need, not held at three tabs' share: {width} not {natural}"
+    );
 }
 
 // ---- Dragging --------------------------------------------------------------
 
 #[test]
 fn the_new_tab_button_adds_and_the_tabs_never_leave_the_strip_while_they_move() {
-    let mut shot = live(600.0);
+    // 420 px holds three tabs at their natural width and not four: the fourth makes the others narrow.
+    let mut shot = live(420.0);
     let new = *named(&mut shot, "IconButton")
         .last()
         .expect("the New tab button");
@@ -2191,50 +2218,75 @@ fn a_dragged_tab_follows_the_pointer_while_the_others_slide_aside() {
 /// Paint order in Freya is the layer, the depth in the tree, so a tab's
 /// contents would draw over the fill of a tab that overlaps it. A dragged tab
 /// lies over its neighbour, so all of it must be in front.
+///
+/// The held tab has glyphs of its own where it covers the neighbour (its close
+/// button), so the pixels are not one colour. The test draws the drag twice, with the
+/// neighbour's title starting with another letter: if nothing of the neighbour's title
+/// shows through the held tab, the two frames are the same where it is covered.
 #[test]
 fn a_dragged_tab_is_painted_over_the_tab_it_overlaps() {
-    let mut shot = live(600.0);
-    let tabs = named(&mut shot, "Tab");
-    let (a, b) = (tabs[0], tabs[1]);
-    let y = a.min_y() + a.height() / 2.0;
-    let from = (a.min_x() + 30.0, y);
-    shot.press(from);
-    // Less than half a step: the neighbour has not slid aside yet, and the held
-    // tab covers the start of its title.
-    shot.move_to((from.0 + 70.0, y));
-    shot.settle(Duration::from_millis(400));
-    let title: Area = shot
-        .runner()
-        .find_many(|node, element| {
-            let label = Label::try_downcast(element)?;
-            (label.text == "Documents").then(|| node.layout().area)
-        })
-        .into_iter()
-        .next()
-        .expect("the neighbour's title");
-    let held = named(&mut shot, "Tab")[0];
+    let drag = |second: &'static str| {
+        let mut shot = live_in(
+            REGULAR,
+            300.0,
+            Live {
+                names: vec!["Home", second, "Downloads and then some"],
+                ..Live::new(600.0)
+            },
+            true,
+        );
+        let tabs = named(&mut shot, "Tab");
+        let (a, b) = (tabs[0], tabs[1]);
+        let y = a.min_y() + a.height() / 2.0;
+        let from = (a.min_x() + 30.0, y);
+        shot.press(from);
+        // Less than half a step: the neighbour has not slid aside yet, and the held
+        // tab covers the start of its title.
+        let shift = (b.min_x() - a.min_x()) * 0.45;
+        shot.move_to((from.0 + shift, y));
+        shot.settle(Duration::from_millis(400));
+        let title: Area = shot
+            .runner()
+            .find_many(|node, element| {
+                let label = Label::try_downcast(element)?;
+                (label.text == second).then(|| node.layout().area)
+            })
+            .into_iter()
+            .next()
+            .expect("the neighbour's title");
+        let held = named(&mut shot, "Tab")[0];
+        let frame = Frame::of(&mut shot);
+        shot.release((from.0 + shift, y));
+        (frame, title, held)
+    };
+    let (documents, title, held) = drag("Documents");
+    let (zocuments, other, _) = drag("Zocuments");
     assert!(
-        held.max_x() > title.min_x() + 30.0 && held.max_x() < title.max_x() + 40.0,
+        near(title.min_x(), other.min_x()) && near(title.min_y(), other.min_y()),
+        "the same place: {title:?} and {other:?}"
+    );
+    let covered = held.max_x() - title.min_x();
+    assert!(
+        covered > 12.0 && held.max_x() < title.max_x() + 40.0,
         "the held tab {held:?} covers the start of the title {title:?}"
     );
-    // The held tab is the selected one: its opaque fill is the selection layer over the bar.
-    let tokens = tokens_of(true);
-    let surface = Paint::Raised.color(&tokens);
-    let frame = Frame::of(&mut shot);
+    // Away from the held tab's own text, which is the same in both.
+    let mut seen = 0;
     let mut x = title.min_x();
-    while x < title.min_x() + 28.0 {
+    while x < held.max_x() - 1.0 {
         let mut row = title.min_y() + 1.0;
         while row < title.max_y() - 1.0 {
-            let got = frame.pixel(x, row);
+            let (one, two) = (documents.pixel(x, row), zocuments.pixel(x, row));
             assert!(
-                same(got, surface, 1.0),
-                "the neighbour's title shows through the held tab at ({x}, {row}): {got:?}, not {surface:?}"
+                same(one, two, 0.0),
+                "the neighbour's title shows through the held tab at ({x}, {row}): {one:?}, not {two:?}"
             );
+            seen += 1;
             row += 1.0;
         }
         x += 1.0;
     }
-    shot.release((from.0 + 70.0, y));
+    assert!(seen > 100, "a region was compared: {seen}");
 }
 
 /// A drag takes its release, so the tab it began on never hears the pointer
@@ -2898,11 +2950,13 @@ fn the_wheel_over_the_strip_scrolls_the_tabs_and_they_stay_where_it_left_them() 
         "the wheel scrolled the tabs back: {first} to {back}"
     );
     // It stays: time passing and the pointer moving do not send it back to the selected tab.
+    shot.settle(Duration::from_millis(1200));
     shot.hover(at.0 + 6.0, at.1);
     shot.settle(Duration::from_millis(1200));
+    let stayed = named(&mut shot, "Tab")[0].min_x();
     assert!(
-        near(named(&mut shot, "Tab")[0].min_x(), back),
-        "the strip stayed where the wheel left it"
+        near(stayed, back),
+        "the strip stayed where the wheel left it: {back} then {stayed}"
     );
     // The vertical wheel turned down goes forwards again.
     wheel(&mut shot, at, 0.0, 128.0, WheelSource::Line);
@@ -3086,7 +3140,10 @@ impl Component for FadeHost {
 
 #[test]
 fn a_title_that_does_not_fit_fades_out_at_the_end_of_the_reading_direction_and_has_no_ellipsis() {
-    let ground = BAR.color(&tokens_of(false));
+    // The ground is what `FadeHost` paints behind the title: the page. The test
+    // took the strip's colour, which stopped being the page's when the strip got
+    // a tone of its own, so every pixel of the page read as ink.
+    let ground = Paint::Bg.color(&tokens_of(false));
     for direction in [Direction::Ltr, Direction::Rtl] {
         let mut shot = Snapshot::new(
             move || FadeHost(direction, LONG).into_element(),
@@ -3238,7 +3295,7 @@ fn a_title_that_fits_is_drawn_inside_its_box_at_its_start_in_both_directions() {
 #[test]
 fn a_tabs_title_is_drawn_whole_at_its_start_in_both_directions() {
     for rtl in [false, true] {
-        for (window, count) in [(REGULAR, 3), (COMPACT, 3), (REGULAR, 1)] {
+        for (window, count) in [(REGULAR, 3), (COMPACT, 2), (REGULAR, 1)] {
             let mut shot = start(
                 window,
                 Case {
@@ -3347,18 +3404,18 @@ fn a_right_to_left_strip_is_mirrored() {
         "the New tab cluster is left of the last tab"
     );
     assert!(
-        near(buttons[0].min_x() - strip.min_x(), g.inset)
-            && near(strip.min_y(), buttons[0].min_y() - g.inset),
+        near(buttons[0].min_x() - strip.min_x(), g.top)
+            && near(strip.min_y(), buttons[0].min_y() - g.top),
         "and has its insets on the left and the top"
     );
     // A tab's close button is at its left and its title is right of it.
     let closes = named(&mut shot, "TabClose");
     for (tab, close) in tabs.iter().zip(&closes) {
         assert!(
-            near(close.min_x() - tab.min_x(), g.inset),
-            "the close button is {} from the tab's left edge, not the inset {}: tab {tab:?}, close {close:?}",
+            near(close.min_x() - tab.min_x(), g.pad()),
+            "the close button is {} from the tab's left edge, not the band {}: tab {tab:?}, close {close:?}",
             close.min_x() - tab.min_x(),
-            g.inset
+            g.pad()
         );
     }
     let titles = named(&mut shot, "FadeText");
@@ -3370,4 +3427,219 @@ fn a_right_to_left_strip_is_mirrored() {
     }
     // Names in screen order are the strip's order reversed.
     assert_eq!(names(&mut shot), ["Folder 3", "Folder 2", "Folder 1"]);
+}
+
+// ---- The tab model: floating tiles, natural width, favicons -----------------
+
+/// With room to spare, tabs are left-aligned at the width they need, however wide the strip
+/// is, and the New tab button follows the last tab: nothing stretches to fill.
+#[test]
+fn tabs_are_left_aligned_at_their_natural_width_and_the_new_tab_button_follows_the_last() {
+    let g = geometry_for(REGULAR);
+    let mut widths: Vec<(usize, f32)> = Vec::new();
+    for container in [700.0, 900.0] {
+        for count in [1, 3] {
+            let mut shot = start(REGULAR, Case::new(count, container));
+            let (strip, room) = (one(&mut shot, "TabStrip"), one(&mut shot, "Container"));
+            let tabs = named(&mut shot, "Tab");
+            let what = format!("{count} tabs in {container}px");
+            assert!(
+                near(tabs[0].min_x(), room.min_x()),
+                "{what}: the first tab starts at the start of the strip's room"
+            );
+            assert!(
+                tabs.iter().all(|tab| near(tab.width(), tabs[0].width())),
+                "{what}: one width"
+            );
+            assert!(
+                tabs[0].width() < g.max - 20.0,
+                "{what}: short titles are short tabs, not {}",
+                tabs[0].width()
+            );
+            widths.push((count, tabs[0].width()));
+            let (cluster, buttons) = end_buttons(&mut shot);
+            let last = tabs.last().unwrap();
+            assert!(
+                near(cluster.min_x(), last.max_x())
+                    && near(buttons[0].min_x() - last.max_x(), g.gap()),
+                "{what}: the New tab button follows the last tab: tab {last:?}, button {:?}",
+                buttons[0]
+            );
+            assert!(
+                strip.max_x() < room.max_x() - 200.0,
+                "{what}: the strip ends after its last button, leaving the room empty: {strip:?} in {room:?}"
+            );
+        }
+    }
+    for count in [1, 3] {
+        let same_count: Vec<f32> = widths
+            .iter()
+            .filter(|(n, _)| *n == count)
+            .map(|(_, width)| *width)
+            .collect();
+        assert!(
+            same_count.iter().all(|width| near(*width, same_count[0])),
+            "the width does not depend on the room, only on the titles: {widths:?}"
+        );
+    }
+}
+
+#[test]
+fn a_tab_is_never_wider_than_two_hundred_pixels() {
+    let mut shot = start(
+        REGULAR,
+        Case {
+            long: true,
+            ..Case::new(2, 900.0)
+        },
+    );
+    let tabs = named(&mut shot, "Tab");
+    assert!(
+        tabs.iter().all(|tab| near(tab.width(), 200.0)),
+        "a long title is cut at 200 px, and the other tab keeps that width: {tabs:?}"
+    );
+    // The title is cut by fading, never by an ellipsis.
+    let cut = named(&mut shot, "FadeText");
+    assert_eq!(cut.len(), 2);
+}
+
+/// As tabs are added past what the strip holds they share it and shrink together: the title
+/// fades first, then each tab is its favicon only (the close button on the chosen tab), then the
+/// strip scrolls and the buttons sit at its end.
+#[test]
+fn a_crowded_strip_fades_the_titles_then_shows_favicons_only_then_scrolls() {
+    let g = geometry_for(REGULAR);
+    let crowd_in = |count, container| {
+        start(
+            REGULAR,
+            Case {
+                icons: true,
+                ..Case::new(count, container)
+            },
+        )
+    };
+    let crowd = |count| crowd_in(count, 600.0);
+    // Four fit at their natural width: whole titles.
+    let mut shot = crowd(4);
+    let tabs = named(&mut shot, "Tab");
+    let natural = tabs[0].width();
+    assert!(natural < g.max - 20.0, "natural: {natural}");
+    assert_eq!(
+        named(&mut shot, "FadeText").len(),
+        4,
+        "every tab has its title"
+    );
+    // Six share a strip too short for them: narrower than natural but over the title
+    // minimum, so the title is still there and fades.
+    let mut shot = crowd_in(6, 640.0);
+    let tabs = named(&mut shot, "Tab");
+    assert!(
+        tabs[0].width() < natural - 5.0 && tabs[0].width() >= g.title_min,
+        "six tabs share the room: {}",
+        tabs[0].width()
+    );
+    let titles = named(&mut shot, "FadeText");
+    assert_eq!(titles.len(), 6, "titles fade out before they go");
+    let labels: Vec<Area> = shot.runner().find_many(|node, element| {
+        Label::try_downcast(element)
+            .filter(|label| label.text.starts_with("Folder"))
+            .map(|_| node.layout().area)
+    });
+    assert!(
+        labels
+            .iter()
+            .zip(&titles)
+            .any(|(label, title)| label.width() > title.width() + 0.5),
+        "a title is wider than the room it has and fades"
+    );
+    // Twelve: favicon only, the close button on the chosen tab alone.
+    let mut shot = crowd(12);
+    let tabs = named(&mut shot, "Tab");
+    assert_eq!(tabs.len(), 12);
+    assert!(
+        tabs.iter()
+            .all(|tab| tab.width() >= g.min - 0.5 && tab.width() < g.title_min),
+        "twelve tabs are favicons: {}",
+        tabs[0].width()
+    );
+    assert_eq!(named(&mut shot, "FadeText").len(), 0, "no titles");
+    assert_eq!(
+        named(&mut shot, "TabClose").len(),
+        1,
+        "the chosen tab's close button"
+    );
+    let (_, buttons) = end_buttons(&mut shot);
+    assert_eq!(buttons.len(), 1, "it all fits: no tab list yet");
+    // Twenty do not fit at the floor: the strip scrolls, and the tab list joins New tab at the end.
+    let mut shot = crowd(20);
+    let tabs = named(&mut shot, "Tab");
+    assert!(
+        tabs.iter().all(|tab| near(tab.width(), g.min)),
+        "at the floor: {}",
+        tabs[0].width()
+    );
+    let (cluster, buttons) = end_buttons(&mut shot);
+    let strip = one(&mut shot, "TabStrip");
+    assert_eq!(buttons.len(), 2, "tab list and New tab");
+    assert!(near(cluster.max_x(), strip.max_x()), "at the strip's end");
+    assert!(
+        tabs.iter()
+            .filter(|tab| tab.min_x() < cluster.min_x() - 1.0)
+            .count()
+            < 20,
+        "some tabs scrolled out"
+    );
+}
+
+/// A faint hairline between two tabs that are not chosen, which goes away next to the chosen
+/// tab and next to the one the pointer is on.
+#[test]
+fn a_hairline_separates_unchosen_tabs_and_hides_beside_the_chosen_or_hovered_one() {
+    let g = geometry_for(REGULAR);
+    let mut shot = start(REGULAR, Case::new(4, 900.0));
+    let tabs = named(&mut shot, "Tab");
+    let bar = bar_of(&mut shot);
+    let marks = named(&mut shot, "TabSeparator");
+    assert_eq!(
+        marks.len(),
+        2,
+        "the first tab is chosen: only 2|3 and 3|4 have one: {marks:?}"
+    );
+    for (mark, pair) in marks.iter().zip(tabs[1..].windows(2)) {
+        assert!(
+            near(mark.width(), 1.0) && near(mark.height(), 16.0),
+            "a 1 px wide hairline 16 px tall: {mark:?}"
+        );
+        assert!(
+            mark.min_x() >= pair[0].max_x() - 0.01 && mark.max_x() <= pair[1].min_x() + 0.01,
+            "it stands in the gap between the tabs: {mark:?} between {:?} and {:?}",
+            pair[0],
+            pair[1]
+        );
+        assert!(
+            near(mark.min_y() - bar.min_y(), (g.strip - 16.0) / 2.0),
+            "it is centred in the strip"
+        );
+    }
+    // The pointer on the fourth tab: the one before it goes too.
+    let on = centre(&tabs[3]);
+    shot.hover(on.0, on.1);
+    rest(&mut shot);
+    assert_eq!(
+        named(&mut shot, "TabSeparator").len(),
+        1,
+        "next to the hovered tab a separator is hidden"
+    );
+    // Chosen second tab: 3|4 only.
+    let mut shot = start(
+        REGULAR,
+        Case {
+            selected: 2,
+            ..Case::new(4, 900.0)
+        },
+    );
+    assert_eq!(named(&mut shot, "TabSeparator").len(), 1);
+    // A strip of one tab has none.
+    let mut shot = start(REGULAR, Case::new(1, 900.0));
+    assert!(named(&mut shot, "TabSeparator").is_empty());
 }

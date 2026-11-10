@@ -1,48 +1,56 @@
 //! A strip of closable tabs for an application whose window holds several
 //! views of the same kind: the folders of a file manager, the documents of an
-//! editor. It speaks the same language as the rest of the shell: a tab is a
-//! rounded rectangle of [`Radius::Control`], like a sidebar row or a button,
-//! and the selected one takes the fill of a selected sidebar row
-//! ([`Paint::Selection`]). The tabs are separate from the content under them,
-//! as a segmented control is from the page it switches; nothing joins them and
-//! the page has no corner of its own to match. See `design/tabs.md`.
+//! editor. A tab is a floating neutral tile of [`Radius::Tab`] on the strip;
+//! the chosen one is the raised tile ([`Paint::Raised`]), the others have no
+//! fill at rest and a faint hover layer. Nothing joins a tab to the toolbar or
+//! the page under the strip. See `design/tabs.md`.
 //!
 //! The strip is the title of a header bar ([`HeaderBar::tab_slot`]): the bar is
-//! the window's title bar, on [`Paint::Surface`] like every other bar, with the
-//! window's buttons in the same row, and the page starts at its bottom edge.
+//! the window's title bar, on [`Paint::Strip`] (a tone of its own: the tabs
+//! are outside the browsing frame), with the window's buttons in the same row,
+//! and the page starts at its bottom edge.
 //!
 //! * **Shape.** The strip is [`Dim::TabBar`] tall (40 px; the whole 44 px touch
-//!   target at compact density). A tab is [`FIELD_INSET`] from its top and bottom
-//!   edges, so it is [`Dim::TabButton`] tall (32 px; 44 px at compact density,
-//!   where there is no inset), and the band above and below it still drags the
-//!   window. Two tabs are [`S1`] apart. An unselected tab has no fill and muted
-//!   ink; the pointer's fill ([`Paint::Hover`]) fades in under it; pressed is a
-//!   stronger fill ([`Paint::Pressed`]) at once; the selected tab has the
-//!   selection fill and text ink. A drop target takes [`Paint::AccentSoft`].
-//! * **Width.** Tabs share one width. It is [`Dim::Field`] at most; as tabs
-//!   are added they shrink together, down to [`Dim::TabMin`], and past that the
-//!   strip scrolls sideways instead. The strip hugs its tabs and never grows
-//!   past its container.
+//!   target at compact density). A tab is [`Dim::TabButton`] tall (30 px, 44 px
+//!   at compact density), centred in it, so it floats 5 px from the strip's top
+//!   and bottom, and the band above and below it still drags the window. Two
+//!   tabs are [`S0_5`] apart. An unchosen tab has no fill and muted ink; the
+//!   pointer's fill ([`Paint::Hover`]) fades in under it; pressed is a stronger
+//!   fill ([`Paint::Pressed`]) at once. A drop target takes
+//!   [`Paint::AccentSoft`]. Between two adjacent tabs that are neither chosen,
+//!   hovered, pressed nor moving, a faint 1 px hairline, 16 px tall, stands in
+//!   the gap.
+//! * **Width.** A tab is as wide as its icon, title and close circle need (all
+//!   tabs share the widest title's width, so the stride is even), at most
+//!   [`Dim::TabMax`] (200 px). It is never stretched: with few tabs the strip
+//!   ends after the New tab button, which follows the last tab, and the rest of
+//!   the bar is empty. Only when the tabs no longer fit do they share the strip
+//!   and shrink together: the title fades out first ([`fade_text`](super::fade_text)),
+//!   then, under [`Dim::TabTitleMin`], each tab is its favicon only, down to
+//!   [`Dim::TabMin`] (36 px), and past that the strip scrolls sideways. The strip
+//!   hugs its tabs and never grows past its container.
 //! * **A tab** is an optional 16 px icon, a title in the small type step that
-//!   takes what room is left, and a close button. A title that does not fit
+//!   takes what room is left, and a close circle. A title that does not fit
 //!   does not end in an ellipsis: its last [`Dim::TextFade`] (24 px) fade out
-//!   ([`fade_text`](super::fade_text)), at the end of the reading direction,
-//!   and the close button beside it is never touched. The close button has a
-//!   slot of its own that is always laid out, so a tab does not change width
-//!   when the button appears. It is a standard icon button, 24 px (the whole
-//!   44 px at compact density), whose corner nests in the tab's, and shows on
-//!   the selected tab, on a tab the pointer is over or the keyboard focus is
-//!   in, and on every tab when the strip is touched. Every tab can be closed,
-//!   a lone one too: the host decides what that means (Files closes the window).
-//! * **The end of the strip** is fixed: the New tab button (drawn when
-//!   [`TabStrip::on_new`] is set) follows the last tab and never scrolls away.
-//!   It is a [`Dim::TabButton`] square, a tab's height, with the corner of a
-//!   tab and the same distance from the strip's top, its bottom, the last tab
-//!   and the strip's trailing edge ([`FIELD_INSET`]; flush at compact
-//!   density). When the tabs overflow, a tab list button beside it opens a
-//!   menu of every tab (its icon, its name, the selected one ticked), and the
-//!   tabs fade into the bar at the edge they continue past. The selected tab is
-//!   scrolled into view.
+//!   at the end of the reading direction, and the close circle beside it is
+//!   never touched. The close circle ([`Dim::TabClose`], 16 px, the whole 44 px
+//!   at compact density, [`IconButton::glyph`](super::button::IconButton::glyph)
+//!   at a small size) has a slot of its own that is always laid out in a tab with
+//!   a title, so a tab does not change width when the button appears. It shows on
+//!   the chosen tab, on a tab the pointer is over or the keyboard focus is in,
+//!   and, where a tab has a title, on every tab when the strip is touched. A tab
+//!   that is its icon only shows it on the chosen tab and under the pointer, in
+//!   the icon's place when the two do not fit side by side. Every tab can be
+//!   closed, a lone one too: the host decides what that means (Files closes the
+//!   window).
+//! * **The end of the strip** follows the last tab: the New tab button (drawn
+//!   when [`TabStrip::on_new`] is set), a [`Dim::TabButton`] square with the
+//!   corner of a button and the same distance from the strip's top, its bottom
+//!   and its trailing edge as a tab is. When the tabs scroll it is at a fixed
+//!   place at the end of the strip and a tab list button beside it opens a menu
+//!   of every tab (its icon, its name, the chosen one ticked); the tabs fade
+//!   into the strip at the edge they continue past. The chosen tab is scrolled
+//!   into view.
 //! * **Scrolling.** The wheel over the strip scrolls it (the vertical wheel
 //!   too, as a strip has one axis), so does a touchpad's two-finger movement,
 //!   and a finger dragged along it. A wheel notch glides, a touchpad and a
@@ -73,7 +81,7 @@
 //!   Home and End move the selection and the focus; Ctrl+Shift+Left and Right
 //!   move the selected tab; Delete or Ctrl+W closes the selected tab, Ctrl+T
 //!   asks for a new one and Ctrl+Shift+T for the last closed one. The focus
-//!   ring is the tab's own rounded rectangle.
+//!   ring is the tab's own rounded rectangle, drawn for keyboard focus only.
 //! * **Reading direction.** The strip is built in reading order and the layout
 //!   engine mirrors it ([`Direction`](super::direction::Direction)): in a
 //!   right-to-left interface the first tab is at the right, a tab's icon is at
@@ -113,9 +121,10 @@ use freya::prelude::*;
 use super::button::icon_button;
 use super::direction::{Direction, use_direction};
 use super::fade_text::fade_text;
+use super::path_label::text_width;
 use super::press::use_press;
 use super::tab_close::{self, Act, Offers, RapidClose, Row};
-use super::tab_geometry::Geometry;
+use super::tab_geometry::{Geometry, SEPARATOR_HEIGHT};
 use super::tab_scroll;
 use super::tab_tear::{self, Detach, Pull, StripLayout, StripProbe, TearGate};
 use crate::a11y::SemanticsExt;
@@ -207,7 +216,6 @@ pub fn tab_strip(tabs: Vec<TabItem>, selected: u64) -> TabStrip {
         on_detach: None,
         insertion: None,
         probe: None,
-        fill: false,
     }
 }
 
@@ -228,7 +236,6 @@ pub struct TabStrip {
     on_detach: Option<EventHandler<Detach>>,
     insertion: Option<usize>,
     probe: Option<StripProbe>,
-    fill: bool,
 }
 
 impl TabStrip {
@@ -321,15 +328,6 @@ impl TabStrip {
         self.probe = Some(probe.clone());
         self
     }
-
-    /// Share the whole width among the tabs, as Finder and GNOME Files do
-    /// with a tab bar of its own under the toolbar, instead of capping a tab
-    /// at [`Dim::Field`] and leaving the rest of the bar bare. Tabs still
-    /// shrink to [`Dim::TabMin`] and then scroll.
-    pub fn fill(mut self, fill: bool) -> Self {
-        self.fill = fill;
-        self
-    }
 }
 
 // ---- Layout ----------------------------------------------------------------
@@ -367,8 +365,20 @@ impl Fit {
 
 /// The widths for `target` tabs that are staying and `effective` tabs' worth of
 /// width right now (a tab that is arriving or leaving counts for part of one),
-/// in `available` pixels, with or without the New tab button.
-fn fit(geometry: Geometry, available: f32, target: usize, effective: f32, add: bool) -> Fit {
+/// in `available` pixels, with or without the New tab button. Tabs are
+/// `natural` wide (the width everything in the widest of them needs, capped at
+/// [`Geometry::max`]) and no wider: with room to spare the strip stays short and
+/// the end buttons follow the last tab. Only when the tabs no longer fit do
+/// they share the room equally and shrink together, down to [`Geometry::min`],
+/// and past that the strip scrolls.
+fn fit(
+    geometry: Geometry,
+    available: f32,
+    target: usize,
+    effective: f32,
+    add: bool,
+    natural: f32,
+) -> Fit {
     let room = (available - geometry.cluster(usize::from(add))).max(0.0);
     if geometry.content(target as f32, geometry.min) > room + 0.01 {
         // Past the narrowest width: the strip is as wide as its container, and
@@ -381,7 +391,9 @@ fn fit(geometry: Geometry, available: f32, target: usize, effective: f32, add: b
         };
     }
     let count = effective.max(1.0);
-    let tab = geometry.tab_in(room, count).clamp(0.0, geometry.max);
+    let tab = geometry
+        .tab_in(room, count)
+        .clamp(0.0, natural.clamp(geometry.min, geometry.max));
     let region = geometry.content(effective, tab);
     Fit {
         tab,
@@ -389,6 +401,24 @@ fn fit(geometry: Geometry, available: f32, target: usize, effective: f32, add: b
         region,
         overflow: false,
     }
+}
+
+/// The width tabs have with room to spare: what the widest of the staying tabs
+/// needs for its icon, whole title and close button, no more than the cap. One
+/// width for all of them keeps the stride of the strip even, which a drag's
+/// slide, the scroll and the rapid close all rely on.
+fn natural_width(entries: &[Entry], geometry: Geometry, measure: &dyn Fn(&str) -> f32) -> f32 {
+    entries
+        .iter()
+        .filter(|entry| entry.life != Life::Leaving)
+        .map(|entry| {
+            geometry.natural(
+                measure(&entry.item.title),
+                entry.item.icon.is_some(),
+                entry.item.edited,
+            )
+        })
+        .fold(geometry.min, f32::max)
 }
 
 // ---- What is on screen -----------------------------------------------------
@@ -1041,14 +1071,7 @@ impl Component for TabStrip {
         let tokens = use_tokens();
         let direction = use_direction();
         let rtl = direction.is_rtl();
-        let geometry = if self.fill {
-            Geometry {
-                max: f32::MAX,
-                ..Geometry::current()
-            }
-        } else {
-            Geometry::current()
-        };
+        let geometry = Geometry::current();
         let mut available = use_state(|| None::<f32>);
         let mut rail_area = use_state(Area::default);
         let mut region_area = use_state(Area::default);
@@ -1196,12 +1219,14 @@ impl Component for TabStrip {
             .filter(|entry| entry.life != Life::Leaving)
             .count();
         let effective: f32 = entries.iter().map(|entry| entry.presence(progress)).sum();
+        let natural_tab = natural_width(&entries, geometry, &|title| text_width(title, CAPTION));
         let natural = fit(
             geometry,
             available().unwrap_or(Dim::Page.px()),
             staying,
             effective,
             add,
+            natural_tab,
         );
         // After a tab was closed with the pointer the tabs keep their width
         // until the pointer leaves the strip, then grow to the room.
@@ -1423,6 +1448,7 @@ impl Component for TabStrip {
                 width: body,
                 left,
                 presence,
+                icon_only: geometry.icon_only(fit.tab, entry.item.icon.is_some(), natural_tab),
                 selected: is_selected,
                 held,
                 armed: held && current_view.armed,
@@ -1450,6 +1476,44 @@ impl Component for TabStrip {
                 held_child = Some(tab);
             } else {
                 row_children.push(tab);
+            }
+        }
+        // The faint hairline between two tabs that are neither chosen nor under the
+        // pointer, nor held, nor arriving or leaving: a quiet mark that they are
+        // separate tabs while nothing else shows it. It stands in the gap, so it
+        // moves with the tabs and is never over a tab's body.
+        if current_view.held.is_none() {
+            let lit = |entry: &Entry| {
+                entry.life != Life::Live
+                    || entry.item.id == self.selected
+                    || under == Some(entry.item.id)
+                    || pressed_now == Some(entry.item.id)
+                    || self.drop_target == Some(entry.item.id)
+            };
+            for pair in entries.windows(2).enumerate() {
+                let (index, pair) = pair;
+                if lit(&pair[0]) || lit(&pair[1]) {
+                    continue;
+                }
+                let (start, body) = placement[index];
+                let mark = Dim::Hairline.px();
+                let at = start + body + (geometry.gap() - mark) / 2.0;
+                row_children.push(
+                    rect()
+                        .key(&("separator", pair[0].item.id))
+                        .component("TabSeparator")
+                        .a11y_hidden()
+                        .interactive(false)
+                        .position(
+                            Position::new_absolute()
+                                .top((geometry.strip - SEPARATOR_HEIGHT) / 2.0)
+                                .left(at),
+                        )
+                        .width(Size::px(mark))
+                        .height(Size::px(SEPARATOR_HEIGHT))
+                        .tw(&tokens, &[bg(Paint::Separator)])
+                        .into_element(),
+                );
             }
         }
         // The tab in hand is drawn last, over the ones that slide aside.
@@ -1631,8 +1695,14 @@ impl Component for TabStrip {
         let scroller = rect()
             .width(Size::px(content))
             .height(Size::px(geometry.strip))
-            .offset_x(-offset)
-            .child(row);
+            // The tabs are placed by the offset rather than the scroller's own
+            // `offset_x`: that one is applied again, on top, whenever a tab under it
+            // is laid out alone (the pointer entering one), which moved the whole strip.
+            .child(
+                rect()
+                    .position(Position::new_absolute().top(0.0).left(-offset))
+                    .child(row),
+            );
         let region = rect()
             .tw(&tokens, &[clip()])
             .height(Size::px(geometry.strip))
@@ -1710,10 +1780,10 @@ impl Component for TabStrip {
                 .component("TabEnd")
                 .width(Size::px(geometry.cluster(count)))
                 .height(Size::px(geometry.strip))
-                .tw(
-                    &tokens,
-                    &[flex_row(), items(Align::Center), px(FIELD_INSET)],
-                )
+                // A gap after the last tab (a strip that fits) or the region (one that
+                // scrolls), and the band a tab has above it behind the last button.
+                .tw(&tokens, &[flex_row(), items(Align::Center)])
+                .padding(Gaps::new(0.0, geometry.top, 0.0, geometry.gap()))
                 // The tab list, then the New tab button at the trailing edge; the other
                 // way round when the strip reads from the right.
                 .children(buttons)
@@ -1872,10 +1942,10 @@ fn wash(selected: bool, drop_target: bool, pressed: bool, hover: f32) -> Wash {
     }
 }
 
-/// One tab: a rounded rectangle of [`Radius::Control`], the corner of a button
-/// and of a sidebar row, [`FIELD_INSET`] from the strip's top and bottom. The
-/// slot is placed by the strip, `left` from the start edge of the tabs'
-/// content; the body in it is the control that takes the pointer and the focus.
+/// One tab: a floating tile of [`Radius::Tab`], [`Geometry::top`] from the
+/// strip's top and bottom. The slot is placed by the strip, `left` from the
+/// start edge of the tabs' content; the body in it is the control that takes
+/// the pointer and the focus.
 #[derive(PartialEq)]
 struct Tab {
     item: TabItem,
@@ -1887,6 +1957,10 @@ struct Tab {
     left: f32,
     /// How much of the tab is there, for a tab that is arriving or leaving.
     presence: f32,
+    /// The strip is so full that this tab has no room for a title: it is its
+    /// icon only, decided from the width it has when it is all there, so a
+    /// tab growing in or out does not flicker between the two.
+    icon_only: bool,
     selected: bool,
     /// The tab is in the hand of a drag.
     held: bool,
@@ -1963,12 +2037,22 @@ impl Component for Tab {
         let fill = wash(self.selected, self.drop_target, self.pressed, glow);
         // The close button shows on the selected tab and on the one the pointer
         // is over. A finger cannot hover, and at compact density the button is
-        // the touch target of the tab, so there it is always shown.
-        let close_alpha = if self.selected || !mouse || geometry.inset == 0.0 {
+        // the touch target of the tab, so there it is shown on every tab that
+        // has a title beside it. A tab that is its icon only has no room for a
+        // button it does not need: it shows one on the selected tab and under
+        // the pointer, and nowhere else.
+        let close_alpha = if self.selected {
             1.0
-        } else {
+        } else if self.icon_only || (mouse && geometry.top > 0.0) {
             glow
+        } else {
+            1.0
         };
+        // The button and the icon do not both fit in the narrowest tab: while the
+        // button shows it takes the icon's place, as in a browser.
+        let room_for_both = self.width
+            >= geometry.lead + geometry.icon + geometry.part_gap + geometry.close + geometry.pad();
+        let close_instead = self.icon_only && close_alpha > 0.0 && !room_for_both;
         let lit = self.selected || glow > 0.5 || matches!(fill, Wash::Pressed | Wash::Drop);
 
         // The selected tab is a raised tile, as one opaque colour: the tab in the
@@ -1984,9 +2068,14 @@ impl Component for Tab {
         };
         let ink = if lit { Ink::Text } else { Ink::Muted };
 
-        let mut parts: Vec<Element> = Vec::with_capacity(3);
-        if let Some(icon) = self.item.icon {
-            parts.push(icons::icon(icon, IconSize::Control, ink.color(&tokens)).into_element());
+        let mut parts: Vec<Element> = Vec::with_capacity(4);
+        if let (Some(icon), false) = (self.item.icon, close_instead) {
+            parts.push(
+                rect()
+                    .key("icon")
+                    .child(icons::icon(icon, IconSize::Control, ink.color(&tokens)))
+                    .into_element(),
+            );
         }
         if self.item.edited {
             parts.push(
@@ -2004,21 +2093,34 @@ impl Component for Tab {
                     .into_element(),
             );
         }
-        parts.push(Element::from(
-            fade_text(self.item.title.clone())
-                .style(CAPTION.in_ink(ink))
-                .grow(),
-        ));
-        parts.push(Element::from(CloseTab {
+        if !self.icon_only {
+            parts.push(Element::from(
+                fade_text(self.item.title.clone())
+                    .style(CAPTION.in_ink(ink))
+                    .grow(),
+            ));
+        }
+        let close = Element::from(CloseTab {
             id,
             alpha: close_alpha,
             title: self.item.title.clone(),
             on_close: self.on_close.clone(),
-        }));
+            size: Dim::TabClose,
+        });
+        // An icon-only tab has its icon in the middle and no button; while the
+        // button shows, it is at the tab's end beside the icon, or in its place.
+        if !self.icon_only {
+            parts.push(close);
+        } else if close_alpha > 0.0 {
+            if !close_instead {
+                parts.push(Element::from(rect().key("fill").tw(&tokens, &[w_flex()])));
+            }
+            parts.push(close);
+        }
         // The engine lays a row that reads from the right out from the right, and
         // `pl` is the padding at the start edge: the icon is S2 from the tab's start
-        // edge and the close button a field inset from its end, the inset it nests in.
-        let pad = [pl(S2), pr(FIELD_INSET)];
+        // edge and the close button the band's width from its end, the band it sits in.
+        let padding = Gaps::new(0.0, geometry.pad(), 0.0, geometry.lead);
 
         let face = rect()
             .component("Tab")
@@ -2031,10 +2133,7 @@ impl Component for Tab {
                 self.item.title.clone()
             })
             .a11y_builder(|builder| builder.set_selected(self.selected))
-            .tw(
-                &tokens,
-                &[w_full(), h_full(), rounded(Radius::Control), clip()],
-            )
+            .tw(&tokens, &[w_full(), h_full(), rounded(Radius::Tab), clip()])
             .on_sized(move |event: Event<SizedEventData>| {
                 area.set_if_modified(event.area);
             })
@@ -2091,7 +2190,7 @@ impl Component for Tab {
                     .interactive(false)
                     .width(Size::px(self.width))
                     .height(Size::px(geometry.tab))
-                    .tw(&tokens, &[rounded(Radius::Control), paint])
+                    .tw(&tokens, &[rounded(Radius::Tab), paint])
                     .maybe(strength < 1.0, |pill| pill.opacity(strength))
             }))
             .child(
@@ -2108,7 +2207,11 @@ impl Component for Tab {
                             gap(S1),
                         ],
                     )
-                    .tw(&tokens, &pad)
+                    .maybe(
+                        self.icon_only && !(close_alpha > 0.0 && room_for_both),
+                        |row| row.main_align(Alignment::Center),
+                    )
+                    .padding(padding)
                     .children(parts),
             );
 
@@ -2138,15 +2241,17 @@ impl Component for Tab {
 /// The close button of a tab: always laid out, so a tab does not change width
 /// when it is hovered, and drawn only while it can be used (`alpha` > 0),
 /// fading in with the tab's hover fill. It is the standard icon button,
-/// [`FIELD_INSET`] from the edges of the fill it sits in: 24 px at mouse density
-/// (the fill's 32 less the inset above and below), and the whole 44 px touch
-/// target at compact density. Its corner is the fill's, nested by that inset.
+/// [`Geometry::pad`] from the edges of the tile it sits in: 24 px in the 30 px
+/// tile at mouse density, and the whole 44 px touch target at compact density.
+/// Its corner is the tile's less that band, to the nearest token.
 #[derive(PartialEq)]
 struct CloseTab {
     id: u64,
     alpha: f32,
     title: String,
     on_close: EventHandler<u64>,
+    /// The side of the button, [`Geometry::close`].
+    size: Dim,
 }
 
 impl Component for CloseTab {
@@ -2154,18 +2259,20 @@ impl Component for CloseTab {
         let tokens = use_tokens();
         let id = self.id;
         let on_close = self.on_close.clone();
-        let inset = FIELD_INSET.px();
-        let size = if inset > 0.0 {
-            Dim::DenseControl
+        let size = self.size;
+        // A circle of 16 px holds the small glyph; the whole 44 px target a finger
+        // has holds the control's.
+        let glyph = if size.px() < IconSize::Control.px() * 2.0 {
+            IconSize::Mark
         } else {
-            Dim::InlineButton
+            IconSize::Control
         };
-        let radius = Radius::Control.nested(inset);
         // A press on the button is the button's: it must not select the tab,
         // begin dragging it, or reach the header bar's drag of the window.
         let slot = rect()
             .component("TabClose")
-            .tw(&tokens, &[w(size), h(size)])
+            .width(Size::px(size.px()))
+            .height(Size::px(size.px()))
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation());
         if self.alpha <= 0.0 {
             return slot.into_element();
@@ -2176,7 +2283,8 @@ impl Component for CloseTab {
             .child(
                 icon_button(Icon::WindowClose, move |_| on_close.call(id))
                     .size(size)
-                    .radius(radius)
+                    .glyph(glyph)
+                    .radius(Radius::Pill)
                     .tooltip(&format!("Close {}", self.title))
                     .pointer_only(),
             )
@@ -2202,7 +2310,7 @@ mod tests {
                 for count in 1..=14 {
                     for available in (100..=900).step_by(7) {
                         let available = available as f32;
-                        let fit = fit(geometry, available, count, count as f32, add);
+                        let fit = fit(geometry, available, count, count as f32, add, geometry.max);
                         assert!(
                             fit.rail <= available + 0.01,
                             "{class:?} add {add}: {count} tabs in {available}px make a strip {} wide",
@@ -2222,54 +2330,168 @@ mod tests {
     }
 
     #[test]
-    fn tabs_share_a_width_between_the_tokens_until_they_scroll() {
+    fn tabs_are_as_wide_as_they_need_and_no_wider_while_the_strip_has_room() {
         for class in CLASSES {
             let geometry = Geometry::in_class(class);
-            let wide = fit(geometry, 2000.0, 3, 3.0, true);
+            // A short title: the tabs are that wide, however much room there is, and the
+            // strip ends where the New tab button does, leaving the rest empty.
+            let natural = 120.0_f32.max(geometry.min);
+            for available in [800.0, 1400.0, 4000.0] {
+                let few = fit(geometry, available, 3, 3.0, true, natural);
+                assert_eq!(few.tab, natural, "{class:?}: not stretched to {available}");
+                assert!(!few.overflow);
+                assert_eq!(
+                    few.rail,
+                    geometry.content(3.0, natural) + geometry.cluster(1),
+                    "{class:?}: the New tab button follows the last tab"
+                );
+                assert!(few.rail < available, "{class:?}: empty strip at the end");
+            }
+            // A long title: the cap.
             assert_eq!(
-                wide.tab, geometry.max,
-                "{class:?}: roomy tabs are the widest"
+                fit(geometry, 4000.0, 3, 3.0, true, 5000.0).tab,
+                geometry.max,
+                "{class:?}: a tab is never wider than the cap"
             );
-            assert!(!wide.overflow);
-            let mut last = wide.tab;
-            for available in (300..2000).rev().step_by(11) {
-                let narrower = fit(geometry, available as f32, 6, 6.0, true);
+            assert_eq!(geometry.max, 200.0);
+        }
+    }
+
+    #[test]
+    fn tabs_share_the_strip_only_when_they_are_full_and_then_shrink_together_to_the_floor() {
+        for class in CLASSES {
+            let geometry = Geometry::in_class(class);
+            let natural = geometry.max;
+            let mut last = natural;
+            for available in (150..2400).rev().step_by(11) {
+                let available = available as f32;
+                let now = fit(geometry, available, 6, 6.0, true, natural);
                 assert!(
-                    narrower.tab <= last + 0.01,
+                    now.tab <= last + 0.01,
                     "{class:?}: tabs only get narrower as room goes"
                 );
                 assert!(
-                    narrower.tab >= geometry.min - 0.01,
-                    "{class:?}: never below the minimum"
+                    now.tab >= geometry.min - 0.01,
+                    "{class:?}: never below the floor"
                 );
-                last = narrower.tab;
+                if now.tab < natural - 0.01 && !now.overflow {
+                    assert!(
+                        (now.rail - available).abs() < 0.01,
+                        "{class:?}: tabs that no longer fit share all of the strip"
+                    );
+                }
+                if now.tab >= natural - 0.01 {
+                    assert!(
+                        now.rail <= available,
+                        "{class:?}: tabs that fit leave room over"
+                    );
+                }
+                last = now.tab;
             }
         }
     }
 
     #[test]
+    fn a_title_fades_before_the_tab_is_its_icon_only_and_the_floor_is_icon_only() {
+        for class in CLASSES {
+            let geometry = Geometry::in_class(class);
+            let (mut seen_fade, mut seen_icon) = (false, false);
+            // Full width: the title has all the room it needs and does not fade.
+            let widest = fit(geometry, 4000.0, 3, 3.0, true, geometry.max).tab;
+            assert!(!geometry.icon_only(widest, true, geometry.max));
+            for count in 3..=40 {
+                let now = fit(geometry, 700.0, count, count as f32, true, geometry.max);
+                let icon = geometry.icon_only(now.tab, true, geometry.max);
+                // As the tabs narrow, the title is first cut (fade_text fades it) and
+                // only then is the tab its icon.
+                if icon {
+                    seen_icon = true;
+                } else if now.tab < geometry.max - 0.01 {
+                    assert!(!seen_icon, "{class:?}: a title does not come back");
+                    seen_fade = true;
+                }
+            }
+            assert!(seen_fade, "{class:?}: the title fades first");
+            assert!(seen_icon, "{class:?}: then the favicon only");
+            assert!(
+                geometry.icon_only(geometry.min, true, geometry.max),
+                "{class:?}: the floor is the favicon only"
+            );
+        }
+    }
+
+    #[test]
+    fn the_natural_width_is_the_widest_title_up_to_the_cap() {
+        let geometry = Geometry::in_class(SizeClass::Regular);
+        // Six px to a letter: no fonts needed.
+        let measure = |title: &str| title.chars().count() as f32 * 6.0;
+        let entry = |id: u64, title: &str| Entry {
+            item: TabItem::new(id, title).icon(Icon::Folder),
+            life: Life::Live,
+        };
+        let natural = |entries: &[Entry]| natural_width(entries, geometry, &measure);
+        let short = natural(&[entry(1, "Home"), entry(2, "Pics")]);
+        let longer = natural(&[entry(1, "Home"), entry(2, "Pictures and more")]);
+        assert!(short < longer, "a longer title makes the tabs wider");
+        assert!(short >= geometry.min && short < geometry.max);
+        assert_eq!(
+            short,
+            geometry.natural(24.0, true, false),
+            "icon, title, close button and nothing else"
+        );
+        let huge = "W".repeat(300);
+        assert_eq!(
+            natural(&[entry(1, "Home"), entry(2, &huge)]),
+            geometry.max,
+            "never past the cap"
+        );
+        let mut leaving = entry(3, &huge);
+        leaving.life = Life::Leaving;
+        assert_eq!(
+            natural(&[entry(1, "Home"), leaving]),
+            natural(&[entry(1, "Home")]),
+            "a tab on its way out does not set the width"
+        );
+    }
+
+    #[test]
     fn overflow_begins_when_the_minimum_widths_no_longer_fit() {
         let geometry = Geometry::in_class(SizeClass::Regular);
-        // 4 px gaps, a New tab button and its insets (4 + 32 + 4), 96 px tabs:
-        // a strip of 500 holds 460 of tabs; four need 4 * 100 - 4 = 396, five
-        // need 496.
-        assert!(!fit(geometry, 500.0, 4, 4.0, true).overflow);
-        assert!(fit(geometry, 500.0, 5, 5.0, true).overflow);
-        let overflowing = fit(geometry, 500.0, 9, 9.0, true);
+        let available = 500.0;
+        let room = available - geometry.cluster(1);
+        // The most tabs at the floor that fit beside the New tab button.
+        let fits = (1..40)
+            .filter(|count| geometry.content(*count as f32, geometry.min) <= room)
+            .max()
+            .unwrap();
+        assert!(fits >= 10, "a 500 px strip holds a dozen favicons ({fits})");
+        assert!(!fit(geometry, available, fits, fits as f32, true, geometry.max).overflow);
+        assert!(
+            fit(
+                geometry,
+                available,
+                fits + 1,
+                fits as f32 + 1.0,
+                true,
+                geometry.max
+            )
+            .overflow
+        );
+        let overflowing = fit(geometry, available, 30, 30.0, true, geometry.max);
         assert_eq!(overflowing.tab, geometry.min);
-        assert_eq!(overflowing.rail, 500.0);
+        assert_eq!(overflowing.rail, available);
         assert_eq!(
             overflowing.region,
-            500.0 - geometry.cluster(2),
-            "the tab list and New tab buttons share one cluster after the tabs"
+            available - geometry.cluster(2),
+            "the tab list and New tab buttons share one cluster at the end of the strip"
         );
     }
 
     #[test]
     fn a_leaving_tab_does_not_change_whether_the_strip_overflows() {
         let geometry = Geometry::in_class(SizeClass::Regular);
-        let settled = fit(geometry, 500.0, 4, 4.0, true);
-        let leaving = fit(geometry, 500.0, 4, 4.6, true);
+        let settled = fit(geometry, 500.0, 4, 4.0, true, geometry.max);
+        let leaving = fit(geometry, 500.0, 4, 4.6, true, geometry.max);
         assert_eq!(settled.overflow, leaving.overflow);
     }
 
@@ -2327,38 +2549,27 @@ mod tests {
 
     #[test]
     fn the_close_button_nests_in_the_tab_and_every_target_fits_it() {
-        // A tab's corner is Control; a button FIELD_INSET inside it is that
-        // radius less the inset, and at compact density there is no inset.
         for class in CLASSES {
-            let inset = FIELD_INSET.px_in(class);
-            assert_eq!(
-                Radius::Control.nested(inset).px(),
-                Radius::Control.px() - inset
-            );
             let geometry = Geometry::in_class(class);
-            let close = if inset > 0.0 {
-                Dim::DenseControl
-            } else {
-                Dim::InlineButton
-            }
-            .px_in(class);
-            // The close button is centred in the tab, inset by the field inset.
+            let band = geometry.pad();
+            // The close circle is centred in the tile, a band from its edges.
             assert_eq!(
-                (geometry.tab - close) / 2.0,
-                inset,
-                "{class:?}: the close button is inset by the field inset"
+                geometry.tab - 2.0 * band,
+                geometry.close,
+                "{class:?}: the close button is inset by one band on every side"
             );
-            assert!(
-                close >= 24.0,
-                "{class:?}: the close button is {close}px, under 24"
+            assert_eq!(
+                geometry.close,
+                Dim::TabClose.px_in(class),
+                "{class:?}: the close circle is the token"
             );
-            // The end buttons are as tall as a tab.
             assert_eq!(
                 geometry.button(),
                 geometry.tab,
                 "{class:?}: the end buttons are as tall as a tab"
             );
         }
+        assert_eq!(Geometry::in_class(SizeClass::Regular).close, 16.0);
     }
 
     #[test]
@@ -2378,10 +2589,10 @@ mod tests {
     #[test]
     fn a_held_width_keeps_the_tabs_narrow_and_the_strip_short() {
         let geometry = Geometry::in_class(SizeClass::Regular);
-        // Four tabs in 800 are 240 wide at most; the room for three would give
-        // them 240 too, but with 600 the room gives more as one tab closes.
-        let before = fit(geometry, 600.0, 4, 4.0, true);
-        let after = fit(geometry, 600.0, 3, 3.0, true);
+        // Four full tabs do not fit in 600, so they share it; with one fewer the
+        // room gives wider tabs.
+        let before = fit(geometry, 600.0, 4, 4.0, true, geometry.max);
+        let after = fit(geometry, 600.0, 3, 3.0, true, geometry.max);
         assert!(
             after.tab > before.tab,
             "one tab fewer and the room gives wider tabs"
@@ -2395,7 +2606,7 @@ mod tests {
         );
         assert!(!held.overflow);
         // A scrolling strip is not held: its tabs are at the minimum already.
-        let scrolling = fit(geometry, 300.0, 9, 9.0, true);
+        let scrolling = fit(geometry, 150.0, 9, 9.0, true, geometry.max);
         assert_eq!(scrolling.held_at(geometry, 150.0, 9.0, true), scrolling);
     }
 

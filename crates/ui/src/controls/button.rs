@@ -471,6 +471,9 @@ pub struct IconButton {
     /// [`IconButton::morph`].
     morph: Option<(Icon, bool)>,
     semantics: Option<crate::a11y::Semantics>,
+    /// The glyph's size instead of the control glyph's 16 px, for a button
+    /// too small to hold one (the close circle of a tab).
+    glyph: Option<IconSize>,
 }
 
 pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconButton {
@@ -495,6 +498,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         id: None,
         layers: None,
         morph: None,
+        glyph: None,
     }
 }
 
@@ -530,6 +534,13 @@ impl IconButton {
 
     pub fn size(mut self, size: Dim) -> Self {
         self.size = Some(size);
+        self
+    }
+
+    /// Draw the glyph at `glyph` instead of the control glyph's 16 px, for a
+    /// button too small to hold one.
+    pub fn glyph(mut self, glyph: IconSize) -> Self {
+        self.glyph = Some(glyph);
         self
     }
 
@@ -809,11 +820,13 @@ impl Component for IconButton {
                     Some((to, on)) => Element::from(MorphGlyph {
                         from: self.icon,
                         to,
-                        size: IconSize::Control,
+                        size: self.glyph.unwrap_or(IconSize::Control),
                         color: ink,
                         on,
                     }),
-                    None => icons::icon(self.icon, IconSize::Control, ink).into(),
+                    None => {
+                        icons::icon(self.icon, self.glyph.unwrap_or(IconSize::Control), ink).into()
+                    }
                 }
             })
             .focusable(focus());
