@@ -7,20 +7,20 @@ The component's own behaviour (keys, menus, overflow) is in the module comment o
 
 ## Design thesis
 
-1. **Tabs are the shell's own controls, spread along the title bar.** A tab is a
-   rounded rectangle of `Radius::Control`, the corner of a button, a sidebar row
-   and a segmented control; the selected one has the fill of a selected sidebar
-   row (`Paint::Selection`), the pointer's fill is `Paint::Hover`, a press is
-   `Paint::Pressed`, and accent colour is used for nothing but a drop target.
-2. **The tabs are separate from the content, and say so.** The bar is the
-   window's title bar on `Paint::Surface`, the page under it is `Paint::Bg` (the
-   same colour), and nothing joins the two: no flare, no shared shape, no
-   darker strip, no card. The page runs square to the window's edges as the
-   Settings page does, so it has no corner of its own to match. The window's
-   rounding is the compositor's.
-3. **Quiet and dense.** An unselected tab is muted ink on the bare bar, a tab
-   is 32 px tall, 4 px from the bar's edges, 4 px from its neighbour; no
-   separators, no outline, no hairline, no shadow.
+1. **Tabs float.** A tab is a rounded tile of `Radius::Control`, the corner of
+   a button, a sidebar row and a segmented control. The selected one is a
+   raised tile (`Paint::Raised`), the pointer's fill is `Paint::Hover`, a press
+   is `Paint::Pressed`, and accent colour is used for nothing but a drop
+   target. No tab joins the toolbar or the page.
+2. **The strip is its own tier.** The tabs stand on `Paint::Strip`, a tone off
+   both the chrome (`Paint::Sidebar`) and the content (`Paint::Bg`), because
+   they sit outside the browsing frame (`design/boundaries.md`). The page runs
+   square to the window's edges, so it has no corner of its own to match. The
+   window's rounding is the compositor's.
+3. **Quiet and dense.** An unselected tab is muted ink on the bare strip, a tab
+   is 32 px tall, 4 px from the strip's edges, 4 px from its neighbour. Tabs
+   share the room up to `Dim::Field` (240 px) each, left-aligned, shrink
+   together to `Dim::TabMin` when they no longer fit, then the strip scrolls.
 
 ## What it replaced, and why
 

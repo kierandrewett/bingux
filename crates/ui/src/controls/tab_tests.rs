@@ -974,7 +974,7 @@ fn a_tab_is_a_rounded_rectangle_of_its_own_in_both_schemes_and_directions() {
         for rtl in [false, true] {
             let tokens = tokens_of(dark);
             let bar = BAR.color(&tokens);
-            let selected = composite(Paint::Selection.color(&tokens), bar);
+            let selected = Paint::Raised.color(&tokens);
             for window in [REGULAR] {
                 let mut shot = start(
                     window,
@@ -1015,9 +1015,9 @@ fn a_tab_is_a_rounded_rectangle_of_its_own_in_both_schemes_and_directions() {
 #[test]
 fn the_page_runs_square_to_the_window_under_a_bar_of_its_own_colour() {
     // Nothing joins the tabs to the page and the page has no corner of its own:
-    // every corner and edge of it is the page's colour, at every selection, width
-    // and reading direction, and so is the bar around the tabs (they are the same
-    // colour on purpose).
+    // every corner of the page is the page's colour and every corner of the bar
+    // the strip's, at every selection, width and reading direction. The two are
+    // different tones on purpose: the strip is outside the browsing frame.
     for dark in [true, false] {
         for rtl in [false, true] {
             for (window, count, selected) in [
@@ -1030,10 +1030,7 @@ fn the_page_runs_square_to_the_window_under_a_bar_of_its_own_colour() {
             ] {
                 let tokens = tokens_of(dark);
                 let (page_colour, bar_colour) = (Paint::Bg.color(&tokens), BAR.color(&tokens));
-                assert_eq!(
-                    page_colour, bar_colour,
-                    "the bar and the page are one colour"
-                );
+                assert_ne!(page_colour, bar_colour, "the strip has a tone of its own");
                 let container = window - 24.0;
                 let mut shot = start_in(
                     window,
@@ -1053,41 +1050,71 @@ fn the_page_runs_square_to_the_window_under_a_bar_of_its_own_colour() {
                     if rtl { "rtl" } else { "ltr" }
                 );
                 let inset = 0.5;
-                for (x, y, label) in [
-                    (page.min_x() + inset, page.min_y() + inset, "page top start"),
-                    (page.max_x() - inset, page.min_y() + inset, "page top end"),
+                let corners = [
+                    (
+                        page.min_x() + inset,
+                        page.min_y() + inset,
+                        "page top start",
+                        page_colour,
+                    ),
+                    (
+                        page.max_x() - inset,
+                        page.min_y() + inset,
+                        "page top end",
+                        page_colour,
+                    ),
                     (
                         page.min_x() + inset,
                         page.max_y() - inset,
                         "page bottom start",
+                        page_colour,
                     ),
                     (
                         page.max_x() - inset,
                         page.max_y() - inset,
                         "page bottom end",
+                        page_colour,
                     ),
-                    (bar.min_x() + inset, bar.min_y() + inset, "bar top start"),
-                    (bar.max_x() - inset, bar.min_y() + inset, "bar top end"),
-                    (bar.min_x() + inset, bar.max_y() - inset, "bar bottom start"),
-                    (bar.max_x() - inset, bar.max_y() - inset, "bar bottom end"),
-                ] {
+                    (
+                        bar.min_x() + inset,
+                        bar.min_y() + inset,
+                        "bar top start",
+                        bar_colour,
+                    ),
+                    (
+                        bar.max_x() - inset,
+                        bar.min_y() + inset,
+                        "bar top end",
+                        bar_colour,
+                    ),
+                    (
+                        bar.min_x() + inset,
+                        bar.max_y() - inset,
+                        "bar bottom start",
+                        bar_colour,
+                    ),
+                    (
+                        bar.max_x() - inset,
+                        bar.max_y() - inset,
+                        "bar bottom end",
+                        bar_colour,
+                    ),
+                ];
+                for (x, y, label, want) in corners {
                     let got = frame.pixel(x, y);
                     assert!(
-                        same(got, page_colour, 1.0),
-                        "{what}: {label} is {got:?}, not {page_colour:?}"
+                        same(got, want, 1.0),
+                        "{what}: {label} is {got:?}, not {want:?}"
                     );
                 }
-                // Along the join of bar and page: nothing is drawn but the one colour, except where a
-                // tab's own fill comes within its inset of the line (it never touches it).
+                // Just under the join, nothing of a tab reaches into the page.
                 let mut x = bar.min_x() + 2.0;
                 while x < bar.max_x() - 2.0 {
-                    for dy in [-2.0, -1.0, 0.0, 1.0] {
-                        let got = frame.pixel(x, page.min_y() + dy);
-                        assert!(
-                            same(got, page_colour, 1.0) || window == COMPACT,
-                            "{what}: at x {x}, {dy} from the join, {got:?} is not {page_colour:?}"
-                        );
-                    }
+                    let got = frame.pixel(x, page.min_y() + 1.0);
+                    assert!(
+                        same(got, page_colour, 1.0),
+                        "{what}: at x {x}, under the join, {got:?} is not {page_colour:?}"
+                    );
                     x += 5.0;
                 }
             }
@@ -1101,10 +1128,7 @@ fn the_tab_is_not_joined_to_the_page_under_it() {
     // the tab is the whole bar and its own rounded corners keep it apart.
     for dark in [true, false] {
         let tokens = tokens_of(dark);
-        let (bar_colour, selected) = (
-            BAR.color(&tokens),
-            composite(Paint::Selection.color(&tokens), BAR.color(&tokens)),
-        );
+        let (page_colour, selected) = (Paint::Bg.color(&tokens), Paint::Raised.color(&tokens));
         for window in [REGULAR, COMPACT] {
             let mut shot = start(
                 window,
@@ -1117,11 +1141,11 @@ fn the_tab_is_not_joined_to_the_page_under_it() {
             let (page, tab) = (one(&mut shot, "Page"), named(&mut shot, "Tab")[1]);
             let frame = Frame::of(&mut shot);
             let what = format!("{} {window}px", scheme_name(dark));
-            // Directly under the middle of the selected tab's lower edge: the page's colour, not the selection's.
+            // Directly under the middle of the selected tab's lower edge: the page's colour, not the tab's.
             let under = frame.pixel(tab.min_x() + tab.width() / 2.0, page.min_y() + 1.0);
             assert!(
-                same(under, bar_colour, 1.0),
-                "{what}: under the tab is {under:?}, not {bar_colour:?}"
+                same(under, page_colour, 1.0),
+                "{what}: under the tab is {under:?}, not {page_colour:?}"
             );
             let inside = frame.pixel(tab.min_x() + tab.width() / 2.0, tab.max_y() - 1.5);
             assert!(
@@ -2195,7 +2219,7 @@ fn a_dragged_tab_is_painted_over_the_tab_it_overlaps() {
     );
     // The held tab is the selected one: its opaque fill is the selection layer over the bar.
     let tokens = tokens_of(true);
-    let surface = composite(Paint::Selection.color(&tokens), BAR.color(&tokens));
+    let surface = Paint::Raised.color(&tokens);
     let frame = Frame::of(&mut shot);
     let mut x = title.min_x();
     while x < title.min_x() + 28.0 {

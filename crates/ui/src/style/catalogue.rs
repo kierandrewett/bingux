@@ -175,6 +175,7 @@ pub const PAINTS: &[(&str, Paint)] = &[
     ("Bg", Paint::Bg),
     ("Surface", Paint::Surface),
     ("Sidebar", Paint::Sidebar),
+    ("Strip", Paint::Strip),
     ("Recess", Paint::Recess),
     ("Card", Paint::Card),
     ("Control", Paint::Control),

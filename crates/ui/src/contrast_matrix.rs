@@ -148,9 +148,10 @@ const fn pair(what: &'static str, fg: Fg, bg: Bg, need: Requirement) -> Pair {
 }
 
 /// The layers a control or text can sit on directly.
-const LAYERS: [Paint; 7] = [
+const LAYERS: [Paint; 8] = [
     Paint::Bg,
     Paint::Sidebar,
+    Paint::Strip,
     Paint::Recess,
     Paint::Card,
     Paint::Control,
@@ -159,9 +160,10 @@ const LAYERS: [Paint; 7] = [
 ];
 
 /// The layers coloured text and tinted badges sit on.
-const TEXT_LAYERS: [Paint; 5] = [
+const TEXT_LAYERS: [Paint; 6] = [
     Paint::Bg,
     Paint::Sidebar,
+    Paint::Strip,
     Paint::Card,
     Paint::Control,
     Paint::Popover,
@@ -193,6 +195,7 @@ pub fn pairs() -> Vec<Pair> {
         for layer in [
             Paint::Bg,
             Paint::Sidebar,
+            Paint::Strip,
             Paint::Recess,
             Paint::Card,
             Paint::Control,

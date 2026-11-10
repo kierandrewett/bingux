@@ -128,6 +128,11 @@ pub struct Tokens {
     /// The recess behind a viewer's content (an image, a PDF page): one step
     /// darker than `bg`, so the page or picture stands out of it.
     pub recess: Color,
+    /// The tab strip: the band above the browsing frame, a third tone that is
+    /// neither the content (`bg`) nor the chrome (`sidebar`), so the strip
+    /// reads as outside the window's boundary. The selected tab takes the
+    /// chrome tone to join the toolbar under it.
+    pub strip: Color,
     /// Fill of the group cards, dialogs and popovers.
     pub elevated: Color,
     /// Fill of buttons, fields, dropdowns and segmented controls. One step
@@ -288,6 +293,7 @@ impl Tokens {
             surface: p.content,
             sidebar: p.sidebar,
             recess: p.recess,
+            strip: p.strip,
             elevated: p.card,
             control: p.control,
             raised: p.raised,
@@ -619,6 +625,8 @@ pub(crate) struct Palette {
     pub(crate) sidebar: Color,
     /// The recess behind a viewer's content: one step darker than the content.
     pub(crate) recess: Color,
+    /// The tab strip: a third tone, off both the content and the sidebar.
+    pub(crate) strip: Color,
     /// Group cards on a page.
     pub(crate) card: Color,
     /// Buttons, fields and dropdowns sitting on a card.
@@ -683,6 +691,7 @@ impl Palette {
             Self {
                 content: hex(0x1a1a1d),
                 recess: hex(0x111113),
+                strip: hex(0x111113),
                 sidebar: hex(0x242428),
                 card: hex(0x2a2a2e),
                 control: hex(0x36363a),
@@ -707,10 +716,11 @@ impl Palette {
     }
 
     /// The opaque layers a control or text can sit on.
-    fn layers(&self) -> [Color; 5] {
+    fn layers(&self) -> [Color; 6] {
         [
             self.content,
             self.sidebar,
+            self.strip,
             self.card,
             self.control,
             self.popup,
@@ -755,6 +765,7 @@ impl Palette {
         Self {
             content: hex(0x222226),
             recess: hex(0x18181b),
+            strip: hex(0x18181b),
             sidebar: hex(0x2e2e32),
             card: hex(0x343438),
             control: hex(0x424246),
@@ -785,6 +796,7 @@ impl Palette {
             content: hex(0xfafafb),
             sidebar: hex(0xebebed),
             recess: hex(0xebebed),
+            strip: hex(0xdcdce0),
             card: hex(0xffffff),
             control: hex(0xf1f1f3),
             raised: hex(0xffffff),

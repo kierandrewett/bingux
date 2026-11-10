@@ -575,7 +575,11 @@ impl Dim {
     /// ([`crate::access::grow`]), so 200 % text is never clipped by a row,
     /// a control or a menu item of the designed height (WCAG 1.4.4).
     fn with_text(self, px: f32) -> f32 {
-        if self.holds_text() { crate::access::grow(px) } else { px }
+        if self.holds_text() {
+            crate::access::grow(px)
+        } else {
+            px
+        }
     }
 
     /// Whether this size is the height of a box that holds one line of text.
@@ -880,6 +884,11 @@ pub enum Paint {
     /// The recess behind a viewer's content (an image, a PDF page): one step
     /// darker than [`Paint::Bg`], so the picture stands out of it.
     Recess,
+    /// The tab strip: the band of document tabs above the toolbar, outside the
+    /// browsing frame. Neither [`Paint::Bg`] (the content) nor
+    /// [`Paint::Sidebar`] (the chrome): the tabs float on it as tiles, and no
+    /// tab joins the toolbar (`design/boundaries.md`).
+    Strip,
     /// Group cards.
     Card,
     /// Buttons, fields, dropdowns and segmented tracks.
@@ -1033,6 +1042,7 @@ impl Paint {
             Paint::Frosted if tokens.reduce_transparency => tokens.bg,
             Paint::Frosted => tokens.bg.with_af32(0.82),
             Paint::Sidebar => tokens.sidebar,
+            Paint::Strip => tokens.strip,
             Paint::Recess => tokens.recess,
             Paint::Card => tokens.card,
             Paint::Control => tokens.control,

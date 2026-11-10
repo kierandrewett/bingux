@@ -144,8 +144,9 @@ const DRAG_REACH: Dim = Dim::Header;
 const HELD_LAYER: i16 = crate::layers::TAB_HELD;
 
 /// What the strip stands on and what the fades at its edges dissolve into: the
-/// header bar's own fill, which is also the page's.
-pub(crate) const BAR: Paint = Paint::Surface;
+/// strip's own tone, off both the page and the toolbar, because the tabs are
+/// outside the browsing frame (`design/boundaries.md`).
+pub(crate) const BAR: Paint = Paint::Strip;
 
 /// The marker of where a dragged-in tab would land is above all of them.
 const MARKER_LAYER: i16 = HELD_LAYER + 1;
@@ -1970,13 +1971,14 @@ impl Component for Tab {
         };
         let lit = self.selected || glow > 0.5 || matches!(fill, Wash::Pressed | Wash::Drop);
 
-        // The selected tab's fill is the selection layer over the bar, as one opaque
-        // colour (`surface`): the tab in the hand of a drag slides over its neighbours'
-        // titles and must hide them, which a translucent layer would not.
+        // The selected tab is a raised tile, as one opaque colour: the tab in the
+        // hand of a drag slides over its neighbours' titles and must hide them,
+        // which a translucent layer would not. Tabs float: no tab joins the
+        // toolbar under the strip.
         let pill = match fill {
             Wash::None => None,
             Wash::Drop => Some((bg(Paint::AccentSoft), 1.0)),
-            Wash::Selected => Some((surface(BAR, false, false, true), 1.0)),
+            Wash::Selected => Some((bg(Paint::Raised), 1.0)),
             Wash::Pressed => Some((bg(Paint::Pressed), 1.0)),
             Wash::Hover(strength) => Some((bg(Paint::Hover), strength)),
         };
@@ -2478,7 +2480,7 @@ mod tests {
             let lit = [
                 composite(Paint::Hover.color(&tokens), bar),
                 composite(Paint::Pressed.color(&tokens), bar),
-                composite(Paint::Selection.color(&tokens), bar),
+                Paint::Raised.color(&tokens),
                 composite(Paint::AccentSoft.color(&tokens), bar),
             ];
             assert!(
@@ -2501,7 +2503,7 @@ mod tests {
         for scheme in [Scheme::PreferDark, Scheme::PreferLight] {
             let tokens = Tokens::new("blue", scheme, false);
             let bar = BAR.color(&tokens);
-            let selected = composite(Paint::Selection.color(&tokens), bar);
+            let selected = Paint::Raised.color(&tokens);
             assert_ne!(
                 selected, bar,
                 "{scheme:?}: a selected tab is visible on the bar"
