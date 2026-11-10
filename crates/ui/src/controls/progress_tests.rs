@@ -476,7 +476,7 @@ fn keeps_turning(frames: &[Vec<u8>], what: &str) {
 
 #[test]
 fn the_spinner_turns_for_longer_than_a_turn() {
-    // 800 ms a turn: sixteen steps are more than three turns.
+    // 1000 ms a turn: sixteen steps of 170 ms are more than two turns.
     keeps_turning(&spinner_frames(false, 16), "the spinner");
 }
 
@@ -564,7 +564,80 @@ fn ambient_phases(reduced: bool) -> Vec<f32> {
 #[test]
 fn a_decoration_loops_and_stands_still_under_reduced_motion() {
     let moving = ambient_phases(false);
-    assert!(moving.iter().any(|&p| p > 0.2), "an ambient cycle runs: {moving:?}");
+    assert!(
+        moving.iter().any(|&p| p > 0.2),
+        "an ambient cycle runs: {moving:?}"
+    );
     let still = ambient_phases(true);
-    assert!(still.iter().all(|&p| p == 0.0), "under reduced motion it stays at 0: {still:?}");
+    assert!(
+        still.iter().all(|&p| p == 0.0),
+        "under reduced motion it stays at 0: {still:?}"
+    );
+}
+
+/// The alpha the spinner draws at `degrees` clockwise from the top, on the
+/// middle of its ring, when it is turned `turn` degrees.
+fn comet_alpha(turn: f32, degrees: f32) -> f32 {
+    const BOX: i32 = 120;
+    let stroke = BOX as f32 / 8.0;
+    let mut surface = raster_n32_premul((BOX, BOX)).expect("a surface");
+    surface.canvas().clear(Color::TRANSPARENT);
+    super::progress::draw_spinner(
+        surface.canvas(),
+        (BOX as f32, BOX as f32),
+        Color::from_rgb(255, 255, 255),
+        stroke,
+        turn,
+    );
+    let info = surface.canvas().image_info();
+    let row = info.min_row_bytes();
+    let mut bytes = vec![0u8; info.compute_byte_size(row)];
+    assert!(surface.canvas().read_pixels(&info, &mut bytes, row, (0, 0)));
+    let radius = (BOX as f32 - stroke) / 2.0;
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    let (x, y) = (
+        BOX as f32 / 2.0 + radius * sin,
+        BOX as f32 / 2.0 - radius * cos,
+    );
+    // N32 is blue, green, red, alpha.
+    f32::from(bytes[y.round() as usize * row + x.round() as usize * 4 + 3]) / 255.0
+}
+
+#[test]
+fn the_spinner_is_a_faint_ring_under_a_comet_that_fades_out_behind_its_head() {
+    // A conic gradient, clear for the first 40 % of the turn (144 degrees from
+    // the top) and rising to the full ink at 360, over a ring at 25 % ink.
+    let ring = comet_alpha(0.0, 72.0);
+    assert!(
+        (ring - 0.25).abs() < 0.05,
+        "where the comet is clear only the 25 % ring shows: {ring}"
+    );
+    let middle = comet_alpha(0.0, 252.0);
+    assert!(
+        (0.55..0.75).contains(&middle),
+        "half way up the ramp the ring is the comet's 50 % over the 25 % ring (about 0.62): {middle}"
+    );
+    let head = comet_alpha(0.0, 357.0);
+    assert!(
+        head > 0.93,
+        "just behind the head the comet is at full ink: {head}"
+    );
+    // The head is a bead as wide as the ring: it reaches half a stroke (about
+    // 8 degrees on this ring) past the end of the stroke, and no further.
+    let bead = comet_alpha(0.0, 3.0);
+    assert!(
+        bead > 0.93,
+        "the round head covers the ring just past the end: {bead}"
+    );
+    let past = comet_alpha(0.0, 15.0);
+    assert!(
+        (past - 0.25).abs() < 0.05,
+        "past the bead it is clear again: {past}"
+    );
+    // Turned a quarter, the head is at 3 o'clock.
+    assert!(comet_alpha(90.0, 87.0) > 0.93, "the head follows the turn");
+    assert!(
+        comet_alpha(90.0, 105.0) < 0.4,
+        "and the ring beyond its bead is clear"
+    );
 }

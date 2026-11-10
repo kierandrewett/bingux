@@ -21,7 +21,7 @@ const SEGMENT: f32 = 30.0;
 /// How faint the breathing fill gets, as an opacity.
 const BREATH_LOW: f32 = 0.3;
 /// One turn of a spinner, in milliseconds, and under reduced motion.
-const SPIN_MS: u64 = 800;
+const SPIN_MS: u64 = 1000;
 const SPIN_SLOW_MS: u64 = 2400;
 
 /// A 6 px progress bar. Determinate bars fill with the accent colour. An
@@ -224,8 +224,10 @@ impl SpinnerSize {
 }
 
 /// An indeterminate circular spinner, with an optional caption below it.
-/// A faint full ring sits under a turning arc: only the top half of the
-/// accent ring is drawn, so the arc reads as a spinning segment.
+/// A faint ring (the ink at 25 %) sits under a comet: a conic gradient that
+/// is clear for the first 40 % of the turn and rises to the full ink at its
+/// head, so the tail fades out behind the head as the ring turns clockwise.
+/// The ring is `stroke` thick, 12.5 % of the diameter at every size.
 #[derive(PartialEq)]
 pub struct Spinner {
     size: SpinnerSize,
@@ -247,7 +249,7 @@ impl Spinner {
         self
     }
 
-    /// Ink of the turning arc; the accent by default.
+    /// Ink of the ring and the comet; the accent by default.
     pub fn ink(mut self, ink: Paint) -> Self {
         self.ink = ink;
         self
@@ -258,34 +260,23 @@ impl Component for Spinner {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let px = self.size.px();
-        let stroke = self.size.stroke();
-        let ink = self.ink;
+        let stroke = self.size.stroke().px();
+        let ink = self.ink.color(&tokens);
         // The same loop clock as an indeterminate bar's. Under reduced motion
-        // the ring turns slowly instead of standing still.
+        // the ring turns slowly instead of standing still: progress is the one
+        // motion that reduced motion slows and does not stop (docs/bingux-ui.md,
+        // rule MO-10), because a spinner that stood still would look hung.
         let phase = use_cycle(if tokens.reduced_motion {
             SPIN_SLOW_MS
         } else {
             SPIN_MS
         });
-        // The angle is a prop, so each tick re-renders the arc and repaints it
-        // with the new rotation.
-        let arc = SpinnerArc {
-            px,
-            stroke: stroke.px(),
-            ink,
-            angle: phase * 360.0,
-        };
-        let ring = rect()
-            .width(Size::px(px))
-            .height(Size::px(px))
-            .child(rect().width(Size::px(px)).height(Size::px(px)).tw(
-                &tokens,
-                &[
-                    rounded(Radius::Pill),
-                    border(Line::Stroke(stroke, Paint::Track)),
-                ],
-            ))
-            .child(arc);
+        // The angle is captured by the paint function, so each tick of the
+        // clock re-renders the box and paints the ring at its new turn.
+        let ring = painted(
+            rect().width(Size::px(px)).height(Size::px(px)),
+            paint_spinner(ink, stroke, phase * 360.0),
+        );
         rect()
             .component("Spinner")
             .a11y_role(AccessibilityRole::ProgressIndicator)
@@ -299,41 +290,84 @@ impl Component for Spinner {
     }
 }
 
-/// The rotating half-ring. Freya clips in unrotated space, so the arc is
-/// drawn as a stroked SVG path (the top half of the ring) and the rect that
-/// holds it is rotated. Taking `angle` as a prop repaints it each tick.
-#[derive(PartialEq)]
-struct SpinnerArc {
-    px: f32,
+/// How much of the turn the comet's tail is clear for, from the start of the
+/// conic gradient: the comet then rises over the other 60 %.
+const COMET_CLEAR: f32 = 0.4;
+/// The ring's share of the ink.
+const TRACK_ALPHA: f32 = 0.25;
+
+/// The spinner's paint function, for [`painted`].
+fn paint_spinner(
+    ink: Color,
     stroke: f32,
-    ink: Paint,
     angle: f32,
+) -> impl FnMut(&mut FillRenderContext) + 'static {
+    move |context| {
+        let (width, height) = (context.size.width, context.size.height);
+        draw_spinner(context.canvas, (width, height), ink, stroke, angle);
+    }
 }
 
-impl Component for SpinnerArc {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let px = self.px;
-        let centre = px / 2.0;
-        let radius = centre - self.stroke / 2.0;
-        let colour = self.ink.color(&tokens);
-        let svg = format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{px}" height="{px}" viewBox="0 0 {px} {px}"><path d="M{l} {centre}A{radius} {radius} 0 0 1 {r} {centre}" fill="none" stroke="#{hex}" stroke-opacity="{alpha}" stroke-width="{stroke}"/></svg>"##,
-            l = centre - radius,
-            r = centre + radius,
-            hex = format!("{:02x}{:02x}{:02x}", colour.r(), colour.g(), colour.b()),
-            alpha = f32::from(colour.a()) / 255.0,
-            stroke = self.stroke,
-        );
-        rect()
-            .width(Size::px(px))
-            .height(Size::px(px))
-            .rotate(self.angle)
-            .position(Position::new_absolute().top(0.0).left(0.0))
-            .child(
-                SvgViewer::new((svg.clone(), Bytes::from(svg)))
-                    .width(Size::px(px))
-                    .height(Size::px(px)),
-            )
-    }
+/// Draws the spinner into a `size` box at the canvas origin: the track ring,
+/// then the comet turned `angle` degrees clockwise from the top. Skia's sweep
+/// gradient starts at 3 o'clock and a CSS conic gradient at 12, so the canvas
+/// is turned a quarter back.
+pub(super) fn draw_spinner(
+    canvas: &freya::engine::prelude::Canvas,
+    size: (f32, f32),
+    ink: Color,
+    stroke: f32,
+    angle: f32,
+) {
+    use freya::engine::prelude::{
+        Colors, Gradient, Interpolation, Paint as Pen, PaintStyle, Point as SkPoint, SkColor4f,
+        TileMode, shaders,
+    };
+    let centre = SkPoint::new(size.0 / 2.0, size.1 / 2.0);
+    let radius = (size.0.min(size.1) - stroke) / 2.0;
+    let mut pen = Pen::default();
+    pen.set_anti_alias(true);
+    pen.set_style(PaintStyle::Stroke);
+    pen.set_stroke_width(stroke);
+    let faint = colour_from_argb(
+        (f32::from(ink.a()) * TRACK_ALPHA).round() as u8,
+        ink.r(),
+        ink.g(),
+        ink.b(),
+    );
+    pen.set_color(faint);
+    canvas.draw_circle(centre, radius, &pen);
+
+    // Clear in the ink's own colour, so the ramp does not pass through grey.
+    let clear = colour_from_argb(0, ink.r(), ink.g(), ink.b());
+    let colours = [SkColor4f::from(clear), SkColor4f::from(ink)];
+    let stops = [COMET_CLEAR, 1.0];
+    let gradient = Gradient::new(
+        Colors::new(&colours, Some(&stops), TileMode::Clamp, None),
+        Interpolation::default(),
+    );
+    let Some(comet) = shaders::sweep_gradient(centre, (0.0, 360.0), &gradient, None) else {
+        return;
+    };
+    let mut pen = Pen::default();
+    pen.set_anti_alias(true);
+    pen.set_style(PaintStyle::Stroke);
+    pen.set_stroke_width(stroke);
+    pen.set_shader(comet);
+    canvas.save();
+    canvas.rotate(angle - 90.0, Some(centre));
+    canvas.draw_circle(centre, radius, &pen);
+    // The comet's brightest end is round: a full-ink dot as wide as the ring,
+    // centred on the end of the stroke (the sweep's start is 3 o'clock in the
+    // turned canvas), so the head reads as a bead and not a cut edge.
+    let mut head = Pen::default();
+    head.set_anti_alias(true);
+    head.set_style(PaintStyle::Fill);
+    head.set_color(ink);
+    canvas.draw_circle(
+        SkPoint::new(centre.x + radius, centre.y),
+        stroke / 2.0,
+        &head,
+    );
+    canvas.restore();
 }
