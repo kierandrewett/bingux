@@ -22,6 +22,8 @@
 //! [`WindowHost`]: crate::window::WindowHost
 
 #[cfg(all(test, feature = "testing"))]
+mod autofocus_tests;
+#[cfg(all(test, feature = "testing"))]
 mod modality_tests;
 pub mod owner;
 #[cfg(all(test, feature = "testing"))]
@@ -576,6 +578,20 @@ pub fn trap_inline(child: impl Into<Element>) -> Trap {
 #[derive(Clone)]
 pub(crate) struct ScopeClosing(pub(crate) State<bool>);
 
+/// Whether a control inside a trap asked for the first focus on open (an
+/// `autofocus` field). Provided by [`Trap`]; the trap's open effect then leaves
+/// focus where that control put it.
+#[derive(Clone)]
+pub(crate) struct InitialFocusClaim(pub(crate) Rc<std::cell::Cell<bool>>);
+
+/// Records, from a control being rendered, that it claims the first focus of
+/// the enclosing trap. Outside a trap it does nothing.
+pub(crate) fn claim_initial_focus() {
+    if let Some(claim) = try_consume_context::<InitialFocusClaim>() {
+        claim.0.set(true);
+    }
+}
+
 /// The closing flag of the popup or dialog above the caller, if any. Read it
 /// while rendering. A control inside a closing scope takes no focus: the
 /// scope's exit hands focus back to the opener, and the control must not pull
@@ -649,6 +665,9 @@ impl Component for Trap {
         });
         // Rings behind the scope hide while it is open.
         use_provide_context(|| InsideScope);
+        // Set by an `autofocus` control rendered below this scope, before the
+        // open effect runs.
+        let claim = use_provide_context(|| InitialFocusClaim(Rc::new(std::cell::Cell::new(false))));
         let publish_core = core.clone();
         use_side_effect(move || publish_core.publish_depth());
 
@@ -682,10 +701,16 @@ impl Component for Trap {
         // for the first effect.
         let effect_core = core.clone();
         let focus_start = self.focus_start;
+        let claimed = claim.clone();
         use_side_effect(move || {
             let mut opened = opened;
             if !*opened.peek() && focus_start {
                 opened.set(true);
+                // An `autofocus` control inside took the first focus: it keeps
+                // it, and the trap must not move it to the start.
+                if claimed.0.get() {
+                    return;
+                }
                 if *Platform::get().current_window().navigation_mode.peek()
                     == NavigationMode::Keyboard
                 {

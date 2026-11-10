@@ -465,6 +465,9 @@ fn edit_item(label: &str, enabled: bool, on_press: impl FnMut(()) + 'static) -> 
 impl Component for TextField {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        if self.autofocus {
+            crate::focus::claim_initial_focus();
+        }
         // A form line that is too narrow for the field's width asks it to
         // fill what it has instead.
         let fills = self.fill || crate::controls::adaptive::use_line_fill();
