@@ -14,11 +14,11 @@ use crate::convert;
 use crate::model::Model;
 use crate::views::shown;
 
+/// The month picker and the calendars. The screen holds it as its sidebar on
+/// a desktop; a phone opens it in a popup.
 #[derive(PartialEq)]
 pub struct Sidebar {
     pub model: Model,
-    /// In a popup, as on a phone: as wide as it is given, with no fill.
-    pub embedded: bool,
 }
 
 impl Component for Sidebar {
@@ -67,21 +67,8 @@ impl Component for Sidebar {
             .into_element()
         });
 
-        let frame = if self.embedded {
-            rect().tw(&tokens, &[w_full(), flex_col(), gap(S3), p(S3)])
-        } else {
-            rect().tw(
-                &tokens,
-                &[
-                    w(Dim::Sidebar),
-                    h_full(),
-                    flex_col(),
-                    gap(S3),
-                    p(S3),
-                    bg(Paint::Sidebar),
-                ],
-            )
-        };
+        // The screen sizes and paints the sidebar pane, or the popup holds it.
+        let frame = rect().tw(&tokens, &[w_full(), flex_col(), gap(S3), p(S3)]);
         frame
             .component("Sidebar")
             .child(

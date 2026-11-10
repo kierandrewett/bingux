@@ -16,11 +16,9 @@ use super::model::{self, Period, Request, Snapshot};
 use crate::icons::Icon;
 use crate::pages::loading::veiled;
 use crate::routes;
-use crate::ui::{
-    Group, Row, Status, Tone, form_field, page_column, property_row, row, segmented, status,
-};
+use crate::ui::{Group, Row, Status, Tone, form_field, page_column, property_row, row, status};
 use bingux_data_usage::Source;
-use bingux_ui::prelude::use_router;
+use bingux_ui::prelude::{use_page_switcher, use_router, view, view_switcher};
 use bingux_ui::task::use_polled_resource;
 
 /// How often a visible page reads the totals again.
@@ -204,6 +202,16 @@ impl Component for UsagePage {
         let resource =
             use_polled_resource(request.clone(), model::load, POLL, Snapshot::draws_same);
 
+        // The period decides which traffic the whole page counts, so it is the
+        // page header's switcher; the group below says which dates it covers.
+        use_page_switcher(view_switcher(
+            Period::ALL
+                .iter()
+                .map(|period| view(period.key(), period.label())),
+            period.read().key(),
+            move |key: String| period.set(Period::from_key(&key)),
+        ));
+
         if let Some(failure) = resource.with(|state| state.error().map(str::to_string)) {
             return Element::from(
                 page_column().child(
@@ -225,23 +233,14 @@ impl Component for UsagePage {
         }
 
         // Period.
-        let options = Period::ALL
-            .iter()
-            .map(|period| (period.key().to_string(), period.label().to_string()))
-            .collect();
         let custom_span = request
             .custom
             .map(|(first, last)| model::custom_span(snapshot.zone, first, last));
         let shown_span = current
             .span(&snapshot.periods, custom_span)
             .map(|(first, last)| format::range(snapshot.zone, first, last));
-        let mut selector = Group::titled(&tr!("data-usage-period")).row(
-            row(&tr!("data-usage-show"))
-                .maybe_subtitle(shown_span)
-                .trailing(segmented(options, current.key(), move |key: String| {
-                    period.set(Period::from_key(&key))
-                })),
-        );
+        let mut selector = Group::titled(&tr!("data-usage-period"))
+            .row(row(&tr!("data-usage-show")).value(shown_span.unwrap_or_default()));
         if current == Period::Custom {
             let range_error = match (
                 format::parse_date(&from.read()),

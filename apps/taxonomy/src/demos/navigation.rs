@@ -179,16 +179,95 @@ pub const HEADER_BAR: &[Spec] = &[
             .trailing(WindowControls)
             .into_element()
     }),
-    Spec::forced("Title slot", || {
-        HeaderBar::new("")
-            .title_slot(segmented(
-                vec![("a".into(), "Day".into()), ("b".into(), "Week".into())],
+    Spec::forced("View switcher", || {
+        HeaderBar::new("Calendar")
+            .switcher(view_switcher(
+                vec![view("a", "Day"), view("b", "Week")],
                 "a",
                 |_| {},
             ))
+            .trailing(WindowControls)
+            .into_element()
+    }),
+    Spec::forced("Title slot", || {
+        HeaderBar::new("")
+            .title_slot(path_label("~/Documents/Notes"))
             .into_element()
     }),
 ];
+
+/// A small window built by the shell, so the three tiers and the slots show.
+fn screen_specimen(footer: bool, immersive: bool) -> Element {
+    let tokens = use_tokens();
+    let header = HeaderBar::new("Window")
+        .switcher(view_switcher(
+            vec![
+                view("a", "Songs").icon(Icon::FolderMusic),
+                view("b", "Albums").icon(Icon::ViewGrid),
+            ],
+            "a",
+            |_| {},
+        ))
+        .trailing(icon_button(Icon::OpenMenu, |_| {}).tooltip("Menu"))
+        .trailing(WindowControls);
+    let label = |text: &str| {
+        rect()
+            .tw(&tokens, &[w_full(), h_full(), center()])
+            .child(typography::CAPTION.in_ink(Ink::Muted).label(&tokens, text))
+    };
+    let mut screen = Screen::new(header)
+        .sidebar(label("Sidebar: chrome"))
+        .content(label("Content"))
+        .immersive(immersive);
+    if footer {
+        screen = screen.footer(
+            rect()
+                .tw(&tokens, &[w_full(), h(Dim::Header), center()])
+                .child(
+                    typography::CAPTION
+                        .in_ink(Ink::Muted)
+                        .label(&tokens, "Footer: full width"),
+                ),
+        );
+    }
+    rect()
+        .width(Size::fill())
+        .height(Size::px(320.0))
+        .child(screen)
+        .into()
+}
+
+pub const SCREEN: &[Spec] = &[
+    Spec::forced("Header, sidebar and content", || {
+        screen_specimen(false, false)
+    }),
+    Spec::forced("With a footer under the sidebar", || {
+        screen_specimen(true, false)
+    }),
+    Spec::forced("Immersive", || screen_specimen(false, true)),
+];
+
+pub const CAROUSEL: &[Spec] = &[Spec::live("Pages and their dots", || {
+    let tokens = use_tokens();
+    let mut at = use_state(|| 0_usize);
+    let page = |text: &str| -> Element {
+        rect()
+            .tw(&tokens, &[w_full(), h_full(), center(), bg(Paint::Card)])
+            .child(typography::HEADING.label(&tokens, text))
+            .into()
+    };
+    let pages = vec![page("Sheffield"), page("Leeds"), page("York")];
+    let names = vec!["Sheffield".into(), "Leeds".into(), "York".into()];
+    rect()
+        .width(Size::fill())
+        .height(Size::px(260.0))
+        .child(
+            Screen::new(HeaderBar::new("Places"))
+                .content(carousel(pages, at(), move |page: usize| at.set(page)).label("Places"))
+                .pager(page_dots(names, at(), move |page: usize| at.set(page))),
+        )
+        .into()
+})];
 
 const TOPICS: [(&str, &str); 4] = [
     ("Wi-Fi", "Connect to a wireless network"),

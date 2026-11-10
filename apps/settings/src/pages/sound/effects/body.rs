@@ -1,10 +1,11 @@
-//! The body of the effects popup: a top bar (the master switch, the Output and
-//! Input tabs and the presets), and under it the stack beside the page of the
-//! effect that is selected.
+//! The body of the effects popup: a toolbar (the master switch, the Output and
+//! Input switcher and the presets), and under it the stack beside the page of
+//! the effect that is selected.
 
 use bingux_audio_effects::Direction;
 use bingux_ui::prelude::{
-    PopupAction, PopupActions, WindowLike, master_detail, segmented, use_popup_actions,
+    HeaderBar, PopupAction, PopupActions, WindowLike, master_detail, use_popup_actions,
+    view_switcher,
 };
 use bingux_ui::style::*;
 use freya::prelude::*;
@@ -33,7 +34,9 @@ impl Component for EffectsBody {
         let direction = data.direction;
         let enabled = data.saved.of(direction).enabled;
 
-        let tabs = segmented(
+        // Output and Input decide which chain the popup shows, so they are the
+        // toolbar's switcher, above the hairline, not a control of the chain.
+        let views = view_switcher(
             vec![
                 ("output".to_string(), tr!("sound-effects-tab-output")),
                 ("input".to_string(), tr!("sound-effects-tab-input")),
@@ -49,30 +52,18 @@ impl Component for EffectsBody {
                     fx.refresh();
                 }
             },
-        )
-        .tabs();
+        );
 
-        let bar = rect()
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    flex_row(),
-                    items(Align::Center),
-                    justify(Align::Between),
-                    gap(S3),
-                    px(S4),
-                    py(S3),
-                ],
-            )
-            .child(
+        let bar = HeaderBar::new("")
+            .draggable(false)
+            .leading(
                 hstack(S2)
                     .tw_layout(&[items(Align::Center)])
                     .child(switch(enabled, move |on: bool| fx.set_enabled(on)))
                     .maybe_child((!is_compact()).then(|| caption(&tr!("sound-effects")))),
             )
-            .child(tabs)
-            .child(presets::menu(fx, &data));
+            .switcher(views)
+            .trailing(presets::menu(fx, &data));
 
         let selected = fx.selected_id(&data);
         let master = ScrollView::new()

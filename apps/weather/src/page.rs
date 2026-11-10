@@ -12,7 +12,8 @@ use bingux_weather::{Failure, Loaded, Place, Units};
 use freya::prelude::*;
 
 use crate::cards::{Details, Trends, section};
-use crate::hero::Hero;
+use crate::format::light_of;
+use crate::hero::{Backdrop, Hero};
 use crate::hourly::HourStrip;
 use crate::week::Week;
 use crate::words;
@@ -59,6 +60,7 @@ fn open_data_source() {
 impl Component for Page {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        let inset = use_chrome_inset();
         match &self.load {
             Load::Loading | Load::Locating => {
                 let words = if matches!(self.load, Load::Locating) {
@@ -73,6 +75,7 @@ impl Component for Page {
                         Dim::Page,
                         rect()
                             .tw(&tokens, &[w_full(), p(S4)])
+                            .child(rect().height(Size::px(inset)))
                             .child(status(Status::Loading(words.into()))),
                     ))
                     .into_element();
@@ -102,7 +105,11 @@ impl Component for Page {
         let now = unix_now();
         let local = forecast.local(now);
 
-        let mut column = rect().tw(&tokens, &[w_full(), flex_col(), gap(S3), p(S4)]);
+        // The page starts its words below the glass header; its sky runs
+        // under it.
+        let mut column = rect()
+            .tw(&tokens, &[w_full(), flex_col(), gap(S3), p(S4)])
+            .child(rect().height(Size::px(inset)));
         if let Some(failure) = loaded.stale {
             let retry = self.retry.clone();
             column = column.child(
@@ -190,9 +197,13 @@ impl Component for Page {
             ),
         );
 
+        let code = forecast.current.code.unwrap_or(3);
+        let sky = bingux_weather::codes::Sky::of(code);
+        let light = light_of(forecast, local, forecast.current.is_day);
         rect()
             .component("Page")
             .tw(&tokens, &[w_full(), h_full()])
+            .child(Backdrop { sky, light })
             .child(
                 ScrollView::new()
                     .key(self.place.key())

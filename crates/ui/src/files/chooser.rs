@@ -50,7 +50,7 @@ use crate::layout::divider;
 use crate::motion::{Dwell, use_dwell};
 use crate::nav::{HistoryItem, NavModel, Outcome};
 use crate::shell::{
-    CANCEL_ID, HeaderBar, MenuItem, Overlays, ResponseKind, WindowControls, dialog,
+    CANCEL_ID, HeaderBar, MenuItem, Overlays, ResponseKind, Screen, WindowControls, dialog,
     history_menu_with, menu_button, menu_item, menu_separator, use_overlays,
 };
 use crate::style::*;
@@ -1126,11 +1126,23 @@ impl Component for ChooserBody {
             Host::Browser(browse) => Some(browse.clone()),
             Host::Dialog(_) => None,
         };
-        let toolbar = match &browse {
-            Some(browse) => browser_header(&tokens, compact, parts, &browse.menu, stopping),
-            None => dialog_toolbar(&tokens, compact, parts),
-        };
         let tab_bar = browse.as_ref().and_then(|browse| browse.tab_bar.clone());
+        // A browser window gives its toolbar to the screen as its header; a
+        // dialog lays its own toolbar out.
+        let (toolbar, browser_bar): (Element, Option<HeaderBar>) = match &browse {
+            Some(browse) => (
+                rect().into(),
+                Some(browser_header(
+                    &tokens,
+                    compact,
+                    parts,
+                    &browse.menu,
+                    stopping,
+                    tab_bar.is_none(),
+                )),
+            ),
+            None => (dialog_toolbar(&tokens, compact, parts), None),
+        };
 
         let sidebar = (!compact).then(|| {
             let places = places.value().cloned().unwrap_or_default();
@@ -1183,50 +1195,28 @@ impl Component for ChooserBody {
                 }
             });
 
-        if browse.is_some() {
-            // A window: the places run the window's full height on the
-            // sidebar surface, the first place on the header bar's row (no
-            // empty band above it), and the content pane beside them has
-            // the header bar, the tab bar and the files, as in Settings.
-            let pane = rect()
-                .tw(
-                    &tokens,
-                    &[
-                        flex_col(),
-                        grow_children(),
-                        w_flex(),
-                        h_full(),
-                        bg(Paint::Bg),
-                    ],
-                )
-                .child(toolbar)
-                .maybe_child(tab_bar.map(|strip| {
-                    rect()
-                        .component("FileTabBar")
-                        .tw(&tokens, &[flex_col(), w_full()])
-                        .child(rect().tw(&tokens, &[w_full(), px(S2)]).child(strip))
-                        .child(divider(&tokens))
-                }))
-                .child(files);
-            let root = root
-                .tw(
-                    &tokens,
-                    &[
-                        flex_row(),
-                        grow_children(),
-                        w_full(),
-                        h_full(),
-                        bg(if compact { Paint::Bg } else { Paint::Sidebar }),
-                    ],
-                )
-                .maybe_child(sidebar.map(|sidebar| {
-                    rect()
-                        .tw(&tokens, &[flex_row(), h_full(), w(Dim::PlacesColumn)])
-                        .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(sidebar))
-                        .child(rect().tw(&tokens, SPLIT_HAIRLINE))
-                }))
-                .child(pane);
-            return root.into_element();
+        if let Some(header) = browser_bar {
+            // A browser window is three tiers, which the screen paints: the
+            // file list and its status line are the content, the places and
+            // the toolbar are one chrome frame, and the tab strip above both
+            // is outside the browsing frame (`design/boundaries.md`).
+            let mut screen = Screen::new(header)
+                .sidebar_width(Dim::PlacesColumn)
+                .content(files);
+            if let Some(sidebar) = sidebar {
+                screen = screen.sidebar(sidebar);
+            }
+            if let Some(strip) = tab_bar {
+                screen = screen.strip(
+                    HeaderBar::new(String::new())
+                        .tab_slot(strip)
+                        .trailing(WindowControls),
+                );
+            }
+            return root
+                .tw(&tokens, &[w_full(), h_full()])
+                .child(screen)
+                .into_element();
         }
         root.tw(&tokens, &[flex_col(), grow_children(), w_full(), h_full()])
             .child(toolbar)
@@ -1938,6 +1928,10 @@ fn dialog_toolbar(tokens: &crate::theme::Tokens, compact: bool, parts: ToolbarPa
 /// | Desktop | Back, Forward | the address bar | Search · New folder (Empty Trash in the Trash) · the view switch and its menu · the main menu, the window buttons |
 /// | Phone | the places menu | the address bar | Search · the main menu (with the view's choices on top), the window buttons |
 ///
+/// The bar is the window's chrome, on [`Paint::Sidebar`] like the places
+/// beside it, so the two are one continuous colour. With a tab strip above it
+/// (`controls` false) the window's buttons sit in the strip's row instead.
+///
 /// Up is Alt+Up and the address bar's crumbs, Reload is F5 and the view
 /// menu, the preview pane is Alt+P and the view menu: a header with every
 /// button at one weight had nothing to find first. While a slow read is
@@ -1948,7 +1942,8 @@ fn browser_header(
     parts: ToolbarParts,
     menu: &[MenuItem],
     stopping: bool,
-) -> Element {
+    controls: bool,
+) -> HeaderBar {
     // A gap between groups of buttons, twice the gap inside a group.
     let gap_between = || Element::from(rect().tw(tokens, &[px(S1)]));
     let address = rect()
@@ -1965,20 +1960,21 @@ fn browser_header(
             items.push(menu_separator());
             items.extend(menu.iter().cloned());
         }
-        return HeaderBar::new(String::new())
-            .fill(Paint::Bg)
+        let header = HeaderBar::new(String::new())
             .title_start(true)
             .leading(parts.places)
             .title_slot(address)
             .trailing(parts.search)
             .trailing(
                 menu_button(crate::tr!("ui-files-chooser-main-menu"), items).icon(Icon::OpenMenu),
-            )
-            .trailing(WindowControls)
-            .into();
+            );
+        return if controls {
+            header.trailing(WindowControls)
+        } else {
+            header
+        };
     }
     let mut header = HeaderBar::new(String::new())
-        .fill(Paint::Bg)
         .title_start(true)
         .leading(parts.back)
         .leading(parts.forward);
@@ -2000,7 +1996,10 @@ fn browser_header(
                 .icon(Icon::OpenMenu),
         );
     }
-    header.trailing(WindowControls).into()
+    if controls {
+        header = header.trailing(WindowControls);
+    }
+    header
 }
 
 /// The sort and hidden-file choices of the view menu.

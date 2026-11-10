@@ -22,9 +22,11 @@ use crate::surface::{use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
 
 /// The shell's segmented control: a quiet `control` rail where only the
-/// selected segment is raised. `tabs` makes the same rail an app's tab bar:
-/// its segments are tabs, it never becomes a dropdown, and `scroll` lets a
-/// narrow container scroll it sideways rather than squeeze the segments.
+/// selected segment is raised. It picks a value (a row's setting, a mode of a
+/// tool) and turns into a dropdown on a phone. A control that switches what
+/// the content shows is a [`ViewSwitcher`](crate::shell::ViewSwitcher)
+/// instead. `scroll` lets a narrow container scroll the rail sideways rather
+/// than squeeze the segments.
 #[derive(PartialEq)]
 pub struct Segmented {
     options: Vec<(String, String)>,
@@ -60,8 +62,10 @@ impl Segmented {
     }
 
     /// Use the rail as a tab bar. Tabs switch views, so like a filled rail
-    /// they stay a rail on a phone.
-    pub fn tabs(mut self) -> Self {
+    /// they stay a rail on a phone. Crate-private: an app switches views with
+    /// [`view_switcher`](crate::shell::view_switcher), which only the chrome
+    /// takes (`design/boundaries.md`).
+    pub(crate) fn tabs(mut self) -> Self {
         self.tabs = true;
         self
     }

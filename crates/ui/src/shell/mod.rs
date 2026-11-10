@@ -1,10 +1,16 @@
-//! Window-level pieces: header bars, window controls, the navigation
-//! split view, status pages, banners, dialogs and toasts.
+//! Window-level pieces: the window shell ([`Screen`]), header bars, window
+//! controls, the navigation split view, status pages, banners, dialogs and
+//! toasts. [`boundary`] says which controls belong to the chrome.
 
 #[cfg(all(test, feature = "testing"))]
 mod app_menu_tests;
 pub mod back_button;
 pub mod banner;
+pub mod boundary;
+#[cfg(test)]
+mod boundary_scan_tests;
+#[cfg(all(test, feature = "testing"))]
+mod boundary_tests;
 pub mod dialog;
 pub mod form_dialog;
 #[cfg(all(test, feature = "testing"))]
@@ -28,6 +34,7 @@ mod page_motion_tests;
 pub(crate) mod panel;
 #[cfg(all(test, feature = "testing"))]
 mod rest_fill_tests;
+pub mod screen;
 #[cfg(all(test, feature = "testing"))]
 mod scroll_slide_tests;
 pub mod sections;
@@ -42,6 +49,7 @@ pub mod window;
 
 pub use back_button::{BackButton, ForwardButton, history_menu, history_menu_with};
 pub use banner::{Banner, BannerKind, banner};
+pub use boundary::{ChromeItem, ContentItem, Region, View, ViewSwitcher, view, view_switcher};
 pub use dialog::{
     CANCEL_ID, Dialog, DialogFrame, DialogIcon, DialogResponse, ResponseKind, dialog, framed_dialog,
 };
@@ -50,8 +58,11 @@ pub use menu::{
     MenuButton, MenuItem, app_menu_item, app_menu_items, menu_button, menu_item, menu_separator,
     submenu,
 };
-pub use navigation::{NavigationSplitView, PageAction, PageHead, Profile, use_page_busy};
+pub use navigation::{
+    NavigationSplitView, PageAction, PageHead, Profile, use_page_busy, use_page_switcher,
+};
 pub use overlays::{OverlayHost, Overlays, Toast, use_overlays};
 pub use panel::choice_sheet;
+pub use screen::{Pane, Screen, use_chrome_inset};
 pub use status_page::{StatusPage, status_page};
 pub use window::{HeaderBar, InertControls, WindowControls, drag_on_pointer_down, with_window};

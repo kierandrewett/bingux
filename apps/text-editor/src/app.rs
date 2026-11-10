@@ -600,9 +600,16 @@ impl Component for Content {
                 .edited(document.is_some_and(Document::is_unsaved))
             })
             .collect();
-        // A phone has no room for Open and Save beside the tabs and the
-        // window's buttons: they are in the main menu, and a document names
-        // itself in its tab at a readable width.
+        // The tabs are the strip above the toolbar, with the window's buttons:
+        // they name the documents the window holds. The toolbar under them is
+        // the chrome of the document on show. A phone has no room for Open and
+        // Save there: they are in the main menu.
+        let strip = HeaderBar::new("").trailing(WindowControls).tab_slot(
+            tabs.strip(strip_items, &tab_window, move |_: ()| {
+                actions.new_document()
+            })
+            .on_duplicate(move |id: u64| actions.duplicate(id)),
+        );
         let mut header = HeaderBar::new(title.clone());
         if compact {
             header = header.busy(saving);
@@ -613,21 +620,19 @@ impl Component for Content {
                         icon_button(Icon::DocumentOpen, move |_| actions.open_dialog())
                             .tooltip(&tip(commands, "file.open", "Open")),
                     )
-                    .trailing(
+                    .leading(
                         icon_button(Icon::DocumentSave, move |_| document.save())
                             .tooltip(&tip(commands, "file.save", "Save"))
                             .busy(saving),
                     );
         }
+        let find_handle = handle.clone();
         let header = header
-            .trailing(app_menu(Vec::new()))
-            .trailing(WindowControls)
-            .tab_slot(
-                tabs.strip(strip_items, &tab_window, move |_: ()| {
-                    actions.new_document()
-                })
-                .on_duplicate(move |id: u64| actions.duplicate(id)),
-            );
+            .trailing(
+                icon_button(Icon::Search, move |_| find.open_from(&find_handle, false))
+                    .tooltip(&tip(commands, "find.find", "Find")),
+            )
+            .trailing(app_menu(Vec::new()));
 
         // ---- Notices ---------------------------------------------------
         let mut notice_banners: Vec<Element> = Vec::new();
@@ -804,18 +809,24 @@ impl Component for Content {
                 )
         });
 
+        // The tabs are the strip, the toolbar is the header, the find bar sits
+        // on the text's top edge inside the content, and the status bar is
+        // the full-width footer.
+        let document_area = rect()
+            .tw(&tokens, &[w_full(), h_full(), flex_col()])
+            .children(notice_banners)
+            .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(body));
+        let mut screen = Screen::new(header)
+            .strip(strip)
+            .content(document_area)
+            .footer(status);
+        if let Some(bar) = bar {
+            screen = screen.content_bar(bar);
+        }
+
         tab_window
             .root(rect())
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    h_full(),
-                    flex_col(),
-                    grow_children(),
-                    bg(Paint::Bg),
-                ],
-            )
+            .tw(&tokens, &[w_full(), h_full()])
             .on_key_down(on_key_down)
             .on_sized(move |event: Event<SizedEventData>| {
                 files_over.set_area(event.visible_area);
@@ -827,11 +838,7 @@ impl Component for Content {
                     }
                 }
             })
-            .child(header)
-            .children(notice_banners)
-            .maybe_child(bar)
-            .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(body))
-            .child(status)
+            .child(screen)
             .maybe_child(drop_overlay)
             .into_element()
     }
@@ -1251,7 +1258,6 @@ fn status_bar(
                 items(Align::Center),
                 gap(S1),
                 px(S2),
-                bg(Paint::Surface),
             ],
         )
         .child(

@@ -18,7 +18,7 @@ use freya::prelude::*;
 
 use crate::calendars;
 use crate::editor::{self, Seed};
-use crate::header::Header;
+use crate::header::header_bar;
 use crate::model::{Clock, EventRef, Message, Model};
 use crate::sidebar::Sidebar;
 use crate::views::agenda::{AgendaView, SearchResults};
@@ -160,16 +160,7 @@ impl Component for Content {
         });
 
         let main = rect()
-            .tw(
-                &tokens,
-                &[
-                    w_flex(),
-                    h_full(),
-                    flex_col(),
-                    grow_children(),
-                    bg(Paint::Bg),
-                ],
-            )
+            .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
             .maybe_child(search_row)
             .maybe_child(hint.map(|hint| rect().tw(&tokens, &[w_full(), p(S2)]).child(hint)))
             .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(body));
@@ -184,22 +175,23 @@ impl Component for Content {
                 )
         });
 
+        let screen = Screen::new(header_bar(
+            model,
+            search_id,
+            window,
+            overlays,
+            tokens.clone(),
+        ))
+        .sidebar(Sidebar { model })
+        .content(main);
+
         rect()
             .component("Calendar")
             .a11y_id(root_id)
             .a11y_focusable(true)
             .a11y_auto_focus(true)
             .a11y_role(AccessibilityRole::Window)
-            .tw(
-                &tokens,
-                &[
-                    w_full(),
-                    h_full(),
-                    flex_col(),
-                    grow_children(),
-                    bg(Paint::Bg),
-                ],
-            )
+            .tw(&tokens, &[w_full(), h_full()])
             .on_key_down(shortcuts)
             .on_global_file_hover(move |_| dropping.set_if_modified(true))
             .on_global_file_hover_cancelled(move |_| dropping.set_if_modified(false))
@@ -209,16 +201,7 @@ impl Component for Content {
                     calendars::import_file(model, overlays, path);
                 }
             })
-            .child(Header { model, search_id })
-            .child(
-                rect()
-                    .tw(&tokens, &[w_full(), h_flex(), flex_row(), grow_children()])
-                    .maybe_child((!compact).then(|| Sidebar {
-                        model,
-                        embedded: false,
-                    }))
-                    .child(main),
-            )
+            .child(screen)
             .maybe_child(drop_cover)
     }
 }

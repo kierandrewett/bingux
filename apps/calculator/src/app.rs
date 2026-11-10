@@ -1,6 +1,8 @@
-//! The window: a header bar with the mode, the display and keys of that
-//! mode, and the history beside them (a screen of its own on a narrow window).
+//! The window: a header bar with the mode switcher, the display and keys of
+//! that mode, and the history beside them (a screen of its own on a narrow
+//! window).
 
+use std::rc::Rc;
 use std::time::Duration;
 
 use bingux_calc::store::Mode;
@@ -121,14 +123,16 @@ impl Component for Content {
         let history_page = *calc.history_page.read();
         let history_open = calc.with(|s| s.saved.settings.history_open);
 
-        let options: Vec<(String, String)> = Mode::ALL
-            .iter()
-            .map(|m| (mode_key(*m), mode_title(*m)))
-            .collect();
         let pick = calc.clone();
-        let switch = segmented(options, &mode_key(mode), move |key: String| {
-            switch_mode(&pick, mode_of(&key))
-        });
+        // The mode decides which calculator is on screen, so it is chrome: the
+        // header's switcher on a desktop, the bottom bar on a phone.
+        let modes = view_switcher(
+            Mode::ALL
+                .iter()
+                .map(|m| view(mode_key(*m), mode_title(*m)).icon(mode_icon(*m))),
+            &mode_key(mode),
+            move |key: String| switch_mode(&pick, mode_of(&key)),
+        );
 
         // A launch that names a mode (`--mode convert`) puts it here.
         let wanted = use_try_location().as_ref().and_then(mode_at);
@@ -162,82 +166,94 @@ impl Component for Content {
             })));
         });
 
-        let toggle = calc.clone();
+        // The history is the aside: a pane beside the keys on a desktop, a
+        // page pushed over them on a phone (Back, or using an entry, which
+        // clears `history_page`, returns to the keys).
+        let open_history: Rc<dyn Fn()> = {
+            let calc = calc.clone();
+            Rc::new(move || {
+                if is_compact() {
+                    let mut page = calc.history_page;
+                    let next = !*page.peek();
+                    page.set(next);
+                } else {
+                    calc.with(|s| s.saved.settings.history_open = !s.saved.settings.history_open);
+                    calc.changed();
+                }
+            })
+        };
         let showing_history = if compact { history_page } else { history_open };
         // The window's commands: the palette, the shortcuts sheet and the
         // main menu list them with their keys.
-        use_window_commands(window_commands(&calc, overlays, showing_history));
-        let history_button = icon_button(Icon::Clock, move |_: ()| toggle_history(&toggle))
-            .tooltip(&if showing_history {
+        use_window_commands(window_commands(
+            &calc,
+            overlays,
+            showing_history,
+            open_history.clone(),
+        ));
+        let history_button = {
+            let open_history = open_history.clone();
+            icon_button(Icon::Clock, move |_: ()| open_history()).tooltip(&if showing_history {
                 tr!("calculator-history-hide.tooltip")
             } else {
                 tr!("calculator-history-show.tooltip")
-            });
+            })
+        };
 
-        // The history button sits beside the menu on a desktop. A phone's
-        // header has no room for a third button there, so it goes first.
         let menu = app_menu(main_menu(&calc));
-        let header = HeaderBar::new(tr!("calculator-title")).title_slot(switch);
-        let header = if compact {
-            header.leading(history_button)
+        let header = HeaderBar::new(tr!("calculator-title")).switcher(modes);
+        let header = if compact && history_page {
+            let back = calc.clone();
+            HeaderBar::new(tr!("calculator-history-title")).leading(
+                icon_button(Icon::GoPrevious, move |_| {
+                    let mut page = back.history_page;
+                    page.set(false);
+                })
+                .tooltip(&tr!("calculator-history-hide.tooltip")),
+            )
         } else {
             header.trailing(history_button)
         };
         let header = header.trailing(menu).trailing(WindowControls);
 
         let key_calc = calc.clone();
-        let body = if compact && history_page {
-            rect()
-                .tw(&tokens, &[w_full(), h_flex()])
-                .child(HistoryPanel { calc: calc.clone() })
-                .into_element()
-        } else {
-            // The calculator takes the width the history leaves. A box that is
-            // full width would push the history out of the window.
-            let main = rect()
-                .width(Size::flex(1.0))
-                .height(Size::fill())
-                .child(calculator(&calc, mode, &tokens));
-            let mut row_el = rect()
-                .tw(&tokens, &[w_full(), h_flex(), flex_row(), grow_children()])
-                .child(main);
-            if !compact && history_open {
-                row_el = row_el.child(
-                    rect()
-                        .tw(&tokens, &[w(Dim::Sidebar), h_full(), bg(Paint::Sidebar)])
-                        .child(HistoryPanel { calc: calc.clone() }),
-                );
-            }
-            row_el.into_element()
-        };
+        let mut screen = Screen::new(header).content(calculator(&calc, mode, &tokens));
+        if (!compact && history_open) || (compact && history_page) {
+            screen = screen.aside(HistoryPanel { calc: calc.clone() });
+        }
+        if compact && history_page {
+            screen = screen.compact_pane(Pane::Aside);
+        }
 
         rect()
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
+            .tw(&tokens, &[w_full(), h_full()])
             .on_key_down(move |event: Event<KeyboardEventData>| {
                 if shortcut(&key_calc, overlays, &event) {
                     event.stop_propagation();
                 }
             })
-            .child(header)
-            .child(body)
+            .child(screen)
     }
 }
 
-/// Opens or closes the history: a setting on a desktop, a screen on a phone.
-fn toggle_history(calc: &Calc) {
-    if is_compact() {
-        let mut page = calc.history_page;
-        let next = !*page.peek();
-        page.set(next);
-    } else {
-        calc.with(|s| s.saved.settings.history_open = !s.saved.settings.history_open);
-        calc.changed();
+/// The icon of a mode, for a phone's bottom bar.
+fn mode_icon(mode: Mode) -> Icon {
+    match mode {
+        Mode::Basic => Icon::AccessoriesCalculator,
+        Mode::Scientific => Icon::ViewGrid,
+        Mode::Programmer => Icon::FormatCode,
+        Mode::Convert => Icon::Swap,
     }
 }
 
 /// The window's commands: the modes, copy, clear and history. The palette,
 /// the shortcuts sheet and the main menu list them, with their keys.
-fn window_commands(calc: &Calc, overlays: Overlays, showing_history: bool) -> Vec<Command> {
+fn window_commands(
+    calc: &Calc,
+    overlays: Overlays,
+    showing_history: bool,
+    open_history: Rc<dyn Fn()>,
+) -> Vec<Command> {
     let keys = ["Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4"];
     let mut commands: Vec<Command> = Mode::ALL
         .iter()
@@ -278,12 +294,11 @@ fn window_commands(calc: &Calc, overlays: Overlays, showing_history: bool) -> Ve
         .shortcut("Escape")
         .group(CommandGroup::Edit),
     );
-    let history = calc.clone();
     commands.push(
         Command::new(
             "calculator.history",
             tr!("calculator-command-history"),
-            move |_| toggle_history(&history),
+            move |_| open_history(),
         )
         .shortcut("Ctrl+H")
         .checked(showing_history)

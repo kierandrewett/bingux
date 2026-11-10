@@ -543,8 +543,8 @@ pub const COLOUR_BUTTON: &[Spec] = &[
     ),
 ];
 
-/// How tall a framed strip is: the bar and a few lines of page.
-const FRAME_HEIGHT: f32 = 168.0;
+/// How tall a framed strip is: the strip, a toolbar and a few lines of page.
+const FRAME_HEIGHT: f32 = 204.0;
 
 /// Three tabs, for the specimens that differ in what is selected.
 fn three(selected: u64) -> TabStrip {
@@ -745,22 +745,23 @@ pub const FADE_TEXT: &[Spec] = &[
     .page(FRAME_HEIGHT),
 ];
 
-/// `strip` in a header bar over a few lines of page, as an application uses
-/// tabs: the bar is the window's title bar on the page's own colour, the tabs
-/// are rounded rectangles of their own, and the page runs square to the edges
-/// under them.
+/// `strip` as an application uses tabs: the strip is the window's top row on
+/// its own tone, the toolbar under it is the chrome tone the selected tab
+/// joins, and the page below is the content tone.
 fn framed(strip: TabStrip) -> Element {
     let tokens = use_tokens();
     let bar = rect()
-        .tw(&tokens, &[w_full(), h(Dim::TabBar), bg(Paint::Surface)])
+        .tw(&tokens, &[w_full(), h(Dim::TabBar), bg(Paint::Strip)])
         .child(strip);
+    let toolbar = rect().tw(&tokens, &[w_full(), h(Dim::Header), bg(Paint::Sidebar)]);
     let page = rect()
         .tw(&tokens, &[w_full(), h_flex(), flex_col(), bg(Paint::Bg), p(S4), gap(S1)])
         .child(caption("The page the selected tab opens."))
-        .child(caption("The tabs are separate from it: no shape joins them and the page has no corner of its own."));
+        .child(caption("The selected tab is the toolbar's colour and runs into it; the strip is a colour of its own."));
     rect()
         .tw(&tokens, &[w_full(), h_full(), flex_col()])
         .child(bar)
+        .child(toolbar)
         .child(page)
         .into_element()
 }

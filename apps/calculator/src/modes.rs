@@ -31,6 +31,7 @@ impl Component for ProgrammerPanel {
             .map(|(value, name)| (value.to_string(), name.to_string()))
             .collect();
         let base_calc = calc.clone();
+        // boundary: value, the base the keypad types in; it edits the calculation.
         let base_switch = segmented(bases, &base.to_string(), move |value: String| {
             base_calc.set_base(value.parse().unwrap_or(10))
         });
@@ -42,6 +43,7 @@ impl Component for ProgrammerPanel {
         let size_calc = calc.clone();
         let signed_calc = calc.clone();
         let (bits, signed) = (word.bits, word.signed);
+        // boundary: value, the word the value wraps at; it edits the calculation.
         let word_switch = segmented(sizes, &bits.to_string(), move |value: String| {
             let bits = value.parse().unwrap_or(64);
             size_calc.set_word(bits, signed);

@@ -8,6 +8,7 @@ use crate::controls::press::hit_area;
 use crate::controls::{SpinnerSize, hover_tip, spinner};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
+use crate::shell::boundary::{BottomBarHost, ChromeItem, SwitcherRail, ViewSwitcher};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::EMPHASIS;
@@ -27,9 +28,12 @@ pub fn drag_on_pointer_down(event: Event<PointerEventData>) {
     }
 }
 
-/// A header bar: optional leading elements, a title centred across the whole
-/// bar, and trailing elements. Dragging the bar moves the window.
-#[derive(PartialEq)]
+/// A header bar: the chrome above the content. Leading elements, a title (or
+/// a view switcher) centred across the whole bar, and trailing elements.
+/// Dragging the bar moves the window. A window gets one from
+/// [`Screen`](crate::shell::Screen), which paints it in the chrome tone; see
+/// `design/boundaries.md` for what belongs in each slot.
+#[derive(Clone, PartialEq)]
 pub struct HeaderBar {
     title: String,
     leading: Vec<Element>,
@@ -37,6 +41,11 @@ pub struct HeaderBar {
     background: Paint,
     title_slot: Option<Element>,
     tab_slot: Option<Element>,
+    switcher: Option<ViewSwitcher>,
+    /// Items that ride with the switcher: before it and after it in a
+    /// phone's switcher row, in the leading and trailing clusters on a desktop.
+    switcher_leading: Vec<Element>,
+    switcher_trailing: Vec<Element>,
     busy: bool,
     draggable: bool,
     title_start: bool,
@@ -51,26 +60,66 @@ impl HeaderBar {
             background: Paint::Surface,
             title_slot: None,
             tab_slot: None,
+            switcher: None,
+            switcher_leading: Vec::new(),
+            switcher_trailing: Vec::new(),
             busy: false,
             draggable: true,
             title_start: false,
         }
     }
 
-    pub fn leading(mut self, element: impl Into<Element>) -> Self {
-        self.leading.push(element.into());
+    /// Navigation and actions on the document: Back, Today, Open, New. They
+    /// sit at the start of the bar.
+    pub fn leading(mut self, item: impl ChromeItem) -> Self {
+        self.leading.push(item.into_chrome());
         self
     }
 
-    pub fn trailing(mut self, element: impl Into<Element>) -> Self {
-        self.trailing.push(element.into());
+    /// Actions, search, the view and sort menus, the main menu and the window
+    /// buttons. They sit at the end of the bar.
+    pub fn trailing(mut self, item: impl ChromeItem) -> Self {
+        self.trailing.push(item.into_chrome());
         self
     }
 
-    /// The bar's fill; the surface colour by default.
-    pub fn fill(mut self, paint: Paint) -> Self {
+    /// The view switcher of the content under this bar: the modes or views
+    /// that decide what the content shows (Basic and Scientific; Day, Week and
+    /// Month). It is centred where the title goes; a bar that lays its title
+    /// from the start puts it after the title. On a phone it is a full-width
+    /// row under the bar, still above the content.
+    pub fn switcher(mut self, switcher: ViewSwitcher) -> Self {
+        self.switcher = Some(switcher);
+        self
+    }
+
+    /// An item that moves with the switcher, before it: Previous and Next,
+    /// which step through the view the switcher picks. On a phone it sits at
+    /// the start of the switcher's row; on a desktop it joins the leading
+    /// cluster, after the leading items.
+    pub fn switcher_leading(mut self, item: impl ChromeItem) -> Self {
+        self.switcher_leading.push(item.into_chrome());
+        self
+    }
+
+    /// An item that moves with the switcher, after it: Today. On a phone it
+    /// sits at the end of the switcher's row; on a desktop it joins the
+    /// trailing cluster, before the trailing items.
+    pub fn switcher_trailing(mut self, item: impl ChromeItem) -> Self {
+        self.switcher_trailing.push(item.into_chrome());
+        self
+    }
+
+    /// The bar's fill. The shell sets it ([`Screen`](crate::shell::Screen) and
+    /// the split view paint the tiers), so it is not an app's choice.
+    pub(crate) fn fill(mut self, paint: Paint) -> Self {
         self.background = paint;
         self
+    }
+
+    /// The bar's view switcher, for the screen to draw as a phone's bottom bar.
+    pub(crate) fn view_switcher(&self) -> Option<&ViewSwitcher> {
+        self.switcher.as_ref()
     }
 
     /// Show a spinner beside the leading controls while a page is busy.
@@ -91,13 +140,14 @@ impl HeaderBar {
 
     /// Put a strip of tabs where the title goes: from the start of the room
     /// between the controls, filling it, and as tall as the bar. The bar is
-    /// then the strip, [`Dim::TabBar`] tall rather than a header (the window
-    /// has no second row above its tabs), and its icon buttons are
-    /// [`Dim::TabButton`], the height of a tab. Leave the bar on its default
-    /// fill, [`Paint::Surface`]: the strip fades its overflowing tabs into it.
-    /// Replaces the title and [`title_slot`](Self::title_slot).
+    /// then the strip, [`Dim::TabBar`] tall rather than a header, on the strip
+    /// tone ([`Paint::Strip`]) that the strip fades its overflowing tabs into,
+    /// and its icon buttons are [`Dim::TabButton`], the height of a tab. Give
+    /// it to [`Screen::strip`](crate::shell::Screen::strip). Replaces the title
+    /// and [`title_slot`](Self::title_slot).
     pub fn tab_slot(mut self, strip: impl Into<Element>) -> Self {
         self.tab_slot = Some(strip.into());
+        self.background = Paint::Strip;
         self
     }
 
@@ -142,7 +192,8 @@ impl Component for HeaderBar {
         let squeezed = !self.title_start && bar_width() > 0.0 && !self.title.is_empty() && {
             let content = (bar_width() - 2.0 * S2.px()).max(0.0);
             let centred = (content - 2.0 * inset).max(0.0);
-            let from_start = (content - leading_width() - trailing_width() - 2.0 * S2.px()).max(0.0);
+            let from_start =
+                (content - leading_width() - trailing_width() - 2.0 * S2.px()).max(0.0);
             let natural = crate::controls::path_label::text_width(&self.title, EMPHASIS);
             centred < natural && from_start > centred + 1.0
         };
@@ -161,9 +212,33 @@ impl Component for HeaderBar {
         };
         let pad_right = S2;
         let pad = pad_left.px().max(pad_right.px());
-        let text: Element = match &self.title_slot {
-            Some(slot) => slot.clone(),
-            None => EMPHASIS
+        // A screen draws a phone switcher of two to five views with icons as
+        // its bottom bar. Any other phone switcher is a menu of the views in
+        // the title's place: the header stays one row at every size.
+        let compact = is_compact();
+        let bottom = compact
+            && try_consume_context::<BottomBarHost>().is_some()
+            && self
+                .switcher
+                .as_ref()
+                .is_some_and(ViewSwitcher::fits_bottom_bar);
+        let menu = self.switcher.as_ref().filter(|_| compact && !bottom);
+        let switcher_in_bar = self.switcher.as_ref().filter(|_| !compact);
+        let rail = |switcher: &ViewSwitcher, menu: bool| -> Element {
+            SwitcherRail {
+                switcher: switcher.clone(),
+                menu,
+            }
+            .into()
+        };
+        let text: Element = match (&self.title_slot, switcher_in_bar, menu) {
+            (_, _, Some(switcher)) => rail(switcher, true),
+            (_, Some(switcher), _) if !title_start => rect()
+                .tw(&tokens, &[w_full(), flex_row(), justify(Align::Center)])
+                .child(rail(switcher, false))
+                .into(),
+            (Some(slot), _, _) => slot.clone(),
+            (None, _, _) => EMPHASIS
                 .label(&tokens, self.title.clone())
                 .width(Size::fill())
                 .max_lines(1)
@@ -202,12 +277,14 @@ impl Component for HeaderBar {
                 leading_width.set_if_modified(event.area.width());
             })
             .children(self.leading.clone())
+            .children(self.switcher_leading.clone())
             .maybe_child(self.busy.then(busy_indicator));
         let trailing = rect()
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
             .on_sized(move |event: Event<SizedEventData>| {
                 trailing_width.set_if_modified(event.area.width());
             })
+            .children(self.switcher_trailing.clone())
             .children(self.trailing.clone());
         let inert = try_consume_context::<InertControls>().is_some();
         let draggable = self.draggable;
@@ -247,6 +324,9 @@ impl Component for HeaderBar {
                         )
                         .child(text),
                 )
+                // A bar that lays its title from the start keeps the switcher
+                // after the title, before the actions.
+                .maybe_child(switcher_in_bar.map(|switcher| rail(switcher, false)))
                 .child(trailing),
             None => bar
                 .child(title)

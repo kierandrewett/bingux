@@ -1631,3 +1631,11 @@ ui-media-spoken-seconds = { $count ->
 # A screen reader's name for a now-playing item. $title and $subtitle are the film or song's names.
 # $title (String) - the title; $subtitle (String) - the artist or year
 ui-media-item-a11y = { $title }, { $subtitle }. Open the player
+
+# A screen reader's name for one page of a carousel.
+# $page (Number) - the page's position from 1; $count (Number) - how many pages
+ui-carousel-page-a11y = Page { $page } of { $count }
+
+# A screen reader's name for one page dot.
+# $name (String) - the page's name, such as a place; $page (Number) - its position from 1; $count (Number) - how many pages
+ui-page-dot-a11y = { $name }, page { $page } of { $count }

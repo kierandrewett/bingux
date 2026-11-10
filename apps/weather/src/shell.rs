@@ -413,6 +413,34 @@ impl Component for Shell {
             header = header.trailing(WindowControls);
         }
 
+        // The place on show, as a page of the carousel and a dot of the pager.
+        let shown_at = selected_key
+            .as_ref()
+            .and_then(|key| order.iter().position(|other| other == key))
+            .unwrap_or(0);
+        let pick_place = {
+            let order = order.clone();
+            move |at: usize| {
+                if let Some(key) = order.get(at) {
+                    hub.select(key);
+                }
+            }
+        };
+        let dot_names: Vec<String> = order
+            .iter()
+            .map(|key| {
+                if key == HERE {
+                    tr!("weather-my-location")
+                } else {
+                    settings
+                        .saved
+                        .iter()
+                        .find(|saved| &saved.key() == key)
+                        .map(|saved| saved.name.clone())
+                        .unwrap_or_default()
+                }
+            })
+            .collect();
         let selected = selected_key.clone();
         let list = Locations {
             here: here.clone(),
@@ -457,42 +485,86 @@ impl Component for Shell {
                     search::open(overlays, hub)
                 })
                 .into(),
-            _ => Page {
+            // The position is being looked for and there is no place yet.
+            _ if order.is_empty() => Page {
                 place: place.clone().unwrap_or_else(|| Place::new("", 0.0, 0.0)),
-                here: here_text,
+                here: here_text.clone(),
                 units,
-                load,
-                retry,
+                load: load.clone(),
+                retry: retry.clone(),
             }
             .into(),
+            _ => {
+                // One page per place, in the list's order: the carousel turns
+                // them, and the dots in the pager say which is on show. Only
+                // the place on show has its forecast loaded; a neighbour shows
+                // its loading line while it slides in.
+                let page_of = |key: &String| -> Element {
+                    if Some(key) == selected_key.as_ref() {
+                        return Page {
+                            place: place.clone().unwrap_or_else(|| Place::new("", 0.0, 0.0)),
+                            here: here_text.clone(),
+                            units,
+                            load: load.clone(),
+                            retry: retry.clone(),
+                        }
+                        .into();
+                    }
+                    let (place, here) = match &here {
+                        HereView::Found(found) if key == HERE => (
+                            found.place.clone(),
+                            Some(HereView::source_text(found).to_string()),
+                        ),
+                        _ => (
+                            settings
+                                .saved
+                                .iter()
+                                .find(|saved| &saved.key() == key)
+                                .cloned()
+                                .unwrap_or_else(|| Place::new("", 0.0, 0.0)),
+                            None,
+                        ),
+                    };
+                    Page {
+                        place,
+                        here,
+                        units,
+                        load: Load::Loading,
+                        retry: retry.clone(),
+                    }
+                    .into()
+                };
+                let pick = pick_place.clone();
+                carousel(
+                    order.iter().map(page_of).collect(),
+                    shown_at,
+                    move |at: usize| pick(at),
+                )
+                .label(tr!("weather-places"))
+                .into()
+            }
         };
 
-        let body: Element = if compact {
-            if showing_list {
-                rect()
-                    .tw(&tokens, &[w_full(), h_flex(), bg(Paint::Bg)])
-                    .child(list)
-                    .into()
+        // The sky is the whole window: the chrome floats over it as glass.
+        // A phone shows the list as a screen of its own from the header.
+        let mut screen = Screen::new(header)
+            .immersive(true)
+            .sidebar(list)
+            .content(page)
+            .compact_pane(if showing_list {
+                Pane::Sidebar
             } else {
-                rect().tw(&tokens, &[w_full(), h_flex()]).child(page).into()
-            }
-        } else {
-            rect()
-                .tw(&tokens, &[w_full(), h_flex(), flex_row()])
-                .child(
-                    rect()
-                        .tw(&tokens, &[w(Dim::Sidebar), h_full(), bg(Paint::Sidebar)])
-                        .child(list),
-                )
-                .child(rect().tw(&tokens, &[w(Dim::Hairline), h_full(), bg(Paint::Separator)]))
-                .child(rect().tw(&tokens, &[w_flex(), h_full()]).child(page))
-                .into()
-        };
+                Pane::Content
+            });
+        if order.len() > 1 {
+            screen = screen.pager(page_dots(dot_names, shown_at, move |at: usize| {
+                pick_place(at)
+            }));
+        }
 
         rect()
             .component("Weather")
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
-            .child(header)
-            .child(body)
+            .tw(&tokens, &[w_full(), h_full()])
+            .child(screen)
     }
 }

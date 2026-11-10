@@ -6,6 +6,7 @@ pub mod avatar;
 pub mod breadcrumb;
 pub mod button;
 pub(crate) mod capture;
+pub mod carousel;
 pub mod checkbox;
 pub mod colour_picker;
 pub(crate) mod default_mark;
@@ -73,6 +74,7 @@ pub use breadcrumb::{Breadcrumb, breadcrumb};
 pub use button::{
     ActionButton, IconButton, RowButton, action_button, icon_button, primary_button, row_button,
 };
+pub use carousel::{Carousel, PageDots, carousel, page_dots};
 pub use checkbox::{CheckState, Checkbox, checkbox};
 pub use direction::{directed, use_direction};
 pub use dropdown::{Dropdown, app_dropdown, dropdown};

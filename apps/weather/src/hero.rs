@@ -17,7 +17,7 @@ use bingux_weather::{Forecast, Units};
 use bytes::Bytes;
 use freya::prelude::*;
 
-use crate::format::{self, light_of, rain_outlook};
+use crate::format::{self, rain_outlook};
 use crate::glyph;
 use crate::sky;
 use crate::words;
@@ -159,7 +159,6 @@ impl Component for Hero {
         let current = &forecast.current;
         let code = current.code.unwrap_or(3);
         let sky = Sky::of(code);
-        let light = light_of(forecast, self.local, current.is_day);
         let day = forecast.day_at(self.local);
         let scale = if compact {
             TEMPERATURE_SCALE_PHONE
@@ -255,14 +254,13 @@ impl Component for Hero {
                     .key("outlook"),
             );
 
+        // The sky is the page's own backdrop, under the whole window; the hero
+        // is the words on it.
         rect()
             .component("Hero")
-            .tw(&tokens, &[w_full(), rounded(Radius::Card), clip()])
+            .tw(&tokens, &[w_full()])
             .a11y_role(AccessibilityRole::GenericContainer)
             .a11y_alt(self.spoken())
-            .child(Backdrop { sky, light })
-            // Freya paints by depth, and a tie goes either way: the text sits
-            // deeper than the sky and its picture, so it is always over them.
-            .child(rect().child(rect().child(column)))
+            .child(column)
     }
 }

@@ -1,10 +1,15 @@
-//! What is playing, along the bottom of a window: [`now_playing_bar`].
+//! What is playing, along the bottom of a window: [`now_playing_bar`]. It
+//! belongs to the app rather than to one view, so it goes in the window's
+//! footer slot ([`Screen::footer`](crate::shell::Screen::footer),
+//! [`NavigationSplitView::footer`](crate::shell::NavigationSplitView::footer)),
+//! which runs the full width under the sidebar and paints it in the chrome
+//! tone with a hairline above. The bar paints nothing of its own.
 //!
 //! On a desktop window the bar has three parts: the artwork, title and
 //! artist on the left (a press opens the full player), the transport over
 //! the timeline in the middle, and the volume with the caller's own buttons
-//! (the queue, a mini player) on the right. On a phone it is one row, the
-//! artwork, the title and artist, play and next, under a thin line that
+//! (a mini player, the full player) on the right. On a phone it is one row,
+//! the artwork, the title and artist, play and next, under a thin line that
 //! shows how far through the item is, as the mini player of a phone's music
 //! app; a press on it opens the full player.
 
@@ -248,10 +253,7 @@ impl Component for NowPlayingBar {
             return rect()
                 .component("NowPlayingBar")
                 .width(Size::fill())
-                .tw(
-                    &tokens,
-                    &[flex_col(), bg(Paint::Surface), border(Line::HairlineTop)],
-                )
+                .tw(&tokens, &[flex_col()])
                 .child(
                     rect()
                         .width(Size::fill())
@@ -304,7 +306,7 @@ impl Component for NowPlayingBar {
                 timeline(self.position, self.duration, self.on_seek.clone())
                     .buffered(self.buffered.clone())
                     .chapters(self.chapters.clone())
-                    .on_surface(Paint::Surface)
+                    .on_surface(Paint::Sidebar)
                     .times(),
             );
         let mut right = rect().width(Size::flex(1.0)).tw(
@@ -334,8 +336,6 @@ impl Component for NowPlayingBar {
                     gap(S4),
                     px(S4),
                     py(S2),
-                    bg(Paint::Surface),
-                    border(Line::HairlineTop),
                 ],
             )
             .child(identity(Dim::Box11))

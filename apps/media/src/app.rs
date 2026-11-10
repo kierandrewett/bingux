@@ -514,6 +514,10 @@ impl Component for Content {
                     .trailing(
                         icon_button(Icon::ViewPip, move |_| set_mini(ui, true))
                             .tooltip(&text::mini_player()),
+                    )
+                    .trailing(
+                        icon_button(Icon::ViewFullscreen, move |_| open_stage(ui))
+                            .tooltip(&text::menu_player()),
                     );
                 if video {
                     // The film plays on, small, in the bar.
@@ -525,21 +529,17 @@ impl Component for Content {
                 }
                 bar
             });
-            rect()
-                .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children()])
-                .child(
-                    rect()
-                        .width(Size::fill())
-                        .height(Size::flex(1.0))
-                        .child(split),
-                )
-                .maybe_child(bar)
-                .into_element()
+            // What is playing belongs to the app, not to one page: the bar
+            // runs the whole width of the window, under the sidebar too.
+            match bar {
+                Some(bar) => split.footer(bar).into_element(),
+                None => split.into_element(),
+            }
         };
         let dragging = drop.over().is_some();
         drop.track(
             rect()
-                .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
+                .tw(&tokens, &[w_full(), h_full()])
                 .on_global_key_down(on_key)
                 .child(body)
                 .maybe_child(dragging.then(|| {

@@ -113,128 +113,76 @@ fn view_key(kind: ViewKind) -> &'static str {
         .map_or("week", |(key, _, _)| key)
 }
 
-#[derive(PartialEq)]
-pub struct Header {
-    pub model: Model,
-    pub search_id: AccessibilityId,
-}
+/// The header bar: where you are in time (Today and the arrows), the view,
+/// search, a new event and the menu. The view decides what the window shows,
+/// so it is the header's switcher; on a phone it takes a row under the bar,
+/// with the arrows and Today around it.
+pub fn header_bar(
+    model: Model,
+    search_id: AccessibilityId,
+    window: Window,
+    overlays: Overlays,
+    tokens: Tokens,
+) -> HeaderBar {
+    let compact = is_compact();
+    let shown = *model.view.read();
+    let title = title_of(&model);
 
-impl Component for Header {
-    fn render(&self) -> impl IntoElement {
-        let tokens = use_tokens();
-        let window = use_window();
-        let overlays = use_overlays();
-        let model = self.model;
-        let compact = is_compact();
-        let view = *model.view.read();
-        let title = title_of(&model);
+    let previous = icon_button(Icon::GoPrevious, move |_| model.step(-1)).tooltip("Previous");
+    let next = icon_button(Icon::GoNext, move |_| model.step(1)).tooltip(&tr!("calendar-next"));
+    let today = action_button(tr!("calendar-today"), move |_| model.today());
+    let views = view_switcher(
+        VIEWS
+            .iter()
+            .map(|(key, label, _)| view(*key, bingux_ui::i18n::text(label))),
+        view_key(shown),
+        move |key: String| {
+            if let Some((_, _, kind)) = VIEWS.iter().find(|(candidate, _, _)| *candidate == key) {
+                model.show(*kind);
+            }
+        },
+    );
 
-        let previous =
-            move || icon_button(Icon::GoPrevious, move |_| model.step(-1)).tooltip("Previous");
-        let next = move || {
-            icon_button(Icon::GoNext, move |_| model.step(1)).tooltip(&tr!("calendar-next"))
-        };
-        let today = move || action_button(tr!("calendar-today"), move |_| model.today());
-        let views = move || {
-            segmented(
-                VIEWS
-                    .iter()
-                    .map(|(key, label, _)| {
-                        (key.to_string(), bingux_ui::i18n::text(label).to_string())
-                    })
-                    .collect(),
-                view_key(view),
-                move |key: String| {
-                    if let Some((_, _, kind)) =
-                        VIEWS.iter().find(|(candidate, _, _)| *candidate == key)
-                    {
-                        model.show(*kind);
-                    }
-                },
-            )
-        };
-
-        let mut bar = HeaderBar::new(title).title_start(true);
-        if compact {
-            bar = bar
-                .leading(
-                    icon_button(Icon::SidebarShow, move |_| {
-                        window.open(
-                            popup(
-                                tr!("calendar-calendars"),
-                                Sidebar {
-                                    model,
-                                    embedded: true,
-                                },
-                            )
-                            .width(Dim::PopupNarrow),
-                        );
-                    })
-                    .tooltip(&tr!("calendar-calendars")),
-                )
-                .trailing(
-                    icon_button(Icon::Search, move |_| {
-                        let mut open = model.search_open;
-                        let next = !*open.peek();
-                        open.set(next);
-                    })
-                    .tooltip(&tr!("calendar-search")),
-                );
-        } else {
-            bar = bar
-                .leading(hstack(S1).child(today()).child(previous()).child(next()))
-                .trailing(views())
-                .trailing(
-                    search_field(model.query, move |_: String| {})
-                        .placeholder(tr!("calendar-search"))
-                        .width(Dim::FieldMin)
-                        .a11y_id(self.search_id),
-                );
-        }
+    let mut bar = HeaderBar::new(title).title_start(true).switcher(views);
+    if compact {
+        // A phone's header is one row: the calendars, the arrows, the view
+        // menu in the title's place, then New event and the menu. Today and
+        // search are in the menu and on their keys.
+        let _ = (today, search_id);
         bar = bar
-            .trailing(
-                icon_button(Icon::ListAdd, move |_| {
-                    editor::new_event(model, window, overlays)
+            .leading(
+                icon_button(Icon::SidebarShow, move |_| {
+                    window.open(
+                        popup(tr!("calendar-calendars"), Sidebar { model }).width(Dim::PopupNarrow),
+                    );
                 })
-                .tooltip(&tr!("calendar-new-event"))
-                .filled(),
+                .tooltip(&tr!("calendar-calendars")),
             )
-            .trailing(
-                menu_button(
-                    tr!("calendar-main-menu"),
-                    main_menu(model, window, overlays, tokens),
-                )
-                .icon(Icon::OpenMenu),
-            )
-            .trailing(WindowControls);
-
-        let mut column = rect().tw(&tokens, &[w_full(), flex_col()]).child(bar);
-        if compact {
-            // A phone has no room for the views and the arrows in the bar:
-            // they are a row of their own under it.
-            column = column.child(
-                rect()
-                    .tw(
-                        &tokens,
-                        &[
-                            w_full(),
-                            flex_row(),
-                            grow_children(),
-                            items(Align::Center),
-                            gap(S1),
-                            px(S2),
-                            py(S1),
-                            bg(Paint::Surface),
-                        ],
-                    )
-                    .child(previous())
-                    .child(next())
-                    .child(rect().tw(&tokens, &[w_flex()]).child(views()))
-                    .child(today()),
-            );
-        }
-        column
+            .switcher_leading(previous)
+            .switcher_leading(next);
+    } else {
+        bar = bar.leading(today).leading(previous).leading(next).trailing(
+            search_field(model.query, move |_: String| {})
+                .placeholder(tr!("calendar-search"))
+                .width(Dim::FieldMin)
+                .a11y_id(search_id),
+        );
     }
+    bar.trailing(
+        icon_button(Icon::ListAdd, move |_| {
+            editor::new_event(model, window, overlays)
+        })
+        .tooltip(&tr!("calendar-new-event"))
+        .filled(),
+    )
+    .trailing(
+        menu_button(
+            tr!("calendar-main-menu"),
+            main_menu(model, window, overlays, tokens),
+        )
+        .icon(Icon::OpenMenu),
+    )
+    .trailing(WindowControls)
 }
 
 /// The menu: what to do, how it looks, and About.
@@ -306,6 +254,14 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
     .collect();
 
     let mut items = vec![
+        menu_item(tr!("calendar-today"), move |_| model.today()).shortcut("T"),
+        menu_item(tr!("calendar-search"), move |_| {
+            let mut open = model.search_open;
+            let next = !*open.peek();
+            open.set(next);
+        })
+        .shortcut("Ctrl+F"),
+        menu_separator(),
         menu_item(tr!("calendar-new-event"), move |_| {
             editor::new_event(model, window, overlays)
         })

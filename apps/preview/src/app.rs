@@ -12,8 +12,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use bingux_files::{Filter, Kind};
 use bingux_files::ops::{self, Trashed};
+use bingux_files::{Filter, Kind};
 use bingux_ui::component::ComponentName;
 use bingux_ui::files::{self, FileIcon, file_icon_view};
 use bingux_ui::prelude::*;
@@ -693,9 +693,21 @@ impl Component for Content {
                 )
         });
 
+        let view = rect()
+            .tw(&tokens, &[w_full(), h_full(), flex_col()])
+            .child(body)
+            .maybe_child(drop_overlay);
+        // In full screen the picture is the window; the header comes back when
+        // the pointer is at the top.
+        let window: Element = if show_chrome {
+            Screen::new(header).content(view).into_element()
+        } else {
+            view.into_element()
+        };
+
         rect()
             .component("PreviewWindow")
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
+            .tw(&tokens, &[w_full(), h_full(), flex_col()])
             .on_global_key_down(on_key)
             .on_global_file_hover(move |_| over_file.set_if_modified(true))
             .on_global_file_hover_cancelled(move |_| over_file.set_if_modified(false))
@@ -718,13 +730,7 @@ impl Component for Content {
                     chrome_near.set_if_modified(near);
                 }
             })
-            .maybe_child(show_chrome.then(|| header.into_element()))
-            .child(
-                rect()
-                    .tw(&tokens, &[w_full(), h_flex(), flex_col()])
-                    .child(body)
-                    .maybe_child(drop_overlay),
-            )
+            .child(window)
     }
 }
 

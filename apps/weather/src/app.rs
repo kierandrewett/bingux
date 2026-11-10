@@ -31,10 +31,11 @@ impl Component for Content {
         let boot = use_resource((), load::boot);
         match boot.with(|state| state.value().cloned()) {
             Some(boot) => Shell { boot }.into_element(),
-            // The settings are a small file: this frame is the first, and the
-            // window's colour is all there is to show for it.
-            None => rect()
-                .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
+            // The settings are a small file: this frame is the first, and an
+            // empty window with its header is all there is to show for it.
+            None => Screen::new(HeaderBar::new("").trailing(WindowControls))
+                .immersive(true)
+                .content(rect().tw(&tokens, &[w_full(), h_full()]))
                 .into_element(),
         }
     }

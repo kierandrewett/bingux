@@ -78,6 +78,7 @@ impl Component for EqPage {
             mode_row = mode_row.row(control_row(fx, &slot.id, control, value("mode")));
         }
         if mid_side {
+            // boundary: value, the channel the strips below edit; a row of this group.
             let tabs = segmented(
                 vec![
                     ("0".to_string(), tr!("sound-eq-mid")),

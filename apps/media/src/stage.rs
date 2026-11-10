@@ -566,7 +566,6 @@ impl Component for SongStage {
             text::mini_player()
         };
         let header = HeaderBar::new("")
-            .fill(Paint::Bg)
             .leading(icon_button(Icon::PanDown, close).tooltip(&text::close_player()))
             .trailing(
                 rect()
@@ -666,11 +665,8 @@ impl Component for SongStage {
             )
             .maybe_child((!mini).then(|| volume_control(status.volume, status.muted, run_volume)))
             .child(rect().height(Size::flex(1.0)));
-        rect()
-            .expanded()
-            .tw(&tokens, &[bg(Paint::Bg), flex_col(), grow_children()])
-            .child(header)
-            .child(body)
+        // The player is the whole window; its header floats over it as glass.
+        Screen::new(header).immersive(true).content(body)
     }
 }
 

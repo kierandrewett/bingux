@@ -181,7 +181,8 @@ impl Component for Content {
 
         // The tab bar shows once the window has a second tab, as in Finder
         // and Safari, and while a tab from another window is held over this
-        // one, so there is somewhere to drop it. Its tabs share the width.
+        // one, so there is somewhere to drop it. It is the window's top row, on
+        // its own colour, with the window's buttons at its end.
         let titles = tab_titles(&shown);
         use_window_commands(window_commands(tabs));
         let commands = use_commands();
@@ -194,7 +195,6 @@ impl Component for Content {
                         tabs.open(FileTab::new(here(tabs)));
                     },
                 )
-                .fill(true)
                 .on_hover(move |(id, entered): (u64, bool)| {
                     let mut over_tab = over_tab;
                     let folder = set.peek().content(id).and_then(|tab| match &tab.at {
@@ -249,7 +249,7 @@ impl Component for Content {
 
         tab_window
             .root(rect())
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), bg(Paint::Bg)])
+            .tw(&tokens, &[w_full(), h_full(), flex_col()])
             .on_key_down(shortcuts)
             .on_sized(move |event: Event<SizedEventData>| {
                 tab_window.sized(event.area.width(), event.area.height());

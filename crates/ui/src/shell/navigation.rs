@@ -35,11 +35,12 @@ use crate::motion::{Focusable, crossfade};
 use crate::nav::gesture::{
     BackGesture, DRAG_SHARE, Pose, Release, SLIDE_MS, Update, release_curve, release_slope, slide,
 };
-use crate::nav::router::EntryContext;
+use crate::nav::router::{EntryContext, use_entry_id};
 use crate::nav::{
     Change, Entry, Location, NavModel, RouteKind, RouteTable, Transition, use_router,
 };
 use crate::shell::back_button::BackButton;
+use crate::shell::boundary::{Region, within};
 use crate::shell::sections::{self, SearchHit};
 use crate::shell::window::{HeaderBar, WindowControls};
 use crate::style::*;
@@ -60,6 +61,9 @@ pub struct NavigationSplitView {
     /// Enter in the search field calls `on_submit`. See
     /// [`NavigationSplitView::search`].
     pub search: Option<(State<String>, Element, EventHandler<()>)>,
+    /// The full-width bar under the sidebar and the page. See
+    /// [`NavigationSplitView::footer`].
+    pub footer: Option<Element>,
 }
 
 /// The signed-in person at the top of the sidebar: an avatar and the name,
@@ -242,6 +246,70 @@ pub fn use_page_busy(busy: bool) {
     use_drop(move || {
         if let Some(mut pages) = pages {
             pages.write().retain(|other| *other != id);
+        }
+    });
+}
+
+/// The view switcher the page on show asked for ([`use_page_switcher`]): its
+/// entry, views and selection, and the handler of the latest render.
+#[derive(Clone)]
+struct PageSwitcher {
+    shown: State<Option<(u64, Vec<crate::shell::boundary::View>, String)>>,
+    /// The handler changes every render; holding it here draws nothing again.
+    handler: Rc<RefCell<Option<EventHandler<String>>>>,
+}
+
+impl PageSwitcher {
+    fn new() -> Self {
+        Self {
+            shown: State::create(None),
+            handler: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    /// The switcher for the header over `entry`, when its page asked for one.
+    fn for_entry(&self, entry: u64) -> Option<crate::shell::boundary::ViewSwitcher> {
+        let (at, options, selected) = self.shown.read().clone()?;
+        if at != entry {
+            return None;
+        }
+        let handler = self.handler.clone();
+        Some(crate::shell::boundary::view_switcher(
+            options,
+            &selected,
+            move |key: String| {
+                let current = handler.borrow().clone();
+                if let Some(current) = current {
+                    current.call(key);
+                }
+            },
+        ))
+    }
+}
+
+/// Puts `switcher` in the header of the calling page: the views of this page
+/// (Output and Input; Day, Week and Month). The header is chrome, so the
+/// switcher sits above the page, never in it; on a phone it is a row under
+/// the header. The page keeps the selection and gets the key of the view
+/// chosen.
+pub fn use_page_switcher(switcher: crate::shell::boundary::ViewSwitcher) {
+    let slot = use_try_consume::<PageSwitcher>();
+    let entry = use_entry_id();
+    if let Some(slot) = &slot {
+        *slot.handler.borrow_mut() = Some(switcher.on_select.clone());
+    }
+    let shown = slot.as_ref().map(|slot| slot.shown);
+    let key = (entry, switcher.views.clone(), switcher.selected.clone());
+    use_side_effect_with_deps(&key, move |(entry, options, selected)| {
+        if let (Some(mut shown), Some(entry)) = (shown, entry) {
+            shown.set(Some((*entry, options.clone(), selected.clone())));
+        }
+    });
+    use_drop(move || {
+        if let (Some(mut shown), Some(entry)) = (shown, entry) {
+            if shown.peek().as_ref().is_some_and(|(at, _, _)| *at == entry) {
+                shown.set(None);
+            }
         }
     });
 }
@@ -749,8 +817,8 @@ fn compact_screen(tokens: &Tokens, header: Element, content: Element) -> Element
         .width(Size::fill())
         .height(Size::fill())
         .tw(tokens, &[flex_col(), bg(Paint::Bg)])
-        .child(header)
-        .child(content)
+        .child(within(Region::Chrome, header))
+        .child(within(Region::Content, content))
         .into()
 }
 
@@ -929,6 +997,7 @@ impl NavigationSplitView {
             header_trailing: None,
             profile: None,
             search: None,
+            footer: None,
         }
     }
 
@@ -942,6 +1011,14 @@ impl NavigationSplitView {
     /// taxonomy's display switcher, a view menu).
     pub fn header_trailing(mut self, element: impl Into<Element>) -> Self {
         self.header_trailing = Some(element.into());
+        self
+    }
+
+    /// A bar that belongs to the app rather than to one page (what is
+    /// playing): it runs the full width of the window, under the sidebar and
+    /// the page, in the chrome tone with one hairline above it.
+    pub fn footer(mut self, footer: impl crate::shell::boundary::ContentItem) -> Self {
+        self.footer = Some(footer.into_content());
         self
     }
 
@@ -981,6 +1058,7 @@ impl Component for NavigationSplitView {
         let search_id = use_a11y();
         let search_focus = use_focus(search_id);
         let busy_pages = use_provide_context(|| BusyPages(State::create(Vec::new())));
+        let page_switcher = use_provide_context(PageSwitcher::new);
         let section_registry = sections::provide();
         let busy = !busy_pages.0.read().is_empty();
         // On a narrow window the index, the list of pages, is the screen.
@@ -1312,7 +1390,7 @@ impl Component for NavigationSplitView {
                 move |event: Event<PressEventData>| press.press(&event)
             })
             .child(content_region.sentinel())
-            .child(wide_page)
+            .child(within(Region::Content, wide_page))
             .maybe_child(wide_outgoing)
             .maybe_child(active.is_some().then(slide_shield))
             .child(ScrollEdge {
@@ -1454,6 +1532,10 @@ impl Component for NavigationSplitView {
                     ),
                     show_controls,
                 );
+                let header = match page_switcher.for_entry(current.id) {
+                    Some(switcher) => header.switcher(switcher),
+                    None => header,
+                };
                 compact_screen(
                     &tokens,
                     header.into(),
@@ -1644,6 +1726,11 @@ impl Component for NavigationSplitView {
                 title.clone()
             },
         }));
+        // A page's own views (`use_page_switcher`) take the centre of its header.
+        let header = match page_switcher.for_entry(current.id) {
+            Some(switcher) => header.switcher(switcher),
+            None => header,
+        };
 
         let back_router = router;
         let back_gesture = gesture.clone();
@@ -1666,7 +1753,7 @@ impl Component for NavigationSplitView {
         let reduced_cancel = tokens.motion(cancel_ms) == 0;
         let motion_cancel_ms = tokens.motion(cancel_ms);
 
-        rect()
+        let split = rect()
             .component("NavigationSplitView")
             .expanded()
             .tw(
@@ -1806,13 +1893,33 @@ impl Component for NavigationSplitView {
                                 .width(Size::fill())
                                 .layer(Layer::Relative(HEADER_LAYER))
                                 .backdrop_blur(HEADER_BLUR)
-                                .child(header),
+                                .child(within(Region::Chrome, header)),
                         )
                     }))
                     .maybe_child((!narrow && lifted).then(|| lifted_controls(&tokens)))
                     .maybe_child((!narrow).then(|| Element::from(wide_content)))
                     .maybe_child(stage),
-            )
+            );
+        // The app's own bar runs the full width under the sidebar and the
+        // page: the sidebar ends above it.
+        match self.footer.clone() {
+            Some(footer) => rect()
+                .component("NavigationSplitWindow")
+                .expanded()
+                .tw(&tokens, &[flex_col(), bg(Paint::Sidebar)])
+                .child(split.width(Size::fill()).height(Size::flex(1.0)))
+                .child(
+                    rect()
+                        .component("SplitFooter")
+                        .width(Size::fill())
+                        .tw(&tokens, &[flex_col(), bg(Paint::Sidebar)])
+                        .child(
+                            rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]),
+                        )
+                        .child(within(Region::Chrome, footer)),
+                ),
+            None => split,
+        }
     }
 }
 
