@@ -151,31 +151,47 @@ impl Config {
             _ if server.is_some() => RemoteSettings::SecurityOnly,
             _ => RemoteSettings::MozillaDirect,
         };
-        let mut read_dirs: Vec<PathBuf> = [
-            "Downloads",
-            "Documents",
-            "Desktop",
-            "Pictures",
-            "Videos",
-            "Music",
-        ]
-        .iter()
-        .map(|name| home.join(name))
-        .filter(|dir| dir.is_dir())
-        .collect();
-        // More folders `file://` pages may read, named by the host.
+        let downloads = home.join("Downloads");
+        let cache = own.then(|| cache_home.join("bingux-browser/engine"));
+        let crash = own.then(|| state_home.join("bingux-browser/crashes"));
+        let runtime = own
+            .then(|| runtime_home.map(|run| run.join("bingux-browser")))
+            .flatten();
+        // Folders `file://` pages may read: the usual ones of the home folder
+        // that exist, and the ones the host names. The download folder is not
+        // one of them: it is a folder of the engine's own, like the profile,
+        // cache, dumps and sockets, and the engine refuses to start when a
+        // folder pages may read overlaps one of those (one inside the other).
+        let mut read_dirs: Vec<PathBuf> = ["Documents", "Desktop", "Pictures", "Videos", "Music"]
+            .iter()
+            .map(|name| home.join(name))
+            .filter(|dir| dir.is_dir())
+            .collect();
         if let Some(extra) = var_os("BINGUX_BROWSER_FILE_DIRS") {
             read_dirs.extend(std::env::split_paths(&extra).filter(|dir| dir.is_absolute()));
         }
+        let engines_own: Vec<&PathBuf> = [
+            Some(&profile),
+            cache.as_ref(),
+            crash.as_ref(),
+            runtime.as_ref(),
+            Some(&downloads),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        read_dirs.retain(|dir| {
+            !engines_own
+                .iter()
+                .any(|own| dir.starts_with(own) || own.starts_with(dir))
+        });
         Self {
             profile,
             ephemeral: private,
-            cache: own.then(|| cache_home.join("bingux-browser/engine")),
-            crash: own.then(|| state_home.join("bingux-browser/crashes")),
-            runtime: own
-                .then(|| runtime_home.map(|run| run.join("bingux-browser")))
-                .flatten(),
-            downloads: home.join("Downloads"),
+            cache,
+            crash,
+            runtime,
+            downloads,
             read_dirs,
             remote_settings,
             remote_settings_server: server,
@@ -497,6 +513,27 @@ mod tests {
         assert_eq!(
             directories.download.as_deref(),
             Some(Path::new("/h/Downloads"))
+        );
+    }
+
+    #[test]
+    fn a_folder_pages_may_read_never_overlaps_a_folder_of_the_engines_own() {
+        // The engine refuses to start on such an overlap (it did, once the
+        // first run had made ~/Downloads): the folder is left out instead.
+        let c = config(
+            false,
+            &[
+                ("HOME", "/h"),
+                (
+                    "BINGUX_BROWSER_FILE_DIRS",
+                    "/h/pages:/h/Downloads:/h/Downloads/sub:/h:/h/.cache/bingux-browser",
+                ),
+            ],
+        );
+        assert_eq!(
+            c.read_dirs,
+            [Path::new("/h/pages")],
+            "the download folder, the home holding the profile and the cache are not pages' to read"
         );
     }
 
