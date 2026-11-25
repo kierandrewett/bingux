@@ -1,0 +1,395 @@
+//! What the host tells the engine: the profile and the folders around it, the
+//! folders it may read, how it learns about revoked certificates, who it says
+//! it is. All of it is chosen here, once, from the environment of the process
+//! that starts the browser, and shown on the settings page; the engine reads
+//! nothing else.
+//!
+//! Where things live (the XDG base directories, unless `BINGUX_BROWSER_PROFILE`
+//! names a profile, in which case everything stays below that profile):
+//!
+//! | What | Where |
+//! | ---- | ----- |
+//! | profile | `$XDG_DATA_HOME/bingux-browser/profile` |
+//! | cache | `$XDG_CACHE_HOME/bingux-browser/engine` |
+//! | crash dumps (never uploaded) | `$XDG_STATE_HOME/bingux-browser/crashes` |
+//! | runtime sockets | `$XDG_RUNTIME_DIR/bingux-browser` |
+//! | downloads | `~/Downloads` |
+//! | a private window | one profile, with everything below it, in `$XDG_RUNTIME_DIR`, deleted with the window |
+
+use std::path::{Path, PathBuf};
+use std::time::Duration;
+
+use vivarium as vv;
+
+use crate::backend::{EngineSettings, RemoteSettings};
+
+/// What a page's WebRTC connection may reveal about the machine
+/// (`BINGUX_BROWSER_WEBRTC_IP_POLICY`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WebrtcChoice {
+    Default,
+    DefaultPublic,
+    PublicOnly,
+    RelayOnly,
+}
+
+impl WebrtcChoice {
+    fn parse(text: &str) -> Option<Self> {
+        Some(match text {
+            "default" => Self::Default,
+            "default-public" => Self::DefaultPublic,
+            "public-only" => Self::PublicOnly,
+            "relay-only" => Self::RelayOnly,
+            _ => return None,
+        })
+    }
+
+    /// What the choice means, for the settings page.
+    pub const fn text(self) -> &'static str {
+        match self {
+            Self::Default => "Gecko's default: local addresses may be shared",
+            Self::DefaultPublic => "Share the public address, and local ones only when a call needs them",
+            Self::PublicOnly => "Share only the public address",
+            Self::RelayOnly => "Share nothing: calls go through a relay",
+        }
+    }
+
+    pub(super) const fn policy(self) -> vv::WebrtcIpPolicy {
+        match self {
+            Self::Default => vv::WebrtcIpPolicy::Default,
+            Self::DefaultPublic => vv::WebrtcIpPolicy::DefaultPublic,
+            Self::PublicOnly => vv::WebrtcIpPolicy::PublicOnly,
+            Self::RelayOnly => vv::WebrtcIpPolicy::RelayOnly,
+        }
+    }
+}
+
+/// The host's choices.
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub profile: PathBuf,
+    /// A private window's profile is thrown away with it.
+    pub ephemeral: bool,
+    /// The engine's cache, when it is not below the profile.
+    pub cache: Option<PathBuf>,
+    /// Where minidumps go, when it is not below the profile.
+    pub crash: Option<PathBuf>,
+    /// Where the engine's runtime sockets go, when not below the profile.
+    pub runtime: Option<PathBuf>,
+    pub downloads: PathBuf,
+    pub read_dirs: Vec<PathBuf>,
+    pub remote_settings: RemoteSettings,
+    pub remote_settings_server: Option<String>,
+    pub content_processes: u32,
+    pub locales: String,
+    /// The WebRTC address policy the host asks for. The engine applies it
+    /// only when it announces `net.config`; the settings page says which.
+    pub webrtc: Option<WebrtcChoice>,
+    /// The SDK folder (`VIVARIUM_SDK_DIR`), when it is not where the library is.
+    pub sdk: Option<PathBuf>,
+}
+
+fn nonempty(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.is_empty())
+}
+
+/// `en_GB.UTF-8` as a BCP 47 tag, `en-US` when the environment says nothing.
+pub fn locale_tag(lang: &str) -> String {
+    let base = lang.split(['.', '@']).next().unwrap_or("");
+    if base.is_empty() || base == "C" || base == "POSIX" {
+        return "en-US".to_string();
+    }
+    base.replace('_', "-")
+}
+
+impl Config {
+    /// The choices of this process. `BINGUX_BROWSER_PROFILE` names the profile,
+    /// `BINGUX_BROWSER_REMOTE_SETTINGS` is `off`, `security` or `mozilla` and
+    /// `BINGUX_BROWSER_REMOTE_SETTINGS_SERVER` the mirror `security` reads from
+    /// (without one, or without a choice, the security data comes from
+    /// Mozilla). `BINGUX_BROWSER_FILE_DIRS` (a path list) adds folders `file://`
+    /// pages may read, `BINGUX_BROWSER_WEBRTC_IP_POLICY` (`default`,
+    /// `default-public`, `public-only`, `relay-only`) asks for a WebRTC address
+    /// policy and `VIVARIUM_SDK_DIR` names the engine.
+    pub fn from_environment(private: bool) -> Self {
+        Self::from_lookup(private, &|name| std::env::var(name).ok(), &|name| std::env::var_os(name))
+    }
+
+    /// [`Config::from_environment`] over any source of variables.
+    fn from_lookup(
+        private: bool,
+        var: &dyn Fn(&str) -> Option<String>,
+        var_os: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+    ) -> Self {
+        let path = |name: &str| var_os(name).filter(|value| !value.is_empty()).map(PathBuf::from).filter(|path| path.is_absolute());
+        let home = path("HOME").unwrap_or_else(|| PathBuf::from("/"));
+        let data = path("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local/share"));
+        let cache_home = path("XDG_CACHE_HOME").unwrap_or_else(|| home.join(".cache"));
+        let state_home = path("XDG_STATE_HOME").unwrap_or_else(|| home.join(".local/state"));
+        let runtime_home = path("XDG_RUNTIME_DIR");
+        let named = path("BINGUX_BROWSER_PROFILE");
+        let profile = if private {
+            let run = runtime_home.clone().unwrap_or_else(std::env::temp_dir);
+            run.join(format!("bingux-browser-private-{}", std::process::id()))
+        } else {
+            named.clone().unwrap_or_else(|| data.join("bingux-browser/profile"))
+        };
+        // Everything but the profile is the XDG place only for the browser's
+        // own profile: a named profile (and a private window's) keeps its
+        // cache, dumps and sockets with it, so two profiles share nothing.
+        let own = !private && named.is_none();
+        let server = nonempty(var("BINGUX_BROWSER_REMOTE_SETTINGS_SERVER"));
+        let remote_settings = match var("BINGUX_BROWSER_REMOTE_SETTINGS").as_deref() {
+            Some("off") => RemoteSettings::Off,
+            Some("mozilla") => RemoteSettings::MozillaDirect,
+            _ if server.is_some() => RemoteSettings::SecurityOnly,
+            _ => RemoteSettings::MozillaDirect,
+        };
+        let mut read_dirs: Vec<PathBuf> = ["Downloads", "Documents", "Desktop", "Pictures", "Videos", "Music"]
+            .iter()
+            .map(|name| home.join(name))
+            .filter(|dir| dir.is_dir())
+            .collect();
+        // More folders `file://` pages may read, named by the host.
+        if let Some(extra) = var_os("BINGUX_BROWSER_FILE_DIRS") {
+            read_dirs.extend(std::env::split_paths(&extra).filter(|dir| dir.is_absolute()));
+        }
+        Self {
+            profile,
+            ephemeral: private,
+            cache: own.then(|| cache_home.join("bingux-browser/engine")),
+            crash: own.then(|| state_home.join("bingux-browser/crashes")),
+            runtime: own.then(|| runtime_home.map(|run| run.join("bingux-browser"))).flatten(),
+            downloads: home.join("Downloads"),
+            read_dirs,
+            remote_settings,
+            remote_settings_server: server,
+            content_processes: 0,
+            locales: locale_tag(&var("LANG").unwrap_or_default()),
+            webrtc: var("BINGUX_BROWSER_WEBRTC_IP_POLICY").as_deref().and_then(WebrtcChoice::parse),
+            sdk: path("VIVARIUM_SDK_DIR"),
+        }
+    }
+
+    /// Who the engine says it is. The engine builds the user agent itself,
+    /// `Mozilla/5.0 (X11; Linux x86_64; rv:V.0) Gecko/20100101 <ua_name>/V.0`
+    /// with its own Gecko version `V`, so naming the product `Firefox` is all
+    /// it takes for sites to serve what they serve Firefox; the host reads no
+    /// file for it and appends no suffix. The single-instance name stays
+    /// `bingux-browser` so the browser never answers to a real Firefox's
+    /// remote commands.
+    fn identity(&self) -> vv::Identity {
+        vv::Identity {
+            // The Mozilla application ID the earlier Dot browser used, kept as a nod to it.
+            app_id: Some("{818c990f-687c-498c-bc9a-a99d9729702a}".to_string()),
+            app_name: Some("bingux-browser".to_string()),
+            remoting_name: Some("bingux-browser".to_string()),
+            vendor: Some("Bingux".to_string()),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            ua_name: Some("Firefox".to_string()),
+            locales: vec![self.locales.clone()],
+            ..vv::Identity::default()
+        }
+    }
+
+    fn directories(&self) -> vv::Directories {
+        let mut directories = vv::Directories::new(self.profile.clone());
+        directories.download = Some(self.downloads.clone());
+        directories.cache = self.cache.clone();
+        directories.crash = self.crash.clone();
+        directories.runtime = self.runtime.clone();
+        directories
+    }
+
+    fn remote_settings_choice(&self) -> vv::RemoteSettings {
+        match (&self.remote_settings, &self.remote_settings_server) {
+            (RemoteSettings::Off, _) => vv::RemoteSettings::Off,
+            (RemoteSettings::MozillaDirect, _) | (RemoteSettings::SecurityOnly, None) => vv::RemoteSettings::MozillaDirect,
+            (RemoteSettings::SecurityOnly, Some(server)) => vv::RemoteSettings::SecurityOnly { server: server.clone() },
+        }
+    }
+
+    /// The builder for this configuration. The engine must reach the standard
+    /// sandbox or it does not start.
+    pub(super) fn builder(&self) -> vv::EngineBuilder {
+        let mut builder = vv::Engine::builder(self.profile.clone())
+            .directories(self.directories())
+            .identity(self.identity())
+            .remote_settings(self.remote_settings_choice())
+            .sandbox_floor(vv::SandboxFloor::Standard)
+            .limits(vv::Limits {
+                content_processes: self.content_processes,
+                ..vv::Limits::default()
+            })
+            // The UI thread drops the engine at quit: a stuck engine is killed
+            // after this, not after the library's ten seconds.
+            .shutdown_timeout(Duration::from_secs(3));
+        for dir in &self.read_dirs {
+            builder = builder.file_read_dir(dir.clone());
+        }
+        if let Some(sdk) = &self.sdk {
+            builder = builder.resource_dir(sdk.clone());
+        }
+        builder
+    }
+
+    fn below(&self, name: &str) -> PathBuf {
+        self.profile.join("vivarium").join(name)
+    }
+
+    /// What the settings page says. `webrtc_applied` is whether the engine
+    /// took the policy the host asked for.
+    pub(super) fn settings(&self, webrtc_applied: bool) -> EngineSettings {
+        let webrtc_ip_policy = match (self.webrtc, webrtc_applied) {
+            (Some(choice), true) => choice.text().to_string(),
+            (Some(choice), false) => format!("Asked for \u{201c}{}\u{201d}, but this engine keeps its own fixed policy", choice.text()),
+            (None, _) => "The engine's own fixed policy: no local or TCP addresses are shared".to_string(),
+        };
+        EngineSettings {
+            profile_dir: self.profile.clone(),
+            cache_dir: self.cache.clone().unwrap_or_else(|| self.below("cache")),
+            download_dir: self.downloads.clone(),
+            crash_dir: self.crash.clone().unwrap_or_else(|| self.profile.join("crashes")),
+            remote_settings: self.remote_settings,
+            remote_settings_server: self.remote_settings_server.clone(),
+            content_process_limit: if self.content_processes == 0 { 8 } else { self.content_processes },
+            locales: self.locales.clone(),
+            webrtc_ip_policy,
+            sandbox_floor: "Standard: web content level 6, network level 2, seccomp on every process".to_string(),
+        }
+    }
+
+    /// A private window's profile goes with it.
+    pub(super) fn forget(&self) {
+        if self.ephemeral {
+            let _ = std::fs::remove_dir_all(&self.profile);
+        }
+    }
+
+    /// The profile folder.
+    pub fn profile(&self) -> &Path {
+        &self.profile
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::ffi::OsString;
+
+    use super::*;
+
+    fn config(private: bool, vars: &[(&str, &str)]) -> Config {
+        let vars: HashMap<String, String> = vars.iter().map(|(k, v)| ((*k).to_string(), (*v).to_string())).collect();
+        let text = vars.clone();
+        let os = vars;
+        Config::from_lookup(private, &move |name| text.get(name).cloned(), &move |name| os.get(name).map(OsString::from))
+    }
+
+    #[test]
+    fn a_locale_becomes_a_bcp47_tag() {
+        assert_eq!(locale_tag("en_GB.UTF-8"), "en-GB");
+        assert_eq!(locale_tag("de_DE@euro"), "de-DE");
+        assert_eq!(locale_tag("C"), "en-US");
+        assert_eq!(locale_tag(""), "en-US");
+    }
+
+    #[test]
+    fn the_engines_folders_are_the_xdg_ones() {
+        let c = config(
+            false,
+            &[
+                ("HOME", "/home/a"),
+                ("XDG_DATA_HOME", "/data"),
+                ("XDG_CACHE_HOME", "/cache"),
+                ("XDG_STATE_HOME", "/state"),
+                ("XDG_RUNTIME_DIR", "/run/user/1"),
+            ],
+        );
+        assert_eq!(c.profile, Path::new("/data/bingux-browser/profile"));
+        assert_eq!(c.cache.as_deref(), Some(Path::new("/cache/bingux-browser/engine")));
+        assert_eq!(c.crash.as_deref(), Some(Path::new("/state/bingux-browser/crashes")));
+        assert_eq!(c.runtime.as_deref(), Some(Path::new("/run/user/1/bingux-browser")));
+        assert_eq!(c.downloads, Path::new("/home/a/Downloads"));
+        let settings = c.settings(false);
+        assert_eq!(settings.crash_dir, Path::new("/state/bingux-browser/crashes"));
+        assert_eq!(settings.cache_dir, Path::new("/cache/bingux-browser/engine"));
+    }
+
+    #[test]
+    fn without_xdg_variables_the_defaults_are_below_home() {
+        let c = config(false, &[("HOME", "/home/a")]);
+        assert_eq!(c.profile, Path::new("/home/a/.local/share/bingux-browser/profile"));
+        assert_eq!(c.cache.as_deref(), Some(Path::new("/home/a/.cache/bingux-browser/engine")));
+        assert_eq!(c.crash.as_deref(), Some(Path::new("/home/a/.local/state/bingux-browser/crashes")));
+        assert_eq!(c.runtime, None, "no runtime directory, no sockets elsewhere");
+    }
+
+    #[test]
+    fn a_named_profile_keeps_everything_with_it() {
+        let c = config(false, &[("HOME", "/home/a"), ("BINGUX_BROWSER_PROFILE", "/tmp/p")]);
+        assert_eq!(c.profile, Path::new("/tmp/p"));
+        assert_eq!((c.cache.clone(), c.crash.clone(), c.runtime.clone()), (None, None, None));
+        assert_eq!(c.settings(false).crash_dir, Path::new("/tmp/p/crashes"));
+        assert_eq!(c.settings(false).cache_dir, Path::new("/tmp/p/vivarium/cache"));
+    }
+
+    #[test]
+    fn a_private_window_has_a_profile_of_its_own_that_goes_with_it() {
+        let c = config(true, &[("HOME", "/home/a"), ("XDG_RUNTIME_DIR", "/run/user/1")]);
+        assert!(c.ephemeral);
+        assert!(c.profile.starts_with("/run/user/1") && c.profile.to_string_lossy().contains("bingux-browser-private-"));
+        assert_eq!((c.cache, c.crash, c.runtime), (None, None, None), "its dumps and cache go with it");
+    }
+
+    #[test]
+    fn remote_settings_follow_the_choice_and_the_mirror() {
+        assert_eq!(config(false, &[]).remote_settings, RemoteSettings::MozillaDirect);
+        assert_eq!(config(false, &[("BINGUX_BROWSER_REMOTE_SETTINGS", "off")]).remote_settings, RemoteSettings::Off);
+        let mirrored = config(false, &[("BINGUX_BROWSER_REMOTE_SETTINGS_SERVER", "https://rs.example/v1")]);
+        assert_eq!(mirrored.remote_settings, RemoteSettings::SecurityOnly);
+        assert_eq!(
+            mirrored.remote_settings_choice(),
+            vv::RemoteSettings::SecurityOnly {
+                server: "https://rs.example/v1".to_string()
+            }
+        );
+        let asked_without_mirror = Config {
+            remote_settings: RemoteSettings::SecurityOnly,
+            remote_settings_server: None,
+            ..config(false, &[])
+        };
+        assert_eq!(asked_without_mirror.remote_settings_choice(), vv::RemoteSettings::MozillaDirect);
+    }
+
+    #[test]
+    fn the_engine_names_itself_firefox_and_the_browser_for_everything_else() {
+        let identity = config(false, &[("LANG", "de_DE.UTF-8")]).identity();
+        assert_eq!(identity.ua_name.as_deref(), Some("Firefox"), "sites see the user agent of Firefox");
+        assert_eq!(identity.user_agent_suffix, None, "and nothing appended");
+        assert_eq!(identity.remoting_name.as_deref(), Some("bingux-browser"));
+        assert_eq!(identity.locales, ["de-DE"]);
+    }
+
+    #[test]
+    fn the_directories_reach_the_engine_configuration() {
+        let c = config(false, &[("HOME", "/h"), ("XDG_RUNTIME_DIR", "/run/u")]);
+        let directories = c.directories();
+        assert_eq!(directories.crash.as_deref(), Some(Path::new("/h/.local/state/bingux-browser/crashes")));
+        assert_eq!(directories.cache.as_deref(), Some(Path::new("/h/.cache/bingux-browser/engine")));
+        assert_eq!(directories.runtime.as_deref(), Some(Path::new("/run/u/bingux-browser")));
+        assert_eq!(directories.download.as_deref(), Some(Path::new("/h/Downloads")));
+    }
+
+    #[test]
+    fn the_webrtc_policy_is_the_hosts_choice_and_the_page_says_whether_it_took() {
+        assert_eq!(config(false, &[]).webrtc, None);
+        let c = config(false, &[("BINGUX_BROWSER_WEBRTC_IP_POLICY", "relay-only")]);
+        assert_eq!(c.webrtc, Some(WebrtcChoice::RelayOnly));
+        assert_eq!(WebrtcChoice::RelayOnly.policy(), vv::WebrtcIpPolicy::RelayOnly);
+        assert!(c.settings(true).webrtc_ip_policy.contains("relay"));
+        assert!(c.settings(false).webrtc_ip_policy.contains("keeps its own fixed policy"));
+        assert!(config(false, &[]).settings(false).webrtc_ip_policy.contains("fixed policy"));
+        assert_eq!(config(false, &[("BINGUX_BROWSER_WEBRTC_IP_POLICY", "anything")]).webrtc, None, "an unknown word is no choice");
+    }
+}
