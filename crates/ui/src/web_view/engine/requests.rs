@@ -404,12 +404,21 @@ pub(super) fn answer(open: Open, response: Response) -> Result<(), Unanswered> {
             None => SelectReply::Cancel,
         }),
         (Open::FilePicker(reply), Response::FilePicker { paths }) => {
-            let files: Vec<PickedFile> = paths.iter().filter_map(|path| picked(path)).collect();
-            reply.answer(if files.is_empty() {
-                FilePickerReply::Cancel
-            } else {
-                FilePickerReply::Files(files)
-            })
+            // Opening the files can wait on a slow disk: it is done on a
+            // thread of its own, never on the UI thread that answers. A
+            // thread that does not start drops the responder: the default.
+            let _ = std::thread::Builder::new()
+                .name("web-view-picker".to_string())
+                .spawn(move || {
+                    let files: Vec<PickedFile> =
+                        paths.iter().filter_map(|path| picked(path)).collect();
+                    let _ = reply.answer(if files.is_empty() {
+                        FilePickerReply::Cancel
+                    } else {
+                        FilePickerReply::Files(files)
+                    });
+                });
+            Ok(())
         }
         _ => return Err(Unanswered::Mismatch),
     };

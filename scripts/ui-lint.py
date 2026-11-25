@@ -369,6 +369,8 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/document/recents.rs": "recently-used.xbel; every call is on a worker (spawn_blocking or spawn_detached) by the document manager",
     "crates/ui/src/document/scene.rs": "the scene file: read once in Application::run before the window exists, written by a worker half a second after the last change",
     "crates/ui/src/document/documents_tests.rs": "test fixtures: files, drafts a crash left and the changes another program makes, made before or beside the headless window and never in render",
+    "crates/ui/src/web_view/engine/requests.rs": "the files a page's file picker gets are opened on a thread of their own (`answer`), never on the UI thread",
+    "crates/ui/src/web_view/engine/requests/tests.rs": "a unit test's fixture files in the temporary folder; no UI thread",
 }
 
 
