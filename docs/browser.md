@@ -40,13 +40,13 @@ comes from Mozilla. The settings page shows what was chosen and does not change 
 Where the engine keeps things (the XDG folders; a named profile, and a private window, keep every folder
 below their profile instead, so two profiles share nothing):
 
-| What | Where |
-| ---- | ----- |
-| profile | `$XDG_DATA_HOME/bingux-browser/profile` |
-| cache | `$XDG_CACHE_HOME/bingux-browser/engine` |
+| What                        | Where                                    |
+| --------------------------- | ---------------------------------------- |
+| profile                     | `$XDG_DATA_HOME/bingux-browser/profile`  |
+| cache                       | `$XDG_CACHE_HOME/bingux-browser/engine`  |
 | crash dumps, never uploaded | `$XDG_STATE_HOME/bingux-browser/crashes` |
-| runtime sockets | `$XDG_RUNTIME_DIR/bingux-browser` |
-| downloads | `~/Downloads` |
+| runtime sockets             | `$XDG_RUNTIME_DIR/bingux-browser`        |
+| downloads                   | `~/Downloads`                            |
 
 `file://` pages may read `Documents`, `Desktop`, `Pictures`, `Videos` and `Music` of the home folder (those that
 exist) and the folders `BINGUX_BROWSER_FILE_DIRS` names (a path list). A folder inside one of the engine's own
@@ -71,15 +71,15 @@ desktop size and at 390x800 over the test double. `--snapshot --list` names them
 
 ## The model
 
-| Part | What it holds |
-| ---- | ------------- |
-| `Tab` | url, title, load progress and error, security, history, zoom, audio, pinned, private, crash, the questions waiting (`Prompt`), find state, certificate error, opener |
-| `TabList` | order (pinned first, as a block), the one on show, close rule (opener, else the neighbour that takes its place), reorder, pin |
-| `Browser` | tabs, closed tabs, downloads, history, permissions, engine state, what only the window can do (`UiRequest`), toasts (`Notice`). It calls the backend itself; the UI calls its commands |
-| `address` | `classify` (address, words, nothing; `javascript:` is words), `display`, `origin`, search engines |
-| `suggest`, `history` | the rows under the address bar: typed text, open tabs, history |
-| `shortcuts` | key and modifiers to `Command`, per platform (Ctrl on Linux and Windows, Command on macOS; Alt+1-9 on Linux) |
-| `failure`, `security` | the words of error pages, certificate problems and the page info |
+| Part                  | What it holds                                                                                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Tab`                 | url, title, load progress and error, security, history, zoom, audio, pinned, private, crash, the questions waiting (`Prompt`), find state, certificate error, opener                   |
+| `TabList`             | order (pinned first, as a block), the one on show, close rule (opener, else the neighbour that takes its place), reorder, pin                                                          |
+| `Browser`             | tabs, closed tabs, downloads, history, permissions, engine state, what only the window can do (`UiRequest`), toasts (`Notice`). It calls the backend itself; the UI calls its commands |
+| `address`             | `classify` (address, words, nothing; `javascript:` is words), `display`, `origin`, search engines                                                                                      |
+| `suggest`, `history`  | the rows under the address bar: typed text, open tabs, history                                                                                                                         |
+| `shortcuts`           | key and modifiers to `Command`, per platform (Ctrl on Linux and Windows, Command on macOS; Alt+1-9 on Linux)                                                                           |
+| `failure`, `security` | the words of error pages, certificate problems and the page info                                                                                                                       |
 
 Every rule has a test (`cargo test`), the commands over `TestDoubleBackend`.
 
@@ -109,22 +109,22 @@ event. No thread of the browser waits on the engine.
 
 ## Which bingux-ui piece for each part
 
-| Part | Primitive |
-| ---- | --------- |
-| Tab strip: add, close, reorder, pinned, tab list, loading/audio/crashed/attention marks | `tab_frame` + `tab_strip` (`TabItem::pinned`, `status`, `tab_menu`, `on_status`: added) |
-| Toolbar, Back/Forward/Reload/Stop, downloads, zoom chip | `icon_button`, `action_button`, `menu_button`; the toolbar is a row on `Paint::Bg` with a bottom hairline |
-| Address bar | `text_field` (leading glyph, `revert_to`, `on_arrow`, `on_enter_modifiers`) |
-| Suggestions | `popover(..).attached()` and `suggestion_row` (added) |
-| Page info, downloads | `popover` (added) with `Group`, `row`, `property_row`, `progress_bar` |
-| Find bar | `text_field(..).flat()` (made for a docked strip), `icon_button`, `checkbox` |
-| Permission prompt | `banner` with three actions (Block, Allow this time, Allow); on a phone the actions take a row of their own |
-| alert, confirm, prompt, beforeunload, authentication, `<select>` | `dialog` with `content`; the certificate details are a dialog whose way on is a destructive response |
-| `<input type=file>` | `files::choose` |
-| Error, crash, certificate, new tab pages | `status_page` |
-| Context menus (link, image, selection, editable, page) | `Overlays::show_menu` |
-| Settings page | `page_column`, `Group`, `row`, `dropdown`, `property_row` |
-| Phone | no strip: address row on top, history row below, tabs as a `popup` sheet |
-| Page | `frame_view` with `FocusEscape::Producer` (Tab goes into the page, F6 gets out) |
+| Part                                                                                    | Primitive                                                                                                   |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Tab strip: add, close, reorder, pinned, tab list, loading/audio/crashed/attention marks | `tab_frame` + `tab_strip` (`TabItem::pinned`, `status`, `tab_menu`, `on_status`: added)                     |
+| Toolbar, Back/Forward/Reload/Stop, downloads, zoom chip                                 | `icon_button`, `action_button`, `menu_button`; the toolbar is a row on `Paint::Bg` with a bottom hairline   |
+| Address bar                                                                             | `text_field` (leading glyph, `revert_to`, `on_arrow`, `on_enter_modifiers`)                                 |
+| Suggestions                                                                             | `popover(..).attached()` and `suggestion_row` (added)                                                       |
+| Page info, downloads                                                                    | `popover` (added) with `Group`, `row`, `property_row`, `progress_bar`                                       |
+| Find bar                                                                                | `text_field(..).flat()` (made for a docked strip), `icon_button`, `checkbox`                                |
+| Permission prompt                                                                       | `banner` with three actions (Block, Allow this time, Allow); on a phone the actions take a row of their own |
+| alert, confirm, prompt, beforeunload, authentication, `<select>`                        | `dialog` with `content`; the certificate details are a dialog whose way on is a destructive response        |
+| `<input type=file>`                                                                     | `files::choose`                                                                                             |
+| Error, crash, certificate, new tab pages                                                | `status_page`                                                                                               |
+| Context menus (link, image, selection, editable, page)                                  | `Overlays::show_menu`                                                                                       |
+| Settings page                                                                           | `page_column`, `Group`, `row`, `dropdown`, `property_row`                                                   |
+| Phone                                                                                   | no strip: address row on top, history row below, tabs as a `popup` sheet                                    |
+| Page                                                                                    | `frame_view` with `FocusEscape::Producer` (Tab goes into the page, F6 gets out)                             |
 
 ## What is missing
 
@@ -197,36 +197,36 @@ same 8 vCPUs and other agents' jobs running: **run to run it varies by a third**
 decimals). `long.html` is 400 sections scrolled by 60 wheel notches three times down and twice up;
 `anim.html` is a 40-circle canvas animation at `requestAnimationFrame`; all at scale 1:
 
-| build | page | window | frames shown/s (median of the seconds that had any) | render | present | input->frame |
-| ----- | ---- | ------ | -------------------------------------------------- | ------ | ------- | ------------ |
-| release | scroll | 1100x760 | 59.5 | 1.4 ms | 6.8 ms | 7 ms |
-| release | animation | 1100x760 | 59 | 1.6 ms | 8.7 ms | |
-| release | scroll | 3440x1304 | 43.5 | 5.0 ms | 21.8 ms | 17 ms |
-| release | animation | 3440x1304 | 46 (an earlier run: 57) | 5.3 ms | 22.7 ms | |
-| debug | scroll | 1100x760 | 60 | 1.1 ms | 3.9 ms | 10 ms |
-| debug | animation | 1100x760 | 60 | 1.0 ms | 3.4 ms | |
-| debug | scroll | 3440x1304 | 51 | 4.2 ms | 17.2 ms | 13 ms |
-| debug | animation | 3440x1304 | 36 (an earlier run: 30) | 6.8 ms | 38 ms | |
+| build   | page      | window    | frames shown/s (median of the seconds that had any) | render | present | input->frame |
+| ------- | --------- | --------- | --------------------------------------------------- | ------ | ------- | ------------ |
+| release | scroll    | 1100x760  | 59.5                                                | 1.4 ms | 6.8 ms  | 7 ms         |
+| release | animation | 1100x760  | 59                                                  | 1.6 ms | 8.7 ms  |              |
+| release | scroll    | 3440x1304 | 43.5                                                | 5.0 ms | 21.8 ms | 17 ms        |
+| release | animation | 3440x1304 | 46 (an earlier run: 57)                             | 5.3 ms | 22.7 ms |              |
+| debug   | scroll    | 1100x760  | 60                                                  | 1.1 ms | 3.9 ms  | 10 ms        |
+| debug   | animation | 1100x760  | 60                                                  | 1.0 ms | 3.4 ms  |              |
+| debug   | scroll    | 3440x1304 | 51                                                  | 4.2 ms | 17.2 ms | 13 ms        |
+| debug   | animation | 3440x1304 | 36 (an earlier run: 30)                             | 6.8 ms | 38 ms   |              |
 
 What limits the frame rate:
 
-* **The engine is not the limit.** Frames reach the mailbox every 16.7 ms on average at both sizes (the
+- **The engine is not the limit.** Frames reach the mailbox every 16.7 ms on average at both sizes (the
   engine's own 60 Hz clock; p95 23-54 ms while the machine was busy).
-* **At 1100x760 nothing is: both builds show 60/s.** The frame view's work is small (`paint` 0.7-1 ms).
-* **At 3440x1304 the window's present is.** One frame is 18 MB; `render` (recording) stays at 5 ms but
+- **At 1100x760 nothing is: both builds show 60/s.** The frame view's work is small (`paint` 0.7-1 ms).
+- **At 3440x1304 the window's present is.** One frame is 18 MB; `render` (recording) stays at 5 ms but
   `present` (rasterise, upload, swap) is 17-38 ms here, past the 16.7 ms budget, so frames are shown at
   36-51/s while the engine makes 60 and the mailbox drops the surplus. That stage is the GL driver's
   (llvmpipe on the build machine), not bingux code; on a GPU it should be a fraction of this. The numbers
   from Kieran's machine are the ones that decide this: run with `BINGUX_FRAME_STATS=1` and read `present`
   against `render`. A `present` near 16.7 ms whatever `render` costs is the swap waiting for vertical blank;
   a `present` far above it is the rasteriser or the upload.
-* **Debug versus release.** Dependencies and bingux-ui are optimised in a dev build already (see the
+- **Debug versus release.** Dependencies and bingux-ui are optimised in a dev build already (see the
   profile in `Cargo.toml`), so the difference is the app's own code and the missing LTO: `paint`+`render`
   were within 1.5 ms of each other at both sizes. The 3440 animation was the only run where the debug build
   fell clearly behind (36/s against 46-57/s), by the host thread being late for frames. A release build
   (`BINGUX_BROWSER_BUILD=release packages/bingux-browser/run.sh`, thin LTO, stripped, 41 MB against 573 MB)
   is what to run.
-* **One copy.** The measurements above are from the earlier crate, which handed the engine's buffer to Skia
+- **One copy.** The measurements above are from the earlier crate, which handed the engine's buffer to Skia
   in place. The current `vivarium` crate reads a frame only through its checked view, which copies the
   shared memory once per frame (an engine could write a buffer it handed over; the copy cannot tear under a
   reader), and the backend hands that copy to Skia without another one. The numbers have not been measured
@@ -249,19 +249,19 @@ reads it yet.
 The engine owns scrolling (its smooth scrolling, momentum and overscroll); the host forwards what the
 device sent:
 
-* A wheel notch is `WheelUnit::Line` with the count of notches (the window's 64 px step is divided out
+- A wheel notch is `WheelUnit::Line` with the count of notches (the window's 64 px step is divided out
   again by the view). The engine backend tells the engine `3 * notches` lines with `ticks` = notches, which is
   what Firefox on GTK reports for a notch (`deltaY` 3 in `DOM_DELTA_LINE`). Measured on the real engine
   (`pages/scroll.html`, release build): **57 px per notch** (3 lines of 19 px) with 41 animation frames for
   570 px. Before this, a notch was told as one line and scrolled 19 px, a third of Firefox's.
-* A touchpad is `WheelUnit::Pixel` in the view's logical pixels (the window's device pixels divided by
+- A touchpad is `WheelUnit::Pixel` in the view's logical pixels (the window's device pixels divided by
   the display scale and by `BINGUX_TOUCHPAD_FACTOR`) with the gesture phase: `Began`, `Changed`, `Ended`,
   `Cancelled`. Upstream Freya dropped every phase but `Changed`, which left the engine without the start and
   the lift of the fingers (no fling, no overscroll); the vendored `freya-winit` now delivers them
   (`WheelPhase`, see `packages/vendor/README.md`).
-* None of `BINGUX_WHEEL_STEP`, the wheel feel of `ScrollView` (`wheel_accel`) or the touchpad factor
+- None of `BINGUX_WHEEL_STEP`, the wheel feel of `ScrollView` (`wheel_accel`) or the touchpad factor
   accelerates the page: they apply to Freya's own scroll views, and the view divides them out.
-* Not verified: a real touchpad (the build machine has none; xdotool sends notches, and on X11 winit
+- Not verified: a real touchpad (the build machine has none; xdotool sends notches, and on X11 winit
   delivers each notch twice, so a `scroll.html` run there reads twice the distance a Wayland session gives).
 
 ## Appearance
@@ -274,14 +274,14 @@ system colours, which the browser does not set. An engine that does not take the
 `Unsupported`, which is not an error: the colour scheme also goes to each session
 (`Session::set_color_scheme`), and new sessions are made in it.
 
-| bingux-ui | the page sees |
-| --------- | ------------- |
-| `Tokens::scheme` `PreferDark` | `prefers-color-scheme: dark`; `Default` and `PreferLight` are light |
-| `Tokens::accent` | `AccentColor` system colour |
-| `LANG` | `navigator.languages` (set at engine start) |
-| `Tokens::reduced_motion`, `stress::text_scale()` | nothing: ABI 2.0 has no field for them |
-| (no token) | `prefers-contrast: no-preference`; `forced-colors: none` |
-| the interface font | nothing: the ABI has no default-font setting |
+| bingux-ui                                        | the page sees                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------- |
+| `Tokens::scheme` `PreferDark`                    | `prefers-color-scheme: dark`; `Default` and `PreferLight` are light |
+| `Tokens::accent`                                 | `AccentColor` system colour                                         |
+| `LANG`                                           | `navigator.languages` (set at engine start)                         |
+| `Tokens::reduced_motion`, `stress::text_scale()` | nothing: ABI 2.0 has no field for them                              |
+| (no token)                                       | `prefers-contrast: no-preference`; `forced-colors: none`            |
+| the interface font                               | nothing: the ABI has no default-font setting                        |
 
 ## User agent
 
@@ -311,7 +311,7 @@ last second, and turns thumb drags and track clicks into engine commands.
 What the ABI must offer (sent to InputC):
 
 1. `vv_event_scroll { session, root_scroller_id, offset_x, offset_y, viewport_w, viewport_h, content_w,
-   content_h, scale }` for the root scroller of the top frame, in CSS pixels, on every change, coalesced
+content_h, scale }` for the root scroller of the top frame, in CSS pixels, on every change, coalesced
    to the frame rate and always sent once after the load finishes and after a resize. A flag for
    `overflow: hidden` axes (no bar) and for `scrollbar-width: none`.
 2. `vv_session_scroll_to(session, x, y, behaviour)` with `behaviour` = instant (a thumb drag), smooth
@@ -367,5 +367,5 @@ the library has to provide, in the order an app would use it:
 6. **Proof.** `BINGUX_TEXT_DIRECTION=rtl` in `layout-lint.py`, in `focus-ring-check.py` and in the
    taxonomy's snapshot run, with a mirrored specimen for each component above.
 
-Until then the browser's `rtl` snapshot scenario shows an RTL *page* (drawn by the engine), with the
+Until then the browser's `rtl` snapshot scenario shows an RTL _page_ (drawn by the engine), with the
 chrome unmirrored; that is the honest state, not a design choice.

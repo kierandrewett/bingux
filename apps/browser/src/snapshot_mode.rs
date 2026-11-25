@@ -15,11 +15,11 @@ use std::ffi::OsString;
 use std::sync::Arc;
 use std::time::Duration;
 
-use bingux_ui::web_view::test_double::TestDoubleBackend;
-use bingux_ui::web_view::{BrowserEvent, Capabilities, FailureCause, TabEvent, TabId};
 use bingux_ui::nav::{RouteTable, provide_router};
 use bingux_ui::prelude::Location;
 use bingux_ui::snapshot::Snapshot;
+use bingux_ui::web_view::test_double::TestDoubleBackend;
+use bingux_ui::web_view::{BrowserEvent, Capabilities, FailureCause, TabEvent, TabId};
 use freya::prelude::*;
 
 use crate::model::browser::Options;
@@ -95,7 +95,8 @@ fn wait(shot: &mut Snapshot, ms: u64) {
 
 /// The engine session of the `n`th tab (from 0).
 fn session(n: usize) -> TabId {
-    ctx().browser
+    ctx()
+        .browser
         .peek()
         .tabs
         .all()
@@ -129,8 +130,22 @@ fn tabs(shot: &mut Snapshot, rig: &Rig) {
         browser.set_pinned(second, true);
         browser.select(third);
     });
-    tell(rig, 2, TabEvent::Audio(bingux_ui::web_view::Audio { playing: true, muted: false }));
-    tell(rig, 7, TabEvent::Audio(bingux_ui::web_view::Audio { playing: true, muted: true }));
+    tell(
+        rig,
+        2,
+        TabEvent::Audio(bingux_ui::web_view::Audio {
+            playing: true,
+            muted: false,
+        }),
+    );
+    tell(
+        rig,
+        7,
+        TabEvent::Audio(bingux_ui::web_view::Audio {
+            playing: true,
+            muted: true,
+        }),
+    );
     wait(shot, 500);
 }
 
@@ -142,7 +157,16 @@ fn tab_menu(shot: &mut Snapshot, rig: &Rig) {
 
 fn loading(shot: &mut Snapshot, rig: &Rig) {
     wait(shot, 300);
-    tell(rig, 0, TabEvent::Load { started: false, loading: true, progress: 0.45, error: None });
+    tell(
+        rig,
+        0,
+        TabEvent::Load {
+            started: false,
+            loading: true,
+            progress: 0.45,
+            error: None,
+        },
+    );
     wait(shot, 400);
 }
 
@@ -241,7 +265,8 @@ fn tab_list(shot: &mut Snapshot, _: &Rig) {
 fn popup_window(shot: &mut Snapshot, rig: &Rig) {
     wait(shot, 500);
     let opener = session(0);
-    rig.double.open_window(opener, "https://news.bingux.dev/popup");
+    rig.double
+        .open_window(opener, "https://news.bingux.dev/popup");
     wait(shot, 600);
 }
 
@@ -278,7 +303,12 @@ fn capabilities(shot: &mut Snapshot, _: &Rig) {
 /// The engine process is killed: the window says so, and offers to start it again.
 fn engine_failed(shot: &mut Snapshot, rig: &Rig) {
     wait(shot, 500);
-    rig.double.fail_engine(FailureCause::Crashed, "the engine process was killed", 137, true);
+    rig.double.fail_engine(
+        FailureCause::Crashed,
+        "the engine process was killed",
+        137,
+        true,
+    );
     wait(shot, 600);
 }
 
@@ -292,7 +322,12 @@ fn engine_restart(shot: &mut Snapshot, rig: &Rig) {
 /// The engine broke the protocol and the library ended it.
 fn engine_violation(shot: &mut Snapshot, rig: &Rig) {
     wait(shot, 500);
-    rig.double.fail_engine(FailureCause::ProtocolViolation, "a frame was sent for a session that is not there", 0, true);
+    rig.double.fail_engine(
+        FailureCause::ProtocolViolation,
+        "a frame was sent for a session that is not there",
+        0,
+        true,
+    );
     wait(shot, 600);
 }
 
@@ -335,12 +370,20 @@ fn scenarios() -> Vec<Scenario> {
         scenario("info-plain", &["plain.example.net"], info),
         scenario("menu", &["example.com"], menu),
         scenario("settings", &["example.com"], settings),
-        scenario("suggestions", &["example.com", "news.bingux.dev", "docs.example.org"], suggestions),
+        scenario(
+            "suggestions",
+            &["example.com", "news.bingux.dev", "docs.example.org"],
+            suggestions,
+        ),
         scenario("context", &["example.com"], context),
         scenario("hover", &["example.com"], hover),
         scenario("zoom", &["example.com"], zoomed),
         scenario("fullscreen", &["video.example.net"], fullscreen),
-        scenario("tab-list", &["example.com", "news.bingux.dev", "video.example.net"], tab_list),
+        scenario(
+            "tab-list",
+            &["example.com", "news.bingux.dev", "video.example.net"],
+            tab_list,
+        ),
         scenario("popup", &["example.com"], popup_window),
         scenario("rtl", &["news.bingux.dev"], rtl),
         Scenario {
@@ -351,8 +394,16 @@ fn scenarios() -> Vec<Scenario> {
             engine: Some(engine_of_today),
             ..scenario("capabilities", &["example.com"], capabilities)
         },
-        scenario("engine-failed", &["example.com", "news.bingux.dev"], engine_failed),
-        scenario("engine-restart", &["example.com", "news.bingux.dev"], engine_restart),
+        scenario(
+            "engine-failed",
+            &["example.com", "news.bingux.dev"],
+            engine_failed,
+        ),
+        scenario(
+            "engine-restart",
+            &["example.com", "news.bingux.dev"],
+            engine_restart,
+        ),
         scenario("engine-violation", &["example.com"], engine_violation),
         Scenario {
             engine: Some(engine_unsafe_profile),
@@ -372,8 +423,14 @@ fn scenarios() -> Vec<Scenario> {
 /// The window root a snapshot mounts.
 fn app(rig: &Rig, scenario: &Scenario) -> impl Fn() -> Element + use<> {
     let engine = Engine(rig.double.clone());
-    let options = Options { private: scenario.private };
-    let start: Vec<String> = scenario.start.iter().map(|url| (*url).to_string()).collect();
+    let options = Options {
+        private: scenario.private,
+    };
+    let start: Vec<String> = scenario
+        .start
+        .iter()
+        .map(|url| (*url).to_string())
+        .collect();
     move || {
         provide_router(Arc::new(RouteTable::new(SCHEME)), &Location::rooted(SCHEME));
         Element::from(App {
@@ -421,7 +478,10 @@ fn run_real(dir: &str, addresses: &[String]) {
             wait(&mut shot, 500);
             waited += 500;
             let ready = CTX.with(Cell::get).is_some_and(|ctx| {
-                ctx.browser.peek().active().is_some_and(|tab| !tab.title.is_empty() && !tab.load.loading)
+                ctx.browser
+                    .peek()
+                    .active()
+                    .is_some_and(|tab| !tab.title.is_empty() && !tab.load.loading)
             });
             if ready {
                 break;
@@ -429,7 +489,10 @@ fn run_real(dir: &str, addresses: &[String]) {
         }
         // Then a few seconds for the first frames of it.
         wait(&mut shot, 4_000);
-        let title = CTX.with(Cell::get).map(|ctx| ctx.browser.peek().active().map(|tab| tab.title.clone())).flatten();
+        let title = CTX
+            .with(Cell::get)
+            .map(|ctx| ctx.browser.peek().active().map(|tab| tab.title.clone()))
+            .flatten();
         let path = format!("{dir}/real-{label}.png");
         shot.save(&path);
         println!("[snapshot] wrote {path} (title {title:?}, waited {waited} ms)");
@@ -437,7 +500,10 @@ fn run_real(dir: &str, addresses: &[String]) {
         // and the toolbar's buttons must be found by name.
         for name in ["Web page", "Back", "Forward", "Reload"] {
             let found = shot.click_name(name);
-            println!("[snapshot] accessible name {name:?} ({label}): {}", if found { "found" } else { "MISSING" });
+            println!(
+                "[snapshot] accessible name {name:?} ({label}): {}",
+                if found { "found" } else { "MISSING" }
+            );
         }
     }
 }
@@ -451,12 +517,18 @@ pub fn run(arguments: &[OsString]) {
         }
         return;
     }
-    let dir = arguments
-        .first()
-        .map_or_else(|| "/tmp/bingux-browser-snapshots".into(), |dir| dir.to_string_lossy().into_owned());
+    let dir = arguments.first().map_or_else(
+        || "/tmp/bingux-browser-snapshots".into(),
+        |dir| dir.to_string_lossy().into_owned(),
+    );
     let only: Vec<String> = arguments
         .get(1)
-        .map(|list| list.to_string_lossy().split(',').map(str::to_string).collect())
+        .map(|list| {
+            list.to_string_lossy()
+                .split(',')
+                .map(str::to_string)
+                .collect()
+        })
         .unwrap_or_default();
     std::fs::create_dir_all(&dir).expect("create the snapshot folder");
     if only.first().is_some_and(|name| name == "real") {
