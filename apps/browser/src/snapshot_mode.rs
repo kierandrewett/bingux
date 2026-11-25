@@ -276,8 +276,9 @@ fn rtl(shot: &mut Snapshot, rig: &Rig) {
     wait(shot, 500);
 }
 
-/// An engine that announces what the real one does today: pages and favicons,
-/// and none of the host-answered things.
+/// An engine that accepts none of the host-answered request kinds: pages and
+/// favicons only. (The engine of 2026-11-25 accepts every kind the browser
+/// answers; an older or a cut-down one may not.)
 fn engine_of_today() -> Arc<TestDoubleBackend> {
     TestDoubleBackend::with_capabilities(Capabilities {
         favicons: true,
