@@ -432,7 +432,13 @@ impl CertificateDelegate for Host<'_> {
 }
 
 impl DownloadDelegate for Host<'_> {
-    fn on_download(&mut self, _: SessionId, download: DownloadEvent) {
+    /// A download belongs to a contextual identity, not to a page: the
+    /// engine's event names no session.
+    fn on_download(
+        &mut self,
+        _: Option<vivarium::contextual_identities::ContextualIdentityId>,
+        download: DownloadEvent,
+    ) {
         if let Some(info) = requests::download_info(&download) {
             self.shared.push(BrowserEvent::Download(info));
         }
