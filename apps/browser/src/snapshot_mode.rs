@@ -569,3 +569,70 @@ pub fn run(arguments: &[OsString]) {
         }
     }
 }
+
+/// The window's controls pressed the way a person presses them, over the test
+/// double: what opens the downloads list.
+///
+/// Failures these tests guard against:
+///   1. the toolbar's downloads button does nothing while a download runs,
+///      which is when the person wants it (the button was busy, and a busy
+///      icon button swallows presses);
+///   2. the toast's "Show" does not open the list;
+///   3. the button does nothing when nothing runs either (the control).
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn open(shot: &mut Snapshot) -> bool {
+        let _ = shot;
+        ctx().chrome.downloads_open.peek().clone()
+    }
+
+    fn window() -> (Snapshot, Rig) {
+        CTX.with(|slot| slot.set(None));
+        let rig = Rig {
+            double: TestDoubleBackend::new(),
+        };
+        let scenario = scenario("press", &["files.example.net"], nothing);
+        let mut shot = Snapshot::new(app(&rig, &scenario), (1100.0, 700.0));
+        wait(&mut shot, 800);
+        (shot, rig)
+    }
+
+    #[test]
+    fn the_downloads_button_opens_the_list_while_a_download_runs() {
+        let (mut shot, _rig) = window();
+        assert_eq!(ctx().browser.peek().downloads.active(), 1);
+        assert!(
+            shot.click_name("Downloads: 1 running"),
+            "the button is there"
+        );
+        wait(&mut shot, 400);
+        assert!(open(&mut shot));
+    }
+
+    #[test]
+    fn the_downloads_button_opens_the_list_when_nothing_runs() {
+        let (mut shot, rig) = window();
+        rig.double.advance_downloads(10_000_000);
+        wait(&mut shot, 400);
+        assert_eq!(ctx().browser.peek().downloads.active(), 0);
+        assert!(shot.click_name("Downloads"), "the button is there");
+        wait(&mut shot, 400);
+        assert!(open(&mut shot));
+    }
+
+    #[test]
+    fn the_toasts_show_opens_the_list() {
+        let (mut shot, _rig) = window();
+        // The button's words are drawn text, not an accessible name.
+        let shown = shot.runner().find_many(|node, element| {
+            let label = Label::try_downcast(element)?;
+            (label.text == "Show").then(|| node.layout().area.center())
+        });
+        let centre = shown.first().expect("the toast for the download is up");
+        shot.click(centre.x, centre.y);
+        wait(&mut shot, 400);
+        assert!(open(&mut shot));
+    }
+}

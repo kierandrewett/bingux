@@ -132,6 +132,12 @@ pub const ICON_BUTTON: &[Spec] = &[
             .tooltip("Stop (Esc)")
             .into_element()
     }),
+    Spec::forced("Working", || {
+        icon_button(Icon::FolderDownload, |_| {})
+            .tooltip("Downloads: 1 running")
+            .working(true)
+            .into_element()
+    }),
     Spec::forced("Disabled", || {
         icon_button(Icon::OpenMenu, |_| {})
             .enabled(false)

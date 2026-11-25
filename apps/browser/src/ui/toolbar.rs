@@ -67,14 +67,18 @@ fn tone_ink(tone: Tone) -> Option<Ink> {
 fn history_buttons(ctx: Ctx, read: &Reading) -> Vec<Element> {
     let key = read.key;
     vec![
-        icon_button(Icon::GoPrevious, move |_: ()| ctx.with(|browser| browser.back(key)))
-            .tooltip("Back")
-            .enabled(read.can_back)
-            .into(),
-        icon_button(Icon::GoNext, move |_: ()| ctx.with(|browser| browser.forward(key)))
-            .tooltip("Forward")
-            .enabled(read.can_forward)
-            .into(),
+        icon_button(Icon::GoPrevious, move |_: ()| {
+            ctx.with(|browser| browser.back(key))
+        })
+        .tooltip("Back")
+        .enabled(read.can_back)
+        .into(),
+        icon_button(Icon::GoNext, move |_: ()| {
+            ctx.with(|browser| browser.forward(key))
+        })
+        .tooltip("Forward")
+        .enabled(read.can_forward)
+        .into(),
     ]
 }
 
@@ -82,14 +86,18 @@ fn history_buttons(ctx: Ctx, read: &Reading) -> Vec<Element> {
 fn reload_button(ctx: Ctx, read: &Reading) -> Element {
     let key = read.key;
     if read.loading {
-        icon_button(Icon::WindowClose, move |_: ()| ctx.with(|browser| browser.stop(key)))
-            .tooltip("Stop loading")
-            .into()
+        icon_button(Icon::WindowClose, move |_: ()| {
+            ctx.with(|browser| browser.stop(key))
+        })
+        .tooltip("Stop loading")
+        .into()
     } else {
-        icon_button(Icon::Refresh, move |_: ()| ctx.with(|browser| browser.reload(key, false)))
-            .tooltip("Reload")
-            .enabled(read.is_web)
-            .into()
+        icon_button(Icon::Refresh, move |_: ()| {
+            ctx.with(|browser| browser.reload(key, false))
+        })
+        .tooltip("Reload")
+        .enabled(read.is_web)
+        .into()
     }
 }
 
@@ -97,7 +105,8 @@ fn reload_button(ctx: Ctx, read: &Reading) -> Element {
 fn connection_button(ctx: Ctx, read: &Reading) -> Element {
     let mut anchor = ctx.chrome.info_anchor;
     let mut open = ctx.chrome.info_open;
-    let mut button = icon_button(read.summary.icon, move |_: ()| open.set(true)).tooltip(&read.summary.headline);
+    let mut button =
+        icon_button(read.summary.icon, move |_: ()| open.set(true)).tooltip(&read.summary.headline);
     if let Some(ink) = tone_ink(read.summary.tone) {
         button = button.ink(ink);
     }
@@ -144,7 +153,7 @@ fn downloads_button(ctx: Ctx, downloads: &Downloads) -> Element {
                 open.set(true);
             })
             .tooltip(&tip)
-            .busy(active > 0)
+            .working(active > 0)
             .enabled(can),
         )
         .into_element()

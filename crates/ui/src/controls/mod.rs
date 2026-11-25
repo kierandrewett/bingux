@@ -23,6 +23,8 @@ pub mod focus_stop;
 pub mod form;
 #[cfg(all(test, feature = "testing"))]
 pub(crate) mod hit_area_tests;
+#[cfg(all(test, feature = "testing"))]
+mod icon_button_tests;
 pub mod keypad;
 pub mod level_meter;
 pub mod master_detail;

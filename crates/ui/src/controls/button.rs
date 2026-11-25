@@ -456,6 +456,7 @@ pub struct IconButton {
     active: bool,
     enabled: bool,
     busy: bool,
+    working: bool,
     radius: Radius,
     menu: Vec<MenuItem>,
     refocus: Option<AccessibilityId>,
@@ -489,6 +490,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         active: false,
         enabled: true,
         busy: false,
+        working: false,
         radius: Radius::Control,
         menu: Vec::new(),
         refocus: None,
@@ -605,6 +607,15 @@ impl IconButton {
     /// action it starts is running. The button keeps its size.
     pub fn busy(mut self, busy: bool) -> Self {
         self.busy = busy;
+        self
+    }
+
+    /// Show a spinner in place of the icon, and keep the button pressable.
+    /// For a button that opens the list of what is running (a browser's
+    /// downloads, a file manager's transfers): a [`busy`](Self::busy) one
+    /// would swallow the press that shows the person how far it is.
+    pub fn working(mut self, working: bool) -> Self {
+        self.working = working;
         self
     }
 
@@ -806,7 +817,7 @@ impl Component for IconButton {
                         }
                     })
             })
-            .child(if self.busy {
+            .child(if self.busy || self.working {
                 Element::from(spinner(SpinnerSize::Small))
             } else {
                 let ink = if self.danger && hovering() {
