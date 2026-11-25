@@ -1511,6 +1511,24 @@ web_view(backend.clone(), tab, surface)
     .on_host_key(move |key: KeyInput| app_shortcut(&key).map(run).is_some())
 ```
 
+The engine side (`web_view::engine`, behind `web-view-vivarium` or `web-view-dynamic-load`) is one
+`BrowserBackend` over the `vivarium` crate (ABI 2.0). `engine::start(Config::from_environment(private))` starts it
+and never fails: an engine that does not start is a backend whose first event is `EngineEvent::Failed`.
+
+| Engine                                     | Control                                                                                       |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| wake hook (library thread)                 | wakes the UI task; it only signals                                                            |
+| `Dispatcher::dispatch` and delegate traits | `poll_events` runs it on the UI thread: one `BrowserEvent` per event, 256 at most per call    |
+| request: `Ask` and a typed `Responder`     | a control `Request`; the responder waits under its `RequestId` and the control's `Response` answers it |
+| request kinds the engine accepts           | `Capabilities`: a kind it refuses as unsupported leaves its control off                       |
+| `Frame` (shared memory)                    | the tab's `PageSurface`; the crate's checked view copies the buffer once per frame            |
+| contextual identity                        | default for tabs, private for a private window, one per container                             |
+
+There is one model of questions, the control's: the backend adds no second one. A responder that is dropped (a
+closed tab, a failed engine, an answer of the wrong kind) answers the default of its kind, so no page waits on
+the host. What ABI 2.0 has no call for is `false` in `Capabilities` and `BackendError::Unsupported`: find, audio
+state and muting, composition, touch input, download control and session state to restore after a crash.
+
 ### Frame view
 
 `frame_view(source, label)` (module `frame_view`) shows frames that something

@@ -48,9 +48,23 @@ below their profile instead, so two profiles share nothing):
 | runtime sockets | `$XDG_RUNTIME_DIR/bingux-browser` |
 | downloads | `~/Downloads` |
 
+`file://` pages may read `Documents`, `Desktop`, `Pictures`, `Videos` and `Music` of the home folder (those that
+exist) and the folders `BINGUX_BROWSER_FILE_DIRS` names (a path list). A folder inside one of the engine's own
+folders above, or holding one, is left out, the download folder included: the engine refuses to start when a
+folder pages may read overlaps one of its own.
+
 `BINGUX_BROWSER_WEBRTC_IP_POLICY` (`default`, `default-public`, `public-only`, `relay-only`) asks for a WebRTC
-address policy. The engine applies it only when it announces `net.config`; today it keeps one fixed policy
-(no local or TCP addresses), and the settings page says which of the two is the case.
+address policy. ABI 2.0 has no call that sets one, so the engine keeps its own fixed policy (no local or TCP
+addresses) and the settings page says the choice was not applied.
+
+Checked on the real engine on 2026-11-25 (a37 box, headless sway with the pixman renderer, a development SDK
+built that day: Gecko 160, ABI 2.0, content sandbox level 6), built with
+`VIVARIUM_SDK_DIR=$SDK cargo build --features vivarium` and started as a normal user with
+`VIVARIUM_SDK_DIR=$SDK LD_LIBRARY_PATH=$SDK BINGUX_BROWSER_PROFILE=$PROFILE BINGUX_BROWSER_FILE_DIRS=$PAGES
+bingux-browser ADDRESS`: a local `file://` page, a link clicked, an address typed into the bar
+(`https://example.com/`), a second tab, the window at 1100x760 and at 390x800, the engine's context menu on a
+link and a `confirm()` answered through the browser's dialog. The engine accepted every request kind the
+browser answers.
 
 `bingux-browser --snapshot DIR [SCENARIO,...]` (a `--features snapshot` build) renders 36 states at the
 desktop size and at 390x800 over the test double. `--snapshot --list` names them.
@@ -72,14 +86,22 @@ Every rule has a test (`cargo test`), the commands over `TestDoubleBackend`.
 ## Event flows
 
 ```
-engine thread ──► EventQueue ──wake──► UI task ──► Browser::apply ──► State<Browser> ──► render
+engine wake hook ──► UI task ──► poll_events: Dispatcher ──► Host (delegates) ──► EventQueue ──► Browser::apply ──► State<Browser> ──► render
 UI handler ──► Ctx::with ──► Browser::<command> ──► BrowserBackend call (queued, never waits)
 frame view ──► BrowserBackend::send (not through the state: a pointer move is not news)
-engine frame ──► PageSurface (newest wins, damage folded) ──► FrameSource ──► frame_view
+engine frame ──► Host::on_frame_available ──► PageSurface (newest wins, damage folded) ──► FrameSource ──► frame_view
 ```
 
+The engine's library calls the wake hook on its own thread when its event queue goes from empty to not empty;
+the hook only wakes the UI's task. That task calls `poll_events`, which runs the `vivarium` crate's `Dispatcher`
+on the UI thread: at most 256 events a call, never blocking, one delegate method of the backend's `Host` per
+event. No thread of the browser waits on the engine.
+
 - A request the engine asks (permission, dialog, auth, certificate error, select, file picker, context
-  menu) becomes a `Prompt` on its tab, answered once; a request for a tab that is gone is refused.
+  menu) arrives at a delegate method with the question and a typed responder. The backend keeps the
+  responder under the `RequestId` of a control `Request`, which becomes a `Prompt` on its tab, answered once
+  with a control `Response` that the backend turns into the responder's reply. A request for a tab that is
+  gone is refused, and a responder that is dropped answers the default of its kind.
 - Keys typed over the page go to the browser's shortcuts first (a page cannot take Ctrl+T) and Ctrl+C,
   X, V, A, Z become the engine's edit commands; the key-up of a taken key is not the page's either.
 - `window.open` becomes a tab beside its opener (`accept_tab`); `window.close()` closes it and goes
@@ -106,19 +128,18 @@ engine frame ──► PageSurface (newest wins, damage folded) ──► FrameS
 
 ## What is missing
 
-- **ABI/engine:** the real backend reads `Capabilities` from what the engine announces
-  (`vv_engine_capabilities`: request and event kinds, and `vv_engine_feature` names), never from a list
-  in the browser. The engine of today announces only `window.open`, so the controls for permissions,
-  dialogs, certificate errors, context menus, link hover, audio, touch, composition, pickers and
-  downloads are disabled or answered with a notice (the "capabilities" snapshot shows the main menu
-  that way) and switch on by themselves when the engine announces the kind. Three things stay off
-  whatever the engine announces, because the safe `vivarium` crate does not wrap their calls: find in
-  page, pausing and cancelling downloads, and the permission store. Right click opens the browser's own
-  page menu (Back, Forward, Reload, Select all, source) while the engine cannot say what is under the
-  pointer, and a finger is turned into a click, a scroll and a held press (`touch.rs`). Favicons arrive
-  as addresses only, so tabs show a glyph. There is no print and no "focus order ran out" event.
-  A page that asked for fullscreen is not told when the person leaves it: ABI 2.0 has no call for that
-  (the window's own fullscreen is the window's).
+- **ABI/engine:** ABI 2.0 announces no lists of request or event kinds and no named features. The real
+  backend subscribes to the requests it answers and reads `Capabilities` from which of them the engine
+  accepts, never from a list in the browser; a kind it refuses as unsupported keeps its control disabled or
+  answered with a notice (the "capabilities" snapshot shows the main menu that way). Several things stay off
+  whatever the engine accepts, because the safe `vivarium` crate has no call for them: find in page, audio
+  state and muting, composition (input methods commit text), pausing and cancelling downloads, the
+  permission store, and touch input (fingers become a click, a scroll and a held press, `touch.rs`). A file
+  picker opens files only: the engine asks for no folder and no place to save. Right click opens the
+  browser's own page menu (Back, Forward, Reload, Select all, source) while the engine does not ask for its
+  context menu. Favicons arrive as addresses only, so tabs show a glyph. There is no print and no "focus
+  order ran out" event. A page that asked for fullscreen is not told when the person leaves it: ABI 2.0 has
+  no call for that (the window's own fullscreen is the window's).
 - **A long address** is cut at the edge of the address field (bingux-ui's `TextField` clips; there is no
   ellipsis or fade), so on a phone `news.bingux.dev/popup` ends mid-letter.
 - **Not built:** persistent history, bookmarks, the engine's settings as editable controls, tear-off
@@ -133,9 +154,8 @@ The engine is a process of its own; the window outlives it.
   the signal) and whether a new engine on the same profile is safe. The window keeps its tabs, drops what
   they were waiting for, and shows a page for the whole window ("The browser engine stopped", or "was
   stopped" for a protocol violation) with **Start again**. That recreates the engine and opens every tab
-  again from the state the engine last reported for it (history, scroll position, form data; a private tab
-  keeps nothing, so it opens at its address). If the engine still does not start, the page says so again with
-  the new words.
+  again at its address: ABI 2.0 hands the host no saved session state, so history, scroll position and form
+  data are not taken up. If the engine still does not start, the page says so again with the new words.
 - **It does not start.** `engine::start` never fails: it returns a backend whose first event is `Failed`
   with the cause, and the window opens with the page. A profile folder the engine does not trust
   (`VV_ERR_PROFILE_UNSAFE`: wrong owner, writable by others, a link out of it, planted files) names the folder
@@ -206,8 +226,11 @@ What limits the frame rate:
   fell clearly behind (36/s against 46-57/s), by the host thread being late for frames. A release build
   (`BINGUX_BROWSER_BUILD=release packages/bingux-browser/run.sh`, thin LTO, stripped, 41 MB against 573 MB)
   is what to run.
-* **No copy.** The engine's buffer is handed to Skia as an image in place (`PageSurface` keeps one frame
-  and folds damage); there is no memcpy between the engine's shared memory and the GPU upload.
+* **One copy.** The measurements above are from the earlier crate, which handed the engine's buffer to Skia
+  in place. The current `vivarium` crate reads a frame only through its checked view, which copies the
+  shared memory once per frame (an engine could write a buffer it handed over; the copy cannot tear under a
+  reader), and the backend hands that copy to Skia without another one. The numbers have not been measured
+  again since.
 
 ## Resizing
 
@@ -245,19 +268,18 @@ device sent:
 
 `PageEnvironment` (`bingux_ui::web_view::environment`) carries the window's look to the engine and is sent on
 `EngineEvent::Ready` and whenever the tokens change (`use_side_effect_with_deps` in `ui/app.rs`); new tabs
-are made in the current scheme. The engine-wide call (`Engine::set_environment`) carries only the fields
-the engine announces (`env.color_scheme`, `env.accent`, ... through `vv_engine_feature`): the library
-refuses a whole call that names one it does not implement, so a field is added when the engine says it is
-there, not tried. The colour scheme also goes to each session (`vv_session_set_color_scheme`), which is how
-an engine without `env.color_scheme` takes it. The text on the accent colour is black or white, by luminance.
+are made in the current scheme. ABI 2.0's engine-wide call (`Engine::set_environment`) has three fields: the
+colour scheme, the accent colour with the text drawn on it (black or white, by luminance) and a palette of
+system colours, which the browser does not set. An engine that does not take the call answers
+`Unsupported`, which is not an error: the colour scheme also goes to each session
+(`Session::set_color_scheme`), and new sessions are made in it.
 
 | bingux-ui | the page sees |
 | --------- | ------------- |
 | `Tokens::scheme` `PreferDark` | `prefers-color-scheme: dark`; `Default` and `PreferLight` are light |
 | `Tokens::accent` | `AccentColor` system colour |
-| `Tokens::reduced_motion` | `prefers-reduced-motion: reduce` |
-| `stress::text_scale()` (`BINGUX_TEXT_SCALE`) | the engine's text scale |
 | `LANG` | `navigator.languages` (set at engine start) |
+| `Tokens::reduced_motion`, `stress::text_scale()` | nothing: ABI 2.0 has no field for them |
 | (no token) | `prefers-contrast: no-preference`; `forced-colors: none` |
 | the interface font | nothing: the ABI has no default-font setting |
 
