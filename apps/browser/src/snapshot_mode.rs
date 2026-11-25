@@ -583,7 +583,9 @@ pub fn run(arguments: &[OsString]) {
 ///      documented to do (a page that holds the keyboard hears it first);
 ///   5. the downloads button's tooltip stays up behind the list that opens
 ///      over it, peeking out from under its edge (a popover is a modal
-///      surface, and tips go down for those).
+///      surface, and tips go down for those);
+///   6. a download that failed or was cancelled has no way to be tried
+///      again (the engine's Resume takes it from where it stopped).
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -688,5 +690,55 @@ mod tests {
         wait(&mut shot, 900);
         assert!(open(&mut shot), "the list is open");
         assert_eq!(bubbles(&mut shot, tip), 0, "the tip went down with it");
+    }
+
+    /// A download the engine says failed: the page's own (id 1), as it stood.
+    fn fail_the_download(rig: &Rig) {
+        let mut failed = ctx().browser.peek().downloads.list()[0].clone();
+        failed.state = bingux_ui::web_view::requests::DownloadState::Failed;
+        failed.speed = 0;
+        rig.double.emit(BrowserEvent::Download(failed));
+    }
+
+    #[test]
+    fn a_failed_download_can_be_tried_again() {
+        use bingux_ui::web_view::requests::DownloadState;
+        use bingux_ui::web_view::test_double::Call;
+        let (mut shot, rig) = window();
+        let id = ctx().browser.peek().downloads.list()[0].id;
+        fail_the_download(&rig);
+        wait(&mut shot, 300);
+        assert_eq!(
+            ctx().browser.peek().downloads.list()[0].state,
+            DownloadState::Failed
+        );
+        let at = ctx();
+        shot.runner().run_in(|| at.run(Command::Downloads));
+        wait(&mut shot, 400);
+        assert!(
+            shot.click_name("Retry"),
+            "a failed download has a Retry button"
+        );
+        wait(&mut shot, 400);
+        assert!(
+            rig.double
+                .calls()
+                .iter()
+                .any(|call| matches!(call, Call::ResumeDownload(known) if *known == id)),
+            "the engine was asked to resume it"
+        );
+        assert_eq!(
+            ctx().browser.peek().downloads.list()[0].state,
+            DownloadState::Running
+        );
+    }
+
+    #[test]
+    fn a_download_that_runs_has_no_retry() {
+        let (mut shot, _rig) = window();
+        let at = ctx();
+        shot.runner().run_in(|| at.run(Command::Downloads));
+        wait(&mut shot, 400);
+        assert!(!shot.click_name("Retry"), "pause and cancel, not retry");
     }
 }

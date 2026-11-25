@@ -124,7 +124,8 @@ fn page_info(ctx: Ctx) -> Element {
     column.into_element()
 }
 
-/// One download's controls: pause or resume, and cancel.
+/// One download's controls: pause or resume, and cancel; Retry for one that
+/// failed or was cancelled (the engine's Resume takes it from where it stopped).
 fn download_controls(ctx: Ctx, download: &DownloadInfo) -> Option<Element> {
     let id: DownloadId = download.id;
     // An engine with no call for it gets no button that does nothing.
@@ -171,7 +172,18 @@ fn download_controls(ctx: Ctx, download: &DownloadInfo) -> Option<Element> {
                 )
                 .into_element(),
         ),
-        _ => None,
+        DownloadState::Failed | DownloadState::Cancelled => Some(
+            rect()
+                .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
+                .child(
+                    icon_button(Icon::Refresh, move |_: ()| {
+                        let _ = backend.resume_download(id);
+                    })
+                    .tooltip("Retry"),
+                )
+                .into_element(),
+        ),
+        DownloadState::Finished => None,
     }
 }
 

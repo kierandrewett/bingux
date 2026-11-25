@@ -167,6 +167,10 @@ takes the calls. The find card steps with Enter and Shift+Enter and counts match
 and cancels a running download, and "Clear finished" has the engine forget what is over. An engine that lacks a
 call leaves `Capabilities::find` or `download_control` off: the command says so, and the buttons are not drawn.
 
+A download that failed or was cancelled shows Retry in the list (the engine's Resume: from where it stopped when the
+server takes a range, else from the start). Escape closes the downloads list and the page-info popover even while
+the page holds the keyboard, and the downloads button's tooltip goes down when the list opens.
+
 A download says whose it is: `DownloadInfo::private` (the engine's private flag, or the private identity) and
 `DownloadInfo::container` (0 is the default). The browser lists a private download in a private window only, and
 never in a normal window's list or toasts; it writes no downloads to disk.
