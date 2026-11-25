@@ -43,3 +43,11 @@ pub(crate) fn checker(light: Color, dark: Color, cell: f32) -> impl FnMut(&mut F
         }
     }
 }
+
+/// [`painted`] on whole device pixels: the box's corner and size are rounded
+/// to the pixel grid, and so is the clip it paints inside, so a picture that
+/// is the size of the box lands on the display pixel for pixel. For a box that
+/// shows a bitmap; a shape with curves is better antialiased.
+pub(crate) fn painted_on_pixels(rect: Rect, draw: impl FnMut(&mut FillRenderContext) + 'static) -> Rect {
+    rect.background(Fill::Callback(RenderCallback::new(draw).snapped_to_pixels()))
+}

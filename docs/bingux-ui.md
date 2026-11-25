@@ -789,6 +789,7 @@ Where each control goes, and why, is in
 | Forms            | `form_row(label, control)` for a label beside a control; `form_field(title, value)` for a validated text row (see Forms below); `live_state(rows)` for a read-only "Right now" group; `pending_bar(dirty, valid, on_apply, on_revert)` for the apply bar of a form with a draft; `segmented(options, selected, on_select).fill()` for a popup tab rail of equal segments (it stays a rail on a phone)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Trees            | `tree_view(roots, expanded, selected)` takes `TreeNode`s (`TreeNode::new(id, label)` with `detail`, `icon`, `badge`, `chips`, `paints(label, detail)` and `children`; a `Vec` or an `Rc<[TreeNode]>`) and the sets of open branches and the selected id as state. Rows are `MenuItem` height, or `CodeRow` height in the code face with `.code()`. Up and Down move the selection, Right opens a branch or enters it, Left closes it or goes to the parent, Enter and Space open or close a branch and activate it. A click selects; clicking the selected row activates it; Alt-clicking a chevron opens or closes the whole subtree. A selection the caller sets opens the row's ancestors and scrolls it into view. `TreeView::on_hover`, `on_activate` and `on_context` (a right click selects the row and reports its window position) report to the caller; `child_counts()` shows the child count of a closed branch and `find(text, current)` marks a search text in the rows. The inspector's Elements tree is a `tree_view`                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Splits           | `split_pane(first, second, ratio)` with the first pane's share of the length in `ratio` (kept between 0.15 and 0.85). Side by side by default; `.vertical()` stacks the panes. Drag the divider to resize; the divider is a hairline with an `S1` hit zone on each side                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| External content | `frame_view(source, label)` (module `frame_view`): frames from a producer (a web engine, a video decoder, a remote desktop, a game) drawn pixel for pixel, with the pointer, wheel, keys, touch and input method text sent back; `FrameSource` is the producer's side, `PatternSource` the bundled producer for specimens and tests; see Frame view |
 | Menus            | `menu_item` and `menu_button(label, items)`. `MenuItem::checked` (state is a tick; menus are text, and `MenuItem::icon` is only for a menu whose rows the icon names, never in the file views; a list of applications is the exception and always has app icons: `app_menu_items(Vec<AppChoice>, on_pick)`, `app_dropdown(Vec<AppChoice>, selected, f)`), `menu_button` opens its menu against its own button (below it, above when there is no room, edge aligned, kept inside the window), `Overlays::show_menu` at a point is for context menus only; `MenuItem::destructive` and `MenuItem::disabled`; `menu_separator()`. `Overlays::show_menu` opens at window coordinates and stays on screen: it opens upward or leftward when there is no room. Picking an item closes the menu, then runs it; Escape and an outside press close it. While a menu or dropdown list is open, the window behind it takes no presses, wheel turns or hover, and the wheel never scrolls the page behind a list                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 Every control supports keyboard use: Enter and Space activate. Arrows move
@@ -1004,6 +1005,8 @@ The taxonomy's Tabs entry shows each state in a bar over a page at both densitie
 `fade_text(text).style(CAPTION).grow()` is a line of text that does not fit: instead of ending in an ellipsis its last `Dim::TextFade` (24 px) fade out. The fade is the glyphs' own alpha (the text's paint is a gradient from the ink to the ink at no alpha), not a coloured overlay, so what is behind the text (a hovered tab's fill, the selected tab's surface, the strip) shows through and the neighbour at the end of the line, a close button, is never touched. It is the end of the _reading direction_: the right edge in a left-to-right interface, the left edge in a right-to-left one. Text that fits is drawn plain. The label inside is a plain `label`, so the text is in the accessibility tree and found by a test like any label. Use it for a title cut beside a control; use `path_label` where the end of a name matters (it cuts the middle).
 
 The layout engine reads a direction (see Direction). In a tab strip the first tab is at the right, a tab's icon is at its right and its close button at its left, the New tab button follows the last tab on its left, the strip scrolls forward leftwards, a tab dragged to a later place goes left, the arrow keys are the screen's and `StripLayout { rtl }` counts the place a torn tab would land from the right. The engine does the mirroring; the code does only the pixel maths.
+
+**Pinned tabs and what a tab is doing.** `TabItem::pinned(true)` makes a tab its icon alone (a square body of `Dim::Control` plus the inset on each side, no title and no close button); the host lists pinned tabs first. They stand in a block before the scrolling region, do not scroll or drag, and share the room with the others (the rest of the strip fits in what is left). `TabItem::status(TabStatus)` puts one state on the tab: `Loading` (a spinner in place of the icon), `Failed` (a danger glyph in its place), `Audio` and `Muted` (a speaker after the title, a button when `TabStrip::on_status` is set, named "Mute <title>" or "Unmute <title>"), `Attention` (an accent dot after the title; on a pinned tab a dot on its corner). `TabStrip::tab_menu(id, items)` adds the host's items (Pin tab, Mute tab, Reload tab) to the tab's menu, above Close, Move left and Move right, which move a tab only among its own kind. The browser is the first user; a second is Files, for a folder tab that is still listing (a network share) and for pinned folders such as Downloads.
 
 ### Sortable list
 
@@ -1365,6 +1368,31 @@ Phone rule: a panel is a sheet only for choosing a value from a set (a dropdown 
 
 The shield is the only input shield; there is no second copy of the shield or grabber code.
 
+### Popovers
+
+`popover(open, &anchor, content)` is the card that hangs from a toolbar button and holds anything: a connection's details, a list of downloads, a few groups and rows. A menu is a list of text items and a popup is a modal panel in the middle of the window; a popover is neither. It is the same [`Panel`](#panel) every floating surface is, so it has the same shield (a press outside or Escape runs `on_dismiss`), motion, placement (below the control, above when there is no room, kept inside the window) and Back handling. The one thing it adds is a height that follows its content: the body reports its size and the panel is placed with it from the next frame, so the caller counts no pixels.
+
+```rust
+let mut area = use_state(Area::default);
+rect()
+    .on_sized(move |event| area.set_if_modified(event.area))   // the button's place in the window
+    .child(icon_button(Icon::SecurityHigh, move |_| open.set(true)).tooltip("Page info"))
+    .child(
+        popover(open(), &area.read(), page_info_groups())
+            .width(Dim::MenuWide)                             // or width_px(w) on a phone
+            .on_dismiss(move |_| open.set(false)),
+    )
+```
+
+| Part | Behaviour |
+| ---- | --------- |
+| Surface | The menu's: `Paint::Popover`, `Radius::Overlay`, a hairline, `Elevation::Raised`, `S2` inside. Put `Group`s in it, as in a popup. |
+| Width | `Dim::MenuWide` (300 px) by default; `width(Dim)` or, for a card that is a phone's whole column, `width_px`. |
+| `attached()` | A list under a text field (suggestions): no shield, so the keys and the pointer stay with the field, and as wide as the field. The owner closes it and keeps the keys that move through it. |
+| `suggestion_row(icon, title, detail)` | One row of such a list, the menu item's row (height, inset, fill) with a title and a quieter detail. The owner marks the `highlighted` row, since the keyboard stays in the field. |
+
+Used by the browser (page info, downloads, the address bar's suggestions); a second use is Files' hover card and address list, which draw their own floating card and list rows today, and Settings' row details. The taxonomy's Popover entry shows both forms.
+
 ### Sliders, the colour picker and every drag that makes a value
 
 A slider row (`slider_row`, `level_row`) gives its track and readout 55 % of the row on a desktop and the title the rest, so the sliders of one card start at one x and a title is cut only when the rest of the row cannot hold it. The readout (`value_text`) is beside the track in a slot at least `Dim::SliderValue` wide and as wide as its text, so a value that gains a digit moves nothing and words such as "Faster than normal" are never cut or wrapped. Every level row of one `Group` takes the widest slot of the group, so the tracks of a card end at one x. A row whose readout changes length as it moves ("Slower", "Normal", "Faster than normal") names its longest text with `widest_value(text)`, so the slot holds it from the first frame and the track does not shrink under the pointer.
@@ -1430,6 +1458,230 @@ On `ColourButton` only: `live(bool)`, `title(text)` (the sheet's title and the b
 The inspector's colour property (`inspector/props.rs`) is a live dense `colour_button` beside its hex field. The Settings accent row is not a colour picker: GNOME's `accent-color` takes one of nine names and nothing else, so it stays the named swatch row (`pages/appearance.rs`), which already has this picker's swatch look (a ring, a check mark, a name on hover).
 
 The taxonomy pages Controls > Selection show both forms: the inline picker in each variation and at both densities, the button at rest, with opacity, disabled, dense, open (a popover; the phone sheet is in the Phone column of the same page when the window is a phone) and live. `controls::colour_picker::live_tests` measures every target at both densities, drags the handle with real pointer and touch events (it follows the pointer and clamps at every edge), checks the keys, the hex field, the boxes, the swatches and the recent row, and opens, closes, cancels and commits the button on a desktop, on a phone and inside a dialog.
+
+### Frame view
+
+`frame_view(source, label)` (module `frame_view`) shows frames that something
+else makes and sends that something the input. The first user is a web engine
+that renders into shared memory; the same component is a **video player**
+(a decoder thread hands over frames and the view letterboxes them with
+`FrameFit::Contain`), a **remote desktop client** (frames from the network,
+pointer and keys back on the wire) and the preview of an **embedded game or
+VR session**. Nothing in bingux-ui knows about any of them: the view speaks to
+a `FrameSource`, and a source is three methods.
+
+```rust
+use std::sync::Arc;
+use bingux_ui::frame_view::{Frame, FrameSource, frame_view};
+
+pub trait FrameSource: Send + Sync + 'static {
+    /// The newest frame not shown yet. Never blocks.
+    fn take_frame(&self) -> Option<Frame>;
+    /// The waker to call when there is a frame (or a new cursor or caret).
+    fn set_waker(&self, waker: std::task::Waker);
+    /// A frame back, after the view has drawn it. Exactly once per frame.
+    fn release(&self, frame: Frame);
+
+    // Optional: the size to be shown at, the pointer shape, the text caret.
+    fn size_hint(&self) -> Option<(f32, f32)> { None }
+    fn cursor(&self) -> CursorKind { CursorKind::Default }
+    fn caret(&self) -> Option<CaretRect> { None }
+}
+```
+
+- **Pull, never push, and no timer.** The producer calls its waker (cheap, any
+  thread, coalescing) when there is something new. The view's task wakes on the
+  UI thread, takes the newest frame, gives back the one it replaces and asks
+  for a redraw; between wakes it does nothing. A producer that falls behind
+  costs the UI nothing; one that runs ahead is dropped to the newest frame,
+  which the source recycles itself. All the trait's methods are called on the UI
+  thread and return at once (see Nothing blocks the UI thread).
+- **A source feeds one view.** `set_waker` replaces the waker of whichever
+  view mounted before, and a frame is handed out once.
+- **A frame is a view onto the producer's memory.** `Frame::Pixels(PixelFrame)`
+  holds the size, `stride`, `PixelFormat` (`Bgra8Premultiplied`, or `Bgrx8` when
+  every pixel is opaque), the bytes as an `Arc` of any region (a mapped
+  shared-memory file works), a `damage` rectangle, `y_inverted`, the producer's
+  `scale` (pixels per logical pixel, as a Wayland buffer scale) and an `id`
+  that comes back untouched in `release`. The producer must not write to the
+  bytes until the frame is released. `Frame` is `#[non_exhaustive]`: a GPU
+  buffer will be a second variant, so match with a wildcard arm. The view holds
+  the frame on screen until the next arrives, so a pool needs three buffers.
+- **Damage.** The rectangle is relative to the frame the view still shows, so a
+  producer that skipped frames folds theirs in with `DamageRect::union`. An
+  empty rectangle means nothing changed: the frame is handed straight back,
+  nothing is redrawn. A partial rectangle cannot make the paint cheaper, because
+  Freya repaints the whole tree on every render
+  (`freya-core/src/render_pipeline.rs` has an incremental renderer as a
+  TODO), so the frame is shown whole.
+
+#### A complete example
+
+`cargo run --example frame_view` (`examples/frame_view.rs`) is this, in a
+window. `PatternSource` is bingux-ui's own producer for specimens and tests: a
+real `FrameSource` (a pool of three buffers, a mailbox that keeps the newest
+frame, a waker, a thread that sleeps on a condition variable between frames)
+that draws a deterministic animated picture, and the reference for writing
+another.
+
+```rust
+use bingux_ui::frame_view::{KeyInput, PatternSource, PointerInput, ViewSize, WheelInput, frame_view};
+use bingux_ui::prelude::*;
+use freya::prelude::*;
+
+#[derive(PartialEq)]
+struct Demo;
+
+impl Component for Demo {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let mut heard = use_state(|| "Move over the view, press, scroll or type.".to_string());
+        // The producer: a thread that draws a picture and wakes the view.
+        let source = use_hook(|| PatternSource::animated(640, 360, 60));
+        let follower = source.clone();
+        let view = frame_view(source, "Test pattern")
+            .placeholder("Starting")
+            // Render at the size the view really has: 1:1 on every display.
+            .on_resize(move |size: ViewSize| {
+                let (width, height) = size.device_size();
+                follower.resize(width, height, size.scale as f32);
+            })
+            .on_pointer(move |input: PointerInput| {
+                heard.set(format!("{:?} at {:.0}, {:.0}", input.action, input.position.0, input.position.1));
+            })
+            .on_wheel(move |input: WheelInput| heard.set(format!("wheel {:?}", input.delta)))
+            .on_key(move |input: KeyInput| heard.set(format!("key {} ({})", input.key_string(), input.code_string())));
+        rect()
+            .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children(), p(S4), gap(S3)])
+            .child(rect().tw(&tokens, &[w_full(), h_flex()]).child(view))
+            .child(caption(heard.read().clone()))
+    }
+}
+```
+
+#### Size, scale and drawing
+
+- **The size.** `on_resize(ViewSize { width, height, scale })` is called when the
+  view first has a size, then at most once per 16 ms while it changes, with the
+  last size always delivered (a one-shot timer, started by a change, never a
+  loop). A size the producer was already told is not told again, and a change
+  of window scale is a change of size. `ViewSize::device_size()` is the size of
+  a frame that is drawn 1:1. The view's box does not depend on the frame, so a
+  producer that answers a size with a frame cannot start a feedback loop.
+- **Pixel for pixel.** The view's box is rounded to the device pixel grid (its
+  corner to the nearest pixel, its size to `device_size()`, ties leaning up so
+  float noise cannot flip them; the vendored renderer draws the clip on the
+  same grid), and a frame of that size is drawn without filtering: at 1.0, 1.25
+  and 2.0 alike, at any position. A frame of another size is filtered
+  bilinearly. `FrameFit` says where a frame that is not the box's size goes:
+  `Anchored` (default: the frame at its own size in the top left corner, clipped
+  to the box, the backdrop filling what it leaves bare: while the producer
+  catches up with a resize the old frame stays sharp and undistorted, and only
+  a frame of another `scale` is scaled), `Stretch` (fills the box, so the last
+  frame is stretched while the producer catches up), `Contain` (aspect kept,
+  centred, for a video). `PixelFrame::resize_id` is the producer's optional
+  answer to a size report: it says which report the frame was rendered for.
+  Nothing reads it yet; it is there so a producer that numbers its resizes can
+  say so without a change of the contract.
+- **Timing.** `BINGUX_FRAME_STATS=1` prints one line a second to stderr while frames arrive:
+  the producer's frame interval (`frame_view::stats::arrived`, called by the producer when a
+  frame reaches its mailbox, and `dropped` for a frame a newer one replaced), the view's own paint
+  recording, the interval between frames shown, input event to next frame, and the window's layout,
+  render and present times (`freya_winit::bingux_frame`). Off, each probe is one atomic load.
+- **Until the first frame** the view is a `Paint::Control` box with the
+  optional `placeholder(text)`; around a frame that does not fill it, it is
+  `Paint::Backdrop`. An opaque `Bgrx8` frame replaces what is beneath it; a
+  `Bgra8Premultiplied` frame blends over it.
+- **What is copied.** Nothing in bingux-ui or Freya: the Skia image reads the
+  producer's bytes in place (`Data::new_bytes`, no copy), and a repaint with no
+  new frame draws the same image again. The one pass over the pixels is the
+  draw itself: a blit into the window's surface in the software renderer, the
+  texture upload on the GPU (Skia's, once per new frame, never per repaint;
+  that upload is a copy of CPU memory and is not measured here, as the checks
+  run headless). Removing it needs a GPU variant of `Frame` (a dmabuf imported
+  as a texture in the vendored `freya-engine`), which is what the
+  `#[non_exhaustive]` leaves room for.
+- **Cost.** Per 1920x1080 frame, in a release build on the 4 vCPU build machine
+  with the software renderer (300 frames each; `cargo test --release --features
+  testing --lib frame_view::tests::measure_a_1080p_frame -- --ignored
+  --nocapture` prints them):
+
+  | Case                                     | take and show | paint a new frame | repaint the same |
+  | ---------------------------------------- | ------------- | ----------------- | ---------------- |
+  | opaque (`Bgrx8`), 1:1                    | 0.006 ms      | 0.41 ms           | 0.29 ms          |
+  | premultiplied alpha, 1:1                 | 0.008 ms      | 0.74 ms           | 0.64 ms          |
+  | opaque, 1.25x display, 1:1               | 0.013 ms      | 0.87 ms           | 0.64 ms          |
+  | opaque, stretched 1920 to 1600 (bilinear) | 0.014 ms      | 8.92 ms           | 8.98 ms          |
+
+  For scale, a `memcpy` of the frame (8.3 MB) takes 0.25 ms, so the 1:1 draw
+  is about one pass over the pixels. The Rust side allocates nothing per frame
+  (the test `showing_and_painting_frames_allocates_nothing_on_the_ui_thread_after_the_first`
+  counts this thread's allocations over 60 frames on every run; Skia's own small
+  image object per new frame is not counted). A frame of the wrong size costs
+  twenty times more than one of the right size, which is why the producer is
+  told the size.
+
+#### The input contract
+
+Every position is in the view's **logical pixels**, origin at its top left;
+`ViewSize::to_device` multiplies by the scale. A pointer position names the
+frame pixel under it to within half a device pixel (the view's corner sits on
+the nearest pixel). Keys use DOM names: `KeyInput::key_string()` and
+`code_string()` are `KeyboardEvent.key` and `code`. All callbacks are optional.
+
+| Callback | Event | Contract |
+| -------- | ----- | -------- |
+| `on_pointer(PointerInput)` | `Move`, `Down`, `Up`, `Enter`, `Leave` | `position`, `button` (of a `Down` and `Up`), `buttons` (a DOM bit set held after the event), `modifiers`, `click_count` (1, 2, 3 for presses within 400 ms and 4 px of each other; the `Up` carries its press's count). A press that began in the view ends with an `Up` wherever the button is let go, and the moves in between are reported outside the view, with a position that may be negative. Moves and the release are taken in the capture phase and consumed, as `controls::capture` does for a drag that makes a value, so nothing under the pointer reacts. Unlike it, every move is reported and every button counts. A touch is a left-button press unless `on_touch` is set |
+| `on_wheel(WheelInput)` | wheel and touchpad | `Lines` for a wheel notch, `Pixels` for a touchpad, `y` positive when the content scrolls down, `x` positive to the right, `modifiers`, `position`, `phase`. The scroll does not also reach a scroll view around the view. **The producer gets what the device sent.** A notch is a count of notches (the window's 64 px step is divided out, and a hi-res wheel's fraction stays), a touchpad delta is in the view's logical pixels (the device pixels the window reports, less the window's `BINGUX_TOUCHPAD_FACTOR` and the display scale), and nothing is accelerated or smoothed on the way (the wheel feel of `ScrollView` does not apply here: the producer owns scrolling). `phase` is `None` for a notch and `Began` (with the first delta), `Changed`, `Ended` / `Cancelled` (zero delta, the fingers lifted) for a touchpad gesture, so a producer with its own momentum and overscroll sees the whole gesture. A scroll view, slider or zoom handler ignores the `Ended` / `Cancelled` events |
+| `on_key(KeyInput)` | key down and up | `key`, `code`, `modifiers`, `repeat` (a down with no up since the last), `text` (what the key types: none with Ctrl, Alt or Meta). Every key goes here except F6 and, by default, Tab and Shift+Tab; the keys are kept from the rest of the window |
+| `on_text(TextInput)` | input method and on-screen keyboard | `Preedit { text, cursor }` while composing (an empty `text` ends it), `Commit(text)` for finished text. Freya reports a commit as a character key with no physical key; the view turns it back into text |
+| `on_touch(TouchInput)` | touch | `phase`, finger `id`, `position` |
+| `on_focus(bool)` | keyboard focus | gained or lost. Keys held are forgotten on loss |
+| `on_resize(ViewSize)` | layout | see Size, scale and drawing |
+
+The producer's side of input: `FrameSource::cursor()` is a `CursorKind` (the
+CSS cursor names; `Hidden` hides the pointer) shown over the view, and
+`caret()` is the text caret's `CaretRect` in the view's logical pixels while the
+producer's focus is in something that takes text. Both are read after every
+wake. While there is a caret the window's input method is on and its popup
+opens beside it (`WinitPlatformExt::set_ime_cursor_area`, a vendored addition:
+upstream placed the popup at the whole focused node), and the view's
+accessible role is a text input, so assistive technology and the input method
+agree about where the user is typing.
+
+#### Focus and accessibility
+
+- The view is one Tab stop, with the focus ring every control has: outside its
+  box, with its corner radius (`radius(Radius)`, default `Radius::Control`),
+  checked by `scripts/focus-ring-check.py` like the rest. `ring_inside()` draws
+  it inside, for a view on the window's clipped edge. `producer_draws_focus()`
+  draws none: for a producer that shows its own focus (a game, a guest
+  desktop, a page with its own caret and outlines), where a second ring says
+  nothing the picture does not. The app must be sure that the producer does;
+  the view is a Tab stop and takes the keyboard either way.
+- A click focuses the view with no ring, like any control; the keys go to the
+  producer from then on.
+- **Leaving.** `focus_escape(FocusEscape::Tab)` (default): Tab and Shift+Tab
+  leave the view to the next and previous stop, and the producer never sees
+  them, so the view can never be a keyboard trap. `FocusEscape::Producer`:
+  Tab and Shift+Tab go to the producer, for a page, an editor or a terminal;
+  F6 and Shift+F6 are never forwarded and still cycle the window's regions, so
+  the keyboard can always get out; when the producer reports that its own focus
+  order ran out, the app calls `focus::step_focus(back)`.
+- **Accessibility.** `frame_view(source, label)`: the label is the accessible name
+  (what the content is: "Web page", "Remote desktop"). `role(AccessibilityRole)`
+  is `Canvas` by default and can be `Video`, `Document` or `Image`; it is a text
+  input while the producer reports a caret. The producer's own accessibility
+  tree is not bridged; that needs a producer-specific protocol.
+- `enabled(false)` (or a disabled container) leaves the view showing frames but
+  not a stop and deaf to input.
+
+`frame_view/tests.rs` covers the parts that need no window (which frame is
+shown and that each comes back once, damage, the placement maths, painting onto
+a raster surface at 1.0, 1.25 and 2.0, the size debounce, the input maths and
+the producer); `frame_view/view_tests.rs` mounts the view headless at the same
+scales and checks the size it reports, the pixels it draws, the events it
+forwards, Tab and F6, the focus ring and the input method text.
 
 ## Files and the file chooser
 

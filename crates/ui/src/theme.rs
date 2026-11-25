@@ -366,6 +366,15 @@ impl Tokens {
         }
     }
 
+    /// The accent as `0xAARRGGBB`, for a consumer outside the UI that wants a
+    /// number: a web page's `AccentColor`, a launcher's highlight.
+    pub fn accent_argb(&self) -> u32 {
+        u32::from(self.accent.a()) << 24
+            | u32::from(self.accent.r()) << 16
+            | u32::from(self.accent.g()) << 8
+            | u32::from(self.accent.b())
+    }
+
     /// Duration in milliseconds, zero when reduced motion is enabled.
     pub fn motion(&self, ms: u64) -> u64 {
         if self.reduced_motion { 0 } else { ms }

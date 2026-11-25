@@ -161,6 +161,9 @@ impl Component for Scrub {
                 origin.set(None);
             })
             .on_wheel(move |event: Event<WheelEventData>| {
+                if event.phase.is_end() {
+                    return;
+                }
                 let notch = if event.delta_y < 0.0 {
                     1.0
                 } else if event.delta_y > 0.0 {

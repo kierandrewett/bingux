@@ -9,8 +9,8 @@
 use crate::demos::transfer;
 use crate::demos::{
     accessibility, buttons, calendar, commands, containers, data, documents, feedback, files,
-    formats, foundations, icon_set, inputs, inspector, localisation, media, navigation, platform,
-    table, text,
+    formats, foundations, frames, icon_set, inputs, inspector, localisation, media, navigation,
+    platform, table, text,
 };
 use crate::model::{Body, Category, Entry};
 
@@ -389,6 +389,15 @@ pub static ENTRIES: &[Entry] = &[
         body: Body::States(feedback::TOOLTIP),
     },
     Entry {
+        name: "Popover",
+        category: Category::Controls,
+        page: "Feedback",
+        api: "popover(open, &anchor_area, content).width(Dim).width_px(f32).attached().on_dismiss(f); suggestion_row(Icon, title, detail).highlighted(bool).on_press(f).on_hover(f). Second users: Files' hover card and address list, Settings' row details",
+        doc: "popovers",
+        covers: &["Popover", "popover", "SuggestionRow", "suggestion_row"],
+        body: Body::States(feedback::POPOVER),
+    },
+    Entry {
         name: "Error boundary",
         category: Category::Controls,
         page: "Feedback",
@@ -499,6 +508,43 @@ pub static ENTRIES: &[Entry] = &[
         doc: "components",
         covers: &["SplitPane", "split_pane"],
         body: Body::States(feedback::SPLIT_PANE),
+    },
+    Entry {
+        name: "Frame view",
+        category: Category::Controls,
+        page: "External content",
+        api: "frame_view(Arc<dyn FrameSource>, label).fit(FrameFit).focus_escape(FocusEscape).placeholder(text).on_resize(f).on_pointer(f).on_wheel(f).on_key(f).on_text(f); impl FrameSource { take_frame, release, set_waker }",
+        doc: "frame-view",
+        covers: &[
+            "FrameView",
+            "frame_view",
+            "FrameSource",
+            "Frame",
+            "PixelFrame",
+            "PixelFormat",
+            "PixelBytes",
+            "DamageRect",
+            "FrameError",
+            "FrameFit",
+            "FocusEscape",
+            "ViewSize",
+            "CursorKind",
+            "CaretRect",
+            "PointerInput",
+            "PointerAction",
+            "PointerButtons",
+            "WheelInput",
+            "WheelDelta",
+            "KeyInput",
+            "TextInput",
+            "TouchInput",
+            "PatternSource",
+            "PatternStats",
+            "arrived",
+            "dropped",
+            "PATTERN_MIN_WIDTH",
+        ],
+        body: Body::States(frames::FRAME_VIEW),
     },
     // ---- Foundations -------------------------------------------------------
     Entry {

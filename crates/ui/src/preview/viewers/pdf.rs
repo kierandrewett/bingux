@@ -928,6 +928,9 @@ impl Component for Reading {
             let zoom_step = zoom_step.clone();
             let lay_width = lay.width;
             move |event: Event<WheelEventData>| {
+                if event.phase.is_end() {
+                    return;
+                }
                 let modifiers = freya_winit::modifiers::live();
                 if modifiers.contains(Modifiers::CONTROL) {
                     event.stop_propagation();

@@ -457,6 +457,36 @@ impl Snapshot {
         self
     }
 
+    /// One keyboard event with its physical `code`, for a test of what the
+    /// code decides (a key repeat, a DOM `code`): [`Snapshot::key`] sends
+    /// `Code::Unidentified`. Runs the frames a key needs to move focus.
+    pub fn key_event(&mut self, name: KeyboardEventName, key: Key, code: Code, modifiers: Modifiers) -> &mut Self {
+        self.input(format!("key_event {name:?} {modifiers:?} {key:?} {code:?}"));
+        self.runner.run_in(|| {
+            Platform::get()
+                .current_window()
+                .navigation_mode
+                .set(NavigationMode::Keyboard);
+        });
+        self.runner.send_event(PlatformEvent::Keyboard { name, key, code, modifiers });
+        for _ in 0..3 {
+            self.runner.sync_and_update();
+        }
+        self.capture_frame();
+        self
+    }
+
+    /// Deliver any platform event the runner takes (an input method's
+    /// preedit, say), then let the frames it needs run.
+    pub fn platform_event(&mut self, event: PlatformEvent) -> &mut Self {
+        self.runner.send_event(event);
+        for _ in 0..3 {
+            self.runner.sync_and_update();
+        }
+        self.capture_frame();
+        self
+    }
+
     /// Open `location` in the window, as a deep link does: the stack is the
     /// location's ancestors, so Back works from it.
     pub fn navigate(&mut self, location: Location) -> &mut Self {

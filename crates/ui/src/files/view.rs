@@ -1900,6 +1900,9 @@ impl Component for FileView {
             .on_wheel({
                 let shared = shared.clone();
                 move |event: Event<WheelEventData>| {
+                    if event.phase.is_end() {
+                        return;
+                    }
                     let ctx = shared.get();
                     ctx.zoom.wheel(&event);
                 }

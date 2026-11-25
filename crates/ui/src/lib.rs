@@ -33,6 +33,7 @@ mod expander_tests;
 pub mod files;
 pub mod focus;
 pub mod format;
+pub mod frame_view;
 pub mod group;
 pub mod i18n;
 pub mod icons;
@@ -110,6 +111,7 @@ pub mod prelude {
     };
     pub use crate::controls::*;
     pub use crate::files::{self, ChooserRequest, Chosen};
+    pub use crate::frame_view::{FrameView, frame_view};
     pub use crate::group::{
         Group, Status, StatusBlock, action_row, caption, centered_caption, form_row, group_head,
         heading, section_label, skeleton, skeleton_caption, skeleton_row, skeleton_row_slot,
@@ -143,10 +145,11 @@ pub mod prelude {
     pub use crate::shell::{
         BackButton, Banner, BannerKind, CANCEL_ID, ChromeItem, ContentItem, Dialog, DialogIcon,
         ForwardButton, HeaderBar, MenuButton, MenuItem, NavigationSplitView, OverlayHost, Overlays,
-        PageAction, PageHead, Pane, Profile, ResponseKind, Screen, StatusPage, Toast, ViewSwitcher,
-        WindowControls, app_menu_item, app_menu_items, banner, choice_sheet, dialog, framed_dialog,
-        history_menu, menu_button, menu_item, menu_separator, status_page, submenu,
-        use_chrome_inset, use_overlays, use_page_busy, use_page_switcher, view, view_switcher,
+        PageAction, PageHead, Pane, Popover, Profile, ResponseKind, Screen, StatusPage,
+        SuggestionRow, Toast, ViewSwitcher, WindowControls, app_menu_item, app_menu_items, banner,
+        choice_sheet, dialog, framed_dialog, history_menu, menu_button, menu_item, menu_separator,
+        popover, status_page, submenu, suggestion_row, use_chrome_inset, use_overlays,
+        use_page_busy, use_page_switcher, view, view_switcher,
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;

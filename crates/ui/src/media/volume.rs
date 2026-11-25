@@ -182,6 +182,9 @@ impl Component for VolumeControl {
         let wheel = {
             let on_change = on_change.clone();
             move |event: Event<WheelEventData>| {
+                if event.phase.is_end() {
+                    return;
+                }
                 let next = wheel_level(if muted { 0.0 } else { level }, event.delta_y);
                 event.stop_propagation();
                 on_change.call(VolumeChange::Level(next));

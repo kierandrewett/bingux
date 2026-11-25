@@ -13,6 +13,7 @@ pub mod feedback;
 pub mod files;
 pub mod formats;
 pub mod foundations;
+pub mod frames;
 pub mod icon_set;
 pub mod inputs;
 pub mod inspector;

@@ -852,6 +852,9 @@ impl Component for TextEditorView {
         let wheel_zoom = self.on_zoom.clone();
         let zoom_travel = use_hook(|| Rc::new(std::cell::Cell::new(0.0f64)));
         let on_wheel = move |event: Event<WheelEventData>| {
+            if event.phase.is_end() {
+                return;
+            }
             if held().contains(Modifiers::CONTROL) {
                 // A notch is a step; a touchpad's pixels add up to one.
                 let travel = zoom_travel.get() + event.delta_y;

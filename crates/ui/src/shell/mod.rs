@@ -34,6 +34,7 @@ mod page_motion_tests;
 pub(crate) mod panel;
 #[cfg(all(test, feature = "testing"))]
 mod rest_fill_tests;
+pub mod popover;
 pub mod screen;
 #[cfg(all(test, feature = "testing"))]
 mod scroll_slide_tests;
@@ -63,6 +64,7 @@ pub use navigation::{
 };
 pub use overlays::{OverlayHost, Overlays, Toast, use_overlays};
 pub use panel::choice_sheet;
+pub use popover::{Popover, SuggestionRow, popover, suggestion_row};
 pub use screen::{Pane, Screen, use_chrome_inset};
 pub use status_page::{StatusPage, status_page};
 pub use window::{HeaderBar, InertControls, WindowControls, drag_on_pointer_down, with_window};

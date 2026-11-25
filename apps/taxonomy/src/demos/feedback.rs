@@ -112,6 +112,72 @@ impl Component for Reduced {
     }
 }
 
+/// A button that opens a popover with groups and rows in it.
+#[derive(PartialEq)]
+struct PopoverDemo;
+
+impl Component for PopoverDemo {
+    fn render(&self) -> impl IntoElement {
+        let mut open = use_state(|| false);
+        let mut area = use_state(Area::default);
+        let anchor = area.read().clone();
+        let content = rect()
+            .tw_layout(&[flex_col(), w_full(), gap(S3)])
+            .child(Group::new(None::<String>).row(
+                row("Connection is secure").subtitle("What you send to this site is private on its way there.").leading(Icon::SecurityHigh),
+            ))
+            .child(
+                Group::new("Site".to_string())
+                    .row(property_row("Site", "example.com"))
+                    .row(property_row("Address", "example.com/docs")),
+            );
+        rect()
+            .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
+            .child(icon_button(Icon::SecurityHigh, move |_| open.set(true)).tooltip("Page info"))
+            .child(popover(open(), &anchor, content.into_element()).on_dismiss(move |_| open.set(false)))
+    }
+}
+
+/// A field with a list of suggestions hanging from it.
+#[derive(PartialEq)]
+struct AttachedDemo;
+
+impl Component for AttachedDemo {
+    fn render(&self) -> impl IntoElement {
+        let text = use_state(String::new);
+        let mut area = use_state(Area::default);
+        let mut chosen = use_state(|| None::<usize>);
+        let anchor = area.read().clone();
+        let rows: Vec<Element> = ["Example Domain", "Bingux News", "The example guide"]
+            .iter()
+            .enumerate()
+            .map(|(at, title)| {
+                suggestion_row(Icon::Clock, *title, "example.org/page")
+                    .highlighted(chosen() == Some(at))
+                    .on_hover(move |inside: bool| chosen.set(inside.then_some(at)))
+                    .into()
+            })
+            .collect();
+        rect()
+            .tw_layout(&[w_full()])
+            .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
+            .child(text_field(text, |_| {}).fill_width().placeholder("Type to see suggestions").leading(Icon::Search))
+            .child(
+                popover(!text.read().is_empty(), &anchor, rect().width(Size::fill()).children(rows).into_element())
+                    .attached(),
+            )
+    }
+}
+
+pub const POPOVER: &[Spec] = &[
+    Spec::live("Opens against its button", || PopoverDemo.into_element())
+        .script("scroll 700, 600, -2600; wait 300; click-name Page info; wait 500; save {out}")
+        .page(260.0),
+    Spec::live("Attached to a field: type to open the list", || AttachedDemo.into_element())
+        .script("scroll 700, 600, -3200; wait 300; click 717, 900; wait 200; type ex; wait 500; save {out}")
+        .page(260.0),
+];
+
 pub const TOOLTIP: &[Spec] = &[
     Spec::live("Hover the icon", || {
         hover_tip(

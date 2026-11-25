@@ -504,6 +504,9 @@ impl Component for ZoomView {
         };
 
         let on_wheel = move |event: Event<WheelEventData>| {
+            if event.phase.is_end() {
+                return;
+            }
             let (vw, vh) = *handle.viewport.peek();
             let now = *handle.view.peek();
             let natural = *handle.natural.peek();
