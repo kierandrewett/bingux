@@ -560,6 +560,7 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/calendar/time_grid.rs": "the time grid's day headers and bars of whole-day events: parts of one grid, not buttons",
     "crates/ui/src/charts/flame.rs": "chart hit areas",
     "crates/ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
+    "crates/ui/src/shell/popover.rs": "the suggestion row: a menu item's row, whose press must not reach the field or the shield under it",
 }
 
 

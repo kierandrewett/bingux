@@ -20,7 +20,8 @@ are off their face. This script reads them. It runs
   * every Bingux Settings page, subpage and click-opened popup, at the desktop
     size and at 390x800 (the two densities), and
   * every bingux-taxonomy page, which holds each component and state of
-    bingux-ui, at desktop and phone size.
+    bingux-ui, at desktop and phone size, and
+  * every bingux-browser scenario (a `--features snapshot` build), at both sizes.
 
     python3 scripts/focus-ring-check.py                  # everything
     python3 scripts/focus-ring-check.py --only taxonomy
@@ -142,7 +143,7 @@ def run(job: dict, workdir: Path, timeout: int) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--only", choices=["settings", "taxonomy"])
+    parser.add_argument("--only", choices=["settings", "taxonomy", "browser"])
     parser.add_argument("--pages", default="", help="comma-separated Settings pages")
     parser.add_argument("--sizes", default=f"{DESKTOP},{PHONE}", help="Settings sizes, `default` is desktop")
     parser.add_argument("--jobs", type=int, default=2, help="captures to run at once")
@@ -167,13 +168,18 @@ def main() -> int:
         if not taxonomy.exists():
             sys.exit(f"{taxonomy} is missing: build with --build")
         jobs += lint.taxonomy_jobs()
+    browser = lint.TARGET / "debug" / "bingux-browser"
+    if args.only == "browser" or (args.only is None and browser.exists() and not args.pages):
+        if not browser.exists():
+            sys.exit(f"{browser} is missing: build it with --features snapshot")
+        jobs += lint.browser_jobs()
 
     workdir = Path(args.keep) if args.keep else Path(tempfile.mkdtemp(prefix="focus-ring-check-"))
     workdir.mkdir(parents=True, exist_ok=True)
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
         futures = [
-            pool.submit(run, job, workdir, args.timeout * (30 if job["name"] == "taxonomy" else 1))
+            pool.submit(run, job, workdir, args.timeout * (30 if job["name"] in ("taxonomy", "browser") else 1))
             for job in jobs
         ]
         for future in concurrent.futures.as_completed(futures):

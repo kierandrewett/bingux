@@ -349,6 +349,66 @@ ALLOWED: list[dict] = [
         "where": r"FlameGraph",
         "why": "A flame graph writes each frame's name inside its bar and cuts it to the bar's width (charts/flame.rs): a bar of a few pixels cannot hold its name, as in every flame graph. Open: the graph has no hover card that names the frame, so a cut name cannot be read (BH/CT-03 gap).",
     },
+    {
+        "rule": "truncated",
+        "capture": r"^browser:(tabs|tab-menu)-desktop",
+        "where": r"TabStrip > Tab",
+        "why": "Eight tabs share the strip down to Dim::TabMin and then show an ellipsis; the taxonomy's tab specimens report the same finding and bingux-ui owns the rule",
+    },
+    {
+        "rule": "uneven-padding",
+        "capture": r"^browser:(dialog|auth|cert-details)-",
+        "where": r"AlertDialog",
+        "why": "bingux-ui's AlertDialog panel (the taxonomy's 'Update installed' reports the same 12 px): its title keeps a top margin the footer does not",
+    },
+    {
+        "rule": "uneven-padding",
+        "capture": r"^browser:permission-phone",
+        "where": r"Banner",
+        "why": "bingux-ui's stacked Banner: the action labels sit inside 36 px hit areas, so the gap under the label is larger than the gap over the message",
+    },
+    {
+        "rule": "uneven-padding",
+        "capture": r"^browser:find",
+        "where": r"FindBar",
+        "why": "The autofocused field's focus ring sits 4 px outside its box and the icon buttons at the end have 10 px of inner padding: the painted ends are not the box ends",
+    },
+    {
+        "rule": "uneven-padding",
+        "capture": r"^browser:downloads",
+        "where": r"Popover > Group > Row",
+        "why": "The pause and cancel icon buttons end 12 px inside the row (their own inner padding); the row's text and controls are centred in the PNG",
+    },
+    {
+        "rule": "off-centre",
+        "capture": r"^browser:(downloads|info)",
+        "where": r"Popover > Group > Row",
+        "why": "A wrapped subtitle makes the row's text column taller than its icon; the row is centred in the PNG (viewed), the lint measures the column's box",
+    },
+    {
+        "rule": "outside-parent",
+        "capture": r"^browser:(cert|cert-details|error|popup)-phone",
+        "where": r"AddressBar > TextField",
+        "why": "A single-line TextField clips its text at the field's edge instead of eliding it: an address wider than the field is cut there (viewed in popup-phone). Listed under 'What is missing' in docs/browser.md",
+    },
+    {
+        "rule": "dead-space",
+        "capture": r"^browser:tab-list-phone",
+        "where": r"Dialog",
+        "why": "A phone sheet hangs `sheet_overhang()` (65 px) below the window edge by design: its card is taller than the window it shows",
+    },
+    {
+        "rule": "outside-parent",
+        "capture": r"^browser:tab-list-phone",
+        "where": r"Dialog",
+        "why": "The same overhang: 20 px of the sheet's card lies below the window's bottom edge, which is how a sheet rests",
+    },
+    {
+        "rule": "uneven-padding",
+        "capture": r"^browser:suggestions",
+        "where": r"Toolbar",
+        "why": "The suggestion list is an attached popover drawn below the toolbar; the lint counts it as the toolbar's content",
+    },
 ]
 
 
@@ -666,9 +726,21 @@ def files_jobs(workdir: Path) -> list[dict]:
     return jobs
 
 
+def browser_jobs() -> list[dict]:
+    # `--snapshot` renders every scenario at desktop and at 390x800 over the
+    # in-memory test double (a `--features snapshot` build of bingux-browser).
+    return [
+        {
+            "name": "browser",
+            "argv": [str(TARGET / "debug" / "bingux-browser"), "--snapshot"],
+            "pages": [],
+        }
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--only", choices=["settings", "taxonomy", "files"])
+    parser.add_argument("--only", choices=["settings", "taxonomy", "files", "browser"])
     parser.add_argument("--pages", default="", help="comma-separated Settings pages")
     parser.add_argument("--sizes", default=f"{DESKTOP},{PHONE}", help="Settings sizes, `default` is desktop")
     parser.add_argument("--jobs", type=int, default=2, help="captures to run at once")
@@ -702,6 +774,11 @@ def main() -> int:
             sys.exit(f"{settings} is missing: build with --build")
         pages = [page for page in args.pages.split(",") if page] or panels() + SUBPAGES
         jobs += settings_jobs(pages, [size for size in args.sizes.split(",") if size])
+    browser = TARGET / "debug" / "bingux-browser"
+    if args.only == "browser" or (args.only is None and browser.exists() and not args.pages):
+        if not browser.exists():
+            sys.exit(f"{browser} is missing: build it with --features snapshot")
+        jobs += browser_jobs()
     if args.only in (None, "taxonomy") and not args.pages:
         if not taxonomy.exists():
             sys.exit(f"{taxonomy} is missing: build with --build")
@@ -719,7 +796,9 @@ def main() -> int:
     def run_all(batch: list[dict]) -> None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, args.jobs)) as pool:
             futures = [
-                pool.submit(run_job, job, workdir, args.timeout * (30 if job["name"].startswith("taxonomy") else 1))
+                pool.submit(
+                    run_job, job, workdir, args.timeout * (30 if job["name"].startswith(("taxonomy", "browser")) else 1)
+                )
                 for job in batch
             ]
             for future in concurrent.futures.as_completed(futures):
