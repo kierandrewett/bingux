@@ -623,6 +623,10 @@ impl<D: PartialEq + 'static, B: Fn(VirtualItem, &D) -> Element + 'static> Compon
         };
 
         let on_wheel = move |e: Event<WheelEventData>| {
+            // Bingux patch: the lift of the fingers moves nothing.
+            if e.phase.is_end() {
+                return;
+            }
             // Bingux patch: leave the event to an ancestor while Ctrl is held.
             if pass_ctrl_wheel && *pressing_ctrl.read() {
                 return;

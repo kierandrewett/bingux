@@ -487,7 +487,22 @@ impl ElementExt for RectElement {
     fn render(&self, context: RenderContext) {
         let style = self.style();
 
-        let area = context.layout_node.visible_area();
+        let mut area = context.layout_node.visible_area();
+        // Bingux patch: a drawn background that asks for it sits on whole device
+        // pixels (see `RenderCallback::snapped_to_pixels`). The corner and the
+        // size are rounded with a little give, so a box that lands on a tie
+        // because of float noise rounds the same way every time.
+        if style
+            .background
+            .render_callback()
+            .is_some_and(|callback| callback.snaps_to_pixels())
+        {
+            let snap = |value: f32| (value + 0.501).floor();
+            area = Area::new(
+                (snap(area.min_x()), snap(area.min_y())).into(),
+                (snap(area.width()), snap(area.height())).into(),
+            );
+        }
         // A box that reads right to left is painted as the reflection of what it was
         // written as: its start corners, its start border and the way its shadow falls.
         let rtl = context.text_style_state.direction.is_rtl();

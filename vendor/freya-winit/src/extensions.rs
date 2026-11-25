@@ -112,6 +112,11 @@ pub trait WinitPlatformExt {
     /// ```
     fn set_window_title(&self, window_id: WindowId, title: impl Into<String>);
 
+    /// Bingux patch: place the input method's popup at `area`, in logical
+    /// window pixels, instead of at the focused node, or back at the node
+    /// with `None`. For a node that draws its own text caret.
+    fn set_ime_cursor_area(&self, window_id: WindowId, area: Option<torin::prelude::Area>);
+
     /// Execute a callback with mutable access to a [`Window`].
     ///
     /// This allows direct manipulation of the underlying winit [`Window`] for advanced use cases.
@@ -238,6 +243,16 @@ impl WinitPlatformExt for Platform {
             NativePlatformErasedEventAction::RendererCallback(Box::new(move |context| {
                 if let Some(app) = context.windows.get_mut(&window_id) {
                     app.set_title(&title);
+                }
+            })),
+        ))));
+    }
+
+    fn set_ime_cursor_area(&self, window_id: WindowId, area: Option<torin::prelude::Area>) {
+        self.send(GlobalUserEvent::Erased(SingleThreadErasedEvent(Box::new(
+            NativePlatformErasedEventAction::RendererCallback(Box::new(move |context| {
+                if let Some(app) = context.windows.get_mut(&window_id) {
+                    app.set_ime_cursor_override(area);
                 }
             })),
         ))));

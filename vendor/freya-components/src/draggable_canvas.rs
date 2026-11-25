@@ -97,6 +97,9 @@ impl Component for DraggableCanvas {
         };
 
         let on_wheel = move |e: Event<WheelEventData>| {
+            if e.phase.is_end() {
+                return;
+            }
             let mut current_offset = offset.write();
             current_offset.x += e.delta_x;
             current_offset.y += e.delta_y;

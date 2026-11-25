@@ -37,6 +37,7 @@ use ragnarok::{
     NodesState,
 };
 use torin::prelude::{
+    Area,
     CursorPoint,
     Size2D,
 };
@@ -107,6 +108,10 @@ pub struct AppWindow {
     #[cfg(feature = "accessibility")]
     pub(crate) accessibility_adapter: accesskit_winit::Adapter,
     pub(crate) accessibility_tasks_for_next_render: AccessibilityTask,
+    /// Bingux patch: where the input method's popup goes instead of the focused
+    /// node's box, while an app that draws its own text caret (a frame view)
+    /// has one. See `WinitPlatformExt::set_ime_cursor_area`.
+    pub(crate) ime_cursor_override: Option<Area>,
     #[cfg(feature = "accessibility")]
     pub(crate) screen_reader: ScreenReader,
 
@@ -169,7 +174,9 @@ impl AppWindow {
             self.platform.navigation_mode.set(mode);
         }
 
-        let area = layout_node.visible_area();
+        let area = self
+            .ime_cursor_override
+            .unwrap_or_else(|| layout_node.visible_area());
         self.window.set_ime_cursor_area(
             LogicalPosition::new(area.min_x(), area.min_y()),
             LogicalSize::new(area.width(), area.height()),
@@ -179,6 +186,17 @@ impl AppWindow {
         if self.screen_reader.is_on() {
             self.accessibility_adapter.update_if_active(|| update);
         }
+    }
+
+    /// Bingux patch: put the input method's popup at `area` (logical window
+    /// pixels) instead of at the focused node, or back at the node with `None`.
+    pub fn set_ime_cursor_override(&mut self, area: Option<Area>) {
+        if self.ime_cursor_override == area {
+            return;
+        }
+        self.ime_cursor_override = area;
+        self.accessibility_tasks_for_next_render |= AccessibilityTask::ProcessUpdate { mode: None };
+        self.window.request_redraw();
     }
 
     /// Set the window title and refresh the accessibility label of the root node.
@@ -445,6 +463,7 @@ impl AppWindow {
             #[cfg(feature = "accessibility")]
             accessibility_adapter,
             accessibility_tasks_for_next_render: AccessibilityTask::ProcessUpdate { mode: None },
+            ime_cursor_override: None,
             #[cfg(feature = "accessibility")]
             screen_reader,
 

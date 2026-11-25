@@ -171,6 +171,53 @@ pub struct StyledEventData {
     pub text_style: TextStyleState,
 }
 
+/// Where a wheel event is in a touchpad gesture. Bingux patch: upstream drops
+/// every phase but `Changed`, which leaves an engine that does its own scrolling
+/// (momentum, overscroll) without the start and the lift-off of the fingers.
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Default)]
+pub enum WheelPhase {
+    /// A notch of a wheel, or an event made by code: not part of a gesture.
+    #[default]
+    None,
+    /// The fingers started to scroll. Carries the first delta.
+    Began,
+    /// The gesture goes on.
+    Changed,
+    /// The fingers lifted. Carries no delta.
+    Ended,
+    /// The system cancelled the gesture. Carries no delta.
+    Cancelled,
+}
+
+std::thread_local! {
+    static CURRENT_PHASE: std::cell::Cell<WheelPhase> = const { std::cell::Cell::new(WheelPhase::None) };
+}
+
+/// Sets the phase of the wheel event the window is about to hand to the
+/// event system, and returns the one it replaces. The window sets it around
+/// `process_platform_events`; [`PlatformEvent::Wheel`] has no field for it
+/// because other crates build that variant (the test harness), so the phase
+/// travels beside it on the same thread, and `emittable` reads it where it
+/// makes the [`WheelEventData`].
+///
+/// [`PlatformEvent::Wheel`]: crate::events::platform::PlatformEvent::Wheel
+pub fn set_current_wheel_phase(phase: WheelPhase) -> WheelPhase {
+    CURRENT_PHASE.with(|current| current.replace(phase))
+}
+
+/// The phase set by [`set_current_wheel_phase`]: `None` outside a window's
+/// wheel event.
+pub fn current_wheel_phase() -> WheelPhase {
+    CURRENT_PHASE.with(std::cell::Cell::get)
+}
+
+impl WheelPhase {
+    /// Whether this event only marks the end of a gesture and moves nothing.
+    pub fn is_end(self) -> bool {
+        matches!(self, Self::Ended | Self::Cancelled)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum WheelSource {
     /// Discrete line-based steps, usually from a mouse wheel.
@@ -195,9 +242,17 @@ pub struct WheelEventData {
     pub delta_y: f64,
     pub global_location: CursorPoint,
     pub element_location: CursorPoint,
+    /// Bingux patch: the touchpad gesture phase.
+    pub phase: WheelPhase,
 }
 
 impl WheelEventData {
+    /// The event with the gesture phase of a touchpad.
+    pub fn with_phase(mut self, phase: WheelPhase) -> Self {
+        self.phase = phase;
+        self
+    }
+
     pub fn new(
         delta_x: f64,
         delta_y: f64,
@@ -211,6 +266,7 @@ impl WheelEventData {
             source,
             global_location,
             element_location,
+            phase: WheelPhase::None,
         }
     }
 }

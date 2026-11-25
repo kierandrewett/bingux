@@ -1045,6 +1045,7 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                             )
                                 .into();
 
+                            let layout_started = crate::bingux_frame::enabled().then(std::time::Instant::now);
                             app.tree.measure_layout(
                                 size,
                                 &mut self.font_collection,
@@ -1054,6 +1055,9 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                                 scale_factor,
                                 &self.fallback_fonts,
                             );
+                            if let Some(started) = layout_started {
+                                crate::bingux_frame::record(crate::bingux_frame::Stage::Layout, started.elapsed());
+                            }
                             app.platform.root_size.set_if_modified(size);
                             app.process_layout_on_next_render = false;
                             self.plugins.send(
@@ -1080,6 +1084,7 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                         }
 
                         let resource_cache = app.driver.resource_cache_usage();
+                        let present_started = crate::bingux_frame::enabled().then(std::time::Instant::now);
                         let present_result = app.driver.present(
                             app.window.inner_size().cast(),
                             &app.window,
@@ -1103,7 +1108,11 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                                     background: app.background,
                                 };
 
+                                let render_started = crate::bingux_frame::enabled().then(std::time::Instant::now);
                                 render_pipeline.render();
+                                if let Some(started) = render_started {
+                                    crate::bingux_frame::record(crate::bingux_frame::Stage::Render, started.elapsed());
+                                }
 
                                 let cached_assets = app.runner.with_root_context(|| {
                                     AssetCacher::try_get()
@@ -1143,6 +1152,9 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                                 );
                             },
                         );
+                        if let Some(started) = present_started {
+                            crate::bingux_frame::record(crate::bingux_frame::Stage::Present, started.elapsed());
+                        }
                         if let Err(error) = present_result {
                             tracing::warn!(
                                 "Graphics driver lost ({error:?}), rebuilding on the same window"
@@ -1192,7 +1204,9 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                                     .focused_accessibility_node
                                     .set_if_modified(focused_node);
 
-                                let area = layout_node.visible_area();
+                                let area = app
+                                    .ime_cursor_override
+                                    .unwrap_or_else(|| layout_node.visible_area());
                                 app.window.set_ime_cursor_area(
                                     LogicalPosition::new(area.min_x(), area.min_y()),
                                     LogicalSize::new(area.width(), area.height()),
@@ -1334,7 +1348,19 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                     let wheel_speed_modifier = crate::bingux_scroll::wheel_step();
                     let touchpad_speed_modifier = crate::bingux_scroll::touchpad_factor();
 
-                    if TouchPhase::Moved == phase {
+                    // Bingux patch: every phase of a touchpad gesture is delivered
+                    // (upstream drops all but `Moved`), so a page that scrolls on
+                    // its own sees the fingers land and lift. A wheel's notches
+                    // have no gesture.
+                    let wheel_phase = match (delta, phase) {
+                        (MouseScrollDelta::LineDelta(..), _) => WheelPhase::None,
+                        (_, TouchPhase::Started) => WheelPhase::Began,
+                        (_, TouchPhase::Moved) => WheelPhase::Changed,
+                        (_, TouchPhase::Ended) => WheelPhase::Ended,
+                        (_, TouchPhase::Cancelled) => WheelPhase::Cancelled,
+                    };
+                    let is_line = matches!(delta, MouseScrollDelta::LineDelta(..));
+                    if TouchPhase::Moved == phase || !is_line {
                         let (delta_x, delta_y, source) = match delta {
                             MouseScrollDelta::LineDelta(x, y) => (
                                 x as f64 * wheel_speed_modifier,
@@ -1348,6 +1374,7 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                             ),
                         };
 
+                        let outer = freya_core::events::data::set_current_wheel_phase(wheel_phase);
                         app.process_platform_events(
                             vec![PlatformEvent::Wheel {
                                 name: WheelEventName::Wheel,
@@ -1358,6 +1385,7 @@ impl ApplicationHandler<NativeEvent> for WinitRenderer {
                             &mut self.plugins,
                             PluginHandle::new(&self.proxy),
                         );
+                        freya_core::events::data::set_current_wheel_phase(outer);
                     }
                 }
 

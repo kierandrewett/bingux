@@ -77,6 +77,19 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   event to `path`; `bingux_scroll::enable_tap()` queues them for
   `bingux_scroll::drain_tap()` (the `scroll_probe` example reads them). Off
   (one atomic load per event) unless one of the two is set.
+- `freya-core/src/events/data.rs`, `emittable.rs`, `freya-winit/src/renderer.rs`
+  and the wheel handlers of `freya-components`: `WheelPhase` (`None`, `Began`,
+  `Changed`, `Ended`, `Cancelled`) and `WheelEventData::phase`. Upstream hands the
+  event system only the `Moved` phase of a touchpad gesture; the window now
+  delivers every phase (a notch has none), and the phase reaches `emittable`
+  beside `PlatformEvent::Wheel` on a thread-local
+  (`set_current_wheel_phase`/`current_wheel_phase`), because other crates (the
+  test harness) build that variant and a new field would break them. The
+  `Ended`/`Cancelled` events carry no delta and `ScrollView`, `VirtualScrollView`
+  and `DraggableCanvas` return on them; `frame_view` forwards them to its producer.
+- `freya-winit/src/bingux_frame.rs` (new) and `renderer.rs`: how long a frame's
+  layout, render and present took, read by `BINGUX_FRAME_STATS=1`
+  (`bingux_ui::frame_view::stats`). Off, one atomic load per stage.
 - `freya-components/src/scrollviews/wheel_accel.rs` (new), `scrollview.rs`,
   `virtual_scrollview.rs`, `use_scroll_controller.rs`: the wheel feel.
   `BINGUX_WHEEL_FEEL` (`current`, `raw`, `accelerated`) or
@@ -210,6 +223,26 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   started it. A slide started by a page mounting (a slow frame) jumped to its
   end in one frame, so Back seemed to have no slide-out; a hitch now delays an
   animation by a frame or two instead of skipping it.
+
+- `freya-core/src/style/render_callback.rs`, `elements/rect.rs`:
+  `RenderCallback::snapped_to_pixels()`. A box whose background is a drawing
+  can ask to sit on whole device pixels: its corner and size are rounded
+  (leaning a thousandth of a pixel upward, so float noise cannot flip a tie),
+  and so are its clip and the box the callback is given. Without it a box at a
+  fractional position (at 1.25x most are) is clipped through the middle of its
+  edge pixels, which half-covers the last row and column of a picture that is
+  meant to land pixel for pixel. Bingux's frame view uses it
+  (`style::painted_on_pixels`); every other callback is unchanged.
+- `freya-winit/src/extensions.rs`, `window.rs`, `renderer.rs`:
+  `WinitPlatformExt::set_ime_cursor_area(window, Option<Area>)`. Upstream puts
+  the input method's popup at the whole focused node; a node that draws its own
+  text caret (the frame view, for a web page) places it at the caret, and `None`
+  puts it back. `AppWindow::set_ime_cursor_override` keeps the area and asks for
+  an accessibility update, which applies it (`process_accessibility_update` and
+  the first update both read it).
+- `freya-winit/src/bingux_scroll.rs`: `wheel_step()` and `touchpad_factor()`
+  are `pub` (they were `pub(crate)`), so a component that forwards the wheel
+  can tell a notch from the pixels Freya made of it.
 
 These crates are MIT licensed by the Freya authors. Tests, benches and examples are
 not copied. Drop this directory and the patch entries when upstream exposes these

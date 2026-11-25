@@ -227,7 +227,7 @@ impl EmmitableEvent {
                         source,
                         global_location,
                         element_location,
-                    )),
+                    ).with_phase(crate::events::data::current_wheel_phase())),
                     bubbles,
                 }
             }

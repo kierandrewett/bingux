@@ -340,6 +340,10 @@ impl Component for ScrollView {
         };
 
         let on_wheel = move |e: Event<WheelEventData>| {
+            // Bingux patch: the lift of the fingers moves nothing.
+            if e.phase.is_end() {
+                return;
+            }
             // Only invert direction on deviced-sourced wheel events
             let invert_direction = e.source.is_device()
                 && (*pressing_shift.read() || invert_scroll_wheel)
