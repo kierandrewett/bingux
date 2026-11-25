@@ -136,6 +136,12 @@ pub const SEARCH_FIELD: &[Spec] = &[
     }),
 ];
 
+/// The stand-in content's height: the find card floats over it (absolute, top
+/// right), so the area must be at least as tall as the card, which is taller
+/// with its option row.
+const FIND_AREA_HEIGHT: f32 = 96.0;
+const FIND_AREA_HEIGHT_OPTIONS: f32 = 132.0;
+
 /// A find card over a stand-in for the content it searches: the card floats
 /// at the area's top right and never moves it.
 fn find_area(text: &'static str, result: Option<(u32, u32)>, options: bool) -> Element {
@@ -159,7 +165,11 @@ fn find_area(text: &'static str, result: Option<(u32, u32)>, options: bool) -> E
         });
     rect()
         .width(Size::fill())
-        .height(Size::px(if options { 132.0 } else { 96.0 }))
+        .height(Size::px(if options {
+            FIND_AREA_HEIGHT_OPTIONS
+        } else {
+            FIND_AREA_HEIGHT
+        }))
         .child(caption("The content the card searches"))
         .child(card)
         .into_element()
