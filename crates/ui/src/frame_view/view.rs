@@ -689,6 +689,13 @@ fn touch_handler(
 fn key_handler(live: &Rc<Live>, pressed: bool) -> impl FnMut(Event<KeyboardEventData>) + 'static {
     let live = live.clone();
     move |event: Event<KeyboardEventData>| {
+        // A menu, popover or dialog over the view has the keyboard: a key
+        // pressed now is not the page's, and Escape must reach the surface
+        // that dismisses. A release still goes through, so a key that went
+        // down before the surface opened is not left held.
+        if pressed && crate::nav::try_router().is_some_and(|router| router.modal_open_now()) {
+            return;
+        }
         let route = live.keys.borrow_mut().route(
             &event.key,
             event.code,

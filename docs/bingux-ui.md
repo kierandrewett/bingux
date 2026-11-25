@@ -1511,6 +1511,8 @@ web_view(backend.clone(), tab, surface)
     .on_host_key(move |key: KeyInput| app_shortcut(&key).map(run).is_some())
 ```
 
+While a menu, popover or dialog is open the view hears no key press (a release still goes through, so a key that went down before it opened is not left held): the keys belong to the surface, and Escape and Back dismiss it even when the page holds the keyboard.
+
 The engine side (`web_view::engine`, behind `web-view-vivarium` or `web-view-dynamic-load`) is one
 `BrowserBackend` over the `vivarium` crate (ABI 2.0). `engine::start(Config::from_environment(private))` starts it
 and never fails: an engine that does not start is a backend whose first event is `EngineEvent::Failed`.

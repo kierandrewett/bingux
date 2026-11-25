@@ -578,7 +578,9 @@ pub fn run(arguments: &[OsString]) {
 ///      which is when the person wants it (the button was busy, and a busy
 ///      icon button swallows presses);
 ///   2. the toast's "Show" does not open the list;
-///   3. the button does nothing when nothing runs either (the control).
+///   3. the button does nothing when nothing runs either (the control);
+///   4. Escape does not close the downloads list, which every popover is
+///      documented to do (a page that holds the keyboard hears it first).
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -634,5 +636,20 @@ mod tests {
         shot.click(centre.x, centre.y);
         wait(&mut shot, 400);
         assert!(open(&mut shot));
+    }
+
+    #[test]
+    fn escape_closes_the_downloads_list() {
+        let (mut shot, _rig) = window();
+        // The person clicked into the page: it holds the keyboard.
+        shot.click(400.0, 400.0);
+        wait(&mut shot, 200);
+        let at = ctx();
+        shot.runner().run_in(|| at.run(Command::Downloads));
+        wait(&mut shot, 400);
+        assert!(open(&mut shot), "the list is open");
+        shot.run_script("key escape", SCHEME).expect("a key");
+        wait(&mut shot, 400);
+        assert!(!open(&mut shot), "Escape closed it");
     }
 }
