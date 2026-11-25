@@ -628,7 +628,7 @@ mod tests {
         // The button's words are drawn text, not an accessible name.
         let shown = shot.runner().find_many(|node, element| {
             let label = Label::try_downcast(element)?;
-            (label.text == "Show").then(|| node.layout().area.center())
+            (label.text == "Show").then(|| Area::center(&node.layout().area))
         });
         let centre = shown.first().expect("the toast for the download is up");
         shot.click(centre.x, centre.y);
