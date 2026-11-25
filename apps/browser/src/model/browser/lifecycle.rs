@@ -1,7 +1,7 @@
 //! The engine's life as the window sees it: it fails, and a restart opens the
 //! tabs again; a page asks for a window, and the browser says yes or no.
 
-use bingux_geckoview::{Disposition, FailureCause, NewWindow, RequestId, TabId};
+use bingux_ui::web_view::{Disposition, FailureCause, NewWindow, RequestId, TabId};
 
 use super::{Browser, EngineStatus, Notice};
 use crate::model::tab::{Tab, TabKind};

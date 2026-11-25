@@ -1,5 +1,5 @@
 //! `bingux-browser --snapshot DIR [SCENARIO,...]`: the window rendered
-//! headlessly to PNG, over the in-memory test double of `bingux-geckoview`
+//! headlessly to PNG, over the in-memory test double of `bingux_ui::web_view`
 //! (never the engine), at the desktop size and at 390 x 800.
 //!
 //! Each scenario puts the window in one state: a page, a tab that crashed, a
@@ -15,8 +15,8 @@ use std::ffi::OsString;
 use std::sync::Arc;
 use std::time::Duration;
 
-use bingux_geckoview::test_double::TestDoubleBackend;
-use bingux_geckoview::{BrowserEvent, Capabilities, FailureCause, TabEvent, TabId};
+use bingux_ui::web_view::test_double::TestDoubleBackend;
+use bingux_ui::web_view::{BrowserEvent, Capabilities, FailureCause, TabEvent, TabId};
 use bingux_ui::nav::{RouteTable, provide_router};
 use bingux_ui::prelude::Location;
 use bingux_ui::snapshot::Snapshot;
@@ -129,8 +129,8 @@ fn tabs(shot: &mut Snapshot, rig: &Rig) {
         browser.set_pinned(second, true);
         browser.select(third);
     });
-    tell(rig, 2, TabEvent::Audio(bingux_geckoview::Audio { playing: true, muted: false }));
-    tell(rig, 7, TabEvent::Audio(bingux_geckoview::Audio { playing: true, muted: true }));
+    tell(rig, 2, TabEvent::Audio(bingux_ui::web_view::Audio { playing: true, muted: false }));
+    tell(rig, 7, TabEvent::Audio(bingux_ui::web_view::Audio { playing: true, muted: true }));
     wait(shot, 500);
 }
 
@@ -398,13 +398,13 @@ fn sizes() -> Vec<(&'static str, (f32, f32))> {
 /// `--snapshot DIR real ADDRESS,...`: the window over the real engine, which
 /// opens each address and is looked at once its page has a title and has had
 /// a few seconds to paint. Needs a `vivarium` build and an SDK.
-#[cfg(feature = "vivarium")]
+#[cfg(any(feature = "vivarium", feature = "dynamic-load"))]
 fn run_real(dir: &str, addresses: &[String]) {
     for (label, size) in sizes() {
         CTX.with(|slot| slot.set(None));
-        let config = bingux_geckoview::engine::Config::from_environment(true);
+        let config = bingux_ui::web_view::engine::Config::from_environment(true);
         // An engine that does not start is a window that says so: the shot shows it.
-        let engine = Engine(bingux_geckoview::engine::start(config));
+        let engine = Engine(bingux_ui::web_view::engine::start(config));
         let start = addresses.to_vec();
         let app = move || {
             provide_router(Arc::new(RouteTable::new(SCHEME)), &Location::rooted(SCHEME));
@@ -460,7 +460,7 @@ pub fn run(arguments: &[OsString]) {
         .unwrap_or_default();
     std::fs::create_dir_all(&dir).expect("create the snapshot folder");
     if only.first().is_some_and(|name| name == "real") {
-        #[cfg(feature = "vivarium")]
+        #[cfg(any(feature = "vivarium", feature = "dynamic-load"))]
         {
             let addresses: Vec<String> = std::env::var("BINGUX_BROWSER_REAL_URLS")
                 .unwrap_or_default()
@@ -470,7 +470,7 @@ pub fn run(arguments: &[OsString]) {
                 .collect();
             run_real(&dir, &addresses);
         }
-        #[cfg(not(feature = "vivarium"))]
+        #[cfg(not(any(feature = "vivarium", feature = "dynamic-load")))]
         eprintln!("the `real` scenario needs a build with the `vivarium` feature");
         return;
     }

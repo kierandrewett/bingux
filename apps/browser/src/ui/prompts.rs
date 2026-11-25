@@ -5,7 +5,7 @@
 //! The first prompt of the tab on show is the one on screen. Prompts of other
 //! tabs wait, and the tab says so in the strip.
 
-use bingux_geckoview::requests::{DialogKind, DialogRequest, PickerMode, PickerRequest};
+use bingux_ui::web_view::requests::{DialogKind, DialogRequest, PickerMode, PickerRequest};
 use bingux_ui::files::choose;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
@@ -143,7 +143,7 @@ fn show_dialog(ctx: Ctx, key: u64, request: &DialogRequest) {
     ctx.overlays.show_dialog(shown.cancel_action(if request.kind == DialogKind::Alert { "ok" } else { CANCEL_ID }));
 }
 
-fn show_auth(ctx: Ctx, key: u64, request: &bingux_geckoview::requests::AuthRequest) {
+fn show_auth(ctx: Ctx, key: u64, request: &bingux_ui::web_view::requests::AuthRequest) {
     let mut name = ctx.chrome.dialog_text;
     let mut password = ctx.chrome.dialog_password;
     name.set(String::new());
@@ -184,7 +184,7 @@ fn show_auth(ctx: Ctx, key: u64, request: &bingux_geckoview::requests::AuthReque
 }
 
 /// A `<select>` list, as a dialog with the options in a dropdown.
-fn show_select(ctx: Ctx, key: u64, request: &bingux_geckoview::requests::SelectRequest) {
+fn show_select(ctx: Ctx, key: u64, request: &bingux_ui::web_view::requests::SelectRequest) {
     let options: Vec<(String, String)> = request
         .options
         .iter()

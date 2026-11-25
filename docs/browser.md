@@ -1,14 +1,17 @@
 # Browser
 
-`packages/bingux-browser` is the browser's window; `packages/bingux-geckoview` is the glue between
-the Vivarium engine and bingux-ui. The window is built from bingux-ui and nothing else. Pages are
-drawn by the engine (an embeddable Gecko, see the Vivarium repository) into a `frame_view`.
+`packages/bingux-browser` is the browser: a thin frame (tabs, toolbar, address field, menus, settings) around
+bingux-ui's web view control (`bingux_ui::web_view`, cargo feature `web-view`), the way iexplore.exe was a frame
+around IE's WebBrowser control. Any Bingux app can embed the same control (Mail's account sign-in is the second use;
+`docs/apps/browser/PLAN.md`). The window is built from bingux-ui and nothing else. Pages are drawn by the engine (an
+embeddable Gecko, see the Vivarium repository) into the control's frame view.
 
 ```
-bingux-browser   model/ (state and rules, no window)   ui/ (pages built from bingux-ui)
+bingux-browser          model/ (state and rules, no window)   ui/ (pages built from bingux-ui)
       |
-bingux-geckoview BrowserBackend (one trait)  ->  engine (real, over the `vivarium` crate)
-                                              ->  test_double (tests and snapshots only)
+bingux_ui::web_view     WebView control + BrowserBackend (one trait)
+                          ->  engine (feature web-view-vivarium or web-view-dynamic-load, over `vivarium` 0.1)
+                          ->  test_double (features web-view + testing: tests and snapshots only)
 ```
 
 ## Run it
@@ -240,7 +243,7 @@ device sent:
 
 ## Appearance
 
-`PageEnvironment` (`bingux-geckoview::environment`) carries the window's look to the engine and is sent on
+`PageEnvironment` (`bingux_ui::web_view::environment`) carries the window's look to the engine and is sent on
 `EngineEvent::Ready` and whenever the tokens change (`use_side_effect_with_deps` in `ui/app.rs`); new tabs
 are made in the current scheme. The engine-wide call (`Engine::set_environment`) carries only the fields
 the engine announces (`env.color_scheme`, `env.accent`, ... through `vv_engine_feature`): the library

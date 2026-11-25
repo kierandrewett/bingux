@@ -1,8 +1,8 @@
 //! The sites the test double knows: a host name picks how a load ends.
 
-use crate::ids::DownloadId;
-use crate::page::{LoadError, Security, SecurityState};
-use crate::requests::{
+use crate::web_view::ids::DownloadId;
+use crate::web_view::page::{LoadError, Security, SecurityState};
+use crate::web_view::requests::{
     AuthRequest, CertError, CertProblem, DialogKind, DialogRequest, DownloadInfo, DownloadState,
     PermissionKind, PermissionRequest, RequestKind,
 };

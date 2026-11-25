@@ -21,7 +21,7 @@ use std::time::Duration;
 
 use vivarium as vv;
 
-use crate::backend::{EngineSettings, RemoteSettings};
+use crate::web_view::backend::{EngineSettings, RemoteSettings};
 
 /// What a page's WebRTC connection may reveal about the machine
 /// (`BINGUX_BROWSER_WEBRTC_IP_POLICY`).

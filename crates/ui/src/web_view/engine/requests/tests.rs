@@ -430,7 +430,7 @@ fn a_download_event_becomes_a_line_of_the_list_and_a_removed_one_does_not() {
         error: String::new(),
     };
     let info = download_info(&event(vv::DownloadState::Progress)).unwrap();
-    assert_eq!((info.id, info.state, info.received, info.total, info.speed), (crate::ids::DownloadId(9), DownloadState::Running, 512, Some(1024), 100));
+    assert_eq!((info.id, info.state, info.received, info.total, info.speed), (crate::web_view::ids::DownloadId(9), DownloadState::Running, 512, Some(1024), 100));
     assert_eq!(info.path.as_deref(), Some(Path::new("/home/u/Downloads/f.bin")));
     for (engine, browser) in [
         (vv::DownloadState::Started, DownloadState::Running),

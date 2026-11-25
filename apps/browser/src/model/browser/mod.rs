@@ -13,8 +13,8 @@ mod prompts;
 
 use std::sync::Arc;
 
-use bingux_geckoview::requests::ContextTarget;
-use bingux_geckoview::{BackendError, BrowserBackend, Capabilities, FailureCause, PageEnvironment, RequestId, TabConfig, TabId};
+use bingux_ui::web_view::requests::ContextTarget;
+use bingux_ui::web_view::{BackendError, BrowserBackend, Capabilities, FailureCause, PageEnvironment, RequestId, TabConfig, TabId};
 
 use super::address::ENGINES;
 use super::downloads::Downloads;
@@ -220,7 +220,7 @@ impl Browser {
     }
 
     /// Run an engine call; what goes wrong becomes a notice.
-    pub(crate) fn engine_call(&mut self, call: impl FnOnce(&dyn BrowserBackend) -> bingux_geckoview::Done) {
+    pub(crate) fn engine_call(&mut self, call: impl FnOnce(&dyn BrowserBackend) -> bingux_ui::web_view::Done) {
         if let Err(error) = call(self.backend.as_ref()) {
             // A tab that is already closed is not the person's business.
             if !matches!(error, BackendError::NoSuchTab(_)) {

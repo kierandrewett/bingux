@@ -4,14 +4,14 @@
 //! conversion copies fields and loses none. The tests are the proof that every
 //! field arrives.
 
-use bingux_ui::frame_view::{CursorKind as ViewCursor, WheelPhase};
+use crate::frame_view::{CursorKind as ViewCursor, WheelPhase};
 use vivarium as vv;
 
-use crate::input::{
+use crate::web_view::input::{
     EditCommand, FocusAction, KeyEvent, PageInput, PointerEvent, PointerKind, TextEvent, TouchEvent, TouchKind,
     WheelEvent, WheelUnit,
 };
-use crate::page::{GoneReason, Security, SecurityState};
+use crate::web_view::page::{GoneReason, Security, SecurityState};
 
 fn modifiers(bits: u32) -> vv::Modifiers {
     vv::Modifiers::from_bits_truncate(bits)
@@ -66,7 +66,7 @@ pub(super) fn on_accent(accent: u32) -> u32 {
 /// only when `announced` says the engine implements it (`env.<field>`): the
 /// library refuses a whole call that names one it does not, and the answer
 /// would be `Unsupported` for the fields that do work too.
-pub(super) fn environment(environment: &crate::environment::PageEnvironment, announced: &dyn Fn(&str) -> bool) -> vv::Environment {
+pub(super) fn environment(environment: &crate::web_view::environment::PageEnvironment, announced: &dyn Fn(&str) -> bool) -> vv::Environment {
     let mut out = vv::Environment::default();
     if announced("color_scheme") {
         out.color_scheme = Some(if environment.dark() { vv::ColorScheme::Dark } else { vv::ColorScheme::Light });
@@ -168,7 +168,7 @@ pub(super) fn focus(action: FocusAction) -> vv::FocusAction {
     }
 }
 
-pub(super) fn context_menu(at: Option<(f64, f64)>, held: crate::input::Mods) -> vv::ContextMenuEvent {
+pub(super) fn context_menu(at: Option<(f64, f64)>, held: crate::web_view::input::Mods) -> vv::ContextMenuEvent {
     match at {
         Some((x, y)) => {
             let mut event = vv::ContextMenuEvent::at(x, y);
@@ -265,7 +265,7 @@ mod tests {
     #[test]
     fn the_hosts_appearance_becomes_the_engines_environment() {
         use super::*;
-        use crate::environment::{PageEnvironment, PageScheme};
+        use crate::web_view::environment::{PageEnvironment, PageScheme};
         let host = PageEnvironment {
             scheme: PageScheme::Dark,
             accent: 0xFF11_2233,
@@ -287,7 +287,7 @@ mod tests {
     #[test]
     fn a_field_the_engine_does_not_announce_is_not_sent() {
         use super::*;
-        use crate::environment::PageEnvironment;
+        use crate::web_view::environment::PageEnvironment;
         // The engine of today: colour scheme, accent and palette only.
         let today = |field: &str| matches!(field, "color_scheme" | "accent" | "palette");
         let engine = environment(&PageEnvironment { reduced_motion: true, text_scale: 2.0, locales: vec!["fr".into()], ..PageEnvironment::default() }, &today);
@@ -315,7 +315,7 @@ mod tests {
     }
 
     use super::*;
-    use crate::input::Mods;
+    use crate::web_view::input::Mods;
 
     #[test]
     fn a_pointer_arrives_with_every_field() {

@@ -3,12 +3,12 @@
 
 use std::sync::Arc;
 
-use bingux_geckoview::input::{EditCommand, Mods, PageInput};
-use bingux_geckoview::requests::{
+use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
+use bingux_ui::web_view::requests::{
     ContextTarget, DialogKind, DialogRequest, PermissionKind, PermissionRequest, RequestKind,
 };
-use bingux_geckoview::test_double::{Call, TestDoubleBackend};
-use bingux_geckoview::{BrowserBackend, Capabilities, GoneReason, Response, TabEvent, TabId};
+use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
+use bingux_ui::web_view::{BrowserBackend, Capabilities, GoneReason, Response, TabEvent, TabId};
 
 use super::browser::{Browser, Options, UiRequest};
 use super::shortcuts::Command;
@@ -47,7 +47,7 @@ fn typing_an_address_loads_it_and_the_events_fill_in_the_tab() {
     assert_eq!(tab.url, "https://example.com");
     assert_eq!(tab.title, "Example Domain");
     assert!(!tab.load.loading);
-    assert_eq!(tab.security.state, bingux_geckoview::SecurityState::Secure);
+    assert_eq!(tab.security.state, bingux_ui::web_view::SecurityState::Secure);
     assert_eq!(tab.page(), Page::Web);
     assert!(double.calls().iter().any(|call| matches!(call, Call::Load(_, url) if url == "https://example.com")));
 }
@@ -100,7 +100,7 @@ fn a_page_that_is_loading_shows_progress_and_stop_ends_it() {
 
 #[test]
 fn a_new_appearance_reaches_the_engine_once_and_decides_the_scheme_of_new_tabs() {
-    use bingux_geckoview::{PageEnvironment, PageScheme};
+    use bingux_ui::web_view::{PageEnvironment, PageScheme};
     let (mut browser, double) = browser();
     let sent = |double: &TestDoubleBackend| {
         double.calls().iter().filter(|call| matches!(call, Call::SetEnvironment(_))).count()
@@ -216,7 +216,7 @@ fn zoom_steps_along_the_ladder_and_resets() {
     assert!(double.calls().contains(&Call::SetZoom(session, 1.2)));
     browser.run(Command::ZoomReset);
     assert_eq!(browser.tabs.get(key).unwrap().zoom, 1.0);
-    browser.apply(bingux_geckoview::BrowserEvent::tab(session, TabEvent::Zoom(1.5)));
+    browser.apply(bingux_ui::web_view::BrowserEvent::tab(session, TabEvent::Zoom(1.5)));
     assert_eq!(browser.tabs.get(key).unwrap().zoom, 1.5, "the page's own Ctrl+wheel is followed");
 }
 
@@ -254,7 +254,7 @@ fn a_certificate_error_can_be_refused_or_proceeded_past() {
     browser.poll();
     let tab = browser.tabs.get(key).unwrap();
     assert_eq!(tab.page(), Page::Web);
-    assert_eq!(tab.security.state, bingux_geckoview::SecurityState::Broken, "the page loads but is marked not secure");
+    assert_eq!(tab.security.state, bingux_ui::web_view::SecurityState::Broken, "the page loads but is marked not secure");
     assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(_, _, Response::CertError { proceed: true }))));
 
     let key = go(&mut browser, "selfsigned.example.net");
@@ -346,7 +346,7 @@ fn a_tab_that_crashes_drops_the_questions_it_can_no_longer_hear() {
     let key = go(&mut browser, "dialog.example.net");
     assert!(browser.prompt(key).is_some());
     let session = browser.session_of(key).unwrap();
-    double.emit(bingux_geckoview::BrowserEvent::tab(session, TabEvent::ProcessGone(GoneReason::Killed)));
+    double.emit(bingux_ui::web_view::BrowserEvent::tab(session, TabEvent::ProcessGone(GoneReason::Killed)));
     browser.poll();
     assert!(browser.prompt(key).is_none());
 }
@@ -455,7 +455,7 @@ fn a_window_opened_by_a_page_becomes_a_tab_next_to_its_opener() {
     // `window.close()` closes it and goes back to the page that opened it.
     let popup_key = popup.key;
     let popup_session = popup.session.unwrap();
-    double.emit(bingux_geckoview::BrowserEvent::tab(popup_session, TabEvent::CloseRequested));
+    double.emit(bingux_ui::web_view::BrowserEvent::tab(popup_session, TabEvent::CloseRequested));
     browser.poll();
     assert!(browser.tabs.get(popup_key).is_none());
     assert_eq!(browser.tabs.active_key(), opener);

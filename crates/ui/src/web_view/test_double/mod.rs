@@ -1,7 +1,8 @@
 //! `TestDoubleBackend`: an in-memory [`BrowserBackend`] for tests of the
 //! browser's UI logic and for its headless snapshots. It is **not** an
-//! engine and **never ships**: it exists only with the `test-double` feature,
-//! which the browser enables for its tests and its `snapshot` build.
+//! engine and **never ships**: it exists only with bingux-ui's `testing` and
+//! `web-view` features together, which the browser enables for its tests and
+//! its `snapshot` build.
 //!
 //! It keeps a session history per tab, answers a load from a table of host
 //! names (`sites.rs`: a page, a certificate error, an unknown host, a crash, a
@@ -22,22 +23,22 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::Waker;
 
-use bingux_ui::frame_view::DamageRect;
+use crate::frame_view::DamageRect;
 
-use crate::backend::{
+use crate::web_view::backend::{
     BackendError, BrowserBackend, Capabilities, Done, EngineInfo, EngineSettings, EngineState,
     FindQuery, RemoteSettings, TabConfig,
 };
-use crate::events::{BrowserEvent, EngineEvent, FailureCause, NewWindow, TabEvent};
-use crate::report::{CheckStatus, ReportEntry, SecurityReport};
-use crate::ids::{DownloadId, RequestId, TabId};
-use crate::input::{PageInput, PointerKind, WheelUnit};
-use crate::page::{Audio, GoneReason, HistoryEntry, Security};
-use crate::queue::EventQueue;
-use crate::requests::{
+use crate::web_view::events::{BrowserEvent, EngineEvent, FailureCause, NewWindow, TabEvent};
+use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
+use crate::web_view::ids::{DownloadId, RequestId, TabId};
+use crate::web_view::input::{PageInput, PointerKind, WheelUnit};
+use crate::web_view::page::{Audio, GoneReason, HistoryEntry, Security};
+use crate::web_view::queue::EventQueue;
+use crate::web_view::requests::{
     CertError, ContextTarget, DownloadInfo, DownloadState, Request, RequestKind, Response,
 };
-use crate::surface::PageSurface;
+use crate::web_view::surface::PageSurface;
 
 pub use sites::{fix_up, host_of};
 
@@ -59,7 +60,7 @@ pub enum Call {
     SetSize(TabId, u32, u32, f32),
     SetVisible(TabId, bool, bool),
     SetZoom(TabId, f64),
-    SetEnvironment(crate::environment::PageEnvironment),
+    SetEnvironment(crate::web_view::environment::PageEnvironment),
     Send(TabId, PageInput),
     Find(TabId, FindQuery),
     FindStop(TabId),
@@ -417,7 +418,7 @@ impl TestDoubleBackend {
             return;
         }
         let bytes = paint::page(state.look, state.hue, state.scroll, device.0, device.1, scale);
-        let bytes: bingux_ui::frame_view::PixelBytes = Arc::new(Bytes(bytes));
+        let bytes: crate::frame_view::PixelBytes = Arc::new(Bytes(bytes));
         if let Some(frame) = PageSurface::frame_of(
             device.0,
             device.1,
@@ -474,7 +475,7 @@ impl TestDoubleBackend {
                     state.blocked = Some((id, url.clone()));
                 }
                 self.queue.push(BrowserEvent::tab(tab, TabEvent::Title(error.host.clone())));
-                self.queue.push(stop(Some(crate::page::LoadError {
+                self.queue.push(stop(Some(crate::web_view::page::LoadError {
                     code: 0x805A_1FF3,
                     name: error.code.clone(),
                 })));
@@ -773,7 +774,7 @@ impl BrowserBackend for TestDoubleBackend {
         })
     }
 
-    fn set_environment(&self, environment: &crate::environment::PageEnvironment) -> Done {
+    fn set_environment(&self, environment: &crate::web_view::environment::PageEnvironment) -> Done {
         lock(&self.inner).calls.push(Call::SetEnvironment(environment.clone()));
         Ok(())
     }
@@ -919,7 +920,7 @@ impl BrowserBackend for TestDoubleBackend {
                     self.queue.push(BrowserEvent::tab(
                         tab,
                         TabEvent::Security(Security {
-                            state: crate::page::SecurityState::Broken,
+                            state: crate::web_view::page::SecurityState::Broken,
                             ..Security::default()
                         }),
                     ));
@@ -1007,7 +1008,7 @@ impl CertError {
             _ => Self {
                 host: host.to_string(),
                 code: "SEC_ERROR_UNKNOWN_ISSUER".to_string(),
-                problem: crate::requests::CertProblem::UnknownIssuer,
+                problem: crate::web_view::requests::CertProblem::UnknownIssuer,
                 issuer: None,
                 fingerprint: None,
                 valid_until: None,
@@ -1020,7 +1021,7 @@ impl CertError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::input::{Mods, PointerEvent};
+    use crate::web_view::input::{Mods, PointerEvent};
 
     fn drain(double: &TestDoubleBackend) -> Vec<BrowserEvent> {
         let mut out = Vec::new();
@@ -1136,7 +1137,7 @@ mod tests {
         double
             .send(
                 tab,
-                PageInput::Wheel(crate::input::WheelEvent {
+                PageInput::Wheel(crate::web_view::input::WheelEvent {
                     x: 10.0,
                     y: 10.0,
                     dx: 0.0,
@@ -1144,7 +1145,7 @@ mod tests {
                     unit: WheelUnit::Line,
                     precise: false,
                     modifiers: Mods::default(),
-                    phase: bingux_ui::frame_view::WheelPhase::None,
+                    phase: crate::frame_view::WheelPhase::None,
                 }),
             )
             .expect("wheel");

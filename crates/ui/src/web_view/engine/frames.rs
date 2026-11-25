@@ -7,11 +7,11 @@
 
 use std::sync::Arc;
 
-use bingux_ui::frame_view::DamageRect;
+use crate::frame_view::DamageRect;
 use vivarium as vv;
 
 use super::state::Entry;
-use crate::surface::PageSurface;
+use crate::web_view::surface::PageSurface;
 
 /// The pixels of one engine frame, as the frame view reads them.
 pub(super) struct FrameBytes(pub vv::Frame);

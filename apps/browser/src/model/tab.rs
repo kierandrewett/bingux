@@ -3,10 +3,10 @@
 
 use std::collections::VecDeque;
 
-use bingux_geckoview::requests::{
+use bingux_ui::web_view::requests::{
     AuthRequest, CertError, DialogRequest, PermissionRequest, PickerRequest, SelectRequest,
 };
-use bingux_geckoview::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
+use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
 use super::address;
 
@@ -72,7 +72,7 @@ pub enum Page<'a> {
     Crashed(GoneReason),
     CertError(&'a CertError),
     /// The load failed.
-    Failed(&'a bingux_geckoview::LoadError),
+    Failed(&'a bingux_ui::web_view::LoadError),
 }
 
 #[derive(Clone, Debug)]
@@ -189,7 +189,7 @@ impl Tab {
 
 #[cfg(test)]
 mod tests {
-    use bingux_geckoview::LoadError;
+    use bingux_ui::web_view::LoadError;
 
     use super::*;
 

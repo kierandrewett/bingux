@@ -18,6 +18,7 @@ pub mod dropdown;
 mod dropdown_rows_tests;
 pub mod fade_text;
 pub mod fader;
+pub mod find_card;
 pub mod focus_stop;
 pub mod form;
 #[cfg(all(test, feature = "testing"))]
@@ -80,6 +81,7 @@ pub use direction::{directed, use_direction};
 pub use dropdown::{Dropdown, app_dropdown, dropdown};
 pub use fade_text::{FadeText, fade_text};
 pub use fader::{Fader, fader};
+pub use find_card::{FindCard, FindOption, find_card, find_result_text};
 pub use focus_stop::{
     StopRing, focus_stop, focus_stop_menu, focus_stop_press, focus_stop_pressed, focus_stop_with,
 };

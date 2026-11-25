@@ -5,11 +5,11 @@
 //! | `Engine` | one [`Runtime`](runtime::Runtime): the engine and the thread that listens to it |
 //! | `Context` | the default context for tabs, the private context for private tabs, one per container |
 //! | `Session` (class `Web`) | a tab; its id is the [`TabId`] |
-//! | `Event` | [`BrowserEvent`](crate::BrowserEvent), by `events.rs` |
+//! | `Event` | [`BrowserEvent`](crate::web_view::BrowserEvent), by `events.rs` |
 //! | `Request` | a prompt, a pop-up tab or the engine's default, by `requests.rs` |
 //! | `Frame` | the tab's [`PageSurface`], by `frames.rs`, without a copy |
 //! | `Capabilities`, `feature` | [`Capabilities`] and which environment fields are sent, by `caps.rs` |
-//! | `SecurityReport` | [`crate::report::SecurityReport`] on the settings page |
+//! | `SecurityReport` | [`crate::web_view::report::SecurityReport`] on the settings page |
 //! | `EngineFailed` | [`EngineEvent::Failed`] and a `restart` that opens the tabs again |
 //!
 //! Commands go straight to the session from the caller's thread; the library
@@ -40,14 +40,14 @@ pub use config::{Config, WebrtcChoice, locale_tag};
 use runtime::{Runtime, StartFailure};
 use state::{Entry, Shared, lock, tab_of};
 
-use crate::backend::{BackendError, BrowserBackend, Capabilities, Done, EngineInfo, EngineSettings, EngineState, TabConfig};
-use crate::environment::PageEnvironment;
-use crate::events::{BrowserEvent, EngineEvent};
-use crate::ids::{RequestId, TabId};
-use crate::input::PageInput;
-use crate::report::{CheckStatus, ReportEntry, SecurityReport};
-use crate::requests::Response;
-use crate::surface::PageSurface;
+use crate::web_view::backend::{BackendError, BrowserBackend, Capabilities, Done, EngineInfo, EngineSettings, EngineState, TabConfig};
+use crate::web_view::environment::PageEnvironment;
+use crate::web_view::events::{BrowserEvent, EngineEvent};
+use crate::web_view::ids::{RequestId, TabId};
+use crate::web_view::input::PageInput;
+use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
+use crate::web_view::requests::Response;
+use crate::web_view::surface::PageSurface;
 
 /// The engine, behind [`BrowserBackend`].
 pub struct GeckoBackend {

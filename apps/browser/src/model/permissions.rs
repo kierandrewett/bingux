@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use bingux_geckoview::requests::PermissionKind;
+use bingux_ui::web_view::requests::PermissionKind;
 
 /// What a permission is called to a person.
 pub fn label(kind: &PermissionKind) -> String {

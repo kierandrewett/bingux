@@ -1459,6 +1459,58 @@ The inspector's colour property (`inspector/props.rs`) is a live dense `colour_b
 
 The taxonomy pages Controls > Selection show both forms: the inline picker in each variation and at both densities, the button at rest, with opacity, disabled, dense, open (a popover; the phone sheet is in the Phone column of the same page when the window is a phone) and live. `controls::colour_picker::live_tests` measures every target at both densities, drags the handle with real pointer and touch events (it follows the pointer and clamps at every edge), checks the keys, the hex field, the boxes, the swatches and the recent row, and opens, closes, cancels and commits the button on a desktop, on a phone and inside a dialog.
 
+### Find card
+
+`find_card(text)` (module `controls::find_card`) is find in a page, a document or a list, for every app: one rule.
+
+- It floats over the content's top right (8 px in, `Paint::Popover`, raised) and never moves the content. On a phone it
+  spans the width less the margins.
+- It holds a field with the match count ("2 of 5", "Phrase not found" in danger ink), Previous and Next, and an X
+  button that closes it; Escape closes it too. An X, not Done (Kieran, 2026-11-25).
+- `.options(vec![FindOption::new(label, on, toggle)])` adds the app's options as checkboxes on a second row (not on a
+  phone). `.on_change` searches from the start, `.on_step(bool)` steps (Enter next, Shift+Enter previous),
+  `.on_close` closes. `.focus_requests(n)` focuses the field with its text selected when `n` changes.
+
+```rust
+find_card(text)
+    .placeholder("Find in page")
+    .result(Some((2, 5)))
+    .on_change(move |text: String| search(text))
+    .on_step(move |forward: bool| step(forward))
+    .on_close(move |_: ()| close())
+```
+
+### Web view
+
+`web_view(backend, tab, surface)` (module `web_view`, cargo feature `web-view`) is one page of the web as a control,
+like IE's WebBrowser control: any app can embed it, and Browser is a thin frame around it. The page's frames come
+from the engine through a `PageSurface` into a frame view; pointer, wheel, keys, text, fingers and focus go back to
+the engine as `PageInput`.
+
+| Feature                   | Adds                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------- |
+| `web-view`                | The control and the engine protocol (`BrowserBackend`, events, requests); no engine |
+| `web-view-vivarium`       | The real engine over the `vivarium` crate, linked at build time                     |
+| `web-view-dynamic-load`   | The same engine with `libvivarium.so` opened at run time                            |
+| `testing` with `web-view` | `TestDoubleBackend`, an in-memory engine for tests and snapshots                    |
+
+An app that does not turn on `web-view` does not link Vivarium. An app that turns on an engine feature patches
+`vivarium` and `vivarium-sys` 0.1 to the Vivarium repository in its `[patch.crates-io]` (see
+`packages/bingux-browser/Cargo.toml`).
+
+The host shapes the control with three hooks, as IE's `IDocHostUIHandler` did:
+
+| Hook                      | Called when                                                                   | Default                         |
+| ------------------------- | ----------------------------------------------------------------------------- | ------------------------------- |
+| `.on_host_key(f -> bool)` | a key goes down over the page; `true` keeps it (and its release) for the host | every key goes to the page      |
+| `.on_resize(f)`           | the view's size or scale changes                                              | the engine is told the new size |
+| `.on_local_menu(f)`       | a right click on an engine without page context menus                         | nothing                         |
+
+```rust
+web_view(backend.clone(), tab, surface)
+    .on_host_key(move |key: KeyInput| app_shortcut(&key).map(run).is_some())
+```
+
 ### Frame view
 
 `frame_view(source, label)` (module `frame_view`) shows frames that something

@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use crate::ids::{DownloadId, RequestId};
+use crate::web_view::ids::{DownloadId, RequestId};
 
 /// What a page asks to use.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -16,24 +16,25 @@ path = "src/main.rs"
 [features]
 default = []
 # `bingux-browser --snapshot DIR` renders the window headlessly to PNG, over
-# the in-memory test double (never part of a shipped browser).
-snapshot = ["bingux-ui/testing", "bingux-geckoview/test-double"]
-# The real engine: bingux-geckoview over the `vivarium` crate.
-vivarium = ["bingux-geckoview/vivarium"]
-# The same, with `libvivarium.so` opened at run time (after the loader's trust
-# checks) instead of linked at build time; it needs the SDK's headers only.
-dynamic-load = ["bingux-geckoview/dynamic-load"]
+# the in-memory engine double of bingux-ui's web view (never part of a
+# shipped browser).
+snapshot = ["bingux-ui/testing"]
+# The real engine: bingux-ui's web view over the `vivarium` crate, linked at
+# build time against a Vivarium SDK.
+vivarium = ["bingux-ui/web-view-vivarium"]
+# The same engine, with `libvivarium.so` opened at run time (after the loader's
+# trust checks) instead of linked at build time; it needs the SDK's headers only.
+dynamic-load = ["bingux-ui/web-view-dynamic-load"]
 
 [dependencies]
 freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
-bingux-ui = { path = "../../crates/ui" }
-bingux-geckoview = { path = "../../crates/geckoview" }
+# The browser is a thin frame around bingux-ui's web view control.
+bingux-ui = { path = "../../crates/ui", features = ["web-view"] }
 libc = "0.2"
 
 [dev-dependencies]
-# The tests of the UI logic run over the in-memory test double.
-bingux-geckoview = { path = "../../crates/geckoview", features = ["test-double"] }
-bingux-ui = { path = "../../crates/ui", features = ["testing"] }
+# The tests of the UI logic run over the in-memory engine double.
+bingux-ui = { path = "../../crates/ui", features = ["web-view", "testing"] }
 
 # Desktop scroll feel; see ../../vendor/README.md.
 [patch.crates-io]
@@ -43,6 +44,10 @@ freya-animation = { path = "../../vendor/freya-animation" }
 freya-components = { path = "../../vendor/freya-components" }
 torin = { path = "../../vendor/torin" }
 winit = { path = "../../vendor/winit" }
+# The Vivarium engine, from its repository next to this one (published as
+# `vivarium` 0.1 on crates.io).
+vivarium = { path = "../../../vivarium/crates/vivarium" }
+vivarium-sys = { path = "../../../vivarium/crates/vivarium-sys" }
 
 # A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
 # which makes scrolling visibly slow. Optimise every dependency and bingux-ui;

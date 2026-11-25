@@ -10,7 +10,7 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::Waker;
 
-use bingux_ui::frame_view::{
+use crate::frame_view::{
     CaretRect, CursorKind, DamageRect, Frame, FrameSource, PixelBytes, PixelFormat, PixelFrame,
 };
 
@@ -70,10 +70,10 @@ impl PageSurface {
         {
             let mut state = lock(&self.state);
             state.pushed += 1;
-            bingux_ui::frame_view::stats::arrived();
+            crate::frame_view::stats::arrived();
             if let Some(old) = state.waiting.take() {
                 state.dropped += 1;
-                bingux_ui::frame_view::stats::dropped();
+                crate::frame_view::stats::dropped();
                 let same_size = (old.frame.width, old.frame.height) == (frame.width, frame.height);
                 if same_size {
                     let carried = state.folded.unwrap_or_else(|| old.frame.damage_rect());

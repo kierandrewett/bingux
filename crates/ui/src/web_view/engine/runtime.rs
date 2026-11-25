@@ -4,7 +4,7 @@
 //! answers and the engine announces, and starts the pump: one thread that
 //! waits for the engine's events (`vv_engine_wait_event`, which sleeps on the
 //! same descriptor `Engine::event_handle` gives), turns each into a
-//! [`BrowserEvent`](crate::BrowserEvent) and pushes it onto the queue whose
+//! [`BrowserEvent`](crate::web_view::BrowserEvent) and pushes it onto the queue whose
 //! waker wakes the UI's task. The UI never waits for the engine and never
 //! polls a timer; the pump's own timeout only bounds how long it takes to
 //! notice that it was asked to stop.
@@ -24,8 +24,8 @@ use super::config::Config;
 use super::events::{Pump, handle};
 use super::state::{Shared, lock};
 use super::caps;
-use crate::backend::Capabilities;
-use crate::events::FailureCause;
+use crate::web_view::backend::Capabilities;
+use crate::web_view::events::FailureCause;
 
 /// How long the pump sleeps before it looks at whether it was stopped.
 const LISTEN: Duration = Duration::from_millis(100);
@@ -141,7 +141,7 @@ fn pump(engine: &Arc<vv::Engine>, shared: &Arc<Shared>, stop: &AtomicBool, downl
                 // The engine's own account (`EngineFailed`) comes through the
                 // queue before any call fails; an error with none is the
                 // library's, and the engine cannot be used.
-                shared.push(crate::BrowserEvent::Engine(crate::EngineEvent::Failed {
+                shared.push(crate::web_view::BrowserEvent::Engine(crate::web_view::EngineEvent::Failed {
                     message: error.to_string(),
                     code: 0,
                     cause: FailureCause::Crashed,

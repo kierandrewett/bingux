@@ -82,6 +82,8 @@ pub mod theme;
 pub mod toolbar;
 pub mod typography;
 mod warm;
+#[cfg(feature = "web-view")]
+pub mod web_view;
 pub mod window;
 pub mod zoom_view;
 

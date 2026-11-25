@@ -1,4 +1,5 @@
-//! Controls: the frame view and its test producer.
+//! Controls: the frame view and its test producer, and the web view control
+//! over the in-memory engine double.
 
 use std::sync::Arc;
 
@@ -7,9 +8,55 @@ use bingux_ui::frame_view::{
     WheelInput, frame_view,
 };
 use bingux_ui::prelude::*;
+use bingux_ui::web_view::test_double::TestDoubleBackend;
+use bingux_ui::web_view::{BrowserBackend, TabConfig, web_view};
 use freya::prelude::*;
 
 use crate::model::Spec;
+
+/// A web view of `url`, as an app embeds one: the engine is the in-memory
+/// double, which draws a wireframe of the page at the view's size.
+fn web_page(url: &'static str, label: &'static str) -> Element {
+    let (backend, tab, surface) = use_hook(move || {
+        let double = TestDoubleBackend::new();
+        let tab = double.create_tab(&TabConfig::default()).expect("the double opens a session");
+        let _ = double.load(tab, url);
+        let surface = double.surface(tab).expect("a session has a surface");
+        (double as Arc<dyn BrowserBackend>, tab, surface)
+    });
+    rect()
+        .width(Size::fill())
+        .height(Size::px(VIEW_HEIGHT))
+        .child(web_view(backend, tab, surface).label(label))
+        .into_element()
+}
+
+pub const WEB_VIEW: &[Spec] = &[
+    Spec::live("A page in an app: drawn by the engine, driven like a control", || {
+        web_page("https://example.com", "Example Domain")
+    }),
+    Spec::live("The host takes its own keys first (Ctrl+T never reaches the page)", || {
+        let mut taken = use_state(|| "Press Ctrl+T over the page".to_string());
+        let (backend, tab, surface) = use_hook(|| {
+            let double = TestDoubleBackend::new();
+            let tab = double.create_tab(&TabConfig::default()).expect("the double opens a session");
+            let _ = double.load(tab, "https://example.com");
+            let surface = double.surface(tab).expect("a session has a surface");
+            (double as Arc<dyn BrowserBackend>, tab, surface)
+        });
+        let view = web_view(backend, tab, surface).label("Page with host keys").on_host_key(move |input: KeyInput| {
+            let mine = input.modifiers.contains(Modifiers::CONTROL) && input.key_string() == "t";
+            if mine {
+                taken.set("The app took Ctrl+T".to_string());
+            }
+            mine
+        });
+        vstack(S3)
+            .child(rect().width(Size::fill()).height(Size::px(VIEW_HEIGHT)).child(view))
+            .child(caption(taken.read().clone()))
+            .into_element()
+    }),
+];
 
 /// The height of a view in a stage; its width is the stage's.
 const VIEW_HEIGHT: f32 = 180.0;

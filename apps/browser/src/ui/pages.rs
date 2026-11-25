@@ -3,8 +3,8 @@
 //! not be loaded, a connection that cannot be trusted, a tab that crashed).
 //! Each is a status page of bingux-ui with the words of `model::failure`.
 
-use bingux_geckoview::requests::CertError;
-use bingux_geckoview::{FailureCause, GoneReason, LoadError};
+use bingux_ui::web_view::requests::CertError;
+use bingux_ui::web_view::{FailureCause, GoneReason, LoadError};
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 

@@ -1,7 +1,7 @@
 //! How the connection of the page on show is described: the icon beside the
 //! address and the words in the page info.
 
-use bingux_geckoview::{Security, SecurityState};
+use bingux_ui::web_view::{Security, SecurityState};
 use bingux_ui::icons::Icon;
 
 /// How much the person should worry.

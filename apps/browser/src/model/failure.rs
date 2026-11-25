@@ -2,8 +2,8 @@
 //! and its name; the page the person sees is the browser's, in the browser's
 //! words.
 
-use bingux_geckoview::requests::{CertError, CertProblem};
-use bingux_geckoview::{FailureCause, GoneReason, LoadError};
+use bingux_ui::web_view::requests::{CertError, CertProblem};
+use bingux_ui::web_view::{FailureCause, GoneReason, LoadError};
 use bingux_ui::icons::Icon;
 
 /// A page that replaces the web page because the load did not make one.

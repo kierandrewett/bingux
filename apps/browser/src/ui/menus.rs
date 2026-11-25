@@ -1,7 +1,7 @@
 //! The menus: the main menu, a tab's menu and the page's context menu.
 
-use bingux_geckoview::input::EditCommand;
-use bingux_geckoview::requests::ContextTarget;
+use bingux_ui::web_view::input::EditCommand;
+use bingux_ui::web_view::requests::ContextTarget;
 use bingux_ui::prelude::*;
 
 use crate::model::address;

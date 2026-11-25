@@ -12,7 +12,7 @@
 use vivarium as vv;
 use vivarium_sys as sys;
 
-use crate::backend::Capabilities;
+use crate::web_view::backend::Capabilities;
 
 /// What the browser has a prompt or a state for, by request kind. A kind the
 /// browser does not answer is never subscribed, so the engine gives it its

@@ -15,8 +15,8 @@ use std::path::{Path, PathBuf};
 
 use vivarium as vv;
 
-use crate::events::{Disposition, NewWindow};
-use crate::requests::{
+use crate::web_view::events::{Disposition, NewWindow};
+use crate::web_view::requests::{
     AuthRequest, CertError, CertProblem, ContextTarget, DialogKind, DialogRequest, DownloadInfo, DownloadState, PermissionKind,
     PermissionRequest, PickerMode, PickerRequest, RequestKind, Response, SelectOption, SelectRequest,
 };
@@ -336,7 +336,7 @@ pub(super) fn download_info(event: &vv::DownloadEvent) -> Option<DownloadInfo> {
         _ => return None,
     };
     Some(DownloadInfo {
-        id: crate::ids::DownloadId(event.download_id.get()),
+        id: crate::web_view::ids::DownloadId(event.download_id.get()),
         url: event.url.clone(),
         filename: event.filename.clone(),
         path: (!event.target_path.is_empty()).then(|| PathBuf::from(&event.target_path)),

@@ -4,7 +4,7 @@
 //! and does not pretend to change them. They are set where the browser is
 //! started and take effect the next time it starts.
 
-use bingux_geckoview::{CheckStatus, EngineInfo, EngineState, ProcessSandbox, RemoteSettings, SecurityCheck, SecurityReport};
+use bingux_ui::web_view::{CheckStatus, EngineInfo, EngineState, ProcessSandbox, RemoteSettings, SecurityCheck, SecurityReport};
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
@@ -235,7 +235,7 @@ mod tests {
     #[test]
     fn a_report_the_engine_has_not_made_is_one_row_that_says_so() {
         assert_eq!(security_groups(None).len(), 1);
-        let report = bingux_geckoview::test_double::healthy_report();
+        let report = bingux_ui::web_view::test_double::healthy_report();
         assert_eq!(security_groups(Some(&report)).len(), 3, "the result, the processes and the other checks");
     }
 

@@ -39,8 +39,8 @@ fn reading(ctx: Ctx) -> Reading {
             || security::summarize(&Default::default(), ""),
             |tab| match tab.kind {
                 TabKind::Settings => security::summarize(
-                    &bingux_geckoview::Security {
-                        state: bingux_geckoview::SecurityState::Internal,
+                    &bingux_ui::web_view::Security {
+                        state: bingux_ui::web_view::SecurityState::Internal,
                         ..Default::default()
                     },
                     "bingux:settings",

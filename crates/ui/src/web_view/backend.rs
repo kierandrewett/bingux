@@ -15,12 +15,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::task::Waker;
 
-use crate::events::BrowserEvent;
-use crate::ids::{DownloadId, RequestId, TabId};
-use crate::input::PageInput;
-use crate::report::SecurityReport;
-use crate::requests::Response;
-use crate::surface::PageSurface;
+use crate::web_view::events::BrowserEvent;
+use crate::web_view::ids::{DownloadId, RequestId, TabId};
+use crate::web_view::input::PageInput;
+use crate::web_view::report::SecurityReport;
+use crate::web_view::requests::Response;
+use crate::web_view::surface::PageSurface;
 
 /// Why an operation did not happen.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -252,7 +252,7 @@ pub trait BrowserBackend: Send + Sync + 'static {
     /// The waker to call when there are events. Cheap, from any thread, and
     /// coalescing, as [`FrameSource::set_waker`] is.
     ///
-    /// [`FrameSource::set_waker`]: bingux_ui::frame_view::FrameSource::set_waker
+    /// [`FrameSource::set_waker`]: crate::frame_view::FrameSource::set_waker
     fn set_waker(&self, waker: Waker);
 
     /// Appends every event since the last call, in order. Never blocks.
@@ -296,7 +296,7 @@ pub trait BrowserBackend: Send + Sync + 'static {
     /// The appearance pages see, for every tab, now and later (see
     /// [`PageEnvironment`]). An engine that cannot set all of it sets what it
     /// can: the colour scheme of the tabs there are.
-    fn set_environment(&self, environment: &crate::environment::PageEnvironment) -> Done;
+    fn set_environment(&self, environment: &crate::web_view::environment::PageEnvironment) -> Done;
 
     // ---- Input -----------------------------------------------------------------
 

@@ -7,7 +7,7 @@
 //! macOS; Alt+1 to 9 for a tab on Linux and Ctrl+1 to 9 elsewhere, as Firefox
 //! does.
 
-use bingux_geckoview::input::EditCommand;
+use bingux_ui::web_view::input::EditCommand;
 use freya::prelude::{Key, Modifiers, NamedKey};
 
 /// Which family of conventions applies.

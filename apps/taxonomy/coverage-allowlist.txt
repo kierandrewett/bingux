@@ -82,3 +82,28 @@ file:location/reverse.rs # Named: the town found for a position, no appearance
 file:calendar/date.rs     # civil dates and clock text for the calendar views: data, no appearance
 file:calendar/layout.rs   # overlap columns, lanes and drag maths of the calendar views: data, no appearance
 file:calendar/palette.rs  # calendar colours and the tints events are drawn in: the views show them
+
+# The web view's engine protocol (feature `web-view`): the data the engine and
+# the host pass each other. The control and its surface are the "Web view"
+# entry; these have no pixels of their own (the browser draws what they say).
+file:web_view/events.rs # what the engine tells the host (load, location, process gone, new windows): data, drawn by the browser
+file:web_view/ids.rs # session, request and download ids: plain numbers
+file:web_view/input.rs # PageInput: frame view input converted to DOM names for the engine; no pixels
+file:web_view/page.rs # load, history and security state of a page: data, drawn by the browser's chrome
+file:web_view/requests.rs # the questions a page asks and their answers: data, drawn by the browser's prompts
+file:web_view/queue.rs # the event queue between the engine thread and the UI thread: plumbing
+file:web_view/report.rs # the engine's security report: data, drawn by the browser's settings page
+file:web_view/environment.rs # the host's appearance as pages see it: data sent to the engine
+file:web_view/touch.rs # fingers as clicks and scrolls for an engine without touch: input plumbing
+file:web_view/test_double/sites.rs # the test double's table of invented sites: test tooling
+file:web_view/engine/mod.rs # the real engine backend over the vivarium crate: no pixels of its own
+file:web_view/engine/config.rs # the engine's start configuration: system backend
+BackendError # why an engine call did not happen: data
+Done # the result type of an engine call
+EngineInfo # what the engine says about itself: data, drawn by the browser's settings page
+EngineSettings # what the host told the engine at start: data
+EngineState # where the engine is in its start: data
+FindQuery # a search of the page: data passed to the engine
+RemoteSettings # the host's Remote Settings choice: data
+Call # the test double's record of calls: test tooling
+healthy_report # the test double's clean security report: test tooling

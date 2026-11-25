@@ -191,6 +191,15 @@ pub static ENTRIES: &[Entry] = &[
         body: Body::States(inputs::SEARCH_FIELD),
     },
     Entry {
+        name: "Find card",
+        category: Category::Controls,
+        page: "Text input",
+        api: "find_card(State<String>).placeholder(text).result(Option<(current, total)>).focus_requests(n).options(vec![FindOption::new(label, on, toggle)]).on_change(f).on_step(f).on_close(f)",
+        doc: "find-card",
+        covers: &["FindCard", "FindOption", "find_card", "find_result_text"],
+        body: Body::States(inputs::FIND_CARD),
+    },
+    Entry {
         name: "Form field",
         category: Category::Controls,
         page: "Text input",
@@ -545,6 +554,15 @@ pub static ENTRIES: &[Entry] = &[
             "PATTERN_MIN_WIDTH",
         ],
         body: Body::States(frames::FRAME_VIEW),
+    },
+    Entry {
+        name: "Web view",
+        category: Category::Controls,
+        page: "External content",
+        api: "web_view(Arc<dyn BrowserBackend>, TabId, Arc<PageSurface>).label(text).on_host_key(f -> bool).on_resize(f).on_local_menu(f); TestDoubleBackend::new() under `testing`",
+        doc: "web-view",
+        covers: &["WebView", "web_view", "PageSurface", "SurfaceStats", "BrowserBackend", "TabConfig", "TestDoubleBackend"],
+        body: Body::States(frames::WEB_VIEW),
     },
     // ---- Foundations -------------------------------------------------------
     Entry {

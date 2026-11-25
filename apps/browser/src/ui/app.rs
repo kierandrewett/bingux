@@ -2,8 +2,8 @@
 //! banners, the find bar and the page. On a phone there is no strip: the
 //! address bar is on top, the history below, and the tabs are a list.
 
-use bingux_geckoview::PageEnvironment;
-use bingux_geckoview::queue::Signal;
+use bingux_ui::web_view::PageEnvironment;
+use bingux_ui::web_view::queue::Signal;
 use bingux_ui::prelude::*;
 use bingux_ui::shell::with_window;
 use freya::prelude::*;
@@ -209,14 +209,20 @@ impl Component for Content {
             ctx,
             engine: engine.clone(),
         };
-        let find = find_open.then(|| rect().key(key).child(FindBar { ctx, key }));
+        // The find card floats over the page's top right and never moves it.
+        let find = (find_open && !fullscreen).then(|| {
+            rect()
+                .key(key)
+                .position(Position::new_absolute().top(0.0).left(0.0))
+                .width(Size::fill())
+                .child(FindBar { ctx, key })
+        });
         let compact = is_compact();
         let body = rect()
             .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children(), bg(Paint::Bg)])
             .maybe_child((!fullscreen).then(|| Toolbar { ctx }))
             .maybe_child((!fullscreen).then(|| PermissionBanner { ctx }))
-            .maybe_child(find.filter(|_| !fullscreen))
-            .child(page)
+            .child(rect().tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children()]).child(page).maybe_child(find))
             .maybe_child((compact && !fullscreen).then(|| PhoneBottom { ctx }))
             .child(Popovers { ctx })
             .child(PromptHost { ctx })
@@ -254,7 +260,7 @@ impl Component for ContextMenuHost {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
         let id = ctx.browser.read().menu.as_ref().map(|menu| (menu.tab, menu.request, menu.target.position.0 as i32, menu.target.position.1 as i32));
-        use_side_effect_with_deps(&id, move |id: &Option<(u64, Option<bingux_geckoview::RequestId>, i32, i32)>| {
+        use_side_effect_with_deps(&id, move |id: &Option<(u64, Option<bingux_ui::web_view::RequestId>, i32, i32)>| {
             if id.is_none() {
                 return;
             }

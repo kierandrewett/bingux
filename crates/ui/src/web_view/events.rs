@@ -1,9 +1,9 @@
 //! What the engine tells the host. One enum, so the browser has one place that
 //! turns the engine's news into state.
 
-use crate::ids::{RequestId, TabId};
-use crate::page::{Audio, GoneReason, HistoryEntry, LoadError, Security};
-use crate::requests::{DownloadInfo, Request};
+use crate::web_view::ids::{RequestId, TabId};
+use crate::web_view::page::{Audio, GoneReason, HistoryEntry, LoadError, Security};
+use crate::web_view::requests::{DownloadInfo, Request};
 
 /// News about one tab.
 #[derive(Clone, Debug, PartialEq)]

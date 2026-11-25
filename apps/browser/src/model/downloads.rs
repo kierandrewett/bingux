@@ -1,6 +1,6 @@
 //! The list of downloads, and how a size and a speed read.
 
-use bingux_geckoview::requests::{DownloadInfo, DownloadState};
+use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 
 /// `bytes` as people read it: `1.2 MB`. Powers of 1000, as a file manager
 /// shows them.
@@ -144,7 +144,7 @@ impl Downloads {
 
 #[cfg(test)]
 mod tests {
-    use bingux_geckoview::DownloadId;
+    use bingux_ui::web_view::DownloadId;
 
     use super::*;
 

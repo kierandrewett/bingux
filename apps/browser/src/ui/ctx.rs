@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use bingux_geckoview::BrowserBackend;
+use bingux_ui::web_view::BrowserBackend;
 use bingux_ui::prelude::*;
 use bingux_ui::shell::with_window;
 use freya::prelude::*;

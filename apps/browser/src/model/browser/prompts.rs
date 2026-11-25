@@ -3,7 +3,7 @@
 
 use std::path::PathBuf;
 
-use bingux_geckoview::Response;
+use bingux_ui::web_view::Response;
 
 use super::Browser;
 use crate::model::tab::Prompt;
@@ -141,7 +141,7 @@ impl Browser {
         self.menu = Some(super::PendingMenu {
             tab: key,
             request: None,
-            target: bingux_geckoview::requests::ContextTarget {
+            target: bingux_ui::web_view::requests::ContextTarget {
                 position,
                 ..Default::default()
             },

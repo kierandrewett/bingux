@@ -7,10 +7,10 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use vivarium as vv;
 
 use super::runtime::Runtime;
-use crate::events::BrowserEvent;
-use crate::ids::{RequestId, TabId};
-use crate::queue::EventQueue;
-use crate::surface::PageSurface;
+use crate::web_view::events::BrowserEvent;
+use crate::web_view::ids::{RequestId, TabId};
+use crate::web_view::queue::EventQueue;
+use crate::web_view::surface::PageSurface;
 
 pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)

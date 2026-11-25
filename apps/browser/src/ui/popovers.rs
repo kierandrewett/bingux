@@ -1,8 +1,8 @@
 //! The two cards that hang from the toolbar: what is known about the page's
 //! connection and permissions, and the downloads.
 
-use bingux_geckoview::requests::{DownloadInfo, DownloadState};
-use bingux_geckoview::DownloadId;
+use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
+use bingux_ui::web_view::DownloadId;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 

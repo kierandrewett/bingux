@@ -2,8 +2,8 @@
 //! engine for what it needs; none of them waits for the engine's answer, which
 //! comes back as an event.
 
-use bingux_geckoview::input::{EditCommand, PageInput};
-use bingux_geckoview::{FindQuery, TabId};
+use bingux_ui::web_view::input::{EditCommand, PageInput};
+use bingux_ui::web_view::{FindQuery, TabId};
 
 use super::{Browser, ClosedTab, Notice, UiRequest, ViewSize};
 use crate::model::address::{self, Typed};
@@ -422,9 +422,9 @@ impl Browser {
     /// The window is the active one or not: the page shows its caret.
     pub fn set_window_focus(&mut self, focused: bool) {
         let action = if focused {
-            bingux_geckoview::input::FocusAction::Activate
+            bingux_ui::web_view::input::FocusAction::Activate
         } else {
-            bingux_geckoview::input::FocusAction::Deactivate
+            bingux_ui::web_view::input::FocusAction::Deactivate
         };
         self.send(self.tabs.active_key(), PageInput::Focus(action));
     }

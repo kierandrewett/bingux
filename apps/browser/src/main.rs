@@ -1,7 +1,7 @@
 //! Bingux Browser: the web browser of the Bingux desktop.
 //!
 //! The window is built from bingux-ui and nothing else; the pages are drawn by
-//! the Vivarium engine (an embeddable Gecko) behind `bingux-geckoview`. A
+//! the Vivarium engine (an embeddable Gecko) behind bingux-ui's web view control. A
 //! second launch hands its address to the running window, which opens it in a
 //! new tab. `--private` starts a window of its own whose tabs keep nothing.
 
@@ -76,14 +76,14 @@ fn main() {
 }
 
 /// Start the engine, with the profile of this window.
-#[cfg(not(feature = "vivarium"))]
+#[cfg(not(any(feature = "vivarium", feature = "dynamic-load")))]
 fn start_engine(_private: bool) -> Result<Engine, String> {
     Err("this build has no engine. Build it with the `vivarium` feature, against a Vivarium SDK.".to_string())
 }
 
-#[cfg(feature = "vivarium")]
+#[cfg(any(feature = "vivarium", feature = "dynamic-load"))]
 fn start_engine(private: bool) -> Result<Engine, String> {
     // An engine that does not start is not a reason to exit: the window opens and says why
     // (a profile folder that is not safe, a sandbox it cannot reach), and offers to try again.
-    Ok(Engine(bingux_geckoview::engine::start(bingux_geckoview::engine::Config::from_environment(private))))
+    Ok(Engine(bingux_ui::web_view::engine::start(bingux_ui::web_view::engine::Config::from_environment(private))))
 }

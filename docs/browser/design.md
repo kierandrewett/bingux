@@ -14,58 +14,61 @@ Settings and library; Phone; Web view in other apps.
 Every request Kieran made for the browser's design, in the order he made it, with the frame that answers it.
 "Comment" rows are his comments on the canvas (2026-11-25); the frame he commented on was replaced by the one named.
 
-| #   | Requirement                                                                                             | Source                        | Answered by                                                                |
-| --- | ------------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------- |
-| 1   | The whole chrome is bingux-ui; a component other apps could use goes into bingux-ui                     | Prompt, 2026-10-29            | Every frame; the gaps table below                                          |
-| 2   | Gecko engine; the normal Firefox user agent                                                             | Prompts, 2026-10-29 and 10-30 | Settings 11 About Browser (engine, user agent)                             |
-| 3   | The engine's sandbox and security must be visible and trustworthy                                       | Prompt, 2026-10-30            | Settings 11 (engine security report), Settings 05                          |
-| 4   | Link status on hover; Bingux scrollbars                                                                 | Prompt, 2026-10-30            | Window 01 (status card, scrollbar)                                         |
-| 5   | Pages follow the system theme                                                                           | Prompt, 2026-10-30            | Settings 02 Appearance ("Pages in dark style"), Window 02                  |
-| 6   | Consumers get a CEF/Electron-like API with full control of the view                                     | Prompt, 2026-10-30            | Embedded 01-06; the API sketch below                                       |
-| 7   | More layouts                                                                                            | Prompt, 2026-11-10            | Window 17, 25-30; Settings 02                                              |
-| 8   | Tabs either floating or attached, not both: floating                                                    | Prompt, 2026-11-10            | Window 18-24                                                               |
-| 9   | Compact mode is one row, like his reference                                                             | Prompt, 2026-11-10            | Window 27-28                                                               |
-| 10  | Fewer Chrome-isms; it must feel like Bingux                                                             | Prompt, 2026-11-10            | Decisions below; every frame                                               |
-| 11  | Find is a floating card (every app)                                                                     | Prompt, 2026-11-10            | Tools 01-02, Phone 14                                                      |
-| 12  | A menu button                                                                                           | Prompt, 2026-11-10            | Window 07-08 (three-dot main menu)                                         |
-| 13  | The bookmarks bar is the toolbar's colour                                                               | Prompt, 2026-11-10            | Window 28                                                                  |
-| 14  | uBlock Origin and Bitwarden in the toolbar                                                              | Prompt, 2026-11-10            | Window 12-14                                                               |
-| 15  | A profile icon in every Doop app                                                                        | Prompt, 2026-11-10            | Superseded by row 37: no avatar; profiles in Settings 10 and the main menu |
-| 16  | The phone UI needs serious work                                                                         | Prompt, 2026-11-10            | Phone 01-20                                                                |
-| 17  | Real pages and real use cases (permissions.site, about:config, CEF-style apps)                          | Prompt, 2026-11-13            | Embedded 01-06 (Mail's sign-in); the rest is an open question              |
-| 18  | Drop bingux-geckoview: IE-style architecture, the web view a reusable control, the browser a thin frame | Prompt, 2026-11-25            | PLAN.md "Two parts"; Embedded 01-06                                        |
-| 19  | Design in Doop with bingux-ui components before building                                                | Prompt, 2026-11-25            | This canvas                                                                |
-| 20  | Rust consumers control the extension-facing tab state (isArticle, audible, width)                       | Prompt, 2026-11-25            | API sketch below (`ViewState`)                                             |
-| 21  | Consolidate: one design, few pages, read the comments                                                   | Prompt, 2026-11-25            | This file, PLAN.md, CONSOLIDATION.md                                       |
-| 22  | Site details page "sucks"                                                                               | Comment                       | Settings 07 Site details                                                   |
-| 23  | Profile menu "sucks"                                                                                    | Comment                       | Removed; profile row in Window 07                                          |
-| 24  | Extensions menu could be improved                                                                       | Comment                       | Window 12 Extensions menu                                                  |
-| 25  | The Library must be a real manager with tools                                                           | Comment                       | Library 01-03 (filters, sort, multi-select actions, folders)               |
-| 26  | Side panel: a switcher like Firefox's, or an icon rail like Vivaldi                                     | Comment                       | Tools 11-12 (icon rail)                                                    |
-| 27  | Share: the phone icon is too skinny; cut the slop                                                       | Comment (2)                   | Tools 06 Share                                                             |
-| 28  | Developer tools use the Firefox DevTools UI                                                             | Comment                       | Tools 08                                                                   |
-| 29  | Printing is a popup                                                                                     | Comment                       | Tools 05 Print                                                             |
-| 30  | The translation bar keeps the toolbar's colour                                                          | Comment                       | Tools 04                                                                   |
-| 31  | Find: an X button instead of Done                                                                       | Comment                       | Tools 01, Phone 14                                                         |
-| 32  | Certificate details: do better, after macOS                                                             | Comment                       | Page states 05                                                             |
-| 33  | "Not secure": red, solid, a proper icon                                                                 | Comment                       | Page states 03, 04, 06; Phone 19                                           |
-| 34  | Error pages: solid icons, seriously improved                                                            | Comment (2)                   | Page states 01-10                                                          |
-| 35  | Autofill: no key hint in the corner                                                                     | Comment                       | Prompts 08                                                                 |
-| 36  | Passkey dialog looked broken                                                                            | Comment                       | Prompts 07                                                                 |
-| 37  | Avatar not needed yet; zoom icon ugly; zoom popup ugly and too big                                      | Comment (3)                   | Window 11; no avatar anywhere in the browser                               |
-| 38  | Screen sharing and location prompts could be designed better                                            | Comment (2)                   | Prompts 01, 05                                                             |
-| 39  | Split view: each web view gets its own navigation bar                                                   | Comment                       | Tools 09                                                                   |
+| #   | Requirement                                                                                             | Source                        | Answered by                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------- |
+| 1   | The whole chrome is bingux-ui; a component other apps could use goes into bingux-ui                     | Prompt, 2026-10-29            | Every frame; the gaps table below                                            |
+| 2   | Gecko engine; the normal Firefox user agent                                                             | Prompts, 2026-10-29 and 10-30 | Settings 11 About Browser (engine, user agent)                               |
+| 3   | The engine's sandbox and security must be visible and trustworthy                                       | Prompt, 2026-10-30            | Settings 11 (engine security report), Settings 05                            |
+| 4   | Link status on hover; Bingux scrollbars                                                                 | Prompt, 2026-10-30            | Window 01 (status card, scrollbar)                                           |
+| 5   | Pages follow the system theme                                                                           | Prompt, 2026-10-30            | Settings 02 Appearance ("Pages in dark style"), Window 02                    |
+| 6   | Consumers get a CEF/Electron-like API with full control of the view                                     | Prompt, 2026-10-30            | Embedded 01-06; the API sketch below                                         |
+| 7   | More layouts                                                                                            | Prompt, 2026-11-10            | Window 17, 25-30; Settings 02                                                |
+| 8   | Tabs either floating or attached, not both: floating                                                    | Prompt, 2026-11-10            | Window 18-24                                                                 |
+| 9   | Compact mode is one row, like his reference                                                             | Prompt, 2026-11-10            | Window 27-28                                                                 |
+| 10  | Fewer Chrome-isms; it must feel like Bingux                                                             | Prompt, 2026-11-10            | Decisions below; every frame                                                 |
+| 11  | Find is a floating card (every app)                                                                     | Prompt, 2026-11-10            | Tools 01-02, Phone 14                                                        |
+| 12  | A menu button                                                                                           | Prompt, 2026-11-10            | Window 07-08 (three-dot main menu)                                           |
+| 13  | The bookmarks bar is the toolbar's colour                                                               | Prompt, 2026-11-10            | Window 28                                                                    |
+| 14  | uBlock Origin and Bitwarden in the toolbar                                                              | Prompt, 2026-11-10            | Window 12-14                                                                 |
+| 15  | A profile icon in every Doop app                                                                        | Prompt, 2026-11-10            | Superseded by row 37: no avatar; profiles in Settings 10 and the main menu   |
+| 16  | The phone UI needs serious work                                                                         | Prompt, 2026-11-10            | Phone 01-20                                                                  |
+| 17  | Real pages and real use cases (permissions.site, about:config, CEF-style apps)                          | Prompt, 2026-11-13            | Embedded 01-06 (Mail's sign-in); the rest are Vivarium demos (default below) |
+| 18  | Drop bingux-geckoview: IE-style architecture, the web view a reusable control, the browser a thin frame | Prompt, 2026-11-25            | PLAN.md "Two parts"; Embedded 01-06                                          |
+| 19  | Design in Doop with bingux-ui components before building                                                | Prompt, 2026-11-25            | This canvas                                                                  |
+| 20  | Rust consumers control the extension-facing tab state (isArticle, audible, width)                       | Prompt, 2026-11-25            | API sketch below (`ViewState`)                                               |
+| 21  | Consolidate: one design, few pages, read the comments                                                   | Prompt, 2026-11-25            | This file, PLAN.md, CONSOLIDATION.md                                         |
+| 22  | Site details page "sucks"                                                                               | Comment                       | Settings 07 Site details                                                     |
+| 23  | Profile menu "sucks"                                                                                    | Comment                       | Removed; profile row in Window 07                                            |
+| 24  | Extensions menu could be improved                                                                       | Comment                       | Window 12 Extensions menu                                                    |
+| 25  | The Library must be a real manager with tools                                                           | Comment                       | Library 01-03 (filters, sort, multi-select actions, folders)                 |
+| 26  | Side panel: a switcher like Firefox's, or an icon rail like Vivaldi                                     | Comment                       | Tools 11-12 (icon rail)                                                      |
+| 27  | Share: the phone icon is too skinny; cut the slop                                                       | Comment (2)                   | Tools 06 Share                                                               |
+| 28  | Developer tools use the Firefox DevTools UI                                                             | Comment                       | Tools 08                                                                     |
+| 29  | Printing is a popup                                                                                     | Comment                       | Tools 05 Print                                                               |
+| 30  | The translation bar keeps the toolbar's colour                                                          | Comment                       | Tools 04                                                                     |
+| 31  | Find: an X button instead of Done                                                                       | Comment                       | Tools 01, Phone 14                                                           |
+| 32  | Certificate details: do better, after macOS                                                             | Comment                       | Page states 05                                                               |
+| 33  | "Not secure": red, solid, a proper icon                                                                 | Comment                       | Page states 03, 04, 06; Phone 19                                             |
+| 34  | Error pages: solid icons, seriously improved                                                            | Comment (2)                   | Page states 01-10                                                            |
+| 35  | Autofill: no key hint in the corner                                                                     | Comment                       | Prompts 08                                                                   |
+| 36  | Passkey dialog looked broken                                                                            | Comment                       | Prompts 07                                                                   |
+| 37  | Avatar not needed yet; zoom icon ugly; zoom popup ugly and too big                                      | Comment (3)                   | Window 11; no avatar anywhere in the browser                                 |
+| 38  | Screen sharing and location prompts could be designed better                                            | Comment (2)                   | Prompts 01, 05                                                               |
+| 39  | Split view: each web view gets its own navigation bar                                                   | Comment                       | Tools 09                                                                     |
 
 The binding Bingux rules (one header row; tabs as floating tiles up to 200 px with + after the last; asides closed by
 their toggle and Escape; sheets on a phone; dense desktop rows; the `ds-sp` spinner) hold in every frame.
 
-## Questions for Kieran
+## Defaults chosen for Kieran (2026-11-25)
 
-1. Avatar: the 2026-11-10 rule put a profile avatar in every app's header; your canvas comment says the browser does
-   not need one yet. The browser now has none. Should the other apps drop theirs too, or is it browser only?
-2. Find: you asked for an X instead of Done on the browser's find card; the shared rule says Done. X everywhere?
-3. Tablet: the separate tablet layout is gone (size decides: medium window, then phone). Keep it that way?
-4. The example pages and CEF-style demo apps (2026-11-13): frames on this canvas, or Vivarium demos only?
+Kieran did not answer these in time, so these defaults stand. He can still change any of them; each is one edit.
+
+| Question                                            | Default                                                | Where it lives                               |
+| --------------------------------------------------- | ------------------------------------------------------ | -------------------------------------------- |
+| Do the other apps drop the avatar too?              | No: the browser only is the exception                  | `docs/CONSISTENCY.md` §1.7                   |
+| Find card: X or Done?                               | X in every app, in bingux-ui's find control (one rule) | bingux-ui find bar; `docs/CONSISTENCY.md` §2 |
+| A separate tablet layout?                           | No: size decides (medium window, then phone)           | PLAN.md, Layouts                             |
+| Example pages and CEF-style demo apps (2026-11-13)? | Vivarium demos, not frames on this canvas              | The Vivarium repository                      |
 
 ## Decisions
 

@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll, Wake, Waker};
 
-use crate::events::BrowserEvent;
+use crate::web_view::events::BrowserEvent;
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
@@ -150,9 +150,9 @@ mod tests {
     use std::sync::atomic::AtomicUsize;
 
     use super::*;
-    use crate::events::EngineEvent;
-    use crate::ids::TabId;
-    use crate::events::TabEvent;
+    use crate::web_view::events::EngineEvent;
+    use crate::web_view::ids::TabId;
+    use crate::web_view::events::TabEvent;
 
     struct Counter(AtomicUsize);
 

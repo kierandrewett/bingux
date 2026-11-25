@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
-use bingux_geckoview::requests::{DialogKind, DialogRequest, RequestKind};
-use bingux_geckoview::test_double::{Call, TestDoubleBackend};
-use bingux_geckoview::{BrowserBackend, BrowserEvent, Capabilities, Disposition, EngineEvent, FailureCause, NewWindow};
+use bingux_ui::web_view::requests::{DialogKind, DialogRequest, RequestKind};
+use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
+use bingux_ui::web_view::{BrowserBackend, BrowserEvent, Capabilities, Disposition, EngineEvent, FailureCause, NewWindow};
 
 use super::browser::{Browser, EngineStatus, Options};
 use super::shortcuts::Command;

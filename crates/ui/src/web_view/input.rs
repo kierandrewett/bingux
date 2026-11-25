@@ -2,7 +2,7 @@
 //! DOM button bits, the engine's modifier bits), so converting a bingux-ui
 //! input loses nothing and the engine side is a field-for-field copy.
 
-use bingux_ui::frame_view::{
+use crate::frame_view::{
     KeyInput, PointerAction, PointerInput, TextInput, TouchInput, WheelDelta, WheelInput, WheelPhase,
 };
 use freya::prelude::{MouseButton, Modifiers, TouchPhase};
@@ -298,7 +298,7 @@ impl PageInput {
 
 #[cfg(test)]
 mod tests {
-    use bingux_ui::frame_view::PointerButtons;
+    use crate::frame_view::PointerButtons;
     use freya::prelude::{Code, Key, NamedKey};
 
     use super::*;

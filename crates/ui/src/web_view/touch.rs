@@ -9,9 +9,9 @@
 
 use std::time::{Duration, Instant};
 
-use bingux_ui::frame_view::WheelPhase;
+use crate::frame_view::WheelPhase;
 
-use crate::input::{
+use crate::web_view::input::{
     Mods, PageInput, PointerEvent, PointerKind, TouchEvent, TouchKind, WheelEvent, WheelUnit,
 };
 

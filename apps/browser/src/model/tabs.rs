@@ -6,7 +6,7 @@
 //! else to the neighbour that takes its place (the one on the right, or the
 //! last when the closed tab was).
 
-use bingux_geckoview::TabId;
+use bingux_ui::web_view::TabId;
 
 use super::tab::Tab;
 

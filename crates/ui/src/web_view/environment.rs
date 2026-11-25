@@ -17,7 +17,7 @@
 //! | contrast | `prefers-contrast`: bingux-ui has no contrast preference yet, so pages always see "no preference" |
 //! | the interface font | none: the ABI has no setting for the default fonts, so pages use the engine's |
 
-use bingux_ui::theme::{Scheme, Tokens};
+use crate::theme::{Scheme, Tokens};
 
 /// The colour scheme pages see.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

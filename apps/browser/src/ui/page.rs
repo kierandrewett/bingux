@@ -11,17 +11,17 @@ use crate::model::tab::Page;
 use super::ctx::Ctx;
 use super::pages;
 use super::settings::SettingsPage;
-use super::web::{Surface, WebView};
+use super::web::{Surface, TabPage};
 
 /// What the area holds, copied out of the browser so no lock is held while
 /// the elements are built.
 enum Shown {
-    Web(bingux_geckoview::TabId, Surface),
+    Web(bingux_ui::web_view::TabId, Surface),
     NewTab,
     Settings,
-    Crashed(bingux_geckoview::GoneReason),
-    Cert(bingux_geckoview::requests::CertError),
-    Failed(bingux_geckoview::LoadError, String),
+    Crashed(bingux_ui::web_view::GoneReason),
+    Cert(bingux_ui::web_view::requests::CertError),
+    Failed(bingux_ui::web_view::LoadError, String),
     /// A page with no surface: the engine has not made one.
     Waiting,
 }
@@ -57,7 +57,7 @@ impl Component for PageArea {
             (key, shown, tab.hover.clone(), tab.load.loading.then_some(tab.load.progress))
         };
         let body: Element = match shown {
-            Shown::Web(session, surface) => WebView {
+            Shown::Web(session, surface) => TabPage {
                 ctx,
                 engine: self.engine.clone(),
                 key,

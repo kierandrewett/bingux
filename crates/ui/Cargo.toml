@@ -22,6 +22,18 @@ location = ["dep:ureq"]
 # Syntax highlighting in `text_editor` (syntect and its grammars, about 200
 # languages). Without it the editor and the Markdown preview draw plain text.
 syntax = ["bingux-text/syntax"]
+# The web view control (bingux_ui::web_view): one page of the web as a control
+# any app can embed, like IE's WebBrowser control. Types, input, the page
+# surface and the control itself; no engine. With `testing` it also has the
+# in-memory engine double for tests and snapshots.
+web-view = []
+# The real engine behind the web view: the `vivarium` crate (an embeddable
+# Gecko), linked at build time. Apps that do not embed the web never turn this
+# on, so they never link Vivarium.
+web-view-vivarium = ["web-view", "dep:vivarium", "dep:vivarium-sys", "vivarium/link"]
+# The same engine, but `libvivarium.so` is opened at run time (after the
+# loader's trust checks) instead of linked: it needs the SDK's headers only.
+web-view-dynamic-load = ["web-view", "dep:vivarium", "dep:vivarium-sys", "vivarium/dynamic-load"]
 
 [dependencies]
 # `gif`: the picture viewer plays animated GIFs.
@@ -78,6 +90,13 @@ fluent-syntax = "0.12"
 fluent-langneg = "0.13"
 intl-memoizer = "0.5"
 unic-langid = "0.9"
+# The engine behind the web view (features `web-view-vivarium` and
+# `web-view-dynamic-load`). Each app's Cargo.toml patches them to the Vivarium
+# repository next to this one.
+vivarium = { version = "0.1", optional = true, default-features = false }
+# The ABI's constants (`VV_EVENT_*`) for the capability bitmaps; the link mode
+# is the `vivarium` crate's choice.
+vivarium-sys = { version = "0.1", optional = true, default-features = false }
 
 # `location` only: the keyless lookups over HTTPS. The location portal uses the
 # `zbus` above (blocking, on a thread of its own).
@@ -106,6 +125,10 @@ freya-animation = { path = "../../vendor/freya-animation" }
 freya-components = { path = "../../vendor/freya-components" }
 torin = { path = "../../vendor/torin" }
 winit = { path = "../../vendor/winit" }
+# The Vivarium engine, from its repository next to this one (published as
+# `vivarium` 0.1 on crates.io).
+vivarium = { path = "../../../vivarium/crates/vivarium" }
+vivarium-sys = { path = "../../../vivarium/crates/vivarium-sys" }
 
 # Panics unwind, in dev and in release. The error boundaries and guards in the
 # vendored freya-core catch a panic with `catch_unwind`, which does nothing under

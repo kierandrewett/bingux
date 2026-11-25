@@ -1,7 +1,7 @@
 //! What the engine says, turned into state.
 
-use bingux_geckoview::requests::{DownloadState, Request, RequestKind};
-use bingux_geckoview::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
+use bingux_ui::web_view::requests::{DownloadState, Request, RequestKind};
+use bingux_ui::web_view::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
 
 use super::{Browser, Notice, PendingMenu, UiRequest};
 use crate::model::shortcuts::Command;
@@ -231,7 +231,7 @@ impl Browser {
     }
 
     /// A request for a tab that is gone gets the answer that does the least.
-    fn refuse(&mut self, session: TabId, id: bingux_geckoview::RequestId, kind: &RequestKind) {
+    fn refuse(&mut self, session: TabId, id: bingux_ui::web_view::RequestId, kind: &RequestKind) {
         let response = match kind {
             RequestKind::Permission(_) => Response::Permission {
                 allow: false,

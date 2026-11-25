@@ -11,16 +11,16 @@
 
 use std::path::Path;
 
-use bingux_ui::frame_view::CaretRect;
+use crate::frame_view::CaretRect;
 use vivarium as vv;
 
 use super::requests::{self, Incoming};
 use super::state::{Shared, lock, tab_of};
 use super::{convert, frames};
-use crate::events::{BrowserEvent, EngineEvent, FailureCause, TabEvent};
-use crate::ids::RequestId;
-use crate::page::{HistoryEntry, LoadError};
-use crate::requests::Request;
+use crate::web_view::events::{BrowserEvent, EngineEvent, FailureCause, TabEvent};
+use crate::web_view::ids::RequestId;
+use crate::web_view::page::{HistoryEntry, LoadError};
+use crate::web_view::requests::Request;
 
 /// What an event handler needs besides the event.
 pub(super) struct Pump<'a> {
@@ -258,7 +258,7 @@ pub(super) fn handle(pump: &Pump, event: vv::Event) {
         K::StatusText(text) => tab(&event, TabEvent::HoverLink((!text.is_empty()).then(|| text.clone()))),
         K::AudioState(audio) => tab(
             &event,
-            TabEvent::Audio(crate::page::Audio {
+            TabEvent::Audio(crate::web_view::page::Audio {
                 playing: audio.audible,
                 muted: audio.muted,
             }),
