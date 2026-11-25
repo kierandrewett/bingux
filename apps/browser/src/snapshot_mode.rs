@@ -580,7 +580,10 @@ pub fn run(arguments: &[OsString]) {
 ///   2. the toast's "Show" does not open the list;
 ///   3. the button does nothing when nothing runs either (the control);
 ///   4. Escape does not close the downloads list, which every popover is
-///      documented to do (a page that holds the keyboard hears it first).
+///      documented to do (a page that holds the keyboard hears it first);
+///   5. the downloads button's tooltip stays up behind the list that opens
+///      over it, peeking out from under its edge (a popover is a modal
+///      surface, and tips go down for those).
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -651,5 +654,39 @@ mod tests {
         shot.run_script("key escape", SCHEME).expect("a key");
         wait(&mut shot, 400);
         assert!(!open(&mut shot), "Escape closed it");
+    }
+
+    /// The drawn bubbles that say `text`: the visible one and its hidden
+    /// measuring copy are both labels, and a tip that is down has neither.
+    fn bubbles(shot: &mut Snapshot, text: &str) -> usize {
+        shot.runner()
+            .find_many(|_, element| {
+                let label = Label::try_downcast(element)?;
+                (label.text == text).then_some(())
+            })
+            .len()
+    }
+
+    #[test]
+    fn a_tooltip_goes_down_when_the_list_opens_over_its_button() {
+        let (mut shot, _rig) = window();
+        let tip = "Downloads: 1 running";
+        let button = shot.runner().find_many(|node, element| {
+            (element.accessibility().builder.label() == Some(tip))
+                .then(|| Area::center(&node.layout().area))
+        });
+        let at = button.first().expect("the button is there");
+        shot.runner()
+            .move_cursor((f64::from(at.x), f64::from(at.y)));
+        wait(&mut shot, 900);
+        assert!(
+            bubbles(&mut shot, tip) > 0,
+            "the tip is up while the pointer rests"
+        );
+        let window = ctx();
+        shot.runner().run_in(|| window.run(Command::Downloads));
+        wait(&mut shot, 900);
+        assert!(open(&mut shot), "the list is open");
+        assert_eq!(bubbles(&mut shot, tip), 0, "the tip went down with it");
     }
 }
