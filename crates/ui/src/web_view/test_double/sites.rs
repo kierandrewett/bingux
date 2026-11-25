@@ -51,7 +51,11 @@ pub fn host_of(url: &str) -> String {
     let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     let authority = authority.rsplit('@').next().unwrap_or(authority);
-    authority.split(':').next().unwrap_or("").to_ascii_lowercase()
+    authority
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
 }
 
 fn hue_of(host: &str) -> f32 {
@@ -117,10 +121,30 @@ pub(super) fn resolve(url: &str, next_download: u64) -> Outcome {
             Look::Site,
             Vec::new(),
         ),
-        "expired.example.net" => Outcome::Cert(cert(&host, "SEC_ERROR_EXPIRED_CERTIFICATE", CertProblem::Expired, true)),
-        "selfsigned.example.net" => Outcome::Cert(cert(&host, "SEC_ERROR_UNKNOWN_ISSUER", CertProblem::SelfSigned, true)),
-        "wronghost.example.net" => Outcome::Cert(cert(&host, "SSL_ERROR_BAD_CERT_DOMAIN", CertProblem::WrongHost, true)),
-        "pinned.example.net" => Outcome::Cert(cert(&host, "MOZILLA_PKIX_ERROR_ADDITIONAL_POLICY_CONSTRAINT_FAILED", CertProblem::Other, false)),
+        "expired.example.net" => Outcome::Cert(cert(
+            &host,
+            "SEC_ERROR_EXPIRED_CERTIFICATE",
+            CertProblem::Expired,
+            true,
+        )),
+        "selfsigned.example.net" => Outcome::Cert(cert(
+            &host,
+            "SEC_ERROR_UNKNOWN_ISSUER",
+            CertProblem::SelfSigned,
+            true,
+        )),
+        "wronghost.example.net" => Outcome::Cert(cert(
+            &host,
+            "SSL_ERROR_BAD_CERT_DOMAIN",
+            CertProblem::WrongHost,
+            true,
+        )),
+        "pinned.example.net" => Outcome::Cert(cert(
+            &host,
+            "MOZILLA_PKIX_ERROR_ADDITIONAL_POLICY_CONSTRAINT_FAILED",
+            CertProblem::Other,
+            false,
+        )),
         "missing.example.net" => Outcome::Error(LoadError {
             code: 0x804B_001E,
             name: "NS_ERROR_UNKNOWN_HOST".to_string(),
@@ -178,12 +202,18 @@ pub(super) fn resolve(url: &str, next_download: u64) -> Outcome {
                 received: 3_200_000,
                 total: Some(8_400_000),
                 speed: 1_100_000,
+                container: 0,
+                private: false,
             })],
         ),
         "video.example.net" => page("Watch", secure(), Look::Video, vec![After::Sound]),
         _ => page(
             &host_title(&host),
-            if url.starts_with("http://") { Security::default() } else { secure() },
+            if url.starts_with("http://") {
+                Security::default()
+            } else {
+                secure()
+            },
             Look::Site,
             Vec::new(),
         ),
@@ -214,14 +244,23 @@ mod tests {
 
     #[test]
     fn the_host_is_found_in_an_address() {
-        assert_eq!(host_of("https://User@Example.COM:8080/a?b#c"), "example.com");
+        assert_eq!(
+            host_of("https://User@Example.COM:8080/a?b#c"),
+            "example.com"
+        );
         assert_eq!(host_of("example.com/x"), "example.com");
     }
 
     #[test]
     fn known_hosts_end_the_way_they_are_named() {
-        assert!(matches!(resolve("https://expired.example.net/", 1), Outcome::Cert(_)));
-        assert!(matches!(resolve("https://missing.example.net/", 1), Outcome::Error(_)));
+        assert!(matches!(
+            resolve("https://expired.example.net/", 1),
+            Outcome::Cert(_)
+        ));
+        assert!(matches!(
+            resolve("https://missing.example.net/", 1),
+            Outcome::Error(_)
+        ));
         assert!(matches!(resolve("about:blank", 1), Outcome::Blank));
         let Outcome::Page { security, .. } = resolve("http://anything.example/", 1) else {
             panic!("a page");

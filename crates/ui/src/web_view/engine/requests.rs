@@ -23,6 +23,7 @@
 use std::path::{Path, PathBuf};
 
 use vivarium::certificates::{CertErrorFlags, CertErrorReply, CertErrorRequest, CertProblems};
+use vivarium::contextual_identities::ContextualIdentityId;
 use vivarium::downloads::{DownloadEvent, DownloadState as EngineDownload};
 use vivarium::error::Error;
 use vivarium::navigation::{NewWindowFlags, NewWindowRequest, TargetWindow};
@@ -438,8 +439,38 @@ pub(super) fn download_state(state: EngineDownload) -> Option<DownloadState> {
     })
 }
 
+/// Whose a download is: its container (0 is the default one) and whether it
+/// is private.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) struct DownloadOwner {
+    pub container: u32,
+    pub private: bool,
+}
+
+/// Whose a download is, from the engine's flags and its contextual identity;
+/// `containers` says which container an identity made for one belongs to,
+/// and whether it is private.
+pub(super) fn download_owner(
+    flags: u32,
+    identity: Option<ContextualIdentityId>,
+    containers: impl Fn(ContextualIdentityId) -> Option<(u32, bool)>,
+) -> DownloadOwner {
+    let flagged = flags & vivarium_sys::VV_DOWNLOAD_IS_PRIVATE != 0;
+    let (container, private) = match identity {
+        None => (0, false),
+        Some(id) if id == ContextualIdentityId::PRIVATE => (0, true),
+        Some(id) if id == ContextualIdentityId::DEFAULT => (0, false),
+        // An identity the browser did not make is the default container's.
+        Some(id) => containers(id).unwrap_or((0, false)),
+    };
+    DownloadOwner {
+        container,
+        private: flagged || private,
+    }
+}
+
 /// The browser's account of a download from the engine's.
-pub(super) fn download_info(event: &DownloadEvent) -> Option<DownloadInfo> {
+pub(super) fn download_info(event: &DownloadEvent, owner: DownloadOwner) -> Option<DownloadInfo> {
     let state = download_state(event.state)?;
     Some(DownloadInfo {
         id: crate::web_view::ids::DownloadId(event.download_id.get()),
@@ -451,6 +482,8 @@ pub(super) fn download_info(event: &DownloadEvent) -> Option<DownloadInfo> {
         received: event.received,
         total: event.total,
         speed: event.speed_bps,
+        container: owner.container,
+        private: owner.private,
     })
 }
 

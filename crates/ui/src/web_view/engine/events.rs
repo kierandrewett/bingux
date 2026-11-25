@@ -436,10 +436,20 @@ impl DownloadDelegate for Host<'_> {
     /// engine's event names no session.
     fn on_download(
         &mut self,
-        _: Option<vivarium::contextual_identities::ContextualIdentityId>,
+        identity: Option<vivarium::contextual_identities::ContextualIdentityId>,
         download: DownloadEvent,
     ) {
-        if let Some(info) = requests::download_info(&download) {
+        let owner = {
+            let state = lock(&self.shared.state);
+            requests::download_owner(download.flags, identity, |id| {
+                state
+                    .identities
+                    .iter()
+                    .find(|(_, made)| made.id() == id)
+                    .map(|(&(container, private), _)| (container, private))
+            })
+        };
+        if let Some(info) = requests::download_info(&download, owner) {
             self.shared.push(BrowserEvent::Download(info));
         }
     }

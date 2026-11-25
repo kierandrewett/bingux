@@ -44,7 +44,9 @@ pub enum DialogKind {
     Alert,
     Confirm,
     /// The text the field starts with.
-    Prompt { default: String },
+    Prompt {
+        default: String,
+    },
     /// "Leave this page?": the page has unsaved work.
     BeforeUnload,
 }
@@ -226,6 +228,11 @@ pub struct DownloadInfo {
     pub total: Option<u64>,
     /// Bytes a second, smoothed.
     pub speed: u64,
+    /// The container the download belongs to; 0 is the default one.
+    pub container: u32,
+    /// The download came from a private-browsing identity: it belongs in a
+    /// private window's list only, and is never kept.
+    pub private: bool,
 }
 
 /// A question with its answer's name, for the log of what the engine asked.
