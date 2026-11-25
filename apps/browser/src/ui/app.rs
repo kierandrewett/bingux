@@ -1,0 +1,274 @@
+//! The window: the tab strip on the title bar and, under it, the toolbar, the
+//! banners, the find bar and the page. On a phone there is no strip: the
+//! address bar is on top, the history below, and the tabs are a list.
+
+use bingux_geckoview::PageEnvironment;
+use bingux_geckoview::queue::Signal;
+use bingux_ui::prelude::*;
+use bingux_ui::shell::with_window;
+use freya::prelude::*;
+
+use crate::model::browser::{Browser, EngineStatus, Options};
+use crate::model::shortcuts::{Command, Platform, window_command};
+use crate::model::tabs::Place;
+
+use super::ctx::{Chrome, Ctx, Engine};
+use super::find::FindBar;
+use super::page::PageArea;
+use super::pages;
+use super::popovers::Popovers;
+use super::prompts::{PermissionBanner, PromptHost};
+use super::strip::strip;
+use super::toolbar::{PhoneBottom, Toolbar};
+
+/// The window root.
+#[derive(PartialEq)]
+pub struct App {
+    pub engine: Engine,
+    pub options: Options,
+    /// What the tabs open on at start, when nothing else was asked for.
+    pub start: Vec<String>,
+}
+
+impl Component for App {
+    fn render(&self) -> impl IntoElement {
+        let tokens = provide_tokens();
+        rect()
+            .tw(&tokens, &[w_full(), h_full(), ink(Paint::Text)])
+            .font_family(bingux_ui::theme::font_family())
+            .child(OverlayHost::new(Content {
+                engine: self.engine.clone(),
+                options: self.options,
+                start: self.start.clone(),
+            }))
+    }
+}
+
+#[derive(PartialEq)]
+struct Content {
+    engine: Engine,
+    options: Options,
+    start: Vec<String>,
+}
+
+/// The addresses a launch names: the `open` pairs of its location.
+fn opened_by(location: &Location) -> Vec<String> {
+    location
+        .query_pairs()
+        .iter()
+        .filter(|(key, _)| key == "open")
+        .map(|(_, value)| value.clone())
+        .collect()
+}
+
+impl Component for Content {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let window = use_window();
+        let overlays = use_overlays();
+        let location = use_location();
+        let engine = self.engine.clone();
+        let options = self.options;
+        // What pages see of the window's look: its scheme, accent, motion and
+        // text scale, sent again whenever they change.
+        let environment = PageEnvironment::from_tokens(&tokens, bingux_ui::stress::text_scale(), Vec::new());
+        let browser = use_state({
+            let engine = engine.clone();
+            let environment = environment.clone();
+            move || {
+                let mut browser = Browser::new(engine.0.clone(), options);
+                browser.environment = environment;
+                browser
+            }
+        });
+        let chrome = Chrome {
+            address: use_state(String::new),
+            typing: use_state(|| false),
+            focus_address: use_state(|| 0_u32),
+            highlight: use_state(|| None),
+            focus_find: use_state(|| 0_u32),
+            info_open: use_state(|| false),
+            downloads_open: use_state(|| false),
+            info_anchor: use_state(Area::default),
+            downloads_anchor: use_state(Area::default),
+            menu_anchor: use_state(Area::default),
+            field_area: use_state(Area::default),
+            page_origin: use_state(|| (0.0, 0.0)),
+            dialog_text: use_state(String::new),
+            dialog_password: use_state(String::new),
+        };
+        let ctx = Ctx {
+            browser,
+            chrome,
+            overlays,
+            window,
+            platform: Platform::current(),
+        };
+        #[cfg(feature = "snapshot")]
+        crate::snapshot_mode::publish(ctx);
+
+        // The engine's events wake the window: it takes them in and sleeps
+        // again. The first tabs open once the window exists.
+        let first: Vec<String> = {
+            let launched = opened_by(&location);
+            if launched.is_empty() { self.start.clone() } else { launched }
+        };
+        use_hook({
+            let engine = engine.clone();
+            move || {
+                let signal = Signal::new();
+                engine.0.set_waker(signal.waker());
+                spawn(async move {
+                    ctx.with(|browser| {
+                        browser.poll();
+                        browser.open_first(&first);
+                    });
+                    if first_is_blank(ctx) {
+                        let mut focus = ctx.chrome.focus_address;
+                        focus.set(1);
+                    }
+                    loop {
+                        signal.notified().await;
+                        ctx.pump();
+                    }
+                });
+            }
+        });
+        use_side_effect_with_deps(&environment, move |environment: &PageEnvironment| {
+            let environment = environment.clone();
+            ctx.with(move |browser| browser.set_environment(environment));
+        });
+        // A second launch changes the location: what it names opens in new tabs.
+        let handled = use_hook({
+            let first = location.clone();
+            move || std::rc::Rc::new(std::cell::RefCell::new(first))
+        });
+        if *handled.borrow() != location {
+            *handled.borrow_mut() = location.clone();
+            let urls = opened_by(&location);
+            spawn(async move {
+                ctx.with(|browser| {
+                    for url in &urls {
+                        browser.open_tab(url, Place::End, true);
+                    }
+                });
+            });
+        }
+
+        // The window's title follows the tab on show.
+        let (title, fullscreen, failed, key, find_open, empty_window) = {
+            let browser = ctx.browser.read();
+            let title = browser.active().map_or_else(String::new, |tab| tab.display_title());
+            (
+                title,
+                browser.fullscreen,
+                match &browser.engine {
+                    EngineStatus::Failed { message, code, cause, restartable } => Some((message.clone(), *code, *cause, *restartable)),
+                    _ => None,
+                },
+                browser.tabs.active_key(),
+                browser.active().is_some_and(|tab| tab.find.open),
+                browser.tabs.is_empty(),
+            )
+        };
+        let private = options.private;
+        use_side_effect_with_deps(&(title.clone(), private), move |(title, private): &(String, bool)| {
+            let name = match (title.is_empty(), private) {
+                (true, true) => "Private browsing \u{2013} Browser".to_string(),
+                (true, false) => "Browser".to_string(),
+                (false, true) => format!("{title} \u{2013} Private browsing"),
+                (false, false) => format!("{title} \u{2013} Browser"),
+            };
+            with_window(move |window| window.set_title(&name));
+        });
+        // The window says it is the one the person is in, so the page shows a caret.
+        let focused = bingux_ui::runtime::window_focus();
+        use_side_effect_with_deps(&*focused.read(), move |focused: &bool| {
+            ctx.with(|browser| browser.set_window_focus(*focused));
+        });
+
+        if let Some((message, code, cause, restartable)) = failed {
+            return pages::engine_failed(ctx, cause, &message, code, restartable);
+        }
+        if empty_window {
+            // The last tab went: the window is closing.
+            return rect().into_element();
+        }
+
+        let shortcuts = move |event: Event<KeyboardEventData>| {
+            if let Some(command) = window_command(ctx.platform, &event.key, event.modifiers) {
+                event.stop_propagation();
+                ctx.with(|browser| browser.run(command));
+            } else if event.key == Key::Named(NamedKey::Escape) && ctx.browser.peek().fullscreen {
+                event.stop_propagation();
+                ctx.with(|browser| browser.run(Command::Fullscreen));
+            }
+        };
+
+        let page = PageArea {
+            ctx,
+            engine: engine.clone(),
+        };
+        let find = find_open.then(|| rect().key(key).child(FindBar { ctx, key }));
+        let compact = is_compact();
+        let body = rect()
+            .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children(), bg(Paint::Bg)])
+            .maybe_child((!fullscreen).then(|| Toolbar { ctx }))
+            .maybe_child((!fullscreen).then(|| PermissionBanner { ctx }))
+            .maybe_child(find.filter(|_| !fullscreen))
+            .child(page)
+            .maybe_child((compact && !fullscreen).then(|| PhoneBottom { ctx }))
+            .child(Popovers { ctx })
+            .child(PromptHost { ctx })
+            .child(ContextMenuHost { ctx });
+
+        let root = rect()
+            .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children(), bg(Paint::Bg)])
+            .on_key_down(shortcuts);
+        if compact || fullscreen {
+            return root.child(body).into_element();
+        }
+        // The tabs stand on the toolbar: the header bar is transparent over the
+        // frame's strip, and the strip, from the left, is its title.
+        let header = HeaderBar::new(title)
+            .fill(Paint::Transparent)
+            .trailing(WindowControls)
+            .tab_slot(strip(ctx));
+        root.child(tab_frame(header, body)).into_element()
+    }
+}
+
+/// Whether the tab on show is the blank one a launch without an address makes.
+fn first_is_blank(ctx: Ctx) -> bool {
+    ctx.browser.peek().active().is_some_and(|tab| tab.is_blank())
+}
+
+/// Opens the page's context menu when the engine asks for it. It draws
+/// nothing.
+#[derive(PartialEq)]
+struct ContextMenuHost {
+    ctx: Ctx,
+}
+
+impl Component for ContextMenuHost {
+    fn render(&self) -> impl IntoElement {
+        let ctx = self.ctx;
+        let id = ctx.browser.read().menu.as_ref().map(|menu| (menu.tab, menu.request, menu.target.position.0 as i32, menu.target.position.1 as i32));
+        use_side_effect_with_deps(&id, move |id: &Option<(u64, Option<bingux_geckoview::RequestId>, i32, i32)>| {
+            if id.is_none() {
+                return;
+            }
+            let Some(menu) = ctx.browser.peek().menu.clone() else {
+                return;
+            };
+            let (x, y) = *ctx.chrome.page_origin.peek();
+            let at = (x + menu.target.position.0, y + menu.target.position.1);
+            let items = super::menus::context_items(ctx, &menu);
+            // The engine waits for the menu to be closed: it is told now, since
+            // what the menu does is the browser's, not the page's.
+            ctx.with(|browser| browser.dismiss_menu());
+            ctx.overlays.show_menu(at, items);
+        });
+        rect().width(Size::px(0.0)).height(Size::px(0.0))
+    }
+}

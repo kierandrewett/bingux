@@ -85,6 +85,7 @@ SOURCES = [
     ROOT / "apps/text-editor/src",
     ROOT / "apps/calendar/src",
     ROOT / "apps/taxonomy/src",
+    ROOT / "apps/browser/src",
 ]
 
 # Every directory that holds the repository's own Rust crates. vendor/ (the Freya
@@ -485,6 +486,7 @@ RESILIENT_APPS = (
     "bingux-weather-app",
     "bingux-calculator-app",
     "bingux-calendar",
+    "bingux-browser",
 )
 
 

@@ -1,0 +1,75 @@
+[package]
+name = "bingux-browser"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "GPL-3.0-or-later"
+description = "The Bingux web browser: its window, tabs and toolbar, over the Vivarium engine"
+authors = ["Kieran Drewett"]
+homepage = "https://github.com/kierandrewett/bingux"
+repository = "https://github.com/kierandrewett/bingux"
+
+[[bin]]
+name = "bingux-browser"
+path = "src/main.rs"
+
+[features]
+default = []
+# `bingux-browser --snapshot DIR` renders the window headlessly to PNG, over
+# the in-memory test double (never part of a shipped browser).
+snapshot = ["bingux-ui/testing", "bingux-geckoview/test-double"]
+# The real engine: bingux-geckoview over the `vivarium` crate.
+vivarium = ["bingux-geckoview/vivarium"]
+# The same, with `libvivarium.so` opened at run time (after the loader's trust
+# checks) instead of linked at build time; it needs the SDK's headers only.
+dynamic-load = ["bingux-geckoview/dynamic-load"]
+
+[dependencies]
+freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
+bingux-ui = { path = "../../crates/ui" }
+bingux-geckoview = { path = "../../crates/geckoview" }
+libc = "0.2"
+
+[dev-dependencies]
+# The tests of the UI logic run over the in-memory test double.
+bingux-geckoview = { path = "../../crates/geckoview", features = ["test-double"] }
+bingux-ui = { path = "../../crates/ui", features = ["testing"] }
+
+# Desktop scroll feel; see ../../vendor/README.md.
+[patch.crates-io]
+freya-winit = { path = "../../vendor/freya-winit" }
+freya-core = { path = "../../vendor/freya-core" }
+freya-animation = { path = "../../vendor/freya-animation" }
+freya-components = { path = "../../vendor/freya-components" }
+torin = { path = "../../vendor/torin" }
+winit = { path = "../../vendor/winit" }
+
+# A debug build runs Freya's layout, Skia glue and the UI controls unoptimised,
+# which makes scrolling visibly slow. Optimise every dependency and bingux-ui;
+# the app itself stays at opt-level 0 so a rebuild after an edit stays quick.
+# Debug assertions are off for them too: freya-core's `debug-integrity` walk of
+# the node trees runs after every update when they are on.
+[profile.dev.package."*"]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+[profile.dev.package.bingux-ui]
+opt-level = 2
+debug-assertions = false
+overflow-checks = false
+
+# Panics unwind, in dev and in release. The error boundaries and guards in the
+# vendored freya-core catch a panic with `catch_unwind`, which does nothing under
+# `panic = "abort"`: one failed component would end the process again. Both are
+# Cargo's defaults, spelled out so nobody changes one for size.
+# `scripts/ui-lint.py` fails when a Bingux app sets "abort".
+[profile.dev]
+panic = "unwind"
+
+# A release build links with thin LTO (the UI, Freya and Skia glue inline across
+# crates) and ships without symbols.
+[profile.release]
+panic = "unwind"
+lto = "thin"
+strip = "symbols"
