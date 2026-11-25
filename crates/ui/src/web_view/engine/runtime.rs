@@ -15,9 +15,11 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use vivarium::delegate::Dispatcher;
+use vivarium::downloads::{DownloadAction, DownloadId};
 use vivarium::engine::Engine;
 use vivarium::error::{Error, Status};
 
@@ -40,6 +42,9 @@ pub(super) struct Runtime {
     dispatcher: Dispatcher,
     /// What the browser's controls may offer because of it.
     pub capabilities: Capabilities,
+    /// Whether the engine took `Session::find`, once a session has asked it
+    /// (`caps::taken`); unset until then.
+    pub find: OnceLock<bool>,
     downloads: PathBuf,
     /// The engine failed: its queue has nothing more to say.
     failed: AtomicBool,
@@ -77,10 +82,16 @@ impl Runtime {
         // Before the first session: the engine never asks a question the
         // browser has no prompt for.
         let accepted = caps::subscribe(&engine).map_err(|error| start_failure(&error))?;
+        // An id no download has is ignored, whatever the action: the answer
+        // says only whether the engine has the call.
+        let download_control = caps::taken(
+            &engine.control_download(DownloadId::from_raw(u64::MAX), DownloadAction::Remove),
+        ) == Some(true);
         Ok(Arc::new(Self {
             dispatcher: engine.dispatcher(),
+            capabilities: caps::capabilities(&accepted, download_control),
+            find: OnceLock::new(),
             engine,
-            capabilities: caps::capabilities(&accepted),
             downloads: config.downloads.clone(),
             failed: AtomicBool::new(false),
         }))

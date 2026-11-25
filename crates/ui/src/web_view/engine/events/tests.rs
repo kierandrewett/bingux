@@ -495,3 +495,75 @@ fn a_failed_engine_lets_go_of_every_question_and_says_why() {
         })]
     ));
 }
+
+// ---- Downloads, through the mock engine --------------------------------------
+//
+// Failures these guard against:
+//   1. a download event reaches the list without the flag that says it is
+//      private, so a normal window lists it;
+//   2. a normal download is marked private;
+//   3. a download of a state the browser has no word for (a removed one) is
+//      listed as if it were running.
+//
+// The result of a search is an `OperationResult` and its live counts carry an
+// `OperationId`, neither of which a host outside the crate can make, so those
+// paths are tested through `requests::find_settled` and the real engine.
+
+fn download_event(state: vivarium::downloads::DownloadState, flags: u32) -> EventKind {
+    EventKind::Download(vivarium::downloads::DownloadEvent {
+        state,
+        download_id: vivarium::downloads::DownloadId::from_raw(11),
+        flags,
+        error_code: 0,
+        received: 40,
+        total: Some(100),
+        speed_bps: 4,
+        url: "https://example.com/a.zip".to_string(),
+        target_path: "/home/u/Downloads/a.zip".to_string(),
+        filename: "a.zip".to_string(),
+        mime: "application/zip".to_string(),
+        error: String::new(),
+    })
+}
+
+#[test]
+fn a_download_reaches_the_list_with_its_privacy() {
+    use vivarium::downloads::DownloadState as State;
+    let mock = MockEngine::new();
+    mock.emit(
+        None,
+        download_event(State::Progress, vivarium_sys::VV_DOWNLOAD_IS_PRIVATE),
+    );
+    mock.emit(
+        None,
+        download_event(State::Progress, vivarium_sys::VV_DOWNLOAD_CAN_PAUSE),
+    );
+    let shared = Shared::new();
+    let (events, _) = dispatch(&mock, &shared);
+    let [
+        BrowserEvent::Download(private),
+        BrowserEvent::Download(normal),
+    ] = events.as_slice()
+    else {
+        panic!("two downloads, not {events:?}")
+    };
+    assert!(private.private && !normal.private);
+    assert_eq!(
+        (private.id, private.state, private.received),
+        (
+            crate::web_view::DownloadId(11),
+            crate::web_view::requests::DownloadState::Running,
+            40
+        )
+    );
+}
+
+#[test]
+fn a_download_the_engine_forgot_is_not_listed() {
+    use vivarium::downloads::DownloadState as State;
+    let mock = MockEngine::new();
+    mock.emit(None, download_event(State::Removed, 0));
+    let shared = Shared::new();
+    let (events, _) = dispatch(&mock, &shared);
+    assert!(events.is_empty(), "{events:?}");
+}

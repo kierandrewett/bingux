@@ -7,9 +7,13 @@
 //! engine accepts a subscription to a request kind: one it cannot send
 //! answers `Unsupported`. A control of the browser is enabled when the
 //! request it needs is accepted, or when it needs only events and calls this
-//! crate wraps; the crate has no call for find, muting, downloads control,
-//! composition or the permission store's lists yet, so those stay disabled
-//! (the doc comment of each field says which).
+//! crate wraps. A call has no subscription to try: an engine that lacks it
+//! answers `Unsupported` ([`taken`]). The download control is asked once at
+//! start (an id no download has is ignored, so the question changes
+//! nothing); find needs a session to be asked and is learned from the first
+//! one. The crate has no call for muting, composition or the permission
+//! store's lists yet, so those stay disabled (the doc comment of each field
+//! says which).
 
 use vivarium::engine::Engine;
 use vivarium::error::Result;
@@ -58,19 +62,32 @@ pub(super) fn subscribe(engine: &Engine) -> Result<Vec<RequestKind>> {
     Ok(accepted.into_iter().map(|delegate| delegate.kind).collect())
 }
 
-/// What the UI may offer, from the request kinds the engine accepted.
-pub(super) fn capabilities(accepted: &[RequestKind]) -> Capabilities {
+/// Whether the engine took a call, from what it answered: `Some(true)` when
+/// it did, `Some(false)` when it says it has no such call, `None` when the
+/// answer says nothing of the call (the session was gone, the engine failed)
+/// and the question is still open.
+pub(super) fn taken(answer: &Result<()>) -> Option<bool> {
+    match answer {
+        Ok(()) => Some(true),
+        Err(error) if error.is_unsupported() => Some(false),
+        Err(_) => None,
+    }
+}
+
+/// What the UI may offer, from the request kinds the engine accepted and
+/// whether it took the call that controls a download.
+pub(super) fn capabilities(accepted: &[RequestKind], download_control: bool) -> Capabilities {
     let asks = |kind: RequestKind| accepted.contains(&kind);
     Capabilities {
-        // The safe crate has no `vv_session_find`: never enabled.
+        // Learned from the first session (`taken`), which this has none of.
         find: false,
         permissions: asks(RequestKind::Permission),
         dialogs: asks(RequestKind::JsDialog) && asks(RequestKind::Auth),
         cert_errors: asks(RequestKind::CertError),
         context_menus: asks(RequestKind::ContextMenu),
-        // The request is answered here and progress comes as events; the
-        // safe crate has no pause, resume or cancel, so the buttons say so.
+        // The request is answered here and progress comes as events.
         downloads: asks(RequestKind::Download),
+        download_control,
         // `ContentDelegate::on_status_text`: an event, nothing to announce.
         hover_links: true,
         // ABI 2.0 has no audio state event and no mute call.
@@ -88,6 +105,8 @@ pub(super) fn capabilities(accepted: &[RequestKind]) -> Capabilities {
 
 #[cfg(test)]
 mod tests {
+    use vivarium::error::{Error, Status};
+
     use super::*;
 
     #[test]
@@ -103,7 +122,7 @@ mod tests {
 
     #[test]
     fn a_control_is_offered_only_when_the_engine_took_its_request() {
-        let none = capabilities(&[]);
+        let none = capabilities(&[], false);
         assert!(
             !none.permissions
                 && !none.dialogs
@@ -112,7 +131,7 @@ mod tests {
                 && !none.downloads
                 && !none.form_pickers
         );
-        let all = capabilities(ANSWERED);
+        let all = capabilities(ANSWERED, true);
         assert!(
             all.permissions
                 && all.dialogs
@@ -122,11 +141,41 @@ mod tests {
                 && all.form_pickers
         );
         assert!(
-            !all.find && !all.audio && !all.touch && !all.composition,
+            !all.audio && !all.touch && !all.composition,
             "no call for them, whatever the engine takes"
         );
-        let half = capabilities(&[RequestKind::JsDialog, RequestKind::Select]);
+        let half = capabilities(&[RequestKind::JsDialog, RequestKind::Select], false);
         assert!(!half.dialogs, "a dialog needs authentication too");
         assert!(!half.form_pickers, "a list needs the file picker too");
+    }
+
+    // Failures the find and download-control capabilities guard against:
+    //   1. download control on for an engine that has no such call, so a
+    //      button does nothing and says nothing;
+    //   2. download control off for an engine that has it, so the buttons of
+    //      a running download never show;
+    //   3. a call the engine lacks read as taken, or one that failed for an
+    //      unrelated reason (a closed session) read as lacking, so find stays
+    //      off for good after a tab closed under the probe.
+    #[test]
+    fn download_control_follows_the_call_the_engine_took() {
+        assert!(capabilities(ANSWERED, true).download_control);
+        assert!(!capabilities(ANSWERED, false).download_control);
+        assert!(
+            !capabilities(&[], false).download_control && !capabilities(&[], false).downloads,
+            "the progress of a download is its own capability"
+        );
+    }
+
+    #[test]
+    fn a_call_is_taken_when_the_engine_answers_it_and_lacking_when_it_says_so() {
+        assert_eq!(taken(&Ok(())), Some(true));
+        assert_eq!(taken(&Err(Error::Status(Status::Unsupported))), Some(false));
+        assert_eq!(
+            taken(&Err(Error::Status(Status::NoSuchSession))),
+            None,
+            "a session that closed under the probe says nothing of the call"
+        );
+        assert_eq!(taken(&Err(Error::Status(Status::EngineFailed))), None);
     }
 }

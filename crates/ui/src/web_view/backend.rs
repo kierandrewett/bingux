@@ -67,6 +67,8 @@ pub struct Capabilities {
     pub context_menus: bool,
     /// Downloads, with progress.
     pub downloads: bool,
+    /// Pausing, resuming, cancelling and removing a download.
+    pub download_control: bool,
     /// The address of the link under the pointer.
     pub hover_links: bool,
     /// Whether a page is making sound, and muting it.
@@ -93,6 +95,7 @@ impl Capabilities {
             cert_errors: true,
             context_menus: true,
             downloads: true,
+            download_control: true,
             hover_links: true,
             audio: true,
             touch: true,
@@ -341,6 +344,12 @@ pub trait BrowserBackend: Send + Sync + 'static {
     }
 
     fn resume_download(&self, _download: DownloadId) -> Done {
+        Err(BackendError::Unsupported("downloads"))
+    }
+
+    /// Forgets a download that is over (the engine keeps a finished file) or
+    /// stops one that is not, and removes its partial data.
+    fn remove_download(&self, _download: DownloadId) -> Done {
         Err(BackendError::Unsupported("downloads"))
     }
 }

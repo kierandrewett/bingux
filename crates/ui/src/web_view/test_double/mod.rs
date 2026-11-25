@@ -30,11 +30,11 @@ use crate::web_view::backend::{
     FindQuery, RemoteSettings, TabConfig,
 };
 use crate::web_view::events::{BrowserEvent, EngineEvent, FailureCause, NewWindow, TabEvent};
-use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
 use crate::web_view::ids::{DownloadId, RequestId, TabId};
 use crate::web_view::input::{PageInput, PointerKind, WheelUnit};
 use crate::web_view::page::{Audio, GoneReason, HistoryEntry, Security};
 use crate::web_view::queue::EventQueue;
+use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
 use crate::web_view::requests::{
     CertError, ContextTarget, DownloadInfo, DownloadState, Request, RequestKind, Response,
 };
@@ -69,6 +69,7 @@ pub enum Call {
     CancelDownload(DownloadId),
     PauseDownload(DownloadId),
     ResumeDownload(DownloadId),
+    RemoveDownload(DownloadId),
     Restart,
 }
 
@@ -116,7 +117,7 @@ struct Inner {
 pub struct TestDoubleBackend {
     inner: Mutex<Inner>,
     queue: EventQueue,
-    capabilities: Capabilities,
+    capabilities: Mutex<Capabilities>,
     auto_finish: bool,
 }
 
@@ -141,6 +142,12 @@ impl TestDoubleBackend {
         Self::build(capabilities, true)
     }
 
+    /// What the engine can do changed: a call it had not answered yet was
+    /// taken (find is learned from the first session).
+    pub fn set_capabilities(&self, capabilities: Capabilities) {
+        *lock(&self.capabilities) = capabilities;
+    }
+
     fn build(capabilities: Capabilities, auto_finish: bool) -> Arc<Self> {
         let double = Arc::new(Self {
             inner: Mutex::new(Inner {
@@ -151,7 +158,7 @@ impl TestDoubleBackend {
                 ..Inner::default()
             }),
             queue: EventQueue::new(),
-            capabilities,
+            capabilities: Mutex::new(capabilities),
             auto_finish,
         });
         double.queue.push(BrowserEvent::Engine(EngineEvent::Ready));
@@ -222,7 +229,8 @@ impl TestDoubleBackend {
     /// The engine ends a question by itself: its deadline passed, or the page
     /// went on.
     pub fn close_request(&self, tab: TabId, request: RequestId) {
-        self.queue.push(BrowserEvent::RequestClosed { tab, request });
+        self.queue
+            .push(BrowserEvent::RequestClosed { tab, request });
     }
 
     /// The engine process dies: every tab is lost with what it had, and
@@ -272,7 +280,8 @@ impl TestDoubleBackend {
     /// The engine's report, or `None` while it has not produced one.
     pub fn set_report(&self, report: Option<SecurityReport>) {
         lock(&self.inner).report = report;
-        self.queue.push(BrowserEvent::Engine(EngineEvent::SecurityChanged));
+        self.queue
+            .push(BrowserEvent::Engine(EngineEvent::SecurityChanged));
     }
 
     /// Finish every load that is waiting.
@@ -298,11 +307,15 @@ impl TestDoubleBackend {
                 continue;
             }
             download.received += bytes;
-            if download.total.is_some_and(|total| download.received >= total) {
+            if download
+                .total
+                .is_some_and(|total| download.received >= total)
+            {
                 download.received = download.total.unwrap_or(download.received);
                 download.state = DownloadState::Finished;
                 download.speed = 0;
-                download.path = Some(PathBuf::from("/home/user/Downloads").join(&download.filename));
+                download.path =
+                    Some(PathBuf::from("/home/user/Downloads").join(&download.filename));
             }
             changed.push(download.clone());
         }
@@ -362,7 +375,11 @@ impl TestDoubleBackend {
     }
 
     fn location_event(&self, tab: TabId, state: &TabState) {
-        let url = state.history.get(state.index).map(|entry| entry.url.clone()).unwrap_or_default();
+        let url = state
+            .history
+            .get(state.index)
+            .map(|entry| entry.url.clone())
+            .unwrap_or_default();
         self.queue.push(BrowserEvent::tab(
             tab,
             TabEvent::Location {
@@ -380,7 +397,11 @@ impl TestDoubleBackend {
             return;
         };
         if push {
-            let keep = if state.history.is_empty() { 0 } else { state.index + 1 };
+            let keep = if state.history.is_empty() {
+                0
+            } else {
+                state.index + 1
+            };
             state.history.truncate(keep);
             state.history.push(HistoryEntry {
                 url: url.clone(),
@@ -413,11 +434,21 @@ impl TestDoubleBackend {
     fn redraw(state: &mut TabState) {
         let (width, height) = state.size;
         let scale = state.scale * state.zoom as f32;
-        let device = ((width as f32 * state.scale) as u32, (height as f32 * state.scale) as u32);
+        let device = (
+            (width as f32 * state.scale) as u32,
+            (height as f32 * state.scale) as u32,
+        );
         if device.0 == 0 || device.1 == 0 {
             return;
         }
-        let bytes = paint::page(state.look, state.hue, state.scroll, device.0, device.1, scale);
+        let bytes = paint::page(
+            state.look,
+            state.hue,
+            state.scroll,
+            device.0,
+            device.1,
+            scale,
+        );
         let bytes: crate::frame_view::PixelBytes = Arc::new(Bytes(bytes));
         if let Some(frame) = PageSurface::frame_of(
             device.0,
@@ -456,15 +487,23 @@ impl TestDoubleBackend {
         match outcome {
             Outcome::Blank => {
                 state.look = Look::Blank;
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Title(String::new())));
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Security(Security::default())));
+                self.queue
+                    .push(BrowserEvent::tab(tab, TabEvent::Title(String::new())));
+                self.queue.push(BrowserEvent::tab(
+                    tab,
+                    TabEvent::Security(Security::default()),
+                ));
                 self.queue.push(stop(None));
             }
             Outcome::Error(error) => {
                 state.look = Look::Blank;
                 let host = sites::host_of(&url);
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Title(host)));
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Security(Security::default())));
+                self.queue
+                    .push(BrowserEvent::tab(tab, TabEvent::Title(host)));
+                self.queue.push(BrowserEvent::tab(
+                    tab,
+                    TabEvent::Security(Security::default()),
+                ));
                 self.queue.push(stop(Some(error)));
             }
             Outcome::Cert(error) => {
@@ -474,7 +513,8 @@ impl TestDoubleBackend {
                 if let Some(state) = inner.tabs.get_mut(&tab) {
                     state.blocked = Some((id, url.clone()));
                 }
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Title(error.host.clone())));
+                self.queue
+                    .push(BrowserEvent::tab(tab, TabEvent::Title(error.host.clone())));
                 self.queue.push(stop(Some(crate::web_view::page::LoadError {
                     code: 0x805A_1FF3,
                     name: error.code.clone(),
@@ -500,9 +540,12 @@ impl TestDoubleBackend {
                     entry.title = title.clone();
                 }
                 let favicon = format!("https://{}/favicon.ico", sites::host_of(&url));
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Title(title)));
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Security(security)));
-                self.queue.push(BrowserEvent::tab(tab, TabEvent::Favicon(favicon)));
+                self.queue
+                    .push(BrowserEvent::tab(tab, TabEvent::Title(title)));
+                self.queue
+                    .push(BrowserEvent::tab(tab, TabEvent::Security(security)));
+                self.queue
+                    .push(BrowserEvent::tab(tab, TabEvent::Favicon(favicon)));
                 self.queue.push(stop(None));
                 self.history_event(tab, state);
                 Self::redraw(state);
@@ -551,16 +594,28 @@ impl AsRef<[u8]> for Bytes {
 
 impl BrowserBackend for TestDoubleBackend {
     fn capabilities(&self) -> Capabilities {
-        self.capabilities
+        *lock(&self.capabilities)
     }
 
     fn info(&self) -> EngineInfo {
         let inner = lock(&self.inner);
         let failed = inner.failed;
         EngineInfo {
-            state: if failed { EngineState::Failed } else { EngineState::Ready },
-            version: if failed { String::new() } else { "Gecko 159.0 (test double)".to_string() },
-            build_id: if failed { String::new() } else { "20260101000000".to_string() },
+            state: if failed {
+                EngineState::Failed
+            } else {
+                EngineState::Ready
+            },
+            version: if failed {
+                String::new()
+            } else {
+                "Gecko 159.0 (test double)".to_string()
+            },
+            build_id: if failed {
+                String::new()
+            } else {
+                "20260101000000".to_string()
+            },
             user_agent: if failed {
                 String::new()
             } else {
@@ -575,8 +630,12 @@ impl BrowserBackend for TestDoubleBackend {
                 remote_settings_server: Some("https://rs.example.org/v1".to_string()),
                 content_process_limit: 8,
                 locales: "en-GB".to_string(),
-                webrtc_ip_policy: "The engine's own fixed policy: no local or TCP addresses are shared".to_string(),
-                sandbox_floor: "Standard: web content level 6, network level 2, seccomp on every process".to_string(),
+                webrtc_ip_policy:
+                    "The engine's own fixed policy: no local or TCP addresses are shared"
+                        .to_string(),
+                sandbox_floor:
+                    "Standard: web content level 6, network level 2, seccomp on every process"
+                        .to_string(),
             },
             security: inner.report.clone(),
         }
@@ -664,7 +723,10 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn surface(&self, tab: TabId) -> Option<Arc<PageSurface>> {
-        lock(&self.inner).tabs.get(&tab).map(|state| state.surface.clone())
+        lock(&self.inner)
+            .tabs
+            .get(&tab)
+            .map(|state| state.surface.clone())
     }
 
     fn load(&self, tab: TabId, url: &str) -> Done {
@@ -748,21 +810,29 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn set_size(&self, tab: TabId, width: u32, height: u32, scale: f32) -> Done {
-        self.with_tab(tab, Call::SetSize(tab, width, height, scale), |inner, tab| {
-            if let Some(state) = inner.tabs.get_mut(&tab) {
-                state.size = (width, height);
-                state.scale = scale;
-                Self::redraw(state);
-            }
-        })
+        self.with_tab(
+            tab,
+            Call::SetSize(tab, width, height, scale),
+            |inner, tab| {
+                if let Some(state) = inner.tabs.get_mut(&tab) {
+                    state.size = (width, height);
+                    state.scale = scale;
+                    Self::redraw(state);
+                }
+            },
+        )
     }
 
     fn set_visible(&self, tab: TabId, visible: bool, focused: bool) -> Done {
-        self.with_tab(tab, Call::SetVisible(tab, visible, focused), |inner, tab| {
-            if let Some(state) = inner.tabs.get_mut(&tab) {
-                state.visible = visible;
-            }
-        })
+        self.with_tab(
+            tab,
+            Call::SetVisible(tab, visible, focused),
+            |inner, tab| {
+                if let Some(state) = inner.tabs.get_mut(&tab) {
+                    state.visible = visible;
+                }
+            },
+        )
     }
 
     fn set_zoom(&self, tab: TabId, zoom: f64) -> Done {
@@ -775,14 +845,16 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn set_environment(&self, environment: &crate::web_view::environment::PageEnvironment) -> Done {
-        lock(&self.inner).calls.push(Call::SetEnvironment(environment.clone()));
+        lock(&self.inner)
+            .calls
+            .push(Call::SetEnvironment(environment.clone()));
         Ok(())
     }
 
     fn send(&self, tab: TabId, input: PageInput) -> Done {
         let recorded = input.clone();
-        let hover_links = self.capabilities.hover_links;
-        let menus = self.capabilities.context_menus;
+        let hover_links = lock(&self.capabilities).hover_links;
+        let menus = lock(&self.capabilities).context_menus;
         self.with_tab(tab, Call::Send(tab, recorded), |inner, tab| {
             let request_id = RequestId(inner.next_request);
             let Some(state) = inner.tabs.get_mut(&tab) else {
@@ -790,11 +862,15 @@ impl BrowserBackend for TestDoubleBackend {
             };
             let on_link = |x: f64, y: f64, scroll: f32, zoom: f64| {
                 let (x, y) = (x as f32 / zoom as f32, y as f32 / zoom as f32 + scroll);
-                x >= LINK.0 && x <= LINK.0 + LINK.2 && y >= LINK.1 - 20.0 && y <= LINK.1 + LINK.3 - 18.0
+                x >= LINK.0
+                    && x <= LINK.0 + LINK.2
+                    && y >= LINK.1 - 20.0
+                    && y <= LINK.1 + LINK.3 - 18.0
             };
             match input {
                 PageInput::Pointer(event) if event.kind == PointerKind::Move && hover_links => {
-                    let over = state.look == Look::Site && on_link(event.x, event.y, state.scroll, state.zoom);
+                    let over = state.look == Look::Site
+                        && on_link(event.x, event.y, state.scroll, state.zoom);
                     if over != state.hovering {
                         state.hovering = over;
                         self.queue.push(BrowserEvent::tab(
@@ -806,8 +882,9 @@ impl BrowserBackend for TestDoubleBackend {
                 PageInput::Pointer(event)
                     if event.kind == PointerKind::Down && event.button == 2 && menus =>
                 {
-                    let link = (state.look == Look::Site && on_link(event.x, event.y, state.scroll, state.zoom))
-                        .then(|| (LINK_URL.to_string(), "More information".to_string()));
+                    let link = (state.look == Look::Site
+                        && on_link(event.x, event.y, state.scroll, state.zoom))
+                    .then(|| (LINK_URL.to_string(), "More information".to_string()));
                     inner.next_request += 1;
                     self.queue.push(BrowserEvent::Request {
                         tab,
@@ -836,7 +913,7 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn find(&self, tab: TabId, query: &FindQuery) -> Done {
-        if !self.capabilities.find {
+        if !lock(&self.capabilities).find {
             return Err(BackendError::Unsupported("find in page"));
         }
         let query = query.clone();
@@ -845,7 +922,11 @@ impl BrowserBackend for TestDoubleBackend {
                 return;
             };
             // The double's pages hold three matches of any word of three letters or more.
-            let total = if query.text.chars().count() >= 3 { 3 } else { 0 };
+            let total = if query.text.chars().count() >= 3 {
+                3
+            } else {
+                0
+            };
             let current = match (&state.find, total) {
                 (_, 0) => 0,
                 (Some((text, current)), _) if *text == query.text && !query.restart => {
@@ -861,10 +942,7 @@ impl BrowserBackend for TestDoubleBackend {
             state.find = Some((query.text.clone(), current));
             self.queue.push(BrowserEvent::tab(
                 tab,
-                TabEvent::FindResult {
-                    current,
-                    total,
-                },
+                TabEvent::FindResult { current, total },
             ));
         })
     }
@@ -878,7 +956,7 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn set_muted(&self, tab: TabId, muted: bool) -> Done {
-        if !self.capabilities.audio {
+        if !lock(&self.capabilities).audio {
             return Err(BackendError::Unsupported("muting a tab"));
         }
         self.with_tab(tab, Call::SetMuted(tab, muted), |inner, tab| {
@@ -916,7 +994,8 @@ impl BrowserBackend for TestDoubleBackend {
                         }
                         Self::redraw(state);
                     }
-                    self.queue.push(BrowserEvent::tab(tab, TabEvent::Title(host)));
+                    self.queue
+                        .push(BrowserEvent::tab(tab, TabEvent::Title(host)));
                     self.queue.push(BrowserEvent::tab(
                         tab,
                         TabEvent::Security(Security {
@@ -939,15 +1018,38 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn cancel_download(&self, download: DownloadId) -> Done {
-        self.change_download(Call::CancelDownload(download), download, DownloadState::Cancelled)
+        self.change_download(
+            Call::CancelDownload(download),
+            download,
+            DownloadState::Cancelled,
+        )
     }
 
     fn pause_download(&self, download: DownloadId) -> Done {
-        self.change_download(Call::PauseDownload(download), download, DownloadState::Paused)
+        self.change_download(
+            Call::PauseDownload(download),
+            download,
+            DownloadState::Paused,
+        )
     }
 
     fn resume_download(&self, download: DownloadId) -> Done {
-        self.change_download(Call::ResumeDownload(download), download, DownloadState::Running)
+        self.change_download(
+            Call::ResumeDownload(download),
+            download,
+            DownloadState::Running,
+        )
+    }
+
+    fn remove_download(&self, download: DownloadId) -> Done {
+        let mut inner = lock(&self.inner);
+        inner.calls.push(Call::RemoveDownload(download));
+        if !lock(&self.capabilities).download_control {
+            return Err(BackendError::Unsupported("downloads"));
+        }
+        // As the engine does, an id it does not hold is no error.
+        inner.downloads.retain(|known| known.id != download);
+        Ok(())
     }
 }
 
@@ -955,7 +1057,14 @@ impl TestDoubleBackend {
     fn change_download(&self, call: Call, id: DownloadId, state: DownloadState) -> Done {
         let mut inner = lock(&self.inner);
         inner.calls.push(call);
-        let Some(download) = inner.downloads.iter_mut().find(|download| download.id == id) else {
+        if !lock(&self.capabilities).download_control {
+            return Err(BackendError::Unsupported("downloads"));
+        }
+        let Some(download) = inner
+            .downloads
+            .iter_mut()
+            .find(|download| download.id == id)
+        else {
             return Err(BackendError::Engine(format!("no download {}", id.0)));
         };
         download.state = state;
@@ -985,17 +1094,42 @@ pub fn healthy_report() -> SecurityReport {
         entry("sandbox.content.level", "6", CheckStatus::Ok, None),
         entry("sandbox.socket.level", "2", CheckStatus::Ok, None),
         entry("sandbox.rdd", "disabled", CheckStatus::Warn, None),
-        entry("sandbox.gpu", "none: no GPU process, compositor in the engine process", CheckStatus::Info, None),
+        entry(
+            "sandbox.gpu",
+            "none: no GPU process, compositor in the engine process",
+            CheckStatus::Info,
+            None,
+        ),
         entry("fission.enabled", "true", CheckStatus::Ok, None),
         entry("profile.dir.mode", "0700", CheckStatus::Ok, None),
         entry("telemetry", "off", CheckStatus::Ok, None),
         entry("crash.upload", "off", CheckStatus::Ok, None),
     ];
     for (pid, kind) in [(4101, "content"), (4102, "content"), (4103, "socket")] {
-        entries.push(entry(&format!("process.{pid}.type"), kind, CheckStatus::Ok, Some(pid)));
-        entries.push(entry(&format!("process.{pid}.seccomp"), "2", CheckStatus::Ok, Some(pid)));
-        entries.push(entry(&format!("process.{pid}.no_new_privs"), "1", CheckStatus::Ok, Some(pid)));
-        entries.push(entry(&format!("process.{pid}.cap_eff"), "0", CheckStatus::Ok, Some(pid)));
+        entries.push(entry(
+            &format!("process.{pid}.type"),
+            kind,
+            CheckStatus::Ok,
+            Some(pid),
+        ));
+        entries.push(entry(
+            &format!("process.{pid}.seccomp"),
+            "2",
+            CheckStatus::Ok,
+            Some(pid),
+        ));
+        entries.push(entry(
+            &format!("process.{pid}.no_new_privs"),
+            "1",
+            CheckStatus::Ok,
+            Some(pid),
+        ));
+        entries.push(entry(
+            &format!("process.{pid}.cap_eff"),
+            "0",
+            CheckStatus::Ok,
+            Some(pid),
+        ));
     }
     SecurityReport::from_entries(CheckStatus::Warn, 1, &entries)
 }
@@ -1059,7 +1193,10 @@ mod tests {
             .collect();
         assert_eq!(
             kinds,
-            ["ready", "started", "location", "history", "title", "security", "favicon", "stopped", "history"]
+            [
+                "ready", "started", "location", "history", "title", "security", "favicon",
+                "stopped", "history"
+            ]
         );
         assert!(events.iter().any(|event| matches!(
             event,
@@ -1078,12 +1215,20 @@ mod tests {
         let events = drain(&double);
         let location = events.iter().find_map(|event| match event {
             BrowserEvent::Tab {
-                event: TabEvent::Location { url, can_back, can_forward },
+                event:
+                    TabEvent::Location {
+                        url,
+                        can_back,
+                        can_forward,
+                    },
                 ..
             } => Some((url.clone(), *can_back, *can_forward)),
             _ => None,
         });
-        assert_eq!(location, Some(("https://example.com".to_string(), false, true)));
+        assert_eq!(
+            location,
+            Some(("https://example.com".to_string(), false, true))
+        );
         double.forward(tab).expect("forward");
         let events = drain(&double);
         assert!(events.iter().any(|event| matches!(
@@ -1100,7 +1245,10 @@ mod tests {
         let events = drain(&double);
         assert!(!events.iter().any(|event| matches!(
             event,
-            BrowserEvent::Tab { event: TabEvent::Title(_), .. }
+            BrowserEvent::Tab {
+                event: TabEvent::Title(_),
+                ..
+            }
         )));
         double.finish_loads();
         assert!(drain(&double).iter().any(|event| matches!(
@@ -1149,7 +1297,11 @@ mod tests {
                 }),
             )
             .expect("wheel");
-        assert_eq!(surface.stats().pushed, before + 1, "the page was drawn again");
+        assert_eq!(
+            surface.stats().pushed,
+            before + 1,
+            "the page was drawn again"
+        );
         double
             .send(
                 tab,

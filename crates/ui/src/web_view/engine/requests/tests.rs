@@ -4,6 +4,18 @@
 //! question takes. The answers themselves go through the crate's mock engine
 //! in `events/tests.rs`.
 //!
+//! Failures the find tests guard against (the engine's find is a call with a
+//! typed query, and the page answers by the tag the search carried):
+//!   1. a new search sent as a step, or a step as a new search, so the first
+//!      match is not selected or the next one is not reached;
+//!   2. the switches (case, whole word, highlight all) lost on the way;
+//!   3. a step that carries the old text, which the engine reads no query of;
+//!   4. the settled result lost, so a page with no match never says so (the
+//!      live counts alone do not);
+//!   5. the result of a replaced, stopped or rejected search taken for the
+//!      page's state, which blanks a card whose search is still on;
+//!   6. the result of another kind of operation taken for a search's.
+//!
 //! Failures the private-download tests guard against (a private download
 //! must never reach a list or a file that outlives its window):
 //!   1. a private download read as a normal one, so the window keeps it;
@@ -16,6 +28,9 @@ use std::path::Path;
 
 use vivarium::certificates::{CertFlags, CertInfo};
 use vivarium::display::Rect;
+use vivarium::error::Status;
+use vivarium::navigation::{FindResult, FindStep};
+use vivarium::operation::{OpFailure, OpKind};
 use vivarium::permissions::{PermissionItemFlags, PermissionType};
 use vivarium::prompts::{AuthScheme, SelectOption as EngineOption};
 use vivarium::session::SessionId;
@@ -592,5 +607,138 @@ fn a_container_download_names_its_container() {
         unknown,
         DownloadOwner::default(),
         "an identity the browser did not make is the default's"
+    );
+}
+
+// ---- Find in page -----------------------------------------------------------
+
+fn query(text: &str, forward: bool, restart: bool) -> FindQuery {
+    FindQuery {
+        text: text.to_string(),
+        forward,
+        match_case: false,
+        whole_words: false,
+        highlight_all: false,
+        restart,
+    }
+}
+
+#[test]
+fn a_new_search_carries_its_text_and_switches() {
+    let options = find_options(&FindQuery {
+        match_case: true,
+        whole_words: true,
+        highlight_all: true,
+        ..query("gecko", true, true)
+    });
+    assert_eq!(options.step, FindStep::New);
+    assert_eq!(options.query, "gecko");
+    assert_eq!(
+        options.flags,
+        FindFlags::CASE_SENSITIVE | FindFlags::ENTIRE_WORD | FindFlags::HIGHLIGHT_ALL
+    );
+    let plain = find_options(&query("gecko", true, true));
+    assert_eq!(
+        plain.flags,
+        FindFlags::empty(),
+        "a switch that is off is off"
+    );
+}
+
+#[test]
+fn a_step_moves_in_the_search_that_runs_and_reads_no_text() {
+    let next = find_options(&query("gecko", true, false));
+    assert_eq!((next.step, next.query.as_str()), (FindStep::Next, ""));
+    let previous = find_options(&query("gecko", false, false));
+    assert_eq!(
+        (previous.step, previous.query.as_str()),
+        (FindStep::Previous, "")
+    );
+    assert_eq!(
+        find_options(&query("gecko", false, true)).step,
+        FindStep::New,
+        "a restart is a new search, whichever way the person was going"
+    );
+}
+
+fn failed(status: Status) -> Result<FindResult, OpFailure> {
+    Err(OpFailure {
+        status,
+        detail: 0,
+        message: String::new(),
+    })
+}
+
+#[test]
+fn a_settled_search_tells_its_tab_where_it_stands() {
+    let found = FindResult {
+        current: 2,
+        total: 5,
+        ..FindResult::default()
+    };
+    assert_eq!(
+        find_settled(OpKind::Find, 7, Ok(found)),
+        Some((
+            TabId(7),
+            TabEvent::FindResult {
+                current: 2,
+                total: 5
+            }
+        ))
+    );
+}
+
+#[test]
+fn a_page_with_no_match_says_so_with_no_count() {
+    let none = FindResult {
+        not_found: true,
+        ..FindResult::default()
+    };
+    assert_eq!(
+        find_settled(OpKind::Find, 7, Ok(none)),
+        Some((
+            TabId(7),
+            TabEvent::FindResult {
+                current: 0,
+                total: 0
+            }
+        ))
+    );
+}
+
+#[test]
+fn a_search_that_did_not_settle_says_nothing_of_the_page() {
+    for status in [
+        Status::Canceled,
+        Status::Closed,
+        Status::Rejected,
+        Status::Timeout,
+    ] {
+        assert_eq!(
+            find_settled(OpKind::Find, 7, failed(status)),
+            None,
+            "{status:?}"
+        );
+    }
+}
+
+#[test]
+fn the_result_of_another_kind_of_operation_is_not_a_search() {
+    assert_eq!(
+        find_settled(OpKind::Eval, 7, Ok(FindResult::default())),
+        None
+    );
+}
+
+#[test]
+fn a_tag_that_is_no_tab_is_no_search() {
+    assert_eq!(
+        find_settled(
+            OpKind::Find,
+            u64::from(u32::MAX) + 1,
+            Ok(FindResult::default())
+        ),
+        None,
+        "a tag this backend did not make"
     );
 }

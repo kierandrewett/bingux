@@ -31,10 +31,12 @@ use std::sync::Arc;
 use std::task::Waker;
 
 use vivarium::contextual_identities::{ContextualIdentity, ContextualIdentityConfig};
+use vivarium::downloads::{DownloadAction, DownloadId as EngineDownloadId};
 use vivarium::engine::{Engine, EngineState as State};
 use vivarium::environment::ColorScheme;
 use vivarium::error::{Error, Result, Status};
 use vivarium::navigation::{CachePolicy, NewWindowReply};
+use vivarium::operation::OpOptions;
 use vivarium::security::CheckStatus as Check;
 use vivarium::session::{Session, SessionConfig};
 
@@ -45,11 +47,11 @@ use runtime::{Runtime, StartFailure};
 use state::{Entry, Shared, lock, tab_of};
 
 use crate::web_view::backend::{
-    BackendError, BrowserBackend, Capabilities, Done, EngineInfo, EngineState, TabConfig,
+    BackendError, BrowserBackend, Capabilities, Done, EngineInfo, EngineState, FindQuery, TabConfig,
 };
 use crate::web_view::environment::PageEnvironment;
 use crate::web_view::events::{BrowserEvent, EngineEvent};
-use crate::web_view::ids::{RequestId, TabId};
+use crate::web_view::ids::{DownloadId, RequestId, TabId};
 use crate::web_view::input::PageInput;
 use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
 use crate::web_view::requests::Response;
@@ -218,6 +220,7 @@ impl GeckoBackend {
 
     fn adopt(&self, session: Session) -> TabId {
         let tab = tab_of(session.id());
+        self.learn_find(&session);
         lock(&self.shared.state).live.insert(
             tab,
             Entry {
@@ -226,6 +229,34 @@ impl GeckoBackend {
             },
         );
         tab
+    }
+
+    /// Asks the first session whether the engine has find (a stop with no
+    /// search does nothing, so the question changes nothing). An answer that
+    /// says nothing of the call leaves it open for the next session.
+    fn learn_find(&self, session: &Session) {
+        let Some(runtime) = lock(&self.shared.state).runtime.clone() else {
+            return;
+        };
+        if runtime.find.get().is_some() {
+            return;
+        }
+        if let Some(taken) = caps::taken(&session.find_stop(false)) {
+            let _ = runtime.find.set(taken);
+        }
+    }
+
+    /// A call on the engine itself, with an engine's error as the UI says it.
+    fn control_download(&self, download: DownloadId, action: DownloadAction) -> Done {
+        let runtime = self.runtime()?;
+        runtime
+            .engine
+            .control_download(EngineDownloadId::from_raw(download.0), action)
+            .map_err(|error| match error.status() {
+                Some(Status::EngineFailed) => BackendError::EngineGone,
+                Some(Status::Unsupported) => BackendError::Unsupported("downloads"),
+                _ => BackendError::Engine(error.to_string()),
+            })
     }
 }
 
@@ -251,7 +282,11 @@ impl BrowserBackend for GeckoBackend {
         lock(&self.shared.state)
             .runtime
             .as_ref()
-            .map_or_else(Capabilities::default, |runtime| runtime.capabilities)
+            .map_or_else(Capabilities::default, |runtime| Capabilities {
+                // Learned from the first session (`learn_find`).
+                find: runtime.find.get().copied().unwrap_or(false),
+                ..runtime.capabilities
+            })
     }
 
     fn info(&self) -> EngineInfo {
@@ -462,6 +497,40 @@ impl BrowserBackend for GeckoBackend {
         self.call(tab, "this kind of input", |session| {
             convert::send(session, &input)
         })
+    }
+
+    /// A new search or a step in the one that runs. The result settles
+    /// later as an operation, which carries the tab as its tag
+    /// (`events::on_operation_result`); the live counts arrive as events.
+    fn find(&self, tab: TabId, query: &FindQuery) -> Done {
+        self.call(tab, "find in page", |session| {
+            session
+                .find(
+                    &requests::find_options(query),
+                    OpOptions::tagged(u64::from(tab.0)),
+                )
+                .map(|_| ())
+        })
+    }
+
+    fn find_stop(&self, tab: TabId) -> Done {
+        self.call(tab, "find in page", |session| session.find_stop(false))
+    }
+
+    fn pause_download(&self, download: DownloadId) -> Done {
+        self.control_download(download, DownloadAction::Pause)
+    }
+
+    fn resume_download(&self, download: DownloadId) -> Done {
+        self.control_download(download, DownloadAction::Resume)
+    }
+
+    fn cancel_download(&self, download: DownloadId) -> Done {
+        self.control_download(download, DownloadAction::Cancel)
+    }
+
+    fn remove_download(&self, download: DownloadId) -> Done {
+        self.control_download(download, DownloadAction::Remove)
     }
 
     /// ABI 2.0 has no call that tells a page its fullscreen ended: the page

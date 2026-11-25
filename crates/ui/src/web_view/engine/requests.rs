@@ -26,7 +26,10 @@ use vivarium::certificates::{CertErrorFlags, CertErrorReply, CertErrorRequest, C
 use vivarium::contextual_identities::ContextualIdentityId;
 use vivarium::downloads::{DownloadEvent, DownloadState as EngineDownload};
 use vivarium::error::Error;
-use vivarium::navigation::{NewWindowFlags, NewWindowRequest, TargetWindow};
+use vivarium::navigation::{
+    FindFlags, FindOptions, FindResult, NewWindowFlags, NewWindowRequest, TargetWindow,
+};
+use vivarium::operation::{OpFailure, OpKind};
 use vivarium::permissions::{PermissionItem, PermissionReply, PermissionType};
 use vivarium::prompts::{
     AuthFlags, AuthReply, AuthRequest as EngineAuth, ContextMenuFlags, ContextMenuReply,
@@ -37,6 +40,7 @@ use vivarium::prompts::{
 use vivarium::request::{Remember, RequestId as EngineRequest, Responder};
 use vivarium::security::Origin;
 
+use crate::web_view::backend::FindQuery;
 use crate::web_view::events::{Disposition, NewWindow, TabEvent};
 use crate::web_view::ids::TabId;
 use crate::web_view::requests::{
@@ -424,6 +428,46 @@ pub(super) fn answer(open: Open, response: Response) -> Result<(), Unanswered> {
         _ => return Err(Unanswered::Mismatch),
     };
     sent.map_err(Unanswered::Engine)
+}
+
+/// A search of the page as the engine takes it: a new search carries its
+/// text and switches; a step reads no text and moves in the search that runs.
+pub(super) fn find_options(query: &FindQuery) -> FindOptions {
+    if !query.restart {
+        return if query.forward {
+            FindOptions::next()
+        } else {
+            FindOptions::previous()
+        };
+    }
+    let mut flags = FindFlags::empty();
+    flags.set(FindFlags::CASE_SENSITIVE, query.match_case);
+    flags.set(FindFlags::ENTIRE_WORD, query.whole_words);
+    flags.set(FindFlags::HIGHLIGHT_ALL, query.highlight_all);
+    FindOptions::new(query.text.clone()).flags(flags)
+}
+
+/// What a settled search tells the tab it ran in, matched by the tag the
+/// search was started with; `None` for a result that says nothing of the
+/// page (a search that was replaced, stopped or never began).
+pub(super) fn find_settled(
+    kind: OpKind,
+    tag: u64,
+    outcome: Result<FindResult, OpFailure>,
+) -> Option<(TabId, TabEvent)> {
+    if kind != OpKind::Find {
+        return None;
+    }
+    let tab = TabId(u32::try_from(tag).ok()?);
+    // A search the engine replaced, stopped, rejected or gave up counting
+    // says nothing of the page; the live counts say what they know.
+    let found = outcome.ok()?;
+    let (current, total) = if found.not_found {
+        (0, 0)
+    } else {
+        (found.current, found.total)
+    };
+    Some((tab, TabEvent::FindResult { current, total }))
 }
 
 /// A download's state in the browser's words; `None` for one gone from the

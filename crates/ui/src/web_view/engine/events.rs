@@ -21,9 +21,10 @@ use vivarium::downloads::{
 use vivarium::engine::{EngineDelegate, EngineFailedFlags, EngineFailure};
 use vivarium::input::{Cursor, InputDelegate};
 use vivarium::navigation::{
-    FindProgress, Load, LoadState, Location, NavigationDelegate, NewWindowReply, NewWindowRequest,
-    ProgressDelegate, SessionHistory,
+    FindProgress, FindResult, Load, LoadState, Location, NavigationDelegate, NewWindowReply,
+    NewWindowRequest, ProgressDelegate, SessionHistory,
 };
+use vivarium::operation::{OpKind, OpResult, Operation};
 use vivarium::permissions::{PermissionDelegate, PermissionReply, PermissionRequest};
 use vivarium::prompts::{
     AuthReply, AuthRequest, ContextMenuReply, ContextMenuRequest, DialogKind as EngineDialog,
@@ -151,6 +152,19 @@ impl EngineDelegate for Host<'_> {
         self.failed = true;
         self.shared
             .push(BrowserEvent::Engine(failed_event(&failure)));
+    }
+
+    /// The settled result of a search, by the tab it was started with: what
+    /// the live counts cannot say (a page with no match).
+    fn on_operation_result(&mut self, result: OpResult) {
+        let (kind, tag) = (result.op_kind, result.user_tag);
+        if kind != OpKind::Find {
+            return;
+        }
+        let outcome = Operation::<FindResult>::finish_detached(result);
+        if let Some((tab, event)) = requests::find_settled(kind, tag, outcome) {
+            self.shared.push(BrowserEvent::tab(tab, event));
+        }
     }
 
     /// The engine ended a question itself (its deadline, a navigation): the

@@ -1515,19 +1515,29 @@ The engine side (`web_view::engine`, behind `web-view-vivarium` or `web-view-dyn
 `BrowserBackend` over the `vivarium` crate (ABI 2.0). `engine::start(Config::from_environment(private))` starts it
 and never fails: an engine that does not start is a backend whose first event is `EngineEvent::Failed`.
 
-| Engine                                     | Control                                                                                                |
-| ------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
-| wake hook (library thread)                 | wakes the UI task; it only signals                                                                     |
-| `Dispatcher::dispatch` and delegate traits | `poll_events` runs it on the UI thread: one `BrowserEvent` per event, 256 at most per call             |
-| request: `Ask` and a typed `Responder`     | a control `Request`; the responder waits under its `RequestId` and the control's `Response` answers it |
-| request kinds the engine accepts           | `Capabilities`: a kind it refuses as unsupported leaves its control off                                |
-| `Frame` (shared memory)                    | the tab's `PageSurface`; the crate's checked view copies the buffer once per frame                     |
-| contextual identity                        | default for tabs, private for a private window, one per container                                      |
+| Engine                                     | Control                                                                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| wake hook (library thread)                 | wakes the UI task; it only signals                                                                                     |
+| `Dispatcher::dispatch` and delegate traits | `poll_events` runs it on the UI thread: one `BrowserEvent` per event, 256 at most per call                             |
+| request: `Ask` and a typed `Responder`     | a control `Request`; the responder waits under its `RequestId` and the control's `Response` answers it                 |
+| request kinds the engine accepts           | `Capabilities`: a kind it refuses as unsupported leaves its control off                                                |
+| `Frame` (shared memory)                    | the tab's `PageSurface`; the crate's checked view copies the buffer once per frame                                     |
+| contextual identity                        | default for tabs, private for a private window, one per container                                                      |
+| `Session::find`, `Session::find_stop`      | `BrowserBackend::find` and `find_stop`; the live counts and the settled result arrive as `TabEvent::FindResult`        |
+| `Engine::control_download`                 | `pause_download`, `resume_download`, `cancel_download` and `remove_download`; the effect is a `BrowserEvent::Download` |
 
 There is one model of questions, the control's: the backend adds no second one. A responder that is dropped (a
 closed tab, a failed engine, an answer of the wrong kind) answers the default of its kind, so no page waits on
-the host. What ABI 2.0 has no call for is `false` in `Capabilities` and `BackendError::Unsupported`: find, audio
-state and muting, composition, touch input, download control and session state to restore after a crash.
+the host. What ABI 2.0 has no call for is `false` in `Capabilities` and `BackendError::Unsupported`: audio
+state and muting, composition, touch input and session state to restore after a crash.
+
+Find and download control are calls, not request kinds, so the engine says it has them by taking them. The
+download control is asked once at start with an id no download has (the engine ignores it, so nothing
+changes); `Capabilities::download_control` is `true` when the call is taken. Find needs a session to be asked
+(`find_stop` with no search does nothing) and is learned from the first tab: `Capabilities::find` is `false`
+until then, and the browser reads it again when the find bar opens. A search carries its tab as the tag of its
+operation, so a page with no match (`TabEvent::FindResult { current: 0, total: 0 }`) is told apart from a search
+that was replaced, stopped or never began, which say nothing of the page.
 
 ### Frame view
 
