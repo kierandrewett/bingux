@@ -21,7 +21,12 @@ impl Browser {
     pub fn apply(&mut self, event: BrowserEvent) {
         match event {
             BrowserEvent::Engine(EngineEvent::Ready) => self.engine_ready(),
-            BrowserEvent::Engine(EngineEvent::Failed { message, code, cause, restartable }) => {
+            BrowserEvent::Engine(EngineEvent::Failed {
+                message,
+                code,
+                cause,
+                restartable,
+            }) => {
                 self.engine_failed(message, code, cause, restartable);
             }
             // The settings page reads the report again when it is drawn; that
@@ -31,7 +36,17 @@ impl Browser {
             BrowserEvent::Request { tab, request } => self.apply_request(tab, request),
             BrowserEvent::RequestClosed { tab, request } => self.request_closed(tab, request),
             BrowserEvent::Download(info) => {
-                let started = !self.downloads.list().iter().any(|known| known.id == info.id);
+                // A private download belongs to a private window's list and
+                // to no other: a normal window never lists it, nor says
+                // its name in a toast.
+                if info.private && !self.options.private {
+                    return;
+                }
+                let started = !self
+                    .downloads
+                    .list()
+                    .iter()
+                    .any(|known| known.id == info.id);
                 let finished = info.state == DownloadState::Finished;
                 let name = info.filename.clone();
                 self.downloads.update(info);
@@ -54,7 +69,14 @@ impl Browser {
 
     fn apply_tab(&mut self, session: TabId, event: TabEvent) {
         // A page the engine opened for `window.open` is not a tab yet.
-        if let TabEvent::NewTab { new, url, name: _, no_opener: _, window } = &event {
+        if let TabEvent::NewTab {
+            new,
+            url,
+            name: _,
+            no_opener: _,
+            window,
+        } = &event
+        {
             self.accept_new_tab(session, *new, url, window);
             return;
         }
@@ -82,7 +104,11 @@ impl Browser {
                 }
                 self.close_tab(key);
             }
-            TabEvent::Location { url, can_back, can_forward } => {
+            TabEvent::Location {
+                url,
+                can_back,
+                can_forward,
+            } => {
                 if let Some(tab) = self.tabs.get_mut(key) {
                     tab.url = url;
                     tab.can_back = can_back;
@@ -91,7 +117,11 @@ impl Browser {
                 }
             }
             TabEvent::Title(title) => {
-                let url = self.tabs.get(key).map(|tab| tab.url.clone()).unwrap_or_default();
+                let url = self
+                    .tabs
+                    .get(key)
+                    .map(|tab| tab.url.clone())
+                    .unwrap_or_default();
                 if let Some(tab) = self.tabs.get_mut(key) {
                     tab.title = title.clone();
                 }
@@ -99,7 +129,12 @@ impl Browser {
                     self.history.set_title(&url, &title);
                 }
             }
-            TabEvent::Load { started, loading, progress, error } => {
+            TabEvent::Load {
+                started,
+                loading,
+                progress,
+                error,
+            } => {
                 let Some(tab) = self.tabs.get_mut(key) else {
                     return;
                 };
@@ -191,9 +226,21 @@ impl Browser {
         };
         match kind {
             RequestKind::Permission(permission) => {
-                match self.permissions.decided(&permission.origin, &permission.kinds) {
+                match self
+                    .permissions
+                    .decided(&permission.origin, &permission.kinds)
+                {
                     Some(allow) => {
-                        self.engine_call(|backend| backend.respond(session, id, Response::Permission { allow, remember: false }));
+                        self.engine_call(|backend| {
+                            backend.respond(
+                                session,
+                                id,
+                                Response::Permission {
+                                    allow,
+                                    remember: false,
+                                },
+                            )
+                        });
                     }
                     None => self.queue_prompt(key, Prompt::Permission(id, permission)),
                 }
@@ -201,7 +248,9 @@ impl Browser {
             RequestKind::Dialog(dialog) => self.queue_prompt(key, Prompt::Dialog(id, dialog)),
             RequestKind::Auth(auth) => self.queue_prompt(key, Prompt::Auth(id, auth)),
             RequestKind::Select(select) => self.queue_prompt(key, Prompt::Select(id, select)),
-            RequestKind::FilePicker(picker) => self.queue_prompt(key, Prompt::FilePicker(id, picker)),
+            RequestKind::FilePicker(picker) => {
+                self.queue_prompt(key, Prompt::FilePicker(id, picker))
+            }
             RequestKind::CertError(error) => {
                 if let Some(tab) = self.tabs.get_mut(key) {
                     tab.cert = Some((id, error));

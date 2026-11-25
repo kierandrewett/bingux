@@ -52,7 +52,9 @@ pub fn status_line(download: &DownloadInfo) -> String {
             let rate = (download.speed > 0).then(|| format!("{}/s", size(download.speed)));
             let left = download
                 .total
-                .and_then(|total| time_left(total.saturating_sub(download.received), download.speed))
+                .and_then(|total| {
+                    time_left(total.saturating_sub(download.received), download.speed)
+                })
                 .map(|left| format!("{left} left"));
             // Each part is one unbreakable word run: a line may wrap between
             // them, never inside "1.1 MB/s".
@@ -64,7 +66,11 @@ pub fn status_line(download: &DownloadInfo) -> String {
                 .join(" \u{b7} ")
         }
         DownloadState::Paused => match download.total {
-            Some(total) => format!("Paused \u{b7} {} of {}", size(download.received), size(total)),
+            Some(total) => format!(
+                "Paused \u{b7} {} of {}",
+                size(download.received),
+                size(total)
+            ),
             None => format!("Paused \u{b7} {}", size(download.received)),
         },
         DownloadState::Finished => size(download.received),
@@ -90,7 +96,8 @@ impl Downloads {
     pub fn update(&mut self, info: DownloadInfo) {
         match self.list.iter_mut().find(|existing| existing.id == info.id) {
             Some(existing) => {
-                let finished = existing.state != info.state && matches!(info.state, DownloadState::Finished | DownloadState::Failed);
+                let finished = existing.state != info.state
+                    && matches!(info.state, DownloadState::Finished | DownloadState::Failed);
                 *existing = info;
                 if finished {
                     self.unseen += 1;
@@ -111,7 +118,12 @@ impl Downloads {
     pub fn active(&self) -> usize {
         self.list
             .iter()
-            .filter(|download| matches!(download.state, DownloadState::Running | DownloadState::Paused))
+            .filter(|download| {
+                matches!(
+                    download.state,
+                    DownloadState::Running | DownloadState::Paused
+                )
+            })
             .count()
     }
 
@@ -119,7 +131,11 @@ impl Downloads {
     pub fn overall(&self) -> Option<f64> {
         let mut received = 0.0;
         let mut total = 0.0;
-        for download in self.list.iter().filter(|download| download.state == DownloadState::Running) {
+        for download in self
+            .list
+            .iter()
+            .filter(|download| download.state == DownloadState::Running)
+        {
             total += download.total? as f64;
             received += download.received as f64;
         }
@@ -137,8 +153,12 @@ impl Downloads {
 
     /// Take finished, failed and cancelled downloads off the list.
     pub fn clear_finished(&mut self) {
-        self.list
-            .retain(|download| matches!(download.state, DownloadState::Running | DownloadState::Paused));
+        self.list.retain(|download| {
+            matches!(
+                download.state,
+                DownloadState::Running | DownloadState::Paused
+            )
+        });
     }
 }
 
@@ -159,6 +179,8 @@ mod tests {
             received,
             total,
             speed: 1_000_000,
+            container: 0,
+            private: false,
         }
     }
 
@@ -184,7 +206,10 @@ mod tests {
     #[test]
     fn a_running_download_says_how_far_how_fast_and_how_long() {
         let running = info(1, DownloadState::Running, 3_200_000, Some(8_400_000));
-        assert_eq!(status_line(&running), "3.2\u{a0}MB\u{a0}of\u{a0}8.4\u{a0}MB \u{b7} 1.0\u{a0}MB/s \u{b7} 6\u{a0}s\u{a0}left");
+        assert_eq!(
+            status_line(&running),
+            "3.2\u{a0}MB\u{a0}of\u{a0}8.4\u{a0}MB \u{b7} 1.0\u{a0}MB/s \u{b7} 6\u{a0}s\u{a0}left"
+        );
         assert_eq!(fraction(&running).map(|f| (f * 100.0).round()), Some(38.0));
         let unknown = info(2, DownloadState::Running, 500, None);
         assert_eq!(fraction(&unknown), None);
@@ -193,10 +218,21 @@ mod tests {
 
     #[test]
     fn the_other_states_read_plainly() {
-        assert_eq!(status_line(&info(1, DownloadState::Finished, 2_000, Some(2_000))), "2.0 kB");
-        assert_eq!(status_line(&info(1, DownloadState::Failed, 0, None)), "Failed");
-        assert_eq!(status_line(&info(1, DownloadState::Cancelled, 0, None)), "Cancelled");
-        assert!(status_line(&info(1, DownloadState::Paused, 1_000, Some(2_000))).starts_with("Paused"));
+        assert_eq!(
+            status_line(&info(1, DownloadState::Finished, 2_000, Some(2_000))),
+            "2.0 kB"
+        );
+        assert_eq!(
+            status_line(&info(1, DownloadState::Failed, 0, None)),
+            "Failed"
+        );
+        assert_eq!(
+            status_line(&info(1, DownloadState::Cancelled, 0, None)),
+            "Cancelled"
+        );
+        assert!(
+            status_line(&info(1, DownloadState::Paused, 1_000, Some(2_000))).starts_with("Paused")
+        );
     }
 
     #[test]
@@ -210,7 +246,11 @@ mod tests {
         downloads.update(info(1, DownloadState::Running, 50, Some(100)));
         assert_eq!(downloads.unseen(), 0, "progress is not news");
         downloads.update(info(1, DownloadState::Finished, 100, Some(100)));
-        assert_eq!((downloads.active(), downloads.unseen()), (1, 1), "finishing is");
+        assert_eq!(
+            (downloads.active(), downloads.unseen()),
+            (1, 1),
+            "finishing is"
+        );
         downloads.clear_finished();
         assert_eq!(downloads.list().len(), 1);
     }
@@ -222,6 +262,10 @@ mod tests {
         downloads.update(info(2, DownloadState::Running, 0, Some(100)));
         assert_eq!(downloads.overall(), Some(0.25));
         downloads.update(info(3, DownloadState::Running, 10, None));
-        assert_eq!(downloads.overall(), None, "one of unknown size makes the share unknown");
+        assert_eq!(
+            downloads.overall(),
+            None,
+            "one of unknown size makes the share unknown"
+        );
     }
 }

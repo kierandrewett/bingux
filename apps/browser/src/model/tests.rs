@@ -1,14 +1,24 @@
 //! The browser's rules, over the in-memory test double: what each command
 //! asks of the engine and what each event does to the state.
+//!
+//! Failures the private-download tests guard against (a private download
+//! must not leak into a list that outlives the private window; the browser
+//! writes no downloads to disk, so what can leak is the in-memory list):
+//!   1. a private download shown in a normal window's list or toast;
+//!   2. a normal download wrongly dropped or marked private by the filter;
+//!   3. a private window's own download missing from its list.
 
 use std::sync::Arc;
 
 use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
 use bingux_ui::web_view::requests::{
-    ContextTarget, DialogKind, DialogRequest, PermissionKind, PermissionRequest, RequestKind,
+    ContextTarget, DialogKind, DialogRequest, DownloadInfo, DownloadState, PermissionKind,
+    PermissionRequest, RequestKind,
 };
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
-use bingux_ui::web_view::{BrowserBackend, Capabilities, GoneReason, Response, TabEvent, TabId};
+use bingux_ui::web_view::{
+    BrowserBackend, BrowserEvent, Capabilities, DownloadId, GoneReason, Response, TabEvent, TabId,
+};
 
 use super::browser::{Browser, Options, UiRequest};
 use super::shortcuts::Command;
@@ -47,9 +57,17 @@ fn typing_an_address_loads_it_and_the_events_fill_in_the_tab() {
     assert_eq!(tab.url, "https://example.com");
     assert_eq!(tab.title, "Example Domain");
     assert!(!tab.load.loading);
-    assert_eq!(tab.security.state, bingux_ui::web_view::SecurityState::Secure);
+    assert_eq!(
+        tab.security.state,
+        bingux_ui::web_view::SecurityState::Secure
+    );
     assert_eq!(tab.page(), Page::Web);
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Load(_, url) if url == "https://example.com")));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::Load(_, url) if url == "https://example.com"))
+    );
 }
 
 #[test]
@@ -88,10 +106,18 @@ fn a_page_that_is_loading_shows_progress_and_stop_ends_it() {
     let key = browser.open_tab("example.com", Place::End, true).unwrap();
     browser.poll();
     assert!(browser.tabs.get(key).unwrap().load.loading);
-    assert_eq!(browser.tabs.get(key).unwrap().display_title(), "Loading\u{2026}");
+    assert_eq!(
+        browser.tabs.get(key).unwrap().display_title(),
+        "Loading\u{2026}"
+    );
     browser.stop(key);
     assert!(!browser.tabs.get(key).unwrap().load.loading);
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Stop(_))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::Stop(_)))
+    );
     browser.reload(key, false);
     double.finish_loads();
     browser.poll();
@@ -103,9 +129,16 @@ fn a_new_appearance_reaches_the_engine_once_and_decides_the_scheme_of_new_tabs()
     use bingux_ui::web_view::{PageEnvironment, PageScheme};
     let (mut browser, double) = browser();
     let sent = |double: &TestDoubleBackend| {
-        double.calls().iter().filter(|call| matches!(call, Call::SetEnvironment(_))).count()
+        double
+            .calls()
+            .iter()
+            .filter(|call| matches!(call, Call::SetEnvironment(_)))
+            .count()
     };
-    let dark = PageEnvironment { scheme: PageScheme::Dark, ..PageEnvironment::default() };
+    let dark = PageEnvironment {
+        scheme: PageScheme::Dark,
+        ..PageEnvironment::default()
+    };
     browser.set_environment(dark.clone());
     browser.set_environment(dark);
     assert_eq!(sent(&double), 1, "the same appearance twice is one call");
@@ -135,12 +168,19 @@ fn history_collects_finished_pages_but_not_in_a_private_window() {
 fn closing_tabs_selects_by_the_rules_and_the_last_one_closes_the_window() {
     let (mut browser, double) = browser();
     let first = browser.tabs.active_key();
-    let second = browser.open_tab("example.com", Place::AfterActive, true).unwrap();
+    let second = browser
+        .open_tab("example.com", Place::AfterActive, true)
+        .unwrap();
     browser.poll();
     assert_eq!(browser.tabs.active_key(), second);
     browser.close_tab(second);
     assert_eq!(browser.tabs.active_key(), first, "the page that opened it");
-    assert!(double.calls().iter().any(|call| matches!(call, Call::CloseTab(_))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::CloseTab(_)))
+    );
     browser.close_tab(first);
     assert_eq!(browser.take_ui(), [UiRequest::CloseWindow]);
     assert!(browser.tabs.is_empty());
@@ -152,7 +192,11 @@ fn a_hidden_tab_is_shown_with_the_size_of_the_view_when_it_is_selected() {
     let first = browser.tabs.active_key();
     browser.resize(800, 500, 2.0);
     let second = browser.open_tab("example.com", Place::End, false).unwrap();
-    assert_eq!(browser.tabs.active_key(), first, "a background tab does not take the selection");
+    assert_eq!(
+        browser.tabs.active_key(),
+        first,
+        "a background tab does not take the selection"
+    );
     double.clear_calls();
     browser.select(second);
     let session = browser.session_of(second).unwrap();
@@ -166,7 +210,9 @@ fn a_hidden_tab_is_shown_with_the_size_of_the_view_when_it_is_selected() {
 #[test]
 fn reopening_a_closed_tab_brings_back_its_address_and_its_pin() {
     let (mut browser, _) = browser();
-    let key = browser.open_tab("news.bingux.dev", Place::End, true).unwrap();
+    let key = browser
+        .open_tab("news.bingux.dev", Place::End, true)
+        .unwrap();
     browser.poll();
     browser.set_pinned(key, true);
     browser.close_tab(key);
@@ -193,7 +239,12 @@ fn settings_is_one_tab_that_is_found_again_and_becomes_a_page_when_navigated_awa
     let tab = browser.tabs.get(settings).unwrap();
     assert_eq!(tab.kind, TabKind::Web);
     assert!(tab.session.is_some());
-    assert!(double.calls().iter().any(|call| matches!(call, Call::CreateTab(_))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::CreateTab(_)))
+    );
 }
 
 #[test]
@@ -216,8 +267,15 @@ fn zoom_steps_along_the_ladder_and_resets() {
     assert!(double.calls().contains(&Call::SetZoom(session, 1.2)));
     browser.run(Command::ZoomReset);
     assert_eq!(browser.tabs.get(key).unwrap().zoom, 1.0);
-    browser.apply(bingux_ui::web_view::BrowserEvent::tab(session, TabEvent::Zoom(1.5)));
-    assert_eq!(browser.tabs.get(key).unwrap().zoom, 1.5, "the page's own Ctrl+wheel is followed");
+    browser.apply(bingux_ui::web_view::BrowserEvent::tab(
+        session,
+        TabEvent::Zoom(1.5),
+    ));
+    assert_eq!(
+        browser.tabs.get(key).unwrap().zoom,
+        1.5,
+        "the page's own Ctrl+wheel is followed"
+    );
 }
 
 #[test]
@@ -231,7 +289,10 @@ fn a_crashed_tab_shows_the_crash_page_and_a_reload_loads_it_again() {
     browser.reload(key, false);
     browser.poll();
     assert!(
-        double.calls().iter().any(|call| matches!(call, Call::Load(_, url) if url == "https://crash.example.net")),
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::Load(_, url) if url == "https://crash.example.net")),
         "a crashed tab has no page to reload: a new load makes one"
     );
 }
@@ -240,7 +301,9 @@ fn a_crashed_tab_shows_the_crash_page_and_a_reload_loads_it_again() {
 fn a_load_that_fails_shows_its_page_until_the_next_load() {
     let (mut browser, _) = browser();
     let key = go(&mut browser, "missing.example.net");
-    assert!(matches!(browser.tabs.get(key).unwrap().page(), Page::Failed(error) if error.name == "NS_ERROR_UNKNOWN_HOST"));
+    assert!(
+        matches!(browser.tabs.get(key).unwrap().page(), Page::Failed(error) if error.name == "NS_ERROR_UNKNOWN_HOST")
+    );
     go(&mut browser, "example.com");
     assert_eq!(browser.tabs.get(key).unwrap().page(), Page::Web);
 }
@@ -249,18 +312,31 @@ fn a_load_that_fails_shows_its_page_until_the_next_load() {
 fn a_certificate_error_can_be_refused_or_proceeded_past() {
     let (mut browser, double) = browser();
     let key = go(&mut browser, "expired.example.net");
-    assert!(matches!(browser.tabs.get(key).unwrap().page(), Page::CertError(_)));
+    assert!(matches!(
+        browser.tabs.get(key).unwrap().page(),
+        Page::CertError(_)
+    ));
     browser.cert_proceed(key);
     browser.poll();
     let tab = browser.tabs.get(key).unwrap();
     assert_eq!(tab.page(), Page::Web);
-    assert_eq!(tab.security.state, bingux_ui::web_view::SecurityState::Broken, "the page loads but is marked not secure");
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(_, _, Response::CertError { proceed: true }))));
+    assert_eq!(
+        tab.security.state,
+        bingux_ui::web_view::SecurityState::Broken,
+        "the page loads but is marked not secure"
+    );
+    assert!(double.calls().iter().any(|call| matches!(
+        call,
+        Call::Respond(_, _, Response::CertError { proceed: true })
+    )));
 
     let key = go(&mut browser, "selfsigned.example.net");
     browser.cert_go_back(key);
     assert!(browser.tabs.get(key).unwrap().cert.is_none());
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(_, _, Response::CertError { proceed: false }))));
+    assert!(double.calls().iter().any(|call| matches!(
+        call,
+        Call::Respond(_, _, Response::CertError { proceed: false })
+    )));
 }
 
 #[test]
@@ -284,14 +360,30 @@ fn a_permission_prompt_waits_and_a_remembered_answer_is_reused() {
     double.clear_calls();
     browser.answer_permission(key, true, true);
     assert!(browser.prompt(key).is_none());
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(_, _, Response::Permission { allow: true, remember: true }))));
+    assert!(double.calls().iter().any(|call| matches!(
+        call,
+        Call::Respond(
+            _,
+            _,
+            Response::Permission {
+                allow: true,
+                remember: true
+            }
+        )
+    )));
     // The same site asks again: it is answered without a prompt.
     double.clear_calls();
     let session = browser.session_of(key).unwrap();
     double.ask(session, RequestKind::Permission(request));
     browser.poll();
-    assert!(browser.prompt(key).is_none(), "no prompt for a decided site");
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(_, _, Response::Permission { allow: true, .. }))));
+    assert!(
+        browser.prompt(key).is_none(),
+        "no prompt for a decided site"
+    );
+    assert!(double.calls().iter().any(|call| matches!(
+        call,
+        Call::Respond(_, _, Response::Permission { allow: true, .. })
+    )));
 }
 
 #[test]
@@ -336,7 +428,11 @@ fn dialogs_queue_in_order_and_each_is_answered_once() {
     browser.answer_dialog(key, false, Some("typed".to_string()));
     assert!(browser.prompt(key).is_none());
     browser.answer_dialog(key, true, None);
-    let answers = double.calls().iter().filter(|call| matches!(call, Call::Respond(..))).count();
+    let answers = double
+        .calls()
+        .iter()
+        .filter(|call| matches!(call, Call::Respond(..)))
+        .count();
     assert_eq!(answers, 2, "a third answer has no question");
 }
 
@@ -346,7 +442,10 @@ fn a_tab_that_crashes_drops_the_questions_it_can_no_longer_hear() {
     let key = go(&mut browser, "dialog.example.net");
     assert!(browser.prompt(key).is_some());
     let session = browser.session_of(key).unwrap();
-    double.emit(bingux_ui::web_view::BrowserEvent::tab(session, TabEvent::ProcessGone(GoneReason::Killed)));
+    double.emit(bingux_ui::web_view::BrowserEvent::tab(
+        session,
+        TabEvent::ProcessGone(GoneReason::Killed),
+    ));
     browser.poll();
     assert!(browser.prompt(key).is_none());
 }
@@ -389,7 +488,12 @@ fn find_asks_the_engine_and_shows_the_count() {
     assert!(browser.tabs.get(key).unwrap().find.not_found());
     browser.close_find(key);
     assert!(!browser.tabs.get(key).unwrap().find.open);
-    assert!(double.calls().iter().any(|call| matches!(call, Call::FindStop(_))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::FindStop(_)))
+    );
 }
 
 #[test]
@@ -411,12 +515,82 @@ fn downloads_are_listed_with_a_notice_and_can_be_controlled() {
     go(&mut browser, "files.example.net");
     assert_eq!(browser.downloads.list().len(), 1);
     let notices = browser.take_notices();
-    assert!(notices.iter().any(|notice| notice.text == "Downloading report-2026.pdf" && notice.action.is_some()));
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.text == "Downloading report-2026.pdf" && notice.action.is_some())
+    );
     double.advance_downloads(10_000_000);
     browser.poll();
     let notices = browser.take_notices();
-    assert!(notices.iter().any(|notice| notice.text == "report-2026.pdf was downloaded"));
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.text == "report-2026.pdf was downloaded")
+    );
     assert_eq!(browser.downloads.active(), 0);
+}
+
+fn download(id: u64, private: bool) -> DownloadInfo {
+    DownloadInfo {
+        id: DownloadId(id),
+        url: format!("https://example.com/{id}"),
+        filename: format!("file-{id}.bin"),
+        path: None,
+        mime: "application/octet-stream".to_string(),
+        state: DownloadState::Running,
+        received: 0,
+        total: Some(100),
+        speed: 0,
+        container: 0,
+        private,
+    }
+}
+
+#[test]
+fn a_private_download_is_not_in_a_normal_windows_list() {
+    let (mut browser, _double) = browser();
+    browser.apply(BrowserEvent::Download(download(1, true)));
+    browser.apply(BrowserEvent::Download(download(2, false)));
+    let ids: Vec<DownloadId> = browser.downloads.list().iter().map(|d| d.id).collect();
+    assert_eq!(ids, [DownloadId(2)]);
+    assert!(
+        browser
+            .take_notices()
+            .iter()
+            .all(|notice| !notice.text.contains("file-1")),
+        "nor does it make a toast"
+    );
+    assert_eq!(browser.downloads.unseen(), 1);
+}
+
+#[test]
+fn a_private_download_is_in_a_private_windows_list_and_a_normal_one_is_unchanged() {
+    let double = TestDoubleBackend::new();
+    let mut browser = Browser::new(double, Options { private: true });
+    browser.apply(BrowserEvent::Download(download(1, true)));
+    browser.apply(BrowserEvent::Download(download(2, false)));
+    let list = browser.downloads.list();
+    assert_eq!(list.len(), 2);
+    assert!(list[1].private && !list[0].private, "each keeps its flag");
+    assert!(
+        browser
+            .take_notices()
+            .iter()
+            .any(|notice| notice.text == "Downloading file-1.bin")
+    );
+}
+
+#[test]
+fn a_normal_download_is_unchanged_in_a_normal_window() {
+    let (mut browser, _double) = browser();
+    browser.apply(BrowserEvent::Download(download(5, false)));
+    let list = browser.downloads.list();
+    assert_eq!(list.len(), 1);
+    assert_eq!(
+        (list[0].id, list[0].private, list[0].container),
+        (DownloadId(5), false, 0)
+    );
 }
 
 #[test]
@@ -436,7 +610,12 @@ fn the_context_menu_is_held_for_the_window_and_closing_it_tells_the_engine() {
     double.clear_calls();
     browser.dismiss_menu();
     assert!(browser.menu.is_none());
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(_, _, Response::ContextMenu))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::Respond(_, _, Response::ContextMenu)))
+    );
 }
 
 #[test]
@@ -451,11 +630,19 @@ fn a_window_opened_by_a_page_becomes_a_tab_next_to_its_opener() {
     assert_eq!(popup.opener, Some(opener));
     assert_eq!(popup.url, "https://news.bingux.dev/popup");
     assert_eq!(browser.tabs.position(popup.key), Some(1));
-    assert!(double.calls().iter().any(|call| matches!(call, Call::AcceptTab(_))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::AcceptTab(_)))
+    );
     // `window.close()` closes it and goes back to the page that opened it.
     let popup_key = popup.key;
     let popup_session = popup.session.unwrap();
-    double.emit(bingux_ui::web_view::BrowserEvent::tab(popup_session, TabEvent::CloseRequested));
+    double.emit(bingux_ui::web_view::BrowserEvent::tab(
+        popup_session,
+        TabEvent::CloseRequested,
+    ));
     browser.poll();
     assert!(browser.tabs.get(popup_key).is_none());
     assert_eq!(browser.tabs.active_key(), opener);
@@ -476,8 +663,14 @@ fn page_input_reaches_the_tab_it_is_for() {
         },
     );
     let calls = double.calls();
-    assert_eq!(calls[0], Call::Send(session, PageInput::Edit(EditCommand::Copy)));
-    assert!(matches!(calls[1], Call::Send(_, PageInput::ContextMenu { .. })));
+    assert_eq!(
+        calls[0],
+        Call::Send(session, PageInput::Edit(EditCommand::Copy))
+    );
+    assert!(matches!(
+        calls[1],
+        Call::Send(_, PageInput::ContextMenu { .. })
+    ));
 }
 
 #[test]
@@ -485,7 +678,9 @@ fn closing_other_tabs_keeps_the_pinned_ones() {
     let (mut browser, _) = browser();
     let a = browser.tabs.active_key();
     let b = browser.open_tab("example.com", Place::End, false).unwrap();
-    let c = browser.open_tab("news.bingux.dev", Place::End, false).unwrap();
+    let c = browser
+        .open_tab("news.bingux.dev", Place::End, false)
+        .unwrap();
     browser.set_pinned(b, true);
     browser.close_others(a);
     let keys: Vec<u64> = browser.tabs.all().iter().map(|tab| tab.key).collect();
@@ -500,7 +695,12 @@ fn muting_goes_to_the_engine_and_is_shown_once_it_agrees() {
     assert!(browser.tabs.get(key).unwrap().audio.playing);
     browser.toggle_mute(key);
     assert!(browser.tabs.get(key).unwrap().audio.muted);
-    assert!(double.calls().iter().any(|call| matches!(call, Call::SetMuted(_, true))));
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::SetMuted(_, true)))
+    );
 }
 
 #[test]
