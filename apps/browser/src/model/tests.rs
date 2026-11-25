@@ -7,6 +7,15 @@
 //!   1. a private download shown in a normal window's list or toast;
 //!   2. a normal download wrongly dropped or marked private by the filter;
 //!   3. a private window's own download missing from its list.
+//!
+//! Failures the find and download-control tests guard against:
+//!   1. "Clear finished" empties the window's list but the engine keeps
+//!      every download it was told of, so its own list grows for good;
+//!   2. the same call stops a download that is still running;
+//!   3. a download's pause, resume and cancel buttons drawn for an engine
+//!      that has no such call, where they do nothing and say nothing;
+//!   4. find learned from the first tab (the engine is asked with a session)
+//!      but the window keeps reading "not available" from before it.
 
 use std::sync::Arc;
 
@@ -590,6 +599,72 @@ fn a_normal_download_is_unchanged_in_a_normal_window() {
     assert_eq!(
         (list[0].id, list[0].private, list[0].container),
         (DownloadId(5), false, 0)
+    );
+}
+
+#[test]
+fn clearing_the_list_has_the_engine_forget_what_is_over_and_nothing_else() {
+    let (mut browser, double) = browser();
+    go(&mut browser, "files.example.net");
+    browser.apply(BrowserEvent::Download(download(8, false)));
+    double.advance_downloads(10_000_000);
+    browser.poll();
+    // The page's download is over; the two the test added still go.
+    let mut running = download(9, false);
+    running.total = None;
+    browser.apply(BrowserEvent::Download(running));
+    double.clear_calls();
+    let over: Vec<DownloadId> = browser
+        .downloads
+        .list()
+        .iter()
+        .filter(|d| !matches!(d.state, DownloadState::Running | DownloadState::Paused))
+        .map(|d| d.id)
+        .collect();
+    assert!(!over.is_empty());
+    browser.clear_finished_downloads();
+    let removed: Vec<DownloadId> = double
+        .calls()
+        .iter()
+        .filter_map(|call| match call {
+            Call::RemoveDownload(id) => Some(*id),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(removed.len(), over.len());
+    for id in &over {
+        assert!(removed.contains(id), "{id:?} is forgotten");
+    }
+    assert!(
+        !removed.contains(&DownloadId(8)) && !removed.contains(&DownloadId(9)),
+        "a running one is not"
+    );
+    let left: Vec<DownloadId> = browser.downloads.list().iter().map(|d| d.id).collect();
+    assert_eq!(left, [DownloadId(9), DownloadId(8)]);
+}
+
+#[test]
+fn what_the_engine_took_of_find_is_read_again_when_the_bar_opens() {
+    let double = TestDoubleBackend::with_capabilities(Capabilities {
+        find: false,
+        ..Capabilities::all()
+    });
+    let mut browser = Browser::new(double.clone(), Options::default());
+    let key = browser.open_tab("example.com", Place::End, true).unwrap();
+    // The engine took the call at the first session, after the window read
+    // what it could do.
+    double.set_capabilities(Capabilities::all());
+    browser.open_find(key);
+    assert!(browser.capabilities().find);
+    assert!(
+        browser.take_notices().is_empty(),
+        "no word of find being absent"
+    );
+    assert!(
+        browser
+            .take_ui()
+            .iter()
+            .any(|ui| matches!(ui, UiRequest::OpenFind))
     );
 }
 

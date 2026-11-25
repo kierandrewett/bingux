@@ -1,9 +1,9 @@
 //! The two cards that hang from the toolbar: what is known about the page's
 //! connection and permissions, and the downloads.
 
-use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
-use bingux_ui::web_view::DownloadId;
 use bingux_ui::prelude::*;
+use bingux_ui::web_view::DownloadId;
+use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 use freya::prelude::*;
 
 use crate::model::address;
@@ -93,12 +93,17 @@ fn page_info(ctx: Ctx) -> Element {
             .row(property_row("Site", address::host(&origin)))
             .row(property_row("Address", {
                 let browser = ctx.browser.read();
-                browser.tabs.get(key).map(|tab| address::display(&tab.url)).unwrap_or_default()
+                browser
+                    .tabs
+                    .get(key)
+                    .map(|tab| address::display(&tab.url))
+                    .unwrap_or_default()
             }));
         column = column.child(site);
     }
     if !remembered.is_empty() {
-        let mut group = Group::new("Permissions".to_string()).footer("Choices you made for this site. Reset one to be asked again.");
+        let mut group = Group::new("Permissions".to_string())
+            .footer("Choices you made for this site. Reset one to be asked again.");
         for (name, allowed) in remembered {
             let site = origin.clone();
             let forget = name.clone();
@@ -122,6 +127,10 @@ fn page_info(ctx: Ctx) -> Element {
 /// One download's controls: pause or resume, and cancel.
 fn download_controls(ctx: Ctx, download: &DownloadInfo) -> Option<Element> {
     let id: DownloadId = download.id;
+    // An engine with no call for it gets no button that does nothing.
+    if !ctx.browser.read().capabilities().download_control {
+        return None;
+    }
     let backend = ctx.browser.read().backend().clone();
     match download.state {
         DownloadState::Running => {
@@ -172,7 +181,13 @@ fn download_list(ctx: Ctx) -> Element {
     if list.is_empty() {
         return rect()
             .tw_layout(&[flex_col(), w_full()])
-            .child(Group::new(None::<String>).row(row("No downloads").subtitle("Files you save appear here.").leading(Icon::FolderDownload)))
+            .child(
+                Group::new(None::<String>).row(
+                    row("No downloads")
+                        .subtitle("Files you save appear here.")
+                        .leading(Icon::FolderDownload),
+                ),
+            )
             .into_element();
     }
     let mut group = Group::new("Downloads".to_string());
@@ -184,11 +199,16 @@ fn download_list(ctx: Ctx) -> Element {
             line = line.leading_tone(bingux_ui::style::Tone::Danger);
         }
         let controls = download_controls(ctx, download);
-        let fraction = downloads::fraction(download).filter(|_| download.state == DownloadState::Running);
+        let fraction =
+            downloads::fraction(download).filter(|_| download.state == DownloadState::Running);
         if controls.is_some() || fraction.is_some() {
             let mut trailing = rect().tw_layout(&[flex_row(), items(Align::Center), gap(S2)]);
             if let Some(fraction) = fraction.filter(|_| !is_compact()) {
-                trailing = trailing.child(rect().tw_layout(&[w(Dim::Box9)]).child(progress_bar(fraction)));
+                trailing = trailing.child(
+                    rect()
+                        .tw_layout(&[w(Dim::Box9)])
+                        .child(progress_bar(fraction)),
+                );
             }
             if let Some(controls) = controls {
                 trailing = trailing.child(controls);
@@ -197,14 +217,19 @@ fn download_list(ctx: Ctx) -> Element {
         }
         group = group.row(line);
     }
-    let finished = list
-        .iter()
-        .any(|download| !matches!(download.state, DownloadState::Running | DownloadState::Paused));
-    let mut column = rect().tw_layout(&[flex_col(), w_full(), gap(S3)]).child(group);
+    let finished = list.iter().any(|download| {
+        !matches!(
+            download.state,
+            DownloadState::Running | DownloadState::Paused
+        )
+    });
+    let mut column = rect()
+        .tw_layout(&[flex_col(), w_full(), gap(S3)])
+        .child(group);
     if finished {
         column = column.child(
             action_button("Clear finished", move |_: ()| {
-                ctx.browser.clone().write().downloads.clear_finished();
+                ctx.browser.clone().write().clear_finished_downloads();
             })
             .flat()
             .compact(),

@@ -162,6 +162,11 @@ What the engine cannot do yet is reported per feature in `Capabilities` (find, p
 errors, context menus, downloads, hover links, audio, touch, composition, form pickers, favicons, article
 detection). A consumer greys such a control out with a reason instead of pretending.
 
+Find in page and download control reach the engine (`Session::find`, `Engine::control_download`) when the engine
+takes the calls. The find card steps with Enter and Shift+Enter and counts matches; the downloads list pauses, resumes
+and cancels a running download, and "Clear finished" has the engine forget what is over. An engine that lacks a
+call leaves `Capabilities::find` or `download_control` off: the command says so, and the buttons are not drawn.
+
 A download says whose it is: `DownloadInfo::private` (the engine's private flag, or the private identity) and
 `DownloadInfo::container` (0 is the default). The browser lists a private download in a private window only, and
 never in a normal window's list or toasts; it writes no downloads to disk.

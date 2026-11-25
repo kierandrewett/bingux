@@ -3,7 +3,8 @@
 //! comes back as an event.
 
 use bingux_ui::web_view::input::{EditCommand, PageInput};
-use bingux_ui::web_view::{FindQuery, TabId};
+use bingux_ui::web_view::requests::DownloadState;
+use bingux_ui::web_view::{DownloadId, FindQuery, TabId};
 
 use super::{Browser, ClosedTab, Notice, UiRequest, ViewSize};
 use crate::model::address::{self, Typed};
@@ -51,7 +52,13 @@ impl Browser {
     }
 
     /// A new tab for a page that was opened from tab `opener`.
-    fn create_web(&mut self, url: &str, place: Place, select: bool, opener: Option<u64>) -> Option<u64> {
+    fn create_web(
+        &mut self,
+        url: &str,
+        place: Place,
+        select: bool,
+        opener: Option<u64>,
+    ) -> Option<u64> {
         let key = self.tabs.next_key();
         let mut tab = Tab::blank(key, TabKind::Web);
         tab.url = url.to_string();
@@ -79,13 +86,20 @@ impl Browser {
 
     /// Open the settings page, or go to it when it is already open.
     pub fn open_settings(&mut self) -> u64 {
-        if let Some(key) = self.tabs.all().iter().find(|tab| tab.kind == TabKind::Settings).map(|tab| tab.key) {
+        if let Some(key) = self
+            .tabs
+            .all()
+            .iter()
+            .find(|tab| tab.kind == TabKind::Settings)
+            .map(|tab| tab.key)
+        {
             self.select(key);
             return key;
         }
         let key = self.tabs.next_key();
         let was = self.tabs.active_key();
-        self.tabs.insert(Tab::blank(key, TabKind::Settings), Place::AfterActive, true);
+        self.tabs
+            .insert(Tab::blank(key, TabKind::Settings), Place::AfterActive, true);
         self.shown(was);
         key
     }
@@ -109,7 +123,11 @@ impl Browser {
             self.engine_call(|backend| backend.set_visible(session, false, false));
         }
         if let Some(session) = self.session_of(now) {
-            let ViewSize { width, height, scale } = self.view;
+            let ViewSize {
+                width,
+                height,
+                scale,
+            } = self.view;
             self.engine_call(|backend| {
                 backend.set_size(session, width, height, scale)?;
                 backend.set_visible(session, true, true)
@@ -158,7 +176,11 @@ impl Browser {
             // is no page to hide.
             let now = self.tabs.active_key();
             if let Some(session) = self.session_of(now) {
-                let ViewSize { width, height, scale } = self.view;
+                let ViewSize {
+                    width,
+                    height,
+                    scale,
+                } = self.view;
                 self.engine_call(|backend| {
                     backend.set_size(session, width, height, scale)?;
                     backend.set_visible(session, true, true)
@@ -242,7 +264,10 @@ impl Browser {
 
     /// Mute or unmute the tab's sound.
     pub fn toggle_mute(&mut self, key: u64) {
-        let (Some(session), Some(muted)) = (self.session_of(key), self.tabs.get(key).map(|tab| tab.audio.muted)) else {
+        let (Some(session), Some(muted)) = (
+            self.session_of(key),
+            self.tabs.get(key).map(|tab| tab.audio.muted),
+        ) else {
             return;
         };
         match self.backend().set_muted(session, !muted) {
@@ -281,7 +306,11 @@ impl Browser {
 
     /// Load `url` in tab `key`. A settings tab becomes a web tab.
     pub fn go(&mut self, key: u64, url: &str) {
-        if self.tabs.get(key).is_some_and(|tab| tab.kind == TabKind::Settings) {
+        if self
+            .tabs
+            .get(key)
+            .is_some_and(|tab| tab.kind == TabKind::Settings)
+        {
             let config = self.config(url, None, false);
             match self.backend().create_tab(&config) {
                 Ok(session) => {
@@ -325,7 +354,11 @@ impl Browser {
             return;
         }
         if let Some(session) = self.session_of(key) {
-            let ViewSize { width, height, scale } = self.view;
+            let ViewSize {
+                width,
+                height,
+                scale,
+            } = self.view;
             self.engine_call(|backend| {
                 backend.set_size(session, width, height, scale)?;
                 backend.set_visible(session, true, true)
@@ -356,7 +389,11 @@ impl Browser {
         let Some(tab) = self.tabs.get(key) else {
             return;
         };
-        let (session, recover, url) = (tab.session, tab.gone.is_some() || tab.cert.is_some(), tab.url.clone());
+        let (session, recover, url) = (
+            tab.session,
+            tab.gone.is_some() || tab.cert.is_some(),
+            tab.url.clone(),
+        );
         let Some(session) = session else {
             return;
         };
@@ -396,7 +433,9 @@ impl Browser {
         }
         self.view = next;
         if let Some(session) = self.session_of(self.tabs.active_key()) {
-            self.engine_call(|backend| backend.set_size(session, next.width, next.height, next.scale));
+            self.engine_call(|backend| {
+                backend.set_size(session, next.width, next.height, next.scale)
+            });
         }
     }
 
@@ -433,6 +472,9 @@ impl Browser {
 
     /// Open the find bar of tab `key`.
     pub fn open_find(&mut self, key: u64) {
+        // The engine took the call, or did not, at its first session: after
+        // the window read what the engine can do, when it opened with none.
+        self.capabilities = self.backend().capabilities();
         if !self.capabilities().find {
             self.notify("Find in page is not available in this engine yet.");
             return;
@@ -481,7 +523,13 @@ impl Browser {
     }
 
     /// Match case, whole words or highlight all changed.
-    pub fn set_find_options(&mut self, key: u64, match_case: bool, whole_words: bool, highlight_all: bool) {
+    pub fn set_find_options(
+        &mut self,
+        key: u64,
+        match_case: bool,
+        whole_words: bool,
+        highlight_all: bool,
+    ) {
         let Some(tab) = self.tabs.get_mut(key) else {
             return;
         };
@@ -490,6 +538,32 @@ impl Browser {
         tab.find.highlight_all = highlight_all;
         let text = tab.find.text.clone();
         self.find(key, &text, true, true);
+    }
+
+    // ---- Downloads ---------------------------------------------------------------
+
+    /// Take finished, failed and cancelled downloads off the list, and have
+    /// the engine forget them.
+    pub fn clear_finished_downloads(&mut self) {
+        let over: Vec<DownloadId> = self
+            .downloads
+            .list()
+            .iter()
+            .filter(|download| {
+                !matches!(
+                    download.state,
+                    DownloadState::Running | DownloadState::Paused
+                )
+            })
+            .map(|download| download.id)
+            .collect();
+        if self.capabilities().download_control {
+            for id in over {
+                // The engine ignores an id it does not hold (a restart forgot it).
+                self.engine_call(|backend| backend.remove_download(id));
+            }
+        }
+        self.downloads.clear_finished();
     }
 
     // ---- Commands -----------------------------------------------------------------
@@ -544,7 +618,11 @@ impl Browser {
             }
             Command::PageInfo => self.ui.push(UiRequest::OpenPageInfo),
             Command::ViewSource => {
-                let url = self.tabs.active().filter(|tab| tab.kind == TabKind::Web && !tab.is_blank()).map(|tab| tab.url.clone());
+                let url = self
+                    .tabs
+                    .active()
+                    .filter(|tab| tab.kind == TabKind::Web && !tab.is_blank())
+                    .map(|tab| tab.url.clone());
                 if let Some(url) = url.filter(|url| !url.starts_with("view-source:")) {
                     self.open_tab(&format!("view-source:{url}"), Place::AfterActive, true);
                 }
