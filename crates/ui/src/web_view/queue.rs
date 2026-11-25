@@ -72,7 +72,9 @@ impl EventQueue {
         out.extend(lock(&self.events).drain(..));
     }
 
-    fn wake(&self) {
+    /// Wakes the UI as a push would, with nothing pushed: a backend whose
+    /// engine queues events of its own (and is woken for them) uses it.
+    pub(crate) fn wake(&self) {
         if let Some(waker) = lock(&self.waker).as_ref() {
             waker.wake_by_ref();
         }
@@ -99,7 +101,9 @@ impl Signal {
 
     /// Resolves once there has been a wake since it last resolved.
     pub fn notified(self: &Arc<Self>) -> Notified {
-        Notified { signal: self.clone() }
+        Notified {
+            signal: self.clone(),
+        }
     }
 }
 
@@ -151,8 +155,8 @@ mod tests {
 
     use super::*;
     use crate::web_view::events::EngineEvent;
-    use crate::web_view::ids::TabId;
     use crate::web_view::events::TabEvent;
+    use crate::web_view::ids::TabId;
 
     struct Counter(AtomicUsize);
 
@@ -169,7 +173,11 @@ mod tests {
         queue.set_waker(Waker::from(counter.clone()));
         queue.push(BrowserEvent::Engine(EngineEvent::Ready));
         queue.push(BrowserEvent::tab(TabId(1), TabEvent::Ready));
-        assert_eq!(counter.0.load(Ordering::SeqCst), 1, "one wake for two events");
+        assert_eq!(
+            counter.0.load(Ordering::SeqCst),
+            1,
+            "one wake for two events"
+        );
         let mut out = Vec::new();
         queue.drain_into(&mut out);
         assert_eq!(out.len(), 2);
@@ -195,6 +203,10 @@ mod tests {
         let waker = Waker::from(Arc::new(Counter(AtomicUsize::new(0))));
         let mut cx = Context::from_waker(&waker);
         assert_eq!(future.as_mut().poll(&mut cx), Poll::Ready(()));
-        assert_eq!(future.as_mut().poll(&mut cx), Poll::Pending, "once per wake");
+        assert_eq!(
+            future.as_mut().poll(&mut cx),
+            Poll::Pending,
+            "once per wake"
+        );
     }
 }

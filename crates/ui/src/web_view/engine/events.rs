@@ -1,33 +1,56 @@
-//! What the engine says, turned into [`BrowserEvent`]s.
+//! What the engine says, turned into [`BrowserEvent`]s: the backend's
+//! delegate.
 //!
-//! One function per event kind the browser has a use for; every other kind is
-//! dropped here, so the UI sees only what it can show. Events arrive in the
-//! order the engine produced them (`Event::seq`); the queue between this
-//! thread and the UI keeps that order.
-//!
-//! The header of an event (`applied_seq`, `navigation_id`, `document_id`) is
-//! not used by the browser: it never waits for "everything I sent has taken
-//! effect", and the page state it shows is the latest the engine said.
+//! [`Host`] implements the crate's delegate traits. The crate's `Dispatcher`
+//! calls one of its methods per event, on the UI thread, when the backend's
+//! `poll_events` runs (the engine's wake hook woke the UI's task). Every
+//! method the browser has no use for keeps its default: an event is dropped,
+//! a request gets the default answer of its kind. Events arrive in the order
+//! the engine produced them; the queue between this delegate and the UI keeps
+//! that order.
 
 use std::path::Path;
 
-use crate::frame_view::CaretRect;
-use vivarium as vv;
+use vivarium::certificates::{CertErrorReply, CertErrorRequest, CertificateDelegate};
+use vivarium::default_delegates;
+use vivarium::diagnostics::{CrashDelegate, ProcessInfo};
+use vivarium::display::{DisplayDelegate, FrameAvailable, ZoomChanged};
+use vivarium::downloads::{
+    Conflict, DownloadDelegate, DownloadEvent, DownloadReply, DownloadRequest,
+};
+use vivarium::engine::{EngineDelegate, EngineFailedFlags, EngineFailure};
+use vivarium::input::{Cursor, InputDelegate};
+use vivarium::navigation::{
+    FindProgress, Load, LoadState, Location, NavigationDelegate, NewWindowReply, NewWindowRequest,
+    ProgressDelegate, SessionHistory,
+};
+use vivarium::permissions::{PermissionDelegate, PermissionReply, PermissionRequest};
+use vivarium::prompts::{
+    AuthReply, AuthRequest, ContextMenuReply, ContextMenuRequest, DialogKind as EngineDialog,
+    FilePickerReply, FilePickerRequest, JsDialogReply, JsDialogRequest, PromptDelegate,
+    SelectReply, SelectRequest,
+};
+use vivarium::request::{Ask, RequestClosed, Responder};
+use vivarium::security::{SecurityDelegate, SecurityInfo, SecurityReport};
+use vivarium::session::{
+    CloseReason, ContentDelegate, SessionClosed, SessionDelegate, SessionId, SessionReady,
+};
 
-use super::requests::{self, Incoming};
-use super::state::{Shared, lock, tab_of};
+use super::requests::{self, Open};
+use super::state::{Asked, Shared, lock, tab_of};
 use super::{convert, frames};
 use crate::web_view::events::{BrowserEvent, EngineEvent, FailureCause, TabEvent};
 use crate::web_view::ids::RequestId;
 use crate::web_view::page::{HistoryEntry, LoadError};
-use crate::web_view::requests::Request;
+use crate::web_view::requests::{Request, RequestKind};
 
-/// What an event handler needs besides the event.
-pub(super) struct Pump<'a> {
-    pub engine: &'a vv::Engine,
+/// The backend as the engine's delegate, for one dispatch.
+pub(super) struct Host<'a> {
     pub shared: &'a Shared,
     /// Where downloads are saved.
     pub downloads: &'a Path,
+    /// The engine said it failed: nothing more will come from it.
+    pub failed: bool,
 }
 
 /// The load was cut short by the person or by the next navigation
@@ -36,27 +59,32 @@ pub(super) struct Pump<'a> {
 const NS_BINDING_ABORTED: u32 = 0x804B_0002;
 
 /// Progress and the end of a load.
-pub(super) fn load(load: &vv::Load) -> TabEvent {
-    let stopped = load.state == vv::LoadState::Stopped;
-    let error = (stopped && load.nsresult != 0 && load.nsresult != NS_BINDING_ABORTED).then(|| LoadError {
-        code: load.nsresult,
-        name: load.error_name.clone(),
-    });
+pub(super) fn load(load: &Load) -> TabEvent {
+    let stopped = load.state == LoadState::Stopped;
+    let error =
+        (stopped && load.nsresult != 0 && load.nsresult != NS_BINDING_ABORTED).then(|| LoadError {
+            code: load.nsresult,
+            name: load.error_name.clone(),
+        });
     TabEvent::Load {
-        started: load.state == vv::LoadState::Started,
+        started: load.state == LoadState::Started,
         loading: !stopped,
-        progress: if stopped { 1.0 } else { load.progress.min(1000) as f32 / 1000.0 },
+        progress: if stopped {
+            1.0
+        } else {
+            load.progress.min(1000) as f32 / 1000.0
+        },
         error,
     }
 }
 
 /// Why the engine is gone, as the browser tells the person.
-pub(super) fn failure_cause(failure: &vv::EngineFailure) -> FailureCause {
+pub(super) fn failure_cause(failure: &EngineFailure) -> FailureCause {
     if failure.is_protocol_violation() {
         FailureCause::ProtocolViolation
-    } else if failure.flags.contains(vv::EngineFailedFlags::SANDBOX_FLOOR) {
+    } else if failure.flags.contains(EngineFailedFlags::SANDBOX_FLOOR) {
         FailureCause::SandboxFloor
-    } else if failure.flags.contains(vv::EngineFailedFlags::PROFILE_LOCKED) {
+    } else if failure.flags.contains(EngineFailedFlags::PROFILE_LOCKED) {
         FailureCause::ProfileLocked
     } else {
         FailureCause::Crashed
@@ -69,234 +97,381 @@ pub(super) fn failure_cause(failure: &vv::EngineFailure) -> FailureCause {
 /// use: starting again is harmless, and when it does not work the window says
 /// why. It is not offered for a protocol violation unless the engine says so,
 /// nor when the sandbox floor was not met (the same engine would fail again).
-pub(super) fn failed_event(failure: &vv::EngineFailure) -> EngineEvent {
+pub(super) fn failed_event(failure: &EngineFailure) -> EngineEvent {
     let cause = failure_cause(failure);
     EngineEvent::Failed {
         message: failure.message.clone(),
         code: failure.exit_code,
         cause,
-        restartable: failure.flags.contains(vv::EngineFailedFlags::RESTARTABLE)
+        restartable: failure.flags.contains(EngineFailedFlags::RESTARTABLE)
             || matches!(cause, FailureCause::ProfileLocked | FailureCause::Crashed),
     }
 }
 
-/// The engine is gone. Its sessions are closed already (each said so, with
-/// the reason `EngineFailed`, and the browser kept the tabs): take what each
-/// had saved, so a new engine can open them again where they were, and let go
-/// of every handle of this one.
-fn engine_failed(pump: &Pump, failure: &vv::EngineFailure) {
-    {
-        let mut state = lock(&pump.shared.state);
-        let live = std::mem::take(&mut state.live);
-        for (tab, entry) in live {
-            // Readable after the failure; only a session made with `report_state` has one.
-            if let Ok(Some(saved)) = entry.session.saved_state()
-                && !saved.data.is_empty()
-            {
-                state.lost.insert(tab, saved.data);
-            }
-        }
-        state.windows.clear();
-        state.requests.clear();
-        state.contexts.clear();
+impl Host<'_> {
+    fn tab(&self, session: SessionId, event: TabEvent) {
+        self.shared.push(BrowserEvent::tab(tab_of(session), event));
     }
-    pump.shared.push(BrowserEvent::Engine(failed_event(failure)));
-}
 
-fn tab_event(pump: &Pump, event: &vv::Event, tab_event: TabEvent) {
-    if let Some(session) = event.session {
-        pump.shared.push(BrowserEvent::tab(tab_of(session), tab_event));
-    }
-}
-
-/// A question or an answer to `window.open`, from the engine.
-fn request(pump: &Pump, request: vv::Request) {
-    let Some(session) = request.session else {
-        let _ = pump.engine.answer_default(&request);
-        return;
-    };
-    match requests::classify(&request, pump.downloads) {
-        Incoming::Ask(kind) => {
-            let mut state = lock(&pump.shared.state);
+    /// A question for the person: its responder waits under a new id, and
+    /// the UI is told.
+    fn ask(&self, session: SessionId, kind: RequestKind, open: Open) {
+        let tab = tab_of(session);
+        let id = {
+            let mut state = lock(&self.shared.state);
             state.next_request += 1;
             let id = RequestId(state.next_request);
-            state.requests.insert(id, request);
+            state.requests.insert(id, Asked { tab, open });
+            id
+        };
+        self.shared.push(BrowserEvent::Request {
+            tab,
+            request: Request { id, kind },
+        });
+    }
+}
+
+impl EngineDelegate for Host<'_> {
+    fn on_engine_ready(&mut self) {
+        self.shared.push(BrowserEvent::Engine(EngineEvent::Ready));
+    }
+
+    /// The engine is gone. Its sessions are closed already (each said so,
+    /// with the reason `EngineFailed`, and the browser kept the tabs): let go
+    /// of every handle of this engine. A new engine opens the tabs again at
+    /// their addresses (ABI 2.0 hands the host no saved session state).
+    fn on_engine_failed(&mut self, failure: EngineFailure) {
+        {
+            let mut state = lock(&self.shared.state);
+            state.live.clear();
+            state.windows.clear();
+            state.requests.clear();
+            state.identities.clear();
+        }
+        self.failed = true;
+        self.shared
+            .push(BrowserEvent::Engine(failed_event(&failure)));
+    }
+
+    /// The engine ended a question itself (its deadline, a navigation): the
+    /// UI forgets it.
+    fn on_request_closed(&mut self, closed: RequestClosed) {
+        let mut state = lock(&self.shared.state);
+        let found = state
+            .requests
+            .iter()
+            .find(|(_, asked)| asked.open.id() == closed.request_id)
+            .map(|(id, asked)| (*id, asked.tab));
+        if let Some((id, tab)) = found {
+            state.requests.remove(&id);
             drop(state);
-            pump.shared.push(BrowserEvent::Request {
-                tab: tab_of(session),
-                request: Request { id, kind },
-            });
+            self.shared
+                .push(BrowserEvent::RequestClosed { tab, request: id });
+            return;
         }
-        Incoming::Window { url, name, no_opener, window } => {
-            let provisional = match &request.payload {
-                vv::RequestPayload::NewWindow(new) => new.new_session,
-                _ => None,
-            };
-            let Some(new) = provisional.map(tab_of) else {
-                let _ = pump.engine.answer_default(&request);
-                return;
-            };
-            lock(&pump.shared.state).windows.insert(new, request);
-            pump.shared.push(BrowserEvent::tab(
-                tab_of(session),
-                TabEvent::NewTab {
-                    new,
-                    url,
-                    name,
-                    no_opener,
-                    window,
-                },
-            ));
-        }
-        Incoming::Download(target) => {
-            // The browser saves what it is offered, under a name that does not
-            // overwrite another file, in the download folder.
-            let answer = vv::Response::save_download(target.to_string_lossy().into_owned(), vv::Conflict::Unique, false);
-            let _ = pump.engine.respond(&request, answer);
-        }
-        Incoming::Default => {
-            let _ = pump.engine.answer_default(&request);
-        }
+        // A pop-up the engine gave up on: its session closes by itself.
+        state
+            .windows
+            .retain(|_, reply| reply.id() != closed.request_id);
     }
 }
 
-/// The engine ended a question itself: the UI forgets it.
-fn request_closed(pump: &Pump, closed: &vv::RequestClosed) {
-    let mut state = lock(&pump.shared.state);
-    let found = state.requests.iter().find(|(_, open)| open.id == closed.request_id).map(|(id, open)| (*id, open.session));
-    if let Some((id, session)) = found {
-        state.requests.remove(&id);
-        drop(state);
-        if let Some(session) = session {
-            pump.shared.push(BrowserEvent::RequestClosed { tab: tab_of(session), request: id });
-        }
-        return;
+impl SessionDelegate for Host<'_> {
+    fn on_session_ready(&mut self, session: SessionId, _: SessionReady) {
+        self.tab(session, TabEvent::Ready);
     }
-    // A pop-up the engine gave up on: its session closes by itself.
-    state.windows.retain(|_, open| open.id != closed.request_id);
-}
 
-/// What the engine said about a session closing.
-fn session_closed(pump: &Pump, event: &vv::Event, closed: &vv::SessionClosed) {
-    let Some(session) = event.session else {
-        return;
-    };
-    let tab = tab_of(session);
-    match closed.reason {
-        // The engine failed: the tab stays, so a new engine can open it again.
-        // `EngineFailed` follows and says it for all of them.
-        vv::CloseReason::EngineFailed => {}
-        // A window nobody took: it never was a tab.
-        vv::CloseReason::WindowRejected => {
-            lock(&pump.shared.state).windows.remove(&tab);
-        }
-        vv::CloseReason::Requested | vv::CloseReason::ByPage => {
-            lock(&pump.shared.state).live.remove(&tab);
-            pump.shared.push(BrowserEvent::tab(tab, TabEvent::Closed { error: None }));
-        }
-        _ => {
-            lock(&pump.shared.state).live.remove(&tab);
-            let why = if closed.message.is_empty() { format!("{:?}", closed.reason) } else { closed.message.clone() };
-            pump.shared.push(BrowserEvent::tab(tab, TabEvent::Closed { error: Some(why) }));
-        }
-    }
-}
-
-/// One event of the engine.
-pub(super) fn handle(pump: &Pump, event: vv::Event) {
-    use vv::EventKind as K;
-    let tab = |e: &vv::Event, state: TabEvent| tab_event(pump, e, state);
-    match &event.kind {
-        K::EngineReady => pump.shared.push(BrowserEvent::Engine(EngineEvent::Ready)),
-        K::EngineFailed(failure) => engine_failed(pump, failure),
-        K::SecurityReport(_) => pump.shared.push(BrowserEvent::Engine(EngineEvent::SecurityChanged)),
-        K::SessionReady(_) => tab(&event, TabEvent::Ready),
-        K::SessionClosed(closed) => session_closed(pump, &event, closed),
-        K::FrameAvailable(_) => {
-            if let Some(session) = event.session
-                && let Some(entry) = lock(&pump.shared.state).live.get(&tab_of(session))
-            {
-                frames::take(entry);
+    fn on_session_closed(&mut self, session: SessionId, closed: SessionClosed) {
+        let tab = tab_of(session);
+        match closed.reason {
+            // The engine failed: the tab stays, so a new engine can open it again.
+            // `EngineFailed` follows and says it for all of them.
+            CloseReason::EngineFailed => {}
+            // A window nobody took: it never was a tab.
+            CloseReason::WindowRejected => {
+                lock(&self.shared.state).windows.remove(&tab);
+            }
+            CloseReason::Requested | CloseReason::ByPage => {
+                lock(&self.shared.state).live.remove(&tab);
+                self.tab(session, TabEvent::Closed { error: None });
+            }
+            _ => {
+                lock(&self.shared.state).live.remove(&tab);
+                let why = if closed.message.is_empty() {
+                    format!("{:?}", closed.reason)
+                } else {
+                    closed.message
+                };
+                self.tab(session, TabEvent::Closed { error: Some(why) });
             }
         }
-        K::Location(location) => tab(
-            &event,
+    }
+
+    fn on_close_requested(&mut self, session: SessionId) {
+        self.tab(session, TabEvent::CloseRequested);
+    }
+}
+
+impl ContentDelegate for Host<'_> {
+    fn on_title(&mut self, session: SessionId, title: String) {
+        self.tab(session, TabEvent::Title(title));
+    }
+
+    fn on_favicon(&mut self, session: SessionId, url: String) {
+        self.tab(session, TabEvent::Favicon(url));
+    }
+
+    /// The link under the pointer; empty means none.
+    fn on_status_text(&mut self, session: SessionId, text: String) {
+        self.tab(
+            session,
+            TabEvent::HoverLink((!text.is_empty()).then_some(text)),
+        );
+    }
+
+    fn on_zoom(&mut self, session: SessionId, zoom: ZoomChanged) {
+        self.tab(session, TabEvent::Zoom(zoom.zoom));
+    }
+
+    fn on_fullscreen_changed(&mut self, session: SessionId, entering: bool) {
+        self.tab(session, TabEvent::Fullscreen(entering));
+    }
+}
+
+impl NavigationDelegate for Host<'_> {
+    fn on_location(&mut self, session: SessionId, location: Location) {
+        self.tab(
+            session,
             TabEvent::Location {
-                url: location.url.clone(),
+                url: location.url,
                 can_back: location.can_back,
                 can_forward: location.can_forward,
             },
-        ),
-        K::Title(title) => tab(&event, TabEvent::Title(title.clone())),
-        K::Load(state) => tab(&event, load(state)),
-        K::Security(security) => tab(&event, TabEvent::Security(convert::security(security.state, security.flags))),
-        K::Favicon(url) => tab(&event, TabEvent::Favicon(url.clone())),
-        K::Cursor(cursor) => {
-            if let Some(session) = event.session
-                && let Some(entry) = lock(&pump.shared.state).live.get(&tab_of(session))
-            {
-                entry.surface.set_cursor(convert::cursor(cursor.kind));
-            }
-        }
-        K::History(history) => tab(
-            &event,
+        );
+    }
+
+    fn on_session_history(&mut self, session: SessionId, history: SessionHistory) {
+        self.tab(
+            session,
             TabEvent::History {
                 index: history.index as usize,
                 entries: history
                     .entries
-                    .iter()
-                    .map(|entry| HistoryEntry { url: entry.url.clone(), title: entry.title.clone() })
+                    .into_iter()
+                    .map(|entry| HistoryEntry {
+                        url: entry.url,
+                        title: entry.title,
+                    })
                     .collect(),
             },
-        ),
-        K::Fullscreen { entering } => tab(&event, TabEvent::Fullscreen(*entering)),
-        // Only the process that shows the tab is the tab's business.
-        K::ProcessGone(info) if info.kind == vv::ProcessKind::Content => tab(&event, TabEvent::ProcessGone(convert::gone(info.reason))),
-        K::CloseRequested => tab(&event, TabEvent::CloseRequested),
-        K::Zoom(zoom) => tab(&event, TabEvent::Zoom(zoom.zoom)),
-        // The link under the pointer; empty means none.
-        K::StatusText(text) => tab(&event, TabEvent::HoverLink((!text.is_empty()).then(|| text.clone()))),
-        K::AudioState(audio) => tab(
-            &event,
-            TabEvent::Audio(crate::web_view::page::Audio {
-                playing: audio.audible,
-                muted: audio.muted,
-            }),
-        ),
-        K::FindResult(find) => tab(&event, TabEvent::FindResult { current: find.current, total: find.total }),
-        K::Download(download) => {
-            if let Some(info) = requests::download_info(download) {
-                pump.shared.push(BrowserEvent::Download(info));
-            }
-        }
-        K::ImeState(state) => {
-            if let Some(session) = event.session
-                && let Some(entry) = lock(&pump.shared.state).live.get_mut(&tab_of(session))
-            {
-                entry.editing = state.focused && state.state != vv::ImeStateKind::Disabled;
-                if !entry.editing {
-                    entry.surface.set_caret(None);
-                }
-            }
-        }
-        K::ImeRects(rects) => {
-            if let Some(session) = event.session
-                && let Some(entry) = lock(&pump.shared.state).live.get(&tab_of(session))
-                && entry.editing
-            {
-                entry.surface.set_caret(Some(CaretRect {
-                    x: rects.caret.x,
-                    y: rects.caret.y,
-                    width: rects.caret.w,
-                    height: rects.caret.h,
-                }));
-            }
-        }
-        K::Request(open) => request(pump, (**open).clone()),
-        K::RequestClosed(closed) => request_closed(pump, closed),
-        _ => {}
+        );
+    }
+
+    fn on_find_result(&mut self, session: SessionId, find: FindProgress) {
+        self.tab(
+            session,
+            TabEvent::FindResult {
+                current: find.current,
+                total: find.total,
+            },
+        );
+    }
+
+    /// `window.open`: the engine made a provisional session; the browser takes
+    /// it as a tab (`accept_tab`, which adopts it) or not (`close_tab`, which
+    /// refuses it). A request with no provisional session is refused here.
+    fn on_new_window_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<NewWindowRequest>,
+        reply: Responder<NewWindowReply>,
+    ) {
+        let Some(new) = ask.payload.new_session.map(tab_of) else {
+            return;
+        };
+        let event = requests::new_tab(
+            new,
+            requests::origin_text(&ask.origin, &ask.top_origin),
+            &ask.payload,
+        );
+        lock(&self.shared.state).windows.insert(new, reply);
+        self.tab(session, event);
     }
 }
+
+impl ProgressDelegate for Host<'_> {
+    fn on_load(&mut self, session: SessionId, state: Load) {
+        self.tab(session, load(&state));
+    }
+
+    fn on_security_changed(&mut self, session: SessionId, security: SecurityInfo) {
+        self.tab(
+            session,
+            TabEvent::Security(convert::security(security.state, security.flags)),
+        );
+    }
+}
+
+impl DisplayDelegate for Host<'_> {
+    fn on_frame_available(&mut self, session: SessionId, _: FrameAvailable) {
+        if let Some(entry) = lock(&self.shared.state).live.get(&tab_of(session)) {
+            frames::take(entry);
+        }
+    }
+}
+
+impl InputDelegate for Host<'_> {
+    fn on_cursor(&mut self, session: SessionId, cursor: Cursor) {
+        if let Some(entry) = lock(&self.shared.state).live.get(&tab_of(session)) {
+            entry.surface.set_cursor(convert::cursor(cursor.kind));
+        }
+    }
+}
+
+impl PromptDelegate for Host<'_> {
+    fn on_js_dialog_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<JsDialogRequest>,
+        reply: Responder<JsDialogReply>,
+    ) {
+        let prompt = ask.payload.dialog == EngineDialog::Prompt;
+        let kind = RequestKind::Dialog(requests::dialog(
+            requests::origin_text(&ask.origin, &ask.top_origin),
+            &ask.payload,
+        ));
+        self.ask(session, kind, Open::Dialog { prompt, reply });
+    }
+
+    fn on_auth_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<AuthRequest>,
+        reply: Responder<AuthReply>,
+    ) {
+        self.ask(
+            session,
+            RequestKind::Auth(requests::auth(&ask.payload)),
+            Open::Auth(reply),
+        );
+    }
+
+    fn on_select_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<SelectRequest>,
+        reply: Responder<SelectReply>,
+    ) {
+        self.ask(
+            session,
+            RequestKind::Select(requests::select(&ask.payload)),
+            Open::Select(reply),
+        );
+    }
+
+    fn on_file_picker_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<FilePickerRequest>,
+        reply: Responder<FilePickerReply>,
+    ) {
+        self.ask(
+            session,
+            RequestKind::FilePicker(requests::picker(&ask.payload)),
+            Open::FilePicker(reply),
+        );
+    }
+
+    fn on_context_menu_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<ContextMenuRequest>,
+        reply: Responder<ContextMenuReply>,
+    ) {
+        self.ask(
+            session,
+            RequestKind::ContextMenu(requests::context_target(&ask.payload)),
+            Open::ContextMenu(reply),
+        );
+    }
+}
+
+impl PermissionDelegate for Host<'_> {
+    fn on_permission_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<PermissionRequest>,
+        reply: Responder<PermissionReply>,
+    ) {
+        let kind = RequestKind::Permission(crate::web_view::requests::PermissionRequest {
+            origin: requests::origin_text(&ask.origin, &ask.top_origin),
+            kinds: ask
+                .payload
+                .items
+                .iter()
+                .map(requests::permission_kind)
+                .collect(),
+        });
+        self.ask(session, kind, Open::Permission(reply));
+    }
+}
+
+impl CertificateDelegate for Host<'_> {
+    fn on_cert_error_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<CertErrorRequest>,
+        reply: Responder<CertErrorReply>,
+    ) {
+        self.ask(
+            session,
+            RequestKind::CertError(requests::cert_error(&ask.payload)),
+            Open::CertError(reply),
+        );
+    }
+}
+
+impl DownloadDelegate for Host<'_> {
+    fn on_download(&mut self, _: SessionId, download: DownloadEvent) {
+        if let Some(info) = requests::download_info(&download) {
+            self.shared.push(BrowserEvent::Download(info));
+        }
+    }
+
+    /// The browser saves what it is offered, under a name that does not
+    /// overwrite another file, in the download folder.
+    fn on_download_request(
+        &mut self,
+        _: SessionId,
+        ask: Ask<DownloadRequest>,
+        reply: Responder<DownloadReply>,
+    ) {
+        let target = requests::download_target(self.downloads, &ask.payload.suggested_name);
+        let _ = reply.answer(DownloadReply::Save {
+            path: target.to_string_lossy().into_owned(),
+            conflict: Conflict::Unique,
+        });
+    }
+}
+
+impl SecurityDelegate for Host<'_> {
+    fn on_security_report(&mut self, _: SecurityReport) {
+        self.shared
+            .push(BrowserEvent::Engine(EngineEvent::SecurityChanged));
+    }
+}
+
+impl CrashDelegate for Host<'_> {
+    /// The content process of the tab is gone.
+    fn on_process_gone(&mut self, session: SessionId, process: ProcessInfo) {
+        self.tab(
+            session,
+            TabEvent::ProcessGone(convert::gone(process.reason)),
+        );
+    }
+}
+
+default_delegates!(Host<'_>: ExtensionDelegate, LocaleDelegate);
 
 #[cfg(test)]
 mod tests;

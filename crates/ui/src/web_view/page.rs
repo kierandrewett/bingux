@@ -24,7 +24,7 @@ pub struct Security {
     pub state: SecurityState,
     /// Scripts or frames loaded over plain HTTP (`VV_SECURITY_MIXED_ACTIVE`).
     pub mixed_active: bool,
-    /// Images or media loaded over plain HTTP (`VV_SECURITY_MIXED_PASSIVE`).
+    /// Images or media loaded over plain HTTP (`VV_SECURITY_MIXED_DISPLAY`).
     pub mixed_passive: bool,
     /// An extended validation certificate (`VV_SECURITY_EV`).
     pub extended_validation: bool,

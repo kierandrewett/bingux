@@ -24,20 +24,25 @@
 //! engine, so an app that does not embed the web does not link Vivarium.
 //!
 //! The real backend over the `vivarium` crate (ABI 2.0) maps each
-//! [`BrowserBackend`] method onto an ABI call and each ABI event onto a
-//! [`BrowserEvent`]. What the engine does not do is read from its own
-//! capabilities (`vv_engine_capabilities`), listed in [`Capabilities`] and
-//! answered with [`BackendError::Unsupported`]; the UI shows those controls
-//! disabled. The ABI's concepts map onto the control like this (`docs/browser-port.md`
-//! of the Vivarium repository has the whole table):
+//! [`BrowserBackend`] method onto a crate call and implements the crate's
+//! delegate traits, one method per engine event, each turned into a
+//! [`BrowserEvent`]. A question the engine asks arrives with a typed
+//! responder; the backend keeps it under the [`RequestId`] of the
+//! control's [`Request`] and answers it with the control's [`Response`], so
+//! there is one model of questions, the control's. What the engine does not
+//! do (a request kind it does not accept, a call the crate does not have) is
+//! `false` in [`Capabilities`] and answered with
+//! [`BackendError::Unsupported`]; the UI shows those controls disabled. The
+//! ABI's concepts map onto the control like this (`docs/browser-port.md` of
+//! the Vivarium repository has the whole table):
 //!
 //! | ABI 2.0 | Browser |
 //! | ------- | ------- |
 //! | `Engine` | one [`BrowserBackend`]; `EngineFailed` is [`EngineEvent::Failed`], and `restart` makes a new one |
-//! | `Context` | the default context for tabs, the private context for a private window, one per container |
-//! | `Session` (class `Web`) | a tab, [`TabId`] is its id |
-//! | `Request` | answered when the engine announces its kind and the browser has a prompt for it; every other kind gets the engine's default |
-//! | `Event`, `seq`, `applied_seq` | [`BrowserEvent`] in the order the engine produced them |
+//! | Contextual identity | the default one for tabs, the private one for a private window, one per container |
+//! | `Session` | a tab, [`TabId`] is its id |
+//! | Request (`Ask`, `Responder`) | answered when the engine accepts its kind and the browser has a prompt for it; every other kind gets the engine's default |
+//! | Events (wake hook, `Dispatcher`) | [`BrowserEvent`] in the order the engine produced them, dispatched on the UI thread when `poll_events` runs |
 
 pub mod backend;
 pub mod environment;

@@ -1,11 +1,16 @@
-//! What the real backend keeps between the engine's thread and the UI's: the
-//! sessions, the questions the engine is waiting on, and the engine itself.
+//! What the real backend keeps between the engine's delegates and the UI's
+//! calls: the sessions, the questions the engine is waiting on, and the engine
+//! itself.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use vivarium as vv;
+use vivarium::contextual_identities::ContextualIdentity;
+use vivarium::navigation::NewWindowReply;
+use vivarium::request::Responder;
+use vivarium::session::{Session, SessionId};
 
+use super::requests::Open;
 use super::runtime::Runtime;
 use crate::web_view::events::BrowserEvent;
 use crate::web_view::ids::{RequestId, TabId};
@@ -17,15 +22,20 @@ pub(super) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 /// A session of the engine is a tab of the browser.
-pub(super) fn tab_of(session: vv::SessionId) -> TabId {
+pub(super) fn tab_of(session: SessionId) -> TabId {
     TabId(session.get())
 }
 
 pub(super) struct Entry {
-    pub session: Arc<vv::Session>,
+    pub session: Arc<Session>,
     pub surface: Arc<PageSurface>,
-    /// An editor has the focus: the caret is shown.
-    pub editing: bool,
+}
+
+/// A question the engine waits on: the tab that asked, and the responder
+/// that answers it.
+pub(super) struct Asked {
+    pub tab: TabId,
+    pub open: Open,
 }
 
 #[derive(Default)]
@@ -36,29 +46,26 @@ pub(super) struct State {
     pub live: HashMap<TabId, Entry>,
     /// `window.open` requests the host has not answered yet, by the
     /// provisional session the engine made for them.
-    pub windows: HashMap<TabId, vv::Request>,
+    pub windows: HashMap<TabId, Responder<NewWindowReply>>,
     /// The other open requests, by the id the browser knows them by.
-    pub requests: HashMap<RequestId, vv::Request>,
+    pub requests: HashMap<RequestId, Asked>,
     pub next_request: u32,
-    /// What the tabs of an engine that failed had saved, by their old id:
-    /// `TabConfig::restore_from` takes a tab up again from it.
-    pub lost: HashMap<TabId, Vec<u8>>,
-    /// Contexts made for containers, by (container, private): kept so a
-    /// container's tabs share one and it lives as long as the engine.
-    pub contexts: HashMap<(u32, bool), vv::Context>,
-    /// The engine took the WebRTC policy the host asked for.
-    pub webrtc_applied: bool,
+    /// Contextual identities made for containers, by (container, private):
+    /// kept so a container's tabs share one and it lives as long as the
+    /// engine.
+    pub identities: HashMap<(u32, bool), ContextualIdentity>,
 }
 
 pub(super) struct Shared {
-    pub queue: EventQueue,
+    /// Also held by the engine's wake hook, which wakes the UI through it.
+    pub queue: Arc<EventQueue>,
     pub state: Mutex<State>,
 }
 
 impl Shared {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            queue: EventQueue::new(),
+            queue: Arc::new(EventQueue::new()),
             state: Mutex::new(State::default()),
         })
     }

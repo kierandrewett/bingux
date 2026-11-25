@@ -181,7 +181,9 @@ pub struct TabConfig {
     /// The tab of the engine that failed whose page this one takes up again:
     /// its history, scroll position and form data, from the state the engine
     /// last reported. Only `BrowserBackend::restart` makes such a tab
-    /// possible; an id the backend does not know is ignored.
+    /// possible; an id the backend does not know is ignored. The Vivarium
+    /// engine (ABI 2.0) reports no such state, so there the tab opens at
+    /// `url`.
     pub restore_from: Option<TabId>,
 }
 
