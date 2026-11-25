@@ -142,14 +142,21 @@ fn find_area(text: &'static str, result: Option<(u32, u32)>, options: bool) -> E
     let query = use_state(|| text.to_string());
     let mut match_case = use_state(|| false);
     let mut highlight = use_state(|| true);
-    let card = find_card(query).placeholder("Find in page").result(result).options(if options {
-        vec![
-            FindOption::new("Match case", match_case(), move |on: bool| match_case.set(on)),
-            FindOption::new("Highlight all", highlight(), move |on: bool| highlight.set(on)),
-        ]
-    } else {
-        Vec::new()
-    });
+    let card = find_card(query)
+        .placeholder("Find in page")
+        .result(result)
+        .options(if options {
+            vec![
+                FindOption::new("Match case", match_case(), move |on: bool| {
+                    match_case.set(on)
+                }),
+                FindOption::new("Highlight all", highlight(), move |on: bool| {
+                    highlight.set(on)
+                }),
+            ]
+        } else {
+            Vec::new()
+        });
     rect()
         .width(Size::fill())
         .height(Size::px(if options { 132.0 } else { 96.0 }))
@@ -159,10 +166,18 @@ fn find_area(text: &'static str, result: Option<(u32, u32)>, options: bool) -> E
 }
 
 pub const FIND_CARD: &[Spec] = &[
-    Spec::live("Rest, focus, typing; X or Escape closes", || find_area("", None, false)),
-    Spec::forced("Which match of how many", || find_area("tram", Some((2, 5)), false)),
-    Spec::forced("Nothing found: the field in danger ink", || find_area("trolleybus", Some((0, 0)), false)),
-    Spec::forced("With the app's options", || find_area("tram", Some((1, 7)), true)),
+    Spec::live("Rest, focus, typing; X or Escape closes", || {
+        find_area("", None, false)
+    }),
+    Spec::forced("Which match of how many", || {
+        find_area("tram", Some((2, 5)), false)
+    }),
+    Spec::forced("Nothing found: the field in danger ink", || {
+        find_area("trolleybus", Some((0, 0)), false)
+    }),
+    Spec::forced("With the app's options", || {
+        find_area("tram", Some((1, 7)), true)
+    }),
 ];
 
 fn form_demo(name: &'static str, password: &'static str, gateway: &'static str) -> Element {
