@@ -791,6 +791,7 @@ def is_test_file(path: Path) -> bool:
         name == "tests.rs"
         or name.endswith("_tests.rs")
         or name.startswith("snapshot")
+        or "snapshot" in parts
         or "tests" in parts
         or "examples" in parts
         or "benches" in parts
