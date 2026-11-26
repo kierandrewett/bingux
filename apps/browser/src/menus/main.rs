@@ -35,6 +35,7 @@ pub struct MainMenuButton {
 impl Component for MainMenuButton {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
+        // Compact windows (phones) get the sheet: a cascade of submenus does not fit them.
         if is_compact() {
             return icon_button(Icon::OpenMenu, move |_: ()| PhoneMenu::open(ctx))
                 .tooltip(tr!("ui-main-menu"))
@@ -255,6 +256,7 @@ impl MainMenu {
             ),
             menu_separator(),
         ];
+        // With nothing to reopen the list would end at the separator, so say so in a dimmed row.
         if read.closed.is_empty() {
             rows.push(menu_item(tr!("browser-main-menu-no-closed-tabs"), |_: ()| {}).disabled());
         }
@@ -268,7 +270,8 @@ impl MainMenu {
         submenu(tr!("browser-main-menu-history"), rows)
     }
 
-    /// Share ›: copy the address.
+    /// Share ›: copy the address. Copy link is the only share target built; the row of a
+    /// page with no address (Settings, a blank tab) is dimmed rather than copying nothing.
     fn share(ctx: Ctx, read: &Reading) -> MenuItem {
         let url = read.url.clone();
         let copy = menu_item(tr!("browser-main-menu-share-copy-link"), move |_: ()| {

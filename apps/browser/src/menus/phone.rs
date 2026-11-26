@@ -116,6 +116,8 @@ impl Component for PhoneMenu {
                 line
             }
         };
+        // Downloads and Settings are the rows of the library that exist. Keep the list short:
+        // `ROWS` sizes the sheet, so Settings is on screen with no scrolling at 390x800.
         let rows = vec![
             downloads.into(),
             row(tr!("browser-command-settings-title"))
