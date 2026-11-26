@@ -138,6 +138,20 @@ impl Default for Profile {
     }
 }
 
+impl Profile {
+    /// A private window of profile `id`: its settings, read without writing,
+    /// and no store, so nothing it does is written.
+    pub fn private(id: Option<String>, settings: Settings) -> Self {
+        Self {
+            id,
+            name: None,
+            settings,
+            settings_keeping: Keeping::NotSaved(NotSaved::Private),
+            store: None,
+        }
+    }
+}
+
 pub struct Browser {
     backend: Arc<dyn BrowserBackend>,
     capabilities: Capabilities,

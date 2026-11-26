@@ -166,15 +166,7 @@ fn main() {
         }
         Opened::Private { settings, from } => {
             let engine = start_or_exit(None);
-            let profile = Profile {
-                id: from.map(|id| id.as_str().to_string()),
-                name: None,
-                settings,
-                settings_keeping: model::keeping::Keeping::NotSaved(
-                    model::keeping::NotSaved::Private,
-                ),
-                store: None,
-            };
+            let profile = Profile::private(from.map(|id| id.as_str().to_string()), settings);
             run_browser(
                 "bingux-browser-private",
                 engine,

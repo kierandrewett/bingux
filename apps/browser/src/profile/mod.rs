@@ -20,6 +20,8 @@ pub mod store;
 #[cfg(test)]
 mod history_tests;
 #[cfg(test)]
+mod private_tests;
+#[cfg(test)]
 mod registry_tests;
 #[cfg(test)]
 mod store_tests;
