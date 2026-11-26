@@ -5,6 +5,14 @@
 # The app's name, in the window title and the About window.
 taxonomy-title = Taxonomy
 
+## Controls > Buttons: the stepper
+
+# The value of a stepper whose unit agrees with the count. $count (Number) - the value
+taxonomy-stepper-items = { $count ->
+    [one] { $count } item
+   *[other] { $count } items
+}
+
 ## Foundations > Localisation: the live demo of bingux_ui::i18n
 
 taxonomy-l10n-language = Language

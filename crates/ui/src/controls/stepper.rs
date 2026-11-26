@@ -23,6 +23,7 @@ pub struct Stepper {
     max: i64,
     step: i64,
     suffix: Option<String>,
+    value_text: Option<String>,
     enabled: bool,
     on_change: EventHandler<i64>,
 }
@@ -34,6 +35,7 @@ pub fn stepper(value: i64, on_change: impl Into<EventHandler<i64>>) -> Stepper {
         max: 100,
         step: 1,
         suffix: None,
+        value_text: None,
         enabled: true,
         on_change: on_change.into(),
     }
@@ -54,6 +56,14 @@ impl Stepper {
     /// Text drawn after the value, such as `" px"` or `" min"`.
     pub fn suffix(mut self, suffix: impl Into<String>) -> Self {
         self.suffix = Some(suffix.into());
+        self
+    }
+
+    /// The whole text drawn for the value, written by the caller from a message that selects on the
+    /// count (`3 times`, `1 time`), so the unit agrees with the number in every language. It replaces
+    /// the value and `suffix`; the stepper still announces the number.
+    pub fn value_text(mut self, text: impl Into<String>) -> Self {
+        self.value_text = Some(text.into());
         self
     }
 
@@ -84,9 +94,10 @@ impl Component for Stepper {
             let on_change = on_change.clone();
             move || on_change.call((value + step).min(max))
         };
-        let text = match &self.suffix {
-            Some(suffix) => format!("{value}{suffix}"),
-            None => value.to_string(),
+        let text = match (&self.value_text, &self.suffix) {
+            (Some(text), _) => text.clone(),
+            (None, Some(suffix)) => format!("{value}{suffix}"),
+            (None, None) => value.to_string(),
         };
         let on_key_down = {
             let decrement = decrement.clone();

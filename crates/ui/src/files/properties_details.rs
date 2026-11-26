@@ -8,9 +8,9 @@
 //! reserved, so the answer moves nothing. The extended attributes come last
 //! in the tab, so a file with many of them only makes the tab longer.
 
+use bingux_files::Category;
 use bingux_files::ops::{HashOutcome, HashProgress};
 use bingux_preview_core::media::{self, AvInfo, ImageInfo};
-use bingux_files::Category;
 use freya::prelude::*;
 
 use super::properties::Page;
@@ -52,8 +52,8 @@ fn media_group(page: &Page) -> Option<Group> {
     let first = page.first();
     match first.category() {
         Category::Image => {
-            let mut image = Group::titled("Image").row(property_row(
-                "Dimensions",
+            let mut image = Group::titled(&crate::tr!("ui-files-props-image")).row(property_row(
+                crate::tr!("ui-files-props-dimensions"),
                 page.fact(|facts| {
                     facts.image.as_ref().map(|image| match image.megapixels() {
                         Some(mega) => format!("{} ({mega})", image.dimensions()),
@@ -64,10 +64,13 @@ fn media_group(page: &Page) -> Option<Group> {
             // Only JPEG carries the camera's notes that are read.
             if first.mime.mime == "image/jpeg" {
                 for (title, of) in [
-                    ("Camera", exif_camera as fn(&ImageInfo) -> Option<String>),
-                    ("Lens", exif_lens),
-                    ("Taken", exif_taken),
-                    ("Exposure", exif_exposure),
+                    (
+                        crate::tr!("ui-files-props-camera"),
+                        exif_camera as fn(&ImageInfo) -> Option<String>,
+                    ),
+                    (crate::tr!("ui-files-props-lens"), exif_lens),
+                    (crate::tr!("ui-files-props-taken"), exif_taken),
+                    (crate::tr!("ui-files-props-exposure"), exif_exposure),
                 ] {
                     image = image.row(property_row(
                         title,
@@ -78,17 +81,23 @@ fn media_group(page: &Page) -> Option<Group> {
             Some(image)
         }
         Category::Audio | Category::Video => Some(
-            Group::titled(if first.category() == Category::Audio {
-                "Audio"
+            Group::titled(&if first.category() == Category::Audio {
+                crate::tr!("ui-files-props-audio")
             } else {
-                "Video"
+                crate::tr!("ui-files-props-video")
             })
             .row(property_row(
-                "Duration",
-                page.fact(|facts| facts.av.as_ref().and_then(|av| av.seconds).map(media::clock)),
+                crate::tr!("ui-files-props-duration"),
+                page.fact(|facts| {
+                    facts
+                        .av
+                        .as_ref()
+                        .and_then(|av| av.seconds)
+                        .map(media::clock)
+                }),
             ))
             .row(property_row(
-                "Codec",
+                crate::tr!("ui-files-props-codec"),
                 page.fact(|facts| facts.av.as_ref().and_then(AvInfo::codec_line)),
             )),
         ),
@@ -127,44 +136,69 @@ fn checksum(page: &Page, hash: &HashView) -> Group {
 
     let action: Element = if running {
         let stop = hash.on_stop.clone();
-        action_button("Stop", move |_| stop.call(())).compact().into_element()
+        action_button(crate::tr!("ui-files-props-stop"), move |_| stop.call(()))
+            .compact()
+            .into_element()
     } else if let Some(digest) = digest.clone() {
         let overlays = hash.overlays;
-        action_button("Copy", move |_| {
+        action_button(crate::tr!("ui-files-props-copy"), move |_| {
             match freya::clipboard::Clipboard::set(digest.clone()) {
-                Ok(()) => overlays.toast("Copied."),
-                Err(_) => overlays.toast("The text could not be copied."),
+                Ok(()) => overlays.toast(crate::tr!("ui-files-props-copied")),
+                Err(_) => overlays.toast(crate::tr!("ui-files-props-copy-failed")),
             }
         })
         .compact()
         .into_element()
     } else {
         let start = hash.on_start.clone();
-        action_button("Calculate", move |_| start.call(())).compact().into_element()
+        action_button(crate::tr!("ui-files-props-calculate"), move |_| {
+            start.call(())
+        })
+        .compact()
+        .into_element()
     };
 
     // One line under the bar, always: how far, or why there is no digest.
     let (status, ink) = match (progress, outcome) {
         (None, _) => (" ".to_owned(), Ink::Muted),
         (Some(progress), None) => (read_line(progress.done, progress.total), Ink::Muted),
-        (Some(_), Some(HashOutcome::Done(_))) => ("Done".to_owned(), Ink::Muted),
-        (Some(_), Some(HashOutcome::Cancelled)) => ("Stopped".to_owned(), Ink::Muted),
+        (Some(_), Some(HashOutcome::Done(_))) => {
+            (crate::tr!("ui-files-props-hash-done"), Ink::Muted)
+        }
+        (Some(_), Some(HashOutcome::Cancelled)) => {
+            (crate::tr!("ui-files-props-hash-stopped"), Ink::Muted)
+        }
         (Some(_), Some(HashOutcome::Failed(message))) => (message.clone(), Ink::Danger),
     };
     let fraction = progress.map_or(0.0, HashProgress::fraction);
     let (first, second) = digest
         .as_deref()
         .map_or_else(|| (NONE.to_owned(), " ".to_owned()), digest_lines);
-    let mono = TextStyle { mono: true, ..CAPTION };
+    let mono = TextStyle {
+        mono: true,
+        ..CAPTION
+    };
     let block = rect()
         .tw(&tokens, &[flex_col(), w_full(), gap(S2)])
         .child(progress_bar(fraction))
         .child(crate::controls::select_text(status).style(CAPTION.in_ink(ink)))
-        .child(crate::controls::select_text(first).style(mono).breaks_anywhere())
-        .child(crate::controls::select_text(second).style(mono).breaks_anywhere());
+        .child(
+            crate::controls::select_text(first)
+                .style(mono)
+                .breaks_anywhere(),
+        )
+        .child(
+            crate::controls::select_text(second)
+                .style(mono)
+                .breaks_anywhere(),
+        );
 
-    Group::titled("Checksum")
-        .row(row("SHA-256").trailing(action).trailing_control())
+    Group::titled(&crate::tr!("ui-files-props-checksum"))
+        .row(
+            row(crate::tr!("ui-files-props-sha-256"))
+                .trailing(action)
+                .trailing_control(),
+        )
         .content(block)
 }
 
@@ -173,31 +207,52 @@ fn storage(page: &Page) -> Group {
     let details = |of: fn(&bingux_files::ops::FileDetails) -> String| {
         page.fact(move |facts| facts.details.as_ref().map(of))
     };
-    Group::titled("Storage")
-        .row(property_row("Inode", details(|details| grouped(details.inode))))
-        .row(property_row("Device", details(device_line)))
-        .row(property_row("Hard links", details(|details| grouped(details.hard_links))))
+    Group::titled(&crate::tr!("ui-files-props-storage"))
         .row(property_row(
-            "Block size",
-            details(|details| format!("{} bytes", grouped(details.block_size))),
+            crate::tr!("ui-files-props-inode"),
+            details(|details| grouped(details.inode)),
         ))
-        .row(property_row("Disk usage", details(disk_usage)))
+        .row(property_row(
+            crate::tr!("ui-files-props-device"),
+            details(device_line),
+        ))
+        .row(property_row(
+            crate::tr!("ui-files-props-hard-links"),
+            details(|details| grouped(details.hard_links)),
+        ))
+        .row(property_row(
+            crate::tr!("ui-files-props-block-size"),
+            details(|details| {
+                crate::tr!("ui-files-props-bytes", count = grouped(details.block_size))
+            }),
+        ))
+        .row(property_row(
+            crate::tr!("ui-files-props-disk-usage"),
+            details(disk_usage),
+        ))
 }
 
 /// The extended attributes, one row each. Before they are read there is one
 /// row that says so; they are the last group, so a long list moves nothing.
 fn attributes(page: &Page) -> Group {
-    let mut group = Group::titled("Extended attributes");
+    let mut group = Group::titled(&crate::tr!("ui-files-props-extended-attributes"));
     match page.loaded.and_then(|facts| facts.details.as_ref()) {
         Some(details) if !details.xattrs.is_empty() => {
             for attribute in &details.xattrs {
                 group = group.row(row(attribute.name.clone()).mono_value(attribute.value.clone()));
             }
         }
-        Some(_) => group = group.row(property_row("None", NONE)),
+        Some(_) => group = group.row(property_row(crate::tr!("ui-files-props-none"), NONE)),
         None => {
-            let waiting = if page.loaded.is_some() || page.failed.is_some() { NONE } else { PENDING };
-            group = group.row(property_row("Attributes", waiting));
+            let waiting = if page.loaded.is_some() || page.failed.is_some() {
+                NONE
+            } else {
+                PENDING
+            };
+            group = group.row(property_row(
+                crate::tr!("ui-files-props-attributes"),
+                waiting,
+            ));
         }
     }
     group

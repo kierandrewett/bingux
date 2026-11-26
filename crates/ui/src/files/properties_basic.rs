@@ -35,17 +35,17 @@ pub(super) fn basic(page: &Page) -> Vec<Element> {
     let mut groups: Vec<Element> = vec![head(page), general(page).into()];
     if page.single() {
         groups.push(
-            Group::titled("Times")
+            Group::titled(&crate::tr!("ui-files-props-times"))
                 .row(property_row(
-                    "Created",
+                    crate::tr!("ui-files-props-created"),
                     page.fact(|facts| time(facts.props.created)),
                 ))
                 .row(property_row(
-                    "Modified",
+                    crate::tr!("ui-files-props-modified"),
                     page.fact(|facts| time(facts.props.modified)),
                 ))
                 .row(property_row(
-                    "Accessed",
+                    crate::tr!("ui-files-props-accessed"),
                     page.fact(|facts| time(facts.props.accessed)),
                 ))
                 .into(),
@@ -103,7 +103,7 @@ fn head(page: &Page) -> Element {
     let name = if single {
         first.name.clone()
     } else {
-        format!("{} items", page.entries.len())
+        crate::tr!("ui-files-props-items", count = page.entries.len())
     };
     let subtitle = if single {
         first.mime.description.to_owned()
@@ -112,7 +112,7 @@ fn head(page: &Page) -> Element {
     };
     let status = page
         .failed
-        .map(|message| format!("Could not read everything: {message}"))
+        .map(|message| crate::tr!("ui-files-props-read-failed", message = message))
         .unwrap_or_default();
 
     rect()
@@ -169,9 +169,9 @@ fn general(page: &Page) -> Group {
     let first = page.first();
     let single = page.single();
     let counted = page.counted();
-    let mut general = Group::titled("General");
+    let mut general = Group::titled(&crate::tr!("ui-files-props-general"));
     general = general.row(property_row(
-        "Type",
+        crate::tr!("ui-files-props-type"),
         if single {
             first.mime.description.to_owned()
         } else {
@@ -179,7 +179,8 @@ fn general(page: &Page) -> Group {
         },
     ));
     if single {
-        general = general.row(row("MIME type").mono_value(first.mime.mime));
+        general =
+            general.row(row(crate::tr!("ui-files-props-mime-type")).mono_value(first.mime.mime));
     }
     let size_text = if counted {
         total_size(page.totals)
@@ -189,7 +190,7 @@ fn general(page: &Page) -> Group {
         page.fact(|facts| Some(size_with_bytes(facts.props.size)))
     };
     general = general.row(
-        row("Size").trailing(
+        row(crate::tr!("ui-files-props-size")).trailing(
             rect()
                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
                 .child(BODY.in_ink(Ink::Muted).selectable(&tokens, size_text))
@@ -197,14 +198,17 @@ fn general(page: &Page) -> Group {
         ),
     );
     if counted {
-        general = general.row(property_row("Contents", contents(page.totals)));
+        general = general.row(property_row(
+            crate::tr!("ui-files-props-contents"),
+            contents(page.totals),
+        ));
     }
     let location = common_parent(page.entries);
     // Where an item of the Trash is, is the Trash: `trash:///`, never the
     // bin's own folder.
     let roots = super::named::Roots::at_home(page.home);
     let location_text = location.as_ref().map_or_else(
-        || "Several folders".to_owned(),
+        || crate::tr!("ui-files-props-several-folders"),
         |folder| match roots.below_trash(folder) {
             Some(_) => roots.uri(&super::directory::Where::Folder(folder.clone())),
             None => home_relative(folder, page.home),
@@ -219,31 +223,38 @@ fn general(page: &Page) -> Group {
         })
     });
     general = general.row(match open_location {
-        Some(open) => row("Location").path_value(location_text).on_press(open),
-        None => row("Location").path_value(location_text),
+        Some(open) => row(crate::tr!("ui-files-props-location"))
+            .path_value(location_text)
+            .on_press(open),
+        None => row(crate::tr!("ui-files-props-location")).path_value(location_text),
     });
     // An item of the Trash says where it was and when it was deleted, from its
     // info file.
     if single && let Some(trash) = first.trash.as_ref() {
-        general = general.row(row("Original location").path_value(
-            trash.original.as_deref().map_or_else(
-                || "Unknown".to_owned(),
-                |original| home_relative(original, page.home),
+        general = general.row(
+            row(crate::tr!("ui-files-props-original-location")).path_value(
+                trash.original.as_deref().map_or_else(
+                    || crate::tr!("ui-files-unknown"),
+                    |original| home_relative(original, page.home),
+                ),
             ),
-        ));
+        );
         general = general.row(property_row(
-            "Deleted",
-            super::properties_words::time(trash.deleted).unwrap_or_else(|| "Unknown".to_owned()),
+            crate::tr!("ui-files-props-deleted"),
+            super::properties_words::time(trash.deleted)
+                .unwrap_or_else(|| crate::tr!("ui-files-unknown")),
         ));
     }
     if single && first.symlink {
-        general = general.row(row("Link target").path_value(page.fact(|facts| {
-            facts
-                .props
-                .link_target
-                .as_ref()
-                .map(|target| target.to_string_lossy().into_owned())
-        })));
+        general = general.row(
+            row(crate::tr!("ui-files-props-link-target")).path_value(page.fact(|facts| {
+                facts
+                    .props
+                    .link_target
+                    .as_ref()
+                    .map(|target| target.to_string_lossy().into_owned())
+            })),
+        );
     }
     general
 }
@@ -257,9 +268,12 @@ fn open_with(page: &Page) -> Option<Group> {
     }
     let overlays = page.overlays;
     let apps = apps_for(first.mime.mime);
-    let mut open = Group::titled("Open with");
+    let mut open = Group::titled(&crate::tr!("ui-files-props-open-with"));
     if apps.is_empty() {
-        open = open.row(property_row("Applications", "None found"));
+        open = open.row(property_row(
+            crate::tr!("ui-files-props-applications"),
+            crate::tr!("ui-files-props-none-found"),
+        ));
     }
     for app in apps.into_iter().take(APP_ROWS) {
         let path = first.path.clone();
@@ -268,7 +282,11 @@ fn open_with(page: &Page) -> Option<Group> {
             EventHandler::new(move |()| {
                 overlays.dismiss_dialog();
                 if let Err(error) = launch(&app, &path) {
-                    overlays.toast(format!("Could not start {name}: {error}."));
+                    overlays.toast(crate::tr!(
+                        "ui-files-props-open-failed",
+                        name = name.clone(),
+                        error = error.to_string()
+                    ));
                 }
             }),
         ));
@@ -315,14 +333,17 @@ fn volume_group(volume: &Option<Volume>, known: bool) -> Group {
         // The line is always one line high, so the bar does not move.
         _ => " ".to_owned(),
     };
-    Group::titled("Volume")
+    Group::titled(&crate::tr!("ui-files-props-volume"))
         .row(property_row(
-            "Name",
+            crate::tr!("ui-files-props-volume-name"),
             text(&|volume| format!("{} ({})", volume.label, volume.fs_type)),
         ))
-        .row(row("Device").mono_value(text(&|volume| volume.device.clone())))
+        .row(
+            row(crate::tr!("ui-files-props-device"))
+                .mono_value(text(&|volume| volume.device.clone())),
+        )
         .row(property_row(
-            "Mounted at",
+            crate::tr!("ui-files-props-mounted-at"),
             text(&|volume| volume.mount_point.to_string_lossy().into_owned()),
         ))
         .content(VolumeSpace { fraction, space })

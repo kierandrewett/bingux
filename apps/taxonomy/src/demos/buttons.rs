@@ -338,6 +338,13 @@ pub const STEPPER: &[Spec] = &[
             .suffix(" items")
             .into_element()
     }),
+    Spec::live("A unit that agrees with the count", || {
+        let mut count = use_state(|| 1_i64);
+        stepper(count(), move |next| count.set(next))
+            .range(0, 10)
+            .value_text(tr!("taxonomy-stepper-items", count = count()))
+            .into_element()
+    }),
     Spec::forced("At its limit", || {
         stepper(10, |_| {})
             .range(0, 10)

@@ -33,9 +33,9 @@ pub(super) enum Can {
 }
 
 const WHO: [(Who, &str); 3] = [
-    (Who::Owner, "Owner"),
-    (Who::Group, "Group"),
-    (Who::Others, "Others"),
+    (Who::Owner, crate::i18n_id!("ui-files-props-who-owner")),
+    (Who::Group, crate::i18n_id!("ui-files-props-who-group")),
+    (Who::Others, crate::i18n_id!("ui-files-props-who-others")),
 ];
 const CAN: [Can; 3] = [Can::Read, Can::Write, Can::Execute];
 
@@ -91,13 +91,14 @@ pub(super) fn symbolic(mode: u32) -> String {
     let letter = |bit: u32, text: char| if mode & bit != 0 { text } else { '-' };
     // The special bit shows over the execute position: lower case when the
     // execute bit is also set, upper case when it is not.
-    let special = |special: u32, execute: u32, lower: char| {
-        match (mode & special != 0, mode & execute != 0) {
-            (true, true) => lower,
-            (true, false) => lower.to_ascii_uppercase(),
-            (false, true) => 'x',
-            (false, false) => '-',
-        }
+    let special = |special: u32, execute: u32, lower: char| match (
+        mode & special != 0,
+        mode & execute != 0,
+    ) {
+        (true, true) => lower,
+        (true, false) => lower.to_ascii_uppercase(),
+        (false, true) => 'x',
+        (false, false) => '-',
     };
     [
         letter(0o400, 'r'),
@@ -136,7 +137,10 @@ impl ModeSet {
     /// The mode every item has, or `None` when they differ.
     pub(super) fn common(&self) -> Option<u32> {
         let first = *self.modes.first()?;
-        self.modes.iter().all(|mode| *mode == first).then_some(first)
+        self.modes
+            .iter()
+            .all(|mode| *mode == first)
+            .then_some(first)
     }
 
     /// Whether `has` holds for all, none or some of the items.
@@ -158,7 +162,10 @@ impl ModeSet {
 
     /// Every item's mode with the box for `who` and `can` pressed to `on`.
     pub(super) fn toggled(&self, who: Who, can: Can, on: bool) -> Vec<u32> {
-        self.modes.iter().map(|mode| toggled(*mode, who, can, on)).collect()
+        self.modes
+            .iter()
+            .map(|mode| toggled(*mode, who, can, on))
+            .collect()
     }
 
     /// Whether the items may be executed: on when each can be by someone.
@@ -168,38 +175,55 @@ impl ModeSet {
 
     /// Every item's mode after "Allow executing as program" is set to `on`.
     pub(super) fn with_execute(&self, on: bool) -> Vec<u32> {
-        self.modes.iter().map(|mode| with_execute(*mode, on)).collect()
+        self.modes
+            .iter()
+            .map(|mode| with_execute(*mode, on))
+            .collect()
     }
 
     /// The numeric mode (`0644`), or "Mixed" when the items differ.
     pub(super) fn numeric(&self) -> String {
-        self.common()
-            .map_or_else(|| "Mixed".to_owned(), |mode| format!("{:04o}", mode & 0o7777))
+        self.common().map_or_else(
+            || crate::tr!("ui-files-props-mixed"),
+            |mode| format!("{:04o}", mode & 0o7777),
+        )
     }
 
     /// The mode in letters (`rw-r--r--`), or "Mixed" when the items differ.
     pub(super) fn letters(&self) -> String {
-        self.common().map_or_else(|| "Mixed".to_owned(), symbolic)
+        self.common()
+            .map_or_else(|| crate::tr!("ui-files-props-mixed"), symbolic)
     }
 
     /// Which of the set user ID, set group ID and sticky bits are on.
     pub(super) fn special_line(&self) -> String {
-        let kinds = [(0o4000, "Set user ID"), (0o2000, "Set group ID"), (0o1000, "Sticky")];
+        let kinds = [
+            (0o4000, crate::i18n_id!("ui-files-props-set-user-id")),
+            (0o2000, crate::i18n_id!("ui-files-props-set-group-id")),
+            (0o1000, crate::i18n_id!("ui-files-props-sticky")),
+        ];
         let found: Vec<String> = kinds
             .into_iter()
-            .filter_map(|(bit, name)| match self.tally(|mode| mode & bit != 0) {
-                CheckState::On => Some(name.to_owned()),
-                CheckState::Mixed => Some(format!("{name} (some)")),
+            .filter_map(|(bit, id)| match self.tally(|mode| mode & bit != 0) {
+                CheckState::On => Some(crate::i18n::text(id)),
+                CheckState::Mixed => Some(crate::tr!(
+                    "ui-files-props-special-some",
+                    name = crate::i18n::text(id)
+                )),
                 CheckState::Off => None,
             })
             .collect();
-        if found.is_empty() { "None".to_owned() } else { found.join(", ") }
+        if found.is_empty() {
+            crate::tr!("ui-files-props-none")
+        } else {
+            found.join(", ")
+        }
     }
 }
 
 /// The grid of boxes: a row each for the owner, the group and everyone else,
 /// and a column each for reading, writing and executing. `modes` is `None`
-/// until they are read. `execute` is what the third column is called. A press
+/// until they are read. `execute` is the message ID of what the third column is called. A press
 /// reports who, what and the box's next value.
 #[derive(PartialEq)]
 pub(super) struct PermissionGrid {
@@ -215,12 +239,22 @@ impl Component for PermissionGrid {
         let modes = self.modes.clone();
         let enabled = self.editable && modes.is_some();
         let label_width = Size::px(crate::style::Dim::Label.px());
-        let heads = ["Read", "Write", self.execute];
+        let heads = [
+            crate::tr!("ui-files-props-can-read"),
+            crate::tr!("ui-files-props-can-write"),
+            crate::i18n::text(self.execute),
+        ];
 
         let head = rect()
             .tw(
                 &tokens,
-                &[flex_row(), grow_children(), items(Align::Center), w_full(), h(Dim::Box7)],
+                &[
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    w_full(),
+                    h(Dim::Box7),
+                ],
             )
             .child(rect().width(label_width.clone()))
             .children(heads.into_iter().map(|name| {
@@ -231,7 +265,7 @@ impl Component for PermissionGrid {
                     .into_element()
             }));
 
-        let lines = WHO.into_iter().map(|(who, name)| {
+        let lines = WHO.into_iter().map(|(who, id)| {
             let boxes = CAN.into_iter().map(|can| {
                 let state = modes
                     .as_ref()
@@ -249,12 +283,18 @@ impl Component for PermissionGrid {
             rect()
                 .tw(
                     &tokens,
-                    &[flex_row(), grow_children(), items(Align::Center), w_full(), h(Dim::Box9)],
+                    &[
+                        flex_row(),
+                        grow_children(),
+                        items(Align::Center),
+                        w_full(),
+                        h(Dim::Box9),
+                    ],
                 )
                 .child(
                     rect()
                         .width(label_width.clone())
-                        .child(BODY.label(&tokens, name)),
+                        .child(BODY.label(&tokens, crate::i18n::text(id))),
                 )
                 .children(boxes)
                 .into_element()
@@ -323,17 +363,29 @@ mod tests {
         assert_eq!(set.numeric(), "Mixed");
         assert_eq!(set.letters(), "Mixed");
         let same = ModeSet::new(vec![0o640, 0o640]);
-        assert_eq!((same.numeric().as_str(), same.letters().as_str()), ("0640", "rw-r-----"));
+        assert_eq!(
+            (same.numeric().as_str(), same.letters().as_str()),
+            ("0640", "rw-r-----")
+        );
     }
 
     #[test]
     fn pressing_a_mixed_box_turns_it_on_for_every_item_and_keeps_the_rest() {
         let set = ModeSet::new(vec![0o644, 0o664, 0o4600]);
         // A mixed box reports `true` as its next value.
-        assert_eq!(set.toggled(Who::Group, Can::Write, true), [0o664, 0o664, 0o4620]);
-        assert_eq!(set.toggled(Who::Owner, Can::Write, false), [0o444, 0o464, 0o4400]);
+        assert_eq!(
+            set.toggled(Who::Group, Can::Write, true),
+            [0o664, 0o664, 0o4620]
+        );
+        assert_eq!(
+            set.toggled(Who::Owner, Can::Write, false),
+            [0o444, 0o464, 0o4400]
+        );
         // A box that is on is pressed off everywhere.
-        assert_eq!(set.toggled(Who::Owner, Can::Read, false), [0o244, 0o264, 0o4200]);
+        assert_eq!(
+            set.toggled(Who::Owner, Can::Read, false),
+            [0o244, 0o264, 0o4200]
+        );
     }
 
     #[test]
@@ -342,14 +394,20 @@ mod tests {
         assert_eq!(set.executable(), CheckState::Mixed);
         assert_eq!(set.with_execute(true), [0o755, 0o700, 0o755]);
         assert_eq!(set.with_execute(false), [0o644, 0o600, 0o644]);
-        assert_eq!(ModeSet::new(vec![0o755, 0o700]).executable(), CheckState::On);
+        assert_eq!(
+            ModeSet::new(vec![0o755, 0o700]).executable(),
+            CheckState::On
+        );
         assert_eq!(ModeSet::new(vec![0o644]).executable(), CheckState::Off);
     }
 
     #[test]
     fn the_special_bits_are_named_and_mixed_ones_say_some() {
         assert_eq!(ModeSet::new(vec![0o644]).special_line(), "None");
-        assert_eq!(ModeSet::new(vec![0o4755, 0o6755]).special_line(), "Set user ID, Set group ID (some)");
+        assert_eq!(
+            ModeSet::new(vec![0o4755, 0o6755]).special_line(),
+            "Set user ID, Set group ID (some)"
+        );
         assert_eq!(ModeSet::new(vec![0o1777]).special_line(), "Sticky");
     }
 }

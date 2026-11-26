@@ -1639,3 +1639,181 @@ ui-carousel-page-a11y = Page { $page } of { $count }
 # A screen reader's name for one page dot.
 # $name (String) - the page's name, such as a place; $page (Number) - its position from 1; $count (Number) - how many pages
 ui-page-dot-a11y = { $name }, page { $page } of { $count }
+
+## Files: the Properties dialog
+
+# The title of the dialog. $name (String) - the item's name, or how many items
+ui-files-props-title = Properties of { $name }
+ui-files-props-header = Properties
+ui-files-props-close = Close
+ui-files-props-stop = Stop
+ui-files-props-cancel = Cancel
+ui-files-props-apply = Apply
+ui-files-props-apply-ellipsis = Apply…
+ui-files-props-none = None
+ui-files-props-mixed = Mixed
+# $message (String) - why the file could not be read
+ui-files-props-read-failed = Could not read everything: { $message }
+ui-files-props-several-folders = Several folders
+ui-files-props-times = Times
+ui-files-props-created = Created
+ui-files-props-modified = Modified
+ui-files-props-accessed = Accessed
+ui-files-props-general = General
+ui-files-props-type = Type
+ui-files-props-mime-type = MIME type
+ui-files-props-size = Size
+ui-files-props-contents = Contents
+ui-files-props-location = Location
+ui-files-props-original-location = Original location
+ui-files-props-deleted = Deleted
+ui-files-props-link-target = Link target
+ui-files-props-open-with = Open with
+ui-files-props-applications = Applications
+ui-files-props-none-found = None found
+# $name (String) - the application, $error (String) - what went wrong
+ui-files-props-open-failed = Could not start { $name }: { $error }.
+ui-files-props-volume = Volume
+ui-files-props-volume-name = Name
+ui-files-props-device = Device
+ui-files-props-mounted-at = Mounted at
+ui-files-props-permissions = Permissions
+ui-files-props-permissions-several = Who may read, write and run each of these.
+ui-files-props-permissions-single = Who may read, write and run this.
+ui-files-props-who-can-change = Who can change
+ui-files-props-access-nobody-read-only = Nobody, read-only drive
+ui-files-props-access-you = You
+ui-files-props-access-owners = Only the owners
+ui-files-props-access-owner = Only the owner
+ui-files-props-who-owner = Owner
+ui-files-props-who-group = Group
+ui-files-props-who-others = Others
+ui-files-props-can-read = Read
+ui-files-props-can-write = Write
+# The column of the permission grid for running a file.
+ui-files-props-can-execute = Execute
+# The same column for a folder, where it means going into it.
+ui-files-props-can-access = Access
+ui-files-props-mode = Mode
+ui-files-props-in-letters = In letters
+ui-files-props-special = Special
+ui-files-props-set-user-id = Set user ID
+ui-files-props-set-group-id = Set group ID
+ui-files-props-sticky = Sticky
+# $name (String) - one of the special bits, set on some of the items
+ui-files-props-special-some = { $name } (some)
+ui-files-props-allow-executing = Allow executing as program
+ui-files-props-ownership = Ownership
+ui-files-props-owner = Owner
+ui-files-props-group = Group
+ui-files-props-several-owners = Several owners
+ui-files-props-several-groups = Several groups
+ui-files-props-enclosed-items = Enclosed items
+ui-files-props-enclosed-hint = Files keep an execute bit only where they had one
+ui-files-props-apply-enclosed = Apply to enclosed items
+ui-files-props-apply-everything-inside = Apply to everything inside?
+# $mode (String) - the mode in octal, such as 0644
+ui-files-props-apply-mode-inside = Apply { $mode } to all items inside?
+ui-files-props-applying = Applying…
+ui-files-props-apply-stopped = Stopped. What was changed stays changed.
+ui-files-props-security = Security
+ui-files-props-selinux-context = SELinux context
+ui-files-props-acl = Access control list
+ui-files-props-acl-entries = Has entries beyond owner, group and others
+ui-files-props-total-size = Total size
+ui-files-props-items-label = Items
+ui-files-props-files-label = Files
+ui-files-props-folders-label = Folders
+ui-files-props-largest-items = Largest items
+ui-files-props-empty-folder = This folder is empty
+ui-files-props-image = Image
+ui-files-props-dimensions = Dimensions
+ui-files-props-camera = Camera
+ui-files-props-lens = Lens
+ui-files-props-taken = Taken
+ui-files-props-exposure = Exposure
+ui-files-props-audio = Audio
+ui-files-props-video = Video
+ui-files-props-duration = Duration
+ui-files-props-codec = Codec
+ui-files-props-copy = Copy
+ui-files-props-copied = Copied.
+ui-files-props-copy-failed = The text could not be copied.
+ui-files-props-calculate = Calculate
+ui-files-props-hash-done = Done
+ui-files-props-hash-stopped = Stopped
+ui-files-props-checksum = Checksum
+# The name of the hash algorithm, which is the same in every language.
+ui-files-props-sha-256 = SHA-256
+ui-files-props-storage = Storage
+ui-files-props-inode = Inode
+ui-files-props-hard-links = Hard links
+ui-files-props-block-size = Block size
+ui-files-props-disk-usage = Disk usage
+ui-files-props-extended-attributes = Extended attributes
+ui-files-props-attributes = Attributes
+
+## Text editor: commands and undo steps
+
+# The heading of the line and comment commands in menus and the palette.
+ui-text-group = Text
+ui-text-undo = Undo
+# $edit (String) - what the step did, such as "typing"
+ui-text-undo-edit = Undo { $edit }
+ui-text-redo = Redo
+# $edit (String) - what the step did, such as "typing"
+ui-text-redo-edit = Redo { $edit }
+ui-text-edit-typing = typing
+ui-text-edit-delete = delete
+ui-text-edit-delete-word = delete word
+ui-text-edit-indent = indent
+ui-text-edit-outdent = outdent
+ui-text-edit-cut = cut
+ui-text-edit-paste = paste
+ui-text-edit-replace = replace
+ui-text-edit-drop-text = drop text
+ui-text-edit-move-text = move text
+ui-text-edit-duplicate-line = duplicate line
+ui-text-edit-delete-line = delete line
+ui-text-edit-move-line = move line
+ui-text-edit-join-lines = join lines
+ui-text-edit-comment = comment
+ui-text-edit-sort-lines = sort lines
+ui-text-edit-remove-trailing-spaces = remove trailing spaces
+ui-text-edit-uppercase = uppercase
+ui-text-edit-lowercase = lowercase
+ui-text-edit-title-case = title case
+ui-text-cmd-cut = Cut
+ui-text-cmd-copy = Copy
+ui-text-cmd-paste = Paste
+ui-text-cmd-select-all = Select all
+ui-text-cmd-select-line = Select line
+ui-text-cmd-add-next-occurrence = Add next occurrence
+    .keywords = multiple carets, cursors
+ui-text-cmd-select-all-occurrences = Select every occurrence
+    .keywords = multiple carets, cursors
+ui-text-cmd-caret-above = Add caret above
+    .keywords = cursor, column
+ui-text-cmd-caret-below = Add caret below
+    .keywords = cursor, column
+ui-text-cmd-caret-click = Add or remove a caret
+ui-text-cmd-matching-bracket = Go to matching bracket
+ui-text-cmd-comment = Comment or uncomment
+    .keywords = toggle comment, uncomment
+ui-text-cmd-duplicate-line = Duplicate line
+    .keywords = copy line
+ui-text-cmd-delete-line = Delete line
+ui-text-cmd-move-line-up = Move line up
+ui-text-cmd-move-line-down = Move line down
+ui-text-cmd-join-lines = Join lines
+ui-text-cmd-indent = Indent or outdent
+ui-text-cmd-delete-word = Delete a word
+ui-text-cmd-sort-lines = Sort lines
+ui-text-cmd-trim-trailing = Remove trailing spaces
+    .keywords = whitespace, trim
+ui-text-cmd-uppercase = Uppercase
+    .keywords = capitals, case
+ui-text-cmd-lowercase = Lowercase
+    .keywords = case
+ui-text-cmd-title-case = Title case
+    .keywords = capitalise, case

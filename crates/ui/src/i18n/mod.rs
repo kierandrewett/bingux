@@ -121,6 +121,18 @@ pub fn text(id: &str) -> String {
     localiser::format(id, None)
 }
 
+/// The words of a `.keywords` attribute, which a message writes as a list ("revert, reload"): split at the
+/// commas of the languages ( `,` `，` `、` `;` ), trimmed, none empty. `Command::keywords` and search take
+/// these, so what a person types to find a command is in their language.
+/// `.keywords(i18n::keywords(&tr!("text-editor-cmd-reload.keywords")))`.
+pub fn keywords(list: &str) -> Vec<String> {
+    list.split([',', '，', '、', ';', '；'])
+        .map(str::trim)
+        .filter(|word| !word.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 /// Whether some catalogue in the chain has `id` (or `id.attribute`).
 pub fn has(id: &str) -> bool {
     localiser::has(id)

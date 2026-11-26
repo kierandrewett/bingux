@@ -5348,20 +5348,22 @@ let count = tr!("calculator-history-count", count = entries.len());
 let tip = tr!("calculator-mode.tooltip");
 ```
 
-| API                                               | What it does                                                                                                      |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `tr!("id")`, `tr!("id.attr")`, `tr!("id", n = 3)` | The message as a `String` in the language shown. The ID is a literal, so the checks see it                        |
-| `i18n_id!("id")`                                  | An ID kept in a table and asked for later with `i18n::text(id)` or `Message::new(id)`                             |
-| `Message::new(id).arg("name", value).format()`    | A message whose ID is chosen at run time                                                                          |
-| `Arg::text(x)`, `Arg::number(x, least, most)`     | A variable's value: text, a number with fixed decimals; integers, floats and `format::Moment` convert by `Into`   |
-| `catalogue!("domain")`, `i18n::register(..)`      | The app's `locale/en-US/<domain>.ftl`, compiled in; register it before `Application::run`                         |
-| `i18n::text(id)`, `i18n::has(id)`                 | A message with no variables; whether a message exists                                                             |
-| `i18n::set_locale(Some(locale))`                  | Shows every window in another language, now. `None` goes back to the environment's                                |
-| `i18n::language()`, `languages()`, `direction()`  | The language shown, the fallback chain (`de`, `en-US`), and its reading direction                                 |
-| `i18n::set_pseudo(Some(Pseudo::Accented \| Rtl))` | A pseudo-locale, as `BINGUX_PSEUDO_LOCALE=accented\|rtl` sets it                                                  |
-| `i18n::use_language()`, `revision()`              | A number that changes with the language; window roots are keyed on it, so nothing else has to                     |
-| `i18n::check::crate_catalogue(dir, domain)`       | A test: every `tr!` ID exists with the variables it passes, and the catalogue has no unused message (`Report`)    |
-| `Application::title(impl Into<Title>)`            | `Title::Text` stays as written; `Title::Message` (from a `Message`) follows the language, in the window title too |
+| API                                               | What it does                                                                                                                                                          |
+| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tr!("id")`, `tr!("id.attr")`, `tr!("id", n = 3)` | The message as a `String` in the language shown. The ID is a literal, so the checks see it                                                                            |
+| `i18n_id!("id")`                                  | An ID kept in a table and asked for later with `i18n::text(id)` or `Message::new(id)`                                                                                 |
+| `Message::new(id).arg("name", value).format()`    | A message whose ID is chosen at run time                                                                                                                              |
+| `Arg::text(x)`, `Arg::number(x, least, most)`     | A variable's value: text, a number with fixed decimals; integers, floats and `format::Moment` convert by `Into`                                                       |
+| `catalogue!("domain")`, `i18n::register(..)`      | The app's `locale/en-US/<domain>.ftl`, compiled in; register it before `Application::run`                                                                             |
+| `i18n::text(id)`, `i18n::has(id)`                 | A message with no variables; whether a message exists                                                                                                                 |
+| `i18n::keywords(&tr!("id.keywords"))`             | The search words of a command, written in the catalogue as a list (`revert, reload`) and split at the commas of any language, for `Command::keywords`                 |
+| `stepper(..).value_text(tr!("id", count = n))`    | A stepper whose unit agrees with the number (`1 time`, `3 times`): the whole text is one message that selects on the count; `suffix` is for a unit that never changes |
+| `i18n::set_locale(Some(locale))`                  | Shows every window in another language, now. `None` goes back to the environment's                                                                                    |
+| `i18n::language()`, `languages()`, `direction()`  | The language shown, the fallback chain (`de`, `en-US`), and its reading direction                                                                                     |
+| `i18n::set_pseudo(Some(Pseudo::Accented \| Rtl))` | A pseudo-locale, as `BINGUX_PSEUDO_LOCALE=accented\|rtl` sets it                                                                                                      |
+| `i18n::use_language()`, `revision()`              | A number that changes with the language; window roots are keyed on it, so nothing else has to                                                                         |
+| `i18n::check::crate_catalogue(dir, domain)`       | A test: every `tr!` ID exists with the variables it passes, and the catalogue has no unused message (`Report`)                                                        |
+| `Application::title(impl Into<Title>)`            | `Title::Text` stays as written; `Title::Message` (from a `Message`) follows the language, in the window title too                                                     |
 
 A language switch rebuilds each window's content under its router, so the
 location, scroll and open tabs stay. Shortcut labels (`Ctrl+Shift+P` is
@@ -5438,7 +5440,8 @@ A message a translation lacks falls back to `en-US`, never to its ID.
 - `scripts/ui-lint.py` (in `make check-static`; the checker is `scripts/literal_text.py`) fails on a string
   literal with a letter in it passed to a bingux-ui call that shows it (`.title("Songs")`, `action_button("Retry", ..)`,
   `.tooltip(format!(..))`, `.keywords([..])`, `.toast(..)`, `app_info!(description = ..)`), on a plural chosen with
-  `if n == 1` and on `format!("{} km", n)`. It reads which calls take text from this crate's own public functions
+  `if n == 1` or between `x-one` and `x-many` messages, on `format!("{} km", n)`, and on a capitalised phrase of two
+  words or more written anywhere (a match arm returning `"Similar to the actual temperature."`). It reads which calls take text from this crate's own public functions
   (a string parameter named `title`, `label`, `text`, `tooltip`, ...), so a new text API is covered with no list
   to edit; a function that takes text but is not for people (a test or automation helper) is named in
   `NOT_TEXT_FNS`. A literal that is right by design is an entry of `ALLOWED` with its reason (a brand name,

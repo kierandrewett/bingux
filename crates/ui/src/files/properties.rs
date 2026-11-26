@@ -43,10 +43,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
 
-use bingux_preview_core::media::{self, AvInfo, ImageInfo};
-use bingux_files::ops::{self, ChildSize, Counting, FileDetails, HashProgress, Hashing, Permissions, Properties, Totals};
+use bingux_files::ops::{
+    self, ChildSize, Counting, FileDetails, HashProgress, Hashing, Permissions, Properties, Totals,
+};
 use bingux_files::thumbs::{self, Bucket};
 use bingux_files::{Cancel, Category, Entry, Kind};
+use bingux_preview_core::media::{self, AvInfo, ImageInfo};
 use freya::prelude::*;
 
 use super::actions::Env;
@@ -60,9 +62,9 @@ use super::properties_words::{NONE, PENDING};
 use crate::component::ComponentName;
 use crate::controls::{action_button, icon_button, segmented, text_width};
 use crate::icons::Icon;
+use crate::prelude::Tokens;
 use crate::shell::dialog::frame_width;
 use crate::shell::{HeaderBar, Overlays, framed_dialog};
-use crate::prelude::Tokens;
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::{spawn_blocking, use_resource};
@@ -82,7 +84,13 @@ pub(super) fn show_properties(env: &Env, selected: &[Entry]) {
             .file_name()
             .map_or_else(|| folder.to_string_lossy(), |name| name.to_string_lossy())
             .into_owned();
-        vec![Entry::named(folder.clone(), name, Kind::Directory, false, false)]
+        vec![Entry::named(
+            folder.clone(),
+            name,
+            Kind::Directory,
+            false,
+            false,
+        )]
     } else {
         selected.to_vec()
     };
@@ -127,12 +135,12 @@ pub(super) fn show_folder_properties(
 fn show(body: Body, closed: EventHandler<()>) {
     let title = match body.entries.as_slice() {
         [only] => only.name.clone(),
-        many => format!("{} items", many.len()),
+        many => crate::tr!("ui-files-props-items", count = many.len()),
     };
     let overlays = body.overlays;
     overlays.show_dialog(
         framed_dialog(
-            format!("Properties of {title}"),
+            crate::tr!("ui-files-props-title", name = title),
             Element::from(body),
             Dim::PopupWidth.px(),
             Dim::PopupHeight.px() + 120.0,
@@ -190,9 +198,14 @@ fn load_facts(subject: Subject) -> Result<Facts, String> {
 }
 
 fn find_poster(props: &Properties) -> Option<PathBuf> {
-    [Bucket::Large, Bucket::XLarge, Bucket::XXLarge, Bucket::Normal]
-        .into_iter()
-        .find_map(|bucket| thumbs::lookup(&props.path, props.modified, bucket))
+    [
+        Bucket::Large,
+        Bucket::XLarge,
+        Bucket::XXLarge,
+        Bucket::Normal,
+    ]
+    .into_iter()
+    .find_map(|bucket| thumbs::lookup(&props.path, props.modified, bucket))
 }
 
 /// The owner, group and mode of every item, in order.
@@ -314,11 +327,16 @@ impl Page<'_> {
 
     /// Stop, while a count is running.
     pub(super) fn stop_button(&self) -> Option<Element> {
-        let counting = self.counting.clone().filter(|_| self.counted() && !self.totals.done)?;
+        let counting = self
+            .counting
+            .clone()
+            .filter(|_| self.counted() && !self.totals.done)?;
         Some(
-            action_button("Stop", move |_| counting.cancel())
-                .compact()
-                .into_element(),
+            action_button(crate::tr!("ui-files-props-stop"), move |_| {
+                counting.cancel()
+            })
+            .compact()
+            .into_element(),
         )
     }
 }
@@ -402,7 +420,11 @@ impl Component for Body {
         let modes = edited
             .read()
             .clone()
-            .or_else(|| perms.as_ref().map(|perms| perms.iter().map(|perm| perm.mode).collect()))
+            .or_else(|| {
+                perms
+                    .as_ref()
+                    .map(|perms| perms.iter().map(|perm| perm.mode).collect())
+            })
             .map(ModeSet::new);
         let read_only = loaded
             .as_ref()
@@ -481,7 +503,8 @@ impl Component for Body {
                 tree.set(TreePhase::Running);
                 let root = root.clone();
                 spawn(async move {
-                    let result = spawn_blocking(move || ops::chmod_tree(&root, mode, &cancel)).await;
+                    let result =
+                        spawn_blocking(move || ops::chmod_tree(&root, mode, &cancel)).await;
                     tree.set(match result {
                         Ok(change) => TreePhase::Done(change),
                         Err(ops::OpError::Cancelled) => TreePhase::Stopped,
@@ -570,9 +593,12 @@ impl Component for Body {
         // ---- the frame ----------------------------------------------------
         // The standard header bar: its icon buttons take the header size and
         // its insets, so Close sits where it does in every other header.
-        let header = HeaderBar::new("Properties").draggable(false).trailing(
-            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog()).tooltip("Close"),
-        );
+        let header = HeaderBar::new(crate::tr!("ui-files-props-header"))
+            .draggable(false)
+            .trailing(
+                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                    .tooltip(&crate::tr!("ui-files-props-close")),
+            );
         let bar = segmented(
             tabs.iter()
                 .map(|tab| (tab.key().to_owned(), tab.title().to_owned()))
@@ -617,7 +643,9 @@ impl Component for Body {
                 // Read the tab first: a borrow held across the choice would
                 // make writing the new one fail.
                 let now = *selected.peek();
-                if let Some(next) = tab_model::shortcut(&event.key, event.modifiers, &shortcuts, now) {
+                if let Some(next) =
+                    tab_model::shortcut(&event.key, event.modifiers, &shortcuts, now)
+                {
                     event.stop_propagation();
                     choose.call(next);
                 }
@@ -637,13 +665,11 @@ impl Component for Body {
                     .height(Size::flex(1.0))
                     .min_height(Size::px(0.0))
                     .child(
-                        ScrollView::new_controlled(scroll)
-                            .key(current.key())
-                            .child(
-                                rect()
-                                    .tw(&tokens, &[flex_col(), w_full(), gap(S4), p(S4)])
-                                    .children(groups),
-                            ),
+                        ScrollView::new_controlled(scroll).key(current.key()).child(
+                            rect()
+                                .tw(&tokens, &[flex_col(), w_full(), gap(S4), p(S4)])
+                                .children(groups),
+                        ),
                     ),
             )
     }
@@ -702,7 +728,10 @@ mod tests {
         std::fs::set_permissions(&two, std::fs::Permissions::from_mode(0o600)).unwrap();
         let mode = |path: &Path| std::fs::metadata(path).unwrap().permissions().mode() & 0o7777;
 
-        let (now, error) = apply_modes(vec![(one.clone(), 0o664, 0o644), (two.clone(), 0o600, 0o600)]);
+        let (now, error) = apply_modes(vec![
+            (one.clone(), 0o664, 0o644),
+            (two.clone(), 0o600, 0o600),
+        ]);
         assert_eq!((now, error), (vec![0o664, 0o600], None));
         assert_eq!((mode(&one), mode(&two)), (0o664, 0o600));
 
@@ -710,7 +739,10 @@ mod tests {
         let gone = dir.join("gone");
         let (now, error) = apply_modes(vec![(gone, 0o755, 0o644), (one.clone(), 0o640, 0o664)]);
         assert_eq!(now, vec![0o644, 0o640]);
-        assert_eq!(error.as_deref(), Some("That file or folder no longer exists."));
+        assert_eq!(
+            error.as_deref(),
+            Some("That file or folder no longer exists.")
+        );
         assert_eq!(mode(&one), 0o640);
         std::fs::remove_dir_all(&dir).unwrap();
     }
@@ -787,7 +819,8 @@ mod window_tests {
 
     /// A folder with two files in it, and a file beside it.
     fn fixture(tag: &str) -> (PathBuf, Entry, Entry) {
-        let root = std::env::temp_dir().join(format!("bingux-props-win-{}-{tag}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("bingux-props-win-{}-{tag}", std::process::id()));
         let folder = root.join("folder");
         std::fs::create_dir_all(&folder).unwrap();
         std::fs::write(folder.join("a.txt"), "hello").unwrap();
@@ -798,12 +831,23 @@ mod window_tests {
             let name = path.file_name().unwrap().to_string_lossy().into_owned();
             Entry::named(path, name, kind, false, false)
         };
-        (root, entry(folder, Kind::Directory), entry(file, Kind::File))
+        (
+            root,
+            entry(folder, Kind::Directory),
+            entry(file, Kind::File),
+        )
     }
 
     fn open(entries: Vec<Entry>, size: (f32, f32)) -> Snapshot {
         tab_model::remember(Tab::Basic);
-        let mut shot = Snapshot::new(move || Element::from(Root { entries: entries.clone() }), size);
+        let mut shot = Snapshot::new(
+            move || {
+                Element::from(Root {
+                    entries: entries.clone(),
+                })
+            },
+            size,
+        );
         shot.settle(Duration::from_millis(900));
         shot
     }
@@ -817,7 +861,11 @@ mod window_tests {
     fn shows(shot: &mut Snapshot, text: &str) -> bool {
         !shot
             .runner()
-            .find_many(|_, element| Label::try_downcast(element).filter(|label| label.text == text).map(|_| ()))
+            .find_many(|_, element| {
+                Label::try_downcast(element)
+                    .filter(|label| label.text == text)
+                    .map(|_| ())
+            })
             .is_empty()
     }
 
@@ -849,11 +897,21 @@ mod window_tests {
         for size in [DESKTOP, PHONE] {
             let mut shot = open(vec![folder.clone()], size);
             let before = frame(&mut shot);
-            assert!(before[0].width() > 100.0 && before[2].height() > 100.0, "{size:?}: {before:?}");
+            assert!(
+                before[0].width() > 100.0 && before[2].height() > 100.0,
+                "{size:?}: {before:?}"
+            );
             for (digit, mark) in MARKS {
                 ctrl(&mut shot, Key::Character(digit.into()));
-                assert!(shows(&mut shot, mark), "{size:?}: Ctrl+{digit} shows {mark}");
-                assert_eq!(frame(&mut shot), before, "{size:?}: the frame on tab {digit}");
+                assert!(
+                    shows(&mut shot, mark),
+                    "{size:?}: Ctrl+{digit} shows {mark}"
+                );
+                assert_eq!(
+                    frame(&mut shot),
+                    before,
+                    "{size:?}: the frame on tab {digit}"
+                );
             }
         }
         std::fs::remove_dir_all(root).unwrap();
@@ -868,9 +926,15 @@ mod window_tests {
             ctrl(&mut shot, Key::Named(NamedKey::Tab));
             assert!(shows(&mut shot, mark), "Ctrl+Tab shows {mark}");
         }
-        shot.key_with(Key::Named(NamedKey::Tab), Modifiers::CONTROL | Modifiers::SHIFT);
+        shot.key_with(
+            Key::Named(NamedKey::Tab),
+            Modifiers::CONTROL | Modifiers::SHIFT,
+        );
         shot.settle(Duration::from_millis(300));
-        assert!(shows(&mut shot, "Largest items"), "Ctrl+Shift+Tab goes back");
+        assert!(
+            shows(&mut shot, "Largest items"),
+            "Ctrl+Shift+Tab goes back"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -897,7 +961,10 @@ mod window_tests {
         assert!(shows(&mut shot, "General"), "there is no third tab");
         ctrl(&mut shot, Key::Character("2".into()));
         assert!(shows(&mut shot, "Ownership"));
-        assert!(!shows(&mut shot, "Allow executing as program"), "a folder is among them");
+        assert!(
+            !shows(&mut shot, "Allow executing as program"),
+            "a folder is among them"
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 }

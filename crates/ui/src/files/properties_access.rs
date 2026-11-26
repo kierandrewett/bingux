@@ -61,15 +61,19 @@ fn access_line(access: &Access, several: bool) -> String {
     match (&access.perms, access.failed) {
         (None, Some(_)) => NONE.to_owned(),
         (None, None) => PENDING.to_owned(),
-        (Some(_), _) if access.read_only => "Nobody, read-only drive".to_owned(),
-        (Some(_), _) if access.editable => "You".to_owned(),
-        (Some(_), _) if several => "Only the owners".to_owned(),
-        (Some(_), _) => "Only the owner".to_owned(),
+        (Some(_), _) if access.read_only => crate::tr!("ui-files-props-access-nobody-read-only"),
+        (Some(_), _) if access.editable => crate::tr!("ui-files-props-access-you"),
+        (Some(_), _) if several => crate::tr!("ui-files-props-access-owners"),
+        (Some(_), _) => crate::tr!("ui-files-props-access-owner"),
     }
 }
 
 /// `kieran (1000)`, or "Several owners" when the items differ.
-fn shared_name(access: &Access, of: impl Fn(&Permissions) -> (u32, &str), noun: &str) -> String {
+fn shared_name(
+    access: &Access,
+    of: impl Fn(&Permissions) -> (u32, &str),
+    several: String,
+) -> String {
     match (access.perms, access.failed) {
         (Some(perms), _) => {
             let mut all = perms.iter().map(&of);
@@ -79,7 +83,7 @@ fn shared_name(access: &Access, of: impl Fn(&Permissions) -> (u32, &str), noun: 
             if all.all(|other| other.0 == first.0) {
                 named_id(first.1, first.0)
             } else {
-                format!("Several {noun}")
+                several
             }
         }
         (None, Some(_)) => NONE.to_owned(),
@@ -105,22 +109,32 @@ pub(super) fn permissions_tab(page: &Page, access: &Access) -> Vec<Element> {
     let numeric_text = pending(modes.as_ref().map(ModeSet::numeric));
     let letters_text = pending(modes.as_ref().map(ModeSet::letters));
     let special_text = pending(modes.as_ref().map(ModeSet::special_line));
-    let mut permissions = Group::titled("Permissions")
+    let mut permissions = Group::titled(&crate::tr!("ui-files-props-permissions"))
         .description(if several {
-            "Who may read, write and run each of these."
+            crate::tr!("ui-files-props-permissions-several")
         } else {
-            "Who may read, write and run this."
+            crate::tr!("ui-files-props-permissions-single")
         })
         .content(PermissionGrid {
             modes: modes.clone(),
             editable: access.editable,
-            execute: if all_folders { "Access" } else { "Execute" },
+            execute: if all_folders {
+                crate::i18n_id!("ui-files-props-can-access")
+            } else {
+                crate::i18n_id!("ui-files-props-can-execute")
+            },
             on_change: on_press,
         })
-        .row(property_row("Who can change", access_line(access, several)))
-        .row(row("Mode").mono_value(numeric_text))
-        .row(row("In letters").mono_value(letters_text))
-        .row(property_row("Special", special_text));
+        .row(property_row(
+            crate::tr!("ui-files-props-who-can-change"),
+            access_line(access, several),
+        ))
+        .row(row(crate::tr!("ui-files-props-mode")).mono_value(numeric_text))
+        .row(row(crate::tr!("ui-files-props-in-letters")).mono_value(letters_text))
+        .row(property_row(
+            crate::tr!("ui-files-props-special"),
+            special_text,
+        ));
     if !any_folder {
         let toggle_modes = modes.clone();
         let on_change = access.on_change.clone();
@@ -129,7 +143,7 @@ pub(super) fn permissions_tab(page: &Page, access: &Access) -> Vec<Element> {
             .is_some_and(|modes| modes.executable() == crate::controls::CheckState::On);
         permissions = permissions.row(
             switch_row(
-                "Allow executing as program",
+                crate::tr!("ui-files-props-allow-executing"),
                 on,
                 EventHandler::new(move |next: bool| {
                     if let Some(modes) = &toggle_modes {
@@ -141,14 +155,22 @@ pub(super) fn permissions_tab(page: &Page, access: &Access) -> Vec<Element> {
         );
     }
 
-    let ownership = Group::titled("Ownership")
+    let ownership = Group::titled(&crate::tr!("ui-files-props-ownership"))
         .row(property_row(
-            "Owner",
-            shared_name(access, |perms| (perms.uid, perms.owner.as_str()), "owners"),
+            crate::tr!("ui-files-props-owner"),
+            shared_name(
+                access,
+                |perms| (perms.uid, perms.owner.as_str()),
+                crate::tr!("ui-files-props-several-owners"),
+            ),
         ))
         .row(property_row(
-            "Group",
-            shared_name(access, |perms| (perms.gid, perms.group.as_str()), "groups"),
+            crate::tr!("ui-files-props-group"),
+            shared_name(
+                access,
+                |perms| (perms.gid, perms.group.as_str()),
+                crate::tr!("ui-files-props-several-groups"),
+            ),
         ));
 
     let mut groups: Vec<Element> = vec![permissions.into(), ownership.into()];
@@ -171,52 +193,71 @@ fn enclosed(page: &Page, access: &Access) -> Group {
     let buttons = rect().tw(&page.tokens, &[flex_row(), items(Align::Center), gap(S2)]);
     let (title, trailing) = match &access.tree {
         TreePhase::Idle => (
-            "Apply to enclosed items".to_owned(),
+            crate::tr!("ui-files-props-apply-enclosed"),
             buttons
                 .child(
-                    action_button("Apply…", move |_| ask.call(()))
-                        .compact()
-                        .enabled(ready),
+                    action_button(crate::tr!("ui-files-props-apply-ellipsis"), move |_| {
+                        ask.call(())
+                    })
+                    .compact()
+                    .enabled(ready),
                 )
                 .into_element(),
         ),
         TreePhase::Confirming => (
             mode.map_or_else(
-                || "Apply to everything inside?".to_owned(),
-                |mode| format!("Apply {:04o} to all items inside?", mode & 0o7777),
+                || crate::tr!("ui-files-props-apply-everything-inside"),
+                |mode| {
+                    crate::tr!(
+                        "ui-files-props-apply-mode-inside",
+                        mode = format!("{:04o}", mode & 0o7777)
+                    )
+                },
             ),
             buttons
-                .child(action_button("Cancel", move |_| cancel.call(())).compact())
                 .child(
-                    action_button("Apply", move |_| apply.call(()))
+                    action_button(crate::tr!("ui-files-props-cancel"), move |_| {
+                        cancel.call(())
+                    })
+                    .compact(),
+                )
+                .child(
+                    action_button(crate::tr!("ui-files-props-apply"), move |_| apply.call(()))
                         .compact()
                         .destructive(),
                 )
                 .into_element(),
         ),
         TreePhase::Running => (
-            "Applying…".to_owned(),
+            crate::tr!("ui-files-props-applying"),
             buttons
-                .child(action_button("Stop", move |_| cancel.call(())).compact())
+                .child(
+                    action_button(crate::tr!("ui-files-props-stop"), move |_| cancel.call(()))
+                        .compact(),
+                )
                 .into_element(),
         ),
         TreePhase::Done(change) => (
             done_line(*change),
             buttons
                 .child(
-                    action_button("Apply…", move |_| ask.call(()))
-                        .compact()
-                        .enabled(ready),
+                    action_button(crate::tr!("ui-files-props-apply-ellipsis"), move |_| {
+                        ask.call(())
+                    })
+                    .compact()
+                    .enabled(ready),
                 )
                 .into_element(),
         ),
         TreePhase::Stopped => (
-            "Stopped. What was changed stays changed.".to_owned(),
+            crate::tr!("ui-files-props-apply-stopped"),
             buttons
                 .child(
-                    action_button("Apply…", move |_| ask.call(()))
-                        .compact()
-                        .enabled(ready),
+                    action_button(crate::tr!("ui-files-props-apply-ellipsis"), move |_| {
+                        ask.call(())
+                    })
+                    .compact()
+                    .enabled(ready),
                 )
                 .into_element(),
         ),
@@ -224,16 +265,18 @@ fn enclosed(page: &Page, access: &Access) -> Group {
             message.clone(),
             buttons
                 .child(
-                    action_button("Apply…", move |_| ask.call(()))
-                        .compact()
-                        .enabled(ready),
+                    action_button(crate::tr!("ui-files-props-apply-ellipsis"), move |_| {
+                        ask.call(())
+                    })
+                    .compact()
+                    .enabled(ready),
                 )
                 .into_element(),
         ),
     };
-    Group::titled("Enclosed items").row(
+    Group::titled(&crate::tr!("ui-files-props-enclosed-items")).row(
         row(title)
-            .subtitle("Files keep an execute bit only where they had one")
+            .subtitle(crate::tr!("ui-files-props-enclosed-hint"))
             .trailing(trailing)
             .trailing_control(),
     )
@@ -262,14 +305,15 @@ fn security(page: &Page) -> Option<Group> {
     if details.security_context.is_none() && !details.acl {
         return None;
     }
-    let mut group = Group::titled("Security");
+    let mut group = Group::titled(&crate::tr!("ui-files-props-security"));
     if let Some(context) = &details.security_context {
-        group = group.row(row("SELinux context").mono_value(context.clone()));
+        group = group
+            .row(row(crate::tr!("ui-files-props-selinux-context")).mono_value(context.clone()));
     }
     if details.acl {
         group = group.row(property_row(
-            "Access control list",
-            "Has entries beyond owner, group and others",
+            crate::tr!("ui-files-props-acl"),
+            crate::tr!("ui-files-props-acl-entries"),
         ));
     }
     Some(group)

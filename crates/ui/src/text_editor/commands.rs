@@ -25,7 +25,7 @@ use super::keymap::{self, Effect};
 use crate::commands::{Command, CommandGroup};
 
 /// The group of the commands that work on lines and comments.
-pub const TEXT_GROUP: CommandGroup = CommandGroup::Other("Text");
+pub const TEXT_GROUP: CommandGroup = CommandGroup::Other(crate::i18n_id!("ui-text-group"));
 
 /// Runs `command` on the document, with the clipboard it may need.
 fn run(handle: &EditorHandle, command: &keymap::Command, read_only: bool) {
@@ -56,30 +56,67 @@ fn command(
 }
 
 /// A command with no key that changes the text with `change`, as one undo
-/// step named `label`.
+/// step of kind `kind` (see [`edit_name`]).
 fn action(
     handle: &EditorHandle,
     read_only: bool,
     id: &'static str,
     title: &str,
-    label: &'static str,
+    kind: &'static str,
     change: fn(&mut Editor),
 ) -> Command {
     let handle = handle.clone();
     Command::new(id, title, move |_| {
         if !read_only {
-            handle.update(|editor| editor.label_edit(label, change));
+            handle.update(|editor| editor.label_edit(kind, change));
         }
     })
     .enabled(!read_only)
     .group(TEXT_GROUP)
 }
 
-/// "Undo typing", "Redo": the verb, then what the step did.
-fn titled(verb: &str, label: Option<&str>) -> String {
-    match label {
-        Some(label) => format!("{verb} {label}"),
-        None => verb.to_owned(),
+/// The name of an edit step as a person reads it ("typing", "duplicate line"): the engine and the
+/// keymap name a step by a key, and each key is a message. A key with no message is shown as it is.
+pub(super) fn edit_name(kind: &str) -> String {
+    let id = match kind {
+        "typing" => crate::i18n_id!("ui-text-edit-typing"),
+        "delete" => crate::i18n_id!("ui-text-edit-delete"),
+        "delete word" => crate::i18n_id!("ui-text-edit-delete-word"),
+        "indent" => crate::i18n_id!("ui-text-edit-indent"),
+        "outdent" => crate::i18n_id!("ui-text-edit-outdent"),
+        "cut" => crate::i18n_id!("ui-text-edit-cut"),
+        "paste" => crate::i18n_id!("ui-text-edit-paste"),
+        "replace" => crate::i18n_id!("ui-text-edit-replace"),
+        "drop text" => crate::i18n_id!("ui-text-edit-drop-text"),
+        "move text" => crate::i18n_id!("ui-text-edit-move-text"),
+        "duplicate line" => crate::i18n_id!("ui-text-edit-duplicate-line"),
+        "delete line" => crate::i18n_id!("ui-text-edit-delete-line"),
+        "move line" => crate::i18n_id!("ui-text-edit-move-line"),
+        "join lines" => crate::i18n_id!("ui-text-edit-join-lines"),
+        "comment" => crate::i18n_id!("ui-text-edit-comment"),
+        "sort lines" => crate::i18n_id!("ui-text-edit-sort-lines"),
+        "remove trailing spaces" => crate::i18n_id!("ui-text-edit-remove-trailing-spaces"),
+        "uppercase" => crate::i18n_id!("ui-text-edit-uppercase"),
+        "lowercase" => crate::i18n_id!("ui-text-edit-lowercase"),
+        "title case" => crate::i18n_id!("ui-text-edit-title-case"),
+        _ => return kind.to_owned(),
+    };
+    crate::i18n::text(id)
+}
+
+/// "Undo typing", "Undo": the verb, then what the step did, in one message.
+fn undo_text(kind: Option<&str>) -> String {
+    match kind {
+        Some(kind) => crate::tr!("ui-text-undo-edit", edit = edit_name(kind)),
+        None => crate::tr!("ui-text-undo"),
+    }
+}
+
+/// "Redo typing", "Redo".
+fn redo_text(kind: Option<&str>) -> String {
+    match kind {
+        Some(kind) => crate::tr!("ui-text-redo-edit", edit = edit_name(kind)),
+        None => crate::tr!("ui-text-redo"),
     }
 }
 
@@ -95,8 +132,8 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
     let history = editor.history();
     let can_undo = history.can_undo() && !read_only;
     let can_redo = history.can_redo() && !read_only;
-    let undo_title = titled("Undo", history.undo_label());
-    let redo_title = titled("Redo", history.redo_label());
+    let undo_title = undo_text(history.undo_label());
+    let redo_title = redo_text(history.redo_label());
     let has_selection = editor.selection().has_selection();
     let has_text = editor.len_chars() > 0;
     drop(editor);
@@ -130,16 +167,22 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
         .enabled(can_redo)
         .group(CommandGroup::Edit)
         .section("history"),
-        command(handle, read_only, "edit.cut", "Cut", keymap::Command::Cut)
-            .shortcut("Ctrl+X")
-            .enabled(!read_only && (has_selection || has_text))
-            .group(CommandGroup::Edit)
-            .section("clipboard"),
+        command(
+            handle,
+            read_only,
+            "edit.cut",
+            crate::tr!("ui-text-cmd-cut"),
+            keymap::Command::Cut,
+        )
+        .shortcut("Ctrl+X")
+        .enabled(!read_only && (has_selection || has_text))
+        .group(CommandGroup::Edit)
+        .section("clipboard"),
         command(
             handle,
             read_only,
             "edit.copy",
-            "Copy",
+            crate::tr!("ui-text-cmd-copy"),
             keymap::Command::Copy,
         )
         .shortcut("Ctrl+C")
@@ -150,7 +193,7 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.paste",
-            "Paste",
+            crate::tr!("ui-text-cmd-paste"),
             keymap::Command::Paste,
         )
         .shortcut("Ctrl+V")
@@ -161,7 +204,7 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.select-all",
-            "Select all",
+            crate::tr!("ui-text-cmd-select-all"),
             keymap::Command::SelectAll,
         )
         .shortcut("Ctrl+A")
@@ -171,7 +214,7 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.select-line",
-            "Select line",
+            crate::tr!("ui-text-cmd-select-line"),
             keymap::Command::SelectLine,
         )
         .shortcut("Ctrl+L")
@@ -181,11 +224,13 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.add-next-occurrence",
-            "Add next occurrence",
+            crate::tr!("ui-text-cmd-add-next-occurrence"),
             keymap::Command::AddNextOccurrence,
         )
         .shortcut("Ctrl+Shift+D")
-        .keywords(["multiple carets", "cursors"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-add-next-occurrence.keywords"
+        )))
         .hidden_from_menu()
         .group(CommandGroup::Edit)
         .section("select"),
@@ -193,11 +238,13 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.select-all-occurrences",
-            "Select every occurrence",
+            crate::tr!("ui-text-cmd-select-all-occurrences"),
             keymap::Command::SelectAllOccurrences,
         )
         .shortcut("Ctrl+Shift+L")
-        .keywords(["multiple carets", "cursors"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-select-all-occurrences.keywords"
+        )))
         .hidden_from_menu()
         .group(CommandGroup::Edit)
         .section("select"),
@@ -205,11 +252,13 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.caret-above",
-            "Add caret above",
+            crate::tr!("ui-text-cmd-caret-above"),
             keymap::Command::AddCursor { up: true },
         )
         .shortcut("Ctrl+Alt+Up")
-        .keywords(["cursor", "column"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-caret-above.keywords"
+        )))
         .hidden_from_menu()
         .group(CommandGroup::Edit)
         .section("select"),
@@ -217,22 +266,28 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "edit.caret-below",
-            "Add caret below",
+            crate::tr!("ui-text-cmd-caret-below"),
             keymap::Command::AddCursor { up: false },
         )
         .shortcut("Ctrl+Alt+Down")
-        .keywords(["cursor", "column"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-caret-below.keywords"
+        )))
         .hidden_from_menu()
         .group(CommandGroup::Edit)
         .section("select"),
-        Command::key_hint("edit.caret-click", "Add or remove a caret", "Alt+click")
-            .group(CommandGroup::Edit)
-            .section("select"),
+        Command::key_hint(
+            "edit.caret-click",
+            crate::tr!("ui-text-cmd-caret-click"),
+            "Alt+click",
+        )
+        .group(CommandGroup::Edit)
+        .section("select"),
         command(
             handle,
             read_only,
             "go.matching-bracket",
-            "Go to matching bracket",
+            crate::tr!("ui-text-cmd-matching-bracket"),
             keymap::Command::MatchingBracket,
         )
         .shortcut("Ctrl+M")
@@ -240,25 +295,29 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
         .section("brackets"),
         edit(
             "text.comment",
-            "Comment or uncomment",
+            &crate::tr!("ui-text-cmd-comment"),
             keymap::Command::ToggleComment,
             "Ctrl+/",
         )
-        .keywords(["toggle comment", "uncomment"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-comment.keywords"
+        )))
         .group(TEXT_GROUP)
         .section("lines"),
         edit(
             "text.duplicate-line",
-            "Duplicate line",
+            &crate::tr!("ui-text-cmd-duplicate-line"),
             keymap::Command::Duplicate,
             "Ctrl+D",
         )
-        .keywords(["copy line"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-duplicate-line.keywords"
+        )))
         .group(TEXT_GROUP)
         .section("lines"),
         edit(
             "text.delete-line",
-            "Delete line",
+            &crate::tr!("ui-text-cmd-delete-line"),
             keymap::Command::DeleteLine,
             "Ctrl+Shift+K",
         )
@@ -266,7 +325,7 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
         .section("lines"),
         edit(
             "text.move-line-up",
-            "Move line up",
+            &crate::tr!("ui-text-cmd-move-line-up"),
             keymap::Command::MoveLines { up: true },
             "Alt+Up",
         )
@@ -274,7 +333,7 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
         .section("lines"),
         edit(
             "text.move-line-down",
-            "Move line down",
+            &crate::tr!("ui-text-cmd-move-line-down"),
             keymap::Command::MoveLines { up: false },
             "Alt+Down",
         )
@@ -282,23 +341,31 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
         .section("lines"),
         edit(
             "text.join-lines",
-            "Join lines",
+            &crate::tr!("ui-text-cmd-join-lines"),
             keymap::Command::JoinLines,
             "Ctrl+J",
         )
         .group(TEXT_GROUP)
         .section("lines"),
-        Command::key_hint("text.indent", "Indent or outdent", "Tab, Shift+Tab")
-            .group(TEXT_GROUP)
-            .section("lines"),
-        Command::key_hint("text.delete-word", "Delete a word", "Ctrl+Backspace")
-            .group(TEXT_GROUP)
-            .section("lines"),
+        Command::key_hint(
+            "text.indent",
+            crate::tr!("ui-text-cmd-indent"),
+            "Tab, Shift+Tab",
+        )
+        .group(TEXT_GROUP)
+        .section("lines"),
+        Command::key_hint(
+            "text.delete-word",
+            crate::tr!("ui-text-cmd-delete-word"),
+            "Ctrl+Backspace",
+        )
+        .group(TEXT_GROUP)
+        .section("lines"),
         action(
             handle,
             read_only,
             "text.sort-lines",
-            "Sort lines",
+            &crate::tr!("ui-text-cmd-sort-lines"),
             "sort lines",
             |editor| editor.sort_lines(),
         )
@@ -307,43 +374,51 @@ pub fn editor_commands(handle: &EditorHandle, read_only: bool) -> Vec<Command> {
             handle,
             read_only,
             "text.trim-trailing",
-            "Remove trailing spaces",
+            &crate::tr!("ui-text-cmd-trim-trailing"),
             "remove trailing spaces",
             |editor| {
                 editor.trim_trailing_whitespace();
             },
         )
-        .keywords(["whitespace", "trim"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-trim-trailing.keywords"
+        )))
         .section("lines"),
         action(
             handle,
             read_only,
             "text.uppercase",
-            "Uppercase",
+            &crate::tr!("ui-text-cmd-uppercase"),
             "uppercase",
             |editor| editor.transform_case(Case::Upper),
         )
-        .keywords(["capitals", "case"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-uppercase.keywords"
+        )))
         .section("case"),
         action(
             handle,
             read_only,
             "text.lowercase",
-            "Lowercase",
+            &crate::tr!("ui-text-cmd-lowercase"),
             "lowercase",
             |editor| editor.transform_case(Case::Lower),
         )
-        .keywords(["case"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-lowercase.keywords"
+        )))
         .section("case"),
         action(
             handle,
             read_only,
             "text.title-case",
-            "Title case",
+            &crate::tr!("ui-text-cmd-title-case"),
             "title case",
             |editor| editor.transform_case(Case::Title),
         )
-        .keywords(["capitalise", "case"])
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-text-cmd-title-case.keywords"
+        )))
         .section("case"),
     ]
 }

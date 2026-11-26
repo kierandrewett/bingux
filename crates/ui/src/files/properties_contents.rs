@@ -21,20 +21,32 @@ pub(super) const LARGEST: usize = 5;
 
 pub(super) fn contents_tab(page: &Page) -> Vec<Element> {
     let tokens = page.tokens;
-    let size = row("Total size").trailing(
+    let size = row(crate::tr!("ui-files-props-total-size")).trailing(
         rect()
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
-            .child(BODY.in_ink(Ink::Muted).selectable(&tokens, total_size(page.totals)))
+            .child(
+                BODY.in_ink(Ink::Muted)
+                    .selectable(&tokens, total_size(page.totals)),
+            )
             .maybe_child(page.stop_button()),
     );
     let (files, folders) = kinds(page.totals);
-    let summary = Group::titled("Contents")
-        .row(property_row("Items", contents(page.totals)))
-        .row(property_row("Files", files))
-        .row(property_row("Folders", folders))
+    let summary = Group::titled(&crate::tr!("ui-files-props-contents"))
+        .row(property_row(
+            crate::tr!("ui-files-props-items-label"),
+            contents(page.totals),
+        ))
+        .row(property_row(
+            crate::tr!("ui-files-props-files-label"),
+            files,
+        ))
+        .row(property_row(
+            crate::tr!("ui-files-props-folders-label"),
+            folders,
+        ))
         .row(size);
 
-    let mut largest = Group::titled("Largest items");
+    let mut largest = Group::titled(&crate::tr!("ui-files-props-largest-items"));
     let found = &page.largest;
     for child in found {
         largest = largest.row(property_row(child.name.clone(), child_line(child)).title_middle());
@@ -44,7 +56,7 @@ pub(super) fn contents_tab(page: &Page) -> Vec<Element> {
             largest = largest.row(property_row(PENDING, PENDING));
         }
     } else if found.is_empty() {
-        largest = largest.row(property_row("This folder is empty", ""));
+        largest = largest.row(property_row(crate::tr!("ui-files-props-empty-folder"), ""));
     }
     vec![summary.into(), largest.into()]
 }
