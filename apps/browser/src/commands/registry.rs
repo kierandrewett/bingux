@@ -73,6 +73,12 @@ impl Registry {
                 true,
             ),
             (
+                "browser.search-tabs",
+                tr!("browser-command-search-tabs-title"),
+                Command::SearchTabs,
+                true,
+            ),
+            (
                 "browser.find",
                 tr!("browser-command-find-title"),
                 Command::Find,

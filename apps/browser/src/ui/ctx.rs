@@ -99,6 +99,7 @@ impl Ctx {
         for request in requests {
             match request {
                 UiRequest::FocusAddress => self.address.focus(),
+                UiRequest::SearchTabs => self.address.search_tabs(),
                 UiRequest::OpenFind => self.find.focus(),
                 UiRequest::OpenDownloads => {
                     self.downloads_popover.open();

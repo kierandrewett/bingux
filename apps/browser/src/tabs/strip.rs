@@ -52,7 +52,18 @@ impl Strip {
             .on_reorder(move |(key, to): (u64, usize)| {
                 ctx.with(|browser| browser.move_tab(key, to))
             })
-            .on_status(move |key: u64| ctx.with(|browser| browser.toggle_mute(key)));
+            .on_status(move |key: u64| ctx.with(|browser| browser.toggle_mute(key)))
+            // The list of every tab: Search all tabs opens the address field on them.
+            .on_search_tabs(
+                Command::SearchTabs.keys().unwrap_or_default(),
+                move |_: ()| ctx.run(Command::SearchTabs),
+            );
+        // Close duplicate tabs is offered only while there are duplicates.
+        if !browser.tabs.duplicates().is_empty() {
+            strip = strip.on_close_duplicates(move |_: ()| {
+                ctx.with(|browser| browser.close_duplicate_tabs())
+            });
+        }
         for tab in browser.tabs.all() {
             strip = strip.tab_menu(tab.key, TabMenu::items(ctx, tab));
         }

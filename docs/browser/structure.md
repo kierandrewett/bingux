@@ -401,6 +401,8 @@ Snapshot scenarios, in the order of today's table, each beside the feature it sh
 | `newtab`                                                                                | `new_tab`     |
 | `page`, `fullscreen`                                                                    | `page`        |
 | `tabs`, `tab-menu`, `tab-list`, `popup`                                                 | `tabs`        |
+| `tabs-few`, `tabs-forty`, `tabs-forty-end`                                              | `tabs`        |
+| `tab-list-all`, `tab-list-private`                                                      | `tabs`        |
 | `loading`, `hover`                                                                      | `navigation`  |
 | `permission`, `dialog`, `auth`                                                          | `prompts`     |
 | `cert`, `cert-details`, `cert-pinned`, `error`, `crash`                                 | `error_pages` |

@@ -92,6 +92,7 @@ impl Platform {
                 _ if Held::is(key, "p") => return Some(Command::NewPrivateWindow),
                 _ if Held::is(key, "r") => return Some(Command::ReloadBypassCache),
                 _ if Held::is(key, "y") => return Some(Command::Downloads),
+                _ if Held::is(key, "a") => return Some(Command::SearchTabs),
                 // Firefox and Chromium both toggle the toolbox with Ctrl+Shift+I.
                 _ if Held::is(key, "i") => return Some(Command::DevTools),
                 _ if Held::is(key, "g") => return Some(Command::FindPrevious),

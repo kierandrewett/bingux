@@ -40,6 +40,7 @@ impl Browser {
             Command::MoveTabLeft => self.shift_tab(key, -1),
             Command::MoveTabRight => self.shift_tab(key, 1),
             Command::FocusAddress => self.out.request(UiRequest::FocusAddress),
+            Command::SearchTabs => self.out.request(UiRequest::SearchTabs),
             Command::Find => self.open_find(key),
             Command::FindNext => self.find_step(key, true),
             Command::FindPrevious => self.find_step(key, false),

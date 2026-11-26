@@ -64,6 +64,9 @@ pub struct Tab {
     pub opener: Option<u64>,
     /// The developer tools docked under the page, when they are open.
     pub toolbox: Option<DockedToolbox>,
+    /// When the tab was last on show or made, on the window's tab clock: Firefox's
+    /// `lastSeenActive`, which decides which of two tabs at one address stays.
+    pub last_seen: u64,
 }
 
 impl Tab {
@@ -94,6 +97,7 @@ impl Tab {
             find: Find::default(),
             opener: None,
             toolbox: None,
+            last_seen: 0,
         }
     }
 

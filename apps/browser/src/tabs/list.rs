@@ -8,7 +8,7 @@
 
 use bingux_ui::web_view::TabId;
 
-use crate::tabs::Tab;
+use crate::tabs::{Tab, TabKind};
 
 /// Where a new tab goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -26,6 +26,8 @@ pub struct TabList {
     tabs: Vec<Tab>,
     active: u64,
     next_key: u64,
+    /// Counts the tabs made and shown, for [`Tab::last_seen`].
+    clock: u64,
 }
 
 impl TabList {
@@ -34,6 +36,7 @@ impl TabList {
             tabs: Vec::new(),
             active: 0,
             next_key: 1,
+            clock: 0,
         }
     }
 
@@ -100,9 +103,15 @@ impl TabList {
         self.tabs.iter().take_while(|tab| tab.pinned).count()
     }
 
+    fn tick(&mut self) -> u64 {
+        self.clock += 1;
+        self.clock
+    }
+
     /// Put `tab` in the list. It becomes the tab on show when `select` is set
     /// or when it is the first.
-    pub fn insert(&mut self, tab: Tab, place: Place, select: bool) {
+    pub fn insert(&mut self, mut tab: Tab, place: Place, select: bool) {
+        tab.last_seen = self.tick();
         let pinned = self.pinned_count();
         let after = match place {
             Place::End => self.tabs.len(),
@@ -129,6 +138,10 @@ impl TabList {
     pub fn select(&mut self, key: u64) -> bool {
         if self.get(key).is_some() {
             self.active = key;
+            let now = self.tick();
+            if let Some(tab) = self.get_mut(key) {
+                tab.last_seen = now;
+            }
             true
         } else {
             false
@@ -209,12 +222,45 @@ impl TabList {
     pub fn last(&self) -> Option<u64> {
         self.tabs.last().map(|tab| tab.key)
     }
+
+    /// The keys, in strip order, of the tabs to close as duplicates, as Firefox's
+    /// `getAllDuplicateTabsToClose` picks them (tabbrowser.js, line 4162 of
+    /// mozilla-central): going from the tab seen most recently to the one seen
+    /// least, a tab is a duplicate when it is not pinned and a tab seen more
+    /// recently has its address. So the tab on show, which is the most recent,
+    /// and a pinned tab are never closed. A tab with no address yet is nobody's duplicate.
+    pub fn duplicates(&self) -> Vec<u64> {
+        let mut recent: Vec<&Tab> = self
+            .tabs
+            .iter()
+            .filter(|tab| tab.kind == TabKind::Web && !tab.url.is_empty())
+            .collect();
+        recent.sort_by_key(|tab| {
+            std::cmp::Reverse(if tab.key == self.active {
+                u64::MAX
+            } else {
+                tab.last_seen
+            })
+        });
+        let mut seen: Vec<&str> = Vec::new();
+        let mut closing: Vec<u64> = Vec::new();
+        for tab in recent {
+            if !tab.pinned && seen.contains(&tab.url.as_str()) {
+                closing.push(tab.key);
+            }
+            seen.push(&tab.url);
+        }
+        self.tabs
+            .iter()
+            .map(|tab| tab.key)
+            .filter(|key| closing.contains(key))
+            .collect()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tabs::TabKind;
 
     fn list(count: usize) -> TabList {
         let mut list = TabList::new();
@@ -351,6 +397,57 @@ mod tests {
         assert_eq!(keys(&list), [4, 2, 3, 1]);
         list.move_to(4, 99);
         assert_eq!(keys(&list), [2, 3, 1, 4], "past the end is the end");
+    }
+
+    /// Give tab `key` the address `url`.
+    fn at(list: &mut TabList, key: u64, url: &str) {
+        list.get_mut(key).unwrap().url = url.to_string();
+    }
+
+    #[test]
+    fn duplicates_are_the_extra_tabs_at_an_address_that_is_open_more_than_once() {
+        let mut list = list(5);
+        for (key, url) in [
+            (1, "https://a.example/"),
+            (2, "https://b.example/"),
+            (3, "https://a.example/"),
+            (4, "https://a.example/"),
+        ] {
+            at(&mut list, key, url);
+        }
+        assert_eq!(
+            list.duplicates(),
+            [3, 4],
+            "the one on show stays; the blank tab 5 repeats nothing"
+        );
+        list.select(4);
+        assert_eq!(list.duplicates(), [1, 3], "the one on show stays");
+        list.select(1);
+        list.select(3);
+        list.select(2);
+        assert_eq!(
+            list.duplicates(),
+            [1, 4],
+            "of the rest, the one seen last stays"
+        );
+        list.set_pinned(4, true);
+        assert_eq!(
+            list.duplicates(),
+            [1],
+            "a pinned tab is never closed, and a tab seen less recently than it goes"
+        );
+    }
+
+    #[test]
+    fn a_window_of_different_pages_or_blank_tabs_has_no_duplicates() {
+        let mut list = list(3);
+        assert!(list.duplicates().is_empty(), "blank tabs repeat nothing");
+        at(&mut list, 1, "https://a.example/");
+        at(&mut list, 2, "https://a.example/page");
+        assert!(
+            list.duplicates().is_empty(),
+            "another address is another page"
+        );
     }
 
     #[test]

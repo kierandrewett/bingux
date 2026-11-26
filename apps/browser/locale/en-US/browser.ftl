@@ -79,6 +79,8 @@ browser-zoom-chip = { NUMBER($percent) }%
 
 # Placeholder of the empty address field on a desktop.
 browser-address-placeholder = Search or enter an address
+# The address field while it searches the open tabs alone (Search all tabs).
+browser-address-search-tabs-placeholder = Search open tabs
 # Placeholder of the empty address field on a phone, which has less room.
 browser-address-compact-placeholder = Search or address
 # First suggestion when what was typed is an address. $address is the address as the bar shows it.
@@ -274,6 +276,7 @@ browser-command-close-tab-title = Close tab
 browser-command-next-tab-title = Next tab
 browser-command-previous-tab-title = Previous tab
 browser-command-address-title = Address bar
+browser-command-search-tabs-title = Search all tabs
 browser-command-find-title = Find in page
 browser-command-reload-title = Reload
 browser-command-back-title = Back
@@ -393,6 +396,12 @@ browser-tabs-sheet-title = Tabs
 browser-tabs-close-tooltip = Close tab
 # Toast shown by Reopen closed tab when nothing was closed.
 browser-tabs-none-to-reopen-notification = There is no closed tab to reopen.
+# Said after Close duplicate tabs. $count is how many tabs were closed.
+browser-tabs-duplicates-closed-notification =
+    { $count ->
+        [one] Closed { $count } duplicate tab
+       *[other] Closed { $count } duplicate tabs
+    }
 # Toast when the engine ends a tab itself. $error is the engine's own words.
 browser-tabs-closed-by-engine-notification = A tab was closed by the engine: { $error }
 # Said in place of the site when a pop-up came from a page with no address.

@@ -57,6 +57,40 @@ impl Suggestion {
         }
     }
 
+    /// The rows of a search of the open tabs alone (*Search all tabs*): every tab
+    /// that matches what is typed, and every tab with an address when nothing is
+    /// typed yet, as the open tabs of the window in strip order. There is no
+    /// typed-text row: Enter takes the highlighted tab, or the first.
+    pub fn tabs(typed: &str, tabs: &[OpenTab]) -> Vec<Suggestion> {
+        let query = typed.trim().to_lowercase();
+        tabs.iter()
+            .filter(|tab| !tab.url.is_empty() && Self::matches(&query, tab))
+            .take(Self::LIMIT)
+            .map(Self::of_tab)
+            .collect()
+    }
+
+    /// Whether every word of `query` (lower case) is in the tab's title or address.
+    fn matches(query: &str, tab: &OpenTab) -> bool {
+        query.split_whitespace().all(|word| {
+            tab.url.to_lowercase().contains(word) || tab.title.to_lowercase().contains(word)
+        })
+    }
+
+    /// The row that goes to `tab`.
+    fn of_tab(tab: &OpenTab) -> Suggestion {
+        Suggestion {
+            source: Source::Tab(tab.key),
+            title: if tab.title.is_empty() {
+                Address::new(&tab.url).display()
+            } else {
+                tab.title.clone()
+            },
+            detail: Address::new(&tab.url).display(),
+            url: tab.url.clone(),
+        }
+    }
+
     /// The rows for what is typed: the typed text first (go there, or search for
     /// it), then open tabs that match, then the hits of the `history` searchable
     /// for it, in the order the search ranked them.
@@ -91,20 +125,8 @@ impl Suggestion {
         let mut rows = vec![first];
         let query = typed.trim().to_lowercase();
         for tab in tabs {
-            let matches = query.split_whitespace().all(|word| {
-                tab.url.to_lowercase().contains(word) || tab.title.to_lowercase().contains(word)
-            });
-            if matches && !tab.url.is_empty() && rows.len() < Self::LIMIT {
-                rows.push(Suggestion {
-                    source: Source::Tab(tab.key),
-                    title: if tab.title.is_empty() {
-                        Address::new(&tab.url).display()
-                    } else {
-                        tab.title.clone()
-                    },
-                    detail: Address::new(&tab.url).display(),
-                    url: tab.url.clone(),
-                });
+            if Self::matches(&query, tab) && !tab.url.is_empty() && rows.len() < Self::LIMIT {
+                rows.push(Self::of_tab(tab));
             }
         }
         for visit in history {
@@ -186,6 +208,60 @@ mod tests {
             rows[2].url, "https://docs.example.org/guide",
             "the open page is not offered twice"
         );
+    }
+
+    fn open(key: u64, title: &str, url: &str) -> OpenTab {
+        OpenTab {
+            key,
+            title: title.to_string(),
+            url: url.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_search_of_the_open_tabs_lists_every_tab_with_an_address_until_something_is_typed() {
+        crate::locale::register();
+        let tabs = [
+            open(1, "Example Domain", "https://example.com/"),
+            open(2, "", ""),
+            open(3, "The guide", "https://docs.example.org/guide"),
+        ];
+        let rows = Suggestion::tabs("", &tabs);
+        let sources: Vec<Source> = rows.iter().map(|row| row.source.clone()).collect();
+        assert_eq!(
+            sources,
+            [Source::Tab(1), Source::Tab(3)],
+            "no typed-text row, and the blank tab is not offered"
+        );
+        assert_eq!(rows[1].title, "The guide");
+        assert_eq!(rows[1].url, "https://docs.example.org/guide");
+    }
+
+    #[test]
+    fn typing_narrows_a_search_of_the_open_tabs_by_title_and_address() {
+        crate::locale::register();
+        let tabs = [
+            open(1, "Example Domain", "https://example.com/"),
+            open(2, "The guide", "https://docs.example.org/guide"),
+            open(3, "News", "https://news.bingux.dev/"),
+        ];
+        let keys = |typed: &str| -> Vec<u64> {
+            Suggestion::tabs(typed, &tabs)
+                .iter()
+                .filter_map(|row| match row.source {
+                    Source::Tab(key) => Some(key),
+                    _ => None,
+                })
+                .collect()
+        };
+        assert_eq!(keys("guide"), [2]);
+        assert_eq!(
+            keys("EXAMPLE"),
+            [1, 2],
+            "case does not matter and the address counts"
+        );
+        assert_eq!(keys("guide docs"), [2], "every word has to match");
+        assert!(keys("zzz").is_empty());
     }
 
     #[test]

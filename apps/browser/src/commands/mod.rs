@@ -31,6 +31,9 @@ pub enum Command {
     MoveTabLeft,
     MoveTabRight,
     FocusAddress,
+    /// *Search all tabs*: the address field takes the keyboard to search the
+    /// window's open tabs alone, and Enter goes to one.
+    SearchTabs,
     Find,
     FindNext,
     FindPrevious,
@@ -70,6 +73,7 @@ impl Command {
             Command::NextTab => "Ctrl+Tab",
             Command::PreviousTab => "Ctrl+Shift+Tab",
             Command::FocusAddress => "Ctrl+L",
+            Command::SearchTabs => "Ctrl+Shift+A",
             Command::Find => "Ctrl+F",
             Command::Reload => "Ctrl+R",
             Command::Back => "Alt+Left",

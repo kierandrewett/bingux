@@ -75,6 +75,9 @@ pub struct FieldState {
     text: State<String>,
     /// Whether the field follows the page or the person is typing in it.
     entry: State<UrlbarValue>,
+    /// The field searches the open tabs alone (*Search all tabs*), until the
+    /// person leaves it.
+    tabs_only: State<bool>,
     /// Counts the requests to focus the field. A new count is a new field
     /// that takes the focus with its text selected.
     focus: State<u32>,
@@ -88,6 +91,7 @@ impl FieldState {
         Self {
             text: use_state(String::new),
             entry: use_state(|| UrlbarValue::Page),
+            tabs_only: use_state(|| false),
             focus: use_state(|| 0_u32),
             area: use_state(Area::default),
         }
@@ -97,6 +101,20 @@ impl FieldState {
     pub fn focus(self) {
         let mut entry = self.entry;
         entry.set(UrlbarValue::Page);
+        let mut focus = self.focus;
+        let next = *focus.peek() + 1;
+        focus.set(next);
+    }
+
+    /// Put the cursor in an empty field that lists the open tabs and nothing
+    /// else, as Firefox's *Search all tabs* does: the person types to narrow
+    /// them, and Enter goes to the highlighted tab, or the first.
+    pub fn search_tabs(self) {
+        let (mut text, mut entry, mut tabs_only) = (self.text, self.entry, self.tabs_only);
+        text.set(String::new());
+        tabs_only.set(true);
+        // The list shows only while the person is editing.
+        entry.set(UrlbarValue::after_typing());
         let mut focus = self.focus;
         let next = *focus.peek() + 1;
         focus.set(next);
@@ -141,6 +159,7 @@ impl Component for AddressBar {
         let mut entry = state.entry;
         let mut address = state.text;
         let mut field_area = state.area;
+        let mut tabs_only = state.tabs_only;
         let focused = focus().is_focused();
 
         let (key, shown) = {
@@ -160,7 +179,7 @@ impl Component for AddressBar {
         let has_history = ctx.browser.read().has_history();
         let found = search::use_search_with(
             History::suggestions(&typed),
-            editing && has_history && !typed.trim().is_empty(),
+            editing && has_history && !tabs_only() && !typed.trim().is_empty(),
         );
         // What the list offers: only while the person has changed the text.
         let rows: Vec<Suggestion> = if editing {
@@ -175,8 +194,13 @@ impl Component for AddressBar {
                     url: tab.url.clone(),
                 })
                 .collect();
-            let visited: Vec<Visited> = found.hits.iter().map(History::visited).collect();
-            Suggestion::list(&typed, browser.search(), &open, &visited)
+            if tabs_only() {
+                // *Search all tabs*: the open tabs alone, and no row for the text itself.
+                Suggestion::tabs(&typed, &open)
+            } else {
+                let visited: Vec<Visited> = found.hits.iter().map(History::visited).collect();
+                Suggestion::list(&typed, browser.search(), &open, &visited)
+            }
         } else {
             Vec::new()
         };
@@ -190,6 +214,12 @@ impl Component for AddressBar {
                 }
             },
         );
+        // The search of the open tabs ends with the typing.
+        use_side_effect_with_deps(&editing, move |editing: &bool| {
+            if !*editing {
+                tabs_only.set(false);
+            }
+        });
         // The keyboard leaving the field ends the typing, unless the pointer is
         // on a row (a press on it takes the keyboard for a moment).
         use_side_effect_with_deps(&focused, move |focused: &bool| {
@@ -201,14 +231,26 @@ impl Component for AddressBar {
         let submit = {
             let rows = rows.clone();
             let enter_with_alt = enter_with_alt.clone();
+            let scoped = tabs_only();
             move |text: String| {
                 let chosen = entry
                     .peek()
                     .highlight()
                     .and_then(|at| rows.get(at))
                     .cloned();
+                // A search of the open tabs goes to the first match when no row
+                // was reached, and to nothing when nothing matches: what was typed is
+                // not an address there.
+                let chosen = if scoped {
+                    chosen.or_else(|| rows.first().cloned())
+                } else {
+                    chosen
+                };
                 let alt = enter_with_alt.replace(false);
                 entry.set(UrlbarValue::Page);
+                if scoped && chosen.is_none() {
+                    return;
+                }
                 match chosen {
                     Some(Suggestion {
                         source: Source::Tab(tab),
@@ -229,7 +271,9 @@ impl Component for AddressBar {
         let wanted = state.focus.read().to_owned();
         let mut field = text_field(address, submit)
             .fill_width()
-            .placeholder(if is_compact() {
+            .placeholder(if tabs_only() {
+                tr!("browser-address-search-tabs-placeholder")
+            } else if is_compact() {
                 tr!("browser-address-compact-placeholder")
             } else {
                 tr!("browser-address-placeholder")

@@ -40,6 +40,15 @@ fn the_basic_ctrl_shortcuts() {
 }
 
 #[test]
+fn ctrl_shift_a_searches_the_open_tabs_and_menus_say_so() {
+    assert_eq!(
+        Platform::Linux.window_command(&ch("A"), CTRL | Modifiers::SHIFT),
+        Some(Command::SearchTabs)
+    );
+    assert_eq!(Command::SearchTabs.keys(), Some("Ctrl+Shift+A"));
+}
+
+#[test]
 fn extra_modifiers_make_it_another_key() {
     assert_eq!(
         Platform::Linux.window_command(&ch("t"), CTRL | Modifiers::ALT),

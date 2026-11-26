@@ -273,6 +273,23 @@ impl Browser {
         }
     }
 
+    /// Close the tabs that only repeat a page another tab has ([`crate::tabs::TabList::duplicates`]).
+    pub fn close_duplicate_tabs(&mut self) {
+        let duplicates = self.tabs.duplicates();
+        if duplicates.is_empty() {
+            return;
+        }
+        let count = duplicates.len();
+        for key in duplicates {
+            self.close_tab(key);
+        }
+        // Firefox's confirmation hint (`confirmation-hint-duplicate-tabs-closed`), as a toast.
+        self.out.notify(tr!(
+            "browser-tabs-duplicates-closed-notification",
+            count = count
+        ));
+    }
+
     /// Close the tabs after `key` (not the pinned ones).
     pub fn close_after(&mut self, key: u64) {
         let Some(at) = self.tabs.position(key) else {

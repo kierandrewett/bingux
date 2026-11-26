@@ -19,6 +19,8 @@ pub struct Notice {
 pub enum UiRequest {
     /// Put the cursor in the address bar, with its text selected.
     FocusAddress,
+    /// Put the cursor in the address bar to search the open tabs alone.
+    SearchTabs,
     /// Open the find bar and focus its field.
     OpenFind,
     OpenDownloads,

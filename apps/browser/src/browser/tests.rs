@@ -315,3 +315,33 @@ fn muting_goes_to_the_engine_and_is_shown_once_it_agrees() {
             .any(|call| matches!(call, Call::SetMuted(_, true)))
     );
 }
+
+#[test]
+fn search_all_tabs_asks_the_window_to_search_the_open_tabs() {
+    let (mut browser, _) = browser();
+    browser.run(Command::SearchTabs);
+    assert_eq!(browser.take_ui(), [UiRequest::SearchTabs]);
+}
+
+#[test]
+fn closing_duplicate_tabs_leaves_one_tab_for_each_address() {
+    let (mut browser, _) = browser();
+    let first = browser.tabs.active_key();
+    browser.navigate(first, "example.com");
+    let news = browser
+        .open_tab("news.bingux.dev", Place::End, false)
+        .unwrap();
+    let again = browser.open_tab("example.com", Place::End, false).unwrap();
+    let third = browser.open_tab("example.com", Place::End, false).unwrap();
+    browser.poll();
+    assert_eq!(browser.tabs.duplicates(), [again, third]);
+    browser.close_duplicate_tabs();
+    let keys: Vec<u64> = browser.tabs.all().iter().map(|tab| tab.key).collect();
+    assert_eq!(keys, [first, news], "the first tab of each address stays");
+    assert_eq!(
+        browser.tabs.active_key(),
+        first,
+        "and the tab on show is not changed"
+    );
+    assert!(browser.tabs.duplicates().is_empty());
+}
