@@ -7,6 +7,6 @@ mod strip;
 mod tab;
 
 pub use list::{Place, TabList};
-pub use sheet::open_tabs;
-pub use strip::{icon_of, strip};
+pub use sheet::TabsSheet;
+pub use strip::Strip;
 pub use tab::{Page, Tab, TabKind};

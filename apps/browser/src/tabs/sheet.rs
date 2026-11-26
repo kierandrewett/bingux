@@ -6,28 +6,29 @@ use freya::prelude::*;
 
 use crate::address::Address;
 
-use crate::tabs::icon_of;
 use crate::ui::Ctx;
 
-/// Open the list of tabs.
-pub fn open_tabs(ctx: Ctx) {
-    // The sheet is as tall as its rows. The popup measures nothing here (a body
-    // of rows in a window that already holds the page leaves it at the most the
-    // window allows), so the height is asked for: the header, the padding and a
-    // row with a subtitle for each tab, which the popup limits to the window.
-    let rows = ctx.browser.peek().tabs.all().len() as f32;
-    let height = Dim::Header.px()
-        + Dim::Hairline.px()
-        + 2.0 * S4.px()
-        + rows * Dim::RowSubtitle.px()
-        + S4.px();
-    ctx.window
-        .open(popup("Tabs", TabsSheet { ctx }).size(Dim::PopupWidth.px(), height));
+#[derive(PartialEq)]
+pub struct TabsSheet {
+    ctx: Ctx,
 }
 
-#[derive(PartialEq)]
-struct TabsSheet {
-    ctx: Ctx,
+impl TabsSheet {
+    /// Open the list of tabs.
+    pub fn open(ctx: Ctx) {
+        // The sheet is as tall as its rows. The popup measures nothing here (a body
+        // of rows in a window that already holds the page leaves it at the most the
+        // window allows), so the height is asked for: the header, the padding and a
+        // row with a subtitle for each tab, which the popup limits to the window.
+        let rows = ctx.browser.peek().tabs.all().len() as f32;
+        let height = Dim::Header.px()
+            + Dim::Hairline.px()
+            + 2.0 * S4.px()
+            + rows * Dim::RowSubtitle.px()
+            + S4.px();
+        ctx.window
+            .open(popup("Tabs", TabsSheet { ctx }).size(Dim::PopupWidth.px(), height));
+    }
 }
 
 impl Component for TabsSheet {
@@ -44,7 +45,7 @@ impl Component for TabsSheet {
                 .map(|tab| {
                     let key = tab.key;
                     let mut line = row(tab.display_title())
-                        .leading(icon_of(tab))
+                        .leading(tab.icon())
                         .selected(key == active)
                         .on_press(move |_: ()| {
                             ctx.with(|browser| browser.select(key));

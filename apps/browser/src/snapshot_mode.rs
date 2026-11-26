@@ -300,7 +300,7 @@ fn tab_list(shot: &mut Snapshot, _: &Rig) {
     // button, so the sheet is opened by the same call the button makes.
     if !shot.click_text("3") {
         let at = ctx();
-        shot.runner().run_in(|| crate::tabs::open_tabs(at));
+        shot.runner().run_in(|| crate::tabs::TabsSheet::open(at));
     }
     wait(shot, 1500);
 }

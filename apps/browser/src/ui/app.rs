@@ -17,7 +17,7 @@ use crate::menus::ContextMenuHost;
 use crate::prompts::{DialogFields, PromptHost};
 use crate::site_info::PopoverState;
 use crate::tabs::Place;
-use crate::tabs::strip;
+use crate::tabs::Strip;
 
 use super::ctx::{Chrome, Ctx};
 use super::page::PageArea;
@@ -312,7 +312,7 @@ impl Component for Content {
         // toolbar is the header of the tab on show.
         let tabs = HeaderBar::new(title.clone())
             .trailing(WindowControls)
-            .tab_slot(strip(ctx));
+            .tab_slot(Strip::build(ctx));
         let header = HeaderBar::new(title).title_slot(Toolbar {
             ctx,
             in_header: true,
