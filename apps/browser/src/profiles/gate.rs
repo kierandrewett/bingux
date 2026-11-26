@@ -40,9 +40,11 @@ impl Component for GateWindow {
                 let mut page =
                     status_page(Icon::DialogWarning, state.title()).description(state.text());
                 if state.can_try_again() {
-                    page = page.action("Try again", move |_: ()| again(None));
+                    page = page.action(tr!("browser-profile-try-again-button"), move |_: ()| {
+                        again(None)
+                    });
                 } else if matches!(state, ProfileState::RegistryDamaged { .. }) {
-                    page = page.action("Start over", move |_: ()| {
+                    page = page.action(tr!("browser-profile-start-over-button"), move |_: ()| {
                         spawn(async move {
                             spawn_blocking(|| {
                                 // A list that cannot be read is kept beside the new one.
@@ -56,7 +58,7 @@ impl Component for GateWindow {
                 page.into_element()
             }
             Gate::Choose(profiles) => {
-                let mut group = Group::new("Profiles".to_string());
+                let mut group = Group::new(tr!("browser-profile-choose-title"));
                 for (id, name) in profiles {
                     let id = id.clone();
                     group = group.row(
@@ -66,13 +68,13 @@ impl Component for GateWindow {
                             .on_press(move |_: ()| again(Some(id.clone()))),
                     );
                 }
-                status_page(Icon::AvatarDefault, "Which profile?")
-                    .description("Each profile keeps its own history, cookies and settings.")
+                status_page(Icon::AvatarDefault, tr!("browser-profile-which-title"))
+                    .description(tr!("browser-profile-which-description"))
                     .child(clamp(Dim::PopupNarrow, group))
                     .into_element()
             }
         };
-        let header = HeaderBar::new("Browser".to_string()).trailing(WindowControls);
+        let header = HeaderBar::new(tr!("browser-title")).trailing(WindowControls);
         rect()
             .tw(
                 &tokens,

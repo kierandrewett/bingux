@@ -6,6 +6,7 @@
 //! A private window opens no profile: it reads the registry and one
 //! profile's settings with plain reads, and writes nothing.
 
+use bingux_ui::prelude::tr;
 use std::path::PathBuf;
 
 use crate::first_run::{self, Migrated, MigrationError};
@@ -37,15 +38,15 @@ pub enum ProfileState {
 
 impl ProfileState {
     /// The page's title.
-    pub fn title(&self) -> &'static str {
+    pub fn title(&self) -> String {
         match self {
-            Self::InUse { .. } => "This profile is already open",
-            Self::RegistryDamaged { .. } => "The list of profiles is damaged",
-            Self::RegistryTooNew { .. } => "A newer Browser set up these profiles",
-            Self::MoveWaiting { .. } => "Browser is still open from before the update",
-            Self::MoveFailed { .. } => "Your profile could not be moved",
-            Self::Unwritable { .. } => "Browser cannot keep anything",
-            Self::UnknownProfile { .. } => "There is no such profile",
+            Self::InUse { .. } => tr!("browser-profile-in-use-title"),
+            Self::RegistryDamaged { .. } => tr!("browser-profile-damaged-title"),
+            Self::RegistryTooNew { .. } => tr!("browser-profile-too-new-title"),
+            Self::MoveWaiting { .. } => tr!("browser-profile-move-waiting-title"),
+            Self::MoveFailed { .. } => tr!("browser-profile-move-failed-title"),
+            Self::Unwritable { .. } => tr!("browser-profile-unwritable-title"),
+            Self::UnknownProfile { .. } => tr!("browser-profile-unknown-title"),
         }
     }
 
@@ -53,28 +54,32 @@ impl ProfileState {
     pub fn text(&self) -> String {
         match self {
             Self::InUse { name, .. } => {
-                format!("{name} is open in another Browser window. Use that window, or close it and try again.")
+                tr!("browser-profile-in-use-description", name = name.as_str())
             }
-            Self::RegistryDamaged { .. } => "Browser could not read the list of your profiles. \
-                Start over makes a new list and keeps the damaged one beside it; your profile folders are not touched."
-                .to_string(),
+            Self::RegistryDamaged { .. } => tr!("browser-profile-damaged-description"),
             Self::RegistryTooNew { .. } => {
-                "Update Browser to open these profiles. Nothing was changed.".to_string()
+                tr!("browser-profile-too-new-description")
             }
             Self::MoveWaiting { .. } => {
-                "Close the older Browser window, then try again. Your profile is moved once, when nothing is using it."
-                    .to_string()
+                tr!("browser-profile-move-waiting-description")
             }
-            Self::MoveFailed { old, problem } => format!(
-                "{} could not be moved into Browser's profiles: {}. Nothing was changed.",
-                old.display(),
-                problem.text()
+            Self::MoveFailed { old, problem } => tr!(
+                "browser-profile-move-failed-description",
+                path = old.display().to_string(),
+                problem = problem.text()
             ),
             Self::Unwritable { path, problem } => {
-                format!("{} cannot be used: {}.", path.display(), problem.text())
+                tr!(
+                    "browser-profile-unwritable-description",
+                    path = path.display().to_string(),
+                    problem = problem.text()
+                )
             }
             Self::UnknownProfile { asked } => {
-                format!("No profile is called \u{201c}{asked}\u{201d}.")
+                tr!(
+                    "browser-profile-unknown-description",
+                    asked = asked.as_str()
+                )
             }
         }
     }

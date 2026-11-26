@@ -453,3 +453,33 @@ browser-settings-permissions-kept = { $count ->
         [one] { $count } site has choices kept
        *[other] { $count } sites have choices kept
     }
+
+## Profiles
+## The window shown when a profile cannot be opened, and the app's name.
+
+browser-profile-in-use-title = This profile is already open
+browser-profile-damaged-title = The list of profiles is damaged
+browser-profile-too-new-title = A newer Browser set up these profiles
+browser-profile-move-waiting-title = Browser is still open from before the update
+browser-profile-move-failed-title = Your profile could not be moved
+browser-profile-unwritable-title = Browser cannot keep anything
+browser-profile-unknown-title = There is no such profile
+# $name is the profile.
+browser-profile-in-use-description = { $name } is open in another Browser window. Use that window, or close it and try again.
+browser-profile-damaged-description = Browser could not read the list of your profiles. Start over makes a new list and keeps the damaged one beside it; your profile folders are not touched.
+browser-profile-too-new-description = Update Browser to open these profiles. Nothing was changed.
+browser-profile-move-waiting-description = Close the older Browser window, then try again. Your profile is moved once, when nothing is using it.
+# $path is the old folder, $problem the system's own words.
+browser-profile-move-failed-description = { $path } could not be moved into Browser’s profiles: { $problem }. Nothing was changed.
+browser-profile-unwritable-description = { $path } cannot be used: { $problem }.
+# $asked is what --profile named.
+browser-profile-unknown-description = No profile is called “{ $asked }”.
+browser-profile-try-again-button = Try again
+browser-profile-start-over-button = Start over
+browser-profile-choose-title = Profiles
+browser-profile-which-title = Which profile?
+browser-profile-which-description = Each profile keeps its own history, cookies and settings.
+# The name of the app, in the window title.
+browser-title = Browser
+# The description of the app, in the About window.
+browser-description = Browse the web

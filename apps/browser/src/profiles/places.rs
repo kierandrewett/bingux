@@ -70,20 +70,21 @@ impl Places {
     /// [`Places::from_environment`] over any source of variables. A relative
     /// path is ignored, as the XDG specification says.
     pub fn from_lookup(var_os: &dyn Fn(&str) -> Option<OsString>) -> Self {
-        let path = |name: &str| {
+        let absolute = |name: &str| {
             var_os(name)
                 .filter(|value| !value.is_empty())
                 .map(PathBuf::from)
                 .filter(|path| path.is_absolute())
         };
-        let home = path("HOME").unwrap_or_else(|| PathBuf::from("/"));
-        let base = |name: &str, fallback: &str| path(name).unwrap_or_else(|| home.join(fallback));
+        let home = absolute("HOME").unwrap_or_else(|| PathBuf::from("/"));
+        let base =
+            |name: &str, fallback: &str| absolute(name).unwrap_or_else(|| home.join(fallback));
         Self {
             data: base("XDG_DATA_HOME", ".local/share").join("bingux-browser"),
             cache: base("XDG_CACHE_HOME", ".cache").join("bingux-browser"),
             state: base("XDG_STATE_HOME", ".local/state").join("bingux-browser"),
-            runtime: path("XDG_RUNTIME_DIR").map(|run| run.join("bingux-browser")),
-            named: path("BINGUX_BROWSER_PROFILE"),
+            runtime: absolute("XDG_RUNTIME_DIR").map(|run| run.join("bingux-browser")),
+            named: absolute("BINGUX_BROWSER_PROFILE"),
         }
     }
 

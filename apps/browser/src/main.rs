@@ -28,7 +28,7 @@ mod zoom;
 use std::ffi::OsString;
 use std::os::unix::process::CommandExt;
 
-use bingux_ui::prelude::Application;
+use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 use crate::browser::{Options, Profile};
 mod downloads;
@@ -219,13 +219,12 @@ fn main() {
 
 fn application(id: &str) -> Application {
     Application::new(id)
-        .title("Browser")
+        .title(Message::new(i18n_id!("browser-title")))
         .size(1100.0, 760.0)
         .borderless()
         .normalise(target::normalise)
         .about(bingux_ui::app_info!(
-            name = "Browser",
-            description = "Browse the web",
+            description = tr!("browser-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
