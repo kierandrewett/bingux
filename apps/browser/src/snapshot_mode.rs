@@ -24,6 +24,7 @@ use freya::prelude::*;
 
 use crate::browser::Options;
 use crate::model::shortcuts::Command;
+use crate::model::tab::Tab;
 use crate::target::SCHEME;
 use crate::ui::{App, Ctx, Engine};
 
@@ -91,6 +92,23 @@ fn nothing(_: &mut Snapshot, _: &Rig) {}
 
 fn wait(shot: &mut Snapshot, ms: u64) {
     shot.settle(Duration::from_millis(ms));
+}
+
+/// A window whose animations jump to their end, so what a picture shows does
+/// not depend on how fast the machine ran the frames before it: a spinner is
+/// at its first turn, a fade is over. Freya's animation clock is the hook.
+fn still(shot: &mut Snapshot) {
+    shot.runner().animation_clock().disable();
+}
+
+/// The caret blinks on a real-time timer that starts half a second after the
+/// last key, so a picture taken in that half second always shows it solid:
+/// keep pressing a key that does not move it while waiting.
+fn wait_typing(shot: &mut Snapshot, ms: u64) {
+    for _ in 0..ms / 100 {
+        shot.key(Key::Named(NamedKey::End));
+        wait(shot, 100);
+    }
 }
 
 /// The engine session of the `n`th tab (from 0).
@@ -184,14 +202,14 @@ fn find(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 400);
     run_command(shot, Command::Find);
     shot.run_script("type exam", SCHEME).expect("typing");
-    wait(shot, 600);
+    wait_typing(shot, 600);
 }
 
 fn find_missing(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 400);
     run_command(shot, Command::Find);
     shot.run_script("type ab", SCHEME).expect("typing");
-    wait(shot, 600);
+    wait_typing(shot, 600);
 }
 
 fn downloads(shot: &mut Snapshot, rig: &Rig) {
@@ -233,10 +251,27 @@ fn context(shot: &mut Snapshot, _: &Rig) {
 }
 
 fn hover(shot: &mut Snapshot, _: &Rig) {
+    let active = |predicate: fn(&Tab) -> bool| ctx().browser.peek().active().is_some_and(predicate);
+    // The page is loaded first: a load that starts after the pointer arrived
+    // would take the hovered link away again.
+    shot.settle_until(Duration::from_secs(10), |_| {
+        active(|tab| !tab.load.loading && !tab.title.is_empty())
+    });
     wait(shot, 500);
     let (x, y) = *ctx().chrome.page_origin.peek();
-    shot.hover(x + 100.0, y + 290.0);
-    wait(shot, 500);
+    // The pointer keeps moving until the page says it is over the link: the
+    // page view may not have taken the first move, and the engine answers a
+    // change of what is under the pointer, not a move.
+    let mut step = 0.0;
+    shot.settle_until(Duration::from_secs(5), |shot| {
+        if active(|tab| tab.hover.is_some()) {
+            return true;
+        }
+        step = 1.0 - step;
+        shot.hover(x + 100.0 + step, y + 290.0);
+        false
+    });
+    wait(shot, 200);
 }
 
 fn zoomed(shot: &mut Snapshot, _: &Rig) {
@@ -477,6 +512,7 @@ fn run_real(dir: &str, addresses: &[String]) {
             })
         };
         let mut shot = Snapshot::new(app, size);
+        still(&mut shot);
         // Gecko needs seconds, not frames: wait for the first page's title.
         let mut waited = 0;
         while waited < 90_000 {
@@ -565,6 +601,7 @@ pub fn run(arguments: &[OsString]) {
             };
             let rig = Rig { double };
             let mut shot = Snapshot::new(app(&rig, scenario), size);
+            still(&mut shot);
             (scenario.run)(&mut shot, &rig);
             wait(&mut shot, 300);
             let path = format!("{dir}/{}-{label}.png", scenario.name);
