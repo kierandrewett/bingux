@@ -5,7 +5,7 @@ use bingux_ui::search;
 use freya::prelude::*;
 
 use crate::address::Address;
-use crate::history;
+use crate::history::History;
 use crate::ui::Ctx;
 
 /// How many visited pages the new tab page lists.
@@ -26,7 +26,7 @@ impl Component for NewTabPage {
             let browser = ctx.browser.read();
             (browser.options.private, browser.has_history())
         };
-        let found = search::use_search_with(history::recent(RECENT), has_history);
+        let found = search::use_search_with(History::recent(RECENT), has_history);
         let page = if private {
             status_page(
                 Icon::NetworkWirelessEncrypted,
@@ -41,7 +41,7 @@ impl Component for NewTabPage {
             return page.into_element();
         }
         let mut group = Group::new(tr!("browser-new-tab-recent-title"));
-        for visit in found.hits.iter().map(history::visited) {
+        for visit in found.hits.iter().map(History::visited) {
             let name = if visit.title.is_empty() {
                 Address::new(&visit.url).display()
             } else {

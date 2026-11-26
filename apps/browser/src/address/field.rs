@@ -16,7 +16,7 @@ use bingux_ui::search;
 use freya::prelude::*;
 
 use super::{OpenTab, Source, Suggestion, Visited};
-use crate::history;
+use crate::history::History;
 use crate::tabs::Place;
 
 use crate::ui::Ctx;
@@ -116,7 +116,7 @@ impl Component for AddressBar {
         let typed = address.read().clone();
         let has_history = ctx.browser.read().has_history();
         let found = search::use_search_with(
-            history::suggestions(&typed),
+            History::suggestions(&typed),
             editing && has_history && !typed.trim().is_empty(),
         );
         // What the list offers: only while the person has changed the text.
@@ -132,7 +132,7 @@ impl Component for AddressBar {
                     url: tab.url.clone(),
                 })
                 .collect();
-            let visited: Vec<Visited> = found.hits.iter().map(history::visited).collect();
+            let visited: Vec<Visited> = found.hits.iter().map(History::visited).collect();
             Suggestion::list(&typed, browser.search(), &open, &visited)
         } else {
             Vec::new()

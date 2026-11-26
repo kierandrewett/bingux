@@ -23,7 +23,7 @@ use bingux_ui::web_view::test_double::TestDoubleBackend;
 use rusqlite::Connection;
 
 use crate::browser::{Browser, Options, Profile};
-use crate::history::{self, Change, INDEX};
+use crate::history::{Change, Database, History, INDEX, Page};
 use crate::profiles::places::{Folders, Places};
 use crate::settings::Settings;
 use crate::store::files::{remove_tree, tests::temp};
@@ -58,15 +58,15 @@ fn urls(search: &Arc<SearchService>, request: &bingux_ui::search::Search) -> Vec
         .unwrap()
         .hits
         .iter()
-        .map(|hit| history::visited(hit).url)
+        .map(|hit| History::visited(hit).url)
         .collect()
 }
 
-fn page(search: &Arc<SearchService>, url: &str) -> Option<history::Page> {
+fn page(search: &Arc<SearchService>, url: &str) -> Option<Page> {
     search
         .index(INDEX)?
         .get(url)
-        .map(|document| history::page_of(&document))
+        .map(|document| Page::from_document(&document))
 }
 
 fn bytes_of(path: &Path) -> Vec<u8> {
@@ -219,7 +219,7 @@ fn the_cap_keeps_the_pages_visited_last() {
     let store = Store::open_with_cap(&folders(&root), Keeping::Saved, &again, 2).unwrap();
     store.flush();
     assert_eq!(
-        urls(&again, &history::recent(10)),
+        urls(&again, &History::recent(10)),
         ["https://three.example/", "https://two.example/"]
     );
     drop(store);
@@ -242,7 +242,7 @@ fn the_searchable_ranks_a_host_that_begins_with_the_text_first() {
     }
     store.flush();
     assert_eq!(
-        urls(&search, &history::suggestions("exa")),
+        urls(&search, &History::suggestions("exa")),
         [
             "https://example.com/",
             "https://news.other.org/an-example-story"
@@ -324,7 +324,7 @@ fn a_newer_browsers_file_is_neither_read_nor_written() {
         history_state(&store),
         Some(Keeping::NotSaved(NotSaved::TooNew {
             found: 99,
-            supported: history::VERSION
+            supported: Database::VERSION
         }))
     );
     drop(store);
@@ -337,11 +337,13 @@ fn a_full_database_is_disk_full() {
     // A real SQLITE_FULL: the file may not grow past its pages.
     let root = temp();
     let path = folders(&root).store();
-    let mut connection = history::open(&path).unwrap();
-    let pages: i64 = connection
+    let mut database = Database::open(&path).unwrap();
+    let pages: i64 = database
+        .connection()
         .query_row("PRAGMA page_count", [], |row| row.get(0))
         .unwrap();
-    connection
+    database
+        .connection()
         .execute_batch(&format!("PRAGMA max_page_count = {pages}"))
         .unwrap();
     let many: Vec<Change> = (0..2000)
@@ -351,9 +353,9 @@ fn a_full_database_is_disk_full() {
             at,
         })
         .collect();
-    let error = history::write(&mut connection, &many).unwrap_err();
-    assert_eq!(history::not_saved(&error), NotSaved::DiskFull);
-    drop(connection);
+    let error = database.write(&many).unwrap_err();
+    assert_eq!(Database::not_saved(&error), NotSaved::DiskFull);
+    drop(database);
     remove_tree(&root).unwrap();
 }
 

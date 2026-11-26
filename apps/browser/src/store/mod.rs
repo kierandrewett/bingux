@@ -27,9 +27,8 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use bingux_ui::search::{Index, SearchService};
-use rusqlite::Connection;
 
-use crate::history::{self, CAP, Change, INDEX, Page};
+use crate::history::{CAP, Change, Database, History, INDEX, Page};
 use crate::profiles::places::Folders;
 use crate::settings::{Settings, SettingsProblem};
 use crate::store::keeping::{Keeping, NotSaved, damaged_name};
@@ -128,7 +127,7 @@ struct Writer {
     settings: Keeping,
     history_path: PathBuf,
     history: Keeping,
-    connection: Option<Connection>,
+    database: Option<Database>,
     /// Changes not written yet, oldest first.
     pending: Vec<Change>,
     /// When `pending` is written.
@@ -189,16 +188,17 @@ impl Writer {
 
     /// Opens the history file and fills the index from it.
     fn load_history(&mut self) {
-        let loaded = history::open(&self.history_path).and_then(|connection| {
-            history::trim(&connection, self.cap)
-                .and_then(|_| history::pages(&connection))
-                .map(|pages| (connection, pages))
-                .map_err(|error| history::not_saved(&error))
+        let loaded = Database::open(&self.history_path).and_then(|database| {
+            database
+                .trim(self.cap)
+                .and_then(|_| database.pages())
+                .map(|pages| (database, pages))
+                .map_err(|error| Database::not_saved(&error))
         });
         match loaded {
-            Ok((connection, pages)) => {
-                self.connection = Some(connection);
-                if let Err(error) = self.index.replace_all(pages.iter().map(history::document)) {
+            Ok((database, pages)) => {
+                self.database = Some(database);
+                if let Err(error) = self.index.replace_all(pages.iter().map(Page::document)) {
                     self.report_history(Keeping::NotSaved(NotSaved::Failed(format!(
                         "the history index: {error}"
                     ))));
@@ -216,10 +216,10 @@ impl Writer {
         if !writable(&self.history) {
             return false;
         }
-        if self.connection.is_none() {
-            match history::open(&self.history_path) {
-                Ok(connection) => {
-                    self.connection = Some(connection);
+        if self.database.is_none() {
+            match Database::open(&self.history_path) {
+                Ok(database) => {
+                    self.database = Some(database);
                     self.stale_index = true;
                 }
                 Err(why) => {
@@ -238,7 +238,7 @@ impl Writer {
                 let mut page = self
                     .index
                     .get(url)
-                    .map(|document| history::page_of(&document))
+                    .map(|document| Page::from_document(&document))
                     .unwrap_or(Page {
                         url: url.clone(),
                         title: String::new(),
@@ -256,12 +256,12 @@ impl Writer {
                 let Some(document) = self.index.get(url) else {
                     return;
                 };
-                let mut page = history::page_of(&document);
+                let mut page = Page::from_document(&document);
                 page.title.clone_from(title);
                 page
             }
         };
-        let _ = self.index.upsert([history::document(&page)]);
+        let _ = self.index.upsert([page.document()]);
     }
 
     fn queue(&mut self, change: Change) {
@@ -277,10 +277,10 @@ impl Writer {
         if !std::mem::take(&mut self.stale_index) {
             return;
         }
-        if let Some(connection) = &self.connection
-            && let Ok(pages) = history::pages(connection)
+        if let Some(database) = &self.database
+            && let Ok(pages) = database.pages()
         {
-            let _ = self.index.replace_all(pages.iter().map(history::document));
+            let _ = self.index.replace_all(pages.iter().map(Page::document));
         }
     }
 
@@ -293,17 +293,17 @@ impl Writer {
         if !self.can_write() {
             return;
         }
-        let Some(connection) = self.connection.as_mut() else {
+        let Some(database) = self.database.as_mut() else {
             return;
         };
-        let written = history::write(connection, &self.pending);
+        let written = database.write(&self.pending);
         match written {
             Ok(()) => {
                 self.pending.clear();
                 self.reload_index();
                 self.report_history(Keeping::Saved);
             }
-            Err(error) => self.report_history(Keeping::NotSaved(history::not_saved(&error))),
+            Err(error) => self.report_history(Keeping::NotSaved(Database::not_saved(&error))),
         }
     }
 
@@ -314,13 +314,13 @@ impl Writer {
         if !self.can_write() {
             return;
         }
-        let Some(connection) = self.connection.as_mut() else {
+        let Some(database) = self.database.as_mut() else {
             return;
         };
-        let cleared = history::clear(connection);
+        let cleared = database.clear();
         match cleared {
             Ok(()) => self.report_history(Keeping::Saved),
-            Err(error) => self.report_history(Keeping::NotSaved(history::not_saved(&error))),
+            Err(error) => self.report_history(Keeping::NotSaved(Database::not_saved(&error))),
         }
     }
 
@@ -329,7 +329,7 @@ impl Writer {
             return;
         };
         let detail = detail.clone();
-        self.connection = None;
+        self.database = None;
         let path = &self.history_path;
         let files = [path.clone(), sibling(path, "-wal"), sibling(path, "-shm")];
         if let Err(error) = move_aside(&files) {
@@ -340,9 +340,9 @@ impl Writer {
         }
         // A new file: what this run visited is in the index and queued.
         self.history = Keeping::Loading;
-        match history::open(&self.history_path) {
-            Ok(connection) => {
-                self.connection = Some(connection);
+        match Database::open(&self.history_path) {
+            Ok(database) => {
+                self.database = Some(database);
                 self.report_history(Keeping::Saved);
                 self.commit();
             }
@@ -422,7 +422,7 @@ impl Store {
         cap: usize,
     ) -> std::io::Result<Self> {
         let index = search
-            .create_index(INDEX, history::schema())
+            .create_index(INDEX, History::schema())
             .map_err(|error| std::io::Error::other(error.to_string()))?;
         let outbox = Arc::new(Mutex::new(Outbox::default()));
         let writer = Writer {
@@ -430,7 +430,7 @@ impl Store {
             settings,
             history_path: folders.store(),
             history: Keeping::Loading,
-            connection: None,
+            database: None,
             pending: Vec::new(),
             due: None,
             index: Arc::clone(&index),
@@ -468,7 +468,7 @@ impl Store {
 
     /// A page was loaded. The browser's own pages are not history.
     pub fn record_visit(&self, url: &str, title: &str) {
-        if !history::is_recorded(url) {
+        if !Page::is_recorded(url) {
             return;
         }
         self.send(Command::History(Change::Visit {
@@ -480,7 +480,7 @@ impl Store {
 
     /// The page at `url` got its title after it was recorded.
     pub fn set_title(&self, url: &str, title: &str) {
-        if !history::is_recorded(url) || title.is_empty() {
+        if !Page::is_recorded(url) || title.is_empty() {
             return;
         }
         self.send(Command::History(Change::Title {
