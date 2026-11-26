@@ -8,7 +8,6 @@
 pub mod downloads;
 pub mod failure;
 pub mod keeping;
-pub mod permissions;
 pub mod tab;
 pub mod tabs;
 

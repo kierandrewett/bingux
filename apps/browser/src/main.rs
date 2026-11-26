@@ -12,6 +12,7 @@ mod commands;
 mod engine;
 mod locale;
 mod model;
+mod permissions;
 mod profile;
 mod site_info;
 #[cfg(feature = "snapshot")]

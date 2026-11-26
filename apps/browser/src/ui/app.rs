@@ -20,9 +20,10 @@ use super::find::FindBar;
 use super::page::PageArea;
 use super::pages;
 use super::popovers::Popovers;
-use super::prompts::{PermissionBanner, PromptHost};
+use super::prompts::PromptHost;
 use super::strip::strip;
 use super::toolbar::{PhoneBottom, Toolbar};
+use crate::permissions::PermissionBanner;
 
 /// The profile a window opens in, handed from `main` to the window's first
 /// frame once (it holds what cannot be copied, such as the store's writer).

@@ -26,9 +26,9 @@ use crate::address::SearchEngine;
 use crate::engine::Engine;
 use crate::model::downloads::Downloads;
 use crate::model::keeping::{Keeping, NotSaved};
-use crate::model::permissions::Permissions;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::TabList;
+use crate::permissions::Permissions;
 use crate::profile::settings::Settings;
 use crate::profile::store::Store;
 

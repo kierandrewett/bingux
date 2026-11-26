@@ -19,8 +19,7 @@
 
 use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
 use bingux_ui::web_view::requests::{
-    ContextTarget, DialogKind, DialogRequest, DownloadInfo, DownloadState, PermissionKind,
-    PermissionRequest, RequestKind,
+    ContextTarget, DialogKind, DialogRequest, DownloadInfo, DownloadState, RequestKind,
 };
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
 use bingux_ui::web_view::{
@@ -292,60 +291,6 @@ fn a_certificate_that_cannot_be_overridden_cannot_be_proceeded_past() {
     browser.cert_proceed(key);
     assert!(browser.tabs.get(key).unwrap().cert.is_some());
     assert!(double.calls().is_empty(), "nothing was sent to the engine");
-}
-
-#[test]
-fn a_permission_prompt_waits_and_a_remembered_answer_is_reused() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "perm.example.net");
-    let Some(super::tab::Prompt::Permission(_, request)) = browser.prompt(key).cloned() else {
-        panic!("a permission prompt");
-    };
-    assert_eq!(request.kinds, [PermissionKind::Geolocation]);
-    double.clear_calls();
-    browser.answer_permission(key, true, true);
-    assert!(browser.prompt(key).is_none());
-    assert!(double.calls().iter().any(|call| matches!(
-        call,
-        Call::Respond(
-            _,
-            _,
-            Response::Permission {
-                allow: true,
-                remember: true
-            }
-        )
-    )));
-    // The same site asks again: it is answered without a prompt.
-    double.clear_calls();
-    let session = browser.session_of(key).unwrap();
-    double.ask(session, RequestKind::Permission(request));
-    browser.poll();
-    assert!(
-        browser.prompt(key).is_none(),
-        "no prompt for a decided site"
-    );
-    assert!(double.calls().iter().any(|call| matches!(
-        call,
-        Call::Respond(_, _, Response::Permission { allow: true, .. })
-    )));
-}
-
-#[test]
-fn a_refused_permission_that_is_not_remembered_asks_again() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "perm.example.net");
-    browser.answer_permission(key, false, false);
-    let session = browser.session_of(key).unwrap();
-    double.ask(
-        session,
-        RequestKind::Permission(PermissionRequest {
-            origin: "https://perm.example.net".to_string(),
-            kinds: vec![PermissionKind::Geolocation],
-        }),
-    );
-    browser.poll();
-    assert!(browser.prompt(key).is_some());
 }
 
 #[test]

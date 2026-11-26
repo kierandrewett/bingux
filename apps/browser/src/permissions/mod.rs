@@ -2,11 +2,15 @@
 //! as the window: the engine keeps the permissions it is told to keep, and a
 //! decision that must outlive the window is the engine's profile's.
 
+mod banner;
+
 use std::collections::BTreeMap;
 
 use bingux_ui::web_view::requests::PermissionKind;
 
 use crate::address::Address;
+
+pub use banner::PermissionBanner;
 
 /// What a permission is called to a person.
 pub fn label(kind: &PermissionKind) -> String {
@@ -124,81 +128,4 @@ impl Permissions {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    const SITE: &str = "https://maps.example";
-
-    #[test]
-    fn a_prompt_names_the_site_and_what_it_wants() {
-        assert_eq!(
-            prompt_text(SITE, &[PermissionKind::Geolocation]),
-            "maps.example wants to know your location"
-        );
-        assert_eq!(
-            prompt_text(SITE, &[PermissionKind::Camera, PermissionKind::Microphone]),
-            "maps.example wants to use your camera and use your microphone"
-        );
-        assert_eq!(
-            prompt_text(
-                SITE,
-                &[
-                    PermissionKind::Camera,
-                    PermissionKind::Microphone,
-                    PermissionKind::Screen
-                ]
-            ),
-            "maps.example wants to use your camera, use your microphone and share your screen"
-        );
-    }
-
-    #[test]
-    fn a_decision_is_only_reused_when_it_covers_everything_asked() {
-        let mut permissions = Permissions::new();
-        let both = [PermissionKind::Camera, PermissionKind::Microphone];
-        assert_eq!(permissions.decided(SITE, &both), None);
-        permissions.remember(SITE, &[PermissionKind::Camera], true);
-        assert_eq!(
-            permissions.decided(SITE, &both),
-            None,
-            "the microphone was never asked about"
-        );
-        permissions.remember(SITE, &[PermissionKind::Microphone], true);
-        assert_eq!(permissions.decided(SITE, &both), Some(true));
-        permissions.remember(SITE, &[PermissionKind::Microphone], false);
-        assert_eq!(
-            permissions.decided(SITE, &both),
-            Some(false),
-            "one refusal refuses the set"
-        );
-        assert_eq!(
-            permissions.decided("https://other.example", &both),
-            None,
-            "a decision belongs to a site"
-        );
-        assert_eq!(permissions.decided(SITE, &[]), None);
-    }
-
-    #[test]
-    fn a_decision_can_be_forgotten_and_listed() {
-        let mut permissions = Permissions::new();
-        permissions.remember(
-            SITE,
-            &[PermissionKind::Geolocation, PermissionKind::Notifications],
-            true,
-        );
-        permissions.remember("https://b.example", &[PermissionKind::Camera], false);
-        assert_eq!(permissions.for_origin(SITE).len(), 2);
-        assert_eq!(
-            permissions.origins(),
-            [("https://b.example".to_string(), 1), (SITE.to_string(), 2)]
-        );
-        permissions.forget(SITE, "Know your location");
-        assert_eq!(
-            permissions.for_origin(SITE),
-            [("Show notifications".to_string(), true)]
-        );
-        permissions.forget_all();
-        assert!(permissions.origins().is_empty());
-    }
-}
+mod tests;
