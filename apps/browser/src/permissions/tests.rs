@@ -12,15 +12,15 @@ const SITE: &str = "https://maps.example";
 #[test]
 fn a_prompt_names_the_site_and_what_it_wants() {
     assert_eq!(
-        prompt_text(SITE, &[PermissionKind::Geolocation]),
+        Permissions::prompt_text(SITE, &[PermissionKind::Geolocation]),
         "maps.example wants to know your location"
     );
     assert_eq!(
-        prompt_text(SITE, &[PermissionKind::Camera, PermissionKind::Microphone]),
+        Permissions::prompt_text(SITE, &[PermissionKind::Camera, PermissionKind::Microphone]),
         "maps.example wants to use your camera and use your microphone"
     );
     assert_eq!(
-        prompt_text(
+        Permissions::prompt_text(
             SITE,
             &[
                 PermissionKind::Camera,
@@ -73,10 +73,14 @@ fn a_decision_can_be_forgotten_and_listed() {
         permissions.origins(),
         [("https://b.example".to_string(), 1), (SITE.to_string(), 2)]
     );
-    permissions.forget(SITE, "Know your location");
+    permissions.forget(SITE, "Geolocation");
     assert_eq!(
         permissions.for_origin(SITE),
-        [("Show notifications".to_string(), true)]
+        [Remembered {
+            key: "Notifications".to_string(),
+            label: "Show notifications".to_string(),
+            allowed: true,
+        }]
     );
     permissions.forget_all();
     assert!(permissions.origins().is_empty());

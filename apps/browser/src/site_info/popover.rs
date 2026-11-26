@@ -104,12 +104,12 @@ fn page_info(ctx: Ctx) -> Element {
     if !remembered.is_empty() {
         let mut group = Group::new(tr!("browser-site-info-permissions-title"))
             .footer(tr!("browser-site-info-permissions-footer"));
-        for (name, allowed) in remembered {
+        for kept in remembered {
             let site = origin.clone();
-            let forget = name.clone();
+            let forget = kept.key.clone();
             group = group.row(
-                row(name)
-                    .value(if allowed {
+                row(kept.label)
+                    .value(if kept.allowed {
                         tr!("browser-site-info-allowed")
                     } else {
                         tr!("browser-site-info-blocked")

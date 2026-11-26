@@ -4,7 +4,7 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::model::tab::Prompt;
-use crate::permissions;
+use crate::permissions::Permissions;
 use crate::ui::Ctx;
 
 /// The banner of a permission request.
@@ -21,7 +21,7 @@ impl Component for PermissionBanner {
             let key = browser.tabs.active_key();
             let text = match browser.prompt(key) {
                 Some(Prompt::Permission(_, request)) => {
-                    Some(permissions::prompt_text(&request.origin, &request.kinds))
+                    Some(Permissions::prompt_text(&request.origin, &request.kinds))
                 }
                 _ => None,
             };

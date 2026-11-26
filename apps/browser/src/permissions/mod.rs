@@ -12,54 +12,72 @@ use crate::address::Address;
 
 pub use banner::PermissionBanner;
 
-/// What a permission is called to a person.
-pub fn label(kind: &PermissionKind) -> String {
-    match kind {
-        PermissionKind::Geolocation => "Know your location",
-        PermissionKind::Notifications => "Show notifications",
-        PermissionKind::Camera => "Use your camera",
-        PermissionKind::Microphone => "Use your microphone",
-        PermissionKind::Screen => "Share your screen",
-        PermissionKind::Clipboard => "See what you copied",
-        PermissionKind::Midi => "Use your MIDI devices",
-        PermissionKind::Autoplay => "Play sound on its own",
-        PermissionKind::PersistentStorage => "Keep data when space is low",
-        PermissionKind::Popups => "Open pop-up windows",
-        PermissionKind::Other(name) => return name.clone(),
-    }
-    .to_string()
-}
-
-/// The sentence of a prompt: `example.com wants to know your location and use your camera`.
-pub fn prompt_text(origin: &str, kinds: &[PermissionKind]) -> String {
-    let host = Address::new(origin).host();
-    let host = if host.is_empty() {
-        origin.to_string()
-    } else {
-        host
-    };
-    let mut wants: Vec<String> = kinds.iter().map(label).collect();
-    let last = wants.pop();
-    let list = match (wants.is_empty(), last) {
-        (true, Some(only)) => only.to_lowercase(),
-        (false, Some(last)) => format!(
-            "{} and {}",
-            wants.join(", ").to_lowercase(),
-            last.to_lowercase()
-        ),
-        (_, None) => "do something".to_string(),
-    };
-    format!("{host} wants to {list}")
-}
-
 /// The decisions made, by site.
 #[derive(Clone, Debug, Default)]
 pub struct Permissions {
-    /// `(origin, permission name)` to allowed or blocked.
-    decisions: BTreeMap<(String, String), bool>,
+    /// `(origin, permission key)` to the permission and whether it is allowed.
+    decisions: BTreeMap<(String, String), (PermissionKind, bool)>,
+}
+
+/// One permission kept for a site.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Remembered {
+    /// What names it to `forget`, whatever the language shown.
+    pub key: String,
+    /// What a person calls it.
+    pub label: String,
+    pub allowed: bool,
 }
 
 impl Permissions {
+    /// What a permission is called to a person.
+    pub fn label(kind: &PermissionKind) -> String {
+        match kind {
+            PermissionKind::Geolocation => "Know your location",
+            PermissionKind::Notifications => "Show notifications",
+            PermissionKind::Camera => "Use your camera",
+            PermissionKind::Microphone => "Use your microphone",
+            PermissionKind::Screen => "Share your screen",
+            PermissionKind::Clipboard => "See what you copied",
+            PermissionKind::Midi => "Use your MIDI devices",
+            PermissionKind::Autoplay => "Play sound on its own",
+            PermissionKind::PersistentStorage => "Keep data when space is low",
+            PermissionKind::Popups => "Open pop-up windows",
+            PermissionKind::Other(name) => return name.clone(),
+        }
+        .to_string()
+    }
+
+    /// The sentence of a prompt: `example.com wants to know your location and use your camera`.
+    pub fn prompt_text(origin: &str, kinds: &[PermissionKind]) -> String {
+        let host = Address::new(origin).host();
+        let host = if host.is_empty() {
+            origin.to_string()
+        } else {
+            host
+        };
+        let mut wants: Vec<String> = kinds.iter().map(Self::label).collect();
+        let last = wants.pop();
+        let list = match (wants.is_empty(), last) {
+            (true, Some(only)) => only.to_lowercase(),
+            (false, Some(last)) => format!(
+                "{} and {}",
+                wants.join(", ").to_lowercase(),
+                last.to_lowercase()
+            ),
+            (_, None) => "do something".to_string(),
+        };
+        format!("{host} wants to {list}")
+    }
+
+    /// What names `kind`, whatever the language shown.
+    fn key(kind: &PermissionKind) -> String {
+        match kind {
+            PermissionKind::Other(name) => name.clone(),
+            other => format!("{other:?}"),
+        }
+    }
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -73,16 +91,16 @@ impl Permissions {
         }
         let mut allowed = true;
         for kind in kinds {
-            match self.decisions.get(&(origin.to_string(), label(kind))) {
-                Some(true) => {}
-                Some(false) => return Some(false),
+            match self.decisions.get(&(origin.to_string(), Self::key(kind))) {
+                Some((_, true)) => {}
+                Some((_, false)) => return Some(false),
                 None => allowed = false,
             }
         }
         // Allowed only when every one of them was.
         let all_known = kinds.iter().all(|kind| {
             self.decisions
-                .contains_key(&(origin.to_string(), label(kind)))
+                .contains_key(&(origin.to_string(), Self::key(kind)))
         });
         (allowed && all_known).then_some(true)
     }
@@ -91,23 +109,30 @@ impl Permissions {
     pub fn remember(&mut self, origin: &str, kinds: &[PermissionKind], allow: bool) {
         for kind in kinds {
             self.decisions
-                .insert((origin.to_string(), label(kind)), allow);
+                .insert((origin.to_string(), Self::key(kind)), (kind.clone(), allow));
         }
     }
 
-    /// What is kept for `origin`: the permission's name and whether it is allowed.
-    pub fn for_origin(&self, origin: &str) -> Vec<(String, bool)> {
-        self.decisions
+    /// What is kept for `origin`, by name.
+    pub fn for_origin(&self, origin: &str) -> Vec<Remembered> {
+        let mut kept: Vec<Remembered> = self
+            .decisions
             .iter()
             .filter(|((site, _), _)| site == origin)
-            .map(|((_, name), allowed)| (name.clone(), *allowed))
-            .collect()
+            .map(|((_, key), (kind, allowed))| Remembered {
+                key: key.clone(),
+                label: Self::label(kind),
+                allowed: *allowed,
+            })
+            .collect();
+        kept.sort_by(|a, b| a.label.cmp(&b.label));
+        kept
     }
 
     /// Forget one permission of `origin`: the next ask is a prompt again.
-    pub fn forget(&mut self, origin: &str, name: &str) {
+    pub fn forget(&mut self, origin: &str, key: &str) {
         self.decisions
-            .remove(&(origin.to_string(), name.to_string()));
+            .remove(&(origin.to_string(), key.to_string()));
     }
 
     pub fn forget_all(&mut self) {
