@@ -10,5 +10,7 @@ pub use launch::Launch;
 mod snapshot;
 #[cfg(test)]
 mod structure_tests;
+#[cfg(test)]
+mod tests;
 #[cfg(feature = "snapshot")]
 pub(crate) use snapshot::scenarios;

@@ -44,16 +44,39 @@ impl Launch {
         std::process::exit(1);
     }
 
+    /// The command that starts another copy of this program as a window of its
+    /// own, with `arguments` and nothing else from this window's launch.
+    ///
+    /// A window that was started with `--private` or `--profile` carries that
+    /// in two environment variables (`CommandLine::PRIVATE`, `CommandLine::PROFILE`),
+    /// because bingux-ui's launch does not know the browser's options. A copy
+    /// inherits its parent's environment by default, so without the removals
+    /// below the new window would silently be private, or open the parent's
+    /// profile, whatever its arguments say. The arguments are the whole
+    /// meaning of the new window: `--private` makes it private, `--profile ID`
+    /// names its profile, and neither means a normal window of the default profile.
+    pub(crate) fn copy_command(
+        program: impl AsRef<std::ffi::OsStr>,
+        arguments: Vec<OsString>,
+    ) -> std::process::Command {
+        let mut command = std::process::Command::new(program);
+        command.args(arguments);
+        command.env_remove(CommandLine::PRIVATE);
+        command.env_remove(CommandLine::PROFILE);
+        command
+    }
+
     /// Starts another copy of this program with `arguments`, as a window of its
     /// own, and does not wait for it. A copy that asks for a profile another
-    /// copy holds hands its launch to that copy (`profiles::Waiting`).
+    /// copy holds hands its launch to that copy (`profiles::Waiting`). See
+    /// [`Launch::copy_command`] for what the copy does and does not inherit.
     pub fn start_copy(arguments: Vec<OsString>) {
         freya::prelude::spawn(async move {
             bingux_ui::task::spawn_blocking(move || {
                 let Ok(program) = std::env::current_exe() else {
                     return;
                 };
-                if let Ok(mut child) = std::process::Command::new(program).args(arguments).spawn() {
+                if let Ok(mut child) = Self::copy_command(program, arguments).spawn() {
                     // Reaped on a thread of its own, so it never becomes a zombie.
                     std::thread::spawn(move || {
                         let _ = child.wait();
