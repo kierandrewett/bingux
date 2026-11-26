@@ -6,7 +6,6 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::menus::MainMenu;
 use crate::model::downloads::Downloads;
 use crate::model::tab::TabKind;
 use crate::site_info::ConnectionButton;
@@ -106,12 +105,8 @@ fn downloads_button(ctx: Ctx, downloads: &Downloads) -> Element {
 }
 
 /// The main menu button.
-fn menu_control(ctx: Ctx) -> Element {
-    let mut anchor = ctx.chrome.menu_anchor;
-    rect()
-        .on_sized(move |event: Event<SizedEventData>| anchor.set_if_modified(event.area))
-        .child(menu_button("Main menu", MainMenu::items(ctx)).icon(Icon::OpenMenu))
-        .into_element()
+fn menu_control() -> Element {
+    app_menu(Vec::new()).into()
 }
 
 #[derive(PartialEq)]
@@ -155,7 +150,7 @@ impl Component for Toolbar {
                 .child(ConnectionButton::element(ctx))
                 .child(AddressBar { ctx })
                 .child(tabs_button(ctx, read.tabs))
-                .child(menu_control(ctx))
+                .child(menu_control())
                 .into_element();
         }
         bar = bar
@@ -172,7 +167,7 @@ impl Component for Toolbar {
         if !downloads.list().is_empty() {
             bar = bar.child(downloads_button(ctx, &downloads));
         }
-        bar.child(menu_control(ctx)).into_element()
+        bar.child(menu_control()).into_element()
     }
 }
 

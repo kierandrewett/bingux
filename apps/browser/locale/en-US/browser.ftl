@@ -261,3 +261,30 @@ browser-prompt-select-title = Choose an option
 browser-prompt-choose-button = Choose
 browser-prompt-file-title = Choose a file
 browser-prompt-files-title = Choose files
+
+## Commands
+## What the window tells the shared main menu, command palette and shortcuts sheet.
+
+browser-command-new-tab-title = New tab
+browser-command-private-window-title = New private window
+browser-command-reopen-tab-title = Reopen closed tab
+browser-command-close-tab-title = Close tab
+browser-command-next-tab-title = Next tab
+browser-command-previous-tab-title = Previous tab
+browser-command-address-title = Address bar
+browser-command-find-title = Find in page
+browser-command-reload-title = Reload
+browser-command-back-title = Back
+browser-command-forward-title = Forward
+browser-command-zoom-in-title = Zoom in
+browser-command-zoom-out-title = Zoom out
+# $percent is the zoom of the tab on show.
+browser-command-zoom-reset-title = Reset zoom ({ NUMBER($percent) }%)
+browser-command-fullscreen-title = Fullscreen
+browser-command-downloads-title = Downloads
+browser-command-settings-title = Settings
+browser-command-view-source-title = View page source
+browser-command-print-title = Print…
+browser-command-go-to-tab-title = Go to a tab
+# The keys that go to tab 1 to 8, and the last tab. The modifier is Alt on Linux, Ctrl elsewhere.
+browser-command-go-to-tab-keys = Alt+1 to 9

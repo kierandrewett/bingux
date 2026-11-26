@@ -73,7 +73,6 @@ impl Browser {
                 text: tr!("browser-commands-print-unavailable"),
                 action: None,
             }),
-            Command::MainMenu => self.out.request(UiRequest::OpenMainMenu),
             Command::Edit(edit) => self.send_edit(key, edit),
         }
     }

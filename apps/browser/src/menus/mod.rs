@@ -10,112 +10,11 @@ use bingux_ui::web_view::requests::ContextTarget;
 
 use crate::address::Address;
 use crate::browser::PendingMenu;
-use crate::commands::{self, Command};
+use crate::commands::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
-use crate::zoom::Zoom;
 
 use crate::ui::Ctx;
-
-/// The main menu, from the button at the right of the toolbar.
-pub struct MainMenu;
-
-impl MainMenu {
-    /// The main menu, from the button at the right of the toolbar.
-    pub fn items(ctx: Ctx) -> Vec<MenuItem> {
-        let (zoom_text, can_find, can_download, can_reopen, is_web) = {
-            let browser = ctx.browser.read();
-            let tab = browser.active();
-            (
-                tab.map_or(Zoom::DEFAULT, |tab| tab.zoom).percent(),
-                browser.engine.capabilities().find,
-                browser.engine.capabilities().downloads,
-                !browser.closed.is_empty(),
-                tab.is_some_and(|tab| tab.kind == TabKind::Web && !tab.is_blank()),
-            )
-        };
-        let mut items = vec![
-            Command::NewTab.menu_item(ctx, "New tab"),
-            Command::NewPrivateWindow.menu_item(ctx, "Private window"),
-        ];
-        let reopen = Command::ReopenTab.menu_item(ctx, "Reopen closed tab");
-        items.push(if can_reopen {
-            reopen
-        } else {
-            reopen.disabled()
-        });
-        items.push(menu_separator());
-        items.push(Command::ZoomIn.menu_item(ctx, "Zoom in"));
-        items.push(Command::ZoomOut.menu_item(ctx, "Zoom out"));
-        items.push(Command::ZoomReset.menu_item(ctx, &format!("Reset zoom ({zoom_text}%)")));
-        items.push(menu_separator());
-        let find = Command::Find.menu_item(ctx, "Find in page");
-        items.push(if can_find { find } else { find.disabled() });
-        let downloads = Command::Downloads.menu_item(ctx, "Downloads");
-        items.push(if can_download {
-            downloads
-        } else {
-            downloads.disabled()
-        });
-        let source = Command::ViewSource.menu_item(ctx, "View page source");
-        items.push(if is_web { source } else { source.disabled() });
-        items.push(Command::Print.menu_item(ctx, "Print\u{2026}"));
-        items.push(menu_separator());
-        items.push(Command::Settings.menu_item(ctx, "Settings"));
-        let overlays = ctx.overlays;
-        let platform = ctx.platform;
-        items.push(menu_item("Keyboard shortcuts", move |_: ()| {
-            overlays.show_dialog(
-                dialog("Keyboard shortcuts", ShortcutSheet::text(platform)).cancel("Close"),
-            );
-        }));
-        items.extend(bingux_ui::about::app_menu_items(overlays));
-        items
-    }
-}
-
-/// The dialog that lists the keys.
-pub struct ShortcutSheet;
-
-impl ShortcutSheet {
-    /// What the shortcuts dialog says.
-    pub fn text(platform: commands::Platform) -> String {
-        let rows = [
-            ("New tab", Command::NewTab),
-            ("Close tab", Command::CloseTab),
-            ("Reopen closed tab", Command::ReopenTab),
-            ("Next tab", Command::NextTab),
-            ("Previous tab", Command::PreviousTab),
-            ("New private window", Command::NewPrivateWindow),
-            ("Address bar", Command::FocusAddress),
-            ("Find in page", Command::Find),
-            ("Reload", Command::Reload),
-            ("Back", Command::Back),
-            ("Forward", Command::Forward),
-            ("Zoom in", Command::ZoomIn),
-            ("Zoom out", Command::ZoomOut),
-            ("Reset zoom", Command::ZoomReset),
-            ("Fullscreen", Command::Fullscreen),
-            ("Downloads", Command::Downloads),
-            ("Settings", Command::Settings),
-        ];
-        let mut lines: Vec<String> = rows
-            .iter()
-            .filter_map(|(name, command)| {
-                command
-                    .label(platform)
-                    .map(|keys| format!("{keys}  {name}"))
-            })
-            .collect();
-        let digit = if platform == commands::Platform::Linux {
-            "Alt+1 to 9"
-        } else {
-            "Ctrl+1 to 9"
-        };
-        lines.insert(5, format!("{digit}  Go to a tab"));
-        lines.join("\n")
-    }
-}
 
 /// The menu of a tab in the strip.
 pub struct TabMenu;

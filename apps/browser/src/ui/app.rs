@@ -121,7 +121,6 @@ impl Component for Content {
         let chrome = Chrome {
             downloads_open: use_state(|| false),
             downloads_anchor: use_state(Area::default),
-            menu_anchor: use_state(Area::default),
             page_origin: use_state(|| (0.0, 0.0)),
         };
         let ctx = Ctx {
@@ -135,6 +134,7 @@ impl Component for Content {
             window,
             platform: Platform::current(),
         };
+        use_window_commands(crate::commands::Registry::commands(ctx));
         #[cfg(feature = "snapshot")]
         crate::snapshot_mode::publish(ctx);
         // The engine's events and the profile store's wake the window: it

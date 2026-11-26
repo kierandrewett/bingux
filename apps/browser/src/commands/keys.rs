@@ -25,14 +25,6 @@ impl Platform {
         }
     }
 
-    /// The name of the main shortcut modifier, for menus.
-    pub const fn main_key(self) -> &'static str {
-        match self {
-            Self::Mac => "\u{2318}",
-            Self::Linux | Self::Windows => "Ctrl",
-        }
-    }
-
     /// The shortcut of the window: a key typed anywhere in it.
     pub fn window_command(self, key: &Key, modifiers: Modifiers) -> Option<Command> {
         let held = Held::of(modifiers);
@@ -62,7 +54,6 @@ impl Platform {
                 Key::Named(NamedKey::F5) => return Some(Command::Reload),
                 Key::Named(NamedKey::F3) => return Some(Command::FindNext),
                 Key::Named(NamedKey::F11) => return Some(Command::Fullscreen),
-                Key::Named(NamedKey::F10) => return Some(Command::MainMenu),
                 _ => {}
             }
         }

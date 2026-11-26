@@ -233,7 +233,8 @@ fn info(shot: &mut Snapshot, _: &Rig) {
 
 fn menu(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 500);
-    run_command(shot, Command::MainMenu);
+    shot.click_name("Main menu");
+    wait(shot, 500);
 }
 
 fn settings(shot: &mut Snapshot, _: &Rig) {
@@ -340,7 +341,8 @@ fn engine_unsafe_profile() -> Arc<TestDoubleBackend> {
 /// is disabled, not hidden.
 fn capabilities(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 500);
-    run_command(shot, Command::MainMenu);
+    shot.click_name("Main menu");
+    wait(shot, 500);
 }
 
 /// The engine process is killed: the window says so, and offers to start it again.

@@ -25,7 +25,6 @@ pub struct Chrome {
     pub downloads_open: State<bool>,
     /// Where the controls that open popovers are, in the window.
     pub downloads_anchor: State<Area>,
-    pub menu_anchor: State<Area>,
     /// Where the page area starts in the window: a context menu opens at the
     /// pointer's place in the page plus this.
     pub page_origin: State<(f32, f32)>,
@@ -108,13 +107,6 @@ impl Ctx {
                     self.browser.clone().write().downloads.mark_seen();
                 }
                 UiRequest::OpenPageInfo => self.site_info.open(),
-                UiRequest::OpenMainMenu => {
-                    let anchor = *chrome.menu_anchor.peek();
-                    self.overlays.show_menu(
-                        (anchor.min_x(), anchor.max_y()),
-                        crate::menus::MainMenu::items(self),
-                    );
-                }
                 UiRequest::Fullscreen(on) => with_window(move |window| {
                     window.set_fullscreen(
                         on.then_some(freya::winit::window::Fullscreen::Borderless(None)),

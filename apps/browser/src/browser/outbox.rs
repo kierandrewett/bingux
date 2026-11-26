@@ -23,7 +23,6 @@ pub enum UiRequest {
     OpenFind,
     OpenDownloads,
     OpenPageInfo,
-    OpenMainMenu,
     /// Make the window fullscreen, or take it out of it.
     Fullscreen(bool),
     /// Start another browser window whose tabs are all private.

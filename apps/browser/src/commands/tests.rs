@@ -210,23 +210,6 @@ fn the_window_does_not_take_the_editing_keys() {
 }
 
 #[test]
-fn menu_labels_follow_the_platform() {
-    assert_eq!(
-        Command::NewTab.label(Platform::Linux).as_deref(),
-        Some("Ctrl+T")
-    );
-    assert_eq!(
-        Command::Back.label(Platform::Linux).as_deref(),
-        Some("Alt+Left")
-    );
-    assert_eq!(
-        Command::NewTab.label(Platform::Mac).as_deref(),
-        Some("\u{2318}T")
-    );
-    assert_eq!(Command::GoToTab(1).label(Platform::Linux), None);
-}
-
-#[test]
 fn print_and_unsupported_things_say_so() {
     let (mut browser, _) = browser();
     browser.run(Command::Print);
