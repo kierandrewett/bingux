@@ -6,6 +6,7 @@
 //! opens it in a new tab. `--private` starts a window of its own whose tabs keep
 //! nothing. Each profile is a process of its own (`docs/browser/profiles-and-store.md`).
 
+mod browser;
 mod locale;
 mod model;
 mod profile;
@@ -19,7 +20,7 @@ use std::os::unix::process::CommandExt;
 
 use bingux_ui::prelude::Application;
 
-use crate::model::browser::{Options, Profile};
+use crate::browser::{Options, Profile};
 use crate::profile::open::{Opened, open, open_private};
 use crate::profile::places::{Folders, Places};
 use crate::ui::{App, Engine, Gate, GateWindow, Handoff};

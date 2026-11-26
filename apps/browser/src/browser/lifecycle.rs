@@ -11,7 +11,13 @@ impl Browser {
     /// The engine is gone: every session with it. The tabs stay as they were,
     /// without a session, so a restart can open them again; what each was
     /// waiting for will never be answered by anyone.
-    pub(super) fn engine_failed(&mut self, message: String, code: u32, cause: FailureCause, restartable: bool) {
+    pub(super) fn engine_failed(
+        &mut self,
+        message: String,
+        code: u32,
+        cause: FailureCause,
+        restartable: bool,
+    ) {
         for tab in self.tabs.all_mut() {
             let Some(session) = tab.session.take() else {
                 continue;
@@ -66,7 +72,10 @@ impl Browser {
     /// still does not start the window keeps saying why (the backend says it
     /// again, with the new words).
     pub fn restart_engine(&mut self) {
-        let EngineStatus::Failed { restartable: true, .. } = self.engine else {
+        let EngineStatus::Failed {
+            restartable: true, ..
+        } = self.engine
+        else {
             return;
         };
         if let Err(error) = self.backend().restart() {
@@ -109,12 +118,22 @@ impl Browser {
     /// Only what the engine says is a reason. A request that says nothing
     /// about a gesture (the engine of today does not yet) is not blocked for
     /// that: not knowing is not a verdict.
-    pub(super) fn accept_new_tab(&mut self, opener: TabId, new: TabId, url: &str, window: &NewWindow) {
+    pub(super) fn accept_new_tab(
+        &mut self,
+        opener: TabId,
+        new: TabId,
+        url: &str,
+        window: &NewWindow,
+    ) {
         if window.unrequested && !window.user_gesture {
             if let Err(error) = self.backend().close_tab(new) {
                 self.fail(&error);
             }
-            let from = if window.origin.is_empty() { "a page".to_string() } else { window.origin.clone() };
+            let from = if window.origin.is_empty() {
+                "a page".to_string()
+            } else {
+                window.origin.clone()
+            };
             self.notices.push(Notice {
                 error: false,
                 text: format!("Blocked a pop-up from {from}"),
@@ -157,7 +176,11 @@ impl Browser {
                 tab.cert = None;
             }
         }
-        if self.menu.as_ref().is_some_and(|menu| menu.request == Some(id)) {
+        if self
+            .menu
+            .as_ref()
+            .is_some_and(|menu| menu.request == Some(id))
+        {
             self.menu = None;
         }
     }

@@ -69,7 +69,10 @@ mod tests {
     #[test]
     fn an_address_and_words_are_left_for_the_address_bar() {
         assert_eq!(address_of("example.com"), "example.com");
-        assert_eq!(address_of("  https://example.com/a?b=c "), "https://example.com/a?b=c");
+        assert_eq!(
+            address_of("  https://example.com/a?b=c "),
+            "https://example.com/a?b=c"
+        );
         assert_eq!(address_of("rust lifetimes"), "rust lifetimes");
     }
 

@@ -26,10 +26,13 @@ impl Browser {
         };
         self.take_prompt(key);
         if remember {
-            self.permissions.remember(&request.origin, &request.kinds, allow);
+            self.permissions
+                .remember(&request.origin, &request.kinds, allow);
         }
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.respond(session, id, Response::Permission { allow, remember }));
+            self.engine_call(|backend| {
+                backend.respond(session, id, Response::Permission { allow, remember })
+            });
         }
     }
 
@@ -40,7 +43,9 @@ impl Browser {
         };
         self.take_prompt(key);
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.respond(session, id, Response::Dialog { accept, text }));
+            self.engine_call(|backend| {
+                backend.respond(session, id, Response::Dialog { accept, text })
+            });
         }
     }
 
@@ -51,7 +56,9 @@ impl Browser {
         };
         self.take_prompt(key);
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.respond(session, id, Response::Auth { credentials }));
+            self.engine_call(|backend| {
+                backend.respond(session, id, Response::Auth { credentials })
+            });
         }
     }
 
@@ -73,7 +80,9 @@ impl Browser {
         };
         self.take_prompt(key);
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.respond(session, id, Response::FilePicker { paths }));
+            self.engine_call(|backend| {
+                backend.respond(session, id, Response::FilePicker { paths })
+            });
         }
     }
 
@@ -85,7 +94,9 @@ impl Browser {
         };
         let can_back = self.tabs.get(key).is_some_and(|tab| tab.can_back);
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.respond(session, id, Response::CertError { proceed: false }));
+            self.engine_call(|backend| {
+                backend.respond(session, id, Response::CertError { proceed: false })
+            });
         }
         if can_back {
             self.back(key);
@@ -113,7 +124,9 @@ impl Browser {
             tab.load.error = None;
         }
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.respond(session, id, Response::CertError { proceed: true }));
+            self.engine_call(|backend| {
+                backend.respond(session, id, Response::CertError { proceed: true })
+            });
         }
     }
 

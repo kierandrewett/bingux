@@ -6,7 +6,6 @@
 //! in-memory test double where the engine is needed.
 
 pub mod address;
-pub mod browser;
 pub mod downloads;
 pub mod failure;
 pub mod keeping;
@@ -22,5 +21,3 @@ pub mod zoom;
 mod engine_tests;
 #[cfg(test)]
 mod tests;
-
-pub use browser::{Browser, EngineStatus, Notice, Options, UiRequest};

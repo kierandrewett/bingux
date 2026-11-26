@@ -46,7 +46,12 @@ impl Component for PageArea {
             let shown = match tab.page() {
                 Page::Web => tab
                     .session
-                    .and_then(|session| browser.backend().surface(session).map(|surface| Shown::Web(session, Surface(surface))))
+                    .and_then(|session| {
+                        browser
+                            .backend()
+                            .surface(session)
+                            .map(|surface| Shown::Web(session, Surface(surface)))
+                    })
                     .unwrap_or(Shown::Waiting),
                 Page::NewTab => Shown::NewTab,
                 Page::Settings => Shown::Settings,
@@ -54,7 +59,12 @@ impl Component for PageArea {
                 Page::CertError(error) => Shown::Cert(error.clone()),
                 Page::Failed(error) => Shown::Failed(error.clone(), tab.url.clone()),
             };
-            (key, shown, tab.hover.clone(), tab.load.loading.then_some(tab.load.progress))
+            (
+                key,
+                shown,
+                tab.hover.clone(),
+                tab.load.loading.then_some(tab.load.progress),
+            )
         };
         let body: Element = match shown {
             Shown::Web(session, surface) => TabPage {
@@ -110,8 +120,19 @@ impl Component for PageArea {
         });
         rect()
             .component("PageArea")
-            .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children(), bg(Paint::Bg)])
-            .on_sized(move |event: Event<SizedEventData>| origin.set_if_modified((event.area.min_x(), event.area.min_y())))
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h_flex(),
+                    flex_col(),
+                    grow_children(),
+                    bg(Paint::Bg),
+                ],
+            )
+            .on_sized(move |event: Event<SizedEventData>| {
+                origin.set_if_modified((event.area.min_x(), event.area.min_y()))
+            })
             .child(
                 rect()
                     .key(key)

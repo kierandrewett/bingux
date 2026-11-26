@@ -42,7 +42,13 @@ impl Component for TabPage {
         let key = self.key;
         web_view(self.engine.0.clone(), self.session, self.surface.0.clone())
             .on_resize(move |size: ViewSize| {
-                ctx.with(|browser| browser.resize(size.width.round() as u32, size.height.round() as u32, size.scale as f32));
+                ctx.with(|browser| {
+                    browser.resize(
+                        size.width.round() as u32,
+                        size.height.round() as u32,
+                        size.scale as f32,
+                    )
+                });
             })
             .on_host_key(move |input: KeyInput| {
                 // Escape leaves a fullscreen page, whatever the page says.

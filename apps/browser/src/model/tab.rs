@@ -150,7 +150,8 @@ impl Tab {
 
     /// No address: the new tab page.
     pub fn is_blank(&self) -> bool {
-        self.kind == TabKind::Web && (self.url.is_empty() || self.url == "about:blank" || self.url == "bingux:newtab")
+        self.kind == TabKind::Web
+            && (self.url.is_empty() || self.url == "about:blank" || self.url == "bingux:newtab")
     }
 
     /// What the content area shows now.
@@ -224,9 +225,16 @@ mod tests {
         assert_eq!(tab.page(), Page::Web, "a new load hides the old error");
         tab.load.loading = false;
         tab.cert = Some((RequestId(1), CertError::for_test("expired.example.net")));
-        assert!(matches!(tab.page(), Page::CertError(_)), "a certificate error is before a load error");
+        assert!(
+            matches!(tab.page(), Page::CertError(_)),
+            "a certificate error is before a load error"
+        );
         tab.gone = Some(GoneReason::Crashed);
-        assert_eq!(tab.page(), Page::Crashed(GoneReason::Crashed), "a crash is before everything");
+        assert_eq!(
+            tab.page(),
+            Page::Crashed(GoneReason::Crashed),
+            "a crash is before everything"
+        );
         assert_eq!(web("").page(), Page::NewTab);
         assert_eq!(Tab::blank(3, TabKind::Settings).page(), Page::Settings);
     }

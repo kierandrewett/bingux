@@ -20,13 +20,13 @@ use bingux_ui::web_view::{
     TabConfig, TabId,
 };
 
-use super::address::{ENGINES, SearchEngine};
-use super::downloads::Downloads;
-use super::keeping::{Keeping, NotSaved};
-use super::permissions::Permissions;
-use super::shortcuts::Command;
-use super::tab::{Tab, TabKind};
-use super::tabs::TabList;
+use crate::model::address::{ENGINES, SearchEngine};
+use crate::model::downloads::Downloads;
+use crate::model::keeping::{Keeping, NotSaved};
+use crate::model::permissions::Permissions;
+use crate::model::shortcuts::Command;
+use crate::model::tab::{Tab, TabKind};
+use crate::model::tabs::TabList;
 use crate::profile::settings::Settings;
 use crate::profile::store::Store;
 

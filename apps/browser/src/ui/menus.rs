@@ -1,11 +1,11 @@
 //! The menus: the main menu, a tab's menu and the page's context menu.
 
+use bingux_ui::prelude::*;
 use bingux_ui::web_view::input::EditCommand;
 use bingux_ui::web_view::requests::ContextTarget;
-use bingux_ui::prelude::*;
 
+use crate::browser::PendingMenu;
 use crate::model::address;
-use crate::model::browser::PendingMenu;
 use crate::model::shortcuts::{self, Command};
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
@@ -41,16 +41,28 @@ pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {
         command_item(ctx, "Private window", Command::NewPrivateWindow),
     ];
     let reopen = command_item(ctx, "Reopen closed tab", Command::ReopenTab);
-    items.push(if can_reopen { reopen } else { reopen.disabled() });
+    items.push(if can_reopen {
+        reopen
+    } else {
+        reopen.disabled()
+    });
     items.push(menu_separator());
     items.push(command_item(ctx, "Zoom in", Command::ZoomIn));
     items.push(command_item(ctx, "Zoom out", Command::ZoomOut));
-    items.push(command_item(ctx, &format!("Reset zoom ({zoom_text}%)"), Command::ZoomReset));
+    items.push(command_item(
+        ctx,
+        &format!("Reset zoom ({zoom_text}%)"),
+        Command::ZoomReset,
+    ));
     items.push(menu_separator());
     let find = command_item(ctx, "Find in page", Command::Find);
     items.push(if can_find { find } else { find.disabled() });
     let downloads = command_item(ctx, "Downloads", Command::Downloads);
-    items.push(if can_download { downloads } else { downloads.disabled() });
+    items.push(if can_download {
+        downloads
+    } else {
+        downloads.disabled()
+    });
     let source = command_item(ctx, "View page source", Command::ViewSource);
     items.push(if is_web { source } else { source.disabled() });
     items.push(command_item(ctx, "Print\u{2026}", Command::Print));
@@ -88,7 +100,9 @@ pub fn shortcut_text(platform: shortcuts::Platform) -> String {
     ];
     let mut lines: Vec<String> = rows
         .iter()
-        .filter_map(|(name, command)| shortcuts::label(platform, *command).map(|keys| format!("{keys}  {name}")))
+        .filter_map(|(name, command)| {
+            shortcuts::label(platform, *command).map(|keys| format!("{keys}  {name}"))
+        })
         .collect();
     let digit = if platform == shortcuts::Platform::Linux {
         "Alt+1 to 9"
@@ -104,8 +118,12 @@ pub fn tab_items(ctx: Ctx, tab: &Tab) -> Vec<MenuItem> {
     let key = tab.key;
     let mut items = Vec::new();
     if tab.kind == TabKind::Web {
-        items.push(menu_item("Reload tab", move |_: ()| ctx.with(|browser| browser.reload(key, false))));
-        items.push(menu_item("Duplicate tab", move |_: ()| ctx.with(|browser| browser.duplicate_tab(key))));
+        items.push(menu_item("Reload tab", move |_: ()| {
+            ctx.with(|browser| browser.reload(key, false))
+        }));
+        items.push(menu_item("Duplicate tab", move |_: ()| {
+            ctx.with(|browser| browser.duplicate_tab(key))
+        }));
     }
     let pinned = tab.pinned;
     items.push(menu_item(
@@ -120,8 +138,12 @@ pub fn tab_items(ctx: Ctx, tab: &Tab) -> Vec<MenuItem> {
         ));
     }
     items.push(menu_separator());
-    items.push(menu_item("Close other tabs", move |_: ()| ctx.with(|browser| browser.close_others(key))));
-    items.push(menu_item("Close tabs to the right", move |_: ()| ctx.with(|browser| browser.close_after(key))));
+    items.push(menu_item("Close other tabs", move |_: ()| {
+        ctx.with(|browser| browser.close_others(key))
+    }));
+    items.push(menu_item("Close tabs to the right", move |_: ()| {
+        ctx.with(|browser| browser.close_after(key))
+    }));
     items
 }
 
@@ -129,7 +151,9 @@ pub fn tab_items(ctx: Ctx, tab: &Tab) -> Vec<MenuItem> {
 fn copy(ctx: Ctx, text: String, what: &str) {
     match freya::clipboard::Clipboard::set(text) {
         Ok(()) => ctx.overlays.toast(format!("{what} copied")),
-        Err(_) => ctx.overlays.toast(format!("Could not copy the {}", what.to_lowercase())),
+        Err(_) => ctx
+            .overlays
+            .toast(format!("Could not copy the {}", what.to_lowercase())),
     }
 }
 
@@ -174,23 +198,37 @@ pub fn context_items(ctx: Ctx, menu: &PendingMenu) -> Vec<MenuItem> {
     if let Some(source) = image {
         groups.push(vec![
             menu_item("Open image in new tab", open_tab(source.clone())),
-            menu_item("Copy image address", move |_: ()| copy(ctx, source.clone(), "Image address")),
+            menu_item("Copy image address", move |_: ()| {
+                copy(ctx, source.clone(), "Image address")
+            }),
         ]);
     }
     if let Some((source, video)) = media {
         groups.push(vec![
             menu_item(
-                if video { "Open video in new tab" } else { "Open audio in new tab" },
+                if video {
+                    "Open video in new tab"
+                } else {
+                    "Open audio in new tab"
+                },
                 open_tab(source.clone()),
             ),
-            menu_item("Copy media address", move |_: ()| copy(ctx, source.clone(), "Media address")),
+            menu_item("Copy media address", move |_: ()| {
+                copy(ctx, source.clone(), "Media address")
+            }),
         ]);
     }
     let edit = |label: &str, command: EditCommand| {
-        menu_item(label, move |_: ()| ctx.with(|browser| browser.run(Command::Edit(command))))
+        menu_item(label, move |_: ()| {
+            ctx.with(|browser| browser.run(Command::Edit(command)))
+        })
     };
     if editable {
-        let mut items = vec![edit("Undo", EditCommand::Undo), edit("Redo", EditCommand::Redo), menu_separator()];
+        let mut items = vec![
+            edit("Undo", EditCommand::Undo),
+            edit("Redo", EditCommand::Redo),
+            menu_separator(),
+        ];
         items.push(edit("Cut", EditCommand::Cut));
         if !password {
             items.push(edit("Copy", EditCommand::Copy));
@@ -200,7 +238,11 @@ pub fn context_items(ctx: Ctx, menu: &PendingMenu) -> Vec<MenuItem> {
         groups.push(items);
     } else if let Some(text) = selection.filter(|text| !text.trim().is_empty()) {
         let shown: String = text.trim().chars().take(24).collect();
-        let ellipsis = if text.trim().chars().count() > 24 { "\u{2026}" } else { "" };
+        let ellipsis = if text.trim().chars().count() > 24 {
+            "\u{2026}"
+        } else {
+            ""
+        };
         groups.push(vec![
             edit("Copy", EditCommand::Copy),
             menu_item(
@@ -215,10 +257,14 @@ pub fn context_items(ctx: Ctx, menu: &PendingMenu) -> Vec<MenuItem> {
             if can_back { item } else { item.disabled() }
         },
         {
-            let item = menu_item("Forward", move |_: ()| ctx.with(|browser| browser.forward(key)));
+            let item = menu_item("Forward", move |_: ()| {
+                ctx.with(|browser| browser.forward(key))
+            });
             if can_forward { item } else { item.disabled() }
         },
-        menu_item("Reload", move |_: ()| ctx.with(|browser| browser.reload(key, false))),
+        menu_item("Reload", move |_: ()| {
+            ctx.with(|browser| browser.reload(key, false))
+        }),
     ];
     let plain_page = groups.is_empty();
     if plain_page {
@@ -226,7 +272,11 @@ pub fn context_items(ctx: Ctx, menu: &PendingMenu) -> Vec<MenuItem> {
         page.push(edit("Select all", EditCommand::SelectAll));
         let source = format!("view-source:{url}");
         let item = menu_item("View page source", open_tab(source));
-        page.push(if url.is_empty() || url.starts_with("view-source:") { item.disabled() } else { item });
+        page.push(if url.is_empty() || url.starts_with("view-source:") {
+            item.disabled()
+        } else {
+            item
+        });
         page.push(menu_item("Copy page address", {
             let url = url.clone();
             move |_: ()| copy(ctx, address::display(&url), "Page address")

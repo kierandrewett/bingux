@@ -29,10 +29,10 @@ use bingux_ui::web_view::{
     BrowserBackend, BrowserEvent, Capabilities, DownloadId, GoneReason, Response, TabEvent, TabId,
 };
 
-use super::browser::{Browser, Options, UiRequest};
 use super::shortcuts::Command;
 use super::tab::{Page, TabKind};
 use super::tabs::Place;
+use crate::browser::{Browser, Options, UiRequest};
 
 fn browser() -> (Browser, Arc<TestDoubleBackend>) {
     let double = TestDoubleBackend::new();
@@ -55,7 +55,7 @@ fn the_first_tab_is_blank_and_the_engine_is_ready_after_its_event() {
     let (browser, _) = browser();
     assert_eq!(browser.tabs.len(), 1);
     assert_eq!(browser.active().map(|tab| tab.page()), Some(Page::NewTab));
-    assert_eq!(browser.engine, super::EngineStatus::Ready);
+    assert_eq!(browser.engine, crate::browser::EngineStatus::Ready);
 }
 
 #[test]

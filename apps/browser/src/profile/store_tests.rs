@@ -18,7 +18,7 @@ use super::files::{self, Problem, remove_tree, tests::temp};
 use super::places::{Folders, Places};
 use super::settings::Settings;
 use super::store::{Store, keeping_of, not_saved};
-use crate::model::browser::{Browser, Options, Profile};
+use crate::browser::{Browser, Options, Profile};
 use crate::model::keeping::{Keeping, NotSaved};
 
 fn folders(root: &Path) -> Folders {

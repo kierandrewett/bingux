@@ -16,8 +16,13 @@ pub fn open_tabs(ctx: Ctx) {
     // window allows), so the height is asked for: the header, the padding and a
     // row with a subtitle for each tab, which the popup limits to the window.
     let rows = ctx.browser.peek().tabs.all().len() as f32;
-    let height = Dim::Header.px() + Dim::Hairline.px() + 2.0 * S4.px() + rows * Dim::RowSubtitle.px() + S4.px();
-    ctx.window.open(popup("Tabs", TabsSheet { ctx }).size(Dim::PopupWidth.px(), height));
+    let height = Dim::Header.px()
+        + Dim::Hairline.px()
+        + 2.0 * S4.px()
+        + rows * Dim::RowSubtitle.px()
+        + S4.px();
+    ctx.window
+        .open(popup("Tabs", TabsSheet { ctx }).size(Dim::PopupWidth.px(), height));
 }
 
 #[derive(PartialEq)]
@@ -46,8 +51,10 @@ impl Component for TabsSheet {
                             window.close();
                         })
                         .trailing(
-                            icon_button(Icon::WindowClose, move |_: ()| ctx.with(|browser| browser.close_tab(key)))
-                                .tooltip("Close tab"),
+                            icon_button(Icon::WindowClose, move |_: ()| {
+                                ctx.with(|browser| browser.close_tab(key))
+                            })
+                            .tooltip("Close tab"),
                         );
                     let detail = address::display(&tab.url);
                     if !detail.is_empty() {

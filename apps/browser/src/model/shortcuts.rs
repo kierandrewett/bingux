@@ -264,7 +264,9 @@ pub fn page_command(platform: Platform, key: &Key, modifiers: Modifiers) -> Opti
             _ if is(key, "v") => Some(Command::Edit(EditCommand::Paste)),
             _ if is(key, "a") => Some(Command::Edit(EditCommand::SelectAll)),
             _ if is(key, "z") => Some(Command::Edit(EditCommand::Undo)),
-            _ if is(key, "y") && platform != Platform::Mac => Some(Command::Edit(EditCommand::Redo)),
+            _ if is(key, "y") && platform != Platform::Mac => {
+                Some(Command::Edit(EditCommand::Redo))
+            }
             _ => None,
         };
     }
@@ -303,8 +305,20 @@ pub fn label(platform: Platform, command: Command) -> Option<String> {
         Command::FindPrevious => "Shift+F3".to_string(),
         Command::Reload => format!("{main}+R"),
         Command::ReloadBypassCache => format!("{main}+Shift+R"),
-        Command::Back => if platform == Platform::Mac { format!("{main}+[") } else { "Alt+Left".to_string() },
-        Command::Forward => if platform == Platform::Mac { format!("{main}+]") } else { "Alt+Right".to_string() },
+        Command::Back => {
+            if platform == Platform::Mac {
+                format!("{main}+[")
+            } else {
+                "Alt+Left".to_string()
+            }
+        }
+        Command::Forward => {
+            if platform == Platform::Mac {
+                format!("{main}+]")
+            } else {
+                "Alt+Right".to_string()
+            }
+        }
         Command::ZoomIn if platform == Platform::Mac => return Some("\u{2318}+".to_string()),
         Command::ZoomIn => format!("{main}++"),
         Command::ZoomOut => format!("{main}+-"),
@@ -340,70 +354,165 @@ mod tests {
         assert_eq!(linux("l", CTRL), Some(Command::FocusAddress));
         assert_eq!(linux("f", CTRL), Some(Command::Find));
         assert_eq!(linux("r", CTRL), Some(Command::Reload));
-        assert_eq!(linux("T", CTRL | Modifiers::SHIFT), Some(Command::ReopenTab), "shift makes the letter a capital");
-        assert_eq!(linux("R", CTRL | Modifiers::SHIFT), Some(Command::ReloadBypassCache));
+        assert_eq!(
+            linux("T", CTRL | Modifiers::SHIFT),
+            Some(Command::ReopenTab),
+            "shift makes the letter a capital"
+        );
+        assert_eq!(
+            linux("R", CTRL | Modifiers::SHIFT),
+            Some(Command::ReloadBypassCache)
+        );
         assert_eq!(linux("=", CTRL), Some(Command::ZoomIn));
-        assert_eq!(linux("+", CTRL | Modifiers::SHIFT), Some(Command::ZoomIn), "plus is typed with Shift on most layouts");
+        assert_eq!(
+            linux("+", CTRL | Modifiers::SHIFT),
+            Some(Command::ZoomIn),
+            "plus is typed with Shift on most layouts"
+        );
         assert_eq!(linux("-", CTRL), Some(Command::ZoomOut));
         assert_eq!(linux("0", CTRL), Some(Command::ZoomReset));
     }
 
     #[test]
     fn extra_modifiers_make_it_another_key() {
-        assert_eq!(window_command(Platform::Linux, &ch("t"), CTRL | Modifiers::ALT), None);
-        assert_eq!(window_command(Platform::Linux, &ch("t"), Modifiers::default()), None, "a letter is a letter");
-        assert_eq!(window_command(Platform::Linux, &ch("t"), CTRL | Modifiers::CAPS_LOCK), Some(Command::NewTab), "locks do not count");
-        assert_eq!(window_command(Platform::Linux, &ch("t"), Modifiers::META), None, "Super is not Ctrl");
+        assert_eq!(
+            window_command(Platform::Linux, &ch("t"), CTRL | Modifiers::ALT),
+            None
+        );
+        assert_eq!(
+            window_command(Platform::Linux, &ch("t"), Modifiers::default()),
+            None,
+            "a letter is a letter"
+        );
+        assert_eq!(
+            window_command(Platform::Linux, &ch("t"), CTRL | Modifiers::CAPS_LOCK),
+            Some(Command::NewTab),
+            "locks do not count"
+        );
+        assert_eq!(
+            window_command(Platform::Linux, &ch("t"), Modifiers::META),
+            None,
+            "Super is not Ctrl"
+        );
     }
 
     #[test]
     fn tabs_move_with_tab_and_the_page_keys() {
-        let key = |named: NamedKey, modifiers| window_command(Platform::Linux, &Key::Named(named), modifiers);
+        let key = |named: NamedKey, modifiers| {
+            window_command(Platform::Linux, &Key::Named(named), modifiers)
+        };
         assert_eq!(key(NamedKey::Tab, CTRL), Some(Command::NextTab));
-        assert_eq!(key(NamedKey::Tab, CTRL | Modifiers::SHIFT), Some(Command::PreviousTab));
+        assert_eq!(
+            key(NamedKey::Tab, CTRL | Modifiers::SHIFT),
+            Some(Command::PreviousTab)
+        );
         assert_eq!(key(NamedKey::PageDown, CTRL), Some(Command::NextTab));
         assert_eq!(key(NamedKey::PageUp, CTRL), Some(Command::PreviousTab));
-        assert_eq!(key(NamedKey::PageUp, CTRL | Modifiers::SHIFT), Some(Command::MoveTabLeft));
-        assert_eq!(key(NamedKey::PageDown, CTRL | Modifiers::SHIFT), Some(Command::MoveTabRight));
+        assert_eq!(
+            key(NamedKey::PageUp, CTRL | Modifiers::SHIFT),
+            Some(Command::MoveTabLeft)
+        );
+        assert_eq!(
+            key(NamedKey::PageDown, CTRL | Modifiers::SHIFT),
+            Some(Command::MoveTabRight)
+        );
     }
 
     #[test]
     fn alt_digits_pick_a_tab_on_linux_and_ctrl_digits_elsewhere() {
-        assert_eq!(window_command(Platform::Linux, &ch("3"), Modifiers::ALT), Some(Command::GoToTab(3)));
-        assert_eq!(window_command(Platform::Linux, &ch("9"), Modifiers::ALT), Some(Command::LastTab));
+        assert_eq!(
+            window_command(Platform::Linux, &ch("3"), Modifiers::ALT),
+            Some(Command::GoToTab(3))
+        );
+        assert_eq!(
+            window_command(Platform::Linux, &ch("9"), Modifiers::ALT),
+            Some(Command::LastTab)
+        );
         assert_eq!(window_command(Platform::Linux, &ch("3"), CTRL), None);
-        assert_eq!(window_command(Platform::Windows, &ch("3"), CTRL), Some(Command::GoToTab(3)));
-        assert_eq!(window_command(Platform::Mac, &ch("1"), Modifiers::META), Some(Command::GoToTab(1)));
-        assert_eq!(window_command(Platform::Linux, &ch("0"), Modifiers::ALT), None);
+        assert_eq!(
+            window_command(Platform::Windows, &ch("3"), CTRL),
+            Some(Command::GoToTab(3))
+        );
+        assert_eq!(
+            window_command(Platform::Mac, &ch("1"), Modifiers::META),
+            Some(Command::GoToTab(1))
+        );
+        assert_eq!(
+            window_command(Platform::Linux, &ch("0"), Modifiers::ALT),
+            None
+        );
     }
 
     #[test]
     fn history_keys_follow_the_platform() {
         let left = Key::Named(NamedKey::ArrowLeft);
-        assert_eq!(window_command(Platform::Linux, &left, Modifiers::ALT), Some(Command::Back));
-        assert_eq!(window_command(Platform::Linux, &Key::Named(NamedKey::ArrowRight), Modifiers::ALT), Some(Command::Forward));
-        assert_eq!(window_command(Platform::Mac, &ch("["), Modifiers::META), Some(Command::Back));
-        assert_eq!(window_command(Platform::Mac, &ch("]"), Modifiers::META), Some(Command::Forward));
-        assert_eq!(window_command(Platform::Linux, &left, Modifiers::default()), None, "plain arrows are the page's");
+        assert_eq!(
+            window_command(Platform::Linux, &left, Modifiers::ALT),
+            Some(Command::Back)
+        );
+        assert_eq!(
+            window_command(
+                Platform::Linux,
+                &Key::Named(NamedKey::ArrowRight),
+                Modifiers::ALT
+            ),
+            Some(Command::Forward)
+        );
+        assert_eq!(
+            window_command(Platform::Mac, &ch("["), Modifiers::META),
+            Some(Command::Back)
+        );
+        assert_eq!(
+            window_command(Platform::Mac, &ch("]"), Modifiers::META),
+            Some(Command::Forward)
+        );
+        assert_eq!(
+            window_command(Platform::Linux, &left, Modifiers::default()),
+            None,
+            "plain arrows are the page's"
+        );
     }
 
     #[test]
     fn the_mac_uses_command_and_not_control() {
-        assert_eq!(window_command(Platform::Mac, &ch("t"), Modifiers::META), Some(Command::NewTab));
+        assert_eq!(
+            window_command(Platform::Mac, &ch("t"), Modifiers::META),
+            Some(Command::NewTab)
+        );
         assert_eq!(window_command(Platform::Mac, &ch("t"), CTRL), None);
-        assert_eq!(window_command(Platform::Mac, &ch("]"), Modifiers::META | Modifiers::SHIFT), Some(Command::NextTab));
-        assert_eq!(window_command(Platform::Mac, &ch(","), Modifiers::META), Some(Command::Settings));
+        assert_eq!(
+            window_command(Platform::Mac, &ch("]"), Modifiers::META | Modifiers::SHIFT),
+            Some(Command::NextTab)
+        );
+        assert_eq!(
+            window_command(Platform::Mac, &ch(","), Modifiers::META),
+            Some(Command::Settings)
+        );
     }
 
     #[test]
     fn function_keys_do_not_need_a_modifier() {
-        let f = |named: NamedKey, modifiers| window_command(Platform::Linux, &Key::Named(named), modifiers);
+        let f = |named: NamedKey, modifiers| {
+            window_command(Platform::Linux, &Key::Named(named), modifiers)
+        };
         assert_eq!(f(NamedKey::F5, Modifiers::default()), Some(Command::Reload));
-        assert_eq!(f(NamedKey::F5, Modifiers::SHIFT), Some(Command::ReloadBypassCache));
+        assert_eq!(
+            f(NamedKey::F5, Modifiers::SHIFT),
+            Some(Command::ReloadBypassCache)
+        );
         assert_eq!(f(NamedKey::F5, CTRL), Some(Command::ReloadBypassCache));
-        assert_eq!(f(NamedKey::F3, Modifiers::default()), Some(Command::FindNext));
-        assert_eq!(f(NamedKey::F3, Modifiers::SHIFT), Some(Command::FindPrevious));
-        assert_eq!(f(NamedKey::F11, Modifiers::default()), Some(Command::Fullscreen));
+        assert_eq!(
+            f(NamedKey::F3, Modifiers::default()),
+            Some(Command::FindNext)
+        );
+        assert_eq!(
+            f(NamedKey::F3, Modifiers::SHIFT),
+            Some(Command::FindPrevious)
+        );
+        assert_eq!(
+            f(NamedKey::F11, Modifiers::default()),
+            Some(Command::Fullscreen)
+        );
     }
 
     #[test]
@@ -411,14 +520,28 @@ mod tests {
         let page = |key: &str, modifiers| page_command(Platform::Linux, &ch(key), modifiers);
         assert_eq!(page("c", CTRL), Some(Command::Edit(EditCommand::Copy)));
         assert_eq!(page("v", CTRL), Some(Command::Edit(EditCommand::Paste)));
-        assert_eq!(page("V", CTRL | Modifiers::SHIFT), Some(Command::Edit(EditCommand::PastePlain)));
+        assert_eq!(
+            page("V", CTRL | Modifiers::SHIFT),
+            Some(Command::Edit(EditCommand::PastePlain))
+        );
         assert_eq!(page("a", CTRL), Some(Command::Edit(EditCommand::SelectAll)));
-        assert_eq!(page("Z", CTRL | Modifiers::SHIFT), Some(Command::Edit(EditCommand::Redo)));
-        assert_eq!(page("t", CTRL), Some(Command::NewTab), "a page cannot take Ctrl+T");
+        assert_eq!(
+            page("Z", CTRL | Modifiers::SHIFT),
+            Some(Command::Edit(EditCommand::Redo))
+        );
+        assert_eq!(
+            page("t", CTRL),
+            Some(Command::NewTab),
+            "a page cannot take Ctrl+T"
+        );
         assert_eq!(page("k", CTRL), None, "Ctrl+K is the page's");
         assert_eq!(page("a", Modifiers::default()), None);
         assert_eq!(
-            page_command(Platform::Linux, &Key::Named(NamedKey::Enter), Modifiers::default()),
+            page_command(
+                Platform::Linux,
+                &Key::Named(NamedKey::Enter),
+                Modifiers::default()
+            ),
             None
         );
     }
@@ -432,9 +555,18 @@ mod tests {
 
     #[test]
     fn menu_labels_follow_the_platform() {
-        assert_eq!(label(Platform::Linux, Command::NewTab).as_deref(), Some("Ctrl+T"));
-        assert_eq!(label(Platform::Linux, Command::Back).as_deref(), Some("Alt+Left"));
-        assert_eq!(label(Platform::Mac, Command::NewTab).as_deref(), Some("\u{2318}T"));
+        assert_eq!(
+            label(Platform::Linux, Command::NewTab).as_deref(),
+            Some("Ctrl+T")
+        );
+        assert_eq!(
+            label(Platform::Linux, Command::Back).as_deref(),
+            Some("Alt+Left")
+        );
+        assert_eq!(
+            label(Platform::Mac, Command::NewTab).as_deref(),
+            Some("\u{2318}T")
+        );
         assert_eq!(label(Platform::Linux, Command::GoToTab(1)), None);
     }
 }

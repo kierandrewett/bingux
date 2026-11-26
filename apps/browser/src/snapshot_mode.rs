@@ -22,7 +22,7 @@ use bingux_ui::web_view::test_double::TestDoubleBackend;
 use bingux_ui::web_view::{BrowserEvent, Capabilities, FailureCause, TabEvent, TabId};
 use freya::prelude::*;
 
-use crate::model::browser::Options;
+use crate::browser::Options;
 use crate::model::shortcuts::Command;
 use crate::target::SCHEME;
 use crate::ui::{App, Ctx, Engine};

@@ -19,7 +19,7 @@ use bingux_ui::web_view::test_double::TestDoubleBackend;
 use super::files::{remove_tree, tests::temp};
 use super::open::{Opened, open, open_private};
 use super::places::Places;
-use crate::model::browser::{Browser, Options, Profile};
+use crate::browser::{Browser, Options, Profile};
 use crate::model::keeping::{Keeping, NotSaved};
 use crate::model::tabs::Place;
 

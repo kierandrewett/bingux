@@ -5,9 +5,9 @@
 //! The first prompt of the tab on show is the one on screen. Prompts of other
 //! tabs wait, and the tab says so in the strip.
 
-use bingux_ui::web_view::requests::{DialogKind, DialogRequest, PickerMode, PickerRequest};
 use bingux_ui::files::choose;
 use bingux_ui::prelude::*;
+use bingux_ui::web_view::requests::{DialogKind, DialogRequest, PickerMode, PickerRequest};
 use freya::prelude::*;
 
 use crate::model::permissions;
@@ -28,7 +28,9 @@ impl Component for PermissionBanner {
             let browser = ctx.browser.read();
             let key = browser.tabs.active_key();
             let text = match browser.prompt(key) {
-                Some(Prompt::Permission(_, request)) => Some(permissions::prompt_text(&request.origin, &request.kinds)),
+                Some(Prompt::Permission(_, request)) => {
+                    Some(permissions::prompt_text(&request.origin, &request.kinds))
+                }
                 _ => None,
             };
             (key, text)
@@ -46,10 +48,18 @@ impl Component for PermissionBanner {
         let banner = banner(text.unwrap_or_else(|| shown.read().clone()))
             .kind(BannerKind::Info)
             .icon(Icon::DialogInformation)
-            .action("Block", move |_: ()| ctx.with(|browser| browser.answer_permission(key, false, true)))
-            .action("Allow this time", move |_: ()| ctx.with(|browser| browser.answer_permission(key, true, false)))
-            .action("Allow", move |_: ()| ctx.with(|browser| browser.answer_permission(key, true, true)))
-            .dismissible(move |_: ()| ctx.with(|browser| browser.answer_permission(key, false, false)))
+            .action("Block", move |_: ()| {
+                ctx.with(|browser| browser.answer_permission(key, false, true))
+            })
+            .action("Allow this time", move |_: ()| {
+                ctx.with(|browser| browser.answer_permission(key, true, false))
+            })
+            .action("Allow", move |_: ()| {
+                ctx.with(|browser| browser.answer_permission(key, true, true))
+            })
+            .dismissible(move |_: ()| {
+                ctx.with(|browser| browser.answer_permission(key, false, false))
+            })
             .visible(visible)
             .gap(S1);
         // The pill stands one step in from the window's edge, like a toast.
@@ -96,7 +106,10 @@ impl Component for PromptHost {
 }
 
 fn field(state: State<String>) -> Element {
-    text_field(state, |_: String| {}).fill_width().autofocus().into()
+    text_field(state, |_: String| {})
+        .fill_width()
+        .autofocus()
+        .into()
 }
 
 fn show_dialog(ctx: Ctx, key: u64, request: &DialogRequest) {
@@ -136,11 +149,21 @@ fn show_dialog(ctx: Ctx, key: u64, request: &DialogRequest) {
                 .default_action("ok")
         }
         DialogKind::BeforeUnload => dialog(title, message)
-            .action(CANCEL_ID, "Stay on page", ResponseKind::Default, answer(false))
+            .action(
+                CANCEL_ID,
+                "Stay on page",
+                ResponseKind::Default,
+                answer(false),
+            )
             .response("Leave", ResponseKind::Destructive, answer(true))
             .default_action(CANCEL_ID),
     };
-    ctx.overlays.show_dialog(shown.cancel_action(if request.kind == DialogKind::Alert { "ok" } else { CANCEL_ID }));
+    ctx.overlays
+        .show_dialog(shown.cancel_action(if request.kind == DialogKind::Alert {
+            "ok"
+        } else {
+            CANCEL_ID
+        }));
 }
 
 fn show_auth(ctx: Ctx, key: u64, request: &bingux_ui::web_view::requests::AuthRequest) {
@@ -154,14 +177,22 @@ fn show_auth(ctx: Ctx, key: u64, request: &bingux_ui::web_view::requests::AuthRe
         format!("Sign in to {}", request.host)
     };
     let body = match (request.realm.is_empty(), request.retry) {
-        (false, true) => format!("{} \u{2014} the name or password was not accepted.", request.realm),
+        (false, true) => format!(
+            "{} \u{2014} the name or password was not accepted.",
+            request.realm
+        ),
         (false, false) => request.realm.clone(),
         (true, true) => "The name or password was not accepted.".to_string(),
         (true, false) => "The site asks who you are.".to_string(),
     };
     let form = rect()
         .tw_layout(&[flex_col(), w_full(), gap(S2)])
-        .child(text_field(ctx.chrome.dialog_text, |_: String| {}).fill_width().autofocus().placeholder("Name"))
+        .child(
+            text_field(ctx.chrome.dialog_text, |_: String| {})
+                .fill_width()
+                .autofocus()
+                .placeholder("Name"),
+        )
         .child(
             text_field(ctx.chrome.dialog_password, |_: String| {})
                 .fill_width()
@@ -175,7 +206,10 @@ fn show_auth(ctx: Ctx, key: u64, request: &bingux_ui::web_view::requests::AuthRe
                 ctx.with(|browser| browser.answer_auth(key, None));
             })
             .response("Sign in", ResponseKind::Suggested, move |_: ()| {
-                let credentials = (ctx.chrome.dialog_text.peek().clone(), ctx.chrome.dialog_password.peek().clone());
+                let credentials = (
+                    ctx.chrome.dialog_text.peek().clone(),
+                    ctx.chrome.dialog_password.peek().clone(),
+                );
                 ctx.with(|browser| browser.answer_auth(key, Some(credentials)));
             })
             .default_action("sign_in")
@@ -191,7 +225,11 @@ fn show_select(ctx: Ctx, key: u64, request: &bingux_ui::web_view::requests::Sele
         .enumerate()
         .map(|(at, option)| (at.to_string(), option.label.clone()))
         .collect();
-    let first = request.options.iter().position(|option| option.selected).unwrap_or(0);
+    let first = request
+        .options
+        .iter()
+        .position(|option| option.selected)
+        .unwrap_or(0);
     let mut chosen = ctx.chrome.dialog_text;
     chosen.set(first.to_string());
     ctx.overlays.show_dialog(
@@ -220,7 +258,11 @@ struct SelectBody {
 impl Component for SelectBody {
     fn render(&self) -> impl IntoElement {
         let mut chosen = self.ctx.chrome.dialog_text;
-        dropdown(self.options.clone(), chosen.read().clone(), move |value: String| chosen.set(value))
+        dropdown(
+            self.options.clone(),
+            chosen.read().clone(),
+            move |value: String| chosen.set(value),
+        )
     }
 }
 
@@ -230,7 +272,9 @@ fn show_picker(ctx: Ctx, key: u64, request: &PickerRequest) {
         PickerMode::Open => ChooserRequest::open().title("Choose a file"),
         PickerMode::OpenMany => ChooserRequest::open().multiple(true).title("Choose files"),
         PickerMode::Folder => ChooserRequest::select_folder(),
-        PickerMode::Save => ChooserRequest::save(request.suggested_name.clone().unwrap_or_default()),
+        PickerMode::Save => {
+            ChooserRequest::save(request.suggested_name.clone().unwrap_or_default())
+        }
     };
     choose(ctx.window, chooser, move |chosen| {
         let paths = chosen.map(|chosen| chosen.paths).unwrap_or_default();

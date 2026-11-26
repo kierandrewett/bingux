@@ -13,7 +13,7 @@ use bingux_ui::shell::with_window;
 use bingux_ui::web_view::BrowserBackend;
 use freya::prelude::*;
 
-use crate::model::browser::{Browser, Notice, UiRequest};
+use crate::browser::{Browser, Notice, UiRequest};
 use crate::model::shortcuts::Command;
 use crate::model::shortcuts::Platform;
 

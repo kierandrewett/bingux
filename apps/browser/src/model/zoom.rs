@@ -2,7 +2,9 @@
 //! Ctrl+wheel uses (`docs/input.md`), so the keyboard and the wheel agree.
 
 /// The zoom levels, in percent.
-pub const LEVELS: [u32; 16] = [30, 50, 67, 80, 90, 100, 110, 120, 133, 150, 170, 200, 240, 300, 400, 500];
+pub const LEVELS: [u32; 16] = [
+    30, 50, 67, 80, 90, 100, 110, 120, 133, 150, 170, 200, 240, 300, 400, 500,
+];
 
 /// 100 %.
 pub const DEFAULT: f64 = 1.0;

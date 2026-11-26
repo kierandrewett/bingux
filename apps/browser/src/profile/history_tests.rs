@@ -27,7 +27,7 @@ use super::history::{self, Change, INDEX};
 use super::places::{Folders, Places};
 use super::settings::Settings;
 use super::store::{Event, Store};
-use crate::model::browser::{Browser, Options, Profile};
+use crate::browser::{Browser, Options, Profile};
 use crate::model::keeping::{Keeping, NotSaved};
 use crate::model::tabs::Place;
 

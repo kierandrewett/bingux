@@ -86,7 +86,9 @@ impl TabList {
     }
 
     pub fn by_session_mut(&mut self, session: TabId) -> Option<&mut Tab> {
-        self.tabs.iter_mut().find(|tab| tab.session == Some(session))
+        self.tabs
+            .iter_mut()
+            .find(|tab| tab.session == Some(session))
     }
 
     pub fn position(&self, key: u64) -> Option<usize> {
@@ -104,12 +106,18 @@ impl TabList {
         let pinned = self.pinned_count();
         let after = match place {
             Place::End => self.tabs.len(),
-            Place::AfterActive => self.position(self.active).map_or(self.tabs.len(), |at| at + 1),
+            Place::AfterActive => self
+                .position(self.active)
+                .map_or(self.tabs.len(), |at| at + 1),
             Place::After(key) => self.position(key).map_or(self.tabs.len(), |at| at + 1),
         };
         // A tab that is not pinned never goes among the pinned ones, and a
         // pinned one never past them.
-        let index = if tab.pinned { after.min(pinned) } else { after.max(pinned) };
+        let index = if tab.pinned {
+            after.min(pinned)
+        } else {
+            after.max(pinned)
+        };
         let key = tab.key;
         self.tabs.insert(index, tab);
         if select || self.tabs.len() == 1 {
@@ -247,7 +255,11 @@ mod tests {
         assert_eq!(list.active_key(), 3, "the neighbour that takes its place");
         list.select(4);
         list.remove(4);
-        assert_eq!(list.active_key(), 3, "the last tab goes to its left neighbour");
+        assert_eq!(
+            list.active_key(),
+            3,
+            "the last tab goes to its left neighbour"
+        );
         let key = list.next_key();
         let mut child = Tab::blank(key, TabKind::Web);
         child.opener = Some(1);
@@ -289,14 +301,26 @@ mod tests {
         list.set_pinned(3, true);
         assert_eq!(keys(&list), [3, 1, 2, 4]);
         list.set_pinned(4, true);
-        assert_eq!(keys(&list), [3, 4, 1, 2], "a newly pinned tab joins the end of the block");
+        assert_eq!(
+            keys(&list),
+            [3, 4, 1, 2],
+            "a newly pinned tab joins the end of the block"
+        );
         assert_eq!(list.pinned_count(), 2);
         list.move_to(3, 3);
-        assert_eq!(keys(&list), [4, 3, 1, 2], "a pinned tab cannot leave the block");
+        assert_eq!(
+            keys(&list),
+            [4, 3, 1, 2],
+            "a pinned tab cannot leave the block"
+        );
         list.move_to(2, 0);
         assert_eq!(keys(&list), [4, 3, 2, 1], "an unpinned tab cannot enter it");
         list.set_pinned(4, false);
-        assert_eq!(keys(&list), [3, 4, 2, 1], "an unpinned tab is the first of the others");
+        assert_eq!(
+            keys(&list),
+            [3, 4, 2, 1],
+            "an unpinned tab is the first of the others"
+        );
     }
 
     #[test]
@@ -311,7 +335,11 @@ mod tests {
         let mut pinned = Tab::blank(key, TabKind::Web);
         pinned.pinned = true;
         list.insert(pinned, Place::End, false);
-        assert_eq!(keys(&list), [2, 4, 3, 1], "a pinned tab goes to the end of the block");
+        assert_eq!(
+            keys(&list),
+            [2, 4, 3, 1],
+            "a pinned tab goes to the end of the block"
+        );
     }
 
     #[test]
