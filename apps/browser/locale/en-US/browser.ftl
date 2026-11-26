@@ -157,3 +157,12 @@ browser-permissions-prompt-nothing = do something
 browser-permissions-block-button = Block
 browser-permissions-allow-once-button = Allow this time
 browser-permissions-allow-button = Allow
+
+## Find in page
+
+# Placeholder of the find field.
+browser-find-placeholder = Find in page
+browser-find-match-case = Match case
+browser-find-highlight-all = Highlight all
+# Toast shown when the engine cannot search a page.
+browser-find-unavailable = Find in page is not available in this engine yet.

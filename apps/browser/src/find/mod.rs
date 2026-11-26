@@ -6,6 +6,7 @@ mod state;
 pub use bar::FindBar;
 pub use state::BarState;
 
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::{FindQuery, TabId};
 
 use crate::browser::{Outbox, UiRequest};
@@ -65,7 +66,7 @@ impl Find {
         // the window read what the engine can do, when it opened with none.
         engine.refresh();
         if !engine.capabilities().find {
-            out.notify("Find in page is not available in this engine yet.");
+            out.notify(tr!("browser-find-unavailable"));
             return;
         }
         self.open = true;

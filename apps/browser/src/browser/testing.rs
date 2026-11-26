@@ -9,6 +9,7 @@ use crate::model::tabs::Place;
 
 /// A browser over the test double, with one blank tab open and the engine ready.
 pub(crate) fn browser() -> (Browser, Arc<TestDoubleBackend>) {
+    crate::locale::register();
     let double = TestDoubleBackend::new();
     let mut browser = Browser::new(double.clone(), Options::default());
     browser.open_tab("", Place::End, true);

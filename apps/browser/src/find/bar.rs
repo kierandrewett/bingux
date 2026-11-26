@@ -30,18 +30,28 @@ impl Component for FindBar {
         });
         let (match_case, whole_words, highlight_all) = find.options();
         find_card(text)
-            .placeholder("Find in page")
+            .placeholder(tr!("browser-find-placeholder"))
             .result(find.result())
             .focus_requests(ctx.find.requests())
             .options(vec![
-                FindOption::new("Match case", match_case, move |on: bool| {
-                    ctx.with(|browser| {
-                        browser.set_find_options(key, on, whole_words, highlight_all)
-                    });
-                }),
-                FindOption::new("Highlight all", highlight_all, move |on: bool| {
-                    ctx.with(|browser| browser.set_find_options(key, match_case, whole_words, on));
-                }),
+                FindOption::new(
+                    tr!("browser-find-match-case"),
+                    match_case,
+                    move |on: bool| {
+                        ctx.with(|browser| {
+                            browser.set_find_options(key, on, whole_words, highlight_all)
+                        });
+                    },
+                ),
+                FindOption::new(
+                    tr!("browser-find-highlight-all"),
+                    highlight_all,
+                    move |on: bool| {
+                        ctx.with(|browser| {
+                            browser.set_find_options(key, match_case, whole_words, on)
+                        });
+                    },
+                ),
             ])
             .on_change(move |changed: String| {
                 ctx.with(|browser| browser.find(key, &changed, true, true))

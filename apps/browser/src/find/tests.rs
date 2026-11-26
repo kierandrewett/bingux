@@ -51,6 +51,7 @@ fn find_asks_the_engine_and_shows_the_count() {
 
 #[test]
 fn find_says_so_when_the_engine_cannot() {
+    crate::locale::register();
     let double = TestDoubleBackend::with_capabilities(Capabilities {
         find: false,
         ..Capabilities::all()
@@ -64,6 +65,7 @@ fn find_says_so_when_the_engine_cannot() {
 
 #[test]
 fn what_the_engine_took_of_find_is_read_again_when_the_bar_opens() {
+    crate::locale::register();
     let double = TestDoubleBackend::with_capabilities(Capabilities {
         find: false,
         ..Capabilities::all()
