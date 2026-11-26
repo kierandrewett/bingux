@@ -291,11 +291,14 @@ pub fn write(connection: &mut Connection, changes: &[Change]) -> rusqlite::Resul
     transaction.commit()
 }
 
+/// The statements that empty the history.
+const CLEAR_ALL: &str = "DELETE FROM visits; DELETE FROM pages;";
+
 /// Removes every page and visit. `secure_delete` overwrites the rows, and the
 /// write-ahead log, which still holds them, is emptied.
 pub fn clear(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    transaction.execute_batch("DELETE FROM visits; DELETE FROM pages;")?;
+    transaction.execute_batch(CLEAR_ALL)?;
     transaction.commit()?;
     connection.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))
 }
