@@ -69,7 +69,7 @@ pub(super) fn error_text(what: &str, error: &OpError) -> String {
     crate::tr!(
         "ui-files-transfer-error",
         what = what,
-        error = error.to_string()
+        error = super::op_error::text(error)
     )
 }
 

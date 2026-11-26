@@ -16,6 +16,7 @@ mod backend;
 mod bin;
 mod clipboard;
 mod names;
+mod op_error;
 mod open_with;
 mod transfer;
 mod undo;
@@ -976,7 +977,10 @@ fn create(env: &Env, folder: bool) {
             }
             Err(error) => notify(
                 env.ui,
-                crate::tr!("ui-files-action-create-failed", error = error.to_string()),
+                crate::tr!(
+                    "ui-files-action-create-failed",
+                    error = op_error::text(&error)
+                ),
                 true,
             ),
         }
@@ -1059,7 +1063,10 @@ fn create_from_template(env: &Env, template: PathBuf) {
             }
             Err(error) => notify(
                 env.ui,
-                crate::tr!("ui-files-action-create-failed", error = error.to_string()),
+                crate::tr!(
+                    "ui-files-action-create-failed",
+                    error = op_error::text(&error)
+                ),
                 true,
             ),
         }
@@ -1099,7 +1106,7 @@ pub(super) fn rename(
                 env.reload.call(());
                 done(Ok(()));
             }
-            Err(error) => done(Err(error.to_string())),
+            Err(error) => done(Err(op_error::text(&error))),
         }
     });
 }

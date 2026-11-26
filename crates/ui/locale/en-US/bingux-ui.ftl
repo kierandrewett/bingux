@@ -2231,3 +2231,30 @@ ui-run-whole-files = { $count ->
 }
 # $label (String) - the drive's name; $sentence (String) - why it could not be opened
 ui-files-drive-error = { $label }: { $sentence }
+
+## Files: why an operation did not happen. One message per kind of bingux_files::ops::OpError.
+
+ui-files-error-exists = Something with that name already exists.
+ui-files-error-permission = You do not have permission to do that.
+ui-files-error-not-found = That file or folder no longer exists.
+ui-files-error-cancelled = The operation was cancelled.
+ui-files-error-name-empty = Enter a name for the file.
+ui-files-error-name-reserved = A file cannot be called . or ..
+ui-files-error-name-too-long = The name is longer than 255 bytes.
+ui-files-error-name-invalid = The name contains a character that is not allowed.
+# $program (String) - the name of a program that is not installed, such as zip
+ui-files-error-missing = { $program } is not installed.
+ui-files-error-copy-needed = Moving it to the Trash means copying it to another place first, which can take a long time.
+ui-files-error-io-full = The drive is full. Free some space, then try again.
+ui-files-error-io-read-only = The drive is read-only. Choose another place.
+ui-files-error-io-quota-full = Your storage quota is full.
+ui-files-error-io-not-empty = The folder is not empty.
+ui-files-error-io-in-use = It is in use by another app. Close it there, then try again.
+ui-files-error-io-between-drives = That cannot be done between two drives in one step.
+ui-files-error-io-timed-out = The drive took too long to answer. Try again.
+ui-files-error-io-not-a-folder = That is not a folder.
+ui-files-error-io-is-a-folder = That is a folder, not a file.
+ui-files-error-io-bad-name = Could not use that name. Choose another name.
+ui-files-error-io-unsupported = This drive cannot do that.
+ui-files-error-io-interrupted = It was interrupted. Try again.
+ui-files-error-io-unreadable = Could not read or write the drive. Check that it is connected, then try again.

@@ -44,7 +44,7 @@ fn what(paths: &[PathBuf]) -> String {
 
 /// The sentence for one reason the Trash refused: `plural` when it is about
 /// several items. The reasons are data in `bingux_files`; the words are here.
-fn refusal_text(refusal: &TrashRefusal, plural: bool) -> String {
+pub(super) fn refusal_text(refusal: &TrashRefusal, plural: bool) -> String {
     let count = if plural { 2 } else { 1 };
     match refusal {
         TrashRefusal::NotAbsolute => crate::tr!("ui-files-bin-refusal-not-absolute"),
@@ -390,7 +390,10 @@ fn move_copying(env: &Env, paths: Vec<PathBuf>) {
             }
             Err(error) => notify(
                 env.ui,
-                crate::tr!("ui-files-bin-move-failed", error = error.to_string()),
+                crate::tr!(
+                    "ui-files-bin-move-failed",
+                    error = super::op_error::text(&error)
+                ),
                 true,
             ),
         }
@@ -491,7 +494,10 @@ pub(super) fn confirm_empty_trash(env: &Env) {
             }
             Err(error) => notify(
                 env.ui,
-                crate::tr!("ui-files-bin-count-failed", error = error.to_string()),
+                crate::tr!(
+                    "ui-files-bin-count-failed",
+                    error = super::op_error::text(&error)
+                ),
                 true,
             ),
         }
@@ -546,7 +552,10 @@ fn run_permanent(
             Err(OpError::Cancelled) => notify(env.ui, stopped, false),
             Err(error) => notify(
                 env.ui,
-                crate::tr!("ui-files-bin-delete-failed", error = error.to_string()),
+                crate::tr!(
+                    "ui-files-bin-delete-failed",
+                    error = super::op_error::text(&error)
+                ),
                 true,
             ),
         }
@@ -733,7 +742,7 @@ fn run_restore(env: &Env, plan: RestorePlan, create_missing: bool) {
 /// An error as the status line says it: a restore's messages already name the
 /// item and the folder, so nothing is added in front of them.
 fn error_text_plain(error: &OpError) -> String {
-    error.to_string()
+    super::op_error::text(error)
 }
 
 /// Remember the restore for Undo and tell about it with a toast.
