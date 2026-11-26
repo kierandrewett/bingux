@@ -7,6 +7,7 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::model::downloads::Downloads;
+use crate::navigation::NavButtons;
 use crate::site_info::ConnectionButton;
 use crate::tabs::TabKind;
 use crate::tabs::TabsSheet;
@@ -37,44 +38,6 @@ fn reading(ctx: Ctx) -> Reading {
         zoom: tab.map_or(Zoom::DEFAULT, |tab| tab.zoom),
         is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web),
         tabs: browser.tabs.len(),
-    }
-}
-
-/// Back and Forward.
-fn history_buttons(ctx: Ctx, read: &Reading) -> Vec<Element> {
-    let key = read.key;
-    vec![
-        icon_button(Icon::GoPrevious, move |_: ()| {
-            ctx.with(|browser| browser.back(key))
-        })
-        .tooltip("Back")
-        .enabled(read.can_back)
-        .into(),
-        icon_button(Icon::GoNext, move |_: ()| {
-            ctx.with(|browser| browser.forward(key))
-        })
-        .tooltip("Forward")
-        .enabled(read.can_forward)
-        .into(),
-    ]
-}
-
-/// Reload, or Stop while the page loads.
-fn reload_button(ctx: Ctx, read: &Reading) -> Element {
-    let key = read.key;
-    if read.loading {
-        icon_button(Icon::WindowClose, move |_: ()| {
-            ctx.with(|browser| browser.stop(key))
-        })
-        .tooltip("Stop loading")
-        .into()
-    } else {
-        icon_button(Icon::Refresh, move |_: ()| {
-            ctx.with(|browser| browser.reload(key, false))
-        })
-        .tooltip("Reload")
-        .enabled(read.is_web)
-        .into()
     }
 }
 
@@ -156,8 +119,13 @@ impl Component for Toolbar {
         }
         bar = bar
             .a11y_alt("Navigation")
-            .children(history_buttons(ctx, &read))
-            .child(reload_button(ctx, &read))
+            .children(NavButtons::history(
+                ctx,
+                read.key,
+                read.can_back,
+                read.can_forward,
+            ))
+            .child(NavButtons::reload(ctx, read.key, read.loading, read.is_web))
             .child(ConnectionButton::element(ctx))
             .child(AddressBar { ctx })
             .maybe_child((!read.zoom.is_default()).then_some(ZoomChip {
@@ -203,8 +171,13 @@ impl Component for PhoneBottom {
                     border(Line::HairlineTop),
                 ],
             )
-            .children(history_buttons(ctx, &read))
-            .child(reload_button(ctx, &read))
+            .children(NavButtons::history(
+                ctx,
+                read.key,
+                read.can_back,
+                read.can_forward,
+            ))
+            .child(NavButtons::reload(ctx, read.key, read.loading, read.is_web))
             .child(downloads_button(ctx, &downloads))
     }
 }

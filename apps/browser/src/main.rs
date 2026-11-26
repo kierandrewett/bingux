@@ -13,6 +13,7 @@ mod engine;
 mod find;
 mod locale;
 mod model;
+mod navigation;
 mod new_tab;
 mod permissions;
 mod prompts;
