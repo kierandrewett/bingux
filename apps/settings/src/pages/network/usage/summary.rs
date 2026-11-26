@@ -71,7 +71,10 @@ fn value(summary: Option<&Summary>) -> String {
         Some(Summary {
             today: Some((rx, tx)),
             ..
-        }) => format!("{} today", format::pair(Totals { rx: *rx, tx: *tx })),
+        }) => tr!(
+            "data-usage-today-summary",
+            totals = format::pair(Totals { rx: *rx, tx: *tx }).as_str()
+        ),
     }
 }
 

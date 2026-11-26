@@ -343,11 +343,11 @@ mod tests {
         let settings = limited(10_000_000_000, 80);
         assert_eq!(
             message(Level::Warn, 8_300_000_000, &settings),
-            "83% of the monthly limit used: 8.3 GB of 10 GB this billing cycle."
+            "83% of the monthly limit used: 8.3\u{a0}GB of 10\u{a0}GB this billing cycle."
         );
         assert_eq!(
             message(Level::Over, 12_000_000_000, &settings),
-            "Over the monthly limit: 12 GB used of 10 GB this billing cycle."
+            "Over the monthly limit: 12\u{a0}GB used of 10\u{a0}GB this billing cycle."
         );
     }
 }

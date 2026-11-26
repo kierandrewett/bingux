@@ -275,10 +275,13 @@ fn identity_summary(saved: &ProfileData) -> String {
     let mtu = saved.get(&format!("{setting}.mtu"));
     let mut parts = Vec::new();
     if !mode.is_empty() {
-        parts.push(format!("{} MAC", label_of(CLONED_MAC_CHOICES, &mode)));
+        parts.push(tr!(
+            "network-profile-identity-mac",
+            mode = label_of(CLONED_MAC_CHOICES, &mode)
+        ));
     }
     if !mtu.is_empty() && mtu != "auto" {
-        parts.push(format!("MTU {mtu}"));
+        parts.push(tr!("network-profile-identity-mtu", mtu = mtu));
     }
     if parts.is_empty() {
         tr!("network-profile-identity-default")
@@ -405,7 +408,7 @@ fn advanced_page(page: &Page, extra: Option<Element>) -> Element {
             },
         )
     };
-    let behaviour = Group::titled("Behavior")
+    let behaviour = Group::titled(&tr!("network-profile-behavior-group"))
         .row(priority)
         .row(everyone)
         .row(section_row(page, Section::Options, ""));
@@ -436,12 +439,10 @@ pub(super) fn keyed(key: impl std::hash::Hash, child: impl Into<Element>) -> Ele
 
 /// A link speed as a person says it: `1 Gbit/s`, `100 Mbit/s`.
 pub fn speed_text(mbit: u32) -> String {
-    if mbit >= 1000 && mbit % 1000 == 0 {
-        format!("{} Gbit/s", mbit / 1000)
-    } else if mbit >= 1000 {
-        format!("{:.1} Gbit/s", f64::from(mbit) / 1000.0)
+    if mbit >= 1000 {
+        tr!("network-speed-gbit", gbit = f64::from(mbit) / 1000.0)
     } else {
-        format!("{mbit} Mbit/s")
+        tr!("network-speed-mbit", mbit = mbit)
     }
 }
 

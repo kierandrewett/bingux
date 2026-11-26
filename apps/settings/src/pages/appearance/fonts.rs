@@ -27,7 +27,6 @@ const FILTER_SANS: &str = "sans";
 const FILTER_SERIF: &str = "serif";
 const FILTER_MONOSPACED: &str = "monospaced";
 const FILTER_OTHER: &str = "other";
-const SAMPLE: &str = "The quick brown fox jumps over the lazy dog";
 /// Placeholder font rows shown while the list loads: enough to fill a tall
 /// window (a font row is 56 px), so the list does not end short of the page.
 const PLACEHOLDER_ROWS: usize = 24;
@@ -256,7 +255,7 @@ fn font_row(
     let picked = name.to_string();
     row(name)
         .font(name)
-        .subtitle(SAMPLE)
+        .subtitle(tr!("settings-appearance-font-sample"))
         .subtitle_one_line()
         .selected(is_chosen)
         .on_press(move |_| pick.call(picked.clone()))

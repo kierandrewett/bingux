@@ -188,7 +188,12 @@ fn text_size_options(current: u32) -> Vec<(String, String)> {
     }
     sizes
         .into_iter()
-        .map(|percent| (percent.to_string(), format!("{percent}%")))
+        .map(|percent| {
+            (
+                percent.to_string(),
+                bingux_ui::format::Percent::new(f64::from(percent) / 100.0).format(),
+            )
+        })
         .collect()
 }
 

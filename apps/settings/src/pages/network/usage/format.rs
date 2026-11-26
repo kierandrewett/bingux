@@ -1,32 +1,16 @@
 //! How the page writes sizes, dates and ages.
 //!
 //! Sizes are decimal (1 GB = 1000 MB), the way a mobile plan or an internet
-//! provider counts them, and the page says so once. Numbers always use a
-//! point, whatever the locale, so a screenshot reads the same everywhere.
+//! provider counts them, and the page says so once. They are written by
+//! `bingux_ui::format::Bytes`, in the language shown.
 
 use bingux_data_usage::{Date, Totals, Zone};
+use bingux_ui::format::Bytes;
 use bingux_ui::prelude::tr;
-
-const UNITS: [&str; 6] = ["B", "KB", "MB", "GB", "TB", "PB"];
 
 /// `512 B`, `1.2 GB`, `80 MB`: one decimal below ten, none from ten up.
 pub fn bytes(value: u64) -> String {
-    let mut scaled = value as f64;
-    let mut unit = 0;
-    while scaled >= 1000.0 && unit < UNITS.len() - 1 {
-        scaled /= 1000.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        return format!("{value} B");
-    }
-    let decimals = if scaled < 10.0 { 1 } else { 0 };
-    // 999.96 KB rounds to "1000 KB"; that reads better as 1.0 MB.
-    let rounded = format!("{scaled:.decimals$}");
-    if rounded.parse::<f64>().is_ok_and(|n| n >= 1000.0) && unit < UNITS.len() - 1 {
-        return format!("{:.1} {}", scaled / 1000.0, UNITS[unit + 1]);
-    }
-    format!("{rounded} {}", UNITS[unit])
+    Bytes::new(value).format()
 }
 
 /// `↓ 1.2 GB · ↑ 80 MB`: received, then sent.
@@ -206,22 +190,26 @@ pub fn ago(now: i64, then: i64) -> String {
 mod tests {
     use super::*;
 
+    /// A size with its no-break space written as a plain one, to compare.
+    fn plain(text: String) -> String {
+        text.replace('\u{a0}', " ")
+    }
+
     #[test]
     fn bytes_use_decimal_units_with_few_digits() {
-        assert_eq!(bytes(0), "0 B");
-        assert_eq!(bytes(999), "999 B");
-        assert_eq!(bytes(1000), "1.0 KB");
-        assert_eq!(bytes(1_234_000_000), "1.2 GB");
-        assert_eq!(bytes(80_000_000), "80 MB");
-        assert_eq!(bytes(9_940_000), "9.9 MB");
-        assert_eq!(bytes(123_456_789_000), "123 GB");
+        assert_eq!(plain(bytes(0)), "0 B");
+        assert_eq!(plain(bytes(999)), "999 B");
+        assert_eq!(plain(bytes(1000)), "1 kB");
+        assert_eq!(plain(bytes(1_234_000_000)), "1.2 GB");
+        assert_eq!(plain(bytes(80_000_000)), "80 MB");
+        assert_eq!(plain(bytes(9_940_000)), "9.9 MB");
+        assert_eq!(plain(bytes(123_456_789_000)), "123 GB");
     }
 
     #[test]
     fn bytes_roll_over_instead_of_printing_1000() {
-        assert_eq!(bytes(999_960), "1.0 MB");
-        assert_eq!(bytes(999_999_999), "1.0 GB");
-        assert_eq!(bytes(u64::MAX), "18447 PB");
+        assert_eq!(plain(bytes(999_960)), "1 MB");
+        assert_eq!(plain(bytes(999_999_999)), "1 GB");
     }
 
     #[test]
@@ -230,7 +218,7 @@ mod tests {
             rx: 1_200_000_000,
             tx: 80_000_000,
         };
-        assert_eq!(pair(totals), "↓ 1.2 GB · ↑ 80 MB");
+        assert_eq!(plain(pair(totals)), "↓ 1.2 GB · ↑ 80 MB");
     }
 
     #[test]

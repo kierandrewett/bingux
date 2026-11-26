@@ -452,9 +452,7 @@ impl Component for RunningGroup {
             _ => tr!("network-hotspot-band-auto"),
         };
         let people = match *clients.read() {
-            Some(0) => tr!("network-hotspot-devices-none"),
-            Some(1) => tr!("network-hotspot-devices-one"),
-            Some(count) => tr!("network-hotspot-devices-many", count = count.to_string()),
+            Some(count) => tr!("network-hotspot-devices", count = count),
             None => "—".to_string(),
         };
         Group::titled(&tr!("network-hotspot-group-on"))

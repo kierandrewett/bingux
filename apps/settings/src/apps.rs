@@ -592,7 +592,7 @@ fn classify(
         let base = match found.installation.as_str() {
             "system" => "/var/lib/flatpak".to_string(),
             "user" => home.join(".local/share/flatpak").display().to_string(),
-            other => format!("Flatpak installation {other}"),
+            other => tr!("apps-origin-flatpak-installation", name = other),
         };
         return details(
             Source::Flatpak,
@@ -617,7 +617,7 @@ fn classify(
         let name = snap_name(desktop).unwrap_or_else(|| app.id.clone());
         return details(
             Source::Snap,
-            "Snap Store",
+            &tr!("apps-origin-snap-store"),
             "",
             None,
             format!("/snap/{name}"),
@@ -653,7 +653,7 @@ fn classify(
         };
         return details(
             Source::AppImage,
-            "Stand-alone file",
+            &tr!("apps-origin-standalone"),
             "",
             size,
             exec,
@@ -663,7 +663,7 @@ fn classify(
     if in_home(desktop, home) {
         return details(
             Source::Local,
-            "Made on this computer",
+            &tr!("apps-origin-local"),
             "",
             None,
             desktop_text,
@@ -731,7 +731,7 @@ pub fn with_details(apps: &mut [AppEntry]) {
 /// removal, so the dialog can be tested without removing anything.
 pub fn uninstall(app: &AppEntry) -> Result<(), String> {
     let Some(details) = &app.details else {
-        return Err("The details of this application are not known yet.".to_string());
+        return Err(tr!("apps-uninstall-unknown-error"));
     };
     if cfg!(feature = "snapshot") && std::env::var_os("BINGUX_SETTINGS_FAKE_UNINSTALL").is_some() {
         eprintln!("[fake uninstall] {}: {:?}", app.id, details.removal);
@@ -739,19 +739,21 @@ pub fn uninstall(app: &AppEntry) -> Result<(), String> {
     }
     match &details.removal {
         Removal::Command(command) => {
-            let (program, args) = command.split_first().ok_or("There is no command to run.")?;
+            let (program, args) = command
+                .split_first()
+                .ok_or_else(|| tr!("apps-uninstall-no-command-error"))?;
             let args: Vec<&str> = args.iter().map(String::as_str).collect();
             system::run(program, &args, UNINSTALL_TIMEOUT)
                 .map(|_| ())
                 .map_err(|error| {
                     eprintln!("[uninstall] {}: {}", app.id, error.0);
-                    format!("Could not remove “{}”. Try again.", app.name)
+                    tr!("apps-uninstall-failed-error", name = app.name.as_str())
                 })
         }
         Removal::Files(files) => files.iter().try_for_each(|file| {
             std::fs::remove_file(file).map_err(|error| {
                 eprintln!("[uninstall] {}: {error}", file.display());
-                format!("Could not remove “{}”. Try again.", app.name)
+                tr!("apps-uninstall-failed-error", name = app.name.as_str())
             })
         }),
         Removal::Unavailable(reason) => Err(reason.clone()),

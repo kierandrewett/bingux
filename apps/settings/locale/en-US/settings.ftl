@@ -1808,12 +1808,9 @@ network-hotspot-turn-on = Turn on
 network-hotspot-password-none = None saved
 # Error value when the hotspot password cannot be read.
 network-hotspot-password-error = Could not read the password
-# Value shown when no devices are connected.
-network-hotspot-devices-none = No devices
-# Value shown for one connected device.
-network-hotspot-devices-one = 1 device
-# Value shown for several connected devices.
-network-hotspot-devices-many = { $count ->
+# Value shown for the number of devices connected to the hotspot. $count (Number) - how many devices.
+network-hotspot-devices = { $count ->
+    [0] No devices
     [one] 1 device
    *[other] { $count } devices
 }
@@ -2067,10 +2064,11 @@ network-link-with-address = { $state } · { $address }
 network-ethernet-error-connect = Could not connect. Check the cable and try again.
 # Error when a wired connection cannot be closed.
 network-ethernet-error-disconnect = Could not disconnect. Try again.
-# Row title of one spare wired adapter in the Connections group.
-network-ethernet-other-one = 1 other wired adapter
-# Row title of spare wired adapters in the Connections group. $count (Number) - how many adapters.
-network-ethernet-other-many = { $count } other wired adapters
+# Row title of the spare wired adapters in the Connections group. $count (Number) - how many adapters.
+network-ethernet-other = { $count ->
+    [one] 1 other wired adapter
+   *[other] { $count } other wired adapters
+}
 # Right-click menu item to disconnect a wired device.
 network-ethernet-menu-disconnect = Disconnect
 # Right-click menu item to connect a wired device.
@@ -2883,3 +2881,47 @@ settings-group-connections = Connections
 settings-group-devices = Devices
 settings-group-desktop = Desktop
 settings-group-system = System
+
+## Strings moved out of the code
+
+# Where an application came from, shown in its details.
+# $name (String) - the name of a Flatpak installation
+apps-origin-flatpak-installation = Flatpak installation { $name }
+apps-origin-snap-store = Snap Store
+apps-origin-standalone = Stand-alone file
+apps-origin-local = Made on this computer
+apps-uninstall-unknown-error = The details of this application are not known yet.
+apps-uninstall-no-command-error = There is no command to remove it with. Remove it with the tool you installed it with.
+# $name (String) - the application's name
+apps-uninstall-failed-error = Could not remove “{ $name }”. Try again.
+# The sample text under each font's name.
+settings-appearance-font-sample = The quick brown fox jumps over the lazy dog
+# $scheme (String) - the name of the color scheme, such as Dark
+settings-appearance-scheme-a11y = { $scheme } color scheme
+# $ms (Number) - a time in milliseconds
+settings-keyboard-ms = { $ms } ms
+# $count (Number) - how many keyboard shortcuts there are
+settings-keyboard-shortcut-count = { $count ->
+    [one] 1 shortcut
+   *[other] { $count } shortcuts
+}
+network-wifi-password-field = Password
+network-profile-list-remove = Remove
+# $mode (String) - how the hardware address is set, such as Random
+network-profile-identity-mac = { $mode } MAC
+# $mtu (String) - the largest packet size
+network-profile-identity-mtu = MTU { $mtu }
+network-profile-behavior-group = Behavior
+# $gbit (Number) - a link speed in gigabits a second
+network-speed-gbit = { NUMBER($gbit, maximumFractionDigits: 1) } Gbit/s
+# $mbit (Number) - a link speed in megabits a second
+network-speed-mbit = { $mbit } Mbit/s
+# $totals (String) - the data received and sent today, such as "↓ 1.2 GB · ↑ 80 MB"
+data-usage-today-summary = { $totals } today
+# $cycle (String) - the dates of the current billing cycle
+data-usage-cycle-subtitle = This cycle: { $cycle }
+network-vpn-disconnect = Disconnect
+network-vpn-connect = Connect
+network-vpn-edit = Edit
+network-vpn-add-row = Add VPN…
+network-vpn-row-ip-address = IP address

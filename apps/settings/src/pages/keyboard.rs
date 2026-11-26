@@ -727,7 +727,7 @@ impl Component for KeyboardPage {
                         )
                     },
                 )
-                .value_text(format!("{} ms", model.delay_ms))
+                .value_text(tr!("settings-keyboard-ms", ms = model.delay_ms))
                 .into(),
             };
             let interval: Element = match interval_lua {
@@ -752,7 +752,7 @@ impl Component for KeyboardPage {
                         )
                     },
                 )
-                .value_text(format!("{} ms", model.interval_ms))
+                .value_text(tr!("settings-keyboard-ms", ms = model.interval_ms))
                 .into(),
             };
             let try_it: Element = row(tr!("settings-keyboard-try-it"))
@@ -900,7 +900,7 @@ impl Component for KeyboardPage {
                     )
                 },
             )
-            .value_text(format!("{} ms", model.cursor_blink_time))
+            .value_text(tr!("settings-keyboard-ms", ms = model.cursor_blink_time))
             .into();
             vec![blink]
         } else {

@@ -311,7 +311,7 @@ impl Component for HiddenBody {
             ));
         if needs_password {
             fields = fields.row(
-                form_field("Password", password)
+                form_field(tr!("network-wifi-password-field"), password)
                     .password()
                     .validate(check)
                     .on_submit(move |_: ()| submit()),

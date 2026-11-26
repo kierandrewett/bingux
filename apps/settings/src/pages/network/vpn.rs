@@ -218,7 +218,7 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
     let edit = routes::vpn(&name.to_string());
     let delete = name.to_string();
     let toggle = if up {
-        menu_item("Disconnect", move |_| {
+        menu_item(tr!("network-vpn-disconnect"), move |_| {
             set_link(ctx, toggle_name.clone(), false)
         })
         .icon(Icon::WindowClose)
@@ -281,7 +281,7 @@ pub fn vpn_group(ctx: NetCtx, ov: &Overview) -> Element {
         .map(|vpn| vpn_row(ctx, ov, vpn))
         .collect();
     rows.push(Element::from(
-        row("Add VPN…")
+        row(tr!("network-vpn-add-row"))
             .leading(Icon::ListAdd)
             .navigates()
             .on_press(move |_| ctx.router.open(routes::add_vpn(None))),
@@ -456,7 +456,7 @@ impl Component for VpnPage {
                     .and_then(|loaded| loaded.as_ref().ok())
                     .map(gateway_of)
                     .unwrap_or_default();
-                info = info.row(row("Server").technical_value(dash(server)));
+                info = info.row(row(tr!("network-vpn-row-server")).technical_value(dash(server)));
             }
         }
         if let Link::Connected(address) = &link
