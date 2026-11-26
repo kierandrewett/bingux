@@ -18,7 +18,7 @@ use crate::component::ComponentName;
 use crate::controls::{action_button, icon_button, path_label};
 use crate::files::{FileIcon, file_icon_view};
 use crate::icons::Icon;
-use crate::shell::HeaderBar;
+use crate::shell::{HeaderBar, PanelSide, pane_toggle};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::theme::Tokens;
@@ -305,19 +305,19 @@ pub(super) fn header(
         .tooltip(&crate::tr!("ui-preview-info.tooltip")),
     );
     if let Some(switch) = nav.on_mode.clone().filter(|_| !compact && nav.dock) {
-        let (icon, tip, to) = match mode {
-            Mode::Pane => (
-                Icon::WindowNew,
-                crate::tr!("ui-preview-popup.tooltip"),
-                Mode::Popup,
+        bar = match mode {
+            // A docked pane offers to leave the dock.
+            Mode::Pane => bar.trailing(
+                icon_button(Icon::WindowNew, move |_| switch.call(Mode::Popup))
+                    .tooltip(&crate::tr!("ui-preview-popup.tooltip")),
             ),
-            Mode::Popup | Mode::Fullscreen | Mode::Window => (
-                Icon::SidebarShow,
-                crate::tr!("ui-preview-dock.tooltip"),
-                Mode::Pane,
+            // Everything else offers the pane, which is a column at the end of
+            // the file area: the end-side toggle, so it draws a pane at the end.
+            Mode::Popup | Mode::Fullscreen | Mode::Window => bar.pane_toggle(
+                pane_toggle(PanelSide::End, move |_| switch.call(Mode::Pane))
+                    .tooltip(&crate::tr!("ui-preview-dock.tooltip")),
             ),
         };
-        bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(&tip));
     }
     let close = nav.on_close.clone();
     bar.trailing(
