@@ -502,6 +502,7 @@ impl Component for Sortable {
                     rect()
                         .component("SortableTail")
                         .position(Position::new_absolute().top(0.0).right(-ROW_INSET.px()))
+                        // ui-lint: allow(the grip's width plus the row inset: two tokens summed, one box)
                         .width(Size::px(Dim::RowButton.px() + ROW_INSET.px()))
                         .height(Size::fill())
                         .tw(&tokens, &[surface(Paint::Transparent, false, false, true)])

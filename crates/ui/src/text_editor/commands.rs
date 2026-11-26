@@ -483,7 +483,9 @@ mod tests {
                 .expanded()
                 .child(
                     rect()
+                        // ui-lint: allow(test fixture: an editor of exact size)
                         .width(Size::px(400.0))
+                        // ui-lint: allow(test fixture: an editor of exact size)
                         .height(Size::px(200.0))
                         .child(command_scope("Editor", scope, text_editor(handle.clone())).fill()),
                 )

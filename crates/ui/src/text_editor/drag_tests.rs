@@ -33,6 +33,7 @@ impl Component for Scene {
             editor
         });
         HANDLE.with(|slot| *slot.borrow_mut() = Some(handle.clone()));
+        // ui-lint: allow(test fixture: an editor of exact size)
         rect().width(Size::px(500.0)).height(Size::px(200.0)).child(
             text_editor(handle)
                 .line_numbers(false)

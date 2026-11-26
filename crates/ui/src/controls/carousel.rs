@@ -147,6 +147,7 @@ impl Component for Carousel {
             row = row.child(
                 rect()
                     .position(Position::new_absolute().top(0.0).left(left))
+                    // ui-lint: allow(a page is as wide as the carousel's measured width)
                     .width(Size::px(w.max(1.0)))
                     .height(Size::fill())
                     .a11y_role(AccessibilityRole::Group)

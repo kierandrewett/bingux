@@ -36,7 +36,9 @@ impl Component for Root {
             .expanded()
             .child(
                 rect()
+                    // ui-lint: allow(test fixture: a press target of exact size)
                     .width(Size::px(24.0))
+                    // ui-lint: allow(test fixture: a press target of exact size)
                     .height(Size::px(24.0))
                     .on_press(move |_| shown.set(true)),
             )
@@ -259,7 +261,11 @@ fn an_open_dropdown_names_the_option_the_arrows_reach_as_its_active_descendant()
             ];
             // The window host gives Tab its focus core.
             crate::shell::overlays::OverlayHost::new(rect().expanded().child(
-                Group::new(None).row(row("Style").trailing(dropdown(options, "light", |_: String| {}))),
+                Group::new(None).row(row("Style").trailing(dropdown(
+                    options,
+                    "light",
+                    |_: String| {},
+                ))),
             ))
         }
     }
@@ -282,7 +288,12 @@ fn an_open_dropdown_names_the_option_the_arrows_reach_as_its_active_descendant()
     let active = combos[0].1.expect("an active descendant while open");
     let option_ids: Vec<NodeId> = shot.runner().find_many(|_, element| {
         let data = element.accessibility();
-        (data.builder.role() == Role::ListBoxOption).then(|| data.a11y_id).flatten()
+        (data.builder.role() == Role::ListBoxOption)
+            .then(|| data.a11y_id)
+            .flatten()
     });
-    assert!(option_ids.contains(&active), "the active descendant is an option: {option_ids:?}");
+    assert!(
+        option_ids.contains(&active),
+        "the active descendant is an option: {option_ids:?}"
+    );
 }

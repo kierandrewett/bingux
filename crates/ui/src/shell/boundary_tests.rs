@@ -79,6 +79,7 @@ impl Component for Host {
                     rect()
                         .component("FooterBody")
                         .width(Size::fill())
+                        // ui-lint: allow(test fixture: a footer of exact height)
                         .height(Size::px(48.0)),
                 )
             }

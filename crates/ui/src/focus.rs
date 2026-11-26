@@ -935,7 +935,9 @@ mod tab_tests {
                 }))
                 .child(
                     rect()
+                        // ui-lint: allow(test fixture: a focus target of exact size)
                         .width(Size::px(200.0))
+                        // ui-lint: allow(test fixture: a focus target of exact size)
                         .height(Size::px(40.0))
                         .a11y_id(EDITOR)
                         .a11y_focusable(true),

@@ -1359,6 +1359,7 @@ fn swipe_button<T: 'static, K: Clone + Eq + Hash + 'static>(
     let ink = Ink::OnAccent;
     rect()
         .width(Size::px(ACTION_WIDTH))
+        // ui-lint: allow(the row's measured height less the inset above and below)
         .height(Size::px(height - 2.0 * S1.px()))
         .tw(
             tokens,

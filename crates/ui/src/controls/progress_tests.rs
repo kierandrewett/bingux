@@ -581,10 +581,12 @@ fn comet_alpha(turn: f32, degrees: f32) -> f32 {
     const BOX: i32 = 120;
     let stroke = BOX as f32 / 8.0;
     let mut surface = raster_n32_premul((BOX, BOX)).expect("a surface");
+    // ui-lint: allow(test fixture: the probe surface is cleared to exact transparent pixels)
     surface.canvas().clear(Color::TRANSPARENT);
     super::progress::draw_spinner(
         surface.canvas(),
         (BOX as f32, BOX as f32),
+        // ui-lint: allow(test fixture: the probe ring is drawn in plain white so the alpha is read back)
         Color::from_rgb(255, 255, 255),
         stroke,
         turn,

@@ -27,6 +27,7 @@ use freya::prelude::*;
 
 use crate::component::ComponentName;
 pub use crate::controls::CheckState;
+use crate::style::{Dim, Tw as _, h, w};
 
 /// How urgently a live message interrupts what a screen reader is saying.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -515,14 +516,12 @@ impl Component for AnnouncerRegion {
         rect()
             .component("Announcer")
             .position(Position::new_absolute().top(0.0).left(0.0))
-            .width(Size::px(1.0))
-            .height(Size::px(1.0))
+            .tw_layout(&[w(Dim::Hairline), h(Dim::Hairline)])
             .interactive(false)
             .maybe_child(said.map(|said| {
                 rect()
                     .key(said.id)
-                    .width(Size::px(1.0))
-                    .height(Size::px(1.0))
+                    .tw_layout(&[w(Dim::Hairline), h(Dim::Hairline)])
                     .a11y_role(AccessibilityRole::Status)
                     .a11y_alt(said.text)
                     .a11y_builder(move |node| node.set_live(said.politeness.live()))

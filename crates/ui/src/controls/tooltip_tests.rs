@@ -83,7 +83,7 @@ impl Component for Toggle {
         let queue = self.queue && !flipped();
         rect()
             .position(Position::new_absolute().left(self.at.0).top(self.at.1))
-            .direction(Direction::Horizontal)
+            .tw_layout(&[flex_row()])
             .maybe_child(queue.then(|| {
                 icon_button(Icon::ViewListOrdered, |_: ()| {})
                     .tooltip("Queue")

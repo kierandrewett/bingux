@@ -2015,6 +2015,7 @@ impl Component for TabStrip {
                 // A gap after the last tab (a strip that fits) or the region (one that
                 // scrolls), and the band a tab has above it behind the last button.
                 .tw(&tokens, &[flex_row(), items(Align::Center)])
+                // ui-lint: allow(the insets are the strip's Geometry, measured per density and tab height)
                 .padding(Gaps::new(0.0, geometry.top, 0.0, geometry.gap()))
                 // The tab list, then the New tab button at the trailing edge; the other
                 // way round when the strip reads from the right.
@@ -2534,8 +2535,9 @@ impl Component for Tab {
                     )
                     .maybe(
                         self.icon_only && !(close_alpha > 0.0 && room_for_both),
-                        |row| row.main_align(Alignment::Center),
+                        |row| row.tw(&tokens, &[justify(Align::Center)]),
                     )
+                    // ui-lint: allow(the padding is the tab's Geometry, measured per density)
                     .padding(padding)
                     .children(parts),
             )
@@ -2597,8 +2599,7 @@ impl Component for CloseTab {
         // begin dragging it, or reach the header bar's drag of the window.
         let slot = rect()
             .component("TabClose")
-            .width(Size::px(size.px()))
-            .height(Size::px(size.px()))
+            .tw_layout(&[w(size), h(size)])
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation());
         if self.alpha <= 0.0 {
             return slot.into_element();

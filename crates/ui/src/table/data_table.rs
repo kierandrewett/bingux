@@ -833,6 +833,7 @@ fn placeholder_rows(
 ) -> Element {
     let rows = 12;
     let bar = |width: f32| {
+        // ui-lint: allow(a placeholder bar is the column's measured width, never narrower than a swatch)
         rect().width(Size::px(width.max(16.0))).tw(
             tokens,
             &[h(Dim::Box5), rounded(Radius::Mark), bg(Paint::Control)],
