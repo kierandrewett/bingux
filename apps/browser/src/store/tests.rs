@@ -6,6 +6,10 @@
 //!   3. a write that fails is silent, or its state never clears after a
 //!      later write succeeds;
 //!   4. Start over is lost: the damaged file is deleted instead of kept.
+//!
+//! A test drops its windows before it removes their folder: a window's store
+//! thread opens `browser.sqlite` as the window starts, and a folder removed
+//! under it is not empty when `remove_dir_all` comes to remove it.
 
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
@@ -61,6 +65,7 @@ fn a_search_engine_chosen_in_the_window_survives_a_new_window() {
         .permissions()
         .mode();
     assert_eq!(mode & 0o777, 0o600);
+    drop(again);
     remove_tree(&root).unwrap();
 }
 
@@ -91,6 +96,7 @@ fn a_damaged_file_is_never_written_over_and_start_over_keeps_it_aside() {
         .collect();
     assert_eq!(aside.len(), 1);
     assert_eq!(fs::read(aside[0].path()).unwrap(), b"{ not json");
+    drop(browser);
     remove_tree(&root).unwrap();
 }
 
@@ -109,6 +115,7 @@ fn a_newer_browsers_file_is_left_as_it_is() {
     browser.start_over_settings();
     browser.flush_store();
     assert_eq!(fs::read(&path).unwrap(), newer);
+    drop(browser);
     remove_tree(&root).unwrap();
 }
 
@@ -137,6 +144,7 @@ fn a_read_only_folder_says_so_and_the_next_good_write_clears_it() {
         Settings::read(&folders(&root).settings()).0.search_engine,
         "wikipedia"
     );
+    drop(browser);
     remove_tree(&root).unwrap();
 }
 
