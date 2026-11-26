@@ -192,7 +192,6 @@ NOT_TEXT_CALLS = re.compile(
 # Findings that are right by design: (rule, path regex, text regex, reason). The reason says why this
 # string is not read by a person in the language they chose, or why it must not change.
 ALLOWED: list[tuple[str, str, str, str]] = [
-    ("*", r"^apps/browser/src/", r".*", "converted by the browser restructure (feat/apps), remove when done"),
     (
         "*",
         r"^apps/taxonomy/src/demos/",
