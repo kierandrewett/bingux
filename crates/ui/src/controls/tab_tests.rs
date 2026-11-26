@@ -1461,18 +1461,22 @@ fn middle_click(shot: &mut Snapshot, at: (f32, f32)) {
 }
 
 /// The pointer goes to `at` and the left button is let go there in one turn of
-/// the window, quicker than any frame whatever the load of the machine. As two
-/// calls (`move_to`, then `release`) they leave a gap a frame can run in, and
-/// a frame with the pointer past the threshold tears the tab while the button
-/// is still down.
+/// the window: both events are queued and the runner takes them together, so no
+/// frame runs between them, whatever the load of the machine. `move_to` then
+/// `release` leave a gap a frame can run in, and `TestingRunner::move_cursor`
+/// is no help (it runs the runner after the move). A frame with the pointer
+/// past the threshold tears the tab while the button is still down, which is
+/// what the strip is for when a hand drags it out; what this is for is the
+/// flick that is over before any frame.
 fn move_and_release(shot: &mut Snapshot, at: (f32, f32)) {
     let cursor = CursorPoint::new(at.0 as f64, at.1 as f64);
-    shot.runner().move_cursor(cursor);
-    shot.runner().send_event(PlatformEvent::Mouse {
-        name: MouseEventName::MouseUp,
-        cursor,
-        button: Some(MouseButton::Left),
-    });
+    for name in [MouseEventName::MouseMove, MouseEventName::MouseUp] {
+        shot.runner().send_event(PlatformEvent::Mouse {
+            name,
+            cursor,
+            button: Some(MouseButton::Left),
+        });
+    }
     shot.runner().sync_and_update();
 }
 
@@ -2756,6 +2760,10 @@ fn a_tab_let_go_beyond_the_threshold_in_one_move_is_torn_as_it_is_released() {
     let (at, strip) = grab(&mut shot, 1);
     let bottom = strip_row(&mut shot).max_y();
     let far = (at.0 + 5.0, bottom + 2.0 * strip);
+    // A frame of the strip is due by the time the pointer moves: the press armed
+    // the frame clock, and a loaded machine is late to the next sync as a matter
+    // of course. The tab must be torn by the release all the same.
+    std::thread::sleep(3 * crate::drag::FRAME);
     move_and_release(&mut shot, far);
     rest(&mut shot);
     let log = host.log.borrow().clone();
