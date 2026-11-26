@@ -10,6 +10,7 @@ use bingux_ui::prelude::*;
 use bingux_ui::shell::with_window;
 use freya::prelude::*;
 
+use crate::address::FieldState;
 use crate::browser::{Browser, Notice, UiRequest};
 use crate::model::shortcuts::Command;
 use crate::model::shortcuts::Platform;
@@ -18,15 +19,6 @@ use crate::model::shortcuts::Platform;
 /// window, not to a tab.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Chrome {
-    /// The text of the address bar's field.
-    pub address: State<String>,
-    /// The person has changed it: it is theirs until they submit or leave.
-    pub typing: State<bool>,
-    /// Counts the requests to focus the address bar. A new count is a new
-    /// field that takes the focus with its text selected.
-    pub focus_address: State<u32>,
-    /// The suggestion the keys have reached.
-    pub highlight: State<Option<usize>>,
     /// Counts the requests to focus the find field.
     pub focus_find: State<u32>,
     pub info_open: State<bool>,
@@ -35,8 +27,6 @@ pub struct Chrome {
     pub info_anchor: State<Area>,
     pub downloads_anchor: State<Area>,
     pub menu_anchor: State<Area>,
-    /// The address field's box, which the suggestions hang from.
-    pub field_area: State<Area>,
     /// Where the page area starts in the window: a context menu opens at the
     /// pointer's place in the page plus this.
     pub page_origin: State<(f32, f32)>,
@@ -51,6 +41,7 @@ pub struct Chrome {
 pub struct Ctx {
     pub browser: State<Browser>,
     pub chrome: Chrome,
+    pub address: FieldState,
     pub overlays: Overlays,
     pub window: Window,
     pub platform: Platform,
@@ -100,13 +91,7 @@ impl Ctx {
         let chrome = self.chrome;
         for request in requests {
             match request {
-                UiRequest::FocusAddress => {
-                    let mut typing = chrome.typing;
-                    typing.set(false);
-                    let mut focus = chrome.focus_address;
-                    let next = *focus.peek() + 1;
-                    focus.set(next);
-                }
+                UiRequest::FocusAddress => self.address.focus(),
                 UiRequest::OpenFind => {
                     let mut focus = chrome.focus_find;
                     let next = *focus.peek() + 1;

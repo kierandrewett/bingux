@@ -4,7 +4,7 @@ use bingux_ui::prelude::*;
 use bingux_ui::web_view::input::EditCommand;
 use bingux_ui::web_view::requests::ContextTarget;
 
-use crate::address;
+use crate::address::Address;
 use crate::browser::PendingMenu;
 use crate::model::shortcuts::{self, Command};
 use crate::model::tab::{Tab, TabKind};
@@ -279,7 +279,7 @@ pub fn context_items(ctx: Ctx, menu: &PendingMenu) -> Vec<MenuItem> {
         });
         page.push(menu_item("Copy page address", {
             let url = url.clone();
-            move |_: ()| copy(ctx, address::display(&url), "Page address")
+            move |_: ()| copy(ctx, Address::new(&url).display(), "Page address")
         }));
     }
     groups.push(page);

@@ -15,11 +15,69 @@ use bingux_ui::prelude::*;
 use bingux_ui::search;
 use freya::prelude::*;
 
-use crate::address::suggest::{self, OpenTab, Source, Suggestion, Visited};
+use super::{OpenTab, Source, Suggestion, Visited};
 use crate::model::tabs::Place;
 use crate::profile::history;
 
 use crate::ui::Ctx;
+
+/// The states of the address field that belong to the window, not to a tab.
+#[derive(Clone, Copy, PartialEq)]
+pub struct FieldState {
+    /// The text of the field.
+    text: State<String>,
+    /// The person has changed it: it is theirs until they submit or leave.
+    typing: State<bool>,
+    /// Counts the requests to focus the field. A new count is a new field
+    /// that takes the focus with its text selected.
+    focus: State<u32>,
+    /// The suggestion the keys have reached.
+    highlight: State<Option<usize>>,
+    /// The field's box, which the suggestions hang from.
+    area: State<Area>,
+}
+
+impl FieldState {
+    /// The states, as a hook: call it on every render, in the same place.
+    pub fn use_new() -> Self {
+        Self {
+            text: use_state(String::new),
+            typing: use_state(|| false),
+            focus: use_state(|| 0_u32),
+            highlight: use_state(|| None),
+            area: use_state(Area::default),
+        }
+    }
+
+    /// Put the cursor in the field, with its text selected.
+    pub fn focus(self) {
+        let mut typing = self.typing;
+        typing.set(false);
+        let mut focus = self.focus;
+        let next = *focus.peek() + 1;
+        focus.set(next);
+    }
+
+    /// The field takes the focus when the window first shows it.
+    pub fn focus_at_open(self) {
+        let mut focus = self.focus;
+        focus.set(1);
+    }
+
+    /// The row the arrows reach after `step`: Down goes to the first row and on,
+    /// back to the typed text after the last; Up goes the other way.
+    pub fn move_highlight(current: Option<usize>, rows: usize, down: bool) -> Option<usize> {
+        if rows == 0 {
+            return None;
+        }
+        match (current, down) {
+            (None, true) => Some(0),
+            (None, false) => Some(rows - 1),
+            (Some(at), true) => (at + 1 < rows).then_some(at + 1),
+            (Some(at), false) => at.checked_sub(1),
+        }
+    }
+}
 
 /// The address bar.
 #[derive(PartialEq)]
@@ -27,42 +85,19 @@ pub struct AddressBar {
     pub ctx: Ctx,
 }
 
-fn icon_of(suggestion: &Suggestion) -> Icon {
-    match suggestion.source {
-        Source::Typed if suggestion.detail.is_empty() => Icon::Search,
-        Source::Typed => Icon::WebBrowser,
-        Source::Tab(_) => Icon::WindowNew,
-        Source::History => Icon::Clock,
-    }
-}
-
-/// The row the arrows reach after `step`: Down goes to the first row and on,
-/// back to the typed text after the last; Up goes the other way.
-pub fn move_highlight(current: Option<usize>, rows: usize, down: bool) -> Option<usize> {
-    if rows == 0 {
-        return None;
-    }
-    match (current, down) {
-        (None, true) => Some(0),
-        (None, false) => Some(rows - 1),
-        (Some(at), true) => (at + 1 < rows).then_some(at + 1),
-        (Some(at), false) => at.checked_sub(1),
-    }
-}
-
 impl Component for AddressBar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
-        let chrome = ctx.chrome;
+        let state = ctx.address;
         let id = use_a11y();
         let focus = use_focus(id);
         let mut hovered = use_state(|| None::<usize>);
         let enter_with_alt = use_hook(|| Rc::new(Cell::new(false)));
-        let mut typing = chrome.typing;
-        let mut address = chrome.address;
-        let mut highlight = chrome.highlight;
-        let mut field_area = chrome.field_area;
+        let mut typing = state.typing;
+        let mut address = state.text;
+        let mut highlight = state.highlight;
+        let mut field_area = state.area;
         let focused = focus().is_focused();
 
         let (key, shown) = {
@@ -98,7 +133,7 @@ impl Component for AddressBar {
                 })
                 .collect();
             let visited: Vec<Visited> = found.hits.iter().map(history::visited).collect();
-            suggest::suggest(&typed, browser.search(), &open, &visited)
+            Suggestion::list(&typed, browser.search(), &open, &visited)
         } else {
             Vec::new()
         };
@@ -146,7 +181,7 @@ impl Component for AddressBar {
             }
         };
         let count = rows.len();
-        let wanted = chrome.focus_address.read().to_owned();
+        let wanted = state.focus.read().to_owned();
         let mut field = text_field(address, submit)
             .fill_width()
             .placeholder(if is_compact() {
@@ -163,7 +198,7 @@ impl Component for AddressBar {
             })
             .on_arrow(move |step: f64| {
                 // Up is a positive step in a field, and Up goes to the row above.
-                let next = move_highlight(*highlight.peek(), count, step < 0.0);
+                let next = FieldState::move_highlight(*highlight.peek(), count, step < 0.0);
                 highlight.set(next);
             })
             .on_escape(move |_: ()| {
@@ -183,7 +218,7 @@ impl Component for AddressBar {
             .enumerate()
             .map(|(at, row)| {
                 let target = row.clone();
-                suggestion_row(icon_of(row), row.title.clone(), row.detail.clone())
+                suggestion_row(row.icon(), row.title.clone(), row.detail.clone())
                     .highlighted(hovered().is_none() && highlight() == Some(at))
                     .on_press(move |_: ()| {
                         typing.set(false);
@@ -214,25 +249,5 @@ impl Component for AddressBar {
                 .attached()
                 .on_dismiss(move |_: ()| typing.set(false)),
             )
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_arrows_walk_the_list_and_come_back_to_the_typed_text() {
-        assert_eq!(move_highlight(None, 3, true), Some(0));
-        assert_eq!(move_highlight(Some(0), 3, true), Some(1));
-        assert_eq!(
-            move_highlight(Some(2), 3, true),
-            None,
-            "past the last is the typed text again"
-        );
-        assert_eq!(move_highlight(None, 3, false), Some(2));
-        assert_eq!(move_highlight(Some(1), 3, false), Some(0));
-        assert_eq!(move_highlight(Some(0), 3, false), None);
-        assert_eq!(move_highlight(None, 0, true), None);
     }
 }

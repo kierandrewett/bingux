@@ -1,6 +1,8 @@
 //! The list under the address bar while it is being typed in.
 
-use crate::address::{self, SearchEngine, Typed};
+use bingux_ui::prelude::Icon;
+
+use super::{Address, SearchEngine, Typed};
 
 /// Where a suggestion came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -41,78 +43,89 @@ pub struct Visited {
     pub title: String,
 }
 
-/// The most rows the list shows.
-pub const LIMIT: usize = 7;
+impl Suggestion {
+    /// The most rows the list shows.
+    pub const LIMIT: usize = 7;
 
-/// The rows for what is typed: the typed text first (go there, or search for
-/// it), then open tabs that match, then the hits of the `history` searchable
-/// for it, in the order the search ranked them.
-pub fn suggest(
-    typed: &str,
-    engine: &SearchEngine,
-    tabs: &[OpenTab],
-    history: &[Visited],
-) -> Vec<Suggestion> {
-    let first = match address::classify(typed) {
-        Typed::Nothing => return Vec::new(),
-        Typed::Address(url) => Suggestion {
-            source: Source::Typed,
-            title: format!("Go to {}", address::display(&url)),
-            detail: url.clone(),
-            url,
-        },
-        Typed::Search(words) => Suggestion {
-            source: Source::Typed,
-            title: format!("Search {} for \u{201c}{words}\u{201d}", engine.name),
-            detail: String::new(),
-            url: engine.url_for(&words),
-        },
-    };
-    let mut rows = vec![first];
-    let query = typed.trim().to_lowercase();
-    for tab in tabs {
-        let matches = query.split_whitespace().all(|word| {
-            tab.url.to_lowercase().contains(word) || tab.title.to_lowercase().contains(word)
-        });
-        if matches && !tab.url.is_empty() && rows.len() < LIMIT {
+    /// The icon a row has.
+    pub fn icon(&self) -> Icon {
+        match self.source {
+            Source::Typed if self.detail.is_empty() => Icon::Search,
+            Source::Typed => Icon::WebBrowser,
+            Source::Tab(_) => Icon::WindowNew,
+            Source::History => Icon::Clock,
+        }
+    }
+
+    /// The rows for what is typed: the typed text first (go there, or search for
+    /// it), then open tabs that match, then the hits of the `history` searchable
+    /// for it, in the order the search ranked them.
+    pub fn list(
+        typed: &str,
+        engine: &SearchEngine,
+        tabs: &[OpenTab],
+        history: &[Visited],
+    ) -> Vec<Suggestion> {
+        let first = match Typed::of(typed) {
+            Typed::Nothing => return Vec::new(),
+            Typed::Address(url) => Suggestion {
+                source: Source::Typed,
+                title: format!("Go to {}", Address::new(&url).display()),
+                detail: url.clone(),
+                url,
+            },
+            Typed::Search(words) => Suggestion {
+                source: Source::Typed,
+                title: format!("Search {} for \u{201c}{words}\u{201d}", engine.name),
+                detail: String::new(),
+                url: engine.url_for(&words),
+            },
+        };
+        let mut rows = vec![first];
+        let query = typed.trim().to_lowercase();
+        for tab in tabs {
+            let matches = query.split_whitespace().all(|word| {
+                tab.url.to_lowercase().contains(word) || tab.title.to_lowercase().contains(word)
+            });
+            if matches && !tab.url.is_empty() && rows.len() < Self::LIMIT {
+                rows.push(Suggestion {
+                    source: Source::Tab(tab.key),
+                    title: if tab.title.is_empty() {
+                        Address::new(&tab.url).display()
+                    } else {
+                        tab.title.clone()
+                    },
+                    detail: Address::new(&tab.url).display(),
+                    url: tab.url.clone(),
+                });
+            }
+        }
+        for visit in history {
+            if rows.len() >= Self::LIMIT {
+                break;
+            }
+            // A page that is open is already offered as its tab.
+            if rows.iter().any(|row| row.url == visit.url) {
+                continue;
+            }
             rows.push(Suggestion {
-                source: Source::Tab(tab.key),
-                title: if tab.title.is_empty() {
-                    address::display(&tab.url)
+                source: Source::History,
+                title: if visit.title.is_empty() {
+                    Address::new(&visit.url).display()
                 } else {
-                    tab.title.clone()
+                    visit.title.clone()
                 },
-                detail: address::display(&tab.url),
-                url: tab.url.clone(),
+                detail: Address::new(&visit.url).display(),
+                url: visit.url.clone(),
             });
         }
+        rows
     }
-    for visit in history {
-        if rows.len() >= LIMIT {
-            break;
-        }
-        // A page that is open is already offered as its tab.
-        if rows.iter().any(|row| row.url == visit.url) {
-            continue;
-        }
-        rows.push(Suggestion {
-            source: Source::History,
-            title: if visit.title.is_empty() {
-                address::display(&visit.url)
-            } else {
-                visit.title.clone()
-            },
-            detail: address::display(&visit.url),
-            url: visit.url.clone(),
-        });
-    }
-    rows
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::address::ENGINES;
 
     fn visited(url: &str, title: &str) -> Visited {
         Visited {
@@ -131,12 +144,12 @@ mod tests {
 
     #[test]
     fn the_first_row_is_what_was_typed() {
-        let rows = suggest("example.com", &ENGINES[0], &[], &[]);
+        let rows = Suggestion::list("example.com", &SearchEngine::ALL[0], &[], &[]);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].source, Source::Typed);
         assert_eq!(rows[0].title, "Go to example.com");
         assert_eq!(rows[0].url, "https://example.com");
-        let rows = suggest("rust book", &ENGINES[0], &[], &[]);
+        let rows = Suggestion::list("rust book", &SearchEngine::ALL[0], &[], &[]);
         assert_eq!(
             rows[0].title,
             "Search DuckDuckGo for \u{201c}rust book\u{201d}"
@@ -146,7 +159,7 @@ mod tests {
 
     #[test]
     fn nothing_typed_offers_nothing() {
-        assert!(suggest("  ", &ENGINES[0], &[], &history()).is_empty());
+        assert!(Suggestion::list("  ", &SearchEngine::ALL[0], &[], &history()).is_empty());
     }
 
     #[test]
@@ -156,7 +169,7 @@ mod tests {
             title: "Example Domain".to_string(),
             url: "https://example.com/".to_string(),
         }];
-        let rows = suggest("example", &ENGINES[0], &tabs, &history());
+        let rows = Suggestion::list("example", &SearchEngine::ALL[0], &tabs, &history());
         let sources: Vec<Source> = rows.iter().map(|row| row.source.clone()).collect();
         assert_eq!(sources, [Source::Typed, Source::Tab(7), Source::History]);
         assert_eq!(
@@ -170,6 +183,9 @@ mod tests {
         let history: Vec<Visited> = (0..30)
             .map(|index| visited(&format!("https://site{index}.example/"), "Site"))
             .collect();
-        assert_eq!(suggest("site", &ENGINES[0], &[], &history).len(), LIMIT);
+        assert_eq!(
+            Suggestion::list("site", &SearchEngine::ALL[0], &[], &history).len(),
+            Suggestion::LIMIT
+        );
     }
 }

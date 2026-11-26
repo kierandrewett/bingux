@@ -4,7 +4,7 @@
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::address;
+use crate::address::Address;
 
 use super::ctx::Ctx;
 use super::strip::icon_of;
@@ -56,7 +56,7 @@ impl Component for TabsSheet {
                             })
                             .tooltip("Close tab"),
                         );
-                    let detail = address::display(&tab.url);
+                    let detail = Address::new(&tab.url).display();
                     if !detail.is_empty() {
                         line = line.subtitle(detail);
                     }

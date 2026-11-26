@@ -8,6 +8,7 @@ use bingux_ui::web_view::PageEnvironment;
 use bingux_ui::web_view::queue::Signal;
 use freya::prelude::*;
 
+use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
 use crate::engine::{self, Engine};
 use crate::model::shortcuts::{Command, Platform, window_command};
@@ -115,17 +116,12 @@ impl Component for Content {
             }
         });
         let chrome = Chrome {
-            address: use_state(String::new),
-            typing: use_state(|| false),
-            focus_address: use_state(|| 0_u32),
-            highlight: use_state(|| None),
             focus_find: use_state(|| 0_u32),
             info_open: use_state(|| false),
             downloads_open: use_state(|| false),
             info_anchor: use_state(Area::default),
             downloads_anchor: use_state(Area::default),
             menu_anchor: use_state(Area::default),
-            field_area: use_state(Area::default),
             page_origin: use_state(|| (0.0, 0.0)),
             dialog_text: use_state(String::new),
             dialog_password: use_state(String::new),
@@ -133,6 +129,7 @@ impl Component for Content {
         let ctx = Ctx {
             browser,
             chrome,
+            address: FieldState::use_new(),
             overlays,
             window,
             platform: Platform::current(),
@@ -162,8 +159,7 @@ impl Component for Content {
                         browser.open_first(&first);
                     });
                     if first_is_blank(ctx) {
-                        let mut focus = ctx.chrome.focus_address;
-                        focus.set(1);
+                        ctx.address.focus_at_open();
                     }
                     loop {
                         signal.notified().await;

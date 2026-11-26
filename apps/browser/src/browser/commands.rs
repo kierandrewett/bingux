@@ -7,7 +7,7 @@ use bingux_ui::web_view::requests::DownloadState;
 use bingux_ui::web_view::{DownloadId, FindQuery, TabId};
 
 use super::{Browser, ClosedTab, Notice, UiRequest, ViewSize};
-use crate::address::{self, Typed};
+use crate::address::{Internal, Typed};
 use crate::model::shortcuts::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
@@ -16,21 +16,6 @@ use crate::zoom::Zoom;
 /// How many closed tabs Reopen closed tab remembers.
 const CLOSED_LIMIT: usize = 25;
 
-/// The pages the browser draws itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Internal {
-    Settings,
-    NewTab,
-}
-
-fn internal(typed: &str) -> Option<Internal> {
-    match typed.trim() {
-        "bingux:settings" | "about:preferences" | "about:config" => Some(Internal::Settings),
-        "bingux:newtab" | "about:newtab" | "about:home" => Some(Internal::NewTab),
-        _ => None,
-    }
-}
-
 impl Browser {
     // ---- Tabs ------------------------------------------------------------------
 
@@ -38,12 +23,12 @@ impl Browser {
     /// takes; empty is the new tab page. Returns the tab's key.
     pub fn open_tab(&mut self, typed: &str, place: Place, select: bool) -> Option<u64> {
         let opener = self.tabs.active().map(|tab| tab.key);
-        match internal(typed) {
+        match Typed::internal(typed) {
             Some(Internal::Settings) => return Some(self.open_settings()),
             Some(Internal::NewTab) => return self.create_web("", place, select, opener),
             None => {}
         }
-        let url = match address::classify(typed) {
+        let url = match Typed::of(typed) {
             Typed::Nothing => String::new(),
             Typed::Address(url) => url,
             Typed::Search(words) => self.search().url_for(&words),
@@ -285,7 +270,7 @@ impl Browser {
     /// The person typed `typed` in the address bar of tab `key` and pressed
     /// Enter.
     pub fn navigate(&mut self, key: u64, typed: &str) {
-        match internal(typed) {
+        match Typed::internal(typed) {
             Some(Internal::Settings) => {
                 self.open_settings();
                 return;
@@ -296,7 +281,7 @@ impl Browser {
             }
             None => {}
         }
-        let url = match address::classify(typed) {
+        let url = match Typed::of(typed) {
             Typed::Nothing => return,
             Typed::Address(url) => url,
             Typed::Search(words) => self.search().url_for(&words),

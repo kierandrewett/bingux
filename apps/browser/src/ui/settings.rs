@@ -12,7 +12,7 @@ use bingux_ui::web_view::{
 };
 use freya::prelude::*;
 
-use crate::address::ENGINES;
+use crate::address::SearchEngine;
 use crate::model::keeping::{Keeping, Part};
 use crate::profile::history;
 
@@ -188,7 +188,7 @@ impl Component for SettingsPage {
         };
         // The count is the searchable's, so it follows every visit and Clear.
         let pages = search::use_search_with(history::everything(), has_history).total;
-        let engines: Vec<(String, String)> = ENGINES
+        let engines: Vec<(String, String)> = SearchEngine::ALL
             .iter()
             .enumerate()
             .map(|(at, engine)| (at.to_string(), engine.name.to_string()))

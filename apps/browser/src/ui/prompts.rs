@@ -10,6 +10,7 @@ use bingux_ui::prelude::*;
 use bingux_ui::web_view::requests::{DialogKind, DialogRequest, PickerMode, PickerRequest};
 use freya::prelude::*;
 
+use crate::address::Address;
 use crate::model::permissions;
 use crate::model::tab::Prompt;
 
@@ -113,7 +114,7 @@ fn field(state: State<String>) -> Element {
 }
 
 fn show_dialog(ctx: Ctx, key: u64, request: &DialogRequest) {
-    let host = crate::address::host(&request.origin);
+    let host = Address::new(&request.origin).host();
     let title = match &request.kind {
         DialogKind::BeforeUnload => "Leave this page?".to_string(),
         _ if host.is_empty() => "This page says".to_string(),

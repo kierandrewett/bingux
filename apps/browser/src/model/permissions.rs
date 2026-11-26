@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 
 use bingux_ui::web_view::requests::PermissionKind;
 
+use crate::address::Address;
+
 /// What a permission is called to a person.
 pub fn label(kind: &PermissionKind) -> String {
     match kind {
@@ -26,7 +28,7 @@ pub fn label(kind: &PermissionKind) -> String {
 
 /// The sentence of a prompt: `example.com wants to know your location and use your camera`.
 pub fn prompt_text(origin: &str, kinds: &[PermissionKind]) -> String {
-    let host = crate::address::host(origin);
+    let host = Address::new(origin).host();
     let host = if host.is_empty() {
         origin.to_string()
     } else {

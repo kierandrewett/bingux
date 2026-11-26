@@ -22,7 +22,7 @@ use std::sync::Arc;
 use bingux_ui::web_view::requests::ContextTarget;
 use bingux_ui::web_view::{BrowserBackend, PageEnvironment, RequestId, TabConfig, TabId};
 
-use crate::address::{ENGINES, SearchEngine};
+use crate::address::SearchEngine;
 use crate::engine::Engine;
 use crate::model::downloads::Downloads;
 use crate::model::keeping::{Keeping, NotSaved};
@@ -189,13 +189,13 @@ impl Browser {
     }
 
     pub fn search(&self) -> &'static SearchEngine {
-        &ENGINES[self.settings.engine_index()]
+        &SearchEngine::ALL[self.settings.engine_index()]
     }
 
-    /// The address bar searches with `ENGINES[at]` from now on, and the
+    /// The address bar searches with `SearchEngine::ALL[at]` from now on, and the
     /// profile keeps the choice.
     pub fn set_search_engine(&mut self, at: usize) {
-        let Some(engine) = ENGINES.get(at) else {
+        let Some(engine) = SearchEngine::ALL.get(at) else {
             return;
         };
         self.settings.search_engine = engine.id.to_string();

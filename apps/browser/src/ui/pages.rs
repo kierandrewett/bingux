@@ -9,7 +9,7 @@ use bingux_ui::web_view::requests::CertError;
 use bingux_ui::web_view::{FailureCause, GoneReason, LoadError};
 use freya::prelude::*;
 
-use crate::address;
+use crate::address::Address;
 use crate::model::failure::{self, CERT_RISK};
 use crate::profile::history;
 
@@ -52,14 +52,14 @@ impl Component for NewTab {
         let mut group = Group::new("Recently visited".to_string());
         for visit in found.hits.iter().map(history::visited) {
             let name = if visit.title.is_empty() {
-                address::display(&visit.url)
+                Address::new(&visit.url).display()
             } else {
                 visit.title
             };
             let target = visit.url.clone();
             group = group.row(
                 row(name)
-                    .subtitle(address::display(&visit.url))
+                    .subtitle(Address::new(&visit.url).display())
                     .leading(Icon::Clock)
                     .navigates()
                     .on_press(move |_: ()| ctx.with(|browser| browser.navigate(key, &target))),
@@ -71,7 +71,7 @@ impl Component for NewTab {
 
 /// A load that failed.
 pub fn failed(ctx: Ctx, key: u64, error: &LoadError, url: &str) -> Element {
-    let page = failure::for_load_error(error, &address::host(url));
+    let page = failure::for_load_error(error, &Address::new(url).host());
     let mut view = status_page(page.icon, page.title)
         .description(page.text)
         .child(caption(page.code));

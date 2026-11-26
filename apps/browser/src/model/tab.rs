@@ -8,7 +8,7 @@ use bingux_ui::web_view::requests::{
 };
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
-use crate::address;
+use crate::address::Address;
 use crate::zoom::Zoom;
 
 /// What a tab holds.
@@ -145,7 +145,7 @@ impl Tab {
             TabKind::Web if !self.title.is_empty() => self.title.clone(),
             TabKind::Web if self.is_blank() => "New tab".to_string(),
             TabKind::Web if self.load.loading => "Loading\u{2026}".to_string(),
-            TabKind::Web => address::display(&self.url),
+            TabKind::Web => Address::new(&self.url).display(),
         }
     }
 
@@ -184,7 +184,7 @@ impl Tab {
     pub fn address_text(&self) -> String {
         match self.kind {
             TabKind::Settings => "bingux:settings".to_string(),
-            TabKind::Web => address::display(&self.url),
+            TabKind::Web => Address::new(&self.url).display(),
         }
     }
 }

@@ -18,8 +18,8 @@ use bingux_ui::search::{Document, Hit, Schema, Search};
 use rusqlite::{Connection, ErrorCode, OpenFlags, TransactionBehavior, params};
 
 use super::files::Problem;
-use crate::address;
-use crate::address::suggest::{self, Visited};
+use crate::address::Address;
+use crate::address::{Suggestion, Visited};
 use crate::model::keeping::NotSaved;
 
 /// The name of the searchable: one per process, and a process has one profile.
@@ -90,7 +90,7 @@ pub fn schema() -> Schema {
 
 /// The index document of `page`: its id is the address.
 pub fn document(page: &Page) -> Document {
-    let host = address::host(&page.url);
+    let host = Address::new(&page.url).host();
     let host = host.strip_prefix("www.").unwrap_or(&host).to_string();
     let path = page
         .url
@@ -303,7 +303,7 @@ pub fn clear(connection: &mut Connection) -> rusqlite::Result<()> {
 pub fn suggestions(typed: &str) -> Search {
     Search::new(typed)
         .index(INDEX)
-        .limit(suggest::LIMIT)
+        .limit(Suggestion::LIMIT)
         .sort("_score:desc")
         .sort("last_visit:desc")
         .sort("visit_count:desc")

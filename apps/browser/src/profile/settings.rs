@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::files::{self, Problem};
-use crate::address;
+use crate::address::SearchEngine;
 
 /// The settings format this build reads and writes.
 pub const VERSION: u32 = 1;
@@ -20,7 +20,7 @@ pub const VERSION: u32 = 1;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Settings {
     pub version: u32,
-    /// The id of the address bar's search engine (`address::ENGINES`). An id
+    /// The id of the address bar's search engine (`SearchEngine::ALL`). An id
     /// this build does not know is kept, and the default engine is used.
     pub search_engine: String,
     #[serde(flatten)]
@@ -31,7 +31,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             version: VERSION,
-            search_engine: address::ENGINES[0].id.to_string(),
+            search_engine: SearchEngine::ALL[0].id.to_string(),
             rest: Map::new(),
         }
     }
@@ -85,10 +85,10 @@ impl Settings {
         bytes
     }
 
-    /// Where the address bar's search engine is in `address::ENGINES`: the
+    /// Where the address bar's search engine is in `SearchEngine::ALL`: the
     /// default for an id this build does not know.
     pub fn engine_index(&self) -> usize {
-        address::ENGINES
+        SearchEngine::ALL
             .iter()
             .position(|engine| engine.id == self.search_engine)
             .unwrap_or(0)
@@ -117,7 +117,7 @@ mod tests {
         let (read, problem) = Settings::read(&path);
         assert_eq!(problem, None);
         assert_eq!(read, chosen);
-        assert_eq!(address::ENGINES[read.engine_index()].name, "Wikipedia");
+        assert_eq!(SearchEngine::ALL[read.engine_index()].name, "Wikipedia");
         remove_tree(&dir).unwrap();
     }
 

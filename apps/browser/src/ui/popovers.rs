@@ -6,7 +6,7 @@ use bingux_ui::web_view::DownloadId;
 use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 use freya::prelude::*;
 
-use crate::address;
+use crate::address::Address;
 use crate::model::downloads;
 use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
@@ -70,7 +70,7 @@ fn page_info(ctx: Ctx) -> Element {
             return rect().into_element();
         };
         let summary = security::summarize(&tab.security, &tab.url);
-        let origin = address::origin(&tab.url);
+        let origin = Address::new(&tab.url).origin();
         (
             summary,
             origin.clone(),
@@ -90,13 +90,13 @@ fn page_info(ctx: Ctx) -> Element {
         .child(Group::new(None::<String>).row(status_row));
     if !internal && origin.contains("://") {
         let site = Group::new("Site".to_string())
-            .row(property_row("Site", address::host(&origin)))
+            .row(property_row("Site", Address::new(&origin).host()))
             .row(property_row("Address", {
                 let browser = ctx.browser.read();
                 browser
                     .tabs
                     .get(key)
-                    .map(|tab| address::display(&tab.url))
+                    .map(|tab| Address::new(&tab.url).display())
                     .unwrap_or_default()
             }));
         column = column.child(site);
