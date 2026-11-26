@@ -1,7 +1,11 @@
 # Browser: source structure
 
 Design of 2026-11-26 for how `apps/browser/src` is laid out: by feature, with each feature owning its state, its
-behaviour, its components, its tests and its strings. This is the plan for the move. Nothing here has moved yet.
+behaviour, its components, its tests and its strings. This was the plan for the move, and it is done: the tree is
+as the layout below says, with the differences that `app/` holds the launch and the structure tests (`Launch`,
+`CommandLine`, `app/structure_tests.rs`, which fails a change that breaks rules 1, 5 and 9), `target.rs` stays at
+the root, and the toolbar's controls live with their features. "Today" and the "Where every file goes" tables
+describe the tree before the move.
 
 Paths:
 
