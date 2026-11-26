@@ -118,6 +118,8 @@ pub struct Application {
     address_options: Vec<&'static str>,
     about: Option<crate::about::AppInfo>,
     remember_window: bool,
+    /// Whether this copy listens for other launches ([`Application::refuse_launches`]).
+    takes_launches: bool,
 }
 
 impl Application {
@@ -140,6 +142,7 @@ impl Application {
             address_options: Vec::new(),
             about: None,
             remember_window: false,
+            takes_launches: true,
         }
     }
 
@@ -242,16 +245,109 @@ impl Application {
         self
     }
 
+    /// This copy takes no launch of another: it does not listen on the
+    /// application's socket, so a later launch starts a copy of its own (or
+    /// reaches a copy that does listen) instead of handing its addresses to a
+    /// window that would not show them. For a window that only says why the
+    /// application cannot run, such as a browser profile another copy holds.
+    pub fn refuse_launches(mut self) -> Self {
+        self.takes_launches = false;
+        self
+    }
+
+    /// Hands this launch's addresses (the command line, as [`Application::run`]
+    /// reads it) to a running copy that takes launches. True when one took
+    /// them: this process has nothing left to do. A command line that does not
+    /// parse is left for [`Application::run`] to report.
+    pub fn hand_off(&self) -> bool {
+        let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
+        self.hand_off_to(&socket_path(&self.app_id), &arguments)
+    }
+
+    fn hand_off_to(&self, socket: &std::path::Path, arguments: &[std::ffi::OsString]) -> bool {
+        let Ok(launch) = Launch::parse(arguments, &self.address_options) else {
+            return false;
+        };
+        if launch.help {
+            return false;
+        }
+        let table = self.route_table();
+        let forwarded = Self::forwarded(&self.addresses(&launch, &table));
+        matches!(single_instance::hand_off(socket, &forwarded), Ok(true))
+    }
+
+    fn route_table(&self) -> RouteTable {
+        self.routes
+            .clone()
+            .unwrap_or_else(|| RouteTable::new(&self.app_id))
+    }
+
+    /// One address per argument, in order. An empty argument names nothing
+    /// and only raises a running copy. Text that is not a URI is not an
+    /// error: the app opens its root and says so.
+    fn addresses(&self, launch: &Launch, table: &RouteTable) -> Vec<Option<Location>> {
+        launch
+            .addresses
+            .iter()
+            .map(|text| {
+                let text = match self.normalise {
+                    Some(normalise) if !text.is_empty() => normalise(text),
+                    // No address form to build: the text is a location as typed,
+                    // and one that is not UTF-8 is not a location (it is
+                    // reported below).
+                    _ => text.to_string_lossy().into_owned(),
+                };
+                if text.is_empty() {
+                    return None;
+                }
+                let parsed = Location::parse_in(table.scheme(), &text).unwrap_or_else(|| {
+                    eprintln!("{}: not a location: {text}", self.app_id);
+                    table.home()
+                });
+                Some(table.canonical(&parsed))
+            })
+            .collect()
+    }
+
+    /// What a running copy is told, one line each: no argument only raises it.
+    fn forwarded(addresses: &[Option<Location>]) -> Vec<String> {
+        if addresses.is_empty() {
+            return vec![String::new()];
+        }
+        addresses
+            .iter()
+            .map(|location| {
+                location
+                    .as_ref()
+                    .map(ToString::to_string)
+                    .unwrap_or_default()
+            })
+            .collect()
+    }
+
+    /// The socket this copy listens on for other launches, or none when it
+    /// refuses them or the socket cannot be made.
+    fn listen_for_launches(&self, socket: &std::path::Path) -> Option<single_instance::Owner> {
+        if !self.takes_launches {
+            return None;
+        }
+        match single_instance::Owner::claim(socket) {
+            Ok(owner) => Some(owner),
+            Err(error) => {
+                eprintln!(
+                    "{}: running without a single-instance socket: {error}",
+                    self.app_id
+                );
+                None
+            }
+        }
+    }
+
     /// Run the application with `root` as its window content. Returns when
     /// the window closes, or straight away when another copy took the
     /// address.
     pub fn run<E: IntoElement + 'static>(self, root: impl Fn() -> E + 'static) {
-        let table = Arc::new(
-            self.routes
-                .clone()
-                .unwrap_or_else(|| RouteTable::new(&self.app_id)),
-        );
-        let scheme = table.scheme().to_string();
+        let table = Arc::new(self.route_table());
         let _ = IDENTITY.set((self.app_id.clone(), self.title.clone()));
         // What the window comes back to is read before the window exists.
         crate::document::preload_scene(&self.app_id);
@@ -259,7 +355,6 @@ impl Application {
         // Panics are never fatal: the panic hook, the failure log and the
         // relaunch plan exist before the first window and the first thread.
         crate::resilience::install_for_app();
-        let normalise = self.normalise;
         // `args()` panics on an argument that is not valid UTF-8, which a file
         // name may be; `args_os()` never does.
         let arguments: Vec<std::ffi::OsString> = std::env::args_os().skip(1).collect();
@@ -274,49 +369,13 @@ impl Application {
             println!("{}", self.usage);
             return;
         }
-        // One address per argument, in order. An empty argument names nothing
-        // and only raises a running copy. Text that is not a URI is not an
-        // error: the app opens its root and says so.
-        let addresses: Vec<Option<Location>> = launch
-            .addresses
-            .iter()
-            .map(|text| {
-                let text = match normalise {
-                    Some(normalise) if !text.is_empty() => normalise(text),
-                    // No address form to build: the text is a location as typed,
-                    // and one that is not UTF-8 is not a location (it is
-                    // reported below).
-                    _ => text.to_string_lossy().into_owned(),
-                };
-                if text.is_empty() {
-                    return None;
-                }
-                let parsed = Location::parse_in(&scheme, &text).unwrap_or_else(|| {
-                    eprintln!("{}: not a location: {text}", self.app_id);
-                    table.home()
-                });
-                Some(table.canonical(&parsed))
-            })
-            .collect();
+        let addresses = self.addresses(&launch, &table);
         let initial = addresses
             .first()
             .cloned()
             .flatten()
             .unwrap_or_else(|| table.canonical(&table.home()));
-        // What a running copy is told, one line each: no argument only raises it.
-        let forwarded: Vec<String> = if addresses.is_empty() {
-            vec![String::new()]
-        } else {
-            addresses
-                .iter()
-                .map(|location| {
-                    location
-                        .as_ref()
-                        .map(ToString::to_string)
-                        .unwrap_or_default()
-                })
-                .collect()
-        };
+        let forwarded = Self::forwarded(&addresses);
 
         let socket = socket_path(&self.app_id);
         match single_instance::hand_off(&socket, &forwarded) {
@@ -328,16 +387,7 @@ impl Application {
             }
         }
         // Held until the event loop ends: dropping it removes the socket.
-        let mut owner = match single_instance::Owner::claim(&socket) {
-            Ok(owner) => Some(owner),
-            Err(error) => {
-                eprintln!(
-                    "{}: running without a single-instance socket: {error}",
-                    self.app_id
-                );
-                None
-            }
-        };
+        let mut owner = self.listen_for_launches(&socket);
         let inbox = Arc::new(Inbox::default());
         // The first address starts the window; the others are what a second
         // launch would have handed it.
@@ -1084,5 +1134,60 @@ mod closing_window_tests {
         assert!(!inbox.push_and_wait("three".to_string(), Duration::from_millis(150)));
         closing.join().unwrap();
         assert_eq!(inbox.try_take(), None);
+    }
+}
+
+#[cfg(test)]
+mod launch_tests_refusal {
+    //! A copy that only says why it cannot run (a profile another copy holds)
+    //! must not take other launches: before, it claimed the socket, took a
+    //! later launch's address and showed nothing for it.
+
+    use std::ffi::OsString;
+
+    use super::*;
+
+    fn socket(name: &str) -> (PathBuf, PathBuf) {
+        let dir =
+            std::env::temp_dir().join(format!("bingux-ui-refusal-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let socket = dir.join("app.sock");
+        (dir, socket)
+    }
+
+    #[test]
+    fn a_copy_that_refuses_launches_leaves_the_socket_to_the_next_one() {
+        let (dir, socket) = socket("refuse");
+        let refusing = Application::new("bingux-test-refusing").refuse_launches();
+        assert!(refusing.listen_for_launches(&socket).is_none());
+        assert!(!socket.exists(), "a later launch finds no copy to hand to");
+        let taking = Application::new("bingux-test-taking");
+        let owner = taking.listen_for_launches(&socket);
+        assert!(owner.is_some() && socket.exists());
+        drop(owner);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_launch_is_handed_off_only_to_a_copy_that_takes_it() {
+        let (dir, socket) = socket("hand-off");
+        let app = Application::new("bingux-test-hand-off");
+        let arguments = [OsString::from("bingux-test-hand-off://page")];
+        assert!(!app.hand_off_to(&socket, &arguments), "nobody runs");
+        let mut owner = single_instance::Owner::claim(&socket).unwrap();
+        let listener = owner.take_listener().unwrap();
+        let got = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&got);
+        std::thread::spawn(move || {
+            single_instance::listen(listener, |line| {
+                sink.lock().unwrap().push(line);
+                true
+            })
+        });
+        assert!(app.hand_off_to(&socket, &arguments));
+        assert_eq!(*got.lock().unwrap(), ["bingux-test-hand-off://page"]);
+        drop(owner);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

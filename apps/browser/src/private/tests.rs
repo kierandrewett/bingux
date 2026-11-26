@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use crate::browser::{Browser, Options, Profile};
-use crate::profiles::open::Opened;
+use crate::profiles::open::{Opened, Waiting};
 use crate::profiles::places::Places;
 use crate::store::files::{remove_tree, tests::temp};
 use crate::store::keeping::{Keeping, NotSaved};
@@ -63,7 +63,7 @@ fn a_private_window_leaves_every_file_as_it_was() {
             .map(|(_, path)| OsString::from(path))
     });
     // A profile with settings and history of its own, closed again.
-    match Opened::start(&places, None) {
+    match Opened::start(&places, None, &mut Waiting::none()) {
         Opened::Profile(opened) => drop(opened),
         other => panic!("the first start opens Personal, not {other:?}"),
     }

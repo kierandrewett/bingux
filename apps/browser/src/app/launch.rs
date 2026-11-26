@@ -8,7 +8,7 @@ use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 use super::CommandLine;
 use crate::browser::{Options, Profile};
 use crate::engine::Engine;
-use crate::profiles::open::Opened;
+use crate::profiles::open::{Opened, Waiting};
 use crate::profiles::places::{Folders, Places};
 use crate::profiles::{Gate, GateWindow};
 use crate::store;
@@ -69,9 +69,16 @@ impl Launch {
         let opened = if private {
             Opened::private(&places, asked.as_deref())
         } else {
-            Opened::start(&places, asked.as_deref())
+            // A profile another copy holds: hand this launch to that copy, or
+            // wait for the profile while that copy closes.
+            let mut waiting = Waiting::new(Waiting::PATIENCE, |app_id: &str| {
+                Self::application(app_id).hand_off()
+            });
+            Opened::start(&places, asked.as_deref(), &mut waiting)
         };
         match opened {
+            // The copy with the profile open took this launch.
+            Opened::HandedOff => {}
             Opened::Profile(mut opened) => {
                 if let Some(cache) = opened.stale_cache.take() {
                     // The old engine cache goes on a thread of its own: it can be large.

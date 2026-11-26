@@ -8,6 +8,7 @@
 
 use bingux_ui::prelude::tr;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use crate::first_run::{self, FirstRun, Migrated, MigrationError};
 use crate::profiles::lock::{LockError, ProfileLock};
@@ -122,6 +123,39 @@ pub enum Opened {
     /// Ask which profile (two or more, Ask at start on).
     Choose(Vec<Entry>),
     Problem(ProfileState),
+    /// The profile is open in another copy, which took this launch's addresses.
+    HandedOff,
+}
+
+/// How a start waits for a profile another copy holds. A copy that is closing
+/// holds its profile for the seconds its engine takes to stop, so a launch
+/// right behind the close waits for it rather than showing "This profile is
+/// already open". While it waits it offers its addresses to the copy that has
+/// the profile open, so a launch of a copy that is running is answered at once.
+pub struct Waiting {
+    patience: Duration,
+    /// Hands this launch to the running copy with the application id given;
+    /// true when it took it.
+    hand_off: Box<dyn FnMut(&str) -> bool>,
+}
+
+impl Waiting {
+    /// How long a launch waits for a profile in use: longer than a copy takes to close.
+    pub const PATIENCE: Duration = Duration::from_secs(5);
+    /// How often it tries the lock and the hand-off again.
+    const STEP: Duration = Duration::from_millis(100);
+
+    pub fn new(patience: Duration, hand_off: impl FnMut(&str) -> bool + 'static) -> Self {
+        Self {
+            patience,
+            hand_off: Box::new(hand_off),
+        }
+    }
+
+    /// No wait and no hand-off: a profile in use is said so at once.
+    pub fn none() -> Self {
+        Self::new(Duration::ZERO, |_| false)
+    }
 }
 
 impl ProfileState {
@@ -154,26 +188,40 @@ impl OpenProfile {
 }
 
 impl Opened {
-    /// Locks the profile in `folders` and reads its settings.
+    /// Locks the profile in `folders` and reads its settings. A profile in
+    /// use is waited for as `waiting` says.
     fn locked(
         entry: Option<Entry>,
         folders: Folders,
         stale_cache: Option<PathBuf>,
         default: Option<&Id>,
+        waiting: &mut Waiting,
     ) -> Self {
         let app_id = OpenProfile::app_id_of(entry.as_ref(), default);
         let name = entry.as_ref().map_or_else(
             || folders.root.display().to_string(),
             |entry| entry.name.clone(),
         );
-        let lock = match ProfileLock::take(&folders) {
-            Ok(lock) => lock,
-            Err(LockError::InUse) => return Self::Problem(ProfileState::InUse { name, app_id }),
-            Err(LockError::Io(problem)) => {
-                return Self::Problem(ProfileState::Unwritable {
-                    path: folders.root.clone(),
-                    problem,
-                });
+        let deadline = Instant::now() + waiting.patience;
+        let lock = loop {
+            match ProfileLock::take(&folders) {
+                Ok(lock) => break lock,
+                Err(LockError::InUse) => {
+                    if (waiting.hand_off)(&app_id) {
+                        return Self::HandedOff;
+                    }
+                    let left = deadline.saturating_duration_since(Instant::now());
+                    if left.is_zero() {
+                        return Self::Problem(ProfileState::InUse { name, app_id });
+                    }
+                    std::thread::sleep(left.min(Waiting::STEP));
+                }
+                Err(LockError::Io(problem)) => {
+                    return Self::Problem(ProfileState::Unwritable {
+                        path: folders.root.clone(),
+                        problem,
+                    });
+                }
             }
         };
         if let Err(error) = files::private_dir(&folders.engine) {
@@ -195,10 +243,10 @@ impl Opened {
     }
 
     /// Opens the profile `asked` names (`--profile`, a name or an id), or the
-    /// default one.
-    pub fn start(places: &Places, asked: Option<&str>) -> Self {
+    /// default one. A profile another copy holds is waited for as `waiting` says.
+    pub fn start(places: &Places, asked: Option<&str>, waiting: &mut Waiting) -> Self {
         if let Some(root) = &places.named {
-            return Self::locked(None, Places::named_folders(root), None, None);
+            return Self::locked(None, Places::named_folders(root), None, None, waiting);
         }
         let profiles = Profiles::new(places.clone());
         // A failure here is the registry's, and the start below reports it.
@@ -225,7 +273,7 @@ impl Opened {
             Err(problem) => Self::Problem(ProfileState::of_registry(problem, places)),
             Ok(Startup::Open(entry)) => {
                 let folders = places.folders(&entry.id);
-                Self::locked(Some(entry), folders, stale_cache, default.as_ref())
+                Self::locked(Some(entry), folders, stale_cache, default.as_ref(), waiting)
             }
             Ok(Startup::Ask(entries)) => Self::Choose(entries),
             Ok(Startup::Unknown(asked)) => Self::Problem(ProfileState::UnknownProfile { asked }),
@@ -235,7 +283,7 @@ impl Opened {
                     Ok(entry) => {
                         let folders = places.folders(&entry.id);
                         let id = entry.id.clone();
-                        Self::locked(Some(entry), folders, stale_cache, Some(&id))
+                        Self::locked(Some(entry), folders, stale_cache, Some(&id), waiting)
                     }
                     Err(crate::profiles::registry::ChangeError::Registry(problem)) => {
                         Self::Problem(ProfileState::of_registry(problem, places))
@@ -318,13 +366,67 @@ mod tests {
         }
     }
 
+    /// Failure guarded against (seen on the real engine): a launch right
+    /// behind a window's close found the profile still held by the copy that
+    /// was closing, and showed "This profile is already open" instead of the
+    /// browser.
+    #[test]
+    fn a_profile_its_copy_lets_go_of_soon_opens_after_a_short_wait() {
+        let rig = Rig::new();
+        let closing = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
+        let letting_go = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            drop(closing);
+        });
+        let started = std::time::Instant::now();
+        let mut waiting = Waiting::new(Waiting::PATIENCE, |_| false);
+        let second = opened(Opened::start(&rig.places, None, &mut waiting));
+        assert!(started.elapsed() >= std::time::Duration::from_millis(250));
+        assert_eq!(second.entry.as_ref().unwrap().name, "Personal");
+        letting_go.join().unwrap();
+    }
+
+    #[test]
+    fn a_launch_the_running_copy_takes_does_not_wait() {
+        let rig = Rig::new();
+        let running = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
+        let asked = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let seen = std::rc::Rc::clone(&asked);
+        let mut waiting = Waiting::new(Waiting::PATIENCE, move |app_id: &str| {
+            seen.borrow_mut().push(app_id.to_string());
+            true
+        });
+        let started = std::time::Instant::now();
+        assert!(matches!(
+            Opened::start(&rig.places, None, &mut waiting),
+            Opened::HandedOff
+        ));
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert_eq!(*asked.borrow(), ["bingux-browser"]);
+        drop(running);
+    }
+
+    #[test]
+    fn a_profile_held_past_the_patience_is_in_use() {
+        let rig = Rig::new();
+        let holding = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
+        let mut waiting = Waiting::new(std::time::Duration::from_millis(300), |_: &str| false);
+        let started = std::time::Instant::now();
+        assert!(matches!(
+            Opened::start(&rig.places, None, &mut waiting),
+            Opened::Problem(ProfileState::InUse { .. })
+        ));
+        assert!(started.elapsed() >= std::time::Duration::from_millis(300));
+        drop(holding);
+    }
+
     #[test]
     fn the_first_start_opens_personal_and_holds_its_lock() {
         let rig = Rig::new();
-        let first = opened(Opened::start(&rig.places, None));
+        let first = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
         assert_eq!(first.entry.as_ref().unwrap().name, "Personal");
         assert!(first.folders.engine.is_dir());
-        let Opened::Problem(state) = Opened::start(&rig.places, None) else {
+        let Opened::Problem(state) = Opened::start(&rig.places, None, &mut Waiting::none()) else {
             panic!("a second open of the same profile");
         };
         assert_eq!(
@@ -335,17 +437,21 @@ mod tests {
             }
         );
         drop(first);
-        opened(Opened::start(&rig.places, None));
+        opened(Opened::start(&rig.places, None, &mut Waiting::none()));
     }
 
     #[test]
     fn another_profile_opens_beside_an_open_one() {
         let rig = Rig::new();
-        let personal = opened(Opened::start(&rig.places, None));
+        let personal = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
         Profiles::new(rig.places.clone())
             .create("Work", "orange")
             .unwrap();
-        let work = opened(Opened::start(&rig.places, Some("work")));
+        let work = opened(Opened::start(
+            &rig.places,
+            Some("work"),
+            &mut Waiting::none(),
+        ));
         assert_eq!(work.entry.unwrap().name, "Work");
         drop(personal);
     }
@@ -353,7 +459,9 @@ mod tests {
     #[test]
     fn a_profile_nobody_has_is_said_so() {
         let rig = Rig::new();
-        let Opened::Problem(state) = Opened::start(&rig.places, Some("Study")) else {
+        let Opened::Problem(state) =
+            Opened::start(&rig.places, Some("Study"), &mut Waiting::none())
+        else {
             panic!("no such profile");
         };
         assert_eq!(
@@ -370,7 +478,7 @@ mod tests {
         fs::create_dir_all(&rig.places.data).unwrap();
         fs::write(rig.places.registry(), b"[").unwrap();
         let Opened::Problem(ProfileState::RegistryDamaged { .. }) =
-            Opened::start(&rig.places, None)
+            Opened::start(&rig.places, None, &mut Waiting::none())
         else {
             panic!("a damaged registry");
         };
@@ -384,7 +492,7 @@ mod tests {
         let parent = rig.places.data.parent().unwrap().to_path_buf();
         fs::create_dir_all(&parent).unwrap();
         fs::set_permissions(&parent, fs::Permissions::from_mode(0o500)).unwrap();
-        let result = Opened::start(&rig.places, None);
+        let result = Opened::start(&rig.places, None, &mut Waiting::none());
         fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
         let Opened::Problem(ProfileState::Unwritable { problem, .. }) = result else {
             panic!("a read-only folder: {result:?}");
@@ -395,11 +503,15 @@ mod tests {
     #[test]
     fn ask_at_start_with_two_profiles_asks() {
         let rig = Rig::new();
-        drop(opened(Opened::start(&rig.places, None)));
+        drop(opened(Opened::start(
+            &rig.places,
+            None,
+            &mut Waiting::none(),
+        )));
         let profiles = Profiles::new(rig.places.clone());
         profiles.create("Work", "orange").unwrap();
         profiles.set_ask_at_start(true).unwrap();
-        let Opened::Choose(entries) = Opened::start(&rig.places, None) else {
+        let Opened::Choose(entries) = Opened::start(&rig.places, None, &mut Waiting::none()) else {
             panic!("asks");
         };
         assert_eq!(entries.len(), 2);
@@ -412,7 +524,7 @@ mod tests {
             named: Some(rig.dir.join("named")),
             ..rig.places.clone()
         };
-        let profile = opened(Opened::start(&places, None));
+        let profile = opened(Opened::start(&places, None, &mut Waiting::none()));
         assert_eq!(profile.entry, None);
         assert_eq!(profile.folders.engine, rig.dir.join("named/engine"));
         assert!(!places.registry().exists(), "nothing registered");
@@ -421,7 +533,7 @@ mod tests {
     #[test]
     fn a_private_window_reads_its_profiles_settings() {
         let rig = Rig::new();
-        let personal = opened(Opened::start(&rig.places, None));
+        let personal = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
         let mut chosen = Settings::default();
         chosen.search_engine = "startpage".to_string();
         files::replace(&personal.folders.settings(), &chosen.encode()).unwrap();
