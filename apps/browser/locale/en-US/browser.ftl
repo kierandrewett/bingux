@@ -70,3 +70,8 @@ browser-permissions-footer = Site permissions are kept only while the window is 
 
 browser-history-cleared = History cleared
 browser-history-cleared-link-colours-kept = History cleared. Link colours on pages are kept until the engine can clear them
+
+## Zoom
+
+# The toolbar button that puts the page zoom back to 100 %. $percent is the zoom.
+browser-zoom-chip = { NUMBER($percent) }%
