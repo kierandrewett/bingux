@@ -35,6 +35,8 @@ pub mod overlays;
 #[cfg(all(test, feature = "testing"))]
 mod page_motion_tests;
 pub mod pane_toggle;
+#[cfg(test)]
+mod pane_toggle_scan_tests;
 #[cfg(all(test, feature = "testing"))]
 pub(crate) mod pane_toggle_tests;
 pub(crate) mod panel;
