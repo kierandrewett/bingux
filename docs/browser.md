@@ -1,9 +1,9 @@
 # Browser
 
-`packages/bingux-browser` is the browser: a thin frame (tabs, toolbar, address field, menus, settings) around
+`apps/browser` (package `bingux-browser`) is the browser: a thin frame (tabs, toolbar, address field, menus, settings) around
 bingux-ui's web view control (`bingux_ui::web_view`, cargo feature `web-view`), the way iexplore.exe was a frame
 around IE's WebBrowser control. Any Bingux app can embed the same control (Mail's account sign-in is the second use;
-`docs/apps/browser/PLAN.md`). The window is built from bingux-ui and nothing else. Pages are drawn by the engine (an
+`docs/browser/plan.md`). The window is built from bingux-ui and nothing else. Pages are drawn by the engine (an
 embeddable Gecko, see the Vivarium repository) into the control's frame view.
 
 ```
@@ -17,7 +17,7 @@ bingux_ui::web_view     WebView control + BrowserBackend (one trait)
 ## Run it
 
 ```sh
-VIVARIUM_SDK_DIR=/path/to/sdk packages/bingux-browser/run.sh [--private] [ADDRESS | WORDS | FILE]...
+VIVARIUM_SDK_DIR=/path/to/sdk apps/browser/run.sh [--private] [ADDRESS | WORDS | FILE]...
 ```
 
 `run.sh` checks the SDK folder (`vivarium-engine`, `libvivarium.so`, `libvivarium.so.0`), puts it on
@@ -224,7 +224,7 @@ What limits the frame rate:
   profile in `Cargo.toml`), so the difference is the app's own code and the missing LTO: `paint`+`render`
   were within 1.5 ms of each other at both sizes. The 3440 animation was the only run where the debug build
   fell clearly behind (36/s against 46-57/s), by the host thread being late for frames. A release build
-  (`BINGUX_BROWSER_BUILD=release packages/bingux-browser/run.sh`, thin LTO, stripped, 41 MB against 573 MB)
+  (`BINGUX_BROWSER_BUILD=release apps/browser/run.sh`, thin LTO, stripped, 41 MB against 573 MB)
   is what to run.
 - **One copy.** The measurements above are from the earlier crate, which handed the engine's buffer to Skia
   in place. The current `vivarium` crate reads a frame only through its checked view, which copies the
@@ -258,7 +258,7 @@ device sent:
   the display scale and by `BINGUX_TOUCHPAD_FACTOR`) with the gesture phase: `Began`, `Changed`, `Ended`,
   `Cancelled`. Upstream Freya dropped every phase but `Changed`, which left the engine without the start and
   the lift of the fingers (no fling, no overscroll); the vendored `freya-winit` now delivers them
-  (`WheelPhase`, see `packages/vendor/README.md`).
+  (`WheelPhase`, see `vendor/README.md`).
 - None of `BINGUX_WHEEL_STEP`, the wheel feel of `ScrollView` (`wheel_accel`) or the touchpad factor
   accelerates the page: they apply to Freya's own scroll views, and the view divides them out.
 - Not verified: a real touchpad (the build machine has none; xdotool sends notches, and on X11 winit
@@ -346,7 +346,7 @@ the library has to provide, in the order an app would use it:
 1. **A direction in the environment.** `Direction::{Ltr, Rtl}` next to the scheme and the text scale,
    from the locale (`LANG`/`LC_MESSAGES` language: ar, he, fa, ur, ...) with an override
    (`BINGUX_TEXT_DIRECTION=rtl`, and a snapshot/lint switch for the same), read through `use_tokens()`
-   so a change repaints. Today there is no such value: `grep -ri rtl packages/bingux-ui/src` finds only
+   so a change repaints. Today there is no such value: `grep -ri rtl crates/ui/src` finds only
    unrelated words.
 2. **Logical edges in the layout vocabulary.** `ps/pe` (padding start/end), `ms/me`, `start()`/`end()`
    for alignment and absolute offsets, and `flex_row()` laying children out right to left in `Rtl`

@@ -3,10 +3,9 @@
 Audit of 2026-11-26 on `feat/browser` (HEAD `96178968`). One row per frame of the canvas "Bingux: Browser" (107
 frames), the gap that remains, and what must be answered before it is built. Nothing in this file changes code.
 
-**Paths move.** `AppsConsolidate` is porting this branch to the `apps/` layout. `packages/bingux-browser` becomes
-`apps/browser`, `packages/bingux-ui` becomes `crates/ui`, `packages/bingux-taxonomy` becomes `apps/taxonomy`. In this
-file `B/` is `packages/bingux-browser/src` (`apps/browser/src`) and `UI/` is `packages/bingux-ui/src`
-(`crates/ui/src`).
+**Paths.** The browser is in the `apps/` layout now (branch `feat/apps`): `packages/bingux-browser` is `apps/browser`,
+`packages/bingux-ui` is `crates/ui` and `packages/bingux-taxonomy` is `apps/taxonomy`. In this file `B/` is
+`apps/browser/src` and `UI/` is `crates/ui/src`; line numbers are from the audit on the old layout.
 
 ## The bar
 
@@ -40,7 +39,7 @@ real engine but miss states of the frame.
   390x800 and 844x390. These are 36 scenarios. The pages in them are the double's wireframes, so a row about page
   content cannot be judged from them.
 - **Behaviour.** Read from code. A claim about the real engine rests on the code path and on the earlier real-engine
-  runs recorded in `DESIGN.md` (find, download control). I ran no real-engine session for this audit.
+  runs recorded in `design.md` (find, download control). I ran no real-engine session for this audit.
 - **Engine.** `~/dev/vivarium` at `729d5ea`: `docs/research/api-parity.md`, `TODO.md`, the headers and the Rust
   crate. There is no Gecko checkout on this machine, so Gecko source paths are quoted from the rows of
   `api-parity.md`, not opened.
@@ -163,7 +162,7 @@ Vivarium only when many kinds of embedder use it. Browser policy and layout stay
 
 ## Settings (11)
 
-Settings today is one page in a tab (`TabKind::Settings`, `B/model/tab.rs:184`). `PLAN.md` says Settings and the
+Settings today is one page in a tab (`TabKind::Settings`, `B/model/tab.rs:184`). `plan.md` says Settings and the
 Library are windows of their own, never a page in a tab. That difference alone makes every row below partial or no.
 
 | #   | Frame                  | Impl    | Where                                                                          | What differs                                                                                                                            | Gap | Engine                               |
@@ -484,7 +483,7 @@ Frames: Phone 01 to 20 (except those listed elsewhere).
 
 - Does bottom-address-bar change the toolbar model or is it one component with a flag? Compact by width and height?
 - Tab thumbnails: captured when, and kept where (memory, a cache dir)? Private tab thumbnails: never.
-- Sheets with inset parent (bingux-ui gap in `DESIGN.md`), folded toolbar needs scroll events (not checked).
+- Sheets with inset parent (bingux-ui gap in `design.md`), folded toolbar needs scroll events (not checked).
 - Needs Vivarium touch (slice 12) for real gestures; today it is the W1 workaround.
 
 ### 10. Embedded web view control

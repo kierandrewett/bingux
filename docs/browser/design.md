@@ -6,8 +6,8 @@ Copied from bingux-doop `out/apps-browser/DESIGN.md`; paths such as `frames/apps
 Settings and library; Phone; Web view in other apps.
 
 - **Source:** `frames/apps-browser/`, one module per page group, with the shared kit in the `_` modules.
-- **Plan:** `PLAN.md`.
-- **What the 2026-11-25 consolidation merged and removed:** `CONSOLIDATION.md`.
+- **Plan:** `plan.md`.
+- **What the 2026-11-25 consolidation merged and removed:** `consolidation.md`.
 
 ## Requirements and the frames that answer them
 

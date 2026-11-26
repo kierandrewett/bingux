@@ -4,7 +4,7 @@ Copied from bingux-doop `out/apps-browser/PLAN.md`; paths such as `frames/apps-b
 
 One app, one component tree. Size and one setting (Layout) decide the arrangement. Frames live in
 `frames/apps-browser/`, named `Browser / <Group> / NN Title`, on the canvas "Bingux: Browser" (`KyPwogXD5M`). This
-plan is the consolidated design of 2026-11-25 (`CONSOLIDATION.md` records what was merged and removed).
+plan is the consolidated design of 2026-11-25 (`consolidation.md` records what was merged and removed).
 
 ## Two parts: the web view control and the browser frame (Kieran, 2026-11-25)
 

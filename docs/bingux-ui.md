@@ -1391,7 +1391,7 @@ rect()
 | `attached()`                          | A list under a text field (suggestions): no shield, so the keys and the pointer stay with the field, and as wide as the field. The owner closes it and keeps the keys that move through it. |
 | `suggestion_row(icon, title, detail)` | One row of such a list, the menu item's row (height, inset, fill) with a title and a quieter detail. The owner marks the `highlighted` row, since the keyboard stays in the field.          |
 
-Used by the browser (page info, downloads, the address bar's suggestions); a second use is Files' hover card and address list, which draw their own floating card and list rows today, and Settings' row details. The taxonomy's Popover entry shows both forms.
+Used by the browser (page info, downloads, the address bar's suggestions); Settings' row details are the next. It is the one popover: Files' address list used to wrap `Panel` in a copy of its own, which is gone. The taxonomy's Popover entry shows both forms.
 
 ### Sliders, the colour picker and every drag that makes a value
 
@@ -1496,7 +1496,7 @@ the engine as `PageInput`.
 
 An app that does not turn on `web-view` does not link Vivarium. An app that turns on an engine feature patches
 `vivarium` and `vivarium-sys` 0.1 to the Vivarium repository in its `[patch.crates-io]` (see
-`packages/bingux-browser/Cargo.toml`).
+`apps/browser/Cargo.toml`).
 
 The host shapes the control with three hooks, as IE's `IDocHostUIHandler` did:
 
