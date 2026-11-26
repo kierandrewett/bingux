@@ -268,8 +268,10 @@ browser-side overlay. Never a workaround in the UI. "Open" means the answer need
 
 ## Engine primitives wanted
 
-Places where the browser or bingux-ui reimplements something Gecko already does. Each goes upstream to Vivarium as a
-primitive, and the browser deletes its copy. Gecko paths come from `api-parity.md` rows, or are marked as not opened.
+Places where the browser or bingux-ui reimplements something Gecko already does. These are proposals: a primitive goes
+upstream to Vivarium only when its row states which other kinds of embedder would use it (Kieran's rule); otherwise it
+stays a browser-side layer. P1 to P4 (URL fixup, parse, display and query) are accepted on Kieran's own example and are
+being built on Vivarium's `feat/url-primitives`. Gecko paths come from `api-parity.md` rows, or are marked as not opened.
 
 | #   | Browser code today                                                                                                 | Gecko component                                                                                               | Sketch                       |
 | --- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ---------------------------- |
