@@ -3040,15 +3040,22 @@ fn one_tab_is_hovered_at_a_time_and_it_follows_the_tabs_under_a_resting_pointer(
         Frame::of(shot).pixel(tab.min_x() + 20.0, tab.min_y() + 5.0)
     };
     shot.hover(tabs[1].min_x() + 40.0, y);
-    shot.settle(Duration::from_millis(40));
-    let part = fill(&mut shot, &tabs[1]);
+    // The fill fades in: the first frame that shows any of it is a part of it, not
+    // all of it. Frame by frame until it shows, so no clock decides what that is.
+    let mut part = fill(&mut shot, &tabs[1]);
     assert!(
-        !same(part, strip, 1.0) && !same(part, hover, 1.0),
+        shot.settle_until(WAIT, |shot| {
+            part = fill(shot, &tabs[1]);
+            !same(part, strip, 1.0)
+        }),
+        "the hover fill comes in"
+    );
+    assert!(
+        !same(part, hover, 1.0),
         "a fill that is on its way in is between nothing and full: {part:?}"
     );
-    shot.settle(Duration::from_millis(400));
     assert!(
-        same(fill(&mut shot, &tabs[1]), hover, 2.0),
+        shot.settle_until(WAIT, |shot| same(fill(shot, &tabs[1]), hover, 2.0)),
         "the tab under the pointer has the hover fill"
     );
     for other in [0, 2] {
@@ -3058,14 +3065,11 @@ fn one_tab_is_hovered_at_a_time_and_it_follows_the_tabs_under_a_resting_pointer(
         );
     }
     shot.hover(tabs[2].min_x() + 40.0, y);
-    shot.settle(Duration::from_millis(400));
     assert!(
-        same(fill(&mut shot, &tabs[1]), strip, 1.0),
-        "the tab the pointer left is not lit"
-    );
-    assert!(
-        same(fill(&mut shot, &tabs[2]), hover, 2.0),
-        "the one it is on is"
+        shot.settle_until(WAIT, |shot| {
+            same(fill(shot, &tabs[1]), strip, 1.0) && same(fill(shot, &tabs[2]), hover, 2.0)
+        }),
+        "the tab the pointer left is not lit, and the one it is on is"
     );
     // Selected, hovered and pressed are three different looks.
     let selected_look = Frame::of(&mut shot).pixel(tabs[3].min_x() + 20.0, tabs[3].min_y() + 5.0);
@@ -3079,43 +3083,43 @@ fn one_tab_is_hovered_at_a_time_and_it_follows_the_tabs_under_a_resting_pointer(
     let mut shot = crowded();
     let strip_area = one(&mut shot, "TabStrip");
     let at = (strip_area.min_x() + 100.0, strip_area.min_y() + 20.0);
-    shot.hover(at.0, at.1);
-    shot.settle(Duration::from_millis(400));
-    let on = |shot: &mut Snapshot| {
+    // The tabs that are fully lit now, left to right.
+    let lit_tabs = |shot: &mut Snapshot| -> Vec<Area> {
         named(shot, "Tab")
             .into_iter()
-            .find(|tab| at.0 >= tab.min_x() && at.0 < tab.max_x())
-            .expect("a tab under the pointer")
+            .filter(|tab| tab.max_x() > strip_area.min_x() && tab.min_x() < strip_area.max_x())
+            .filter(|tab| {
+                same(
+                    Frame::of(shot).pixel(
+                        (tab.min_x() + 20.0).max(strip_area.min_x() + 1.0),
+                        tab.min_y() + 5.0,
+                    ),
+                    hover,
+                    2.0,
+                )
+            })
+            .collect()
     };
+    let under = |tab: &Area| at.0 >= tab.min_x() && at.0 < tab.max_x();
+    shot.hover(at.0, at.1);
+    assert!(
+        shot.settle_until(WAIT, |shot| lit_tabs(shot).iter().any(under)),
+        "the tab under the pointer is lit"
+    );
+    let first = named(&mut shot, "Tab")[0].min_x();
     wheel(&mut shot, at, 0.0, -64.0, WheelSource::Line);
-    shot.settle(Duration::from_millis(500));
-    let now = on(&mut shot);
+    // The tabs glide, and the lit one is the one the pointer is over when they have: the
+    // state that is waited for is the moved strip with one lit tab, under the pointer.
+    let mut moved = false;
+    let mut lit: Vec<Area> = Vec::new();
     assert!(
-        at.0 >= now.min_x() && at.0 < now.max_x(),
-        "a tab is under the resting pointer"
-    );
-    let lit: Vec<Area> = named(&mut shot, "Tab")
-        .into_iter()
-        .filter(|tab| tab.max_x() > strip_area.min_x() && tab.min_x() < strip_area.max_x())
-        .filter(|tab| {
-            same(
-                Frame::of(&mut shot).pixel(
-                    (tab.min_x() + 20.0).max(strip_area.min_x() + 1.0),
-                    tab.min_y() + 5.0,
-                ),
-                hover,
-                2.0,
-            )
-        })
-        .collect();
-    assert_eq!(
-        lit.len(),
-        1,
-        "one tab is lit after the tabs moved under the pointer: {lit:?}"
-    );
-    assert!(
-        at.0 >= lit[0].min_x() && at.0 < lit[0].max_x(),
-        "and it is the one the pointer is over"
+        shot.settle_until(WAIT, |shot| {
+            moved = (named(shot, "Tab")[0].min_x() - first).abs() > 1.0;
+            lit = lit_tabs(shot);
+            moved && lit.len() == 1 && under(&lit[0])
+        }),
+        "the strip moved (moved: {moved}) and one tab is lit after the tabs moved under the \
+         pointer, and it is the one the pointer is over: {lit:?}"
     );
 }
 
