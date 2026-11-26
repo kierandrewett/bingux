@@ -355,3 +355,11 @@ browser-tabs-closed-by-engine-notification = A tab was closed by the engine: { $
 browser-tabs-popup-origin-unknown = a page
 # Toast when a page opened a window nobody asked for. $site is the page, or a word for it.
 browser-tabs-popup-blocked-notification = Blocked a pop-up from { $site }
+
+## Navigation
+## The toolbar buttons that move a tab through its history.
+
+browser-nav-back-tooltip = Back
+browser-nav-forward-tooltip = Forward
+browser-nav-stop-tooltip = Stop loading
+browser-nav-reload-tooltip = Reload

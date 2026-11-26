@@ -16,13 +16,13 @@ impl NavButtons {
             icon_button(Icon::GoPrevious, move |_: ()| {
                 ctx.with(|browser| browser.back(key))
             })
-            .tooltip("Back")
+            .tooltip(&tr!("browser-nav-back-tooltip"))
             .enabled(can_back)
             .into(),
             icon_button(Icon::GoNext, move |_: ()| {
                 ctx.with(|browser| browser.forward(key))
             })
-            .tooltip("Forward")
+            .tooltip(&tr!("browser-nav-forward-tooltip"))
             .enabled(can_forward)
             .into(),
         ]
@@ -34,13 +34,13 @@ impl NavButtons {
             icon_button(Icon::WindowClose, move |_: ()| {
                 ctx.with(|browser| browser.stop(key))
             })
-            .tooltip("Stop loading")
+            .tooltip(&tr!("browser-nav-stop-tooltip"))
             .into()
         } else {
             icon_button(Icon::Refresh, move |_: ()| {
                 ctx.with(|browser| browser.reload(key, false))
             })
-            .tooltip("Reload")
+            .tooltip(&tr!("browser-nav-reload-tooltip"))
             .enabled(is_web)
             .into()
         }
