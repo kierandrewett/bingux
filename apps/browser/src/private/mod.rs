@@ -3,6 +3,9 @@
 //! storage and engine are not shared with this window's in any way. It starts
 //! with the settings of `profile` (this window's), which it reads and never writes.
 
+#[cfg(test)]
+mod tests;
+
 use bingux_ui::task::spawn_blocking;
 use freya::prelude::spawn;
 

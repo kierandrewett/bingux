@@ -103,3 +103,15 @@ fn a_private_window_leaves_every_file_as_it_was() {
     );
     remove_tree(&home).unwrap();
 }
+
+#[test]
+fn a_private_window_has_no_history_and_its_tabs_are_private() {
+    // History itself is the profile store's: `profile/history_tests.rs`.
+    let double = TestDoubleBackend::new();
+    let mut private = Browser::new(double, Options { private: true });
+    private.open_tab("example.com", Place::End, true);
+    private.poll();
+    assert!(!private.has_history());
+    assert_eq!(private.history_len(), 0);
+    assert!(private.tabs.active().unwrap().private);
+}

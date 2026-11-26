@@ -15,7 +15,6 @@ mod locale;
 mod model;
 mod new_tab;
 mod permissions;
-mod profile;
 mod prompts;
 mod site_info;
 #[cfg(feature = "snapshot")]
@@ -34,6 +33,7 @@ use crate::browser::{Options, Profile};
 mod error_pages;
 mod first_run;
 mod history;
+mod private;
 mod profiles;
 mod settings;
 use crate::engine::Engine;
