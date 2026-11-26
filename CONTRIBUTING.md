@@ -20,7 +20,10 @@ make check
 ```
 
 `make check` builds both Rust daemons, runs their library and QML socket tests,
-checks native text layout and OSD event routing, and verifies a staged install.
+runs the whole library suite of `crates/ui` (`cargo test --lib --features testing`,
+about 2,400 tests, a quarter of an hour on a loaded 16-core machine; the build is
+shared with the checks before it), checks native text layout and OSD event routing,
+and verifies a staged install.
 
 `make rules-check` runs every design check and reports the state of each of
 Kieran's rules: which check holds it, whether it passed in this run, what is not

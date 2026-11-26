@@ -228,7 +228,7 @@ check: doctor-build native daemons
 	$(CARGO) test --locked --manifest-path apps/taxonomy/Cargo.toml --target-dir $(CARGO_TARGET)
 	$(MAKE) layout-check overflow-check state-check
 	$(MAKE) copy-check pixel-check stability-check motion-check
-	$(CARGO) test --locked --manifest-path crates/ui/Cargo.toml --features testing --target-dir $(CARGO_TARGET) --lib slide_users_tests
+	$(CARGO) test --locked --manifest-path crates/ui/Cargo.toml --features testing --target-dir $(CARGO_TARGET) --lib
 	$(CARGO) test --locked --manifest-path services/statusd/Cargo.toml
 	$(CARGO) test --locked --manifest-path services/session/Cargo.toml
 	$(CARGO) test --locked --manifest-path services/portal/Cargo.toml --target-dir $(CARGO_TARGET)
