@@ -28,16 +28,19 @@ impl Component for NewTabPage {
         };
         let found = search::use_search_with(history::recent(RECENT), has_history);
         let page = if private {
-            status_page(Icon::NetworkWirelessEncrypted, "Private browsing")
-                .description("Nothing you do in this window is kept: no history, cookies or site data. Downloads you save stay on this computer.")
+            status_page(
+                Icon::NetworkWirelessEncrypted,
+                tr!("browser-new-tab-private-title"),
+            )
+            .description(tr!("browser-new-tab-private-description"))
         } else {
-            status_page(Icon::WebBrowser, "New tab")
-                .description("Search or enter an address in the bar above.")
+            status_page(Icon::WebBrowser, tr!("browser-new-tab-title"))
+                .description(tr!("browser-new-tab-description"))
         };
         if found.hits.is_empty() {
             return page.into_element();
         }
-        let mut group = Group::new("Recently visited".to_string());
+        let mut group = Group::new(tr!("browser-new-tab-recent-title"));
         for visit in found.hits.iter().map(history::visited) {
             let name = if visit.title.is_empty() {
                 Address::new(&visit.url).display()

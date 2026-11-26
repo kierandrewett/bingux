@@ -166,3 +166,13 @@ browser-find-match-case = Match case
 browser-find-highlight-all = Highlight all
 # Toast shown when the engine cannot search a page.
 browser-find-unavailable = Find in page is not available in this engine yet.
+
+## New tab page
+
+browser-new-tab-title = New tab
+browser-new-tab-description = Search or enter an address in the bar above.
+# The page of a new tab in a private window.
+browser-new-tab-private-title = Private browsing
+browser-new-tab-private-description = Nothing you do in this window is kept: no history, cookies or site data. Downloads you save stay on this computer.
+# Heading of the pages visited last, listed on the new tab page.
+browser-new-tab-recent-title = Recently visited
