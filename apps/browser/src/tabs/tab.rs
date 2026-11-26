@@ -10,6 +10,7 @@ use crate::address::Address;
 use crate::find::Find;
 use crate::prompts::Prompt;
 use crate::zoom::Zoom;
+use bingux_ui::prelude::tr;
 
 /// What a tab holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -99,10 +100,10 @@ impl Tab {
     /// What the strip and the window title call it.
     pub fn display_title(&self) -> String {
         match self.kind {
-            TabKind::Settings => "Settings".to_string(),
+            TabKind::Settings => tr!("browser-tab-settings-title"),
             TabKind::Web if !self.title.is_empty() => self.title.clone(),
-            TabKind::Web if self.is_blank() => "New tab".to_string(),
-            TabKind::Web if self.load.loading => "Loading\u{2026}".to_string(),
+            TabKind::Web if self.is_blank() => tr!("browser-tab-new-title"),
+            TabKind::Web if self.load.loading => tr!("browser-tab-loading-title"),
             TabKind::Web => Address::new(&self.url).display(),
         }
     }

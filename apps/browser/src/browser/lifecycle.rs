@@ -1,6 +1,7 @@
 //! The engine's life as the window sees it: it fails, and a restart opens the
 //! tabs again; a page asks for a window, and the browser says yes or no.
 
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::{Disposition, FailureCause, NewWindow, RequestId, TabId};
 
 use super::{Browser, Notice};
@@ -131,13 +132,13 @@ impl Browser {
                 self.out.fail(&error);
             }
             let from = if window.origin.is_empty() {
-                "a page".to_string()
+                tr!("browser-tabs-popup-origin-unknown")
             } else {
                 window.origin.clone()
             };
             self.out.notice(Notice {
                 error: false,
-                text: format!("Blocked a pop-up from {from}"),
+                text: tr!("browser-tabs-popup-blocked-notification", site = from),
                 action: None,
             });
             return;

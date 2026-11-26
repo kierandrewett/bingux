@@ -1,5 +1,6 @@
 //! What the engine says, turned into state.
 
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::requests::{DownloadState, Request, RequestKind};
 use bingux_ui::web_view::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
 
@@ -101,7 +102,10 @@ impl Browser {
                 if let Some(error) = error {
                     self.out.notice(Notice {
                         error: true,
-                        text: format!("A tab was closed by the engine: {error}"),
+                        text: tr!(
+                            "browser-tabs-closed-by-engine-notification",
+                            error = error.to_string()
+                        ),
                         action: None,
                     });
                 }

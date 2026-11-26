@@ -26,8 +26,10 @@ impl TabsSheet {
             + 2.0 * S4.px()
             + rows * Dim::RowSubtitle.px()
             + S4.px();
-        ctx.window
-            .open(popup("Tabs", TabsSheet { ctx }).size(Dim::PopupWidth.px(), height));
+        ctx.window.open(
+            popup(tr!("browser-tabs-sheet-title"), TabsSheet { ctx })
+                .size(Dim::PopupWidth.px(), height),
+        );
     }
 }
 
@@ -55,7 +57,7 @@ impl Component for TabsSheet {
                             icon_button(Icon::WindowClose, move |_: ()| {
                                 ctx.with(|browser| browser.close_tab(key))
                             })
-                            .tooltip("Close tab"),
+                            .tooltip(&tr!("browser-tabs-close-tooltip")),
                         );
                     let detail = Address::new(&tab.url).display();
                     if !detail.is_empty() {

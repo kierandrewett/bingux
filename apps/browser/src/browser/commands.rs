@@ -2,6 +2,7 @@
 //! engine for what it needs; none of them waits for the engine's answer, which
 //! comes back as an event.
 
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::input::{EditCommand, PageInput};
 use bingux_ui::web_view::requests::DownloadState;
 use bingux_ui::web_view::{DownloadId, TabId};
@@ -180,7 +181,8 @@ impl Browser {
     /// Open the tab closed last, where it was.
     pub fn reopen_closed(&mut self) {
         let Some(closed) = self.closed.pop() else {
-            self.out.notify("There is no closed tab to reopen.");
+            self.out
+                .notify(tr!("browser-tabs-none-to-reopen-notification"));
             return;
         };
         let key = match closed.kind {

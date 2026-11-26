@@ -334,3 +334,24 @@ browser-menu-copy-failed = { $what ->
     }
 # Entry of the page menu for selected text. $engine is the search engine, $text the selection (cut short with an ellipsis).
 browser-menu-search-for = Search { $engine } for “{ $text }”
+
+## Tabs
+## What a tab is called, the list a phone shows, and what is said when a tab or a pop-up goes.
+
+# The title of the settings tab.
+browser-tab-settings-title = Settings
+# The title of a tab that has no page yet.
+browser-tab-new-title = New tab
+# The title of a tab whose page has not given one yet.
+browser-tab-loading-title = Loading…
+# Title of the list of tabs that a phone shows.
+browser-tabs-sheet-title = Tabs
+browser-tabs-close-tooltip = Close tab
+# Toast shown by Reopen closed tab when nothing was closed.
+browser-tabs-none-to-reopen-notification = There is no closed tab to reopen.
+# Toast when the engine ends a tab itself. $error is the engine's own words.
+browser-tabs-closed-by-engine-notification = A tab was closed by the engine: { $error }
+# Said in place of the site when a pop-up came from a page with no address.
+browser-tabs-popup-origin-unknown = a page
+# Toast when a page opened a window nobody asked for. $site is the page, or a word for it.
+browser-tabs-popup-blocked-notification = Blocked a pop-up from { $site }
