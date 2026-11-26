@@ -294,6 +294,12 @@ fn enter_on_a_typed_folder_opens_it_and_on_a_chosen_row_opens_that() {
     shot.key(Key::Named(NamedKey::ArrowDown));
     shot.key(Key::Named(NamedKey::ArrowDown));
     shot.key(Key::Named(NamedKey::Enter));
+    // Something is opened from the pool, then a spell for a second thing to be opened as well.
+    assert!(
+        until(&mut shot, |_| !OPENED.with_borrow(Vec::is_empty)
+            || !FILES.with_borrow(Vec::is_empty)),
+        "Enter opened nothing"
+    );
     shot.settle(Duration::from_millis(400));
     let opened = OPENED.with_borrow(Clone::clone);
     let files = FILES.with_borrow(Clone::clone);
@@ -357,7 +363,11 @@ fn enter_opens_the_first_row_and_a_result_reveals_in_its_folder() {
     assert!(until(&mut shot, |shot| rows(shot)
         .contains(&"annual-report.pdf".to_string())));
     shot.key(Key::Named(NamedKey::Enter));
-    shot.settle(Duration::from_millis(300));
+    // The file is opened from the pool, which takes as long as the machine makes it.
+    assert!(
+        until(&mut shot, |_| !FILES.with_borrow(Vec::is_empty)),
+        "Enter opened nothing"
+    );
     assert_eq!(
         FILES.with_borrow(Clone::clone),
         [tree_.docs().join("sub/annual-report.pdf")],
@@ -367,9 +377,28 @@ fn enter_opens_the_first_row_and_a_result_reveals_in_its_folder() {
     type_text(&mut shot, "annual");
     assert!(until(&mut shot, |shot| rows(shot)
         .contains(&"annual-report.pdf".to_string())));
-    shot.settle(Duration::from_millis(500));
+    // The results stream in and the rows move as they do: the chip to press is the one of the row
+    // that is the first when they have stopped.
+    let mut last = Vec::new();
+    let mut same = 0;
+    assert!(
+        until(&mut shot, |shot| {
+            let now = rows(shot);
+            if now == last {
+                same += 1;
+            } else {
+                same = 0;
+                last = now;
+            }
+            same >= 20 && shows(shot, "Show in folder")
+        }),
+        "the results never stopped changing, or the result has no Show in folder chip"
+    );
     assert!(shot.click_text("Show in folder"));
-    shot.settle(Duration::from_millis(300));
+    assert!(
+        until(&mut shot, |_| !REVEALED.with_borrow(Vec::is_empty)),
+        "the chip showed nothing"
+    );
     assert_eq!(
         REVEALED.with_borrow(Clone::clone),
         [tree_.docs().join("sub/annual-report.pdf")]
