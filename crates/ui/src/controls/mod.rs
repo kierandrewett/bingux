@@ -113,7 +113,7 @@ pub use stat_tile::{StatTile, stat_tile};
 pub use stepper::{Stepper, stepper};
 pub use switch::{Switch, switch};
 pub use tab_tear::{Detach, StripLayout, StripProbe};
-pub use tabs::{TabItem, TabStrip, tab_strip};
+pub use tabs::{TabItem, TabStatus, TabStrip, tab_strip};
 pub use text_field::{FieldEdit, TextField, text_field};
 pub use tooltip::{TipSide, hover_tip, hover_tip_preferring, hover_tip_sized, tooltip_icon};
 pub use tree_view::{TreeNode, TreeView, tree_view};

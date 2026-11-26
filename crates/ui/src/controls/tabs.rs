@@ -94,6 +94,21 @@
 //!   window would land, counted from the right ([`StripLayout`]).
 //! * [`TabStrip::drop_target`] marks the tab a drag would drop on with the
 //!   accent, so a host can accept files on a tab.
+//! * **What a tab is doing** ([`TabItem::status`], one [`TabStatus`] at a
+//!   time): a spinner takes the icon's place while it loads and a danger glyph
+//!   when it stopped working; a speaker after the title while it plays sound
+//!   (crossed out when muted), which [`TabStrip::on_status`] makes a button
+//!   the host answers by muting the tab; an accent dot after the title when it
+//!   needs the person. A tab that is its icon only shows the speaker and the
+//!   dot as a dot on its corner.
+//! * **Pinned tabs** ([`TabItem::pinned`]) are their icon only, a
+//!   [`Dim::TabMin`] square with no close button, in a block of their own
+//!   before the others: they do not scroll, are not dragged, and move only
+//!   among themselves (Move left, Move right, Ctrl+Shift+arrows). The host
+//!   lists them first. Delete, Ctrl+W and the menu still close one.
+//! * [`TabStrip::tab_menu`] adds the host's own items (Pin tab, Mute tab,
+//!   Reload tab) to a tab's menu, above the strip's, from which a hairline
+//!   separates them.
 //! * [`TabStrip::on_detach`] lets a tab be torn off: dragged past the strip by
 //!   a strip's height ([`tab_tear`]) it leaves, and the host takes it to a
 //!   window of its own. [`TabStrip::insertion`] draws the marker of where a
@@ -123,6 +138,7 @@ use super::direction::{Direction, use_direction};
 use super::fade_text::fade_text;
 use super::path_label::text_width;
 use super::press::use_press;
+use super::progress::{SpinnerSize, spinner};
 use super::tab_close::{self, Act, Offers, RapidClose, Row};
 use super::tab_geometry::{Geometry, SEPARATOR_HEIGHT};
 use super::tab_scroll;
@@ -163,6 +179,37 @@ const MARKER_LAYER: i16 = HELD_LAYER + 1;
 /// How faint a held tab is drawn once going on would tear it off the strip.
 const ARMED_OPACITY: f32 = 0.7;
 
+/// What a tab is doing, shown on the tab itself. A tab has at most one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TabStatus {
+    /// Something is loading: a spinner takes the place of the icon.
+    Loading,
+    /// The view makes sound: a speaker after the title. Pressing it calls
+    /// [`TabStrip::on_status`] (the host mutes the tab).
+    Audio,
+    /// The view is muted: a crossed speaker after the title. Pressing it
+    /// calls [`TabStrip::on_status`].
+    Muted,
+    /// The view needs the person (a question is waiting): an accent dot
+    /// after the title.
+    Attention,
+    /// The view stopped working: a danger glyph takes the place of the icon.
+    Failed,
+}
+
+impl TabStatus {
+    /// What a tab's accessible name adds for the status.
+    fn spoken(self) -> &'static str {
+        match self {
+            TabStatus::Loading => "loading",
+            TabStatus::Audio => "playing sound",
+            TabStatus::Muted => "muted",
+            TabStatus::Attention => "needs attention",
+            TabStatus::Failed => "stopped working",
+        }
+    }
+}
+
 /// One tab. `id` names it for as long as it exists, whatever its place.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TabItem {
@@ -172,6 +219,11 @@ pub struct TabItem {
     /// The document in the tab has changes that are not in its file: a dot
     /// before the title. Pass `Document::is_unsaved()`.
     pub edited: bool,
+    /// A pinned tab is its icon and nothing else, with no close button, in
+    /// the block before the others. The host lists the pinned tabs first.
+    pub pinned: bool,
+    /// What the tab is doing.
+    pub status: Option<TabStatus>,
 }
 
 impl TabItem {
@@ -181,6 +233,8 @@ impl TabItem {
             title: title.into(),
             icon: None,
             edited: false,
+            pinned: false,
+            status: None,
         }
     }
 
@@ -194,6 +248,19 @@ impl TabItem {
     /// not in its file. The title itself stays plain.
     pub fn edited(mut self, edited: bool) -> Self {
         self.edited = edited;
+        self
+    }
+
+    /// Pinned: the tab shows only its icon, before the others. Give it one,
+    /// or it is empty.
+    pub fn pinned(mut self, pinned: bool) -> Self {
+        self.pinned = pinned;
+        self
+    }
+
+    /// What the tab is doing.
+    pub fn status(mut self, status: impl Into<Option<TabStatus>>) -> Self {
+        self.status = status.into();
         self
     }
 }
@@ -216,6 +283,8 @@ pub fn tab_strip(tabs: Vec<TabItem>, selected: u64) -> TabStrip {
         on_detach: None,
         insertion: None,
         probe: None,
+        menus: Vec::new(),
+        on_status: None,
     }
 }
 
@@ -236,6 +305,9 @@ pub struct TabStrip {
     on_detach: Option<EventHandler<Detach>>,
     insertion: Option<usize>,
     probe: Option<StripProbe>,
+    /// The host's own items for a tab's menu, by tab id.
+    menus: Vec<(u64, Vec<MenuItem>)>,
+    on_status: Option<EventHandler<u64>>,
 }
 
 impl TabStrip {
@@ -328,6 +400,29 @@ impl TabStrip {
         self.probe = Some(probe.clone());
         self
     }
+
+    /// Items the host adds to the menu of tab `id` (a right click, or a finger
+    /// held on it), above the strip's own, from which a hairline separates
+    /// them: Pin tab, Mute tab, Reload tab.
+    pub fn tab_menu(mut self, id: u64, items: Vec<MenuItem>) -> Self {
+        self.menus.push((id, items));
+        self
+    }
+
+    /// The speaker of an [`TabStatus::Audio`] or [`TabStatus::Muted`] tab was
+    /// pressed. Without a handler the speaker is only a picture.
+    pub fn on_status(mut self, handler: impl Into<EventHandler<u64>>) -> Self {
+        self.on_status = Some(handler.into());
+        self
+    }
+
+    /// The host's items for the menu of tab `id`.
+    fn host_items(&self, id: u64) -> &[MenuItem] {
+        self.menus
+            .iter()
+            .find(|(tab, _)| *tab == id)
+            .map_or(&[], |(_, items)| items.as_slice())
+    }
 }
 
 // ---- Layout ----------------------------------------------------------------
@@ -404,16 +499,22 @@ fn fit(
 }
 
 /// The width tabs have with room to spare: what the widest of the staying tabs
-/// needs for its icon, whole title and close button, no more than the cap. One
-/// width for all of them keeps the stride of the strip even, which a drag's
-/// slide, the scroll and the rapid close all rely on.
+/// needs for its icon, whole title, status mark and close button, no more than
+/// the cap. One width for all of them keeps the stride of the strip even, which
+/// a drag's slide, the scroll and the rapid close all rely on.
 fn natural_width(entries: &[Entry], geometry: Geometry, measure: &dyn Fn(&str) -> f32) -> f32 {
     entries
         .iter()
         .filter(|entry| entry.life != Life::Leaving)
         .map(|entry| {
+            // The speaker after the title is a close button's size, the dot a dot's.
+            let mark = match entry.item.status {
+                Some(TabStatus::Audio | TabStatus::Muted) => geometry.close + geometry.part_gap,
+                Some(TabStatus::Attention) => geometry.dot + geometry.part_gap,
+                _ => 0.0,
+            };
             geometry.natural(
-                measure(&entry.item.title),
+                measure(&entry.item.title) + mark,
                 entry.item.icon.is_some(),
                 entry.item.edited,
             )
@@ -542,8 +643,11 @@ struct Shared {
     /// The tab a press went down on, until the pointer has travelled far
     /// enough for it to be picked up.
     pending: Cell<Option<usize>>,
-    /// The ids of the live tabs, in order.
+    /// The ids of the live tabs that scroll and drag (the unpinned ones), in
+    /// order.
     ids: RefCell<Vec<u64>>,
+    /// How many live tabs are pinned: the host's places count them first.
+    pinned: Cell<usize>,
     on_reorder: RefCell<Option<EventHandler<(u64, usize)>>>,
     /// One tab's body width, and the gap between bodies.
     tab: Cell<f32>,
@@ -735,7 +839,7 @@ impl Env {
         if !self.drag.is_active_now() || self.busy() {
             return;
         }
-        if self.shared.ids.borrow().len() < 2 {
+        if self.lone() {
             self.check_tear(released);
             return;
         }
@@ -811,7 +915,7 @@ impl Env {
         }
         let (top, bottom) = self.shared.bounds.get();
         let mut gate = self.shared.gate.get();
-        let lone = self.shared.ids.borrow().len() < 2;
+        let lone = self.lone();
         let id = if lone {
             self.shared.ids.borrow().first().copied()
         } else {
@@ -940,6 +1044,11 @@ impl Env {
         self.busy() || self.shared.pending.get().is_some()
     }
 
+    /// Whether the strip has one tab in all, which a drag moves as a window.
+    fn lone(&self) -> bool {
+        self.shared.ids.borrow().len() + self.shared.pinned.get() < 2
+    }
+
     fn finish(&self, done: Done) {
         let Done::Moved { from, to } = done else {
             return;
@@ -947,7 +1056,8 @@ impl Env {
         let id = self.shared.ids.borrow().get(from).copied();
         let handler = self.shared.on_reorder.borrow().clone();
         if let (Some(id), Some(handler)) = (id, handler) {
-            handler.call((id, to));
+            // The host's list has the pinned tabs first.
+            handler.call((id, to + self.shared.pinned.get()));
         }
     }
 
@@ -997,15 +1107,36 @@ struct MenuHandlers {
     reorder: Option<EventHandler<(u64, usize)>>,
 }
 
-/// The menu of the tab `id`, which is at `place` among `ids`.
+/// The menu of the tab `id`, which is at `place` among `ids`: the host's own
+/// `items` first, then the strip's. A tab moves only among its kind, the
+/// places in `kind` (the pinned tabs, or the others).
 fn tab_menu(
     id: u64,
     place: usize,
     ids: &[u64],
+    kind: std::ops::Range<usize>,
     offers: Offers,
     handlers: &MenuHandlers,
+    items: &[MenuItem],
 ) -> Vec<MenuItem> {
-    tab_close::menu_rows(place, ids.len(), offers)
+    let mut menu: Vec<MenuItem> = items.to_vec();
+    if !menu.is_empty() {
+        menu.push(menu_separator());
+    }
+    let rows: Vec<Row> = tab_close::menu_rows(place, ids.len(), offers)
+        .into_iter()
+        .filter(|row| match row {
+            Row::Item {
+                act: Act::MoveLeft, ..
+            } => place > kind.start,
+            Row::Item {
+                act: Act::MoveRight,
+                ..
+            } => place + 1 < kind.end,
+            _ => true,
+        })
+        .collect();
+    let strip = rows
         .into_iter()
         .map(|row| match row {
             Row::Separator => menu_separator(),
@@ -1063,7 +1194,13 @@ fn tab_menu(
                 if enabled { item } else { item.disabled() }
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    menu.extend(strip);
+    // A group the kind emptied leaves a separator at the end.
+    while menu.last().is_some_and(|item| item.separator) {
+        menu.pop();
+    }
+    menu
 }
 
 impl Component for TabStrip {
@@ -1107,6 +1244,7 @@ impl Component for TabStrip {
                 reorder: RefCell::new(Reorder::new(Indicate::Slide)),
                 pending: Cell::new(None),
                 ids: RefCell::new(Vec::new()),
+                pinned: Cell::new(0),
                 on_reorder: RefCell::new(None),
                 tab: Cell::new(0.0),
                 gap: Cell::new(0.0),
@@ -1138,7 +1276,7 @@ impl Component for TabStrip {
         *shared.on_reorder.borrow_mut() = self.on_reorder.clone();
         *shared.on_detach.borrow_mut() = self.on_detach.clone();
 
-        let entries = {
+        let all = {
             let mut memory = memory.borrow_mut();
             let animate = memory.mounted;
             memory.mounted = true;
@@ -1148,16 +1286,31 @@ impl Component for TabStrip {
             memory.entries.clone()
         };
         let epoch = memory.borrow().epoch;
-        let a11y_ids: Vec<AccessibilityId> = {
+        // The pinned tabs stand in a block of their own before the others: they
+        // do not scroll, drag or grow in and out. Everything below that works on
+        // `entries` works on the others.
+        let pinned: Vec<Entry> = all
+            .iter()
+            .filter(|entry| entry.item.pinned && entry.life != Life::Leaving)
+            .cloned()
+            .collect();
+        let entries: Vec<Entry> = all
+            .iter()
+            .filter(|entry| !entry.item.pinned)
+            .cloned()
+            .collect();
+        let (a11y_ids, pinned_a11y): (Vec<AccessibilityId>, Vec<AccessibilityId>) = {
             let mut map = ids.borrow_mut();
-            map.retain(|id, _| entries.iter().any(|entry| entry.item.id == *id));
-            entries
-                .iter()
-                .map(|entry| {
-                    *map.entry(entry.item.id)
-                        .or_insert_with(AccessibilityId::new_unique)
-                })
-                .collect()
+            map.retain(|id, _| all.iter().any(|entry| entry.item.id == *id));
+            let mut of = |list: &[Entry]| -> Vec<AccessibilityId> {
+                list.iter()
+                    .map(|entry| {
+                        *map.entry(entry.item.id)
+                            .or_insert_with(AccessibilityId::new_unique)
+                    })
+                    .collect()
+            };
+            (of(&entries), of(&pinned))
         };
 
         // The motion's clock runs from 0 to 1 once for each epoch. Until the
@@ -1214,6 +1367,10 @@ impl Component for TabStrip {
         };
 
         let add = self.on_new.is_some();
+        // The pinned block's width, each tab followed by the gap: the others
+        // share what is left.
+        let pin = geometry.min;
+        let pinned_width = pinned.len() as f32 * (pin + geometry.gap());
         let staying = entries
             .iter()
             .filter(|entry| entry.life != Life::Leaving)
@@ -1222,7 +1379,7 @@ impl Component for TabStrip {
         let natural_tab = natural_width(&entries, geometry, &|title| text_width(title, CAPTION));
         let natural = fit(
             geometry,
-            available().unwrap_or(Dim::Page.px()),
+            (available().unwrap_or(Dim::Page.px()) - pinned_width).max(0.0),
             staying,
             effective,
             add,
@@ -1310,7 +1467,7 @@ impl Component for TabStrip {
         // After a close from the keyboard, the selection's new tab takes the focus.
         {
             let wants = refocus.clone();
-            let deps = (self.selected, selected_index.map(|index| a11y_ids[index]));
+            let deps = (self.selected, ids.borrow().get(&self.selected).copied());
             use_side_effect_with_deps(
                 &deps,
                 move |&(_, focus_id): &(u64, Option<AccessibilityId>)| {
@@ -1329,6 +1486,13 @@ impl Component for TabStrip {
             .collect();
         let live_ids: Vec<u64> = live.iter().map(|entry| entry.item.id).collect();
         *shared.ids.borrow_mut() = live_ids.clone();
+        shared.pinned.set(pinned.len());
+        // Every live tab in the host's order: the pinned ones, then the others.
+        let all_ids: Vec<u64> = pinned
+            .iter()
+            .map(|entry| entry.item.id)
+            .chain(live_ids.iter().copied())
+            .collect();
         let reorderable = self.on_reorder.is_some();
         let env = Env {
             shared: shared.clone(),
@@ -1374,6 +1538,18 @@ impl Component for TabStrip {
         let mut placement: Vec<(f32, f32)> = Vec::with_capacity(entries.len());
         let mut spans: Vec<(f32, f32)> = Vec::with_capacity(entries.len());
         let mut bodies: Vec<(f32, f32, u64)> = Vec::with_capacity(entries.len());
+        // The pinned block is at the rail's start edge: its left in a strip that
+        // reads left to right, its right in one that reads from the right.
+        for (index, entry) in pinned.iter().enumerate() {
+            let start = index as f32 * (pin + geometry.gap());
+            let left = if rtl {
+                rail_bounds.max_x() - start - pin
+            } else {
+                rail_bounds.min_x() + start
+            };
+            spans.push((left, left + pin));
+            bodies.push((left, left + pin, entry.item.id));
+        }
         for entry in &entries {
             let presence = entry.presence(progress);
             let body = fit.tab * presence;
@@ -1431,9 +1607,15 @@ impl Component for TabStrip {
                 .unwrap_or(0.0);
             let held = place.is_some() && place == current_view.held;
             let menu = match place {
-                Some(place) if entry.life != Life::Leaving => {
-                    tab_menu(id, place, &live_ids, offers, &menu_handlers)
-                }
+                Some(place) if entry.life != Life::Leaving => tab_menu(
+                    id,
+                    pinned.len() + place,
+                    &all_ids,
+                    pinned.len()..all_ids.len(),
+                    offers,
+                    &menu_handlers,
+                    self.host_items(id),
+                ),
                 _ => Vec::new(),
             };
             // Its place in the content in reading order: the engine mirrors an absolute
@@ -1458,6 +1640,7 @@ impl Component for TabStrip {
                 menu,
                 on_select: self.on_select.clone(),
                 on_close: pointer_close.clone(),
+                on_status: self.on_status.clone(),
                 on_down: {
                     let mut pressed = pressed;
                     EventHandler::new(move |tab: u64| pressed.set_if_modified(Some(tab)))
@@ -1477,6 +1660,43 @@ impl Component for TabStrip {
             } else {
                 row_children.push(tab);
             }
+        }
+        // The pinned tabs: a block of their own, their icon only, never dragged.
+        let mut pinned_children: Vec<Element> = Vec::with_capacity(pinned.len());
+        for (index, entry) in pinned.iter().enumerate() {
+            let id = entry.item.id;
+            pinned_children.push(Element::from(Tab {
+                item: entry.item.clone(),
+                geometry,
+                width: pin,
+                left: index as f32 * (pin + geometry.gap()),
+                presence: 1.0,
+                icon_only: true,
+                selected: id == self.selected,
+                held: false,
+                armed: false,
+                drop_target: self.drop_target == Some(id),
+                hover: under == Some(id),
+                pressed: pressed_now == Some(id),
+                menu: tab_menu(
+                    id,
+                    index,
+                    &all_ids,
+                    0..pinned.len(),
+                    offers,
+                    &menu_handlers,
+                    self.host_items(id),
+                ),
+                on_select: self.on_select.clone(),
+                on_close: self.on_close.clone(),
+                on_status: self.on_status.clone(),
+                on_down: {
+                    let mut pressed = pressed;
+                    EventHandler::new(move |tab: u64| pressed.set_if_modified(Some(tab)))
+                },
+                on_arm: None,
+                a11y_id: pinned_a11y[index],
+            }));
         }
         // The faint hairline between two tabs that are neither chosen nor under the
         // pointer, nor held, nor arriving or leaving: a quiet mark that they are
@@ -1545,12 +1765,15 @@ impl Component for TabStrip {
             });
         }
 
-        let key_ids: Vec<(u64, AccessibilityId)> = entries
+        // The keyboard walks every tab in the host's order: the pinned ones first.
+        let key_ids: Vec<(u64, AccessibilityId)> = pinned
             .iter()
-            .zip(&a11y_ids)
+            .zip(&pinned_a11y)
+            .chain(entries.iter().zip(&a11y_ids))
             .filter(|(entry, _)| entry.life != Life::Leaving)
             .map(|(entry, a11y)| (entry.item.id, *a11y))
             .collect();
+        let pinned_count = pinned.len();
         let (on_select, on_close, on_new, on_reorder, on_reopen, can_reopen) = (
             self.on_select.clone(),
             self.on_close.clone(),
@@ -1562,10 +1785,10 @@ impl Component for TabStrip {
         let selected = self.selected;
         let wants_focus = refocus.clone();
         let new_rapid = rapid.clone();
-        let row = rect()
-            .height(Size::px(geometry.strip))
-            .width(Size::px(content))
-            .on_key_down(move |event: Event<KeyboardEventData>| {
+        // The keys of the strip, heard on the pinned block and on the row of the
+        // others alike.
+        let on_keys: Rc<dyn Fn(Event<KeyboardEventData>)> =
+            Rc::new(move |event: Event<KeyboardEventData>| {
                 let Some(index) = key_ids.iter().position(|(id, _)| *id == selected) else {
                     return;
                 };
@@ -1589,6 +1812,8 @@ impl Component for TabStrip {
                         } else {
                             (index < last).then_some(index + 1)
                         };
+                        // A tab moves among its kind: pinned among the pinned.
+                        let to = to.filter(|to| (*to < pinned_count) == (index < pinned_count));
                         if let (Some(to), Some(on_reorder)) = (to, &on_reorder) {
                             on_reorder.call((selected, to));
                         }
@@ -1634,31 +1859,37 @@ impl Component for TabStrip {
                     on_select.call(key_ids[next].0);
                 }
                 key_ids[next].1.request_focus();
-            })
-            .children(row_children)
-            .maybe_child(marker.map(|at| {
-                let width = Dim::Indicator.px();
-                rect()
-                    .key("insertion")
-                    .component("TabInsertion")
-                    .position(
-                        Position::new_absolute()
-                            .top(geometry.top)
-                            .left(tab_scroll::place(
+            });
+        let row =
+            rect()
+                .height(Size::px(geometry.strip))
+                .width(Size::px(content))
+                .on_key_down({
+                    let on_keys = on_keys.clone();
+                    move |event: Event<KeyboardEventData>| on_keys(event)
+                })
+                .children(row_children)
+                .maybe_child(marker.map(|at| {
+                    let width = Dim::Indicator.px();
+                    rect()
+                        .key("insertion")
+                        .component("TabInsertion")
+                        .position(Position::new_absolute().top(geometry.top).left(
+                            tab_scroll::place(
                                 (at - width / 2.0).clamp(0.0, (content - width).max(0.0)),
                                 width,
                                 content,
                                 direction,
-                            )),
-                    )
-                    .layer(Layer::Relative(MARKER_LAYER))
-                    .interactive(false)
-                    .height(Size::px(geometry.tab))
-                    .tw(
-                        &tokens,
-                        &[w(Dim::Indicator), rounded(Radius::Mark), bg(Paint::Accent)],
-                    )
-            }));
+                            ),
+                        ))
+                        .layer(Layer::Relative(MARKER_LAYER))
+                        .interactive(false)
+                        .height(Size::px(geometry.tab))
+                        .tw(
+                            &tokens,
+                            &[w(Dim::Indicator), rounded(Radius::Mark), bg(Paint::Accent)],
+                        )
+                }));
 
         // ---- The region the tabs scroll in, with fades where they continue
         // A fade is written at the start or the end edge as for left to right; the
@@ -1719,8 +1950,9 @@ impl Component for TabStrip {
         // (the default of an icon button); the cluster has the inset before and
         // after them, so a button is the same distance from the strip's top and
         // bottom, from the last tab and from the strip's trailing edge.
-        let all_tabs: Vec<MenuItem> = live
+        let all_tabs: Vec<MenuItem> = pinned
             .iter()
+            .chain(live.iter().copied())
             .map(|entry| {
                 let on_select = self.on_select.clone();
                 let id = entry.item.id;
@@ -1793,13 +2025,25 @@ impl Component for TabStrip {
         // ---- Drag to reorder: the strip tracks the pointer while one is on.
         let release = env.clone();
         let cancel = env.clone();
-        let mut ends = vec![Element::from(region)];
+        // The pinned block stands before the region of the others. It does not
+        // scroll; it hears the strip's keys too.
+        let pinned_row = (!pinned_children.is_empty()).then(|| {
+            rect()
+                .component("PinnedTabs")
+                .width(Size::px(pinned_width))
+                .height(Size::px(geometry.strip))
+                .on_key_down(move |event: Event<KeyboardEventData>| on_keys(event))
+                .children(pinned_children)
+                .into_element()
+        });
+        let mut ends: Vec<Element> = pinned_row.into_iter().collect();
+        ends.push(Element::from(region));
         ends.extend(cluster);
         let strip = rect()
             .component("TabStrip")
             .a11y_role(AccessibilityRole::TabList)
             .a11y_alt("Tabs")
-            .width(Size::px(fit.rail))
+            .width(Size::px(fit.rail + pinned_width))
             .height(Size::px(geometry.strip))
             .tw(&tokens, &[flex_row()])
             .on_sized(move |event: Event<SizedEventData>| {
@@ -1979,6 +2223,8 @@ struct Tab {
     on_select: EventHandler<u64>,
     /// The tab was closed with the pointer (its button or a middle click).
     on_close: EventHandler<u64>,
+    /// The speaker of a tab that plays sound was pressed.
+    on_status: Option<EventHandler<u64>>,
     /// A press went down on the tab.
     on_down: EventHandler<u64>,
     /// A press with the primary mouse button went down at this window point;
@@ -2041,7 +2287,10 @@ impl Component for Tab {
         // has a title beside it. A tab that is its icon only has no room for a
         // button it does not need: it shows one on the selected tab and under
         // the pointer, and nowhere else.
-        let close_alpha = if self.selected {
+        // A pinned tab has no close button: Delete, Ctrl+W and its menu close it.
+        let close_alpha = if self.item.pinned {
+            0.0
+        } else if self.selected {
             1.0
         } else if self.icon_only || (mouse && geometry.top > 0.0) {
             glow
@@ -2068,14 +2317,26 @@ impl Component for Tab {
         };
         let ink = if lit { Ink::Text } else { Ink::Muted };
 
-        let mut parts: Vec<Element> = Vec::with_capacity(4);
-        if let (Some(icon), false) = (self.item.icon, close_instead) {
-            parts.push(
-                rect()
-                    .key("icon")
-                    .child(icons::icon(icon, IconSize::Control, ink.color(&tokens)))
-                    .into_element(),
-            );
+        let mut parts: Vec<Element> = Vec::with_capacity(5);
+        // What stands first: a spinner while the tab loads, a danger glyph when
+        // it stopped working, else its icon.
+        let lead: Option<Element> = match self.item.status {
+            Some(TabStatus::Loading) => Some(spinner(SpinnerSize::Small).into()),
+            Some(TabStatus::Failed) => Some(
+                icons::icon(
+                    Icon::DialogError,
+                    IconSize::Control,
+                    Ink::Danger.color(&tokens),
+                )
+                .into(),
+            ),
+            _ => self
+                .item
+                .icon
+                .map(|icon| icons::icon(icon, IconSize::Control, ink.color(&tokens)).into()),
+        };
+        if let (Some(lead), false) = (lead, close_instead) {
+            parts.push(rect().key("icon").child(lead).into_element());
         }
         if self.item.edited {
             parts.push(
@@ -2100,6 +2361,64 @@ impl Component for Tab {
                     .grow(),
             ));
         }
+        // What stands after the title: the speaker, or the attention dot. A tab
+        // that is its icon only has no room for either: a dot on its corner.
+        let status = self.item.status;
+        if !self.icon_only {
+            match status {
+                Some(TabStatus::Audio | TabStatus::Muted) => {
+                    parts.push(Element::from(StatusMark {
+                        id,
+                        muted: status == Some(TabStatus::Muted),
+                        title: self.item.title.clone(),
+                        on_status: self.on_status.clone(),
+                        size: Dim::TabClose,
+                    }))
+                }
+                Some(TabStatus::Attention) => parts.push(
+                    rect()
+                        .key("attention")
+                        .component("TabAttention")
+                        .a11y_hidden()
+                        .tw(
+                            &tokens,
+                            &[
+                                w(Dim::Dot),
+                                h(Dim::Dot),
+                                rounded(Radius::Pill),
+                                bg(Paint::Accent),
+                            ],
+                        )
+                        .into_element(),
+                ),
+                _ => {}
+            }
+        }
+        let corner_dot = match status {
+            Some(TabStatus::Audio | TabStatus::Muted | TabStatus::Attention) if self.icon_only => {
+                Some(
+                    rect()
+                        .key("corner")
+                        .component("TabDot")
+                        .a11y_hidden()
+                        .interactive(false)
+                        .position(Position::new_absolute().top(S0_5.px()).right(S0_5.px()))
+                        .tw(
+                            &tokens,
+                            &[
+                                w(Dim::Dot),
+                                h(Dim::Dot),
+                                rounded(Radius::Pill),
+                                bg(match status {
+                                    Some(TabStatus::Muted) => Paint::Muted,
+                                    _ => Paint::Accent,
+                                }),
+                            ],
+                        ),
+                )
+            }
+            _ => None,
+        };
         let close = Element::from(CloseTab {
             id,
             alpha: close_alpha,
@@ -2127,10 +2446,16 @@ impl Component for Tab {
             .a11y_id(a11y_id)
             .a11y_focusable(self.selected)
             .a11y_role(AccessibilityRole::Tab)
-            .a11y_alt(if self.item.edited {
-                format!("{}, unsaved changes", self.item.title)
-            } else {
-                self.item.title.clone()
+            .a11y_alt({
+                let mut name = self.item.title.clone();
+                if self.item.edited {
+                    name.push_str(", unsaved changes");
+                }
+                if let Some(status) = status {
+                    name.push_str(", ");
+                    name.push_str(status.spoken());
+                }
+                name
             })
             .a11y_builder(|builder| builder.set_selected(self.selected))
             .tw(&tokens, &[w_full(), h_full(), rounded(Radius::Tab), clip()])
@@ -2213,7 +2538,8 @@ impl Component for Tab {
                     )
                     .padding(padding)
                     .children(parts),
-            );
+            )
+            .maybe_child(corner_dot);
 
         let body = face
             .key("body")
@@ -2292,6 +2618,60 @@ impl Component for CloseTab {
     }
 }
 
+/// The speaker on a tab that plays sound, crossed out when the tab is muted:
+/// the size of the close button, after the title. With a handler it is a
+/// button the host answers by muting the tab, and it names what it will do
+/// ("Mute" while the tab plays, "Unmute" when it is muted); without one it is
+/// only a picture.
+#[derive(PartialEq)]
+struct StatusMark {
+    id: u64,
+    muted: bool,
+    title: String,
+    on_status: Option<EventHandler<u64>>,
+    size: Dim,
+}
+
+impl Component for StatusMark {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let id = self.id;
+        let icon = if self.muted {
+            Icon::AudioVolumeMuted
+        } else {
+            Icon::AudioVolumeMedium
+        };
+        // A press on the speaker is the speaker's: it must not select the tab or
+        // begin dragging it.
+        let slot = rect()
+            .component("TabSound")
+            .width(Size::px(self.size.px()))
+            .height(Size::px(self.size.px()))
+            .tw(&tokens, &[flex_row(), center()])
+            .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation());
+        let Some(on_status) = self.on_status.clone() else {
+            return slot
+                .a11y_alt(if self.muted { "Muted" } else { "Playing sound" })
+                .child(icons::icon(icon, IconSize::Mark, Ink::Muted.color(&tokens)))
+                .into_element();
+        };
+        let name = if self.muted {
+            format!("Unmute {}", self.title)
+        } else {
+            format!("Mute {}", self.title)
+        };
+        slot.child(
+            icon_button(icon, move |_| on_status.call(id))
+                .size(self.size)
+                .glyph(IconSize::Mark)
+                .radius(Radius::Pill)
+                .tooltip(&name)
+                .pointer_only(),
+        )
+        .into_element()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2300,6 +2680,55 @@ mod tests {
 
     fn item(id: u64) -> TabItem {
         TabItem::new(id, format!("Tab {id}"))
+    }
+
+    fn labels(menu: &[MenuItem]) -> Vec<&str> {
+        menu.iter()
+            .map(|item| {
+                if item.separator {
+                    "-"
+                } else {
+                    item.label.as_str()
+                }
+            })
+            .collect()
+    }
+
+    fn handlers() -> MenuHandlers {
+        MenuHandlers {
+            close: EventHandler::new(|_: u64| {}),
+            close_many: None,
+            duplicate: None,
+            reopen: None,
+            reorder: Some(EventHandler::new(|_: (u64, usize)| {})),
+        }
+    }
+
+    const REORDER: Offers = Offers {
+        close_many: false,
+        duplicate: false,
+        reopen: false,
+        can_reopen: false,
+        reorder: true,
+    };
+
+    #[test]
+    fn a_tab_moves_only_among_its_kind_and_the_hosts_items_come_first() {
+        // Two pinned tabs (1, 2), then three others (3, 4, 5).
+        let ids = [1, 2, 3, 4, 5];
+        let host = vec![menu_item("Pin tab", |_| {})];
+        // The last pinned tab cannot move right into the others.
+        let menu = tab_menu(2, 1, &ids, 0..2, REORDER, &handlers(), &[]);
+        assert_eq!(labels(&menu), ["Close tab", "-", "Move left"]);
+        // The first of the others cannot move left into the pinned ones.
+        let menu = tab_menu(3, 2, &ids, 2..5, REORDER, &handlers(), &host);
+        assert_eq!(
+            labels(&menu),
+            ["Pin tab", "-", "Close tab", "-", "Move right"]
+        );
+        // A lone pinned tab has no move at all, and no separator left over.
+        let menu = tab_menu(1, 0, &[1, 2], 0..1, REORDER, &handlers(), &[]);
+        assert_eq!(labels(&menu), ["Close tab"]);
     }
 
     #[test]

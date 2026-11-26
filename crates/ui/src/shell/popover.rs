@@ -113,7 +113,11 @@ impl Component for Popover {
         )
         .size(width, measured().unwrap_or(FIRST_HEIGHT))
         .on_dismiss(self.on_dismiss.clone());
-        if self.attached { panel.nested() } else { panel }
+        if self.attached {
+            panel.nested(0)
+        } else {
+            panel
+        }
     }
 }
 
@@ -123,7 +127,11 @@ impl Component for Popover {
 /// fill), so a list of suggestions reads as the menus do. The row the keys
 /// have reached is `highlighted`; the owner of the field moves it, since the
 /// keyboard stays in the field.
-pub fn suggestion_row(icon: Icon, title: impl Into<String>, detail: impl Into<String>) -> SuggestionRow {
+pub fn suggestion_row(
+    icon: Icon,
+    title: impl Into<String>,
+    detail: impl Into<String>,
+) -> SuggestionRow {
     SuggestionRow {
         icon,
         title: title.into(),
@@ -166,7 +174,11 @@ impl Component for SuggestionRow {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let mut hovering = use_state(|| false);
-        let (on_press, on_enter, on_leave) = (self.on_press.clone(), self.on_hover.clone(), self.on_hover.clone());
+        let (on_press, on_enter, on_leave) = (
+            self.on_press.clone(),
+            self.on_hover.clone(),
+            self.on_hover.clone(),
+        );
         let name = if self.detail.is_empty() {
             self.title.clone()
         } else {
@@ -178,14 +190,25 @@ impl Component for SuggestionRow {
             .width(Size::flex(1.0))
             .span(BODY.in_ink(Ink::Text).span(&tokens, self.title.clone()));
         if !self.detail.is_empty() {
-            label = label.span(BODY.in_ink(Ink::Muted).span(&tokens, format!("  {}", self.detail)));
+            label = label.span(
+                BODY.in_ink(Ink::Muted)
+                    .span(&tokens, format!("  {}", self.detail)),
+            );
         }
         rect()
             .component("SuggestionRow")
             .a11y_role(AccessibilityRole::MenuItem)
             .a11y_alt(name)
             .tw(&tokens, MENU_ITEM)
-            .tw(&tokens, &[surface(Paint::Transparent, hovering() || self.highlighted, false, self.highlighted)])
+            .tw(
+                &tokens,
+                &[surface(
+                    Paint::Transparent,
+                    hovering() || self.highlighted,
+                    false,
+                    self.highlighted,
+                )],
+            )
             .on_pointer_enter(move |_| {
                 hovering.set(true);
                 on_enter.call(true);
@@ -200,7 +223,11 @@ impl Component for SuggestionRow {
                 event.stop_propagation();
                 on_press.call(());
             })
-            .child(icons::icon(self.icon, IconSize::Control, Paint::Muted.color(&tokens)))
+            .child(icons::icon(
+                self.icon,
+                IconSize::Control,
+                Paint::Muted.color(&tokens),
+            ))
             .child(label)
     }
 }

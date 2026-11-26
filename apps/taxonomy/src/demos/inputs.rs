@@ -688,6 +688,39 @@ pub const TABS: &[Spec] = &[
         )
     })
     .page(FRAME_HEIGHT),
+    Spec::forced("Pinned tabs, and what a tab can be doing", || {
+        framed(
+            tab_strip(
+                vec![
+                    TabItem::new(1, "Mail")
+                        .icon(Icon::Folder)
+                        .pinned(true)
+                        .status(TabStatus::Attention),
+                    TabItem::new(2, "Calendar").icon(Icon::Computer).pinned(true),
+                    TabItem::new(3, "Opening a page")
+                        .icon(Icon::DocumentOpen)
+                        .status(TabStatus::Loading),
+                    TabItem::new(4, "Playing")
+                        .icon(Icon::DocumentOpen)
+                        .status(TabStatus::Audio),
+                    TabItem::new(5, "Muted")
+                        .icon(Icon::DocumentOpen)
+                        .status(TabStatus::Muted),
+                    TabItem::new(6, "Crashed")
+                        .icon(Icon::DocumentOpen)
+                        .status(TabStatus::Failed),
+                    TabItem::new(7, "Needs you")
+                        .icon(Icon::DocumentOpen)
+                        .status(TabStatus::Attention),
+                ],
+                3,
+            )
+            .on_new(|_| {})
+            .on_status(|_| {})
+            .tab_menu(3, vec![menu_item("Pin tab", |_| {})]),
+        )
+    })
+    .page(FRAME_HEIGHT),
     Spec::forced("A lone tab shows its close button too", || {
         framed(tab_strip(vec![TabItem::new(1, "Home")], 1).on_new(|_| {}))
     })
