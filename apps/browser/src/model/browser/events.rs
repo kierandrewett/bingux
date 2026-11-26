@@ -8,13 +8,15 @@ use crate::model::shortcuts::Command;
 use crate::model::tab::Prompt;
 
 impl Browser {
-    /// Take in what the engine has said since the last call.
+    /// Take in what the engine and the profile's store have said since the
+    /// last call.
     pub fn poll(&mut self) {
         let mut events = Vec::new();
         self.backend().poll_events(&mut events);
         for event in events {
             self.apply(event);
         }
+        self.take_store_events();
     }
 
     /// Take in one event.

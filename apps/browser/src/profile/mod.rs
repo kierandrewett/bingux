@@ -14,6 +14,9 @@ pub mod open;
 pub mod places;
 pub mod registry;
 pub mod settings;
+pub mod store;
 
 #[cfg(test)]
 mod registry_tests;
+#[cfg(test)]
+mod store_tests;

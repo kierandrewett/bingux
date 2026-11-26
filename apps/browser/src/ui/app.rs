@@ -137,9 +137,9 @@ impl Component for Content {
         };
         #[cfg(feature = "snapshot")]
         crate::snapshot_mode::publish(ctx);
-
-        // The engine's events wake the window: it takes them in and sleeps
-        // again. The first tabs open once the window exists.
+        // The engine's events and the profile store's wake the window: it
+        // takes them in and sleeps again. The first tabs open once the window
+        // exists.
         let first: Vec<String> = {
             let launched = opened_by(&location);
             if launched.is_empty() {
@@ -153,6 +153,7 @@ impl Component for Content {
             move || {
                 let signal = Signal::new();
                 engine.0.set_waker(signal.waker());
+                ctx.browser.peek().set_store_waker(signal.waker());
                 spawn(async move {
                     ctx.with(|browser| {
                         browser.poll();

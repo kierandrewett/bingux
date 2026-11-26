@@ -8,6 +8,7 @@
 
 mod commands;
 mod events;
+mod kept;
 mod lifecycle;
 mod prompts;
 
@@ -22,11 +23,13 @@ use bingux_ui::web_view::{
 use super::address::{ENGINES, SearchEngine};
 use super::downloads::Downloads;
 use super::history::History;
+use super::keeping::{Keeping, NotSaved};
 use super::permissions::Permissions;
 use super::shortcuts::Command;
 use super::tab::{Tab, TabKind};
 use super::tabs::TabList;
 use crate::profile::settings::Settings;
+use crate::profile::store::Store;
 
 /// Where the engine is.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -108,13 +111,32 @@ pub struct ViewSize {
     pub scale: f32,
 }
 
-/// The profile a window opens in: who it is and what it starts with.
-#[derive(Debug, Default)]
+/// The profile a window opens in: who it is, what it starts with, and the
+/// writer that keeps what changes.
+#[derive(Debug)]
 pub struct Profile {
     /// The registry's id and name; `None` for a window without a registered profile.
     pub id: Option<String>,
     pub name: Option<String>,
     pub settings: Settings,
+    /// Whether the settings are kept: how reading them at open went.
+    pub settings_keeping: Keeping,
+    /// The profile's writer; `None` for a private window and a window
+    /// without a profile, which keep nothing.
+    pub store: Option<Store>,
+}
+
+impl Default for Profile {
+    /// No profile: a test or a snapshot. Nothing is kept.
+    fn default() -> Self {
+        Self {
+            id: None,
+            name: None,
+            settings: Settings::default(),
+            settings_keeping: Keeping::NotSaved(NotSaved::NoProfile),
+            store: None,
+        }
+    }
 }
 
 pub struct Browser {
@@ -132,6 +154,10 @@ pub struct Browser {
     pub engine: EngineStatus,
     /// The settings of the window's profile.
     pub settings: Settings,
+    /// Whether a change of the settings is kept.
+    pub settings_keeping: Keeping,
+    /// The writer of the profile, when this window keeps anything.
+    store: Option<Store>,
     /// The profile the window belongs to: its registry id and name, `None`
     /// for a window opened without one.
     pub profile: Option<(String, String)>,
@@ -161,7 +187,7 @@ impl Browser {
         profile: Profile,
     ) -> Self {
         let capabilities = backend.capabilities();
-        Self {
+        let mut browser = Self {
             backend,
             capabilities,
             options,
@@ -173,6 +199,8 @@ impl Browser {
             permissions: Permissions::new(),
             engine: EngineStatus::Starting,
             settings: profile.settings,
+            settings_keeping: Keeping::Loading,
+            store: profile.store,
             profile: profile.id.zip(profile.name),
             view: ViewSize {
                 width: 1024,
@@ -185,7 +213,9 @@ impl Browser {
             fullscreen: false,
             lost: Vec::new(),
             start: None,
-        }
+        };
+        browser.kept_settings(profile.settings_keeping);
+        browser
     }
 
     /// The engine, for the parts of the UI that draw its frames and send its
@@ -202,12 +232,16 @@ impl Browser {
         &ENGINES[self.settings.engine_index()]
     }
 
-    /// The address bar searches with `ENGINES[at]` from now on.
+    /// The address bar searches with `ENGINES[at]` from now on, and the
+    /// profile keeps the choice.
     pub fn set_search_engine(&mut self, at: usize) {
         let Some(engine) = ENGINES.get(at) else {
             return;
         };
         self.settings.search_engine = engine.id.to_string();
+        if let Some(store) = &self.store {
+            store.save_settings(&self.settings);
+        }
     }
 
     /// The engine session of tab `key`.

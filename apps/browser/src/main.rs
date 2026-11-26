@@ -136,6 +136,17 @@ fn main() {
                 });
             }
             let engine = start_or_exit(Some(&opened.folders));
+            let settings_keeping = profile::store::keeping_of(opened.settings_problem.as_ref());
+            let (store, settings_keeping) =
+                match profile::store::Store::open(&opened.folders, settings_keeping.clone()) {
+                    Ok(store) => (Some(store), settings_keeping),
+                    Err(error) => (
+                        None,
+                        model::keeping::Keeping::NotSaved(model::keeping::NotSaved::Failed(
+                            error.to_string(),
+                        )),
+                    ),
+                };
             let profile = Profile {
                 id: opened
                     .entry
@@ -143,6 +154,8 @@ fn main() {
                     .map(|entry| entry.id.as_str().to_string()),
                 name: opened.entry.as_ref().map(|entry| entry.name.clone()),
                 settings: opened.settings,
+                settings_keeping,
+                store,
             };
             // The lock is held until the process ends.
             let _lock = opened.lock;
@@ -154,6 +167,10 @@ fn main() {
                 id: from.map(|id| id.as_str().to_string()),
                 name: None,
                 settings,
+                settings_keeping: model::keeping::Keeping::NotSaved(
+                    model::keeping::NotSaved::Private,
+                ),
+                store: None,
             };
             run_browser(
                 "bingux-browser-private",
