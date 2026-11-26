@@ -97,7 +97,7 @@ pub struct Model {
     /// On a phone the search field has a row of its own, shown on request.
     pub search_open: State<bool>,
     pub scroll_nonce: State<u64>,
-    pub warnings: State<Vec<String>>,
+    pub warnings: State<Vec<bingux_calendar_core::ics::Warning>>,
     /// The text of the dialog that asks for a calendar's name, its colour
     /// and the calendar an import goes in.
     pub draft_name: State<String>,
@@ -161,9 +161,10 @@ impl Model {
                 let watcher = bingux_calendar_core::watch::watch(
                     store.clone(),
                     writer.clone(),
-                    || {
-                        Prefs::load()
-                            .twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour())
+                    |notice| {
+                        let twelve = Prefs::load()
+                            .twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour());
+                        crate::words::reminder(notice, twelve)
                     },
                     move |event| watcher_feed.push(Message::Watch(event)),
                 );

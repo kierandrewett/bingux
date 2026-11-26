@@ -47,7 +47,11 @@ pub fn run_reminders() {
     bingux_calendar_core::alarm::run(
         &Store::open(),
         &stop,
-        || Prefs::load().twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour()),
+        |notice| {
+            let twelve =
+                Prefs::load().twelve_hour(bingux_ui::locale::Locale::current().uses_12_hour());
+            crate::words::reminder(notice, twelve)
+        },
         |_, _| {},
     );
 }

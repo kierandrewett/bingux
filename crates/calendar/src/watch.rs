@@ -10,7 +10,7 @@ use std::time::Duration;
 
 use chrono::{NaiveDateTime, Utc};
 
-use crate::alarm::{self, Delivery};
+use crate::alarm::{self, Delivery, Notice};
 use crate::recur::Change;
 use crate::store::Store;
 use crate::zone::Zone;
@@ -25,7 +25,7 @@ pub struct Writer {
 }
 
 impl Writer {
-    /// `on_error` is told, in words, when a write fails.
+    /// `on_error` is told, with the error's own line, when a write fails.
     pub fn new(store: Store, on_error: impl Fn(String) + Send + 'static) -> Writer {
         let (sender, receiver) = mpsc::channel::<Vec<Change>>();
         let known = Arc::new(AtomicU64::new(store.fingerprint()));
@@ -83,12 +83,14 @@ impl Drop for Watcher {
     }
 }
 
-/// Starts watching. `on_event` is called on the watcher's threads, so it
-/// must hand the event on (a queue the window reads) and return.
+/// Starts watching. `say` words a reminder as its title and body, in the
+/// language and clock the person reads. `on_event` is called on the watcher's
+/// threads, so it must hand the event on (a queue the window reads) and
+/// return.
 pub fn watch(
     store: Store,
     writer: Writer,
-    twelve_hour: impl Fn() -> bool + Send + Sync + 'static,
+    say: impl Fn(&Notice) -> (String, String) + Send + Sync + 'static,
     on_event: impl Fn(Event) + Send + Sync + 'static,
 ) -> Watcher {
     let stop = Arc::new(AtomicBool::new(false));
@@ -135,10 +137,10 @@ pub fn watch(
             .spawn(move || {
                 let _guard = slot;
                 let stop_inner = stop.clone();
-                alarm::run(&store, &stop_inner, twelve_hour, |alarm, delivery| {
+                alarm::run(&store, &stop_inner, &say, |alarm, delivery| {
                     if delivery == Delivery::None {
-                        let (title, body) =
-                            alarm::message(alarm, Utc::now(), Zone::detect_local(), false);
+                        let notice = alarm::notice(alarm, Utc::now(), Zone::detect_local());
+                        let (title, body) = say(&notice);
                         on_event(Event::Reminder { title, body });
                     }
                 });

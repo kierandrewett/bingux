@@ -42,7 +42,7 @@ use std::sync::Arc;
 use chrono::{Duration, NaiveDateTime};
 
 use crate::event::{Item, Occurrence};
-use crate::ics;
+use crate::ics::{self, ParseError, Warning};
 use crate::recur::{self, Change};
 use crate::zone::Zone;
 
@@ -202,7 +202,7 @@ impl Snapshot {
 pub struct Loaded {
     pub snapshot: Snapshot,
     /// Files that could not be read, and things that were read forgivingly.
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Warning>,
 }
 
 /// What importing a file did.
@@ -210,7 +210,7 @@ pub struct Loaded {
 pub struct Imported {
     pub added: usize,
     pub updated: usize,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Warning>,
 }
 
 #[derive(Clone, Debug)]
@@ -306,7 +306,9 @@ impl Store {
                 let text = match fs::read(&file) {
                     Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
                     Err(_) => {
-                        loaded.warnings.push(format!("{name} could not be read."));
+                        loaded
+                            .warnings
+                            .push(Warning::FileUnreadable { file: name.clone() });
                         continue;
                     }
                 };
@@ -314,16 +316,20 @@ impl Store {
                     Ok(parsed) => {
                         loaded
                             .warnings
-                            .extend(parsed.warnings.into_iter().map(|w| format!("{name}: {w}")));
+                            .extend(parsed.warnings.into_iter().map(|warning| Warning::InFile {
+                                file: name.clone(),
+                                warning: Box::new(warning),
+                            }));
                         for mut item in parsed.items {
                             if let Some(first) = seen.get(&item.uid) {
                                 // A second file for an event already read: a
                                 // view must not draw it twice, and an edit
                                 // finds events by UID.
                                 if *first != file_label {
-                                    loaded.warnings.push(format!(
-                                        "{file_label} repeats an event that {first} already has, so it is left out."
-                                    ));
+                                    loaded.warnings.push(Warning::FileRepeats {
+                                        file: file_label.clone(),
+                                        first: first.clone(),
+                                    });
                                 }
                                 continue;
                             }
@@ -333,9 +339,10 @@ impl Store {
                             loaded.snapshot.items.push(Arc::new(item));
                         }
                     }
-                    Err(error) => loaded
-                        .warnings
-                        .push(format!("{name} is not a calendar file ({error}).")),
+                    Err(error) => loaded.warnings.push(Warning::FileNotCalendar {
+                        file: name.clone(),
+                        detail: error.to_string(),
+                    }),
                 }
             }
         }
@@ -396,7 +403,7 @@ impl Store {
         text: &str,
         calendar: &str,
         snapshot: &Snapshot,
-    ) -> Result<(Imported, Vec<Change>), String> {
+    ) -> Result<(Imported, Vec<Change>), ParseError> {
         let parsed = ics::parse(text, calendar)?;
         let mut report = Imported {
             warnings: parsed.warnings,
@@ -774,7 +781,10 @@ mod tests {
         let loaded = store.load();
         assert_eq!(loaded.snapshot.items.len(), 1);
         assert_eq!(loaded.snapshot.items[0].event.summary, "Good");
-        assert!(loaded.warnings.iter().any(|w| w.starts_with("bad.ics")));
+        assert!(loaded.warnings.iter().any(|w| matches!(
+            w,
+            Warning::FileNotCalendar { file, .. } if file == "bad.ics"
+        )));
     }
 
     #[test]
@@ -787,7 +797,10 @@ mod tests {
         let loaded = store.load();
         assert_eq!(loaded.snapshot.items.len(), 1);
         assert_eq!(loaded.snapshot.items[0].event.summary, "First");
-        assert!(loaded.warnings.iter().any(|w| w.starts_with("b.ics")));
+        assert!(loaded.warnings.iter().any(|w| matches!(
+            w,
+            Warning::FileRepeats { file, first } if file == "b.ics" && first == "a.ics"
+        )));
     }
 
     #[test]

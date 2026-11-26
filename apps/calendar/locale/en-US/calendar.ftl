@@ -209,6 +209,62 @@ calendar-nothing-matches = Nothing matches “{ $query }”.
 
 # The toast of a reminder with no notification service. $title (Text) - the event, $body (Text) - when and where
 calendar-reminder-toast = { $title }. { $body }
+
+## The words of a reminder notification
+
+calendar-reminder-untitled = Event
+calendar-reminder-today = Today
+calendar-reminder-tomorrow = Tomorrow
+# $count (Number) - days until an all-day event
+calendar-reminder-in-days = { $count ->
+    [one] In 1 day
+   *[other] In { $count } days
+}
+calendar-reminder-now = Now
+# $count (Number) - minutes until it starts
+calendar-reminder-in-minutes = { $count ->
+    [one] In 1 minute
+   *[other] In { $count } minutes
+}
+# $count (Number) - minutes since it started
+calendar-reminder-started-ago = { $count ->
+    [one] Started 1 minute ago
+   *[other] Started { $count } minutes ago
+}
+# $time (Text) - the start, such as 13:00
+calendar-reminder-today-at = Today at { $time }
+# $day (Text) - the date, such as Wed 12 Mar; $time (Text) - the start
+calendar-reminder-day-at = { $day } at { $time }
+# $when (Text) - when it starts; $place (Text) - where
+calendar-reminder-with-place = { $when }, { $place }
+
+## Things read in a forgiving way from a calendar file
+
+# $named (yes or no) - whether the event has a title; $title (Text) - the title
+calendar-warning-no-start = { $named ->
+    [yes] “{ $title }” has no start and was skipped.
+   *[no] An event has no start and was skipped.
+}
+# $named (yes or no) - whether the event has a title; $title (Text) - the title
+calendar-warning-unreadable-start = { $named ->
+    [yes] “{ $title }” has a start that could not be read and was skipped.
+   *[no] An event has a start that could not be read and was skipped.
+}
+# $named (yes or no) - whether the event has a title; $title (Text) - the title
+calendar-warning-stray-exception = { $named ->
+    [yes] “{ $title }” changes an event that is not in the file; it is kept on its own.
+   *[no] An event changes one that is not in the file; it is kept on its own.
+}
+# $zone (Text) - the zone name the file gave
+calendar-warning-unknown-zone = The time zone “{ $zone }” is not known; its times are read in your time zone.
+# $file (Text) - a file name
+calendar-warning-file-unreadable = { $file } could not be read.
+# $file (Text) - a file name; $detail (Text) - the reader's own line
+calendar-warning-file-not-calendar = { $file } is not a calendar file ({ $detail }).
+# $file (Text) - a file name; $first (Text) - the file that already has the event
+calendar-warning-file-repeats = { $file } repeats an event that { $first } already has, so it is left out.
+# $file (Text) - a file name; $warning (Text) - the sentence for what was found in it
+calendar-warning-in-file = { $file }: { $warning }
 # The value of the stepper after "Ends after". $count (Number) - how many repeats
 calendar-repeat-times = { $count ->
     [one] { $count } time

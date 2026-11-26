@@ -22,8 +22,51 @@ use crate::zone::Zone;
 #[derive(Debug, Default)]
 pub struct Parsed {
     pub items: Vec<Item>,
-    /// Things that were read in a forgiving way, in plain words.
-    pub warnings: Vec<String>,
+    /// Things that were read in a forgiving way.
+    pub warnings: Vec<Warning>,
+}
+
+/// A thing read in a forgiving way, or a file that could not be read. It names
+/// what happened and holds the names a sentence needs; the window words it
+/// in the language the person chose, so no sentence is written here.
+/// `summary` is empty for an event with no title.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Warning {
+    /// An event has no start and was skipped.
+    NoStart { summary: String },
+    /// An event has a start that could not be read and was skipped.
+    UnreadableStart { summary: String },
+    /// An event changes one that is not in the file; it is kept on its own.
+    StrayException { summary: String },
+    /// A time zone is not known; its times are read in the person's zone.
+    UnknownZone { tzid: String },
+    /// A file could not be read.
+    FileUnreadable { file: String },
+    /// A file is not a calendar (`detail` is the reader's own line).
+    FileNotCalendar { file: String, detail: String },
+    /// A file repeats an event another file already has, so it is left out.
+    FileRepeats { file: String, first: String },
+    /// A warning about one event of a file.
+    InFile { file: String, warning: Box<Warning> },
+}
+
+/// Why text is not read as a calendar.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ParseError {
+    /// The text holds no calendar.
+    NotCalendar,
+    /// The reader refused the text, in its own words.
+    Malformed(String),
+}
+
+impl std::fmt::Display for ParseError {
+    /// A short English line for logs.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ParseError::NotCalendar => f.write_str("not an iCalendar file"),
+            ParseError::Malformed(detail) => f.write_str(detail),
+        }
+    }
 }
 
 /// The product identifier written to files.
@@ -54,7 +97,7 @@ const HANDLED: &[&str] = &[
 
 /// Reads every event in `text` into items of `calendar`. Events with one
 /// `UID` become one item; a file of several events gives several items.
-pub fn parse(text: &str, calendar: &str) -> Result<Parsed, String> {
+pub fn parse(text: &str, calendar: &str) -> Result<Parsed, ParseError> {
     let mut parsed = Parsed::default();
     // Some producers write a lone LF, some a BOM.
     let text = text.trim_start_matches('\u{feff}');
@@ -63,7 +106,8 @@ pub fn parse(text: &str, calendar: &str) -> Result<Parsed, String> {
     let mut by_uid: BTreeMap<String, Vec<Read>> = BTreeMap::new();
     let mut order: Vec<String> = Vec::new();
     for parsed_calendar in reader {
-        let parsed_calendar = parsed_calendar.map_err(|error| format!("{error}"))?;
+        let parsed_calendar =
+            parsed_calendar.map_err(|error| ParseError::Malformed(format!("{error}")))?;
         found_calendar = true;
         for component in &parsed_calendar.events {
             let Some(read) = read_event(component, &mut parsed.warnings) else {
@@ -77,7 +121,7 @@ pub fn parse(text: &str, calendar: &str) -> Result<Parsed, String> {
         }
     }
     if !found_calendar {
-        return Err("The file is not an iCalendar file.".to_string());
+        return Err(ParseError::NotCalendar);
     }
     for uid in order {
         let reads = by_uid.remove(&uid).unwrap_or_default();
@@ -110,7 +154,7 @@ fn assemble(
     uid: &str,
     calendar: &str,
     reads: Vec<Read>,
-    warnings: &mut Vec<String>,
+    warnings: &mut Vec<Warning>,
 ) -> Option<Item> {
     let mut masters: Vec<Read> = Vec::new();
     let mut exceptions: Vec<Read> = Vec::new();
@@ -126,10 +170,9 @@ fn assemble(
     let Some(master) = master else {
         // Only exceptions: the first stands alone as an event of its own.
         let mut first = exceptions.into_iter().next()?;
-        warnings.push(format!(
-            "\"{}\" changes an event that is not in the file; it is kept on its own.",
-            first.event.summary
-        ));
+        warnings.push(Warning::StrayException {
+            summary: first.event.summary.clone(),
+        });
         first.recurrence_id = None;
         let mut item = Item::new(uid, calendar, first.event);
         item.sequence = first.sequence;
@@ -178,26 +221,19 @@ fn key_of(stamp: Stamp, master: &Event) -> Key {
     }
 }
 
-fn read_event(component: &IcalEvent, warnings: &mut Vec<String>) -> Option<Read> {
+fn read_event(component: &IcalEvent, warnings: &mut Vec<Warning>) -> Option<Read> {
     let props = &component.properties;
     let text = |name: &str| prop(props, name).map(|p| unescape(p.value.as_deref().unwrap_or("")));
     let uid = text("UID")
         .filter(|uid| !uid.is_empty())
         .unwrap_or_else(new_uid);
     let summary = text("SUMMARY").unwrap_or_default();
-    let label = if summary.is_empty() {
-        "An event".to_string()
-    } else {
-        format!("\"{summary}\"")
-    };
     let Some(start_prop) = prop(props, "DTSTART") else {
-        warnings.push(format!("{label} has no start and was skipped."));
+        warnings.push(Warning::NoStart { summary });
         return None;
     };
     let Some(start) = read_stamp(start_prop, warnings) else {
-        warnings.push(format!(
-            "{label} has a start that could not be read and was skipped."
-        ));
+        warnings.push(Warning::UnreadableStart { summary });
         return None;
     };
     let mut event = match start {
@@ -362,11 +398,11 @@ fn param<'a>(property: &'a Property, name: &str) -> Option<&'a str> {
         .map(String::as_str)
 }
 
-fn read_stamp(property: &Property, warnings: &mut Vec<String>) -> Option<Stamp> {
+fn read_stamp(property: &Property, warnings: &mut Vec<Warning>) -> Option<Stamp> {
     stamp_of(property.value.as_deref()?.trim(), property, warnings)
 }
 
-fn read_stamp_list(property: &Property, warnings: &mut Vec<String>) -> Vec<Stamp> {
+fn read_stamp_list(property: &Property, warnings: &mut Vec<Warning>) -> Vec<Stamp> {
     property
         .value
         .as_deref()
@@ -384,7 +420,7 @@ fn read_stamp_list(property: &Property, warnings: &mut Vec<String>) -> Vec<Stamp
         .collect()
 }
 
-fn stamp_of(value: &str, property: &Property, warnings: &mut Vec<String>) -> Option<Stamp> {
+fn stamp_of(value: &str, property: &Property, warnings: &mut Vec<Warning>) -> Option<Stamp> {
     let is_date = param(property, "VALUE").is_some_and(|v| v.eq_ignore_ascii_case("DATE"))
         || value.len() == 8;
     if is_date {
@@ -405,9 +441,9 @@ fn stamp_of(value: &str, property: &Property, warnings: &mut Vec<String>) -> Opt
         match Zone::from_tzid(tzid) {
             Some(zone) => zone,
             None => {
-                let note = format!(
-                    "The time zone \"{tzid}\" is not known; its times are read in your time zone."
-                );
+                let note = Warning::UnknownZone {
+                    tzid: tzid.to_string(),
+                };
                 if !warnings.contains(&note) {
                     warnings.push(note);
                 }

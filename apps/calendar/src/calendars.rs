@@ -257,7 +257,7 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
         tr!(
             "calendar-import-note",
             message = message,
-            warning = parsed.warnings[0].clone()
+            warning = crate::words::warning(&parsed.warnings[0])
         )
     };
     overlays.show_dialog(

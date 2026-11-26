@@ -19,6 +19,7 @@ mod sidebar;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod views;
+mod words;
 
 use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;

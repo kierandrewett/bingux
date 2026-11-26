@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration as StdDuration, SystemTime};
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, NaiveDate, NaiveTime, Utc};
 
 use crate::event::{Item, Key, Trigger};
 use crate::recur;
@@ -171,7 +171,7 @@ pub fn notify(summary: &str, body: &str) -> Delivery {
     }
     let sent = Command::new("notify-send")
         .args([
-            "--app-name=Calendar",
+            "--app-name=bingux-calendar",
             "--icon=bingux-calendar",
             "--category=reminder",
             "--hint=string:desktop-entry:bingux-calendar",
@@ -203,7 +203,7 @@ fn notify_service(summary: &str, body: &str) -> Result<(), zbus::Error> {
         Some("org.freedesktop.Notifications"),
         "Notify",
         &(
-            "Calendar",
+            "bingux-calendar",
             0u32,
             "bingux-calendar",
             summary,
@@ -216,61 +216,69 @@ fn notify_service(summary: &str, body: &str) -> Result<(), zbus::Error> {
     Ok(())
 }
 
-/// The words of a notification for `alarm`: the title, and a line saying
-/// when it starts and where. `format` writes an instant the way the person
-/// reads it.
-pub fn message(
-    alarm: &Alarm,
-    now: DateTime<Utc>,
-    view: Zone,
-    twelve_hour: bool,
-) -> (String, String) {
+/// When an event starts, as a reminder says it. The window words each kind
+/// in the language the person chose, with the date and clock the way they
+/// read them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum When {
+    /// An all-day event today.
+    Today,
+    /// An all-day event tomorrow.
+    Tomorrow,
+    /// An all-day event in this many days (more than one).
+    InDays(i64),
+    /// An all-day event on a past date.
+    OnDate(NaiveDate),
+    /// It starts this minute.
+    Now,
+    /// It starts within the hour, in this many minutes.
+    InMinutes(i64),
+    /// It started this many minutes ago.
+    StartedMinutesAgo(i64),
+    /// It starts later today.
+    TodayAt(NaiveTime),
+    /// It starts on another day.
+    DayAt(NaiveDate, NaiveTime),
+}
+
+/// What a reminder says: the event, when it starts, and where. `summary` is
+/// empty for an event with no title.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notice {
+    pub summary: String,
+    pub when: When,
+    pub location: String,
+}
+
+/// The facts of a notification for `alarm` as seen from `now` in `view`.
+pub fn notice(alarm: &Alarm, now: DateTime<Utc>, view: Zone) -> Notice {
     let start = view.wall(alarm.starts);
     let minutes = (alarm.starts - now).num_minutes();
     let when = if alarm.all_day {
         let days = (start.date() - view.wall(now).date()).num_days();
         match days {
-            0 => "Today".to_string(),
-            1 => "Tomorrow".to_string(),
-            n if n > 1 => format!("In {n} days"),
-            _ => start.format("%-d %B").to_string(),
+            0 => When::Today,
+            1 => When::Tomorrow,
+            n if n > 1 => When::InDays(n),
+            _ => When::OnDate(start.date()),
         }
     } else if (0..60).contains(&minutes) {
         match minutes {
-            0 => "Now".to_string(),
-            1 => "In 1 minute".to_string(),
-            n => format!("In {n} minutes"),
+            0 => When::Now,
+            n => When::InMinutes(n),
         }
     } else if minutes < 0 && minutes > -120 {
-        let ago = -minutes;
-        if ago == 1 {
-            "Started 1 minute ago".to_string()
-        } else {
-            format!("Started {ago} minutes ago")
-        }
+        When::StartedMinutesAgo(-minutes)
+    } else if start.date() == view.wall(now).date() {
+        When::TodayAt(start.time())
     } else {
-        let clock = if twelve_hour {
-            start.format("%-I:%M %p").to_string()
-        } else {
-            start.format("%H:%M").to_string()
-        };
-        if start.date() == view.wall(now).date() {
-            format!("Today at {clock}")
-        } else {
-            format!("{} at {clock}", start.format("%A %-d %B"))
-        }
+        When::DayAt(start.date(), start.time())
     };
-    let body = if alarm.location.is_empty() {
-        when
-    } else {
-        format!("{when}, {}", alarm.location)
-    };
-    let summary = if alarm.summary.is_empty() {
-        "Event".to_string()
-    } else {
-        alarm.summary.clone()
-    };
-    (summary, body)
+    Notice {
+        summary: alarm.summary.clone(),
+        when,
+        location: alarm.location.clone(),
+    }
 }
 
 /// Runs reminders until `stop` is set: reads the store when it changes,
@@ -279,7 +287,7 @@ pub fn message(
 pub fn run(
     store: &Store,
     stop: &Arc<AtomicBool>,
-    twelve_hour: impl Fn() -> bool,
+    say: impl Fn(&Notice) -> (String, String),
     mut shown: impl FnMut(&Alarm, Delivery),
 ) {
     forget_old();
@@ -296,7 +304,7 @@ pub fn run(
         }
         for alarm in upcoming(&snapshot, checked, now, view) {
             if claim(&alarm) {
-                let (title, body) = message(&alarm, now, view, twelve_hour());
+                let (title, body) = say(&notice(&alarm, now, view));
                 let delivery = notify(&title, &body);
                 shown(&alarm, delivery);
             }
@@ -400,7 +408,7 @@ mod tests {
     }
 
     #[test]
-    fn the_message_says_when() {
+    fn the_notice_says_when() {
         let alarm = Alarm {
             uid: "u".into(),
             calendar: "c".into(),
@@ -411,8 +419,16 @@ mod tests {
             at: utc(12, 45, 1),
             starts: utc(13, 0, 1),
         };
-        let (title, body) = message(&alarm, utc(12, 45, 1), Zone::Utc, false);
-        assert_eq!(title, "Lunch");
-        assert_eq!(body, "In 15 minutes, Nando's");
+        let said = notice(&alarm, utc(12, 45, 1), Zone::Utc);
+        assert_eq!(said.summary, "Lunch");
+        assert_eq!(said.when, When::InMinutes(15));
+        assert_eq!(said.location, "Nando's");
+        let later = notice(&alarm, utc(9, 0, 1), Zone::Utc);
+        assert_eq!(
+            later.when,
+            When::TodayAt(chrono::NaiveTime::from_hms_opt(13, 0, 0).unwrap())
+        );
+        let past = notice(&alarm, utc(13, 5, 1), Zone::Utc);
+        assert_eq!(past.when, When::StartedMinutesAgo(5));
     }
 }
