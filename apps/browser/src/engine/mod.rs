@@ -1,6 +1,8 @@
 //! The engine, the one thing behind the browser's pages: the handle every part
 //! of the browser calls it through, what it can do, and where it is.
 
+mod failed_page;
+pub mod failure;
 mod status;
 
 use std::sync::Arc;
@@ -9,6 +11,7 @@ use bingux_ui::web_view::{BrowserBackend, Capabilities, Done};
 
 use crate::browser::Outbox;
 
+pub use failed_page::engine_failed;
 pub use status::Status;
 
 /// The engine. Comparable by identity (the backend) so it can be a prop.

@@ -3,7 +3,6 @@
 mod app;
 mod ctx;
 mod page;
-mod pages;
 mod popovers;
 mod toolbar;
 mod web;

@@ -1,15 +1,11 @@
-//! The pages the browser draws itself in the content area: the new tab page and
-//! the pages that stand where a page could not be shown (an address that could
-//! not be loaded, a connection that cannot be trusted, a tab that crashed).
-//! Each is a status page of bingux-ui with the words of `model::failure`.
+//! The page of a window whose engine is gone.
 
 use bingux_ui::prelude::*;
 use bingux_ui::web_view::FailureCause;
 use freya::prelude::*;
 
-use crate::model::failure;
-
-use super::ctx::Ctx;
+use super::failure;
+use crate::ui::Ctx;
 
 /// The engine itself is gone: nothing in the window can work. When a new one
 /// may be started the tabs are kept, and "Start again" opens them where they

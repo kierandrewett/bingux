@@ -22,7 +22,6 @@ use crate::tabs::Strip;
 
 use super::ctx::{Chrome, Ctx};
 use super::page::PageArea;
-use super::pages;
 use super::popovers::Popovers;
 use super::toolbar::{PhoneBottom, Toolbar};
 use crate::permissions::PermissionBanner;
@@ -233,7 +232,7 @@ impl Component for Content {
         });
 
         if let Some((message, code, cause, restartable)) = failed {
-            return pages::engine_failed(ctx, cause, &message, code, restartable);
+            return crate::engine::engine_failed(ctx, cause, &message, code, restartable);
         }
         if empty_window {
             // The last tab went: the window is closing.

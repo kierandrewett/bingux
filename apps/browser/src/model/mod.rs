@@ -5,8 +5,6 @@
 //! Everything here is plain data and functions, tested without a UI, over the
 //! in-memory test double where the engine is needed.
 
-pub mod failure;
-
 #[cfg(test)]
 mod engine_tests;
 #[cfg(test)]
