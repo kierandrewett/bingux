@@ -20,7 +20,12 @@ use crate::surface::use_tokens;
 use crate::theme::provide_tokens;
 use crate::window::WindowHost;
 
-const FRAME: Duration = Duration::from_millis(16);
+/// What one step of the animation clock moves every animation by, in milliseconds: the animation
+/// counts whole milliseconds, so this is the 34 ms tick cap at [`SPEED`], 16.5 ms, cut to 16.
+const SPEED: f32 = 0.4853;
+/// The wall time of a step: longer than the 34 ms tick cap, so the cap decides how far an animation
+/// moves, not the load of the machine (a frame that took 50 ms moves it as far as one that took 40).
+const WALL: Duration = Duration::from_millis(40);
 const DESKTOP: (f32, f32) = (1000.0, 560.0);
 const FOOTER: &str = "Using Linux Studio Plugins";
 
@@ -104,6 +109,7 @@ impl Component for Root {
 fn start() -> Snapshot {
     let mut shot = Snapshot::new(|| Root.into_element(), DESKTOP);
     shot.settle(Duration::from_millis(400));
+    shot.runner().animation_clock().set_speed(SPEED);
     shot
 }
 
@@ -149,8 +155,15 @@ fn footer(shot: &mut Snapshot) -> (f32, f32) {
     (area.min_x(), area.min_y())
 }
 
+/// `count` steps of the animation clock, each one 16 ms of motion whatever the load of the machine.
 fn frames(shot: &mut Snapshot, count: u32) {
-    shot.runner().poll_n(FRAME, count);
+    for _ in 0..count {
+        shot.runner().poll_n(WALL, 1);
+        // The tick that `poll_n` ended with is taken by the animations on the next poll: run it, so
+        // the frame shows every tick so far.
+        shot.runner().handle_events_immediately();
+        shot.runner().sync_and_update();
+    }
 }
 
 /// Play `frames` frames and return the footer's place in each.
