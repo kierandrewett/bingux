@@ -19,10 +19,14 @@ impl Tone {
 }
 
 /// The connection of the page: its icon opens the page info.
-pub struct ConnectionButton;
+#[derive(PartialEq)]
+pub struct ConnectionButton {
+    pub ctx: Ctx,
+}
 
-impl ConnectionButton {
-    pub fn element(ctx: Ctx) -> Element {
+impl Component for ConnectionButton {
+    fn render(&self) -> impl IntoElement {
+        let ctx = self.ctx;
         let summary = Summary::of_tab(ctx.browser.read().active());
         let state = ctx.site_info;
         let mut anchor = state.anchor;
@@ -34,6 +38,5 @@ impl ConnectionButton {
         rect()
             .on_sized(move |event: Event<SizedEventData>| anchor.set_if_modified(event.area))
             .child(button)
-            .into()
     }
 }

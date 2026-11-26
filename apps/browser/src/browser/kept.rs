@@ -6,7 +6,7 @@
 
 use super::Browser;
 use crate::store::Event;
-use crate::store::keeping::{ClearScope, Keeping, NotSaved, Part};
+use crate::store::keeping::{ClearScope, Keeping, Part};
 
 impl Browser {
     /// Take in what the store has said since the last call.
@@ -29,7 +29,7 @@ impl Browser {
         if keeping == self.settings_keeping {
             return;
         }
-        if !by_design(&keeping)
+        if !keeping.is_by_design()
             && let Some(text) = keeping.text(Part::Settings)
         {
             self.out.notify(text);
@@ -42,7 +42,7 @@ impl Browser {
         if keeping == self.history_keeping {
             return;
         }
-        if !by_design(&keeping)
+        if !keeping.is_by_design()
             && let Some(text) = keeping.text(Part::History)
         {
             self.out.notify(text);
@@ -119,12 +119,4 @@ impl Browser {
         }
         self.take_store_events();
     }
-}
-
-/// A state the window is in by how it was opened, not by a failure.
-fn by_design(keeping: &Keeping) -> bool {
-    matches!(
-        keeping,
-        Keeping::NotSaved(NotSaved::Private | NotSaved::NoProfile)
-    )
 }

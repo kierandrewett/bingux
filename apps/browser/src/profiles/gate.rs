@@ -25,11 +25,13 @@ pub struct GateWindow {
     pub gate: Gate,
 }
 
-/// Starts the browser again, in place of this process.
-fn again(profile: Option<String>) {
-    spawn(async move {
-        spawn_blocking(move || crate::relaunch(profile.as_deref())).await;
-    });
+impl GateWindow {
+    /// Starts the browser again, in place of this process.
+    fn again(profile: Option<String>) {
+        spawn(async move {
+            spawn_blocking(move || crate::app::Launch::relaunch(profile.as_deref())).await;
+        });
+    }
 }
 
 impl Component for GateWindow {
@@ -41,7 +43,7 @@ impl Component for GateWindow {
                     status_page(Icon::DialogWarning, state.title()).description(state.text());
                 if state.can_try_again() {
                     page = page.action(tr!("browser-profile-try-again-button"), move |_: ()| {
-                        again(None)
+                        Self::again(None)
                     });
                 } else if matches!(state, ProfileState::RegistryDamaged { .. }) {
                     page = page.action(tr!("browser-profile-start-over-button"), move |_: ()| {
@@ -49,7 +51,7 @@ impl Component for GateWindow {
                             spawn_blocking(|| {
                                 // A list that cannot be read is kept beside the new one.
                                 let _ = Profiles::new(Places::from_environment()).start_over();
-                                crate::relaunch(None);
+                                crate::app::Launch::relaunch(None);
                             })
                             .await;
                         });
@@ -65,7 +67,7 @@ impl Component for GateWindow {
                         row(name.clone())
                             .leading(Icon::AvatarDefault)
                             .navigates()
-                            .on_press(move |_: ()| again(Some(id.clone()))),
+                            .on_press(move |_: ()| Self::again(Some(id.clone()))),
                     );
                 }
                 status_page(Icon::AvatarDefault, tr!("browser-profile-which-title"))

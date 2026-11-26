@@ -99,13 +99,20 @@ pub struct Registry {
 }
 
 impl Entry {
+    /// Unix seconds now.
+    fn now() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_secs())
+    }
+
     /// A new profile called `name`, made now.
     pub fn new(id: Id, name: &str, colour: &str) -> Self {
         Self {
             id,
             name: name.to_string(),
             colour: colour.to_string(),
-            created: now(),
+            created: Self::now(),
             deleting: false,
             rest: Map::new(),
         }
@@ -113,6 +120,21 @@ impl Entry {
 }
 
 impl Registry {
+    /// Parses registry bytes.
+    pub fn parse(bytes: &[u8]) -> Result<Registry, RegistryProblem> {
+        let value: Value = serde_json::from_slice(bytes)
+            .map_err(|error| RegistryProblem::Damaged(error.to_string()))?;
+        // The version first: a newer file may not parse as this version's shape.
+        let found = value.get("version").and_then(Value::as_u64).unwrap_or(0);
+        if found > u64::from(VERSION) {
+            return Err(RegistryProblem::TooNew {
+                found: u32::try_from(found).unwrap_or(u32::MAX),
+                supported: VERSION,
+            });
+        }
+        serde_json::from_value(value).map_err(|error| RegistryProblem::Damaged(error.to_string()))
+    }
+
     fn empty() -> Self {
         Self {
             version: VERSION,
@@ -177,6 +199,13 @@ pub enum RegistryProblem {
     Io(Problem),
 }
 
+impl RegistryProblem {
+    /// A failed read or write of the registry.
+    pub fn of_io(error: &std::io::Error) -> Self {
+        Self::Io(Problem::of(error))
+    }
+}
+
 /// What is wrong with a name.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NameProblem {
@@ -206,10 +235,6 @@ impl From<RegistryProblem> for ChangeError {
     }
 }
 
-fn io(error: &std::io::Error) -> RegistryProblem {
-    RegistryProblem::Io(Problem::of(error))
-}
-
 /// What a start opens.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Startup {
@@ -229,27 +254,6 @@ pub struct Profiles {
     places: Places,
 }
 
-fn now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs())
-}
-
-/// Parses registry bytes.
-fn parse(bytes: &[u8]) -> Result<Registry, RegistryProblem> {
-    let value: Value = serde_json::from_slice(bytes)
-        .map_err(|error| RegistryProblem::Damaged(error.to_string()))?;
-    // The version first: a newer file may not parse as this version's shape.
-    let found = value.get("version").and_then(Value::as_u64).unwrap_or(0);
-    if found > u64::from(VERSION) {
-        return Err(RegistryProblem::TooNew {
-            found: u32::try_from(found).unwrap_or(u32::MAX),
-            supported: VERSION,
-        });
-    }
-    serde_json::from_value(value).map_err(|error| RegistryProblem::Damaged(error.to_string()))
-}
-
 impl Profiles {
     pub fn new(places: Places) -> Self {
         Self { places }
@@ -263,8 +267,8 @@ impl Profiles {
     pub fn read(&self) -> Result<Option<Registry>, RegistryProblem> {
         match files::read_if_present(&self.places.registry()) {
             Ok(None) => Ok(None),
-            Ok(Some(bytes)) => parse(&bytes).map(Some),
-            Err(error) => Err(io(&error)),
+            Ok(Some(bytes)) => Registry::parse(&bytes).map(Some),
+            Err(error) => Err(RegistryProblem::of_io(&error)),
         }
     }
 
@@ -283,14 +287,16 @@ impl Profiles {
         &self,
         change: impl FnOnce(&mut Registry) -> Result<T, E>,
     ) -> Result<T, E> {
-        files::private_dir(&self.places.data).map_err(|error| io(&error))?;
-        let _held = Held::wait(&self.places.registry_lock()).map_err(|error| io(&error))?;
+        files::private_dir(&self.places.data).map_err(|error| RegistryProblem::of_io(&error))?;
+        let _held = Held::wait(&self.places.registry_lock())
+            .map_err(|error| RegistryProblem::of_io(&error))?;
         let mut registry = self.read()?.unwrap_or_else(Registry::empty);
         let result = change(&mut registry)?;
         let mut bytes = serde_json::to_vec_pretty(&registry)
             .map_err(|error| RegistryProblem::Damaged(error.to_string()))?;
         bytes.push(b'\n');
-        files::replace(&self.places.registry(), &bytes).map_err(|error| io(&error))?;
+        files::replace(&self.places.registry(), &bytes)
+            .map_err(|error| RegistryProblem::of_io(&error))?;
         Ok(result)
     }
 
@@ -308,8 +314,9 @@ impl Profiles {
                 }
             };
             let folders = self.places.folders(&id);
-            files::private_dir(&self.places.profiles()).map_err(|error| io(&error))?;
-            files::private_dir(&folders.engine).map_err(|error| io(&error))?;
+            files::private_dir(&self.places.profiles())
+                .map_err(|error| RegistryProblem::of_io(&error))?;
+            files::private_dir(&folders.engine).map_err(|error| RegistryProblem::of_io(&error))?;
             let entry = Entry::new(id.clone(), &name, colour);
             registry.profiles.push(entry.clone());
             if registry
@@ -414,7 +421,8 @@ impl Profiles {
         let folders = self.places.folders(id);
         let crash_profile = folders.crash.parent().unwrap_or(Path::new("/nonexistent"));
         for dir in [&folders.cache, crash_profile, &folders.root] {
-            files::remove_tree(dir).map_err(|error| ChangeError::Registry(io(&error)))?;
+            files::remove_tree(dir)
+                .map_err(|error| ChangeError::Registry(RegistryProblem::of_io(&error)))?;
         }
         Ok(())
     }
@@ -450,11 +458,12 @@ impl Profiles {
         let path = self.places.registry();
         let kept = crate::store::keeping::NotSaved::damaged_name(&path);
         {
-            let _held = Held::wait(&self.places.registry_lock()).map_err(|error| io(&error))?;
+            let _held = Held::wait(&self.places.registry_lock())
+                .map_err(|error| RegistryProblem::of_io(&error))?;
             match std::fs::rename(&path, &kept) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(error) => return Err(io(&error)),
+                Err(error) => return Err(RegistryProblem::of_io(&error)),
             }
         }
         let mut found: Vec<Id> = std::fs::read_dir(self.places.profiles())

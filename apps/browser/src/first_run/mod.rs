@@ -56,85 +56,90 @@ pub enum Migrated {
     },
 }
 
-/// Whether a running Gecko holds the profile lock of `engine_profile`.
-pub fn in_use(engine_profile: &Path) -> io::Result<bool> {
-    let file = match OpenOptions::new()
-        .read(true)
-        .write(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(engine_profile.join(".parentlock"))
-    {
-        Ok(file) => file,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(error),
-    };
-    // SAFETY: an all-zero flock is a valid value; the fields are set below.
-    let mut lock: libc::flock = unsafe { std::mem::zeroed() };
-    lock.l_type = libc::F_WRLCK as libc::c_short;
-    lock.l_whence = libc::SEEK_SET as libc::c_short;
-    // An open-file-description lock conflicts with Gecko's classic fcntl
-    // lock, even within one process; closing `file` releases ours.
-    // SAFETY: the descriptor belongs to `file` and `lock` outlives the call.
-    if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_OFD_SETLK, &lock) } == 0 {
-        return Ok(false);
-    }
-    let error = io::Error::last_os_error();
-    match error.raw_os_error() {
-        Some(libc::EAGAIN | libc::EACCES) => Ok(true),
-        _ => Err(error),
-    }
-}
+/// The first start of the browser: what the old single profile becomes.
+pub struct FirstRun;
 
-/// Sets up the profiles on the first start, once. Does nothing when a
-/// registry exists. Runs under the registry's lock, so two first starts
-/// serialise and the second finds the work done.
-pub fn first_run(profiles: &Profiles) -> Result<Migrated, MigrationError> {
-    if profiles.read()?.is_some() {
-        return Ok(Migrated::Nothing);
+impl FirstRun {
+    /// Whether a running Gecko holds the profile lock of `engine_profile`.
+    pub fn in_use(engine_profile: &Path) -> io::Result<bool> {
+        let file = match OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(engine_profile.join(".parentlock"))
+        {
+            Ok(file) => file,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(false),
+            Err(error) => return Err(error),
+        };
+        // SAFETY: an all-zero flock is a valid value; the fields are set below.
+        let mut lock: libc::flock = unsafe { std::mem::zeroed() };
+        lock.l_type = libc::F_WRLCK as libc::c_short;
+        lock.l_whence = libc::SEEK_SET as libc::c_short;
+        // An open-file-description lock conflicts with Gecko's classic fcntl
+        // lock, even within one process; closing `file` releases ours.
+        // SAFETY: the descriptor belongs to `file` and `lock` outlives the call.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_OFD_SETLK, &lock) } == 0 {
+            return Ok(false);
+        }
+        let error = io::Error::last_os_error();
+        match error.raw_os_error() {
+            Some(libc::EAGAIN | libc::EACCES) => Ok(true),
+            _ => Err(error),
+        }
     }
-    let places = profiles.places().clone();
-    profiles.change(|registry| {
-        if !registry.profiles.is_empty() {
+
+    /// Sets up the profiles on the first start, once. Does nothing when a
+    /// registry exists. Runs under the registry's lock, so two first starts
+    /// serialise and the second finds the work done.
+    pub fn run(profiles: &Profiles) -> Result<Migrated, MigrationError> {
+        if profiles.read()?.is_some() {
             return Ok(Migrated::Nothing);
         }
-        let old = places.old_profile();
-        let failed = |problem: Problem| MigrationError::Failed {
-            old: old.clone(),
-            problem,
-        };
-        let id = Id::random();
-        let folders = places.folders(&id);
-        let personal = Entry::new(id.clone(), FIRST_NAME, FIRST_COLOUR);
-        registry.profiles.push(personal.clone());
-        registry.default = Some(id);
-        if !old.is_dir() {
-            files::private_dir(&folders.engine).map_err(|error| failed(Problem::of(&error)))?;
-            return Ok(Migrated::Created(personal));
-        }
-        if in_use(&old).map_err(|error| failed(Problem::of(&error)))? {
-            return Err(MigrationError::Waiting { old: old.clone() });
-        }
-        let moved =
-            files::private_dir(&folders.root).and_then(|()| std::fs::rename(&old, &folders.engine));
-        if let Err(error) = moved {
-            let _ = std::fs::remove_dir(&folders.root);
-            return Err(failed(Problem::of(&error)));
-        }
-        // The crash folder follows when it can; a dump left behind costs
-        // nothing but space.
-        let old_crashes = places.old_crashes();
-        if old_crashes.is_dir()
-            && let Some(parent) = folders.crash.parent()
-            && files::private_dir(parent).is_ok()
-        {
-            let _ = std::fs::rename(&old_crashes, &folders.crash);
-        }
-        let old_cache = places.old_cache();
-        Ok(Migrated::Moved {
-            personal,
-            stale_cache: old_cache.is_dir().then_some(old_cache),
+        let places = profiles.places().clone();
+        profiles.change(|registry| {
+            if !registry.profiles.is_empty() {
+                return Ok(Migrated::Nothing);
+            }
+            let old = places.old_profile();
+            let failed = |problem: Problem| MigrationError::Failed {
+                old: old.clone(),
+                problem,
+            };
+            let id = Id::random();
+            let folders = places.folders(&id);
+            let personal = Entry::new(id.clone(), FIRST_NAME, FIRST_COLOUR);
+            registry.profiles.push(personal.clone());
+            registry.default = Some(id);
+            if !old.is_dir() {
+                files::private_dir(&folders.engine).map_err(|error| failed(Problem::of(&error)))?;
+                return Ok(Migrated::Created(personal));
+            }
+            if Self::in_use(&old).map_err(|error| failed(Problem::of(&error)))? {
+                return Err(MigrationError::Waiting { old: old.clone() });
+            }
+            let moved = files::private_dir(&folders.root)
+                .and_then(|()| std::fs::rename(&old, &folders.engine));
+            if let Err(error) = moved {
+                let _ = std::fs::remove_dir(&folders.root);
+                return Err(failed(Problem::of(&error)));
+            }
+            // The crash folder follows when it can; a dump left behind costs
+            // nothing but space.
+            let old_crashes = places.old_crashes();
+            if old_crashes.is_dir()
+                && let Some(parent) = folders.crash.parent()
+                && files::private_dir(parent).is_ok()
+            {
+                let _ = std::fs::rename(&old_crashes, &folders.crash);
+            }
+            let old_cache = places.old_cache();
+            Ok(Migrated::Moved {
+                personal,
+                stale_cache: old_cache.is_dir().then_some(old_cache),
+            })
         })
-    })
+    }
 }
 
 #[cfg(test)]
@@ -189,7 +194,7 @@ mod tests {
     #[test]
     fn without_an_old_folder_the_first_start_makes_personal() {
         let rig = Rig::new();
-        let Migrated::Created(personal) = first_run(&rig.profiles).unwrap() else {
+        let Migrated::Created(personal) = FirstRun::run(&rig.profiles).unwrap() else {
             panic!("a new profile");
         };
         assert_eq!(
@@ -200,7 +205,7 @@ mod tests {
         let registry = rig.profiles.read().unwrap().unwrap();
         assert_eq!(registry.default, Some(personal.id));
         assert_eq!(
-            first_run(&rig.profiles).unwrap(),
+            FirstRun::run(&rig.profiles).unwrap(),
             Migrated::Nothing,
             "once only"
         );
@@ -213,7 +218,7 @@ mod tests {
         let Migrated::Moved {
             personal,
             stale_cache,
-        } = first_run(&rig.profiles).unwrap()
+        } = FirstRun::run(&rig.profiles).unwrap()
         else {
             panic!("the old folder moved");
         };
@@ -242,7 +247,7 @@ mod tests {
             .write(true)
             .open(rig.places().old_profile().join(".parentlock"))
             .unwrap();
-        // SAFETY: as in `in_use`.
+        // SAFETY: as in `FirstRun::in_use`.
         let mut lock: libc::flock = unsafe { std::mem::zeroed() };
         lock.l_type = libc::F_WRLCK as libc::c_short;
         assert_eq!(
@@ -250,7 +255,7 @@ mod tests {
             0
         );
         assert_eq!(
-            first_run(&rig.profiles),
+            FirstRun::run(&rig.profiles),
             Err(MigrationError::Waiting {
                 old: rig.places().old_profile()
             })
@@ -266,7 +271,10 @@ mod tests {
         );
         drop(gecko);
         assert!(
-            matches!(first_run(&rig.profiles).unwrap(), Migrated::Moved { .. }),
+            matches!(
+                FirstRun::run(&rig.profiles).unwrap(),
+                Migrated::Moved { .. }
+            ),
             "and moves once it is closed"
         );
     }
@@ -278,7 +286,7 @@ mod tests {
         rig.old_layout();
         fs::create_dir_all(rig.places().profiles()).unwrap();
         fs::set_permissions(rig.places().profiles(), fs::Permissions::from_mode(0o500)).unwrap();
-        let result = first_run(&rig.profiles);
+        let result = FirstRun::run(&rig.profiles);
         fs::set_permissions(rig.places().profiles(), fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(
             result,
@@ -296,8 +304,8 @@ mod tests {
         let rig = Rig::new();
         rig.old_layout();
         let results: Vec<Migrated> = std::thread::scope(|scope| {
-            let a = scope.spawn(|| first_run(&rig.profiles).unwrap());
-            let b = scope.spawn(|| first_run(&rig.profiles).unwrap());
+            let a = scope.spawn(|| FirstRun::run(&rig.profiles).unwrap());
+            let b = scope.spawn(|| FirstRun::run(&rig.profiles).unwrap());
             vec![a.join().unwrap(), b.join().unwrap()]
         });
         assert_eq!(

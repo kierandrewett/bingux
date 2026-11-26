@@ -37,15 +37,15 @@ impl Platform {
             match key {
                 Key::Named(NamedKey::ArrowLeft) => return Some(Command::Back),
                 Key::Named(NamedKey::ArrowRight) => return Some(Command::Forward),
-                _ if is(key, "d") => return Some(Command::FocusAddress),
+                _ if Held::is(key, "d") => return Some(Command::FocusAddress),
                 _ => {}
             }
         }
         if mac && held.main(self, false, false) {
-            if is(key, "[") {
+            if Held::is(key, "[") {
                 return Some(Command::Back);
             }
-            if is(key, "]") {
+            if Held::is(key, "]") {
                 return Some(Command::Forward);
             }
         }
@@ -86,15 +86,15 @@ impl Platform {
                 }
             }
             match key {
-                _ if is(key, "t") => return Some(Command::ReopenTab),
-                _ if is(key, "p") => return Some(Command::NewPrivateWindow),
-                _ if is(key, "r") => return Some(Command::ReloadBypassCache),
-                _ if is(key, "y") => return Some(Command::Downloads),
-                _ if is(key, "g") => return Some(Command::FindPrevious),
+                _ if Held::is(key, "t") => return Some(Command::ReopenTab),
+                _ if Held::is(key, "p") => return Some(Command::NewPrivateWindow),
+                _ if Held::is(key, "r") => return Some(Command::ReloadBypassCache),
+                _ if Held::is(key, "y") => return Some(Command::Downloads),
+                _ if Held::is(key, "g") => return Some(Command::FindPrevious),
                 // Plus is Shift and equals on most layouts.
-                _ if is(key, "+") => return Some(Command::ZoomIn),
-                _ if is(key, "]") && mac => return Some(Command::NextTab),
-                _ if is(key, "[") && mac => return Some(Command::PreviousTab),
+                _ if Held::is(key, "+") => return Some(Command::ZoomIn),
+                _ if Held::is(key, "]") && mac => return Some(Command::NextTab),
+                _ if Held::is(key, "[") && mac => return Some(Command::PreviousTab),
                 _ => {}
             }
         }
@@ -107,19 +107,19 @@ impl Platform {
         }
         if plain {
             match key {
-                _ if is(key, "t") => return Some(Command::NewTab),
-                _ if is(key, "w") => return Some(Command::CloseTab),
-                _ if is(key, "l") => return Some(Command::FocusAddress),
-                _ if is(key, "f") => return Some(Command::Find),
-                _ if is(key, "g") => return Some(Command::FindNext),
-                _ if is(key, "r") => return Some(Command::Reload),
-                _ if is(key, "i") => return Some(Command::PageInfo),
-                _ if is(key, "u") => return Some(Command::ViewSource),
-                _ if is(key, "p") => return Some(Command::Print),
-                _ if is(key, ",") => return Some(Command::Settings),
-                _ if is(key, "+") || is(key, "=") => return Some(Command::ZoomIn),
-                _ if is(key, "-") => return Some(Command::ZoomOut),
-                _ if is(key, "0") => return Some(Command::ZoomReset),
+                _ if Held::is(key, "t") => return Some(Command::NewTab),
+                _ if Held::is(key, "w") => return Some(Command::CloseTab),
+                _ if Held::is(key, "l") => return Some(Command::FocusAddress),
+                _ if Held::is(key, "f") => return Some(Command::Find),
+                _ if Held::is(key, "g") => return Some(Command::FindNext),
+                _ if Held::is(key, "r") => return Some(Command::Reload),
+                _ if Held::is(key, "i") => return Some(Command::PageInfo),
+                _ if Held::is(key, "u") => return Some(Command::ViewSource),
+                _ if Held::is(key, "p") => return Some(Command::Print),
+                _ if Held::is(key, ",") => return Some(Command::Settings),
+                _ if Held::is(key, "+") || Held::is(key, "=") => return Some(Command::ZoomIn),
+                _ if Held::is(key, "-") => return Some(Command::ZoomOut),
+                _ if Held::is(key, "0") => return Some(Command::ZoomReset),
                 _ => {}
             }
             // Ctrl+1 to 8 is a tab on Windows and for everybody on macOS; 9 is the last.
@@ -146,12 +146,12 @@ impl Platform {
         let held = Held::of(modifiers);
         if held.main(self, false, false) {
             return match key {
-                _ if is(key, "x") => Some(Command::Edit(EditCommand::Cut)),
-                _ if is(key, "c") => Some(Command::Edit(EditCommand::Copy)),
-                _ if is(key, "v") => Some(Command::Edit(EditCommand::Paste)),
-                _ if is(key, "a") => Some(Command::Edit(EditCommand::SelectAll)),
-                _ if is(key, "z") => Some(Command::Edit(EditCommand::Undo)),
-                _ if is(key, "y") && self != Platform::Mac => {
+                _ if Held::is(key, "x") => Some(Command::Edit(EditCommand::Cut)),
+                _ if Held::is(key, "c") => Some(Command::Edit(EditCommand::Copy)),
+                _ if Held::is(key, "v") => Some(Command::Edit(EditCommand::Paste)),
+                _ if Held::is(key, "a") => Some(Command::Edit(EditCommand::SelectAll)),
+                _ if Held::is(key, "z") => Some(Command::Edit(EditCommand::Undo)),
+                _ if Held::is(key, "y") && self != Platform::Mac => {
                     Some(Command::Edit(EditCommand::Redo))
                 }
                 _ => None,
@@ -159,13 +159,13 @@ impl Platform {
         }
         if held.main(self, true, false) {
             return match key {
-                _ if is(key, "v") => Some(Command::Edit(EditCommand::PastePlain)),
-                _ if is(key, "z") => Some(Command::Edit(EditCommand::Redo)),
+                _ if Held::is(key, "v") => Some(Command::Edit(EditCommand::PastePlain)),
+                _ if Held::is(key, "z") => Some(Command::Edit(EditCommand::Redo)),
                 _ => None,
             };
         }
         // Shift+Insert and Ctrl+Insert are the old paste and copy.
-        if held.only_shift() && named(key, NamedKey::Insert) {
+        if held.only_shift() && Held::named(key, NamedKey::Insert) {
             return Some(Command::Edit(EditCommand::Paste));
         }
         None
@@ -211,14 +211,16 @@ impl Held {
     fn only_shift(self) -> bool {
         self.shift && !self.ctrl && !self.alt && !self.meta
     }
-}
 
-fn is(key: &Key, text: &str) -> bool {
-    matches!(key, Key::Character(typed) if typed.eq_ignore_ascii_case(text))
-}
+    /// Whether `key` is the character `text`, in either case.
+    pub(super) fn is(key: &Key, text: &str) -> bool {
+        matches!(key, Key::Character(typed) if typed.eq_ignore_ascii_case(text))
+    }
 
-fn named(key: &Key, name: NamedKey) -> bool {
-    *key == Key::Named(name)
+    /// Whether `key` is the named key `name`.
+    pub(super) fn named(key: &Key, name: NamedKey) -> bool {
+        *key == Key::Named(name)
+    }
 }
 
 impl Command {

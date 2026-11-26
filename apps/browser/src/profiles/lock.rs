@@ -27,6 +27,20 @@ pub struct ProfileLock {
 }
 
 impl ProfileLock {
+    /// `flock(2)` on `file`.
+    pub fn flock(file: &File, operation: libc::c_int) -> io::Result<()> {
+        loop {
+            // SAFETY: the descriptor belongs to `file`, which outlives the call.
+            if unsafe { libc::flock(file.as_raw_fd(), operation) } == 0 {
+                return Ok(());
+            }
+            let error = io::Error::last_os_error();
+            if error.raw_os_error() != Some(libc::EINTR) {
+                return Err(error);
+            }
+        }
+    }
+
     /// Takes the lock of the profile in `folders`, making its folder if it is
     /// missing. Never waits: a profile another process holds is `InUse`.
     pub fn take(folders: &Folders) -> Result<Self, LockError> {
@@ -44,7 +58,7 @@ impl ProfileLock {
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(path)
             .map_err(|error| LockError::Io(Problem::of(&error)))?;
-        flock(&file, libc::LOCK_EX | libc::LOCK_NB).map_err(|error| {
+        Self::flock(&file, libc::LOCK_EX | libc::LOCK_NB).map_err(|error| {
             if error.raw_os_error() == Some(libc::EWOULDBLOCK) {
                 LockError::InUse
             } else {
@@ -52,20 +66,6 @@ impl ProfileLock {
             }
         })?;
         Ok(Self { _file: file })
-    }
-}
-
-/// `flock(2)` on `file`.
-pub fn flock(file: &File, operation: libc::c_int) -> io::Result<()> {
-    loop {
-        // SAFETY: the descriptor belongs to `file`, which outlives the call.
-        if unsafe { libc::flock(file.as_raw_fd(), operation) } == 0 {
-            return Ok(());
-        }
-        let error = io::Error::last_os_error();
-        if error.raw_os_error() != Some(libc::EINTR) {
-            return Err(error);
-        }
     }
 }
 
@@ -85,7 +85,7 @@ impl Held {
             .mode(0o600)
             .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
             .open(path)?;
-        flock(&file, libc::LOCK_EX)?;
+        ProfileLock::flock(&file, libc::LOCK_EX)?;
         Ok(Self { _file: file })
     }
 }

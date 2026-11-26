@@ -3,18 +3,21 @@
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use super::Downloads;
 use crate::ui::Ctx;
 
 /// The downloads button; busy while something downloads.
-pub struct DownloadsButton;
+#[derive(PartialEq)]
+pub struct DownloadsButton {
+    pub ctx: Ctx,
+}
 
-impl DownloadsButton {
-    pub fn element(ctx: Ctx, downloads: &Downloads) -> Element {
+impl Component for DownloadsButton {
+    fn render(&self) -> impl IntoElement {
+        let ctx = self.ctx;
+        let active = ctx.browser.read().downloads.active();
         let state = ctx.downloads_popover;
         let mut anchor = state.anchor;
         let mut open = state.open;
-        let active = downloads.active();
         // An engine that does not save downloads has nothing to list: the button
         // stays, so the toolbar keeps its shape, and says why it does nothing.
         let can = ctx.browser.read().engine.capabilities().downloads;
@@ -33,6 +36,5 @@ impl DownloadsButton {
                 .working(active > 0)
                 .enabled(can),
             )
-            .into_element()
     }
 }

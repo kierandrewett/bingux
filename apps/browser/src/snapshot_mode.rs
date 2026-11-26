@@ -26,7 +26,7 @@ use crate::browser::Options;
 use crate::commands::Command;
 use crate::engine::Engine;
 use crate::tabs::Tab;
-use crate::target::SCHEME;
+use crate::target::Target;
 use crate::ui::{App, Ctx};
 
 thread_local! {
@@ -208,14 +208,15 @@ fn cert_details(shot: &mut Snapshot, _: &Rig) {
 fn find(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 400);
     run_command(shot, Command::Find);
-    shot.run_script("type exam", SCHEME).expect("typing");
+    shot.run_script("type exam", Target::SCHEME)
+        .expect("typing");
     wait_typing(shot, 600);
 }
 
 fn find_missing(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 400);
     run_command(shot, Command::Find);
-    shot.run_script("type ab", SCHEME).expect("typing");
+    shot.run_script("type ab", Target::SCHEME).expect("typing");
     wait_typing(shot, 600);
 }
 
@@ -246,7 +247,7 @@ fn settings(shot: &mut Snapshot, _: &Rig) {
 fn suggestions(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 500);
     run_command(shot, Command::FocusAddress);
-    shot.run_script("type ex", SCHEME).expect("typing");
+    shot.run_script("type ex", Target::SCHEME).expect("typing");
     wait(shot, 700);
 }
 
@@ -477,7 +478,10 @@ fn app(rig: &Rig, scenario: &Scenario) -> impl Fn() -> Element + use<> {
         .map(|url| (*url).to_string())
         .collect();
     move || {
-        provide_router(Arc::new(RouteTable::new(SCHEME)), &Location::rooted(SCHEME));
+        provide_router(
+            Arc::new(RouteTable::new(Target::SCHEME)),
+            &Location::rooted(Target::SCHEME),
+        );
         Element::from(App {
             engine: engine.clone(),
             options,
@@ -512,7 +516,10 @@ fn run_real(dir: &str, addresses: &[String]) {
         let engine = Engine::new(bingux_ui::web_view::engine::start(config));
         let start = addresses.to_vec();
         let app = move || {
-            provide_router(Arc::new(RouteTable::new(SCHEME)), &Location::rooted(SCHEME));
+            provide_router(
+                Arc::new(RouteTable::new(Target::SCHEME)),
+                &Location::rooted(Target::SCHEME),
+            );
             Element::from(App {
                 engine: engine.clone(),
                 options: Options { private: true },
@@ -703,7 +710,8 @@ mod tests {
         shot.runner().run_in(|| at.run(Command::Downloads));
         wait(&mut shot, 400);
         assert!(open(&mut shot), "the list is open");
-        shot.run_script("key escape", SCHEME).expect("a key");
+        shot.run_script("key escape", Target::SCHEME)
+            .expect("a key");
         wait(&mut shot, 400);
         assert!(!open(&mut shot), "Escape closed it");
     }

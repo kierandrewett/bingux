@@ -9,25 +9,30 @@ mod tests;
 use bingux_ui::task::spawn_blocking;
 use freya::prelude::spawn;
 
-/// Start a private window. Nothing waits for it.
-pub fn open(profile: Option<String>) {
-    spawn(async move {
-        spawn_blocking(move || {
-            let Ok(program) = std::env::current_exe() else {
-                return;
-            };
-            let mut command = std::process::Command::new(program);
-            command.arg("--private");
-            if let Some(profile) = profile {
-                command.arg("--profile").arg(profile);
-            }
-            if let Ok(mut child) = command.spawn() {
-                // Reaped on a thread of its own, so it never becomes a zombie.
-                std::thread::spawn(move || {
-                    let _ = child.wait();
-                });
-            }
-        })
-        .await;
-    });
+/// The private window, started from this one.
+pub struct PrivateWindow;
+
+impl PrivateWindow {
+    /// Start a private window. Nothing waits for it.
+    pub fn open(profile: Option<String>) {
+        spawn(async move {
+            spawn_blocking(move || {
+                let Ok(program) = std::env::current_exe() else {
+                    return;
+                };
+                let mut command = std::process::Command::new(program);
+                command.arg("--private");
+                if let Some(profile) = profile {
+                    command.arg("--profile").arg(profile);
+                }
+                if let Ok(mut child) = command.spawn() {
+                    // Reaped on a thread of its own, so it never becomes a zombie.
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                }
+            })
+            .await;
+        });
+    }
 }

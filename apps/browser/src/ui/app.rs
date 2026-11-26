@@ -85,14 +85,24 @@ struct Content {
     profile: Handoff,
 }
 
-/// The addresses a launch names: the `open` pairs of its location.
-fn opened_by(location: &Location) -> Vec<String> {
-    location
-        .query_pairs()
-        .iter()
-        .filter(|(key, _)| key == "open")
-        .map(|(_, value)| value.clone())
-        .collect()
+impl Content {
+    /// The addresses a launch names: the `open` pairs of its location.
+    fn opened_by(location: &Location) -> Vec<String> {
+        location
+            .query_pairs()
+            .iter()
+            .filter(|(key, _)| key == "open")
+            .map(|(_, value)| value.clone())
+            .collect()
+    }
+
+    /// Whether the tab on show is the blank one a launch without an address makes.
+    fn first_is_blank(ctx: Ctx) -> bool {
+        ctx.browser
+            .peek()
+            .active()
+            .is_some_and(|tab| tab.is_blank())
+    }
 }
 
 impl Component for Content {
@@ -140,7 +150,7 @@ impl Component for Content {
         // takes them in and sleeps again. The first tabs open once the window
         // exists.
         let first: Vec<String> = {
-            let launched = opened_by(&location);
+            let launched = Self::opened_by(&location);
             if launched.is_empty() {
                 self.start.clone()
             } else {
@@ -158,7 +168,7 @@ impl Component for Content {
                         browser.poll();
                         browser.open_first(&first);
                     });
-                    if first_is_blank(ctx) {
+                    if Self::first_is_blank(ctx) {
                         ctx.address.focus_at_open();
                     }
                     loop {
@@ -179,7 +189,7 @@ impl Component for Content {
         });
         if *handled.borrow() != location {
             *handled.borrow_mut() = location.clone();
-            let urls = opened_by(&location);
+            let urls = Self::opened_by(&location);
             spawn(async move {
                 ctx.with(|browser| {
                     for url in &urls {
@@ -328,12 +338,4 @@ impl Component for Content {
         root.child(Screen::new(header).strip(tabs).content(body))
             .into_element()
     }
-}
-
-/// Whether the tab on show is the blank one a launch without an address makes.
-fn first_is_blank(ctx: Ctx) -> bool {
-    ctx.browser
-        .peek()
-        .active()
-        .is_some_and(|tab| tab.is_blank())
 }

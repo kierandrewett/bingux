@@ -86,6 +86,14 @@ impl Keeping {
         })
     }
 
+    /// A state the window is in by how it was opened, not by a failure.
+    pub fn is_by_design(&self) -> bool {
+        matches!(
+            self,
+            Self::NotSaved(NotSaved::Private | NotSaved::NoProfile)
+        )
+    }
+
     /// Whether the part may be written: never a file this build could not
     /// read.
     pub fn is_writable(&self) -> bool {

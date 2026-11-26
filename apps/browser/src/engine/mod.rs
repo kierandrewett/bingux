@@ -3,7 +3,10 @@
 
 mod failed_page;
 pub mod failure;
+mod start;
 mod status;
+#[cfg(test)]
+mod tests;
 
 use std::sync::Arc;
 

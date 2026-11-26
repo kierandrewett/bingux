@@ -7,7 +7,7 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::downloads::DownloadsButton;
-use crate::navigation::NavButtons;
+use crate::navigation::{BackButton, ForwardButton, ReloadButton};
 use crate::site_info::ConnectionButton;
 use crate::tabs::TabKind;
 use crate::tabs::TabsSheet;
@@ -27,23 +27,47 @@ struct Reading {
     tabs: usize,
 }
 
-fn reading(ctx: Ctx) -> Reading {
-    let browser = ctx.browser.read();
-    let tab = browser.active();
-    Reading {
-        key: browser.tabs.active_key(),
-        can_back: tab.is_some_and(|tab| tab.can_back),
-        can_forward: tab.is_some_and(|tab| tab.can_forward),
-        loading: tab.is_some_and(|tab| tab.load.loading),
-        zoom: tab.map_or(Zoom::DEFAULT, |tab| tab.zoom),
-        is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web),
-        tabs: browser.tabs.len(),
+impl Reading {
+    fn of(ctx: Ctx) -> Self {
+        let browser = ctx.browser.read();
+        let tab = browser.active();
+        Reading {
+            key: browser.tabs.active_key(),
+            can_back: tab.is_some_and(|tab| tab.can_back),
+            can_forward: tab.is_some_and(|tab| tab.can_forward),
+            loading: tab.is_some_and(|tab| tab.load.loading),
+            zoom: tab.map_or(Zoom::DEFAULT, |tab| tab.zoom),
+            is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web),
+            tabs: browser.tabs.len(),
+        }
     }
 }
 
 /// The main menu button.
-fn menu_control() -> Element {
-    app_menu(Vec::new()).into()
+#[derive(PartialEq)]
+struct MainMenuButton;
+
+impl Component for MainMenuButton {
+    fn render(&self) -> impl IntoElement {
+        app_menu(Vec::new())
+    }
+}
+
+/// The tab count of a phone, as a button that opens the list of tabs.
+#[derive(PartialEq)]
+struct TabsButton {
+    ctx: Ctx,
+    count: usize,
+}
+
+impl Component for TabsButton {
+    fn render(&self) -> impl IntoElement {
+        let ctx = self.ctx;
+        // The number of tabs is the whole label, as on every phone browser.
+        action_button(self.count.to_string(), move |_: ()| TabsSheet::open(ctx))
+            .flat()
+            .compact()
+    }
 }
 
 #[derive(PartialEq)]
@@ -58,7 +82,7 @@ impl Component for Toolbar {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
-        let read = reading(ctx);
+        let read = Reading::of(ctx);
         let downloads = ctx.browser.read().downloads.clone();
         let mut bar = rect()
             .component("Toolbar")
@@ -84,22 +108,34 @@ impl Component for Toolbar {
             // history is in the bar below.
             return bar
                 .a11y_alt("Address")
-                .child(ConnectionButton::element(ctx))
+                .child(ConnectionButton { ctx })
                 .child(AddressBar { ctx })
-                .child(tabs_button(ctx, read.tabs))
-                .child(menu_control())
+                .child(TabsButton {
+                    ctx,
+                    count: read.tabs,
+                })
+                .child(MainMenuButton)
                 .into_element();
         }
         bar = bar
             .a11y_alt("Navigation")
-            .children(NavButtons::history(
+            .child(BackButton {
                 ctx,
-                read.key,
-                read.can_back,
-                read.can_forward,
-            ))
-            .child(NavButtons::reload(ctx, read.key, read.loading, read.is_web))
-            .child(ConnectionButton::element(ctx))
+                key: read.key,
+                enabled: read.can_back,
+            })
+            .child(ForwardButton {
+                ctx,
+                key: read.key,
+                enabled: read.can_forward,
+            })
+            .child(ReloadButton {
+                ctx,
+                key: read.key,
+                loading: read.loading,
+                is_web: read.is_web,
+            })
+            .child(ConnectionButton { ctx })
             .child(AddressBar { ctx })
             .maybe_child((!read.zoom.is_default()).then_some(ZoomChip {
                 ctx,
@@ -107,9 +143,9 @@ impl Component for Toolbar {
                 zoom: read.zoom,
             }));
         if !downloads.list().is_empty() {
-            bar = bar.child(DownloadsButton::element(ctx, &downloads));
+            bar = bar.child(DownloadsButton { ctx });
         }
-        bar.child(menu_control()).into_element()
+        bar.child(MainMenuButton).into_element()
     }
 }
 
@@ -124,8 +160,7 @@ impl Component for PhoneBottom {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
-        let read = reading(ctx);
-        let downloads = ctx.browser.read().downloads.clone();
+        let read = Reading::of(ctx);
         rect()
             .component("BottomBar")
             .a11y_role(AccessibilityRole::Toolbar)
@@ -144,22 +179,22 @@ impl Component for PhoneBottom {
                     border(Line::HairlineTop),
                 ],
             )
-            .children(NavButtons::history(
+            .child(BackButton {
                 ctx,
-                read.key,
-                read.can_back,
-                read.can_forward,
-            ))
-            .child(NavButtons::reload(ctx, read.key, read.loading, read.is_web))
-            .child(DownloadsButton::element(ctx, &downloads))
+                key: read.key,
+                enabled: read.can_back,
+            })
+            .child(ForwardButton {
+                ctx,
+                key: read.key,
+                enabled: read.can_forward,
+            })
+            .child(ReloadButton {
+                ctx,
+                key: read.key,
+                loading: read.loading,
+                is_web: read.is_web,
+            })
+            .child(DownloadsButton { ctx })
     }
-}
-
-/// The tab count of a phone, as a button that opens the list of tabs.
-fn tabs_button(ctx: Ctx, count: usize) -> Element {
-    // The number of tabs is the whole label, as on every phone browser.
-    action_button(count.to_string(), move |_: ()| TabsSheet::open(ctx))
-        .flat()
-        .compact()
-        .into()
 }

@@ -110,7 +110,7 @@ impl Ctx {
                         on.then_some(freya::winit::window::Fullscreen::Borderless(None)),
                     );
                 }),
-                UiRequest::NewPrivateWindow => crate::private::open(
+                UiRequest::NewPrivateWindow => crate::private::PrivateWindow::open(
                     self.browser
                         .peek()
                         .profile

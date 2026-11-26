@@ -14,6 +14,8 @@ mod outbox;
 mod prompts;
 #[cfg(test)]
 pub(crate) mod testing;
+#[cfg(test)]
+mod tests;
 
 pub use outbox::{Notice, Outbox, UiRequest};
 

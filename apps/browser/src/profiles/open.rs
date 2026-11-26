@@ -9,7 +9,7 @@
 use bingux_ui::prelude::tr;
 use std::path::PathBuf;
 
-use crate::first_run::{self, Migrated, MigrationError};
+use crate::first_run::{self, FirstRun, Migrated, MigrationError};
 use crate::profiles::lock::{LockError, ProfileLock};
 use crate::profiles::places::{Folders, Places};
 use crate::profiles::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
@@ -124,150 +124,158 @@ pub enum Opened {
     Problem(ProfileState),
 }
 
-fn registry_state(problem: RegistryProblem, places: &Places) -> ProfileState {
-    match problem {
-        RegistryProblem::Damaged(detail) => ProfileState::RegistryDamaged { detail },
-        RegistryProblem::TooNew { found, supported } => {
-            ProfileState::RegistryTooNew { found, supported }
-        }
-        RegistryProblem::Io(problem) => ProfileState::Unwritable {
-            path: places.data.clone(),
-            problem,
-        },
-    }
-}
-
-/// The application id of a window of `entry`: `bingux-browser` for the
-/// default profile (and a folder outside the registry), else one per profile.
-pub fn app_id(entry: Option<&Entry>, default: Option<&Id>) -> String {
-    match entry {
-        Some(entry) if Some(&entry.id) != default => {
-            format!("bingux-browser-{}", entry.id.as_str())
-        }
-        _ => "bingux-browser".to_string(),
-    }
-}
-
-/// Locks the profile in `folders` and reads its settings.
-fn lock_and_read(
-    entry: Option<Entry>,
-    folders: Folders,
-    stale_cache: Option<PathBuf>,
-    default: Option<&Id>,
-) -> Opened {
-    let app_id = app_id(entry.as_ref(), default);
-    let name = entry.as_ref().map_or_else(
-        || folders.root.display().to_string(),
-        |entry| entry.name.clone(),
-    );
-    let lock = match ProfileLock::take(&folders) {
-        Ok(lock) => lock,
-        Err(LockError::InUse) => return Opened::Problem(ProfileState::InUse { name, app_id }),
-        Err(LockError::Io(problem)) => {
-            return Opened::Problem(ProfileState::Unwritable {
-                path: folders.root.clone(),
+impl ProfileState {
+    /// The state a registry that cannot be used gives.
+    fn of_registry(problem: RegistryProblem, places: &Places) -> Self {
+        match problem {
+            RegistryProblem::Damaged(detail) => Self::RegistryDamaged { detail },
+            RegistryProblem::TooNew { found, supported } => {
+                Self::RegistryTooNew { found, supported }
+            }
+            RegistryProblem::Io(problem) => Self::Unwritable {
+                path: places.data.clone(),
                 problem,
+            },
+        }
+    }
+}
+
+impl OpenProfile {
+    /// The application id of a window of `entry`: `bingux-browser` for the
+    /// default profile (and a folder outside the registry), else one per profile.
+    pub fn app_id_of(entry: Option<&Entry>, default: Option<&Id>) -> String {
+        match entry {
+            Some(entry) if Some(&entry.id) != default => {
+                format!("bingux-browser-{}", entry.id.as_str())
+            }
+            _ => "bingux-browser".to_string(),
+        }
+    }
+}
+
+impl Opened {
+    /// Locks the profile in `folders` and reads its settings.
+    fn locked(
+        entry: Option<Entry>,
+        folders: Folders,
+        stale_cache: Option<PathBuf>,
+        default: Option<&Id>,
+    ) -> Self {
+        let app_id = OpenProfile::app_id_of(entry.as_ref(), default);
+        let name = entry.as_ref().map_or_else(
+            || folders.root.display().to_string(),
+            |entry| entry.name.clone(),
+        );
+        let lock = match ProfileLock::take(&folders) {
+            Ok(lock) => lock,
+            Err(LockError::InUse) => return Self::Problem(ProfileState::InUse { name, app_id }),
+            Err(LockError::Io(problem)) => {
+                return Self::Problem(ProfileState::Unwritable {
+                    path: folders.root.clone(),
+                    problem,
+                });
+            }
+        };
+        if let Err(error) = files::private_dir(&folders.engine) {
+            return Self::Problem(ProfileState::Unwritable {
+                path: folders.engine.clone(),
+                problem: Problem::of(&error),
             });
         }
-    };
-    if let Err(error) = files::private_dir(&folders.engine) {
-        return Opened::Problem(ProfileState::Unwritable {
-            path: folders.engine.clone(),
-            problem: Problem::of(&error),
-        });
-    }
-    let (settings, settings_problem) = Settings::read(&folders.settings());
-    Opened::Profile(OpenProfile {
-        entry,
-        folders,
-        settings,
-        settings_problem,
-        stale_cache,
-        lock,
-        app_id,
-    })
-}
-
-/// Opens the profile `asked` names (`--profile`, a name or an id), or the
-/// default one.
-pub fn open(places: &Places, asked: Option<&str>) -> Opened {
-    if let Some(root) = &places.named {
-        return lock_and_read(None, Places::named_folders(root), None, None);
-    }
-    let profiles = Profiles::new(places.clone());
-    // A failure here is the registry's, and the start below reports it.
-    let _ = profiles.finish_deletions();
-    let stale_cache = match first_run::first_run(&profiles) {
-        Ok(Migrated::Moved { stale_cache, .. }) => stale_cache,
-        Ok(Migrated::Created(_) | Migrated::Nothing) => None,
-        Err(MigrationError::Waiting { old }) => {
-            return Opened::Problem(ProfileState::MoveWaiting { old });
-        }
-        Err(MigrationError::Failed { old, problem }) => {
-            return Opened::Problem(ProfileState::MoveFailed { old, problem });
-        }
-        Err(MigrationError::Registry(problem)) => {
-            return Opened::Problem(registry_state(problem, places));
-        }
-    };
-    let default = profiles
-        .read()
-        .ok()
-        .flatten()
-        .and_then(|registry| registry.default_entry().map(|entry| entry.id.clone()));
-    match profiles.startup(asked) {
-        Err(problem) => Opened::Problem(registry_state(problem, places)),
-        Ok(Startup::Open(entry)) => {
-            let folders = places.folders(&entry.id);
-            lock_and_read(Some(entry), folders, stale_cache, default.as_ref())
-        }
-        Ok(Startup::Ask(entries)) => Opened::Choose(entries),
-        Ok(Startup::Unknown(asked)) => Opened::Problem(ProfileState::UnknownProfile { asked }),
-        // Every profile was deleted by hand: start again with one.
-        Ok(Startup::Empty) => match profiles.create(first_run::FIRST_NAME, first_run::FIRST_COLOUR)
-        {
-            Ok(entry) => {
-                let folders = places.folders(&entry.id);
-                let id = entry.id.clone();
-                lock_and_read(Some(entry), folders, stale_cache, Some(&id))
-            }
-            Err(crate::profiles::registry::ChangeError::Registry(problem)) => {
-                Opened::Problem(registry_state(problem, places))
-            }
-            Err(other) => Opened::Problem(ProfileState::RegistryDamaged {
-                detail: format!("{other:?}"),
-            }),
-        },
-    }
-}
-
-/// What a private window starts with: the settings of the profile `asked`
-/// names, or of the default one, read without writing anything. A profile
-/// that cannot be read gives the defaults.
-pub fn open_private(places: &Places, asked: Option<&str>) -> Opened {
-    if let Some(root) = &places.named {
-        let (settings, _) = Settings::read(&Places::named_folders(root).settings());
-        return Opened::Private {
+        let (settings, settings_problem) = Settings::read(&folders.settings());
+        Self::Profile(OpenProfile {
+            entry,
+            folders,
             settings,
-            from: None,
-        };
+            settings_problem,
+            stale_cache,
+            lock,
+            app_id,
+        })
     }
-    let profiles = Profiles::new(places.clone());
-    let entry = match profiles.startup(asked) {
-        Ok(Startup::Open(entry)) => Some(entry),
-        Ok(Startup::Ask(_) | Startup::Unknown(_) | Startup::Empty) | Err(_) => profiles
+
+    /// Opens the profile `asked` names (`--profile`, a name or an id), or the
+    /// default one.
+    pub fn start(places: &Places, asked: Option<&str>) -> Self {
+        if let Some(root) = &places.named {
+            return Self::locked(None, Places::named_folders(root), None, None);
+        }
+        let profiles = Profiles::new(places.clone());
+        // A failure here is the registry's, and the start below reports it.
+        let _ = profiles.finish_deletions();
+        let stale_cache = match FirstRun::run(&profiles) {
+            Ok(Migrated::Moved { stale_cache, .. }) => stale_cache,
+            Ok(Migrated::Created(_) | Migrated::Nothing) => None,
+            Err(MigrationError::Waiting { old }) => {
+                return Self::Problem(ProfileState::MoveWaiting { old });
+            }
+            Err(MigrationError::Failed { old, problem }) => {
+                return Self::Problem(ProfileState::MoveFailed { old, problem });
+            }
+            Err(MigrationError::Registry(problem)) => {
+                return Self::Problem(ProfileState::of_registry(problem, places));
+            }
+        };
+        let default = profiles
             .read()
             .ok()
             .flatten()
-            .and_then(|registry| registry.default_entry().cloned()),
-    };
-    let settings = entry
-        .as_ref()
-        .map(|entry| Settings::read(&places.folders(&entry.id).settings()).0)
-        .unwrap_or_default();
-    Opened::Private {
-        settings,
-        from: entry.map(|entry| entry.id),
+            .and_then(|registry| registry.default_entry().map(|entry| entry.id.clone()));
+        match profiles.startup(asked) {
+            Err(problem) => Self::Problem(ProfileState::of_registry(problem, places)),
+            Ok(Startup::Open(entry)) => {
+                let folders = places.folders(&entry.id);
+                Self::locked(Some(entry), folders, stale_cache, default.as_ref())
+            }
+            Ok(Startup::Ask(entries)) => Self::Choose(entries),
+            Ok(Startup::Unknown(asked)) => Self::Problem(ProfileState::UnknownProfile { asked }),
+            // Every profile was deleted by hand: start again with one.
+            Ok(Startup::Empty) => {
+                match profiles.create(first_run::FIRST_NAME, first_run::FIRST_COLOUR) {
+                    Ok(entry) => {
+                        let folders = places.folders(&entry.id);
+                        let id = entry.id.clone();
+                        Self::locked(Some(entry), folders, stale_cache, Some(&id))
+                    }
+                    Err(crate::profiles::registry::ChangeError::Registry(problem)) => {
+                        Self::Problem(ProfileState::of_registry(problem, places))
+                    }
+                    Err(other) => Self::Problem(ProfileState::RegistryDamaged {
+                        detail: format!("{other:?}"),
+                    }),
+                }
+            }
+        }
+    }
+
+    /// What a private window starts with: the settings of the profile `asked`
+    /// names, or of the default one, read without writing anything. A profile
+    /// that cannot be read gives the defaults.
+    pub fn private(places: &Places, asked: Option<&str>) -> Self {
+        if let Some(root) = &places.named {
+            let (settings, _) = Settings::read(&Places::named_folders(root).settings());
+            return Self::Private {
+                settings,
+                from: None,
+            };
+        }
+        let profiles = Profiles::new(places.clone());
+        let entry = match profiles.startup(asked) {
+            Ok(Startup::Open(entry)) => Some(entry),
+            Ok(Startup::Ask(_) | Startup::Unknown(_) | Startup::Empty) | Err(_) => profiles
+                .read()
+                .ok()
+                .flatten()
+                .and_then(|registry| registry.default_entry().cloned()),
+        };
+        let settings = entry
+            .as_ref()
+            .map(|entry| Settings::read(&places.folders(&entry.id).settings()).0)
+            .unwrap_or_default();
+        Self::Private {
+            settings,
+            from: entry.map(|entry| entry.id),
+        }
     }
 }
 
@@ -313,10 +321,10 @@ mod tests {
     #[test]
     fn the_first_start_opens_personal_and_holds_its_lock() {
         let rig = Rig::new();
-        let first = opened(open(&rig.places, None));
+        let first = opened(Opened::start(&rig.places, None));
         assert_eq!(first.entry.as_ref().unwrap().name, "Personal");
         assert!(first.folders.engine.is_dir());
-        let Opened::Problem(state) = open(&rig.places, None) else {
+        let Opened::Problem(state) = Opened::start(&rig.places, None) else {
             panic!("a second open of the same profile");
         };
         assert_eq!(
@@ -327,17 +335,17 @@ mod tests {
             }
         );
         drop(first);
-        opened(open(&rig.places, None));
+        opened(Opened::start(&rig.places, None));
     }
 
     #[test]
     fn another_profile_opens_beside_an_open_one() {
         let rig = Rig::new();
-        let personal = opened(open(&rig.places, None));
+        let personal = opened(Opened::start(&rig.places, None));
         Profiles::new(rig.places.clone())
             .create("Work", "orange")
             .unwrap();
-        let work = opened(open(&rig.places, Some("work")));
+        let work = opened(Opened::start(&rig.places, Some("work")));
         assert_eq!(work.entry.unwrap().name, "Work");
         drop(personal);
     }
@@ -345,7 +353,7 @@ mod tests {
     #[test]
     fn a_profile_nobody_has_is_said_so() {
         let rig = Rig::new();
-        let Opened::Problem(state) = open(&rig.places, Some("Study")) else {
+        let Opened::Problem(state) = Opened::start(&rig.places, Some("Study")) else {
             panic!("no such profile");
         };
         assert_eq!(
@@ -361,7 +369,9 @@ mod tests {
         let rig = Rig::new();
         fs::create_dir_all(&rig.places.data).unwrap();
         fs::write(rig.places.registry(), b"[").unwrap();
-        let Opened::Problem(ProfileState::RegistryDamaged { .. }) = open(&rig.places, None) else {
+        let Opened::Problem(ProfileState::RegistryDamaged { .. }) =
+            Opened::start(&rig.places, None)
+        else {
             panic!("a damaged registry");
         };
         assert_eq!(fs::read(rig.places.registry()).unwrap(), b"[");
@@ -374,7 +384,7 @@ mod tests {
         let parent = rig.places.data.parent().unwrap().to_path_buf();
         fs::create_dir_all(&parent).unwrap();
         fs::set_permissions(&parent, fs::Permissions::from_mode(0o500)).unwrap();
-        let result = open(&rig.places, None);
+        let result = Opened::start(&rig.places, None);
         fs::set_permissions(&parent, fs::Permissions::from_mode(0o700)).unwrap();
         let Opened::Problem(ProfileState::Unwritable { problem, .. }) = result else {
             panic!("a read-only folder: {result:?}");
@@ -385,11 +395,11 @@ mod tests {
     #[test]
     fn ask_at_start_with_two_profiles_asks() {
         let rig = Rig::new();
-        drop(opened(open(&rig.places, None)));
+        drop(opened(Opened::start(&rig.places, None)));
         let profiles = Profiles::new(rig.places.clone());
         profiles.create("Work", "orange").unwrap();
         profiles.set_ask_at_start(true).unwrap();
-        let Opened::Choose(entries) = open(&rig.places, None) else {
+        let Opened::Choose(entries) = Opened::start(&rig.places, None) else {
             panic!("asks");
         };
         assert_eq!(entries.len(), 2);
@@ -402,7 +412,7 @@ mod tests {
             named: Some(rig.dir.join("named")),
             ..rig.places.clone()
         };
-        let profile = opened(open(&places, None));
+        let profile = opened(Opened::start(&places, None));
         assert_eq!(profile.entry, None);
         assert_eq!(profile.folders.engine, rig.dir.join("named/engine"));
         assert!(!places.registry().exists(), "nothing registered");
@@ -411,11 +421,11 @@ mod tests {
     #[test]
     fn a_private_window_reads_its_profiles_settings() {
         let rig = Rig::new();
-        let personal = opened(open(&rig.places, None));
+        let personal = opened(Opened::start(&rig.places, None));
         let mut chosen = Settings::default();
         chosen.search_engine = "startpage".to_string();
         files::replace(&personal.folders.settings(), &chosen.encode()).unwrap();
-        let Opened::Private { settings, from } = open_private(&rig.places, None) else {
+        let Opened::Private { settings, from } = Opened::private(&rig.places, None) else {
             panic!("private");
         };
         assert_eq!(settings.search_engine, "startpage");
