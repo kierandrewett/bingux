@@ -27,6 +27,12 @@ use crate::theme::provide_tokens;
 
 const SIZE: (f32, f32) = (1000.0, 600.0);
 
+/// How long a test waits for a folder to be read, listed or checked before it
+/// says it never was. The wait ends the moment the state is there, so the cap
+/// costs nothing on a machine that keeps up; the work is on worker threads,
+/// which a loaded machine starts late.
+const WAIT: Duration = Duration::from_secs(30);
+
 /// A folder tree in the temporary directory:
 ///
 /// ```text
@@ -132,7 +138,11 @@ fn open(tabs: Vec<TabMemory>) -> (Snapshot, Opened) {
         },
         SIZE,
     );
-    shot.settle(Duration::from_millis(1200));
+    assert!(
+        shot.settle_until(WAIT, |shot| listed(shot, "alpha")),
+        "the first folder was never listed: {:?}",
+        labels(&mut shot)
+    );
     (shot, opened)
 }
 
@@ -167,6 +177,14 @@ fn strings(list: &[&str]) -> Vec<String> {
 
 /// Select the row called `name` and open it with Enter.
 fn enter(shot: &mut Snapshot, name: &str) {
+    // The row is there once the folder has been read on its worker. The whole label, not a
+    // label that contains the name: the tree's own name ends in `gone` and the address bar
+    // shows it, which is a `one` that is not a row.
+    assert!(
+        shot.settle_until(WAIT, |shot| listed(shot, name)),
+        "no row called {name} was ever listed: {:?}",
+        labels(shot)
+    );
     assert!(shot.click_text(name), "a row called {name}");
     shot.key(Key::Named(NamedKey::Enter));
     rest(shot);
@@ -256,6 +274,11 @@ fn labels(shot: &mut Snapshot) -> Vec<String> {
 
 fn shown(shot: &mut Snapshot, text: &str) -> bool {
     labels(shot).iter().any(|label| label.contains(text))
+}
+
+/// Whether a row, a label that is the whole of `name`, is drawn.
+fn listed(shot: &mut Snapshot, name: &str) -> bool {
+    labels(shot).iter().any(|label| label == name)
 }
 
 #[test]
@@ -517,23 +540,26 @@ fn a_folder_that_is_gone_stays_in_the_history_and_the_view_says_so() {
     alt(&mut shot, NamedKey::ArrowLeft);
     std::fs::remove_dir_all(tree.root.join("alpha/one")).expect("the folder is removed");
     alt(&mut shot, NamedKey::ArrowRight);
-    shot.settle(Duration::from_millis(900));
+    // The folder is checked on a worker: the view says so when it has been.
+    let said = shot.settle_until(WAIT, |shot| shown(shot, "Folder not found"));
     assert_eq!(
         names(&tree, &trail(&memory)).1,
         "alpha/one",
         "Forward went to the entry that was kept"
     );
-    let found = labels(&mut shot);
     assert!(
-        shown(&mut shot, "Folder not found"),
-        "the view says the folder is not there: {found:?}"
+        said,
+        "the view says the folder is not there: {:?}",
+        labels(&mut shot)
     );
     // The keys still work from it (they are the window's commands, which
     // need no focused row), and Up goes by the name.
     alt(&mut shot, NamedKey::ArrowUp);
-    shot.settle(Duration::from_millis(600));
     assert_eq!(names(&tree, &trail(&memory)).1, "alpha");
-    assert!(!shown(&mut shot, "Folder not found"));
+    assert!(
+        shot.settle_until(WAIT, |shot| !shown(shot, "Folder not found")),
+        "the message went when the view left the missing folder"
+    );
     alt(&mut shot, NamedKey::ArrowLeft);
     shot.settle(Duration::from_millis(600));
     assert_eq!(
@@ -572,13 +598,14 @@ fn a_typed_path_that_is_not_there_adds_nothing() {
         shot.key(Key::Character(letter.to_string()));
     }
     shot.key(Key::Named(NamedKey::Enter));
-    shot.settle(Duration::from_millis(900));
+    // The address is checked on a worker: the bar says so when it has been.
+    let said = shot.settle_until(WAIT, |shot| shown(shot, "Not found"));
     assert_eq!(
         names(&tree, &trail(&memory)),
         before,
         "an address that is not there is not a place"
     );
-    assert!(shown(&mut shot, "Not found"), "and the bar says why");
+    assert!(said, "and the bar says why: {:?}", labels(&mut shot));
 }
 
 #[test]

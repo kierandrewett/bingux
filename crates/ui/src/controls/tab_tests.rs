@@ -1460,6 +1460,27 @@ fn middle_click(shot: &mut Snapshot, at: (f32, f32)) {
     }
 }
 
+/// The pointer goes to `at` and the left button is let go there in one turn of
+/// the window, quicker than any frame whatever the load of the machine. As two
+/// calls (`move_to`, then `release`) they leave a gap a frame can run in, and
+/// a frame with the pointer past the threshold tears the tab while the button
+/// is still down.
+fn move_and_release(shot: &mut Snapshot, at: (f32, f32)) {
+    let cursor = CursorPoint::new(at.0 as f64, at.1 as f64);
+    shot.runner().move_cursor(cursor);
+    shot.runner().send_event(PlatformEvent::Mouse {
+        name: MouseEventName::MouseUp,
+        cursor,
+        button: Some(MouseButton::Left),
+    });
+    shot.runner().sync_and_update();
+}
+
+/// How long a test waits for a state before it says it never came. The wait
+/// ends the moment the state is there, so the cap costs nothing on a machine
+/// that keeps up.
+const WAIT: Duration = Duration::from_secs(30);
+
 /// The close buttons that are drawn, left to right: the icon buttons in a tab.
 fn close_buttons(shot: &mut Snapshot) -> Vec<Area> {
     let tabs = named(shot, "Tab");
@@ -1637,20 +1658,18 @@ fn every_tab_has_a_16px_close_circle_inset_in_it_and_an_unselected_one_shows_it_
     );
     let third = tabs[2];
     shot.hover(third.min_x() + 40.0, centre(&third).1);
-    shot.settle(Duration::from_millis(200));
-    let after = close_buttons(&mut shot);
-    assert_eq!(
-        after.len(),
-        2,
-        "the tab under the pointer shows its button too"
+    assert!(
+        shot.settle_until(WAIT, |shot| close_buttons(shot).len() == 2),
+        "the tab under the pointer shows its button too: {:?}",
+        close_buttons(&mut shot)
     );
+    let after = close_buttons(&mut shot);
     assert!(contains(&third, &after[1], 0.5));
     shot.hover(1.0, 250.0);
-    shot.settle(Duration::from_millis(200));
-    assert_eq!(
-        close_buttons(&mut shot).len(),
-        1,
-        "and gives it up when the pointer leaves"
+    assert!(
+        shot.settle_until(WAIT, |shot| close_buttons(shot).len() == 1),
+        "and gives it up when the pointer leaves: {:?}",
+        close_buttons(&mut shot)
     );
 }
 
@@ -2737,8 +2756,7 @@ fn a_tab_let_go_beyond_the_threshold_in_one_move_is_torn_as_it_is_released() {
     let (at, strip) = grab(&mut shot, 1);
     let bottom = strip_row(&mut shot).max_y();
     let far = (at.0 + 5.0, bottom + 2.0 * strip);
-    shot.move_to(far);
-    shot.release(far);
+    move_and_release(&mut shot, far);
     rest(&mut shot);
     let log = host.log.borrow().clone();
     assert_eq!(log.len(), 1, "{log:?}");

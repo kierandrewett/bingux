@@ -460,6 +460,29 @@ impl Rig {
         // The animation moves at most one tick cap a frame when the machine is busy, so a list
         // can take more frames to open than the clock says: wait until its rows are drawn whole.
         self.shot.settle_until(WAIT, rows_whole);
+        // The list opens on the current choice, and a sheet that is still on its way up has no
+        // row on screen yet: it is open when the choice can be seen.
+        let (window, fade) = (self.window, self.fade());
+        let selected = if self.case.last {
+            self.case.count - 1
+        } else {
+            0
+        };
+        let labels: Vec<String> = (0..self.case.count).map(label).collect();
+        let in_view = self.shot.settle_until(WAIT, |shot| {
+            let expect = Expect {
+                labels: &labels,
+                dim: &|_| false,
+                fade,
+                fading_in: false,
+            };
+            check_rows(shot, window, &expect).1.contains(&selected)
+        });
+        assert!(
+            in_view,
+            "{:?}: the list never opened on its choice (row {selected})",
+            self.case
+        );
         let tree = Frame2::of(&mut self.shot);
         let named = |name: &str| {
             tree.tree
