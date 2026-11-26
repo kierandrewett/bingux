@@ -98,6 +98,10 @@ browser-commands-print-unavailable = Printing is not available in this engine ye
 browser-print-saved = Saved the page as a PDF: { $path }
 # Toast when printing fails. $reason is the engine's message.
 browser-print-failed = Could not print the page: { $reason }
+# Toast when F12 is pressed: the engine cannot be told to start its developer tools.
+browser-devtools-unavailable = Developer tools are not available in this engine yet.
+# Toast when picture-in-picture is asked for: the engine has no such window.
+browser-picture-in-picture-unavailable = Picture-in-picture is not available in this engine yet.
 # Toast when Print is chosen on a page that is not a web page (a blank tab, Settings).
 browser-print-no-page = There is no web page to print here.
 
@@ -294,6 +298,10 @@ browser-command-downloads-title = Downloads
 browser-command-settings-title = Settings
 browser-command-view-source-title = View page source
 browser-command-print-title = Save page as PDF
+# Disabled menu row: the reason is part of the title because the engine has no developer tools to open yet.
+browser-command-devtools-unavailable-title = Developer tools (not available in this engine)
+# Disabled command: the engine has no picture-in-picture window to open yet.
+browser-command-picture-in-picture-unavailable-title = Picture-in-picture (not available in this engine)
 browser-command-go-to-tab-title = Go to a tab
 # The keys that go to tab 1 to 8, and the last tab. The modifier is Alt on Linux, Ctrl elsewhere.
 browser-command-go-to-tab-keys = Alt+1 to 9

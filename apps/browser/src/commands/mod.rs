@@ -47,6 +47,10 @@ pub enum Command {
     PageInfo,
     ViewSource,
     Print,
+    /// Open the developer tools for the page. The engine cannot yet.
+    DevTools,
+    /// Play the page's video in a window of its own. The engine cannot yet.
+    PictureInPicture,
     /// An editing command for the page, only while the page has the focus.
     Edit(EditCommand),
 }

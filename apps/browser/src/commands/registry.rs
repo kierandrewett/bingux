@@ -182,15 +182,37 @@ impl Registry {
                 true,
                 true,
             ),
+            // Both are listed so the person finds them, and disabled with
+            // the reason in the title: the engine has no call for either
+            // (docs/browser/parity.md, Tools 08 and 10).
+            (
+                "browser.devtools",
+                tr!("browser-command-devtools-unavailable-title"),
+                Command::DevTools,
+                "F12",
+                true,
+                false,
+            ),
+            (
+                "browser.picture-in-picture",
+                tr!("browser-command-picture-in-picture-unavailable-title"),
+                Command::PictureInPicture,
+                "",
+                false,
+                false,
+            ),
         ];
         let mut listed: Vec<Listed> = rows
             .into_iter()
             .map(|(id, title, command, keys, in_menu, enabled)| {
                 let item = Listed::new(id, title, move |_: ()| {
                     ctx.with(|browser| browser.run(command))
-                })
-                .shortcut(keys)
-                .keys_handled_by_view()
+                });
+                let item = if keys.is_empty() {
+                    item
+                } else {
+                    item.shortcut(keys).keys_handled_by_view()
+                }
                 .enabled(enabled);
                 if in_menu {
                     item

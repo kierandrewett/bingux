@@ -173,6 +173,10 @@ fn function_keys_do_not_need_a_modifier() {
         f(NamedKey::F11, Modifiers::default()),
         Some(Command::Fullscreen)
     );
+    assert_eq!(
+        f(NamedKey::F12, Modifiers::default()),
+        Some(Command::DevTools)
+    );
 }
 
 #[test]
@@ -291,4 +295,30 @@ fn print_asks_the_engine_for_a_pdf_named_after_the_page() {
             .any(|notice| !notice.error && notice.text.contains("Saved the page as a PDF")),
         "{notices:?}"
     );
+}
+
+// Failures the two commands the engine cannot do guard against:
+//   1. F12 or the menu row doing nothing at all, so the person thinks the
+//      browser is broken;
+//   2. a toast that claims the tools opened.
+#[test]
+fn developer_tools_and_picture_in_picture_say_the_engine_cannot() {
+    let (mut browser, double) = browser();
+    for (command, words) in [
+        (Command::DevTools, "Developer tools are not available"),
+        (
+            Command::PictureInPicture,
+            "Picture-in-picture is not available",
+        ),
+    ] {
+        browser.run(command);
+        let notices = browser.out.take_notices();
+        assert!(
+            notices
+                .iter()
+                .any(|notice| notice.error && notice.text.contains(words)),
+            "{notices:?}"
+        );
+    }
+    assert!(double.calls().is_empty(), "nothing was asked of the engine");
 }

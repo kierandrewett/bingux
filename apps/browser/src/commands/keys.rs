@@ -54,6 +54,7 @@ impl Platform {
                 Key::Named(NamedKey::F5) => return Some(Command::Reload),
                 Key::Named(NamedKey::F3) => return Some(Command::FindNext),
                 Key::Named(NamedKey::F11) => return Some(Command::Fullscreen),
+                Key::Named(NamedKey::F12) => return Some(Command::DevTools),
                 _ => {}
             }
         }

@@ -70,6 +70,16 @@ impl Browser {
                 }
             }
             Command::Print => self.print(key),
+            Command::DevTools => self.out.notice(Notice {
+                error: true,
+                text: tr!("browser-devtools-unavailable"),
+                action: None,
+            }),
+            Command::PictureInPicture => self.out.notice(Notice {
+                error: true,
+                text: tr!("browser-picture-in-picture-unavailable"),
+                action: None,
+            }),
             Command::Edit(edit) => self.send_edit(key, edit),
         }
     }
