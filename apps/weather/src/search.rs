@@ -23,7 +23,12 @@ const REST: Duration = Duration::from_millis(350);
 
 /// Opens the sheet.
 pub fn open(overlays: Overlays, hub: Hub) {
-    let dialog = framed_dialog("Add location", Sheet { hub }, FORM_WIDTH, FORM_HEIGHT);
+    let dialog = framed_dialog(
+        tr!("weather-add-title"),
+        Sheet { hub },
+        FORM_WIDTH,
+        FORM_HEIGHT,
+    );
     overlays.show_dialog(if is_compact() {
         dialog.fill_window()
     } else {
@@ -128,7 +133,7 @@ impl Component for Sheet {
         let location_off = !hub.settings.read().use_location;
         let bring_back = location_off.then(|| {
             Group::new(None::<String>).row(
-                row("Use my location")
+                row(tr!("weather-use-my-location"))
                     .leading(Icon::LocationArrow)
                     .on_press(move |_| {
                         hub.use_location(true);

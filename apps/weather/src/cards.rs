@@ -269,15 +269,13 @@ impl Details {
         let current = &self.forecast.current;
         let apparent = current.apparent;
         let line = match (apparent, current.temperature) {
-            (Some(feels), Some(actual)) if feels < actual - 1.5 => "Wind is making it feel cooler.",
-            (Some(feels), Some(actual)) if feels > actual + 1.5 => {
-                "Humidity is making it feel warmer."
-            }
-            _ => "Similar to the actual temperature.",
+            (Some(feels), Some(actual)) if feels < actual - 1.5 => tr!("weather-card-feels-cooler"),
+            (Some(feels), Some(actual)) if feels > actual + 1.5 => tr!("weather-card-feels-warmer"),
+            _ => tr!("weather-card-feels-similar"),
         };
         card(
             tokens,
-            "Feels like",
+            &tr!("weather-card-feels-like"),
             vec![
                 figure(tokens, format::temperature(&self.units, apparent)),
                 say(tokens, line),
@@ -302,7 +300,7 @@ impl Details {
             ));
             body.push(note(tokens, words::dew_comfort(text::dew_comfort(dew))));
         }
-        card(tokens, "Humidity", body)
+        card(tokens, &tr!("weather-card-humidity"), body)
     }
 
     fn visibility(&self, tokens: &Tokens, hour: Option<&Hour>) -> Element {
@@ -314,7 +312,7 @@ impl Details {
         if let Some(metres) = metres {
             body.push(say(tokens, words::visibility(text::visibility(metres))));
         }
-        card(tokens, "Visibility", body)
+        card(tokens, &tr!("weather-card-visibility"), body)
     }
 
     fn pressure(&self, tokens: &Tokens) -> Element {
@@ -341,11 +339,11 @@ impl Details {
             body.push(
                 sparkline(values)
                     .format(move |hpa| units.pressure(hpa))
-                    .label("Pressure trend")
+                    .label(tr!("weather-card-pressure-trend.a11y"))
                     .into(),
             );
         }
-        card(tokens, "Pressure", body)
+        card(tokens, &tr!("weather-card-pressure"), body)
     }
 
     /// The air quality: the index on its bands, then each pollutant.
@@ -372,12 +370,21 @@ impl Details {
             say(tokens, words::aqi_advice(text::aqi_band(aqi))),
         ];
         let pollutants = [
-            ("PM2.5", air.pm2_5),
-            ("PM10", air.pm10),
-            ("Ozone", air.ozone),
-            ("Nitrogen dioxide", air.nitrogen_dioxide),
-            ("Sulphur dioxide", air.sulphur_dioxide),
-            ("Carbon monoxide", air.carbon_monoxide),
+            (tr!("weather-pollutant-pm2-5"), air.pm2_5),
+            (tr!("weather-pollutant-pm10"), air.pm10),
+            (tr!("weather-pollutant-ozone"), air.ozone),
+            (
+                tr!("weather-pollutant-nitrogen-dioxide"),
+                air.nitrogen_dioxide,
+            ),
+            (
+                tr!("weather-pollutant-sulphur-dioxide"),
+                air.sulphur_dioxide,
+            ),
+            (
+                tr!("weather-pollutant-carbon-monoxide"),
+                air.carbon_monoxide,
+            ),
         ];
         let mut lines: Vec<Element> = Vec::new();
         for (name, value) in pollutants {
@@ -395,7 +402,13 @@ impl Details {
                         )
                         .child(
                             typography::BODY
-                                .label(tokens, format!("{} µg/m³", value.round() as i64))
+                                .label(
+                                    tokens,
+                                    tr!(
+                                        "weather-card-air-concentration",
+                                        value = value.round() as i64
+                                    ),
+                                )
                                 .max_lines(1),
                         )
                         .into(),
@@ -410,7 +423,7 @@ impl Details {
                     .into(),
             );
         }
-        Some(section(tokens, "Air quality", body))
+        Some(section(tokens, &tr!("weather-card-air"), body))
     }
 }
 
@@ -483,15 +496,21 @@ impl Component for Trends {
                 .collect::<Vec<_>>()
         };
         let temperature = line_chart([
-            bingux_ui::charts::Series::new("Temperature", points(|hour| hour.temperature))
-                .colour(SeriesColour::Accent),
-            bingux_ui::charts::Series::new("Feels like", points(|hour| hour.apparent))
-                .colour(SeriesColour::Muted),
+            bingux_ui::charts::Series::new(
+                tr!("weather-trends-temperature"),
+                points(|hour| hour.temperature),
+            )
+            .colour(SeriesColour::Accent),
+            bingux_ui::charts::Series::new(
+                tr!("weather-trends-feels-like"),
+                points(|hour| hour.apparent),
+            )
+            .colour(SeriesColour::Muted),
         ])
         .x_format(hour_name)
         .y_format(move |value| format!("{}°", value.round() as i64))
-        .marker(0.0, "Now")
-        .label("Temperature, next 24 hours");
+        .marker(0.0, tr!("weather-trends-now"))
+        .label(tr!("weather-trends-temperature.a11y"));
 
         let rain_points: Vec<(f64, f64)> = hours
             .iter()
@@ -508,16 +527,17 @@ impl Component for Trends {
             .map(|hour| hour.precipitation.unwrap_or(0.0))
             .sum();
         let rain_unit = units.rain_unit();
-        let rain = bar_chart(
-            [bingux_ui::charts::Series::new("Precipitation", rain_points)
-                .colour(SeriesColour::Accent)],
+        let rain = bar_chart([bingux_ui::charts::Series::new(
+            tr!("weather-trends-precipitation"),
+            rain_points,
         )
+        .colour(SeriesColour::Accent)])
         .categories(hours.iter().map(|hour| clock.hour(hour.time)))
         .details(hours.iter().map(|hour| {
-            format!(
-                "{} to {}",
-                clock.time(hour.time),
-                clock.time(hour.time + HOUR)
+            tr!(
+                "weather-trends-hour-range",
+                start = clock.time(hour.time),
+                end = clock.time(hour.time + HOUR)
             )
         }))
         .y_format(move |value| {
@@ -527,22 +547,26 @@ impl Component for Trends {
                 format!("{value:.2} {rain_unit}")
             }
         })
-        .label("Precipitation over the next 24 hours");
+        .label(tr!("weather-trends-precipitation.a11y"));
 
         rect()
             .component("Trends")
             .tw(&tokens, &[w_full(), flex_col(), gap(S3)])
-            .child(section(&tokens, "Temperature", vec![temperature.into()]))
             .child(section(
                 &tokens,
-                "Precipitation",
+                &tr!("weather-trends-temperature"),
+                vec![temperature.into()],
+            ))
+            .child(section(
+                &tokens,
+                &tr!("weather-trends-precipitation"),
                 vec![
                     say(
                         &tokens,
                         if total >= 0.1 {
-                            format!("{} in the next 24 hours.", units.rain(total))
+                            tr!("weather-trends-rain-total", amount = units.rain(total))
                         } else {
-                            "None in the next 24 hours.".to_string()
+                            tr!("weather-trends-rain-none")
                         },
                     ),
                     rain.into(),

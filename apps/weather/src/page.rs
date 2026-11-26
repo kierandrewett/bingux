@@ -164,7 +164,7 @@ impl Component for Page {
             })
             .child(section(
                 &tokens,
-                "10-day forecast",
+                &tr!("weather-week-ten-day-title"),
                 vec![
                     Week {
                         forecast: forecast.clone(),

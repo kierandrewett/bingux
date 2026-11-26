@@ -61,6 +61,42 @@ weather-hourly-range = Next 24 hours: low { $low }, high { $high }.
 weather-hourly-sunrise-short = Sunrise
 weather-hourly-sunset-short = Sunset
 
+## Feels like, humidity, visibility, pressure and air quality
+
+weather-card-feels-like = Feels like
+weather-card-feels-cooler = Wind is making it feel cooler.
+weather-card-feels-warmer = Humidity is making it feel warmer.
+weather-card-feels-similar = Similar to the actual temperature.
+weather-card-humidity = Humidity
+weather-card-visibility = Visibility
+weather-card-pressure = Pressure
+weather-card-pressure-trend =
+    .a11y = Pressure trend
+weather-card-air = Air quality
+# $value (Number) - micrograms of a pollutant in a cubic meter of air
+weather-card-air-concentration = { $value } µg/m³
+weather-pollutant-pm2-5 = PM2.5
+weather-pollutant-pm10 = PM10
+weather-pollutant-ozone = Ozone
+weather-pollutant-nitrogen-dioxide = Nitrogen dioxide
+weather-pollutant-sulphur-dioxide = Sulfur dioxide
+weather-pollutant-carbon-monoxide = Carbon monoxide
+
+## The two charts of the next 24 hours
+
+weather-trends-temperature = Temperature
+    .a11y = Temperature, next 24 hours
+weather-trends-feels-like = Feels like
+weather-trends-now = Now
+weather-trends-precipitation = Precipitation
+    .a11y = Precipitation over the next 24 hours
+# A bar's detail. $start, $end (Text) - the times of the hour
+weather-trends-hour-range = { $start } to { $end }
+# $amount (Text) - the rain expected, with its unit
+weather-trends-rain-total = { $amount } in the next 24 hours.
+weather-trends-rain-none = None in the next 24 hours.
+weather-week-ten-day-title = 10-day forecast
+
 ## The cards
 
 weather-card-uv = UV index
