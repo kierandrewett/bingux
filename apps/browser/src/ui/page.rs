@@ -12,6 +12,7 @@ use super::ctx::Ctx;
 use super::pages;
 use super::settings::SettingsPage;
 use super::web::{Surface, TabPage};
+use crate::new_tab;
 
 /// What the area holds, copied out of the browser so no lock is held while
 /// the elements are built.
@@ -76,7 +77,7 @@ impl Component for PageArea {
                 surface,
             }
             .into(),
-            Shown::NewTab => pages::new_tab(ctx, key),
+            Shown::NewTab => new_tab::new_tab(ctx, key),
             Shown::Settings => SettingsPage { ctx }.into(),
             Shown::Crashed(reason) => pages::crashed(ctx, key, reason),
             Shown::Cert(error) => pages::cert_error(ctx, key, &error),
