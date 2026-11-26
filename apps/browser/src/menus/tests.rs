@@ -99,14 +99,15 @@ fn the_zoom_row_steps_the_zoom_and_leaves_the_menu_open() {
     assert!(shot.click_name("Zoom out (Ctrl+-)"));
     wait(&mut shot, 300);
     assert_eq!(zoom(), 110);
-    // The toolbar's zoom chip reads the same: the menu's level is the higher of the two.
+    // The toolbar's zoom chip reads the same level. The menu is drawn below the toolbar,
+    // so the menu's level is the lower of the two labels: pressing the chip would not reset.
     let level = shot.runner().find_many(|node, element| {
         let label = Label::try_downcast(element)?;
         (label.text == "110%").then(|| Area::center(&node.layout().area))
     });
     let level = level
         .into_iter()
-        .min_by(|a, b| a.y.total_cmp(&b.y))
+        .max_by(|a, b| a.y.total_cmp(&b.y))
         .expect("the level in the menu");
     shot.click(level.x, level.y);
     wait(&mut shot, 300);
@@ -384,7 +385,7 @@ mod phone {
     }
 
     #[test]
-    fn the_rows_do_their_work_and_close_the_sheet() {
+    fn the_downloads_row_closes_the_sheet_and_opens_the_list() {
         let (mut shot, _rig) = window();
         assert!(shot.click_name("Main menu"));
         wait(&mut shot, 600);
@@ -395,7 +396,12 @@ mod phone {
             "the list of downloads opened"
         );
         assert!(!shot.hover_text("Copy link"), "the sheet closed");
+    }
 
+    /// Its own window: the list of downloads the other test opens would sit over the button.
+    #[test]
+    fn the_settings_row_closes_the_sheet_and_opens_settings() {
+        let (mut shot, _rig) = window();
         assert!(shot.click_name("Main menu"));
         wait(&mut shot, 600);
         assert!(shot.click_text("Settings"));
