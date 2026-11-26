@@ -45,6 +45,7 @@ pub(crate) fn must_wait(window: u64) -> bool {
 /// has answered.
 pub(crate) fn close_now(window: freya::winit::window::WindowId) {
     use freya::prelude::*;
+    crate::app::window_going(u64::from(window));
     Platform::get().close_window(window);
 }
 

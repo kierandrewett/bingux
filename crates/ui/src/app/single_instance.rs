@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// How long either side waits for the other.
-const PATIENCE: Duration = Duration::from_secs(2);
+pub(super) const PATIENCE: Duration = Duration::from_secs(2);
 
 /// What the copy answers once it has a line.
 const TAKEN: &str = "ok";
@@ -66,16 +66,14 @@ pub(super) struct Owner {
 }
 
 impl Owner {
-    /// Listens on `socket`. A socket file nobody answers on is left over
-    /// from a copy that is gone and is replaced; one a copy answers on is
-    /// refused (`AddrInUse`) and left alone.
+    /// Listens on `socket`. Call it after [`hand_off`] found no copy that
+    /// takes launches: a socket file still there is a crashed copy's (nobody
+    /// answers) or a closing copy's (it answers but refuses), and is
+    /// replaced. The closing copy leaves the new file alone when it goes.
     pub(super) fn claim(socket: &Path) -> io::Result<Self> {
         let listener = match UnixListener::bind(socket) {
             Ok(listener) => listener,
             Err(error) if error.kind() == io::ErrorKind::AddrInUse => {
-                if UnixStream::connect(socket).is_ok() {
-                    return Err(error);
-                }
                 std::fs::remove_file(socket)?;
                 UnixListener::bind(socket)?
             }
@@ -110,10 +108,11 @@ impl Drop for Owner {
     }
 }
 
-/// Accepts connections and passes each line to `push`, answering `ok`. A
-/// client sends one line per connection; an empty line only raises the
-/// window, and a connection that sends nothing (a probe) is ignored.
-pub(super) fn listen(listener: UnixListener, push: impl Fn(String)) {
+/// Accepts connections and passes each line to `push`, answering `ok` only
+/// when `push` says a window took it. A client sends one line per
+/// connection; an empty line only raises the window, and a connection that
+/// sends nothing (a probe) is ignored.
+pub(super) fn listen(listener: UnixListener, push: impl Fn(String) -> bool) {
     for stream in listener.incoming() {
         let Ok(mut stream) = stream else { continue };
         // A client that connects and says nothing must not hold the listener.
@@ -123,8 +122,7 @@ pub(super) fn listen(listener: UnixListener, push: impl Fn(String)) {
         let read = stream
             .try_clone()
             .and_then(|reader| BufReader::new(reader).read_line(&mut line));
-        if matches!(read, Ok(read) if read > 0) {
-            push(line.trim_end().to_string());
+        if matches!(read, Ok(read) if read > 0) && push(line.trim_end().to_string()) {
             let _ = writeln!(stream, "{TAKEN}");
         }
     }
@@ -164,7 +162,12 @@ mod tests {
         let got = Arc::new(Mutex::new(Vec::new()));
         let listener = owner.take_listener().unwrap();
         let sink = Arc::clone(&got);
-        std::thread::spawn(move || listen(listener, |line| sink.lock().unwrap().push(line)));
+        std::thread::spawn(move || {
+            listen(listener, |line| {
+                sink.lock().unwrap().push(line);
+                true
+            })
+        });
         (owner, got)
     }
 
@@ -176,6 +179,28 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         got.lock().unwrap().clone()
+    }
+
+    #[test]
+    fn a_copy_whose_window_does_not_take_the_line_lets_the_launch_run() {
+        // A copy that is closing: its listener still answers, but no window
+        // takes the address (seen on the real engine: a launch right behind
+        // a window's close exited 0 and its address never opened).
+        let (dir, socket) = temp_socket("not-taken");
+        let mut owner = Owner::claim(&socket).unwrap();
+        let listener = owner.take_listener().unwrap();
+        std::thread::spawn(move || listen(listener, |_| false));
+        assert!(!hand_off(&socket, &["lost".to_string()]).unwrap());
+        // The launch runs a copy of its own and takes the socket over, so
+        // the launch right behind it reaches the new copy (seen on the real
+        // engine: without this, two quick launches opened two copies).
+        let (newer, got) = running(&socket);
+        assert!(hand_off(&socket, &["next".to_string()]).unwrap());
+        assert_eq!(wait_for(&got, 1), ["next"]);
+        drop(owner);
+        assert!(socket.exists(), "the closing copy leaves the new socket");
+        drop(newer);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

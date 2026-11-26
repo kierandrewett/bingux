@@ -22,6 +22,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
+use std::time::Duration;
 
 use freya::prelude::*;
 
@@ -348,7 +349,11 @@ impl Application {
             .and_then(single_instance::Owner::take_listener)
         {
             let inbox = Arc::clone(&inbox);
-            std::thread::spawn(move || single_instance::listen(listener, |line| inbox.push(line)));
+            // Half the launch's patience, so the refusal reaches it in time.
+            let patience = single_instance::PATIENCE / 2;
+            std::thread::spawn(move || {
+                single_instance::listen(listener, |line| inbox.push_and_wait(line, patience))
+            });
         }
         let _ = INBOX.set(Arc::clone(&inbox));
         FORWARDED.with(|slot| *slot.borrow_mut() = Some(inbox));
@@ -590,7 +595,28 @@ fn close_requested(id: freya::winit::window::WindowId) -> freya_winit::config::C
         return freya_winit::config::CloseDecision::KeepOpen;
     }
     crate::layers::with_stack(|stack| stack.close(u64::from(id)));
+    window_going(u64::from(id));
     freya_winit::config::CloseDecision::Close
+}
+
+/// The windows whose close has been decided.
+static CLOSING: Mutex<Vec<u64>> = Mutex::new(Vec::new());
+
+/// `window` is going (its close was decided, by the compositor's button or
+/// the window's own): from now on it takes no forwarded address, since a
+/// launch handed to a window that is going would open nothing.
+pub(crate) fn window_going(window: u64) {
+    CLOSING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .push(window);
+}
+
+fn window_closing(id: u64) -> bool {
+    CLOSING
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .contains(&id)
 }
 
 /// The one place a bingux-ui process starts its event loop. It builds the
@@ -665,37 +691,104 @@ fn socket_path(app_id: &str) -> PathBuf {
 #[derive(Default)]
 struct Inbox {
     state: Mutex<InboxState>,
+    /// Signalled whenever a window takes an address.
+    taken: std::sync::Condvar,
 }
 
 #[derive(Default)]
 struct InboxState {
-    queue: VecDeque<String>,
+    /// Each address with the number it was pushed as.
+    queue: VecDeque<(u64, String)>,
+    pushed: u64,
+    /// Whether a window has asked for an address yet. Before that the copy is
+    /// starting, and what it is handed waits for its first window.
+    started: bool,
     /// The windows waiting for an address: more than one when the application
     /// has opened more windows than its first.
     wakers: Vec<Waker>,
 }
 
 impl Inbox {
-    fn push(&self, line: String) {
-        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        state.queue.push_back(line);
+    fn lock(&self) -> std::sync::MutexGuard<'_, InboxState> {
+        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Queues `line` and wakes the windows; returns its number.
+    fn push(&self, line: String) -> u64 {
+        let mut state = self.lock();
+        state.pushed += 1;
+        let number = state.pushed;
+        state.queue.push_back((number, line));
         for waker in state.wakers.drain(..) {
             waker.wake();
         }
+        number
     }
 
-    async fn next(&self) -> String {
+    /// Queues `line` and waits up to `patience` for a window to take it.
+    /// One that is not taken in time is withdrawn: a copy whose last window
+    /// is closing refuses it, and the launch runs a copy of its own. A copy
+    /// whose first window is still being built keeps it for that window.
+    fn push_and_wait(&self, line: String, patience: Duration) -> bool {
+        let number = self.push(line);
+        if !self.lock().started {
+            return true;
+        }
+        let queued = |state: &mut InboxState| state.queue.iter().any(|(n, _)| *n == number);
+        let (mut state, _) = self
+            .taken
+            .wait_timeout_while(self.lock(), patience, |state| queued(state))
+            .unwrap_or_else(PoisonError::into_inner);
+        if queued(&mut state) {
+            state.queue.retain(|(n, _)| *n != number);
+            return false;
+        }
+        true
+    }
+
+    /// The next address for a window, if one waits; none for a window that
+    /// is closing, so the address waits for another window or is refused.
+    fn take_for(&self, closing: bool) -> Option<String> {
+        if closing {
+            return None;
+        }
+        let line = self.lock().queue.pop_front().map(|(_, line)| line);
+        if line.is_some() {
+            self.taken.notify_all();
+        }
+        line
+    }
+
+    #[cfg(test)]
+    fn try_take(&self) -> Option<String> {
+        self.take_for(false)
+    }
+
+    /// A window asks for addresses from now on.
+    fn start(&self) {
+        self.lock().started = true;
+    }
+
+    /// The next address for the window `closing` asks about.
+    async fn next(&self, closing: impl Fn() -> bool) -> String {
+        self.start();
         std::future::poll_fn(|cx| {
-            let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-            match state.queue.pop_front() {
-                Some(line) => Poll::Ready(line),
-                None => {
-                    if !state.wakers.iter().any(|other| other.will_wake(cx.waker())) {
-                        state.wakers.push(cx.waker().clone());
-                    }
-                    Poll::Pending
-                }
+            let closing = closing();
+            if let Some(line) = self.take_for(closing) {
+                return Poll::Ready(line);
             }
+            if closing {
+                // A closing window never asks again.
+                return Poll::Pending;
+            }
+            let mut state = self.lock();
+            // An address pushed between the take and the lock wakes no one.
+            if !state.queue.is_empty() {
+                cx.waker().wake_by_ref();
+            } else if !state.wakers.iter().any(|other| other.will_wake(cx.waker())) {
+                state.wakers.push(cx.waker().clone());
+            }
+            Poll::Pending
         })
         .await
     }
@@ -710,8 +803,9 @@ impl Inbox {
 /// entry in any history.
 fn start_forwarding(inbox: Arc<Inbox>, router: Router) {
     spawn(async move {
+        let window = u64::from(Platform::window_id());
         loop {
-            let text = inbox.next().await;
+            let text = inbox.next(|| window_closing(window)).await;
             if !text.is_empty() {
                 let table = router.table();
                 match (
@@ -920,5 +1014,75 @@ mod launch_tests {
         );
         let option = OsString::from_vec(b"-caf\xe9".to_vec());
         assert!(Launch::parse(&[option], &[]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod inbox_tests {
+    //! A forwarded address counts as taken only when a window takes it.
+    //! Failure guarded against: a copy whose last window is closing takes a
+    //! launch's address and exits, and the address never opens.
+
+    use super::*;
+
+    #[test]
+    fn an_address_no_window_takes_is_withdrawn_and_refused() {
+        let inbox = Inbox::default();
+        inbox.start();
+        assert!(!inbox.push_and_wait("one".to_string(), Duration::from_millis(100)));
+        assert_eq!(inbox.try_take(), None, "it is not opened later");
+    }
+
+    #[test]
+    fn a_copy_still_building_its_first_window_keeps_the_address_for_it() {
+        // Failure guarded against (seen on the real engine): two quick
+        // launches opened two copies, because the first copy's window was
+        // not up yet to take the second launch's address.
+        let inbox = Inbox::default();
+        assert!(inbox.push_and_wait("early".to_string(), Duration::from_millis(100)));
+        assert_eq!(inbox.try_take().as_deref(), Some("early"));
+    }
+
+    #[test]
+    fn an_address_a_window_takes_is_accepted() {
+        let inbox = Arc::new(Inbox::default());
+        inbox.start();
+        let window = Arc::clone(&inbox);
+        let taker = std::thread::spawn(move || {
+            for _ in 0..200 {
+                if let Some(line) = window.try_take() {
+                    return Some(line);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            None
+        });
+        assert!(inbox.push_and_wait("two".to_string(), Duration::from_secs(2)));
+        assert_eq!(taker.join().unwrap().as_deref(), Some("two"));
+    }
+}
+
+#[cfg(test)]
+mod closing_window_tests {
+    //! Failure guarded against (seen on the real engine): a launch right
+    //! behind a window's close button was taken by that window's task, the
+    //! window went, and the address never opened.
+
+    use super::*;
+
+    #[test]
+    fn a_closing_window_takes_no_address_so_it_is_refused() {
+        let inbox = Arc::new(Inbox::default());
+        inbox.start();
+        let window = Arc::clone(&inbox);
+        let closing = std::thread::spawn(move || {
+            for _ in 0..40 {
+                assert_eq!(window.take_for(true), None);
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        assert!(!inbox.push_and_wait("three".to_string(), Duration::from_millis(150)));
+        closing.join().unwrap();
+        assert_eq!(inbox.try_take(), None);
     }
 }
