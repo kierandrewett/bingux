@@ -243,7 +243,9 @@ fn drop_line(shot: &mut Snapshot, home: f32) -> Option<Area> {
     shot.runner()
         .find_many(|node, _| {
             let area = node.layout().area;
-            ((area.height() - Dim::Ring.px_in(class)).abs() < 0.01 && area.width() > 100.0 && area.min_y() > home)
+            ((area.height() - Dim::Ring.px_in(class)).abs() < 0.01
+                && area.width() > 100.0
+                && area.min_y() > home)
                 .then_some(area)
         })
         .into_iter()
@@ -360,7 +362,9 @@ fn areas_of(shot: &mut Snapshot, class: &'static str) -> Vec<Area> {
 fn a_selected_row_is_selected_to_the_card_s_edge_grip_included() {
     let mut shot = app_selecting(Log::default(), false, 4, Some(1), DESKTOP);
     shot.settle(Duration::from_millis(400));
-    let card = areas_of(&mut shot, "Sortable").pop().expect("the list is on screen");
+    let card = areas_of(&mut shot, "Sortable")
+        .pop()
+        .expect("the list is on screen");
     let tails = areas_of(&mut shot, "SortableTail");
     let rows = areas_of(&mut shot, "Row");
     assert_eq!(rows.len(), 4, "a row for each item");
@@ -756,7 +760,9 @@ fn a_long_list_shows_a_line_and_leaves_the_other_rows_still() {
     let (seen, end) = pull_down(&mut shot, 2.2 * row_height, 16);
     // The line and the moves of the rows are animations: wait for the line, with a generous cap,
     // rather than trust a fixed number of frames on a loaded machine.
-    shot.settle_until(Duration::from_secs(5), |shot| drop_line(shot, home).is_some());
+    shot.settle_until(Duration::from_secs(5), |shot| {
+        drop_line(shot, home).is_some()
+    });
     // The drag is armed by the frames that follow the line (releasing at once drops nothing).
     frames(&mut shot, 10);
     assert!(

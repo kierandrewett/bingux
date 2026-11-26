@@ -679,6 +679,9 @@ pub(crate) struct Panel {
     /// A choice sheet that may take the taller share of the window a form's
     /// sheet takes, for content that is a control and not a list of rows.
     tall: bool,
+    /// The tallest the rows of an anchored, scrolling panel get before they
+    /// scroll, when it is not [`Dim::MenuList`].
+    list_cap: Option<f32>,
 }
 
 impl Panel {
@@ -711,6 +714,7 @@ impl Panel {
             pill: None,
             on_escape: None,
             tall: false,
+            list_cap: None,
         }
     }
 
@@ -802,6 +806,25 @@ impl Panel {
     pub(crate) fn on_escape(mut self, on_escape: impl Into<EventHandler<()>>) -> Self {
         self.on_escape = Some(on_escape.into());
         self
+    }
+
+    /// The most height an anchored panel that scrolls gives its rows before it
+    /// scrolls them, instead of [`Dim::MenuList`]: a list that is the point of
+    /// the panel (every tab of a window) may take what room the window has.
+    pub(crate) fn list_cap(mut self, cap: f32) -> Self {
+        self.list_cap = Some(cap);
+        self
+    }
+
+    /// The height of the rows' viewport: all of them, or the cap when the
+    /// panel scrolls.
+    fn viewport(&self) -> f32 {
+        if self.scroll.is_some() {
+            self.content_height
+                .min(self.list_cap.unwrap_or(Dim::MenuList.px()))
+        } else {
+            self.content_height
+        }
     }
 
     /// Lets a choice sheet grow as tall as a form's sheet, instead of the
@@ -1039,11 +1062,7 @@ impl Panel {
         local: Option<LocalMenu>,
     ) -> Option<Rect> {
         let pill = self.pill.as_ref()?;
-        let viewport = if self.scroll.is_some() {
-            self.content_height.min(Dim::MenuList.px())
-        } else {
-            self.content_height
-        };
+        let viewport = self.viewport();
         let size = (self.width, viewport + 2.0 * S2.px());
         let placed = match local {
             Some(local) => PanelRect {
@@ -1197,7 +1216,10 @@ impl Panel {
         // A floating list shows that it continues with its scrollbar alone.
         // An edge hairline under the last visible row read as a stray line
         // at the bottom of the panel. A sheet fades its rows out instead.
-        let mut region = rect().width(Size::fill()).height(Size::px(viewport));
+        let mut region = rect()
+            .component("PanelRows")
+            .width(Size::fill())
+            .height(Size::px(viewport));
         if let Some(drag) = drag {
             // Only a finger drags the list: a mouse scrolls it with the wheel.
             region = region.on_pointer_down(move |event: Event<PointerEventData>| {
@@ -1224,11 +1246,7 @@ impl Panel {
         progress: f32,
         local: Option<LocalMenu>,
     ) -> Rect {
-        let viewport = if self.scroll.is_some() {
-            self.content_height.min(Dim::MenuList.px())
-        } else {
-            self.content_height
-        };
+        let viewport = self.viewport();
         let size = (self.width, viewport + 2.0 * S2.px());
         let anchor = self.trigger.anchor();
         // In a popup window the card sits at the window's margin; its place on the screen is the
@@ -1598,11 +1616,7 @@ impl Panel {
         parent: Option<ParentSlot>,
         own: &ParentSlot,
     ) -> Rect {
-        let viewport = if self.scroll.is_some() {
-            self.content_height.min(Dim::MenuList.px())
-        } else {
-            self.content_height
-        };
+        let viewport = self.viewport();
         let size = (self.width, viewport + 2.0 * S2.px());
         // The layout the menu assumes: placed where it asks, with no window to hold it in.
         let direction = use_direction();

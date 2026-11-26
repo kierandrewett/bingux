@@ -320,10 +320,11 @@ impl Component for FormField {
         let title_line = rect()
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])
             .child(search_highlight::label(BODY, &tokens, &self.title))
-            .maybe_child(
-                self.optional
-                    .then(|| CAPTION.in_ink(Ink::Muted).label(&tokens, crate::tr!("ui-form-optional"))),
-            );
+            .maybe_child(self.optional.then(|| {
+                CAPTION
+                    .in_ink(Ink::Muted)
+                    .label(&tokens, crate::tr!("ui-form-optional"))
+            }));
         let hint = self.hint.clone().map(caption);
         let input_line = rect()
             .tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)])

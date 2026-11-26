@@ -593,6 +593,7 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/controls/focus_stop.rs": "makes a keyboard stop out of any content",
     "crates/ui/src/controls/press.rs": "hit_area: a transparent touch target whose listeners do nothing and let the press bubble to the control that holds it",
     "crates/ui/src/controls/tabs.rs": "the tab itself, a selectable item, not an icon",
+    "crates/ui/src/controls/tab_list.rs": "a row of the list of every tab: a menu row with a tick, an icon, a speaker and a close button of its own, which the menu's rows (owned by the menu's state) and the library rows (no tick column) do not draw",
     "crates/ui/src/controls/tree_view.rs": "tree rows, and the expand chevron: part of the row's own keyboard model (Left and Right), not a stop of its own",
     "crates/ui/src/rows.rs": "the row",
     "crates/ui/src/shell/panel.rs": "scrims and panels that swallow presses",

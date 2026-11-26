@@ -364,6 +364,10 @@ pub enum Dim {
     DropdownMax,
     /// The tallest a dropdown's option list gets before it scrolls: 320 px.
     MenuList,
+    /// The width of the list of every tab that the tab strip's last button
+    /// opens: 340 px, room for an icon, a title and the sound and close
+    /// buttons.
+    TabList,
     /// A switch track: 36 x 20 px, 48 x 28 px for a finger.
     SwitchWidth,
     SwitchHeight,
@@ -659,6 +663,7 @@ impl Dim {
             | Dim::DropdownMenu
             | Dim::DropdownMax
             | Dim::MenuList
+            | Dim::TabList
             | Dim::SwitchWidth
             | Dim::SwitchHeight
             | Dim::SwitchThumb
@@ -772,6 +777,7 @@ impl Dim {
             Dim::DropdownMenu => same(240.0),
             Dim::DropdownMax => same(360.0),
             Dim::MenuList => same(320.0),
+            Dim::TabList => same(340.0),
             Dim::SwitchWidth => (36.0, 48.0),
             Dim::SwitchHeight => (20.0, 28.0),
             Dim::SwitchThumb => (16.0, 22.0),

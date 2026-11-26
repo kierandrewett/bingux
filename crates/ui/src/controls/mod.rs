@@ -54,6 +54,9 @@ pub mod stepper;
 pub mod switch;
 pub mod tab_close;
 pub(crate) mod tab_geometry;
+pub(crate) mod tab_list;
+#[cfg(all(test, feature = "testing"))]
+mod tab_list_tests;
 pub(crate) mod tab_scroll;
 pub mod tab_tear;
 #[cfg(all(test, feature = "testing"))]

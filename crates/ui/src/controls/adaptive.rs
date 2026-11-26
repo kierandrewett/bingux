@@ -702,15 +702,28 @@ mod tests {
 
     #[test]
     fn a_subtitle_longer_than_its_title_widens_the_column() {
-        let title = LabelFacts { natural: 70.0, longest_word: 40.0 };
-        let subtitle = LabelFacts { natural: 190.0, longest_word: 60.0 };
+        let title = LabelFacts {
+            natural: 70.0,
+            longest_word: 40.0,
+        };
+        let subtitle = LabelFacts {
+            natural: 190.0,
+            longest_word: 60.0,
+        };
         let column = title.wider(subtitle);
         assert_eq!((column.natural, column.longest_word), (190.0, 60.0));
         // Beside a short value in a wide row, the column takes the subtitle's
         // width, so the subtitle stays on one line.
-        if let ValueLine::Beside { label } | ValueLine::Wrapped { label } =
-            choose_value_line(600.0, 16.0, column, ValueFacts { natural: 40.0, longest_word: 40.0 }, false)
-        {
+        if let ValueLine::Beside { label } | ValueLine::Wrapped { label } = choose_value_line(
+            600.0,
+            16.0,
+            column,
+            ValueFacts {
+                natural: 40.0,
+                longest_word: 40.0,
+            },
+            false,
+        ) {
             assert!(label_cell_width(label) >= 190.0);
         }
     }

@@ -52,6 +52,8 @@ struct Case {
     rtl: bool,
     /// Every tab has a favicon.
     icons: bool,
+    /// How many of the first tabs are pinned.
+    pinned: usize,
 }
 
 impl Case {
@@ -66,6 +68,7 @@ impl Case {
             header: false,
             rtl: false,
             icons: false,
+            pinned: 0,
         }
     }
 
@@ -116,6 +119,7 @@ impl Component for Host {
                 } else {
                     TabItem::new(id, format!("Folder {id}"))
                 };
+                let item = item.pinned(index < case.pinned);
                 if case.icons {
                     item.icon(crate::icons::Icon::Folder)
                 } else {
@@ -325,29 +329,26 @@ fn check(window: f32, case: Case) {
         strip.height()
     );
 
-    // The one cluster after the tabs that the tab list and New tab buttons are
-    // in: as tall as the strip, with the inset before the first button and
-    // after the last, which is where it ends.
+    // The one cluster after the tabs that the scroll arrow, New tab and the tab list
+    // buttons are in: as tall as the strip, with the inset before the first button
+    // and after the last, which is where it ends. The tab list is always there.
     let container_width = if case.header {
         strip.width()
     } else {
         case.container
     };
     let overflowing = g.content(case.count as f32, g.min)
-        > container_width - g.cluster(usize::from(case.add)) + 0.01;
-    let wanted = usize::from(case.add) + usize::from(overflowing);
+        > container_width - g.cluster(usize::from(case.add) + 1) + 0.01;
+    let wanted = usize::from(case.add) + 1 + usize::from(overflowing);
     let cluster = named(&mut shot, "TabEnd");
-    assert_eq!(
-        cluster.len(),
-        usize::from(wanted > 0),
-        "{what}: one cluster of buttons, when there are any"
-    );
-    // Where the tabs end and the cluster begins, along the reading direction.
+    assert_eq!(cluster.len(), 1, "{what}: one cluster of buttons");
+    // Where the tabs end and the cluster begins, along the reading direction: a
+    // scrolling strip has its left arrow before them.
+    let lead = if overflowing { g.arrow_lead() } else { 0.0 };
     let (region_start, region_end) = match cluster.first() {
-        Some(cluster) if case.rtl => (strip.max_x(), cluster.max_x()),
-        Some(cluster) => (strip.min_x(), cluster.min_x()),
-        None if case.rtl => (strip.max_x(), strip.min_x()),
-        None => (strip.min_x(), strip.max_x()),
+        Some(cluster) if case.rtl => (strip.max_x() - lead, cluster.max_x()),
+        Some(cluster) => (strip.min_x() + lead, cluster.min_x()),
+        None => unreachable!("the cluster is always there"),
     };
     if let Some(cluster) = cluster.first() {
         assert!(
@@ -364,17 +365,15 @@ fn check(window: f32, case: Case) {
             near(cluster.min_y(), strip.min_y()) && near(cluster.max_y(), strip.max_y()),
             "{what}: the buttons are level with the tabs"
         );
-        if case.add {
-            let end = if case.rtl {
-                (strip.min_x(), cluster.min_x())
-            } else {
-                (strip.max_x(), cluster.max_x())
-            };
-            assert!(
-                near(end.0, end.1),
-                "{what}: the New tab button ends the strip: strip {strip:?}, cluster {cluster:?}"
-            );
-        }
+        let end = if case.rtl {
+            (strip.min_x(), cluster.min_x())
+        } else {
+            (strip.max_x(), cluster.max_x())
+        };
+        assert!(
+            near(end.0, end.1),
+            "{what}: the tab list button ends the strip: strip {strip:?}, cluster {cluster:?}"
+        );
     }
 
     // The close slot: every tab has one, a lone tab too. It is inside its
@@ -780,7 +779,7 @@ fn the_new_tab_button_is_the_same_distance_from_the_top_the_bottom_the_last_tab_
             let mut shot = start(window, case);
             let strip = one(&mut shot, "TabStrip");
             let (cluster, buttons) = end_buttons(&mut shot);
-            let new = *buttons.last().expect("the New tab button");
+            let new = *buttons.last().expect("the tab list button");
             let (top, bottom) = (new.min_y() - strip.min_y(), strip.max_y() - new.max_y());
             let (before, after) = (
                 buttons[0].min_x() - cluster.min_x(),
@@ -822,8 +821,8 @@ fn the_new_tab_button_is_the_same_distance_from_the_top_the_bottom_the_last_tab_
             );
             // After the last tab: an inset before the first button, when the tabs fit.
             let tabs = named(&mut shot, "Tab");
-            if buttons.len() == 1 {
-                let from_tab = new.min_x() - tabs.last().unwrap().max_x();
+            if buttons.len() == 2 {
+                let from_tab = buttons[0].min_x() - tabs.last().unwrap().max_x();
                 assert!(
                     near(from_tab, g.gap()),
                     "{what}: {from_tab} from the last tab's end"
@@ -904,8 +903,9 @@ fn the_new_tab_buttons_hover_fill_is_its_square() {
     let tokens = tokens_of(true);
     let bar_colour = BAR.color(&tokens);
     let mut shot = start(REGULAR, Case::new(3, 600.0));
-    let (_, buttons) = end_buttons(&mut shot);
-    let new = *buttons.last().unwrap();
+    let new = button_named(&mut shot, "New tab")
+        .expect("the New tab button")
+        .0;
     shot.hover(centre(&new).0, centre(&new).1);
     shot.settle(Duration::from_millis(300));
     let frame = Frame::of(&mut shot);
@@ -2022,7 +2022,7 @@ fn the_tabs_keep_their_width_while_the_pointer_closes_tab_after_tab_and_grow_whe
     let before = named(&mut shot, "Tab");
     let held = before[0].width();
     let g = geometry_for(REGULAR);
-    let room = 300.0 - g.cluster(1);
+    let room = 300.0 - g.cluster(2);
     assert!(
         near(held, g.tab_in(room, 3.0)) && held < natural - 10.0,
         "three tabs share the room: {held}"
@@ -2103,9 +2103,9 @@ fn closing_with_the_keyboard_does_not_hold_the_widths() {
 fn the_new_tab_button_adds_and_the_tabs_never_leave_the_strip_while_they_move() {
     // 420 px holds three tabs at their natural width and not four: the fourth makes the others narrow.
     let mut shot = live(420.0);
-    let new = *named(&mut shot, "IconButton")
-        .last()
-        .expect("the New tab button");
+    let new = button_named(&mut shot, "New tab")
+        .expect("the New tab button")
+        .0;
     let before = named(&mut shot, "Tab");
     assert_eq!(before.len(), 3);
     shot.click(
@@ -2418,10 +2418,9 @@ fn escape_puts_a_dragged_tab_back() {
 fn many_tabs_scroll_with_the_new_tab_button_pinned_and_the_selection_in_view() {
     let mut shot = live(300.0);
     let new_x = |shot: &mut Snapshot| {
-        named(shot, "IconButton")
-            .last()
-            .copied()
+        button_named(shot, "New tab")
             .expect("the New tab button")
+            .0
             .min_x()
     };
     let pinned = new_x(&mut shot);
@@ -2439,11 +2438,9 @@ fn many_tabs_scroll_with_the_new_tab_button_pinned_and_the_selection_in_view() {
     // The newest tab, selected, is scrolled into the region, which ends before the buttons.
     let strip = one(&mut shot, "TabStrip");
     let tab = named(&mut shot, "Tab").into_iter().last().unwrap();
-    let tab_list = named(&mut shot, "IconButton")
-        .into_iter()
-        .rev()
-        .nth(1)
-        .expect("the tab list button");
+    let tab_list = button_named(&mut shot, "Scroll forwards")
+        .expect("the scroll arrow before the buttons")
+        .0;
     assert!(
         tab.max_x() <= tab_list.min_x() + 0.6 && tab.min_x() >= strip.min_x(),
         "the selected tab {tab:?} is in view, before the buttons ({tab_list:?}) in the strip {strip:?}"
@@ -2454,6 +2451,184 @@ fn many_tabs_scroll_with_the_new_tab_button_pinned_and_the_selection_in_view() {
     assert!(
         first.min_x() >= strip.min_x() && first.max_x() <= tab_list.min_x() + 0.6,
         "Home scrolls back to the first tab"
+    );
+}
+
+// ---- The scroll arrows and the list button -----------------------------------
+
+/// The icon button called `label`: where it is and whether it is enabled (a
+/// dimmed one is still drawn).
+fn button_named(shot: &mut Snapshot, label: &str) -> Option<(Area, bool)> {
+    let label = label.to_string();
+    shot.runner()
+        .find_many(|node, element| {
+            let data = element.accessibility();
+            (data.builder.class_name() == Some("IconButton")
+                && data.builder.label() == Some(label.as_str()))
+            .then(|| (node.layout().area, !data.builder.is_disabled()))
+        })
+        .into_iter()
+        .next()
+}
+
+fn press_button(shot: &mut Snapshot, label: &str) {
+    let (area, _) = button_named(shot, label).unwrap_or_else(|| panic!("no {label} button"));
+    let at = centre(&area);
+    shot.click(at.0, at.1);
+    rest(shot);
+}
+
+#[test]
+fn a_strip_that_fits_has_no_scroll_arrows_and_ends_with_the_new_tab_and_list_buttons() {
+    for rtl in [false, true] {
+        let g = geometry_for(REGULAR);
+        let mut shot = start(
+            REGULAR,
+            Case {
+                rtl,
+                ..Case::new(5, 900.0)
+            },
+        );
+        assert!(
+            button_named(&mut shot, "Scroll backwards").is_none()
+                && button_named(&mut shot, "Scroll forwards").is_none(),
+            "rtl {rtl}: tabs that fit have nothing to scroll"
+        );
+        let strip = one(&mut shot, "TabStrip");
+        let tabs = named(&mut shot, "Tab");
+        let (new, _) = button_named(&mut shot, "New tab").expect("the New tab button");
+        let (list, enabled) = button_named(&mut shot, "Search and manage tabs")
+            .expect("the list button is always there");
+        assert!(enabled, "rtl {rtl}: and it works");
+        let (last_tab, before_list, strip_end, list_end) = if rtl {
+            (tabs[0].min_x(), list.max_x(), strip.min_x(), list.min_x())
+        } else {
+            (tabs[4].max_x(), list.min_x(), strip.max_x(), list.max_x())
+        };
+        assert!(
+            if rtl {
+                new.max_x() <= last_tab + g.gap() + 0.6 && list.max_x() <= new.min_x() + 0.6
+            } else {
+                new.min_x() >= last_tab - 0.6 && new.max_x() <= before_list + 0.6
+            },
+            "rtl {rtl}: the New tab button follows the tabs and the list button follows it"
+        );
+        assert!(
+            near((strip_end - list_end).abs(), g.top),
+            "rtl {rtl}: the list button ends the strip with the band after it: {list:?} in {strip:?}"
+        );
+    }
+}
+
+#[test]
+fn an_overflowing_strip_has_dimmed_scroll_arrows_with_new_tab_after_the_right_one_and_the_list_last()
+ {
+    let mut shot = start(
+        REGULAR,
+        Case {
+            icons: true,
+            pinned: 2,
+            ..Case::new(30, 700.0)
+        },
+    );
+    let strip = one(&mut shot, "TabStrip");
+    let tabs = named(&mut shot, "Tab");
+    let (back, back_on) = button_named(&mut shot, "Scroll backwards").expect("the backwards arrow");
+    let (forward, forward_on) =
+        button_named(&mut shot, "Scroll forwards").expect("the forwards arrow");
+    let (new, _) = button_named(&mut shot, "New tab").expect("the New tab button");
+    let (list, _) = button_named(&mut shot, "Search and manage tabs").expect("the list button");
+    assert!(
+        !back_on,
+        "at the start the backwards arrow is dimmed, not hidden"
+    );
+    assert!(forward_on, "there is more to the end");
+    // Pinned tabs, then the left arrow, then the scrolling tabs, then the right arrow,
+    // New tab and the list.
+    assert!(
+        tabs[1].max_x() <= back.min_x() + 0.6,
+        "the pinned tabs stand before the left arrow: {:?} {back:?}",
+        tabs[1]
+    );
+    assert!(
+        back.max_x() <= tabs[2].min_x() + 0.6,
+        "the scrolling tabs start after the left arrow"
+    );
+    assert!(
+        forward.min_x() > back.max_x()
+            && forward.max_x() <= new.min_x() + 0.6
+            && new.max_x() <= list.min_x() + 0.6,
+        "right arrow, New tab, list: {forward:?} {new:?} {list:?}"
+    );
+    assert!(
+        list.max_x() <= strip.max_x() + 0.6,
+        "the list ends the strip"
+    );
+    // The tabs that are in view are between the arrows.
+    let in_view = tabs
+        .iter()
+        .filter(|tab| tab.min_x() >= back.max_x() - 0.6 && tab.max_x() <= forward.min_x() + 0.6)
+        .count();
+    assert!(
+        in_view >= 3 && in_view < 28,
+        "some tabs show, not all: {in_view}"
+    );
+}
+
+#[test]
+fn the_arrows_scroll_the_tabs_a_step_at_a_time_and_dim_at_the_ends() {
+    let mut shot = start(REGULAR, Case::new(30, 600.0));
+    let first = |shot: &mut Snapshot| named(shot, "Tab")[0].min_x();
+    let last_in_view = |shot: &mut Snapshot| {
+        let tabs = named(shot, "Tab");
+        let (forward, _) = button_named(shot, "Scroll forwards").unwrap();
+        let (back, _) = button_named(shot, "Scroll backwards").unwrap();
+        tabs.iter()
+            .filter(|tab| tab.min_x() >= back.max_x() - 0.6 && tab.max_x() <= forward.min_x() + 0.6)
+            .count()
+    };
+    let start_x = first(&mut shot);
+    press_button(&mut shot, "Scroll forwards");
+    let moved = start_x - first(&mut shot);
+    assert!(
+        moved > 36.0,
+        "a press moves the tabs by more than a tab: {moved}"
+    );
+    assert!(
+        button_named(&mut shot, "Scroll backwards").unwrap().1,
+        "now there is somewhere back to go"
+    );
+    for _ in 0..40 {
+        if !button_named(&mut shot, "Scroll forwards").unwrap().1 {
+            break;
+        }
+        press_button(&mut shot, "Scroll forwards");
+    }
+    assert!(
+        !button_named(&mut shot, "Scroll forwards").unwrap().1,
+        "at the end the forwards arrow is dimmed"
+    );
+    assert!(button_named(&mut shot, "Scroll backwards").unwrap().1);
+    let tabs = named(&mut shot, "Tab");
+    let (forward, _) = button_named(&mut shot, "Scroll forwards").unwrap();
+    assert!(
+        tabs.last().unwrap().max_x() <= forward.min_x() + 0.6,
+        "the last tab is in view at the end"
+    );
+    assert!(last_in_view(&mut shot) >= 3);
+    for _ in 0..40 {
+        if !button_named(&mut shot, "Scroll backwards").unwrap().1 {
+            break;
+        }
+        press_button(&mut shot, "Scroll backwards");
+    }
+    assert!(
+        !button_named(&mut shot, "Scroll backwards").unwrap().1,
+        "back at the start the backwards arrow is dimmed"
+    );
+    assert!(
+        near(first(&mut shot), start_x),
+        "the first tab is where it began"
     );
 }
 
@@ -3032,8 +3207,11 @@ fn the_wheel_over_the_strip_scrolls_the_tabs_and_they_stay_where_it_left_them() 
     }
     shot.settle(Duration::from_millis(100));
     assert!(
-        near(named(&mut shot, "Tab")[0].min_x(), strip.min_x()),
-        "the first tab stops at the start"
+        near(
+            named(&mut shot, "Tab")[0].min_x(),
+            strip.min_x() + geometry_for(REGULAR).arrow_lead()
+        ),
+        "the first tab stops at the start, after the left arrow"
     );
 }
 
@@ -3348,7 +3526,7 @@ fn a_title_that_fits_is_drawn_inside_its_box_at_its_start_in_both_directions() {
 #[test]
 fn a_tabs_title_is_drawn_whole_at_its_start_in_both_directions() {
     for rtl in [false, true] {
-        for (window, count) in [(REGULAR, 3), (COMPACT, 2), (REGULAR, 1)] {
+        for (window, count) in [(REGULAR, 3), (COMPACT, 1), (REGULAR, 1)] {
             let mut shot = start(
                 window,
                 Case {
@@ -3584,7 +3762,7 @@ fn a_crowded_strip_fades_the_titles_then_shows_favicons_only_then_scrolls() {
     );
     // Six share a strip too short for them: narrower than natural but over the title
     // minimum, so the title is still there and fades.
-    let mut shot = crowd_in(6, 640.0);
+    let mut shot = crowd_in(6, 680.0);
     let tabs = named(&mut shot, "Tab");
     assert!(
         tabs[0].width() < natural - 5.0 && tabs[0].width() >= g.title_min,
@@ -3622,7 +3800,11 @@ fn a_crowded_strip_fades_the_titles_then_shows_favicons_only_then_scrolls() {
         "the chosen tab's close button"
     );
     let (_, buttons) = end_buttons(&mut shot);
-    assert_eq!(buttons.len(), 1, "it all fits: no tab list yet");
+    assert_eq!(
+        buttons.len(),
+        2,
+        "it all fits: New tab and the list, no arrows"
+    );
     // Twenty do not fit at the floor: the strip scrolls, and the tab list joins New tab at the end.
     let mut shot = crowd(20);
     let tabs = named(&mut shot, "Tab");
@@ -3633,7 +3815,11 @@ fn a_crowded_strip_fades_the_titles_then_shows_favicons_only_then_scrolls() {
     );
     let (cluster, buttons) = end_buttons(&mut shot);
     let strip = one(&mut shot, "TabStrip");
-    assert_eq!(buttons.len(), 2, "tab list and New tab");
+    assert_eq!(
+        buttons.len(),
+        3,
+        "the right arrow, New tab and the tab list"
+    );
     assert!(near(cluster.max_x(), strip.max_x()), "at the strip's end");
     assert!(
         tabs.iter()

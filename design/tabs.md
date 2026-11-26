@@ -27,8 +27,9 @@ The component's own behaviour (keys, menus, overflow) is in the module comment o
    then, under `Dim::TabTitleMin` (96 px), each tab is its favicon only (the
    close circle shows on the chosen tab and under the pointer, in the favicon's
    place when the two do not fit side by side), down to `Dim::TabMin` (36 px),
-   and then the strip scrolls with fade edges while New tab moves to a fixed place
-   at the strip's end beside a tab-list button.
+   and then the strip scrolls between two arrows (dimmed at the ends, with a fade
+   only at an edge more tabs continue past) while New tab and the tab-list button
+   (always there, "Search and manage tabs") stay at a fixed place at the strip's end.
 4. **A faint hairline** (1 px, 16 px tall) stands in the gap between two
    adjacent tabs when neither is chosen, hovered, pressed, a drop target or
    arriving or leaving; it is hidden while a tab is dragged.
@@ -49,18 +50,18 @@ controls. A later pass tried the first again (the selected tab grown to the
 strip's height in the toolbar's colour); the final model is the second option
 only: floating tiles that never connect.
 
-| Chromium                                                            | Here                                                                                      | Why                                                                     |
-| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Selected tab is the content's surface with flares into it           | A raised neutral tile on the strip, 5 px from its top and bottom                          | The rest of the shell does not join a selection to its content          |
-| Tabs share the whole strip up to a cap                              | Natural width up to 200 px, left-aligned; they share the strip only when it is full       | A few tabs are not stretched into slabs; the empty bar drags the window |
-| Narrowest tab keeps a title                                         | Favicon only under 96 px, down to 36 px, then scroll                                      | The icon identifies a site at any width                                 |
-| Inset rounded card                                                  | Full-bleed page, square to the window                                                     | One corner treatment: the window's                                      |
-| Separator between inactive tabs                                     | A faint 1 px, 16 px hairline, hidden beside the chosen or hovered tab                     | Tabs read as separate with no fill at rest                              |
-| Close button on the active tab and under the pointer                | A 16 px close circle (`Dim::TabClose`), same rule                                         |                                                                         |
-| Scrollable strip with a tab list, new tab button after the last tab | Same: New tab follows the last tab; when scrolling it is fixed at the end with a tab list |                                                                         |
-| Drag follows the pointer, others slide; tear-out                    | Same, on `crate::reorder` and `crate::drag`                                               | `design/tab-tearoff.md`                                                 |
-| Rapid closure, close-tab menu, reopen closed tab                    | Same                                                                                      |                                                                         |
-| Pinned tabs, groups, split tabs                                     | No                                                                                        | No caller needs them                                                    |
+| Chromium                                                            | Here                                                                                                                                                 | Why                                                                     |
+| ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Selected tab is the content's surface with flares into it           | A raised neutral tile on the strip, 5 px from its top and bottom                                                                                     | The rest of the shell does not join a selection to its content          |
+| Tabs share the whole strip up to a cap                              | Natural width up to 200 px, left-aligned; they share the strip only when it is full                                                                  | A few tabs are not stretched into slabs; the empty bar drags the window |
+| Narrowest tab keeps a title                                         | Favicon only under 96 px, down to 36 px, then scroll                                                                                                 | The icon identifies a site at any width                                 |
+| Inset rounded card                                                  | Full-bleed page, square to the window                                                                                                                | One corner treatment: the window's                                      |
+| Separator between inactive tabs                                     | A faint 1 px, 16 px hairline, hidden beside the chosen or hovered tab                                                                                | Tabs read as separate with no fill at rest                              |
+| Close button on the active tab and under the pointer                | A 16 px close circle (`Dim::TabClose`), same rule                                                                                                    |                                                                         |
+| Scrollable strip with a tab list, new tab button after the last tab | Same: New tab follows the last tab, then the tab list, always; when scrolling, arrows at both ends of the tabs and New tab fixed after the right one |                                                                         |
+| Drag follows the pointer, others slide; tear-out                    | Same, on `crate::reorder` and `crate::drag`                                                                                                          | `design/tab-tearoff.md`                                                 |
+| Rapid closure, close-tab menu, reopen closed tab                    | Same                                                                                                                                                 |                                                                         |
+| Pinned tabs, groups, split tabs                                     | No                                                                                                                                                   | No caller needs them                                                    |
 
 ## Geometry
 
@@ -85,7 +86,8 @@ density, then compact.
 | Title                                         | `CAPTION`, the small type step                | 13     | 13      |
 | Close circle                                  | `Dim::TabClose`, `Radius::Pill`, 12 px glyph  | 16     | 44      |
 | Hairline between tabs                         | `Dim::Hairline` wide, `SEPARATOR_HEIGHT` tall | 1 x 16 | 1 x 16  |
-| New tab and tab list buttons                  | `Dim::TabButton`, in a cluster                | 30     | 44      |
+| New tab, tab list and scroll arrows           | `Dim::TabButton`, in a cluster                | 30     | 44      |
+| The list of every tab (width)                 | `Dim::TabList`                                | 340    | 340     |
 | Start edge                                    | the header bar's padding, `S2`                | 8      | 8       |
 | Overflow fade                                 | `Dim::Box5`, into `Paint::Strip`              | 20     | 20      |
 
@@ -236,9 +238,12 @@ tab's.
 - **Menu.** Close tab, Close other tabs, Close tabs to the left (greyed out on
   the first tab), Close tabs to the right, Duplicate tab, Reopen closed tab, Move
   left, Move right. A closed group is remembered rightmost first, so Reopen
-  brings it back left to right at its places. The tab list shows each tab's icon,
-  its name (cut in the middle, the whole name as the tooltip) and ticks the
-  selected one.
+  brings it back left to right at its places. The tab list (the last button of
+  the strip, always there) is a popover: _Search all tabs_, _Close duplicate
+  tabs_ when there are duplicates, the pinned tabs under a _Pinned_ label, then
+  the others, each row with its icon, its title, a speaker while it plays sound
+  or is muted and a close button under the pointer (none on a pinned tab); the
+  selected one is ticked and scrolled to the middle when the list opens.
 - **Right to left.** `controls::direction`: the strip, a tab's pieces, the tab
   list rows, scroll offsets, arrow keys and the place a torn tab lands
   (`StripLayout { rtl }`) are mirrored; `tab_tests.rs` runs the geometry checks

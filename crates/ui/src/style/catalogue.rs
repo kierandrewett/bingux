@@ -147,6 +147,7 @@ const DIMS: &[(&str, Dim)] = &[
     ("DropdownMenu", Dim::DropdownMenu),
     ("ArrangementHeight", Dim::ArrangementHeight),
     ("MenuList", Dim::MenuList),
+    ("TabList", Dim::TabList),
     ("Sidebar", Dim::Sidebar),
     ("SpeakerRoom", Dim::SpeakerRoom),
     ("ArrangementWidth", Dim::ArrangementWidth),

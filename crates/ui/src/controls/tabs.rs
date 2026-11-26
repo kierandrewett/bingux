@@ -44,17 +44,29 @@
 //!   closed, a lone one too: the host decides what that means (Files closes the
 //!   window).
 //! * **The end of the strip** follows the last tab: the New tab button (drawn
-//!   when [`TabStrip::on_new`] is set), a [`Dim::TabButton`] square with the
-//!   corner of a button and the same distance from the strip's top, its bottom
-//!   and its trailing edge as a tab is. When the tabs scroll it is at a fixed
-//!   place at the end of the strip and a tab list button beside it opens a menu
-//!   of every tab (its icon, its name, the chosen one ticked); the tabs fade
-//!   into the strip at the edge they continue past. The chosen tab is scrolled
-//!   into view.
-//! * **Scrolling.** The wheel over the strip scrolls it (the vertical wheel
-//!   too, as a strip has one axis), so does a touchpad's two-finger movement,
-//!   and a finger dragged along it. A wheel notch glides, a touchpad and a
-//!   finger are followed at once. Dragging a tab to the edge scrolls too.
+//!   when [`TabStrip::on_new`] is set) and, last, the tab list button, "Search
+//!   and manage tabs" (always drawn, whether or not the tabs fit). Each is a
+//!   [`Dim::TabButton`] square with the corner of a button and the same
+//!   distance from the strip's top, its bottom and its trailing edge as a tab is.
+//!   The tab list button opens the list of every tab ([`tab_list`](super::tab_list)):
+//!   *Search all tabs* ([`TabStrip::on_search_tabs`]), *Close duplicate tabs*
+//!   ([`TabStrip::on_close_duplicates`], only while the host has duplicates), the
+//!   pinned tabs under a *Pinned* label and then the others, each row with its
+//!   icon, its title, a speaker while it plays or is muted and a close button
+//!   (not on a pinned tab); the selected tab is ticked and scrolled to the middle
+//!   when the list opens, and choosing a tab selects it and closes the list.
+//! * **Scrolling.** When the tabs no longer fit, a scroll arrow stands at each
+//!   end of the region they scroll in, the pinned tabs before the left one. The
+//!   right arrow, New tab and the tab list button are a cluster at the end of
+//!   the strip that does not scroll. An arrow is dimmed, not hidden, at the end
+//!   it points away from ([`tab_scroll::arrow_enabled`]); a press moves the tabs
+//!   by half the region, in whole tabs ([`tab_scroll::arrow_step`]). The tabs
+//!   fade into the strip at an edge they continue past, and only there. The
+//!   chosen tab is scrolled into view. The wheel over the strip scrolls it (the
+//!   vertical wheel too, as a strip has one axis), so does a touchpad's
+//!   two-finger movement, and a finger dragged along it. A wheel notch glides, a
+//!   touchpad and a finger are followed at once. Dragging a tab to the edge
+//!   scrolls too.
 //! * **The pointer.** The tab it is on is worked out from where the pointer
 //!   and the tabs are, so exactly one tab is hovered, and it stays right when
 //!   the tabs move under a pointer that does not (a wheel notch, a tab
@@ -141,7 +153,8 @@ use super::press::use_press;
 use super::progress::{SpinnerSize, spinner};
 use super::tab_close::{self, Act, Offers, RapidClose, Row};
 use super::tab_geometry::{Geometry, SEPARATOR_HEIGHT};
-use super::tab_scroll;
+use super::tab_list::TabListButton;
+use super::tab_scroll::{self, Arrow};
 use super::tab_tear::{self, Detach, Pull, StripLayout, StripProbe, TearGate};
 use crate::a11y::SemanticsExt;
 use crate::component::ComponentName;
@@ -283,6 +296,8 @@ pub fn tab_strip(tabs: Vec<TabItem>, selected: u64) -> TabStrip {
         on_detach: None,
         insertion: None,
         probe: None,
+        on_search_tabs: None,
+        on_close_duplicates: None,
         menus: Vec::new(),
         on_status: None,
     }
@@ -307,6 +322,9 @@ pub struct TabStrip {
     probe: Option<StripProbe>,
     /// The host's own items for a tab's menu, by tab id.
     menus: Vec<(u64, Vec<MenuItem>)>,
+    /// The shortcut hint and handler of the list's *Search all tabs* row.
+    on_search_tabs: Option<(String, EventHandler<()>)>,
+    on_close_duplicates: Option<EventHandler<()>>,
     on_status: Option<EventHandler<u64>>,
 }
 
@@ -416,6 +434,26 @@ impl TabStrip {
         self
     }
 
+    /// Offer *Search all tabs* at the top of the list the strip's last button
+    /// opens, with `shortcut` as its hint (the host binds the key). The host
+    /// answers by opening its address field on the open tabs. Without a handler
+    /// the row is not listed.
+    pub fn on_search_tabs(
+        mut self,
+        shortcut: impl Into<String>,
+        handler: impl Into<EventHandler<()>>,
+    ) -> Self {
+        self.on_search_tabs = Some((shortcut.into(), handler.into()));
+        self
+    }
+
+    /// Offer *Close duplicate tabs* in the list. Set it only while the host has
+    /// duplicates to close: the row is listed whenever there is a handler.
+    pub fn on_close_duplicates(mut self, handler: impl Into<EventHandler<()>>) -> Self {
+        self.on_close_duplicates = Some(handler.into());
+        self
+    }
+
     /// The host's items for the menu of tab `id`.
     fn host_items(&self, id: u64) -> &[MenuItem] {
         self.menus
@@ -437,7 +475,7 @@ struct Fit {
     /// The width of the region the tabs show in.
     region: f32,
     /// Whether the tabs do not fit at their narrowest: they scroll, and the
-    /// tab list button is drawn.
+    /// scroll arrows are drawn.
     overflow: bool,
 }
 
@@ -451,7 +489,7 @@ impl Fit {
         let region = geometry.content(effective, tab);
         Fit {
             tab,
-            rail: region + geometry.cluster(usize::from(add)),
+            rail: region + geometry.cluster(usize::from(add) + 1),
             region,
             overflow: false,
         }
@@ -460,12 +498,13 @@ impl Fit {
 
 /// The widths for `target` tabs that are staying and `effective` tabs' worth of
 /// width right now (a tab that is arriving or leaving counts for part of one),
-/// in `available` pixels, with or without the New tab button. Tabs are
+/// in `available` pixels, with or without the New tab button (the tab list
+/// button is always there). Tabs are
 /// `natural` wide (the width everything in the widest of them needs, capped at
 /// [`Geometry::max`]) and no wider: with room to spare the strip stays short and
 /// the end buttons follow the last tab. Only when the tabs no longer fit do
 /// they share the room equally and shrink together, down to [`Geometry::min`],
-/// and past that the strip scrolls.
+/// and past that the strip scrolls between two arrows.
 fn fit(
     geometry: Geometry,
     available: f32,
@@ -474,14 +513,16 @@ fn fit(
     add: bool,
     natural: f32,
 ) -> Fit {
-    let room = (available - geometry.cluster(usize::from(add))).max(0.0);
+    let room = (available - geometry.cluster(usize::from(add) + 1)).max(0.0);
     if geometry.content(target as f32, geometry.min) > room + 0.01 {
-        // Past the narrowest width: the strip is as wide as its container, and
-        // the tab list button joins the New tab button after the tabs.
+        // Past the narrowest width: the strip is as wide as its container. The left
+        // arrow stands before the region, and the right arrow joins New tab and
+        // the tab list in the cluster after it.
         return Fit {
             tab: geometry.min,
             rail: available.max(0.0),
-            region: (available - geometry.cluster(usize::from(add) + 1)).max(0.0),
+            region: (available - geometry.arrow_lead() - geometry.cluster(usize::from(add) + 2))
+                .max(0.0),
             overflow: true,
         };
     }
@@ -492,7 +533,7 @@ fn fit(
     let region = geometry.content(effective, tab);
     Fit {
         tab,
-        rail: region + geometry.cluster(usize::from(add)),
+        rail: region + geometry.cluster(usize::from(add) + 1),
         region,
         overflow: false,
     }
@@ -1212,13 +1253,11 @@ impl Component for TabStrip {
         let mut available = use_state(|| None::<f32>);
         let mut rail_area = use_state(Area::default);
         let mut region_area = use_state(Area::default);
-        let mut button_area = use_state(Area::default);
         let hover = use_state(|| None::<u64>);
         let pressed = use_state(|| None::<u64>);
         let target = use_state(|| 0.0_f32);
         let seen = use_state(|| 0_u64);
         let tick = use_state(|| 0_u64);
-        let overlays = use_try_consume::<Overlays>();
         let memory = use_hook(|| Rc::new(RefCell::new(Memory::default())));
         // Whether the person closed a tab from the keyboard, so the focus can
         // follow the selection to the tab that takes its place.
@@ -1945,54 +1984,49 @@ impl Component for TabStrip {
             .maybe_child((fades && offset > 0.5).then(|| fade(true)))
             .maybe_child((fades && offset < range - 0.5).then(|| fade(false)));
 
-        // ---- The buttons at the end of the strip, in one cluster as tall as the
-        // strip. Each is a square button, a tab tall, with the corner of a tab
-        // (the default of an icon button); the cluster has the inset before and
-        // after them, so a button is the same distance from the strip's top and
-        // bottom, from the last tab and from the strip's trailing edge.
-        let all_tabs: Vec<MenuItem> = pinned
-            .iter()
-            .chain(live.iter().copied())
-            .map(|entry| {
-                let on_select = self.on_select.clone();
-                let id = entry.item.id;
-                // The tab list shows what the tab does: its icon, then its name, which
-                // is cut in the middle (its end is what tells two tabs apart) with the
-                // whole name as the tooltip; a tick marks the selected tab.
-                let item = menu_item(entry.item.title.clone(), move |_| on_select.call(id))
-                    .name()
-                    .checked(id == self.selected);
-                match entry.item.icon {
-                    Some(icon) => item.icon(icon),
-                    None => item,
-                }
+        // ---- The scroll arrows, New tab and the tab list. A scrolling strip has the
+        // left arrow before the region and the right arrow at the head of the
+        // cluster after it; the cluster is as tall as the strip, and each button in
+        // it is a square, a tab tall, with the corner of a tab (the default of an
+        // icon button). The cluster has the inset before and after them, so a button
+        // is the same distance from the strip's top and bottom, from the last tab
+        // and from the strip's trailing edge.
+        // An arrow is dimmed, not hidden, at the end it points away from. It is for
+        // the pointer: the keys scroll the strip by moving the selection.
+        let arrow = |arrow: Arrow| -> Element {
+            let env = env.clone();
+            let (icon, tooltip) = match arrow {
+                Arrow::Backwards => (
+                    Icon::GoPrevious,
+                    crate::tr!("ui-tab-scroll-backwards.tooltip"),
+                ),
+                Arrow::Forwards => (Icon::GoNext, crate::tr!("ui-tab-scroll-forwards.tooltip")),
+            };
+            let (region, stride) = (fit.region, fit.tab + geometry.gap());
+            icon_button(icon, move |_: ()| {
+                let from = *env.target.peek();
+                let to =
+                    tab_scroll::arrow_target(arrow, from, env.shared.range.get(), region, stride);
+                env.scroll_to(to, false);
             })
-            .collect();
-        let mut buttons: Vec<Element> = Vec::with_capacity(2);
+            .size(Dim::TabButton)
+            .enabled(tab_scroll::arrow_enabled(arrow, offset, range))
+            .tooltip(tooltip)
+            .pointer_only()
+            .into_element()
+        };
+        let scroll_start = fit.overflow.then(|| {
+            rect()
+                .component("TabScrollStart")
+                .width(Size::px(geometry.arrow_lead()))
+                .height(Size::px(geometry.strip))
+                .tw(&tokens, &[flex_row(), items(Align::Center)])
+                .child(arrow(Arrow::Backwards))
+                .into_element()
+        });
+        let mut buttons: Vec<Element> = Vec::with_capacity(3);
         if fit.overflow {
-            buttons.push(
-                rect()
-                    .on_sized(move |event: Event<SizedEventData>| {
-                        button_area.set_if_modified(event.area);
-                    })
-                    .child(
-                        icon_button(Icon::PanDown, move |_| {
-                            if let Some(overlays) = overlays {
-                                overlays.show_menu_from(
-                                    None,
-                                    PanelTrigger::Control(PanelRect::from_area(
-                                        &button_area.read(),
-                                    )),
-                                    all_tabs.clone(),
-                                    false,
-                                );
-                            }
-                        })
-                        .size(Dim::TabButton)
-                        .tooltip(crate::tr!("ui-tab-list.tooltip")),
-                    )
-                    .into_element(),
-            );
+            buttons.push(arrow(Arrow::Forwards));
         }
         if let Some(on_new) = self.on_new.clone() {
             let rapid = rapid.clone();
@@ -2006,7 +2040,26 @@ impl Component for TabStrip {
                 .into_element(),
             );
         }
-        let cluster = (!buttons.is_empty()).then(|| {
+        // The list is always there, whether or not the tabs fit: it is how the
+        // person searches and manages them.
+        buttons.push(
+            TabListButton {
+                tabs: pinned
+                    .iter()
+                    .chain(live.iter().copied())
+                    .map(|entry| entry.item.clone())
+                    .collect(),
+                selected: self.selected,
+                size: Dim::TabButton,
+                search: self.on_search_tabs.clone(),
+                close_duplicates: self.on_close_duplicates.clone(),
+                on_select: self.on_select.clone(),
+                on_close: self.on_close.clone(),
+                on_status: self.on_status.clone(),
+            }
+            .into_element(),
+        );
+        let cluster = {
             let count = buttons.len();
             rect()
                 .component("TabEnd")
@@ -2017,11 +2070,11 @@ impl Component for TabStrip {
                 .tw(&tokens, &[flex_row(), items(Align::Center)])
                 // ui-lint: allow(the insets are the strip's Geometry, measured per density and tab height)
                 .padding(Gaps::new(0.0, geometry.top, 0.0, geometry.gap()))
-                // The tab list, then the New tab button at the trailing edge; the other
-                // way round when the strip reads from the right.
+                // The right arrow, New tab, then the tab list at the trailing edge; the
+                // other way round when the strip reads from the right.
                 .children(buttons)
                 .into_element()
-        });
+        };
 
         // ---- Drag to reorder: the strip tracks the pointer while one is on.
         let release = env.clone();
@@ -2038,8 +2091,9 @@ impl Component for TabStrip {
                 .into_element()
         });
         let mut ends: Vec<Element> = pinned_row.into_iter().collect();
+        ends.extend(scroll_start);
         ends.push(Element::from(region));
-        ends.extend(cluster);
+        ends.push(cluster);
         let strip = rect()
             .component("TabStrip")
             .a11y_role(AccessibilityRole::TabList)
@@ -2751,10 +2805,17 @@ mod tests {
                             "{class:?} add {add}: {count} tabs in {available}px make a strip {} wide",
                             fit.rail
                         );
-                        let end = fit.region
-                            + geometry.cluster(usize::from(add) + usize::from(fit.overflow));
+                        let lead = if fit.overflow {
+                            geometry.arrow_lead()
+                        } else {
+                            0.0
+                        };
+                        let end = lead
+                            + fit.region
+                            + geometry.cluster(usize::from(add) + 1 + usize::from(fit.overflow));
+                        // Narrower than its arrows and buttons the strip cannot hold them all.
                         assert!(
-                            end <= fit.rail + 0.01,
+                            fit.region == 0.0 || end <= fit.rail + 0.01,
                             "{class:?}: the region and the buttons ({end}) outrun the strip ({})",
                             fit.rail
                         );
@@ -2777,7 +2838,7 @@ mod tests {
                 assert!(!few.overflow);
                 assert_eq!(
                     few.rail,
-                    geometry.content(3.0, natural) + geometry.cluster(1),
+                    geometry.content(3.0, natural) + geometry.cluster(2),
                     "{class:?}: the New tab button follows the last tab"
                 );
                 assert!(few.rail < available, "{class:?}: empty strip at the end");
@@ -2893,7 +2954,7 @@ mod tests {
     fn overflow_begins_when_the_minimum_widths_no_longer_fit() {
         let geometry = Geometry::in_class(SizeClass::Regular);
         let available = 500.0;
-        let room = available - geometry.cluster(1);
+        let room = available - geometry.cluster(2);
         // The most tabs at the floor that fit beside the New tab button.
         let fits = (1..40)
             .filter(|count| geometry.content(*count as f32, geometry.min) <= room)
@@ -2917,8 +2978,8 @@ mod tests {
         assert_eq!(overflowing.rail, available);
         assert_eq!(
             overflowing.region,
-            available - geometry.cluster(2),
-            "the tab list and New tab buttons share one cluster at the end of the strip"
+            available - geometry.arrow_lead() - geometry.cluster(3),
+            "the right arrow, New tab and the tab list share one cluster at the end of the strip"
         );
     }
 

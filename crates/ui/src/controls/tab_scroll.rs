@@ -12,6 +12,9 @@
 //! * [`wheel`] and [`pan`]: what a wheel notch, a touchpad's two-finger
 //!   movement and a finger dragged along the strip move the tabs by.
 //! * [`into_view`]: the offset that brings a tab into the region.
+//! * [`arrow_enabled`], [`arrow_step`], [`arrow_target`]: the scroll arrows at
+//!   the ends of a strip that overflows: dimmed at the end they point away from,
+//!   and the offset a press leads to.
 //! * [`physical`], [`place`]: logical to screen, mirrored right to left.
 
 use super::direction::Direction;
@@ -90,6 +93,44 @@ pub(crate) fn into_view(
     } else {
         current
     }
+}
+
+/// Which way a scroll arrow at an end of the strip takes the tabs: towards
+/// the start of the strip or towards its end, in reading order, so the same
+/// arrow is on the start side in both directions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Arrow {
+    Backwards,
+    Forwards,
+}
+
+/// Whether the arrow has anywhere to take the tabs: it is dimmed, not hidden,
+/// at the end it points away from, as Firefox's arrow scroll box does.
+pub(crate) fn arrow_enabled(arrow: Arrow, offset: f32, range: f32) -> bool {
+    // The edge fades use the same half pixel, so an arrow and a fade agree on
+    // whether more of the tabs is hidden on a side.
+    match arrow {
+        Arrow::Backwards => offset > 0.5,
+        Arrow::Forwards => offset < range - 0.5,
+    }
+}
+
+/// How far one press of an arrow moves the tabs: half the region, in whole
+/// tabs, and never less than one tab.
+pub(crate) fn arrow_step(region: f32, stride: f32) -> f32 {
+    ((region / 2.0 / stride).floor() * stride).max(stride)
+}
+
+/// The offset one press of `arrow` leads to, kept in the range.
+pub(crate) fn arrow_target(arrow: Arrow, offset: f32, range: f32, region: f32, stride: f32) -> f32 {
+    let step = arrow_step(region, stride);
+    clamp(
+        match arrow {
+            Arrow::Backwards => offset - step,
+            Arrow::Forwards => offset + step,
+        },
+        range,
+    )
 }
 
 #[cfg(test)]
@@ -182,5 +223,37 @@ mod tests {
         // A region too narrow for a tab shows the tab's start, not its end.
         assert_eq!(into_view(2, geometry, 96.0, 90.0, 0.0), 2.0 * step);
         assert_eq!(into_view(0, geometry, 96.0, 100.0, 0.0), 0.0);
+    }
+
+    #[test]
+    fn an_arrow_is_dimmed_at_the_end_it_points_away_from() {
+        // Nothing to scroll: both are dimmed.
+        assert!(!arrow_enabled(Arrow::Backwards, 0.0, 0.0));
+        assert!(!arrow_enabled(Arrow::Forwards, 0.0, 0.0));
+        // At the start only forwards goes on; at the end only backwards.
+        assert!(!arrow_enabled(Arrow::Backwards, 0.0, 300.0));
+        assert!(arrow_enabled(Arrow::Forwards, 0.0, 300.0));
+        assert!(arrow_enabled(Arrow::Backwards, 300.0, 300.0));
+        assert!(!arrow_enabled(Arrow::Forwards, 300.0, 300.0));
+        // In between both go. A fraction of a pixel short of an end counts as the end,
+        // the same slack the edge fades use.
+        assert!(arrow_enabled(Arrow::Backwards, 120.0, 300.0));
+        assert!(arrow_enabled(Arrow::Forwards, 120.0, 300.0));
+        assert!(!arrow_enabled(Arrow::Backwards, 0.3, 300.0));
+        assert!(!arrow_enabled(Arrow::Forwards, 299.7, 300.0));
+    }
+
+    #[test]
+    fn an_arrow_moves_half_the_region_in_whole_tabs_and_stays_in_range() {
+        // Tabs 38 apart in a region of 400: ten tabs fit, so five are moved.
+        assert_eq!(arrow_step(400.0, 38.0), 5.0 * 38.0);
+        // A region narrower than two tabs still moves one.
+        assert_eq!(arrow_step(50.0, 38.0), 38.0);
+        assert_eq!(arrow_step(0.0, 38.0), 38.0);
+        let target = |arrow, offset| arrow_target(arrow, offset, 600.0, 400.0, 38.0);
+        assert_eq!(target(Arrow::Forwards, 0.0), 190.0);
+        assert_eq!(target(Arrow::Forwards, 500.0), 600.0, "stops at the end");
+        assert_eq!(target(Arrow::Backwards, 600.0), 410.0);
+        assert_eq!(target(Arrow::Backwards, 100.0), 0.0, "stops at the start");
     }
 }

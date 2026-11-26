@@ -123,23 +123,30 @@ impl Geometry {
         self.spacing
     }
 
-    /// The side of an end button (New tab, the tab list): a tab's height.
+    /// The side of an end button (New tab, the tab list, the scroll arrows): a
+    /// tab's height.
     pub(crate) fn button(&self) -> f32 {
         self.tab
     }
 
-    /// The width of the cluster of `buttons` end buttons (New tab, the tab
-    /// list) after the tabs: each is [`Geometry::button`] square, a gap after
-    /// the last tab before the first and the band after the last, so a button
-    /// is the same distance from the strip's top, its bottom and its trailing
-    /// edge. At compact density there is no band and each is the whole touch
-    /// target.
+    /// The width of the cluster of `buttons` end buttons (the right scroll arrow,
+    /// New tab and the tab list) after the tabs: each is [`Geometry::button`]
+    /// square, a gap after the last tab before the first and the band after the
+    /// last, so a button is the same distance from the strip's top, its bottom
+    /// and its trailing edge. At compact density there is no band and each is
+    /// the whole touch target.
     pub(crate) fn cluster(&self, buttons: usize) -> f32 {
         if buttons == 0 {
             0.0
         } else {
             buttons as f32 * self.button() + self.gap() + self.top
         }
+    }
+
+    /// The width of the left scroll arrow of a scrolling strip: a button and
+    /// the gap between it and the first tab that scrolls.
+    pub(crate) fn arrow_lead(&self) -> f32 {
+        self.button() + self.gap()
     }
 
     /// The width of the strip's content for `count` tabs of `tab`: a gap

@@ -1901,8 +1901,19 @@ ui-tab-unmute =
     .tooltip = Unmute { $title }
 ui-tab-close-named =
     .tooltip = Close { $title }
+# The last button of a tab strip: opens the list of every tab, to search and manage them.
 ui-tab-list =
-    .tooltip = Tab list
+    .tooltip = Search and manage tabs
+# The list's first command: the host opens its address field on the open tabs.
+ui-tab-list-search = Search all tabs
+ui-tab-list-close-duplicates = Close duplicate tabs
+# The label over the pinned tabs in the list of tabs.
+ui-tab-list-pinned = Pinned
+# The arrows at the ends of a strip whose tabs do not all fit: they scroll it.
+ui-tab-scroll-backwards =
+    .tooltip = Scroll backwards
+ui-tab-scroll-forwards =
+    .tooltip = Scroll forwards
 ui-tab-new =
     .tooltip = New tab
 
