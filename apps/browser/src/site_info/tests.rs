@@ -11,6 +11,7 @@ fn security(state: SecurityState) -> Security {
 
 #[test]
 fn a_secure_page_is_good_and_an_http_page_is_a_warning() {
+    crate::locale::register();
     let secure = Summary::of(&security(SecurityState::Secure), "https://example.com");
     assert_eq!(
         (secure.tone, secure.icon),
@@ -25,6 +26,7 @@ fn a_secure_page_is_good_and_an_http_page_is_a_warning() {
 
 #[test]
 fn mixed_content_changes_the_wording_and_the_tone() {
+    crate::locale::register();
     let passive = Security {
         mixed_passive: true,
         ..security(SecurityState::Secure)
@@ -44,6 +46,7 @@ fn mixed_content_changes_the_wording_and_the_tone() {
 
 #[test]
 fn a_page_of_the_browser_a_file_and_a_blank_tab_say_nothing_alarming() {
+    crate::locale::register();
     for (state, url) in [
         (SecurityState::Internal, "bingux:settings"),
         (SecurityState::Local, "file:///tmp/a.html"),
@@ -60,6 +63,7 @@ fn a_page_of_the_browser_a_file_and_a_blank_tab_say_nothing_alarming() {
 
 #[test]
 fn an_extended_validation_certificate_says_who_was_verified() {
+    crate::locale::register();
     let ev = Security {
         extended_validation: true,
         ..security(SecurityState::Secure)

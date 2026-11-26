@@ -91,3 +91,37 @@ browser-address-search-for = Search { $engine } for “{ $words }”
 
 # Toast shown when Print is chosen: the engine cannot print yet.
 browser-commands-print-unavailable = Printing is not available in this engine yet.
+
+## Site information
+## The card under the connection button.
+
+# Title of the connection summary when no page is open.
+browser-site-info-blank-title = No page
+browser-site-info-blank-description = There is nothing to describe yet.
+browser-site-info-internal-title = A page of this browser
+browser-site-info-internal-description = This page is part of the browser and sends nothing to the network.
+browser-site-info-local-title = A file on this computer
+browser-site-info-local-description = The page was read from your disk, not from the network.
+browser-site-info-mixed-title = Connection is secure, but some content is not
+browser-site-info-mixed-description = Images or media on this page were loaded without encryption. Someone on the network could see or replace them.
+browser-site-info-secure-title = Connection is secure
+browser-site-info-secure-description = What you send to this site is private on its way there.
+browser-site-info-verified-description = What you send to this site is private, and the organization behind it was verified.
+# Also the title when the page went on past a certificate warning.
+browser-site-info-insecure-title = Connection is not secure
+browser-site-info-insecure-description = Anyone on the network could read this page and what you send to it. Do not enter passwords or card numbers here.
+browser-site-info-active-mixed-description = Scripts on this page were loaded without encryption. Someone on the network could change what the page does.
+browser-site-info-certificate-description = You went on past a warning about this site’s certificate. Do not enter passwords or card numbers here.
+browser-site-info-connecting-title = Connecting
+browser-site-info-connecting-description = The connection is being made; nothing is known about it yet.
+
+# Heading of the group that names the site, and the labels of its two rows.
+browser-site-info-site-title = Site
+browser-site-info-host-label = Site
+browser-site-info-address-label = Address
+browser-site-info-permissions-title = Permissions
+browser-site-info-permissions-footer = Choices you made for this site. Reset one to be asked again.
+# A remembered choice for a permission.
+browser-site-info-allowed = Allowed
+browser-site-info-blocked = Blocked
+browser-site-info-reset-button = Reset

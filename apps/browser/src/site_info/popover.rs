@@ -86,9 +86,12 @@ fn page_info(ctx: Ctx) -> Element {
         .tw_layout(&[flex_col(), w_full(), gap(S3)])
         .child(Group::new(None::<String>).row(status_row));
     if !internal && origin.contains("://") {
-        let site = Group::new("Site".to_string())
-            .row(property_row("Site", Address::new(&origin).host()))
-            .row(property_row("Address", {
+        let site = Group::new(tr!("browser-site-info-site-title"))
+            .row(property_row(
+                tr!("browser-site-info-host-label"),
+                Address::new(&origin).host(),
+            ))
+            .row(property_row(tr!("browser-site-info-address-label"), {
                 let browser = ctx.browser.read();
                 browser
                     .tabs
@@ -99,16 +102,20 @@ fn page_info(ctx: Ctx) -> Element {
         column = column.child(site);
     }
     if !remembered.is_empty() {
-        let mut group = Group::new("Permissions".to_string())
-            .footer("Choices you made for this site. Reset one to be asked again.");
+        let mut group = Group::new(tr!("browser-site-info-permissions-title"))
+            .footer(tr!("browser-site-info-permissions-footer"));
         for (name, allowed) in remembered {
             let site = origin.clone();
             let forget = name.clone();
             group = group.row(
                 row(name)
-                    .value(if allowed { "Allowed" } else { "Blocked" })
+                    .value(if allowed {
+                        tr!("browser-site-info-allowed")
+                    } else {
+                        tr!("browser-site-info-blocked")
+                    })
                     .trailing(
-                        action_button("Reset", move |_: ()| {
+                        action_button(tr!("browser-site-info-reset-button"), move |_: ()| {
                             ctx.with(|browser| browser.permissions.forget(&site, &forget));
                         })
                         .compact()
