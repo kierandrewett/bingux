@@ -78,10 +78,7 @@ impl Component for GateWindow {
         };
         let header = HeaderBar::new(tr!("browser-title")).trailing(WindowControls);
         rect()
-            .tw(
-                &tokens,
-                &[w_full(), h_full(), ink(Paint::Text), bg(Paint::Bg)],
-            )
+            .tw(&tokens, &[w_full(), h_full(), ink(Paint::Text)])
             .font_family(bingux_ui::theme::font_family())
             .child(Screen::new(header).content(body))
     }

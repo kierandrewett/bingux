@@ -7,9 +7,9 @@ use freya::prelude::*;
 use super::failure;
 use crate::ui::Ctx;
 
-/// The page of a window whose engine is gone. It is a component of its own so
-/// that it paints the window's background (nothing else is on screen) with the
-/// tokens of the window.
+/// The page of a window whose engine is gone. The window is a `Screen` with
+/// nothing in its header but the window's buttons, so it can still be moved and
+/// closed; the page is its content.
 #[derive(PartialEq)]
 pub struct EngineFailedPage {
     pub ctx: Ctx,
@@ -55,8 +55,7 @@ impl Component for EngineFailedPage {
                     .children(under),
             );
         }
-        rect()
-            .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
-            .child(view)
+        Screen::new(HeaderBar::new(tr!("browser-title")).trailing(WindowControls))
+            .content(view.into_element())
     }
 }
