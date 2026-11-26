@@ -30,8 +30,8 @@ pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {
         let tab = browser.active();
         (
             zoom::percent(tab.map_or(1.0, |tab| tab.zoom)),
-            browser.capabilities().find,
-            browser.capabilities().downloads,
+            browser.engine.capabilities().find,
+            browser.engine.capabilities().downloads,
             !browser.closed.is_empty(),
             tab.is_some_and(|tab| tab.kind == TabKind::Web && !tab.is_blank()),
         )

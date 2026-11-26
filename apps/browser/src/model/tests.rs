@@ -55,7 +55,7 @@ fn the_first_tab_is_blank_and_the_engine_is_ready_after_its_event() {
     let (browser, _) = browser();
     assert_eq!(browser.tabs.len(), 1);
     assert_eq!(browser.active().map(|tab| tab.page()), Some(Page::NewTab));
-    assert_eq!(browser.engine, crate::engine::Status::Ready);
+    assert_eq!(browser.engine.status, crate::engine::Status::Ready);
 }
 
 #[test]
@@ -653,7 +653,7 @@ fn what_the_engine_took_of_find_is_read_again_when_the_bar_opens() {
     // what it could do.
     double.set_capabilities(Capabilities::all());
     browser.open_find(key);
-    assert!(browser.capabilities().find);
+    assert!(browser.engine.capabilities().find);
     assert!(
         browser.take_notices().is_empty(),
         "no word of find being absent"

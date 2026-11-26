@@ -13,16 +13,14 @@ mod lifecycle;
 mod outbox;
 mod prompts;
 
-pub use outbox::{Notice, UiRequest};
+pub use outbox::{Notice, Outbox, UiRequest};
 
 use std::sync::Arc;
 
 use bingux_ui::web_view::requests::ContextTarget;
-use bingux_ui::web_view::{
-    BackendError, BrowserBackend, Capabilities, PageEnvironment, RequestId, TabConfig, TabId,
-};
+use bingux_ui::web_view::{BrowserBackend, PageEnvironment, RequestId, TabConfig, TabId};
 
-use crate::engine;
+use crate::engine::Engine;
 use crate::model::address::{ENGINES, SearchEngine};
 use crate::model::downloads::Downloads;
 use crate::model::keeping::{Keeping, NotSaved};
@@ -110,8 +108,8 @@ impl Profile {
 }
 
 pub struct Browser {
-    backend: Arc<dyn BrowserBackend>,
-    capabilities: Capabilities,
+    /// The engine: its handle, what it can do, where it is.
+    pub engine: Engine,
     pub options: Options,
     /// The appearance pages see: the colour scheme, accent, motion and text
     /// scale of the window, set by the UI whenever they change.
@@ -122,7 +120,6 @@ pub struct Browser {
     /// Whether the history is kept.
     pub history_keeping: Keeping,
     pub permissions: Permissions,
-    pub engine: engine::Status,
     /// The settings of the window's profile.
     pub settings: Settings,
     /// Whether a change of the settings is kept.
@@ -133,8 +130,8 @@ pub struct Browser {
     /// for a window opened without one.
     pub profile: Option<(String, String)>,
     pub view: ViewSize,
-    pub notices: Vec<Notice>,
-    pub ui: Vec<UiRequest>,
+    /// What the browser has said and the window has not yet shown or done.
+    out: Outbox,
     pub menu: Option<PendingMenu>,
     pub fullscreen: bool,
     /// The tabs of an engine that failed, with the session each had: a restart
@@ -157,10 +154,8 @@ impl Browser {
         options: Options,
         profile: Profile,
     ) -> Self {
-        let capabilities = backend.capabilities();
         let mut browser = Self {
-            backend,
-            capabilities,
+            engine: Engine::new(backend),
             options,
             environment: PageEnvironment::default(),
             tabs: TabList::new(),
@@ -172,7 +167,6 @@ impl Browser {
                 profile.settings_keeping.clone()
             },
             permissions: Permissions::new(),
-            engine: engine::Status::Starting,
             settings: profile.settings,
             settings_keeping: Keeping::Loading,
             store: profile.store,
@@ -182,8 +176,7 @@ impl Browser {
                 height: 640,
                 scale: 1.0,
             },
-            notices: Vec::new(),
-            ui: Vec::new(),
+            out: Outbox::default(),
             menu: None,
             fullscreen: false,
             lost: Vec::new(),
@@ -191,16 +184,6 @@ impl Browser {
         };
         browser.kept_settings(profile.settings_keeping);
         browser
-    }
-
-    /// The engine, for the parts of the UI that draw its frames and send its
-    /// input directly (the frame view).
-    pub fn backend(&self) -> &Arc<dyn BrowserBackend> {
-        &self.backend
-    }
-
-    pub fn capabilities(&self) -> Capabilities {
-        self.capabilities
     }
 
     pub fn search(&self) -> &'static SearchEngine {
@@ -240,43 +223,12 @@ impl Browser {
         }
     }
 
-    /// Tell the person something.
-    pub fn notify(&mut self, text: impl Into<String>) {
-        self.notices.push(Notice {
-            error: false,
-            text: text.into(),
-            action: None,
-        });
-    }
-
-    /// Tell the person something went wrong, unless the same was said last.
-    pub(crate) fn fail(&mut self, error: &BackendError) {
-        let text = error.to_string();
-        if self
-            .notices
-            .last()
-            .is_some_and(|last| last.error && last.text == text)
-        {
-            return;
-        }
-        self.notices.push(Notice {
-            error: true,
-            text,
-            action: None,
-        });
-    }
-
     /// Run an engine call; what goes wrong becomes a notice.
     pub(crate) fn engine_call(
         &mut self,
         call: impl FnOnce(&dyn BrowserBackend) -> bingux_ui::web_view::Done,
     ) {
-        if let Err(error) = call(self.backend.as_ref()) {
-            // A tab that is already closed is not the person's business.
-            if !matches!(error, BackendError::NoSuchTab(_)) {
-                self.fail(&error);
-            }
-        }
+        self.engine.call(&mut self.out, call);
     }
 
     /// The window's appearance changed: every page sees the new one. The same
@@ -292,12 +244,12 @@ impl Browser {
 
     /// The notices not yet shown.
     pub fn take_notices(&mut self) -> Vec<Notice> {
-        std::mem::take(&mut self.notices)
+        self.out.take_notices()
     }
 
     /// What only the window can do, not yet done.
     pub fn take_ui(&mut self) -> Vec<UiRequest> {
-        std::mem::take(&mut self.ui)
+        self.out.take_requests()
     }
 
     /// The tab on show.

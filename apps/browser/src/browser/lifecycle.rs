@@ -32,7 +32,7 @@ impl Browser {
             tab.cert = None;
         }
         self.menu = None;
-        self.engine = engine::Status::Failed {
+        self.engine.status = engine::Status::Failed {
             message,
             code,
             cause,
@@ -43,8 +43,8 @@ impl Browser {
     /// The engine is up (again): it takes the window's look, and what the
     /// controls may offer is what it says it can do.
     pub(super) fn engine_ready(&mut self) {
-        self.engine = engine::Status::Ready;
-        self.capabilities = self.backend().capabilities();
+        self.engine.status = engine::Status::Ready;
+        self.engine.refresh();
         let environment = self.environment.clone();
         self.engine_call(|backend| backend.set_environment(&environment));
     }
@@ -53,7 +53,7 @@ impl Browser {
     /// one blank tab. While the engine is not there the window opens on its
     /// page, with no tab; the first restart opens them.
     pub fn open_first(&mut self, first: &[String]) {
-        if matches!(self.engine, engine::Status::Failed { .. }) {
+        if matches!(self.engine.status, engine::Status::Failed { .. }) {
             self.start = Some(first.to_vec());
             return;
         }
@@ -75,16 +75,16 @@ impl Browser {
     pub fn restart_engine(&mut self) {
         let engine::Status::Failed {
             restartable: true, ..
-        } = self.engine
+        } = self.engine.status
         else {
             return;
         };
-        if let Err(error) = self.backend().restart() {
-            self.fail(&error);
+        if let Err(error) = self.engine.backend().restart() {
+            self.out.fail(&error);
             return;
         }
-        self.engine = engine::Status::Starting;
-        self.capabilities = self.backend().capabilities();
+        self.engine.status = engine::Status::Starting;
+        self.engine.refresh();
         let active = self.tabs.active_key();
         for (key, old) in std::mem::take(&mut self.lost) {
             let Some(tab) = self.tabs.get(key).filter(|tab| tab.kind == TabKind::Web) else {
@@ -92,7 +92,7 @@ impl Browser {
             };
             let mut config = self.config(&tab.url.clone(), None, key != active);
             config.restore_from = Some(old);
-            match self.backend().create_tab(&config) {
+            match self.engine.backend().create_tab(&config) {
                 Ok(session) => {
                     if let Some(tab) = self.tabs.get_mut(key) {
                         tab.session = Some(session);
@@ -102,7 +102,7 @@ impl Browser {
                         tab.load.error = None;
                     }
                 }
-                Err(error) => self.fail(&error),
+                Err(error) => self.out.fail(&error),
             }
         }
         self.shown_again(active);
@@ -127,15 +127,15 @@ impl Browser {
         window: &NewWindow,
     ) {
         if window.unrequested && !window.user_gesture {
-            if let Err(error) = self.backend().close_tab(new) {
-                self.fail(&error);
+            if let Err(error) = self.engine.backend().close_tab(new) {
+                self.out.fail(&error);
             }
             let from = if window.origin.is_empty() {
                 "a page".to_string()
             } else {
                 window.origin.clone()
             };
-            self.notices.push(Notice {
+            self.out.notice(Notice {
                 error: false,
                 text: format!("Blocked a pop-up from {from}"),
                 action: None,
@@ -145,8 +145,8 @@ impl Browser {
         let opener_key = self.key_of(opener);
         let background = window.disposition == Disposition::BackgroundTab;
         let config = self.config("", Some(opener), background);
-        if let Err(error) = self.backend().accept_tab(new, &config) {
-            self.fail(&error);
+        if let Err(error) = self.engine.backend().accept_tab(new, &config) {
+            self.out.fail(&error);
             return;
         }
         let key = self.tabs.next_key();

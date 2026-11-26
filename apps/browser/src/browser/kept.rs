@@ -32,7 +32,7 @@ impl Browser {
         if !by_design(&keeping)
             && let Some(text) = keeping.text(Part::Settings)
         {
-            self.notify(text);
+            self.out.notify(text);
         }
         self.settings_keeping = keeping;
     }
@@ -45,7 +45,7 @@ impl Browser {
         if !by_design(&keeping)
             && let Some(text) = keeping.text(Part::History)
         {
-            self.notify(text);
+            self.out.notify(text);
         }
         self.history_keeping = keeping;
     }
@@ -79,7 +79,7 @@ impl Browser {
         };
         store.clear_history();
         let text = self.history_clear_scope().cleared_text();
-        self.notify(text);
+        self.out.notify(text);
     }
 
     /// The history file could not be read: move it aside and keep history

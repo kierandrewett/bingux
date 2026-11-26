@@ -66,10 +66,10 @@ impl Browser {
         tab.opener = opener;
         let opener_session = opener.and_then(|key| self.session_of(key));
         let config = self.config(url, opener_session, !select && !self.tabs.is_empty());
-        match self.backend().create_tab(&config) {
+        match self.engine.backend().create_tab(&config) {
             Ok(session) => tab.session = Some(session),
             Err(error) => {
-                self.fail(&error);
+                self.out.fail(&error);
                 return None;
             }
         }
@@ -139,7 +139,7 @@ impl Browser {
         }
         if self.fullscreen && self.tabs.active().is_some_and(|tab| !tab.fullscreen) {
             self.fullscreen = false;
-            self.ui.push(UiRequest::Fullscreen(false));
+            self.out.request(UiRequest::Fullscreen(false));
         }
     }
 
@@ -168,7 +168,7 @@ impl Browser {
             self.menu = None;
         }
         if self.tabs.is_empty() {
-            self.ui.push(UiRequest::CloseWindow);
+            self.out.request(UiRequest::CloseWindow);
             return;
         }
         if self.tabs.active_key() != was {
@@ -188,7 +188,7 @@ impl Browser {
             }
             if self.fullscreen {
                 self.fullscreen = false;
-                self.ui.push(UiRequest::Fullscreen(false));
+                self.out.request(UiRequest::Fullscreen(false));
             }
         }
     }
@@ -196,7 +196,7 @@ impl Browser {
     /// Open the tab closed last, where it was.
     pub fn reopen_closed(&mut self) {
         let Some(closed) = self.closed.pop() else {
-            self.notify("There is no closed tab to reopen.");
+            self.out.notify("There is no closed tab to reopen.");
             return;
         };
         let key = match closed.kind {
@@ -270,13 +270,13 @@ impl Browser {
         ) else {
             return;
         };
-        match self.backend().set_muted(session, !muted) {
+        match self.engine.backend().set_muted(session, !muted) {
             Ok(()) => {
                 if let Some(tab) = self.tabs.get_mut(key) {
                     tab.audio.muted = !muted;
                 }
             }
-            Err(error) => self.fail(&error),
+            Err(error) => self.out.fail(&error),
         }
     }
 
@@ -312,7 +312,7 @@ impl Browser {
             .is_some_and(|tab| tab.kind == TabKind::Settings)
         {
             let config = self.config(url, None, false);
-            match self.backend().create_tab(&config) {
+            match self.engine.backend().create_tab(&config) {
                 Ok(session) => {
                     if let Some(tab) = self.tabs.get_mut(key) {
                         tab.kind = TabKind::Web;
@@ -323,7 +323,7 @@ impl Browser {
                     }
                     self.shown_again(key);
                 }
-                Err(error) => self.fail(&error),
+                Err(error) => self.out.fail(&error),
             }
             return;
         }
@@ -474,15 +474,16 @@ impl Browser {
     pub fn open_find(&mut self, key: u64) {
         // The engine took the call, or did not, at its first session: after
         // the window read what the engine can do, when it opened with none.
-        self.capabilities = self.backend().capabilities();
-        if !self.capabilities().find {
-            self.notify("Find in page is not available in this engine yet.");
+        self.engine.refresh();
+        if !self.engine.capabilities().find {
+            self.out
+                .notify("Find in page is not available in this engine yet.");
             return;
         }
         if let Some(tab) = self.tabs.get_mut(key) {
             tab.find.open = true;
         }
-        self.ui.push(UiRequest::OpenFind);
+        self.out.request(UiRequest::OpenFind);
     }
 
     /// Close the find bar and clear what it highlighted.
@@ -557,7 +558,7 @@ impl Browser {
             })
             .map(|download| download.id)
             .collect();
-        if self.capabilities().download_control {
+        if self.engine.capabilities().download_control {
             for id in over {
                 // The engine ignores an id it does not hold (a restart forgot it).
                 self.engine_call(|backend| backend.remove_download(id));
@@ -574,9 +575,9 @@ impl Browser {
         match command {
             Command::NewTab => {
                 self.open_tab("", Place::AfterActive, true);
-                self.ui.push(UiRequest::FocusAddress);
+                self.out.request(UiRequest::FocusAddress);
             }
-            Command::NewPrivateWindow => self.ui.push(UiRequest::NewPrivateWindow),
+            Command::NewPrivateWindow => self.out.request(UiRequest::NewPrivateWindow),
             Command::CloseTab => self.close_tab(key),
             Command::ReopenTab => self.reopen_closed(),
             Command::NextTab => self.step(1),
@@ -593,7 +594,7 @@ impl Browser {
             }
             Command::MoveTabLeft => self.shift_tab(key, -1),
             Command::MoveTabRight => self.shift_tab(key, 1),
-            Command::FocusAddress => self.ui.push(UiRequest::FocusAddress),
+            Command::FocusAddress => self.out.request(UiRequest::FocusAddress),
             Command::Find => self.open_find(key),
             Command::FindNext => self.find_step(key, true),
             Command::FindPrevious => self.find_step(key, false),
@@ -606,17 +607,17 @@ impl Browser {
             Command::ZoomReset => self.set_zoom(key, zoom::DEFAULT),
             Command::Fullscreen => {
                 let on = !self.fullscreen;
-                self.ui.push(UiRequest::Fullscreen(on));
+                self.out.request(UiRequest::Fullscreen(on));
                 self.fullscreen = on;
                 if let Some(session) = self.session_of(key) {
                     self.engine_call(|backend| backend.set_fullscreen(session, on));
                 }
             }
-            Command::Downloads => self.ui.push(UiRequest::OpenDownloads),
+            Command::Downloads => self.out.request(UiRequest::OpenDownloads),
             Command::Settings => {
                 self.open_settings();
             }
-            Command::PageInfo => self.ui.push(UiRequest::OpenPageInfo),
+            Command::PageInfo => self.out.request(UiRequest::OpenPageInfo),
             Command::ViewSource => {
                 let url = self
                     .tabs
@@ -627,12 +628,12 @@ impl Browser {
                     self.open_tab(&format!("view-source:{url}"), Place::AfterActive, true);
                 }
             }
-            Command::Print => self.notices.push(Notice {
+            Command::Print => self.out.notice(Notice {
                 error: true,
                 text: "Printing is not available in this engine yet.".to_string(),
                 action: None,
             }),
-            Command::MainMenu => self.ui.push(UiRequest::OpenMainMenu),
+            Command::MainMenu => self.out.request(UiRequest::OpenMainMenu),
             Command::Edit(edit) => self.send_edit(key, edit),
         }
     }

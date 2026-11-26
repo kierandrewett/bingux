@@ -459,7 +459,7 @@ fn scenarios() -> Vec<Scenario> {
 
 /// The window root a snapshot mounts.
 fn app(rig: &Rig, scenario: &Scenario) -> impl Fn() -> Element + use<> {
-    let engine = Engine(rig.double.clone());
+    let engine = Engine::new(rig.double.clone());
     let options = Options {
         private: scenario.private,
     };
@@ -501,7 +501,7 @@ fn run_real(dir: &str, addresses: &[String]) {
             bingux_ui::web_view::engine::EngineFolders::Private,
         );
         // An engine that does not start is a window that says so: the shot shows it.
-        let engine = Engine(bingux_ui::web_view::engine::start(config));
+        let engine = Engine::new(bingux_ui::web_view::engine::start(config));
         let start = addresses.to_vec();
         let app = move || {
             provide_router(Arc::new(RouteTable::new(SCHEME)), &Location::rooted(SCHEME));

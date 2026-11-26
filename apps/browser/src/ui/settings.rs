@@ -177,7 +177,7 @@ impl Component for SettingsPage {
         let (info, selected, remembered, settings_keeping, has_history, history_keeping, scope) = {
             let browser = ctx.browser.read();
             (
-                browser.backend().info(),
+                browser.engine.backend().info(),
                 browser.settings.engine_index(),
                 browser.permissions.origins().len(),
                 browser.settings_keeping.clone(),

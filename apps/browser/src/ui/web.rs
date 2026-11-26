@@ -42,34 +42,38 @@ impl Component for TabPage {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
         let key = self.key;
-        web_view(self.engine.0.clone(), self.session, self.surface.0.clone())
-            .on_resize(move |size: ViewSize| {
-                ctx.with(|browser| {
-                    browser.resize(
-                        size.width.round() as u32,
-                        size.height.round() as u32,
-                        size.scale as f32,
-                    )
-                });
-            })
-            .on_host_key(move |input: KeyInput| {
-                // Escape leaves a fullscreen page, whatever the page says.
-                if input.key == Key::Named(NamedKey::Escape) && ctx.browser.peek().fullscreen {
-                    ctx.with(|browser| browser.run(Command::Fullscreen));
-                    return true;
+        web_view(
+            self.engine.backend().clone(),
+            self.session,
+            self.surface.0.clone(),
+        )
+        .on_resize(move |size: ViewSize| {
+            ctx.with(|browser| {
+                browser.resize(
+                    size.width.round() as u32,
+                    size.height.round() as u32,
+                    size.scale as f32,
+                )
+            });
+        })
+        .on_host_key(move |input: KeyInput| {
+            // Escape leaves a fullscreen page, whatever the page says.
+            if input.key == Key::Named(NamedKey::Escape) && ctx.browser.peek().fullscreen {
+                ctx.with(|browser| browser.run(Command::Fullscreen));
+                return true;
+            }
+            // The browser's shortcuts come first: a page cannot take
+            // Ctrl+T, and Ctrl+C is the engine's own copy.
+            match page_command(ctx.platform, &input.key, input.modifiers) {
+                Some(command) => {
+                    ctx.with(|browser| browser.run(command));
+                    true
                 }
-                // The browser's shortcuts come first: a page cannot take
-                // Ctrl+T, and Ctrl+C is the engine's own copy.
-                match page_command(ctx.platform, &input.key, input.modifiers) {
-                    Some(command) => {
-                        ctx.with(|browser| browser.run(command));
-                        true
-                    }
-                    None => false,
-                }
-            })
-            .on_local_menu(move |position: (f32, f32)| {
-                ctx.with(|browser| browser.open_local_menu(key, position));
-            })
+                None => false,
+            }
+        })
+        .on_local_menu(move |position: (f32, f32)| {
+            ctx.with(|browser| browser.open_local_menu(key, position));
+        })
     }
 }

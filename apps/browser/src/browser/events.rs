@@ -12,7 +12,7 @@ impl Browser {
     /// last call.
     pub fn poll(&mut self) {
         let mut events = Vec::new();
-        self.backend().poll_events(&mut events);
+        self.engine.backend().poll_events(&mut events);
         for event in events {
             self.apply(event);
         }
@@ -53,13 +53,13 @@ impl Browser {
                 let name = info.filename.clone();
                 self.downloads.update(info);
                 if started {
-                    self.notices.push(Notice {
+                    self.out.notice(Notice {
                         error: false,
                         text: format!("Downloading {name}"),
                         action: Some(("Show".to_string(), Command::Downloads)),
                     });
                 } else if finished {
-                    self.notices.push(Notice {
+                    self.out.notice(Notice {
                         error: false,
                         text: format!("{name} was downloaded"),
                         action: Some(("Show".to_string(), Command::Downloads)),
@@ -98,7 +98,7 @@ impl Browser {
                     tab.session = None;
                 }
                 if let Some(error) = error {
-                    self.notices.push(Notice {
+                    self.out.notice(Notice {
                         error: true,
                         text: format!("A tab was closed by the engine: {error}"),
                         action: None,
@@ -181,7 +181,7 @@ impl Browser {
                 }
                 if key == self.tabs.active_key() && self.fullscreen != entering {
                     self.fullscreen = entering;
-                    self.ui.push(UiRequest::Fullscreen(entering));
+                    self.out.request(UiRequest::Fullscreen(entering));
                 }
             }
             TabEvent::ProcessGone(reason) => {

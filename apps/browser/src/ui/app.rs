@@ -108,7 +108,8 @@ impl Component for Content {
             let environment = environment.clone();
             let profile = self.profile.clone();
             move || {
-                let mut browser = Browser::with_profile(engine.0.clone(), options, profile.take());
+                let mut browser =
+                    Browser::with_profile(engine.backend().clone(), options, profile.take());
                 browser.environment = environment;
                 browser
             }
@@ -153,7 +154,7 @@ impl Component for Content {
             let engine = engine.clone();
             move || {
                 let signal = Signal::new();
-                engine.0.set_waker(signal.waker());
+                engine.backend().set_waker(signal.waker());
                 ctx.browser.peek().set_store_waker(signal.waker());
                 spawn(async move {
                     ctx.with(|browser| {
@@ -201,7 +202,7 @@ impl Component for Content {
             (
                 title,
                 browser.fullscreen,
-                match &browser.engine {
+                match &browser.engine.status {
                     engine::Status::Failed {
                         message,
                         code,

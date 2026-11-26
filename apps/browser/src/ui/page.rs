@@ -48,6 +48,7 @@ impl Component for PageArea {
                     .session
                     .and_then(|session| {
                         browser
+                            .engine
                             .backend()
                             .surface(session)
                             .map(|surface| Shown::Web(session, Surface(surface)))

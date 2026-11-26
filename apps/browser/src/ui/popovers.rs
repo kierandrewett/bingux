@@ -129,10 +129,10 @@ fn page_info(ctx: Ctx) -> Element {
 fn download_controls(ctx: Ctx, download: &DownloadInfo) -> Option<Element> {
     let id: DownloadId = download.id;
     // An engine with no call for it gets no button that does nothing.
-    if !ctx.browser.read().capabilities().download_control {
+    if !ctx.browser.read().engine.capabilities().download_control {
         return None;
     }
-    let backend = ctx.browser.read().backend().clone();
+    let backend = ctx.browser.read().engine.backend().clone();
     match download.state {
         DownloadState::Running => {
             let pause = backend.clone();

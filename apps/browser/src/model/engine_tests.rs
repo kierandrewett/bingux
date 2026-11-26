@@ -33,7 +33,7 @@ fn go(browser: &mut Browser, url: &str) -> u64 {
 }
 
 fn failed(browser: &Browser) -> Option<(FailureCause, bool, u32)> {
-    match &browser.engine {
+    match &browser.engine.status {
         engine::Status::Failed {
             cause,
             restartable,
@@ -55,7 +55,7 @@ fn an_engine_failure_is_a_state_with_its_cause_and_not_a_panic() {
     );
     browser.poll();
     assert_eq!(failed(&browser), Some((FailureCause::Crashed, true, 137)));
-    let engine::Status::Failed { message, .. } = &browser.engine else {
+    let engine::Status::Failed { message, .. } = &browser.engine.status else {
         panic!("failed")
     };
     assert_eq!(message, "the engine process was killed");
@@ -110,7 +110,7 @@ fn a_restart_opens_every_tab_again_where_it_was_and_the_engine_is_ready_again() 
     double.clear_calls();
 
     browser.restart_engine();
-    assert_eq!(browser.engine, engine::Status::Starting);
+    assert_eq!(browser.engine.status, engine::Status::Starting);
     let calls = double.calls();
     assert!(matches!(calls[0], Call::Restart), "the engine first");
     let restored: Vec<_> = calls
@@ -140,7 +140,7 @@ fn a_restart_opens_every_tab_again_where_it_was_and_the_engine_is_ready_again() 
     );
 
     browser.poll();
-    assert_eq!(browser.engine, engine::Status::Ready);
+    assert_eq!(browser.engine.status, engine::Status::Ready);
     for (key, was) in before {
         let tab = browser.tabs.get(key).unwrap();
         assert!(
@@ -200,7 +200,7 @@ fn an_engine_that_does_not_start_is_a_window_that_says_why_and_tries_again_when_
     double.fix_start();
     browser.restart_engine();
     browser.poll();
-    assert_eq!(browser.engine, engine::Status::Ready);
+    assert_eq!(browser.engine.status, engine::Status::Ready);
     assert_eq!(
         browser.tabs.len(),
         1,
@@ -369,9 +369,9 @@ fn what_the_engine_cannot_do_is_disabled_and_the_command_says_so() {
     browser.open_tab("example.com", Place::End, true);
     browser.poll();
     assert!(
-        !browser.capabilities().find
-            && !browser.capabilities().downloads
-            && !browser.capabilities().context_menus
+        !browser.engine.capabilities().find
+            && !browser.engine.capabilities().downloads
+            && !browser.engine.capabilities().context_menus
     );
     browser.run(Command::Find);
     let notices = browser.take_notices();
@@ -380,23 +380,26 @@ fn what_the_engine_cannot_do_is_disabled_and_the_command_says_so() {
         notices[0].text.contains("Find in page is not available"),
         "{notices:?}"
     );
-    assert!(browser.capabilities().favicons, "and what it can do is on");
+    assert!(
+        browser.engine.capabilities().favicons,
+        "and what it can do is on"
+    );
 }
 
 #[test]
 fn the_controls_follow_the_engine_after_a_restart() {
     let (mut browser, double) = browser();
-    assert!(browser.capabilities().find);
+    assert!(browser.engine.capabilities().find);
     double.fail_engine(FailureCause::Crashed, "gone", 1, true);
     browser.poll();
     browser.restart_engine();
     browser.poll();
     assert_eq!(
-        browser.capabilities(),
+        browser.engine.capabilities(),
         double.capabilities(),
         "read again from the new engine"
     );
-    assert_eq!(browser.engine, engine::Status::Ready);
+    assert_eq!(browser.engine.status, engine::Status::Ready);
 }
 
 #[test]
@@ -416,7 +419,7 @@ fn the_latest_words_of_a_failure_are_the_ones_the_window_keeps() {
         code,
         cause,
         ..
-    } = &browser.engine
+    } = &browser.engine.status
     else {
         panic!("failed")
     };

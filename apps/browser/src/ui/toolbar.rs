@@ -139,7 +139,7 @@ fn downloads_button(ctx: Ctx, downloads: &Downloads) -> Element {
     let active = downloads.active();
     // An engine that does not save downloads has nothing to list: the button
     // stays, so the toolbar keeps its shape, and says why it does nothing.
-    let can = ctx.browser.read().capabilities().downloads;
+    let can = ctx.browser.read().engine.capabilities().downloads;
     let tip = match active {
         _ if !can => "Downloads are not available in this engine yet".to_string(),
         0 => "Downloads".to_string(),
