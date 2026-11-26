@@ -30,7 +30,7 @@ mod toolbar;
 
 pub use group::{ButtonGroup, GroupButton, button_group, group_button};
 pub use item::{
-    Placement, ToolbarGroup, ToolbarItem, toolbar_element, toolbar_group, toolbar_item,
-    toolbar_menu,
+    Placement, ToolbarGroup, ToolbarItem, pane_toggle_item, toolbar_element, toolbar_group,
+    toolbar_item, toolbar_menu,
 };
 pub use toolbar::{Toolbar, toolbar};

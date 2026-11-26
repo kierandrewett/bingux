@@ -3,7 +3,7 @@
 use freya::prelude::*;
 
 use crate::icons::Icon;
-use crate::shell::{MenuItem, menu_item, submenu};
+use crate::shell::{MenuItem, PanelSide, menu_item, submenu};
 
 /// Where an item sits, and how soon it goes into the overflow menu when the bar
 /// is too narrow.
@@ -69,6 +69,30 @@ pub fn toolbar_item(
         placement: Placement::Primary,
         prominent: false,
         shortcut: None,
+    }
+}
+
+/// The toggle of a sidebar or a pane on `side` of the window, as a toolbar
+/// item: its glyph shows the side ([`PanelSide::icon`]) and it sits on that
+/// side. A panel at the start gives a [`Placement::Leading`] item, drawn
+/// before the title; a panel at the end gives a [`Placement::Primary`] one,
+/// drawn after it. `label` names the panel ("Sidebar", "Preview pane") and
+/// `open` is whether it is shown.
+///
+/// This is the toolbar's form of [`pane_toggle`](crate::shell::pane_toggle);
+/// a toolbar item built from [`toolbar_item`] with a sidebar glyph is rejected
+/// by `pane_toggle_scan_tests`.
+pub fn pane_toggle_item(
+    id: &'static str,
+    label: impl Into<String>,
+    side: PanelSide,
+    open: bool,
+    on_press: impl Into<EventHandler<()>>,
+) -> ToolbarItem {
+    let item = toolbar_item(id, label, side.icon(), on_press).toggled(open);
+    match side {
+        PanelSide::Start => item.leading(),
+        PanelSide::End => item,
     }
 }
 

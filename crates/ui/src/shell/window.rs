@@ -9,6 +9,7 @@ use crate::controls::{SpinnerSize, hover_tip, spinner};
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::shell::boundary::{BottomBarHost, ChromeItem, SwitcherRail, ViewSwitcher};
+use crate::shell::pane_toggle::{PaneToggle, PanelSide};
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
 use crate::typography::EMPHASIS;
@@ -80,6 +81,33 @@ impl HeaderBar {
     /// buttons. They sit at the end of the bar.
     pub fn trailing(mut self, item: impl ChromeItem) -> Self {
         self.trailing.push(item.into_chrome());
+        self
+    }
+
+    /// The button that shows and hides the sidebar or pane on `toggle`'s side
+    /// of the window ([`pane_toggle`](crate::shell::pane_toggle)). It joins the
+    /// cluster on that side: a toggle for a panel at the start goes in the
+    /// leading cluster, one for a panel at the end in the trailing cluster, in
+    /// the order of the calls among that cluster's items. Call the start toggle
+    /// first, so it opens the bar, and the end toggle after the other trailing
+    /// actions and before `trailing(WindowControls)`, so the window buttons stay last.
+    /// The caller does not choose the cluster: a [`PaneToggle`] is not a
+    /// [`ChromeItem`], so [`leading`](Self::leading) and
+    /// [`trailing`](Self::trailing) refuse it.
+    pub fn pane_toggle(self, toggle: PaneToggle) -> Self {
+        let side = toggle.side();
+        self.pane_control(side, toggle.into_button().into())
+    }
+
+    /// Places `control`, the toggle of the panel on `side`, in the cluster on
+    /// that side. [`HeaderBar::pane_toggle`] is the way in for an app;
+    /// bingux-ui's own composites that wrap a toggle (the places menu of a
+    /// phone's Files, whose button also anchors a menu) come here.
+    pub(crate) fn pane_control(mut self, side: PanelSide, control: Element) -> Self {
+        match side {
+            PanelSide::Start => self.leading.push(control),
+            PanelSide::End => self.trailing.push(control),
+        }
         self
     }
 

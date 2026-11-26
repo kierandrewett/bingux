@@ -168,6 +168,32 @@ pub const HEADER_BAR: &[Spec] = &[
                 .into_element()
         },
     ),
+    Spec::live(
+        "Sidebar and pane toggles, each on the side of its panel (press them)",
+        || {
+            let sidebar = use_state(|| true);
+            let preview = use_state(|| false);
+            HeaderBar::new("Files")
+                .pane_toggle(
+                    pane_toggle(PanelSide::Start, move |_| {
+                        let mut sidebar = sidebar;
+                        sidebar.set(!sidebar());
+                    })
+                    .active(sidebar())
+                    .tooltip("Places"),
+                )
+                .pane_toggle(
+                    pane_toggle(PanelSide::End, move |_| {
+                        let mut preview = preview;
+                        preview.set(!preview());
+                    })
+                    .active(preview())
+                    .tooltip("Preview pane"),
+                )
+                .trailing(WindowControls)
+                .into_element()
+        },
+    ),
     Spec::forced("Busy", || {
         HeaderBar::new("Saving")
             .busy(true)

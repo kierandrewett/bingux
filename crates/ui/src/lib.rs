@@ -149,12 +149,12 @@ pub mod prelude {
     pub use crate::shell::{
         BackButton, Banner, BannerKind, CANCEL_ID, ChromeItem, ContentItem, Dialog, DialogIcon,
         ForwardButton, HeaderBar, MenuButton, MenuControl, MenuItem, NavigationSplitView,
-        OverlayHost, Overlays, PageAction, PageHead, Pane, Popover, Profile, ResponseKind, Screen,
-        StatusPage, SuggestionRow, Toast, ViewSwitcher, WindowControls, app_menu_item,
-        app_menu_items, banner, choice_sheet, dialog, framed_dialog, history_menu, menu_button,
-        menu_control, menu_controls, menu_item, menu_separator, menu_value_control, popover,
-        status_page, submenu, suggestion_row, use_chrome_inset, use_overlays, use_page_busy,
-        use_page_switcher, view, view_switcher,
+        OverlayHost, Overlays, PageAction, PageHead, Pane, PaneToggle, PanelSide, Popover, Profile,
+        ResponseKind, Screen, StatusPage, SuggestionRow, Toast, ViewSwitcher, WindowControls,
+        app_menu_item, app_menu_items, banner, choice_sheet, dialog, framed_dialog, history_menu,
+        menu_button, menu_control, menu_controls, menu_item, menu_separator, menu_value_control,
+        pane_toggle, popover, status_page, submenu, suggestion_row, use_chrome_inset, use_overlays,
+        use_page_busy, use_page_switcher, view, view_switcher,
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;
@@ -167,7 +167,8 @@ pub mod prelude {
     };
     pub use crate::toolbar::{
         ButtonGroup, GroupButton, Placement, Toolbar, ToolbarGroup, ToolbarItem, button_group,
-        group_button, toolbar, toolbar_element, toolbar_group, toolbar_item, toolbar_menu,
+        group_button, pane_toggle_item, toolbar, toolbar_element, toolbar_group, toolbar_item,
+        toolbar_menu,
     };
     pub use crate::typography::{self, Ink, TextStyle, styled_label, styled_paragraph};
     pub use crate::undo::{UndoStack, UndoStep, use_undo};

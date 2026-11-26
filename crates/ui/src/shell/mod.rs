@@ -34,6 +34,9 @@ mod notice_tests;
 pub mod overlays;
 #[cfg(all(test, feature = "testing"))]
 mod page_motion_tests;
+pub mod pane_toggle;
+#[cfg(all(test, feature = "testing"))]
+pub(crate) mod pane_toggle_tests;
 pub(crate) mod panel;
 pub mod popover;
 #[cfg(all(test, feature = "testing"))]
@@ -67,6 +70,7 @@ pub use navigation::{
     NavigationSplitView, PageAction, PageHead, Profile, use_page_busy, use_page_switcher,
 };
 pub use overlays::{OverlayHost, Overlays, Toast, use_overlays};
+pub use pane_toggle::{PaneToggle, PanelSide, pane_toggle};
 pub use panel::choice_sheet;
 pub use popover::{Popover, SuggestionRow, popover, suggestion_row};
 pub use screen::{Pane, Screen, use_chrome_inset};
