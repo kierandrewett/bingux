@@ -9,18 +9,27 @@
 mod address;
 mod browser;
 mod commands;
+mod downloads;
 mod engine;
+mod error_pages;
 mod find;
+mod first_run;
+mod history;
 mod locale;
+mod menus;
 mod model;
 mod navigation;
 mod new_tab;
 mod permissions;
+mod private;
+mod profiles;
 mod prompts;
+mod settings;
 mod site_info;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod store;
+mod tabs;
 mod target;
 mod ui;
 mod zoom;
@@ -31,15 +40,6 @@ use std::os::unix::process::CommandExt;
 use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 use crate::browser::{Options, Profile};
-mod downloads;
-mod error_pages;
-mod first_run;
-mod history;
-mod menus;
-mod private;
-mod profiles;
-mod settings;
-mod tabs;
 use crate::engine::Engine;
 use crate::profiles::open::{Opened, open, open_private};
 use crate::profiles::places::{Folders, Places};
@@ -160,7 +160,8 @@ fn main() {
                 });
             }
             let engine = start_or_exit(Some(&opened.folders));
-            let settings_keeping = store::keeping_of(opened.settings_problem.as_ref());
+            let settings_keeping =
+                store::keeping::Keeping::of_settings(opened.settings_problem.as_ref());
             let (store, settings_keeping) = match store::Store::open(
                 &opened.folders,
                 settings_keeping.clone(),

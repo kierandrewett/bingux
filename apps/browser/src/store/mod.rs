@@ -19,7 +19,7 @@ pub mod keeping;
 #[cfg(test)]
 mod tests;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::Waker;
@@ -30,8 +30,8 @@ use bingux_ui::search::{Index, SearchService};
 
 use crate::history::{CAP, Change, Database, History, INDEX, Page};
 use crate::profiles::places::Folders;
-use crate::settings::{Settings, SettingsProblem};
-use crate::store::keeping::{Keeping, NotSaved, damaged_name};
+use crate::settings::Settings;
+use crate::store::keeping::{Keeping, NotSaved};
 use files::Problem;
 
 /// How long history waits in memory before it is written.
@@ -51,48 +51,6 @@ enum Command {
     ClearHistory,
     StartOverHistory,
     Flush(Sender<()>),
-}
-
-/// The state a settings problem at open gives.
-pub fn keeping_of(problem: Option<&SettingsProblem>) -> Keeping {
-    match problem {
-        None => Keeping::Saved,
-        Some(SettingsProblem::Damaged(detail)) => Keeping::NotSaved(NotSaved::Damaged {
-            detail: detail.clone(),
-        }),
-        Some(SettingsProblem::TooNew { found, supported }) => Keeping::NotSaved(NotSaved::TooNew {
-            found: *found,
-            supported: *supported,
-        }),
-        Some(SettingsProblem::Io(problem)) => not_saved(problem),
-    }
-}
-
-/// The state a failed write gives.
-pub fn not_saved(problem: &Problem) -> Keeping {
-    Keeping::NotSaved(match problem {
-        Problem::DiskFull => NotSaved::DiskFull,
-        Problem::ReadOnly => NotSaved::ReadOnly,
-        Problem::Other(text) => NotSaved::Failed(text.clone()),
-    })
-}
-
-/// Whether a part in `keeping` may be written: never a file this build could
-/// not read.
-fn writable(keeping: &Keeping) -> bool {
-    !matches!(
-        keeping,
-        Keeping::NotSaved(NotSaved::Damaged { .. } | NotSaved::TooNew { .. })
-    )
-}
-
-/// Unix milliseconds now.
-fn now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| {
-            i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
-        })
 }
 
 /// The events the thread has sent and the waker that tells the window.
@@ -157,7 +115,7 @@ impl Writer {
 
     fn write_settings(&mut self, bytes: &[u8]) {
         // What could not be read is never written over.
-        if !writable(&self.settings) {
+        if !self.settings.is_writable() {
             return;
         }
         self.replace_settings(bytes);
@@ -166,7 +124,7 @@ impl Writer {
     fn replace_settings(&mut self, bytes: &[u8]) {
         let keeping = match files::replace(&self.settings_path, bytes) {
             Ok(()) => Keeping::Saved,
-            Err(error) => not_saved(&Problem::of(&error)),
+            Err(error) => Keeping::of_problem(&Problem::of(&error)),
         };
         self.report_settings(keeping);
     }
@@ -176,7 +134,7 @@ impl Writer {
             return;
         };
         let detail = detail.clone();
-        match move_aside(&[self.settings_path.clone()]) {
+        match NotSaved::move_aside(&[self.settings_path.clone()]) {
             Ok(()) => self.replace_settings(bytes),
             // Still damaged, so still never written over; the page says why
             // Start over did not work.
@@ -213,7 +171,7 @@ impl Writer {
     /// Whether there is a connection to write with, opening the file again
     /// after a failed open; false when the file must not or cannot be written.
     fn can_write(&mut self) -> bool {
-        if !writable(&self.history) {
+        if !self.history.is_writable() {
             return false;
         }
         if self.database.is_none() {
@@ -331,8 +289,12 @@ impl Writer {
         let detail = detail.clone();
         self.database = None;
         let path = &self.history_path;
-        let files = [path.clone(), sibling(path, "-wal"), sibling(path, "-shm")];
-        if let Err(error) = move_aside(&files) {
+        let files = [
+            path.clone(),
+            files::beside(path, "-wal"),
+            files::beside(path, "-shm"),
+        ];
+        if let Err(error) = NotSaved::move_aside(&files) {
             self.report_history(Keeping::NotSaved(NotSaved::Damaged {
                 detail: format!("{detail}; it could not be moved aside: {error}"),
             }));
@@ -381,25 +343,6 @@ impl Writer {
         }
         self.commit();
     }
-}
-
-/// `path` with `suffix` added to its name.
-fn sibling(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path.as_os_str().to_os_string();
-    name.push(suffix);
-    PathBuf::from(name)
-}
-
-/// Renames each of `files` that exists to its damaged name, beside it.
-fn move_aside(files: &[PathBuf]) -> std::io::Result<()> {
-    for file in files {
-        if let Err(error) = std::fs::rename(file, damaged_name(file))
-            && error.kind() != std::io::ErrorKind::NotFound
-        {
-            return Err(error);
-        }
-    }
-    Ok(())
 }
 
 impl Store {
@@ -466,6 +409,15 @@ impl Store {
         self.send(Command::StartOverSettings(settings.encode()));
     }
 
+    /// Unix milliseconds now.
+    fn now_ms() -> i64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| {
+                i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
+            })
+    }
+
     /// A page was loaded. The browser's own pages are not history.
     pub fn record_visit(&self, url: &str, title: &str) {
         if !Page::is_recorded(url) {
@@ -474,7 +426,7 @@ impl Store {
         self.send(Command::History(Change::Visit {
             url: url.to_string(),
             title: title.to_string(),
-            at: now_ms(),
+            at: Self::now_ms(),
         }));
     }
 

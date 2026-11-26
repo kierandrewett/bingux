@@ -147,6 +147,13 @@ pub fn remove_tree(dir: &Path) -> io::Result<()> {
     }
 }
 
+/// `path` with `suffix` added to its name.
+pub fn beside(path: &Path, suffix: &str) -> PathBuf {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(suffix);
+    PathBuf::from(name)
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use std::os::unix::fs::MetadataExt;

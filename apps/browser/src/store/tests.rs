@@ -17,9 +17,9 @@ use bingux_ui::web_view::test_double::TestDoubleBackend;
 use crate::browser::{Browser, Options, Profile};
 use crate::profiles::places::{Folders, Places};
 use crate::settings::Settings;
+use crate::store::Store;
 use crate::store::files::{self, Problem, remove_tree, tests::temp};
 use crate::store::keeping::{Keeping, NotSaved};
-use crate::store::{Store, keeping_of, not_saved};
 
 fn folders(root: &Path) -> Folders {
     Places::named_folders(root)
@@ -30,7 +30,7 @@ fn window(root: &Path) -> Browser {
     crate::locale::register();
     let folders = folders(root);
     let (settings, problem) = Settings::read(&folders.settings());
-    let keeping = keeping_of(problem.as_ref());
+    let keeping = Keeping::of_settings(problem.as_ref());
     let store = Store::open(&folders, keeping.clone(), &SearchService::new()).unwrap();
     Browser::with_profile(
         TestDoubleBackend::new(),
@@ -149,7 +149,7 @@ fn a_full_disk_is_disk_full() {
         .unwrap();
     let error = files::write_synced(&mut full, b"{}").unwrap_err();
     assert_eq!(
-        not_saved(&Problem::of(&error)),
+        Keeping::of_problem(&Problem::of(&error)),
         Keeping::NotSaved(NotSaved::DiskFull)
     );
 }

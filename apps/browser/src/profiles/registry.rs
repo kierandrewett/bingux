@@ -448,7 +448,7 @@ impl Profiles {
     /// Nothing in a profile folder is touched. Returns where the old list went.
     pub fn start_over(&self) -> Result<std::path::PathBuf, RegistryProblem> {
         let path = self.places.registry();
-        let kept = crate::store::keeping::damaged_name(&path);
+        let kept = crate::store::keeping::NotSaved::damaged_name(&path);
         {
             let _held = Held::wait(&self.places.registry_lock()).map_err(|error| io(&error))?;
             match std::fs::rename(&path, &kept) {

@@ -7,6 +7,9 @@ use std::path::PathBuf;
 
 use bingux_ui::tr;
 
+use super::files::Problem;
+use crate::settings::SettingsProblem;
+
 /// Whether a part of the profile is being kept on disk.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Keeping {
@@ -57,6 +60,41 @@ impl Part {
 }
 
 impl Keeping {
+    /// The state a settings problem at open gives.
+    pub fn of_settings(problem: Option<&SettingsProblem>) -> Self {
+        match problem {
+            None => Self::Saved,
+            Some(SettingsProblem::Damaged(detail)) => Self::NotSaved(NotSaved::Damaged {
+                detail: detail.clone(),
+            }),
+            Some(SettingsProblem::TooNew { found, supported }) => {
+                Self::NotSaved(NotSaved::TooNew {
+                    found: *found,
+                    supported: *supported,
+                })
+            }
+            Some(SettingsProblem::Io(problem)) => Self::of_problem(problem),
+        }
+    }
+
+    /// The state a failed write gives.
+    pub fn of_problem(problem: &Problem) -> Self {
+        Self::NotSaved(match problem {
+            Problem::DiskFull => NotSaved::DiskFull,
+            Problem::ReadOnly => NotSaved::ReadOnly,
+            Problem::Other(text) => NotSaved::Failed(text.clone()),
+        })
+    }
+
+    /// Whether the part may be written: never a file this build could not
+    /// read.
+    pub fn is_writable(&self) -> bool {
+        !matches!(
+            self,
+            Self::NotSaved(NotSaved::Damaged { .. } | NotSaved::TooNew { .. })
+        )
+    }
+
     /// One line for the settings page about `part`, or `None` when there is
     /// nothing to say.
     pub fn text(&self, part: Part) -> Option<String> {
@@ -82,14 +120,28 @@ impl Keeping {
     }
 }
 
-/// A damaged file's new name: `<name>.damaged-<unix seconds>`, beside it.
-pub fn damaged_name(path: &std::path::Path) -> PathBuf {
-    let seconds = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs());
-    let mut name = path.file_name().unwrap_or_default().to_os_string();
-    name.push(format!(".damaged-{seconds}"));
-    path.with_file_name(name)
+impl NotSaved {
+    /// A damaged file's new name: `<name>.damaged-<unix seconds>`, beside it.
+    pub fn damaged_name(path: &std::path::Path) -> PathBuf {
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |since| since.as_secs());
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".damaged-{seconds}"));
+        path.with_file_name(name)
+    }
+
+    /// Renames each of `files` that exists to its damaged name, beside it.
+    pub fn move_aside(files: &[PathBuf]) -> std::io::Result<()> {
+        for file in files {
+            if let Err(error) = std::fs::rename(file, Self::damaged_name(file))
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                return Err(error);
+            }
+        }
+        Ok(())
+    }
 }
 
 /// What Clear history reaches.
