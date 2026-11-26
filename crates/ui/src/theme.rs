@@ -1083,9 +1083,12 @@ pub fn watch_appearance(mut tokens: State<Tokens>) -> crate::platform::appearanc
     let notify = Arc::clone(&feed);
     let guard = crate::platform::appearance::watch(move || notify.push(()));
     // The task sleeps until a listener says something: no timer runs while the
-    // appearance does not change.
+    // appearance does not change. A burst of changes (a theme switch writes a
+    // dozen keys) is one read: the rest of the burst is dropped before the
+    // read, and a change that lands during the read is read after it.
     spawn(async move {
         while feed.next().await.is_some() {
+            feed.clear();
             let next = spawn_blocking(load_tokens).await;
             tokens.set_if_modified(next);
         }

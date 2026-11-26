@@ -534,7 +534,9 @@ where
             let again = key.clone();
             let outcome = spawn_blocking(move || load(again)).await;
             let unchanged = match (&outcome, &*state.peek()) {
-                (Ok(new), Resource::Ready(old) | Resource::Refreshing(old)) => (repeat.same)(old, new),
+                (Ok(new), Resource::Ready(old) | Resource::Refreshing(old)) => {
+                    (repeat.same)(old, new)
+                }
                 (Err(new), Resource::Error(old)) => new == old,
                 _ => false,
             };
@@ -608,6 +610,17 @@ impl<T> Feed<T> {
         }
     }
 
+    /// Drops every value that is queued and says how many there were. For a
+    /// reader of a stream whose values only mean "something changed": after
+    /// `next`, it clears the burst that came with it and reads once, and what
+    /// arrives while it reads is the next read.
+    pub fn clear(&self) -> usize {
+        let mut state = lock(&self.state);
+        let queued = state.queue.len();
+        state.queue.clear();
+        queued
+    }
+
     /// The next value, waiting for one; `None` when the feed is closed and
     /// drained.
     pub async fn next(&self) -> Option<T> {
@@ -641,20 +654,44 @@ mod tests {
         set_sliding(true);
         let held = try_spawn_blocking(move || count.fetch_add(1, Ordering::SeqCst));
         std::thread::sleep(Duration::from_millis(100));
-        assert_eq!(started.load(Ordering::SeqCst), 0, "the job started mid-slide");
+        assert_eq!(
+            started.load(Ordering::SeqCst),
+            0,
+            "the job started mid-slide"
+        );
         set_sliding(false);
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while started.load(Ordering::SeqCst) == 0 {
-            assert!(std::time::Instant::now() < deadline, "the job never started after the slide");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the job never started after the slide"
+            );
             std::thread::sleep(Duration::from_millis(5));
         }
         let count = Arc::clone(&started);
         let free = try_spawn_blocking(move || count.fetch_add(1, Ordering::SeqCst));
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while started.load(Ordering::SeqCst) < 2 {
-            assert!(std::time::Instant::now() < deadline, "the job did not start at rest");
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the job did not start at rest"
+            );
             std::thread::sleep(Duration::from_millis(5));
         }
         drop((held, free));
+    }
+
+    /// A burst of pushes is one wake-up's worth of work: `clear` drops the
+    /// rest of the burst, and a push after it is read again.
+    #[test]
+    fn clearing_a_feed_drops_the_queued_burst() {
+        let feed = Feed::<()>::default();
+        for _ in 0..50 {
+            feed.push(());
+        }
+        assert_eq!(feed.clear(), 50);
+        assert_eq!(feed.clear(), 0, "nothing is left to clear");
+        feed.push(());
+        assert_eq!(feed.clear(), 1, "a push after a clear is queued again");
     }
 }
