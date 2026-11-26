@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::location::{NameError, check_file_name};
 
 use super::durable::sync_dirs;
-use super::{OpError, rename_noreplace};
+use super::{Failure, OpError, rename_noreplace};
 
 /// A name for one file: the usual rules, and no slash.
 pub(super) fn check_name(name: &str) -> Result<(), OpError> {
@@ -38,7 +38,7 @@ pub(super) fn rename_then(
     let parent = path
         .parent()
         .filter(|parent| !parent.as_os_str().is_empty())
-        .ok_or_else(|| OpError::Other("The root folder cannot be renamed.".into()))?;
+        .ok_or_else(|| Failure::RootCannotBeRenamed.error())?;
     if path.file_name().is_some_and(|name| name == new_name) {
         return Ok(path.to_path_buf());
     }

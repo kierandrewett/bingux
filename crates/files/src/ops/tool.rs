@@ -32,7 +32,7 @@ use std::time::{Duration, Instant};
 
 use crate::Cancel;
 
-use super::OpError;
+use super::{Failure, OpError, Step};
 
 /// How often a running program is checked for being done or cancelled.
 const TICK: Duration = Duration::from_millis(40);
@@ -167,8 +167,9 @@ impl Finished {
         self.status.success()
     }
 
-    /// The first non-empty line the program complained with, as a sentence.
-    pub fn sentence(&self, what: &str) -> OpError {
+    /// The first non-empty line the program complained with, as the failure
+    /// of `step`. The line is the program's own text, kept as it wrote it.
+    pub fn failure(&self, step: Step) -> OpError {
         let line = self
             .complaint
             .lines()
@@ -180,10 +181,15 @@ impl Finished {
                     .map(str::trim)
                     .rfind(|line| !line.is_empty())
             })
-            .unwrap_or("The program gave no reason")
-            .trim_end_matches('.');
-        let line = line.strip_prefix("Error: ").unwrap_or(line);
-        OpError::Other(format!("{what}: {line}."))
+            .map(|line| line.trim_end_matches('.'));
+        match line {
+            Some(line) => Failure::ToolFailed {
+                step,
+                detail: line.strip_prefix("Error: ").unwrap_or(line).to_string(),
+            },
+            None => Failure::ToolSilent { step },
+        }
+        .error()
     }
 }
 
@@ -334,11 +340,11 @@ pub fn run(
     let (sender, lines) = mpsc::channel();
     let Some(out) = child.stdout.take() else {
         stop(&mut child);
-        return Err(OpError::Other("The program gave no output stream.".into()));
+        return Err(Failure::NoOutputStream.error());
     };
     let Some(err) = child.stderr.take() else {
         stop(&mut child);
-        return Err(OpError::Other("The program gave no error stream.".into()));
+        return Err(Failure::NoErrorStream.error());
     };
     read_lines(out, Stream::Out, sender.clone());
     read_lines(err, Stream::Err, sender);
@@ -362,7 +368,7 @@ pub fn run_pipe(
     feed(&mut one, &first.input);
     let Some(pipe) = one.stdout.take() else {
         stop(&mut one);
-        return Err(OpError::Other("The program gave no output stream.".into()));
+        return Err(Failure::NoOutputStream.error());
     };
     let mut two = command_of(second);
     two.stdin(Stdio::from(pipe))
@@ -533,8 +539,12 @@ mod tests {
         let finished = run(&spec, &Cancel::new(), &mut quiet()).unwrap();
         assert_eq!(finished.status.code(), Some(3));
         assert_eq!(
-            finished.sentence("It failed"),
-            OpError::Other("It failed: second thing.".into())
+            finished.failure(Step::Other),
+            Failure::ToolFailed {
+                step: Step::Other,
+                detail: "second thing".into()
+            }
+            .error()
         );
     }
 

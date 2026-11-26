@@ -69,6 +69,7 @@ mod data;
 mod details;
 mod digest;
 mod durable;
+mod failure;
 mod media_plan;
 mod names;
 mod pack;
@@ -89,6 +90,7 @@ pub use archive::{can_extract, extract_available};
 pub use clip::{gnome_copied_files, parse_gnome_copied_files, parse_uri_list, uri_of};
 pub use details::{FileDetails, Xattr, file_details, xattrs};
 pub use digest::{HashOutcome, HashProgress, Hashing, Sha256};
+pub use failure::{CheckProblem, Failure, Step};
 pub use media_plan::{
     AUDIO_KBPS, AudioCodec, AudioOptions, DIMENSIONS, FRAME_RATES, HEIGHTS, ImageFormat,
     ImageOptions, MediaKind, Probe, ReduceOptions, SOUND_KBPS, Sound, Tools, VideoCodec,
@@ -98,7 +100,7 @@ pub use names::{create_dir, create_file, keep_both_name, rename};
 pub use pack::{ItemKind, OnConflict, PackJob, Packed, Scan, pack, parent_of, scan};
 pub use pack_plan::{
     Excludes, Format, Level, NAME_LIMIT, NameCheck, PackOptions, Password, PatternError,
-    SPLIT_SIZES_MIB, base_of, check_name, file_name, free_base, split_label, suggested_base,
+    PatternProblem, SPLIT_SIZES_MIB, base_of, check_name, file_name, free_base, suggested_base,
 };
 pub use props::{
     Permissions, Properties, TreeChange, Volume, chmod, chmod_tree, group_name, permissions,
@@ -143,12 +145,9 @@ pub enum OpError {
     Missing(String),
     /// A call to the drive failed for a reason with a name.
     Io(IoKind),
-    /// This machine or drive cannot do it, worded in English for the log.
-    /// Being replaced by kinds; see `docs/files-errors.md`.
-    Unsupported(String),
-    /// Anything else, worded in English for the log. Being replaced by kinds;
-    /// see `docs/files-errors.md`.
-    Other(String),
+    /// Something else went wrong, and which: a kind with the facts it needs
+    /// (see [`Failure`]).
+    Failed(Failure),
     /// It cannot go to the bin, and why (see [`TrashRefusal`]).
     CannotTrash(TrashRefusal),
     /// Binning it takes a copy between two drives, and it is big: ask first,
@@ -249,7 +248,7 @@ impl fmt::Display for OpError {
             OpError::Cancelled => f.write_str("The operation was cancelled."),
             OpError::Missing(program) => write!(f, "{program} is not installed."),
             OpError::Io(kind) => write!(f, "I/O failed: {}.", kind.describe()),
-            OpError::Unsupported(text) | OpError::Other(text) => f.write_str(text),
+            OpError::Failed(failure) => failure.fmt(f),
             OpError::CannotTrash(refusal) => refusal.fmt(f),
             OpError::CopyNeeded => f.write_str(
                 "Moving it to the Trash means copying it to another place first, which can take a long time.",
@@ -279,32 +278,6 @@ impl From<io::Error> for OpError {
         }
         OpError::Io(IoKind::of(&error))
     }
-}
-
-/// An I/O error as a sentence for a person: what went wrong and what to do,
-/// never the kernel's own wording or its `(os error N)`. The raw error goes
-/// to the log for whoever looks into it.
-pub(crate) fn plain(error: &io::Error) -> String {
-    use io::ErrorKind as Kind;
-    eprintln!("[bingux-files] {error}");
-    let text = match error.kind() {
-        Kind::NotFound => "It is no longer there. Reload the folder and try again.",
-        Kind::PermissionDenied => "You do not have permission. Ask the owner for access.",
-        Kind::AlreadyExists => "Something with that name already exists. Choose another name.",
-        Kind::ReadOnlyFilesystem => "The drive is read-only. Choose another place.",
-        Kind::StorageFull => "The drive is full. Free some space, then try again.",
-        Kind::TimedOut | Kind::WouldBlock => "The drive took too long to answer. Try again.",
-        Kind::NotADirectory => "That is not a folder.",
-        Kind::IsADirectory => "That is a folder, not a file.",
-        Kind::DirectoryNotEmpty => "The folder is not empty.",
-        Kind::ResourceBusy => "It is in use by another app. Close it there, then try again.",
-        Kind::InvalidFilename => "Could not use that name. Choose another name.",
-        Kind::CrossesDevices => "That cannot be done between two drives in one step.",
-        Kind::Unsupported => "This drive cannot do that.",
-        Kind::Interrupted => "It was interrupted. Try again.",
-        _ => "Could not read or write the drive. Check that it is connected, then try again.",
-    };
-    text.to_owned()
 }
 
 /// How far a long operation has got. Clones share the counters, so give one

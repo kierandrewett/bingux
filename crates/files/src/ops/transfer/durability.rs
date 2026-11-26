@@ -276,7 +276,7 @@ fn a_write_that_fails_part_way_keeps_the_source_and_leaves_no_part_file() {
         &ConflictPolicy::Skip,
     )
     .unwrap_err();
-    assert!(matches!(error, OpError::Other(_)), "{error:?}");
+    assert!(matches!(error, OpError::Failed(_)), "{error:?}");
     assert_eq!(read(case.temp.path().join("src/d/a.txt")), "aaaa");
     assert_eq!(read(case.temp.path().join("src/d/sub/b.txt")), "bb");
     assert_eq!(read(case.temp.path().join("src/f.txt")), "ffff");
@@ -311,7 +311,7 @@ fn a_short_copy_is_caught_before_the_source_is_removed() {
     )
     .unwrap_err();
     assert!(
-        error.to_string().contains("did not arrive complete"),
+        matches!(error, OpError::Failed(Failure::DidNotArrive { .. })),
         "{error}"
     );
     assert_eq!(read(case.temp.path().join("src/f.txt")), "ffff");
@@ -338,7 +338,10 @@ fn a_source_that_changes_while_it_is_moved_is_kept() {
         &ConflictPolicy::Skip,
     )
     .unwrap_err();
-    assert!(error.to_string().contains("changed while"), "{error}");
+    assert!(
+        matches!(error, OpError::Failed(Failure::ChangedWhileMoving { .. })),
+        "{error}"
+    );
     assert_eq!(
         read(case.temp.path().join("src/f.txt")),
         "ffff and more, written meanwhile"

@@ -56,7 +56,7 @@ use crate::listing::Cancel;
 use super::data::{Hints, copy_data, copy_xattrs, tolerate};
 use super::durable::{Durable, Flusher, Kernel, Level, Policy};
 use super::names::keep_both_name;
-use super::{OpError, Progress, rename_noreplace};
+use super::{Failure, OpError, Progress, rename_noreplace};
 
 /// Two things with one name: the thing being copied or moved, and the thing
 /// already at the destination.
@@ -572,7 +572,7 @@ pub(super) fn delete_in(
 ) -> Result<(), OpError> {
     for path in paths {
         if path.parent().is_none() {
-            return Err(OpError::Other("The root folder cannot be deleted.".into()));
+            return Err(Failure::RootCannotBeDeleted.error());
         }
     }
     let durable = Durable::without_destination(engine.flusher, engine.policy);
@@ -631,7 +631,7 @@ struct Plan {
 fn plan(dest_dir: &Path) -> Result<Plan, OpError> {
     let meta = fs::metadata(dest_dir)?;
     if !meta.is_dir() {
-        return Err(OpError::Other("The destination is not a folder.".into()));
+        return Err(Failure::DestinationNotFolder.error());
     }
     Ok(Plan {
         dest: dest_dir.to_path_buf(),
@@ -651,9 +651,7 @@ impl Plan {
 
     fn check_not_into_itself(&self, source: &Path, meta: &Metadata) -> Result<(), OpError> {
         if meta.is_dir() && self.dest_canonical.starts_with(fs::canonicalize(source)?) {
-            return Err(OpError::Other(
-                "A folder cannot be put inside itself.".into(),
-            ));
+            return Err(Failure::InsideItself.error());
         }
         Ok(())
     }
@@ -797,10 +795,10 @@ fn finish_move(ctx: &Ctx<'_>, mark: usize) -> Result<(), OpError> {
 
 fn verify(copied: &[Copied]) -> Result<(), OpError> {
     let incomplete = |source: &Path| {
-        OpError::Other(format!(
-            "{} did not arrive complete, so the original was left where it is.",
-            quoted(source)
-        ))
+        Failure::DidNotArrive {
+            name: name_of(source),
+        }
+        .error()
     };
     for item in copied {
         match &item.what {
@@ -820,10 +818,10 @@ fn verify(copied: &[Copied]) -> Result<(), OpError> {
                 if let Ok(now) = item.source.symlink_metadata()
                     && (now.len() != *source_len || now.modified().ok() != *source_modified)
                 {
-                    return Err(OpError::Other(format!(
-                        "{} changed while it was being moved, so the original was left where it is.",
-                        quoted(&item.source)
-                    )));
+                    return Err(Failure::ChangedWhileMoving {
+                        name: name_of(&item.source),
+                    }
+                    .error());
                 }
             }
             What::Link => {
@@ -844,10 +842,6 @@ fn verify(copied: &[Copied]) -> Result<(), OpError> {
         }
     }
     Ok(())
-}
-
-fn quoted(path: &Path) -> String {
-    format!("“{}”", name_of(path))
 }
 
 /// Remove the files and links that were copied, then the folders that are
@@ -900,7 +894,7 @@ fn place(
     ctx.check()?;
     let name = source
         .file_name()
-        .ok_or_else(|| OpError::Other("That cannot be copied or moved.".into()))?;
+        .ok_or_else(|| Failure::CannotCopyOrMove.error())?;
     let meta = source.symlink_metadata()?;
     let target = dir.join(name);
     if ctx.is_reserved(&target) {
@@ -952,10 +946,10 @@ fn replace(
     match (meta.is_dir(), existing.is_dir()) {
         // Folder over folder: merge. The existing folder keeps its own mode.
         (true, true) => copy_dir(ctx, source, meta, target, mode, false),
-        (false, true) => Err(OpError::Other(format!(
-            "A folder called {} is there already, so a file cannot replace it.",
-            name_of(target)
-        ))),
+        (false, true) => Err(Failure::FolderInTheWay {
+            name: name_of(target),
+        }
+        .error()),
         (true, false) => {
             // Put the file aside, so a failure gives it back.
             let aside = temp_path(target.parent().unwrap_or(Path::new(".")));
@@ -1077,10 +1071,10 @@ fn copy_node(
         ctx.remember_file(source, meta, target, copy_len, mode);
         Ok(())
     } else {
-        Err(OpError::Other(format!(
-            "{} is not a regular file, so it cannot be copied.",
-            name_of(source)
-        )))
+        Err(Failure::NotRegularFile {
+            name: name_of(source),
+        }
+        .error())
     }
 }
 
@@ -1175,7 +1169,7 @@ fn copy_file(
     let level = ctx.level_for(mode);
     let dir = target
         .parent()
-        .ok_or_else(|| OpError::Other("That cannot be copied or moved.".into()))?;
+        .ok_or_else(|| Failure::CannotCopyOrMove.error())?;
     let input = fs::OpenOptions::new()
         .read(true)
         .custom_flags(libc::O_NOFOLLOW)
@@ -1347,10 +1341,7 @@ mod tests {
         let inner = temp.dir("d/inner");
         for dest in [&dir, &inner] {
             let error = run_copy(&[dir.clone()], dest, &ConflictPolicy::KeepBoth).unwrap_err();
-            assert_eq!(
-                error,
-                OpError::Other("A folder cannot be put inside itself.".into())
-            );
+            assert_eq!(error, Failure::InsideItself.error());
             let error = run_move(&[dir.clone()], dest, &ConflictPolicy::KeepBoth);
             assert!(error.is_err() || dest == &dir, "{error:?}");
         }
@@ -1471,7 +1462,10 @@ mod tests {
         let dest = temp.dir("dest");
         temp.write("dest/x/inner.txt", "keep");
         let error = run_copy(&[src], &dest, &ConflictPolicy::Replace).unwrap_err();
-        assert!(matches!(error, OpError::Other(_)), "{error:?}");
+        assert!(
+            matches!(error, OpError::Failed(Failure::FolderInTheWay { .. })),
+            "{error:?}"
+        );
         assert_eq!(read(dest.join("x/inner.txt")), "keep");
     }
 
@@ -1559,7 +1553,7 @@ mod tests {
         let temp = Temp::new("delete-guard");
         let file = temp.write("a.txt", "a");
         let error = delete(&[PathBuf::from("/")], &Progress::new(), &Cancel::new());
-        assert!(matches!(error, Err(OpError::Other(_))));
+        assert_eq!(error, Err(Failure::RootCannotBeDeleted.error()));
         let cancel = Cancel::new();
         cancel.cancel();
         assert_eq!(
@@ -1724,7 +1718,7 @@ mod tests {
         let other = temp.write("b.txt", "b");
         assert!(matches!(
             run_copy(&[file.clone()], &other, &ConflictPolicy::Skip),
-            Err(OpError::Other(_))
+            Err(OpError::Failed(Failure::DestinationNotFolder))
         ));
         assert_eq!(
             run_copy(&[file], &temp.path().join("missing"), &ConflictPolicy::Skip),

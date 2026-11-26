@@ -21,81 +21,49 @@ failures and `eprintln!`. Nothing in `bingux-ui` or an app calls
 
 ```rust
 pub enum OpError {
-    // unchanged, already data
     Exists, Permission, NotFound, Cancelled, CopyNeeded,
     Invalid(NameError),
     CannotTrash(TrashRefusal),
-
     /// A program the operation needs is not installed: its name (`zip`,
-    /// `7-Zip`, `ffmpeg`), which is not a sentence. Built.
+    /// `7-Zip`, `ffmpeg`), which is not a sentence.
     Missing(String),
-    /// A call to the drive failed for a reason with a name: `IoKind::Full`,
-    /// `ReadOnly`, `QuotaFull`, `InUse`, `BetweenDrives`, ... Built.
+    /// A call to the drive failed for a reason with a name (`IoKind`).
     Io(IoKind),
-    /// Still worded in English for the log, to be replaced by kinds as the
-    /// table below says: `Unsupported(String)` and `Other(String)`.
-    Unsupported(String),
-    Other(String),
+    /// Everything else: a kind and the facts its message needs.
+    Failed(Failure),
 }
 ```
 
-`Unsupported` and `Failure` are `#[non_exhaustive]` enums whose variants name a
-kind and hold the facts a message needs (a path, a program name, an exit
-status), never a sentence:
+`Failure` (`ops/failure.rs`) names the kind and holds names, counts, an
+`IoKind` or a `Step`; it never holds a sentence. The one exception is the
+line a program wrote itself (`Failure::ToolFailed { step, detail }`), which the
+window shows after a localised lead, as it shows a file name.
+`OpError::Unsupported` and `OpError::Other` are gone.
 
-| Today                                                   | Becomes                                   |
-| ------------------------------------------------------- | ----------------------------------------- |
-| `Other("There is no space left on the drive.")`         | `Failed(Failure::NoSpace)`                |
-| `Other("The drive is read-only.")`                      | `Failed(Failure::ReadOnly)`               |
-| `Other("The folder is not empty.")`                     | `Failed(Failure::NotEmpty)`               |
-| `Other("The file or folder is in use.")`                | `Failed(Failure::InUse)`                  |
-| `Other("Your storage quota is full.")`                  | `Failed(Failure::QuotaFull)`              |
-| `Unsupported("… between two drives in one step.")`      | `Unsupported(Unsupported::BetweenDrives)` |
-| `Unsupported("{name} is not installed.")`               | `Missing(Tool::…)`                        |
-| `Other("The paths must be absolute.")` and similar      | `Failed(Failure::Invalid(Why::…))`        |
-| `Other(format!("{what}: {line}."))` from a program      | `Failed(Failure::Tool { what, detail })`  |
-| `Other(plain(&io_error))` for an OS error we do not map | `Failed(Failure::System(String))`         |
+The reasons next to it follow the same rule:
 
-`detail` and `System` hold text that a program or the OS wrote; the window shows
-it after the localised lead (`ui-files-error-tool = { $what } failed: { $detail }`),
-as it shows a file name.
+- `NameCheck` is the value; the window words it (`ui-compress-name-*`).
+- `Format::unavailable()`, `lock_unavailable()`, `split_unavailable()` and the
+  `Tools::*_unavailable()` functions return `Option<OpError>`.
+- `Excludes::parse` returns a `PatternError` holding a `PatternProblem`.
+- A file that fails its check after being made is `CheckProblem`.
+- Volume sizes are numbers (`SPLIT_SIZES_MIB`); the window words them
+  (`ui-compress-split-mb`, `ui-compress-split-gb`).
 
-The same split applies to the reasons next to it:
-
-- `NameCheck::message()` becomes the `NameCheck` value itself; the Compress
-  dialog already maps it.
-- `Format::unavailable()`, `Tools::*_unavailable()` return `Option<Tool>` or
-  `Option<Unavailable>` (a codec, a format), not `Option<String>`.
-- `Excludes::parse` returns a typed error.
-
-## Callers that match on text
-
-Nobody outside the crate matches on the sentence. Inside it, tests and three
-modules do:
-
-| Where                                             | Change                                                 |
-| ------------------------------------------------- | ------------------------------------------------------ |
-| `ops/durable.rs` (`let OpError::Other(text) = …`) | match `Failure::Device { .. }` / `Failure::System(_)`  |
-| `ops/restore.rs` (five tests and `failure.error`) | match the `Failure` kind (`RestoreTo`, `NoHome`, …)    |
-| `ops/tool.rs`, `ops/archive.rs` tests             | `assert_eq!(error, OpError::Missing(Tool::Named(..)))` |
-
-A test that compared a sentence compares a value instead; that is stricter, and
-no longer breaks when the wording changes.
+Tests compare values, not sentences.
 
 ## The window
 
-`op_error::text(&OpError) -> String` is the one place that turns an error into
-words. `error_text(what, &error)` of the Files actions keeps its shape
-(`ui-files-transfer-error`, `$what` and `$error`), so every caller changes by
-passing `op_error::text(&error)` instead of `error.to_string()`.
-`crate_catalogue(..).assert_clean()` proves every kind has a message.
+`actions::error_words(&OpError) -> String` (`actions/op_error.rs`, with
+`actions/failure_text.rs` for `Failure`) is the one place that turns an error
+into words: messages `ui-files-error-*`, `ui-files-failure-*`,
+`ui-files-step-*`, `ui-files-check-*`. The catalogue check proves every
+message exists and is used.
 
-## Order of work
+## Still in English
 
-1. This note.
-2. `OpError` and its constructors in `ops/mod.rs`, the io mapping, and the
-   window's `op_error.rs`, with a test per kind.
-3. `pack`, `pack_plan`, `media_plan`, `shrink`, `tool`: tools and reasons.
-4. `transfer`, `restore`, `durable`, `trash*`.
-5. The other domain crates (`calendar`, `weather`, `text`) by the same rule:
-   a kind and its facts in the crate, the sentence in the window's catalogue.
+- Progress labels such as "Checking the archive" (`Progress::set_current`).
+- `ImageFormat::label()` and `VideoCodec::label()` (format names).
+- The other domain crates (`calendar`, `weather`, `text`) follow the same rule:
+  a kind and its facts in the crate, the sentence in the app's catalogue.
+  `calendar` is done (`ics::Warning`, `ics::ParseError`, `alarm::Notice`).

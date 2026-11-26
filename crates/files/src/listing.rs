@@ -50,7 +50,8 @@ pub enum ListError {
     Cancelled,
     /// The drive the folder is on did not answer in time.
     Unresponsive,
-    Other(String),
+    /// Some other reason with a name; see [`IoKind`](crate::ops::IoKind).
+    Other(crate::ops::IoKind),
 }
 
 impl ListError {
@@ -59,7 +60,7 @@ impl ListError {
             io::ErrorKind::NotFound => ListError::NotFound,
             io::ErrorKind::PermissionDenied => ListError::PermissionDenied,
             io::ErrorKind::NotADirectory => ListError::NotADirectory,
-            _ => ListError::Other(crate::ops::plain(error)),
+            _ => ListError::Other(crate::ops::IoKind::of(error)),
         }
     }
 }
@@ -75,7 +76,7 @@ impl fmt::Display for ListError {
             ListError::NotADirectory => f.write_str("This is not a folder."),
             ListError::Cancelled => f.write_str("Cancelled."),
             ListError::Unresponsive => f.write_str("The drive this folder is on is not answering."),
-            ListError::Other(detail) => f.write_str(detail),
+            ListError::Other(_) => f.write_str("The folder could not be read."),
         }
     }
 }

@@ -32,7 +32,7 @@ use super::names::keep_both_with;
 use super::pack_plan::{Format, Heard, Password, hear};
 use super::tool::{self, Input, Spec, Stream};
 use super::trash::{Trashed, trash};
-use super::{OpError, Progress, rename_noreplace};
+use super::{Failure, OpError, Progress, Step, rename_noreplace};
 
 /// What to do when something with the same name is already there.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -80,10 +80,8 @@ fn kind_of(archive: &Path) -> Result<(Kind, String, usize), OpError> {
     let name = archive
         .file_name()
         .and_then(|name| name.to_str())
-        .ok_or_else(|| OpError::Other("That is not an archive.".into()))?;
-    let (kind, ending) = classify(name).ok_or_else(|| {
-        OpError::Unsupported("This kind of archive cannot be opened here.".into())
-    })?;
+        .ok_or_else(|| Failure::NotAnArchive.error())?;
+    let (kind, ending) = classify(name).ok_or_else(|| Failure::CannotOpenKind.error())?;
     Ok((kind, name.to_string(), ending))
 }
 
@@ -187,10 +185,7 @@ fn single_top(names: &[String]) -> Option<String> {
 }
 
 fn refuse_unsafe() -> OpError {
-    OpError::Other(
-        "The archive has files that would be put outside its folder, so it was not extracted."
-            .into(),
-    )
+    Failure::ArchiveEscapes.error()
 }
 
 /// Look inside `archive` without extracting it. With a `password`, a locked
@@ -212,7 +207,7 @@ pub fn inspect(
                 .arg(archive);
             let (finished, out) = tool::capture(&verbose, cancel, 64 * 1024 * 1024)?;
             if !finished.success() {
-                return Err(finished.sentence("The archive could not be read"));
+                return Err(finished.failure(Step::ReadArchive));
             }
             let listing = String::from_utf8_lossy(&out);
             if !tar_links_are_safe(&listing) {
@@ -254,7 +249,7 @@ pub fn inspect(
                         stem,
                     });
                 }
-                return Err(finished.sentence("The archive could not be read"));
+                return Err(finished.failure(Step::ReadArchive));
             }
             let entries = parse_seven_listing(&text);
             let names: Vec<String> = entries
@@ -302,7 +297,7 @@ pub fn inspect(
                 .arg(archive);
             let (finished, out) = tool::capture(&list, cancel, 64 * 1024 * 1024)?;
             if !finished.success() {
-                return Err(finished.sentence("The archive could not be read"));
+                return Err(finished.failure(Step::ReadArchive));
             }
             let names: Vec<String> = String::from_utf8_lossy(&out)
                 .lines()
@@ -350,7 +345,7 @@ pub fn check_password(
     if looks_locked(&finished.complaint) || finished.status.code() == Some(2) {
         return Ok(false);
     }
-    Err(finished.sentence("The password could not be tried"))
+    Err(finished.failure(Step::TryPassword))
 }
 
 /// What [`unpack`] made.
@@ -418,17 +413,17 @@ pub fn unpack(
 ) -> Result<Unpacked, OpError> {
     let (kind, _, _) = kind_of(archive)?;
     if !fs::metadata(&options.dest_dir)?.is_dir() {
-        return Err(OpError::Other("The destination is not a folder.".into()));
+        return Err(Failure::DestinationNotFolder.error());
     }
     progress.set_scanning(true);
     let info = inspect(archive, options.password.as_ref(), cancel);
     progress.set_scanning(false);
     let info = info?;
     if info.locked && options.password.is_none() {
-        return Err(OpError::Other("This archive needs a password.".into()));
+        return Err(Failure::NeedsPassword.error());
     }
     if info.names_hidden {
-        return Err(OpError::Other("The password is not right.".into()));
+        return Err(Failure::WrongPassword.error());
     }
     progress.add_total(info.bytes, info.entries);
 
@@ -549,9 +544,9 @@ fn run_extractor(
         return Ok(());
     }
     if looks_locked(&finished.complaint) {
-        return Err(OpError::Other("The password is not right.".into()));
+        return Err(Failure::WrongPassword.error());
     }
-    Err(finished.sentence("The archive could not be extracted"))
+    Err(finished.failure(Step::Extract))
 }
 
 /// Does every link below `dir` (relative to the extraction root as `rel`)
@@ -647,7 +642,7 @@ pub fn extract(archive: &Path, dest_dir: &Path) -> Result<PathBuf, OpError> {
     done.items
         .into_iter()
         .next()
-        .ok_or_else(|| OpError::Other("Nothing was extracted.".into()))
+        .ok_or_else(|| Failure::NothingExtracted.error())
 }
 
 #[cfg(test)]
@@ -842,7 +837,7 @@ mod tests {
             assert_eq!(inspection.names_hidden, hide);
             let dest = temp.dir("dest");
             let none = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_err();
-            assert!(none.to_string().contains("password"), "{none}");
+            assert_eq!(none, Failure::NeedsPassword.error());
             assert!(
                 !check_password(&archive, &Password::new("wrong"), &Cancel::new()).unwrap(),
                 "{format:?}"
@@ -856,7 +851,7 @@ mod tests {
                 &options(&dest, true, Overwrite::KeepBoth, Some("wrong")),
             )
             .unwrap_err();
-            assert!(bad.to_string().contains("password"), "{format:?}: {bad}");
+            assert_eq!(bad, Failure::WrongPassword.error(), "{format:?}");
             assert_eq!(
                 fs::read_dir(&dest).unwrap().count(),
                 0,
@@ -894,7 +889,7 @@ mod tests {
         assert!(made.success());
         let dest = temp.dir("dest");
         let error = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_err();
-        assert!(error.to_string().contains("outside"), "{error}");
+        assert_eq!(error, Failure::ArchiveEscapes.error());
         assert_eq!(fs::read_dir(&dest).unwrap().count(), 0);
         let work = temp.dir("work");
         symlink("/etc", work.join("etc-link")).unwrap();
@@ -936,7 +931,7 @@ mod tests {
         );
         let dest = temp.dir("dest");
         let error = go(&archive, &options(&dest, true, Overwrite::KeepBoth, None)).unwrap_err();
-        assert!(error.to_string().contains("outside"), "{error}");
+        assert_eq!(error, Failure::ArchiveEscapes.error());
         assert_eq!(fs::read_dir(&dest).unwrap().count(), 0);
     }
 

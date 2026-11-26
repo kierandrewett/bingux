@@ -41,7 +41,7 @@ use super::media_plan::{
 use super::pack::Work;
 use super::tool::{self, Stream};
 use super::trash::{Trashed, trash, untrash};
-use super::{OpError, Progress, rename_noreplace};
+use super::{CheckProblem, Failure, OpError, Progress, Step, rename_noreplace};
 
 /// How long a sample of a film or song is, in seconds, for an estimate.
 pub const SAMPLE_SECONDS: f64 = 4.0;
@@ -83,33 +83,29 @@ fn plan_for(
     window: Option<(f64, f64)>,
     cancel: &Cancel,
 ) -> Result<(Plan, Option<Probe>), OpError> {
-    let unsupported = |reason: String| OpError::Unsupported(reason);
     match kind {
         MediaKind::Image => {
             let needs_probe = options.image.max_dimension.is_some();
             let probe = needs_probe.then(|| probe(tools, input, cancel)).flatten();
-            let plan = image_plan(tools, &options.image, input, out, probe.as_ref())
-                .map_err(unsupported)?;
+            let plan = image_plan(tools, &options.image, input, out, probe.as_ref())?;
             Ok((plan, probe))
         }
         MediaKind::Video => {
-            let probe = probe(tools, input, cancel)
-                .ok_or_else(|| OpError::Other("The video could not be read.".into()))?;
+            let probe =
+                probe(tools, input, cancel).ok_or_else(|| Failure::VideoUnreadable.error())?;
             if !probe.has_video {
-                return Err(OpError::Other("The file has no picture to reduce.".into()));
+                return Err(Failure::NoPicture.error());
             }
-            let plan = video_plan(tools, &options.video, input, out, &probe, window)
-                .map_err(unsupported)?;
+            let plan = video_plan(tools, &options.video, input, out, &probe, window)?;
             Ok((plan, Some(probe)))
         }
         MediaKind::Audio => {
-            let probe = probe(tools, input, cancel)
-                .ok_or_else(|| OpError::Other("The audio could not be read.".into()))?;
+            let probe =
+                probe(tools, input, cancel).ok_or_else(|| Failure::AudioUnreadable.error())?;
             if !probe.has_audio {
-                return Err(OpError::Other("The file has no sound to reduce.".into()));
+                return Err(Failure::NoSound.error());
             }
-            let plan = audio_plan(tools, &options.audio, input, out, &probe, window)
-                .map_err(unsupported)?;
+            let plan = audio_plan(tools, &options.audio, input, out, &probe, window)?;
             Ok((plan, Some(probe)))
         }
     }
@@ -144,8 +140,8 @@ fn sample(
     cancel: &Cancel,
 ) -> Result<(u64, f64, Option<f64>), OpError> {
     let name = name_of(path);
-    let extension = extension_for(kind, options, &name)
-        .ok_or_else(|| OpError::Unsupported("This kind of file cannot be reduced here.".into()))?;
+    let extension =
+        extension_for(kind, options, &name).ok_or_else(|| Failure::CannotReduceKind.error())?;
     let work = temp_work()?;
     let out = work.0.join(format!("sample.{extension}"));
     let full = probe(tools, path, cancel);
@@ -156,7 +152,7 @@ fn sample(
     let (plan, _) = plan_for(tools, kind, options, path, &out, window, cancel)?;
     let finished = tool::run(&plan.spec, cancel, &mut |_, _| {})?;
     if !finished.success() {
-        return Err(finished.sentence("The size could not be estimated"));
+        return Err(finished.failure(Step::EstimateSize));
     }
     let bytes = fs::metadata(&out)?.len();
     let seconds = window.map_or_else(
@@ -281,10 +277,10 @@ pub enum Outcome {
     },
     /// Not something this can reduce.
     Skipped {
-        reason: String,
+        reason: OpError,
     },
     Failed {
-        error: String,
+        error: OpError,
     },
 }
 
@@ -415,7 +411,7 @@ fn exists(dir: &Path, name: &str) -> bool {
 fn carry_over(path: &Path, like: &fs::Metadata) -> Result<(), OpError> {
     fs::set_permissions(path, fs::Permissions::from_mode(like.mode() & 0o7777))?;
     let c_path = std::ffi::CString::new(path.as_os_str().as_bytes())
-        .map_err(|_| OpError::Other("The path holds a null character.".into()))?;
+        .map_err(|_| Failure::NullInPath.error())?;
     let times = [
         libc::timespec {
             tv_sec: like.atime() as libc::time_t,
@@ -444,15 +440,15 @@ pub fn reduce(
     cancel: &Cancel,
 ) -> Result<Reduced, OpError> {
     if job.files.is_empty() {
-        return Err(OpError::Other("There is nothing to reduce.".into()));
+        return Err(Failure::NothingToReduce.error());
     }
     if job.files.iter().any(|path| !path.is_absolute()) {
-        return Err(OpError::Other("The paths must be absolute.".into()));
+        return Err(Failure::PathsNotAbsolute.error());
     }
     if let Some(dest) = &job.dest_dir
         && !fs::metadata(dest)?.is_dir()
     {
-        return Err(OpError::Other("The destination is not a folder.".into()));
+        return Err(Failure::DestinationNotFolder.error());
     }
     let tools = Tools::get();
     let sizes: Vec<u64> = job
@@ -500,9 +496,7 @@ pub fn reduce(
                             *stopped.lock().unwrap_or_else(PoisonError::into_inner) = true;
                             return;
                         }
-                        Err(error) => Outcome::Failed {
-                            error: error.to_string(),
-                        },
+                        Err(error) => Outcome::Failed { error },
                     };
                     batch.update(index, |line| {
                         line.stage = Stage::Done;
@@ -551,19 +545,19 @@ fn reduce_one(
     let Some(kind) = kind_of_name(&name) else {
         progress.add_bytes(size);
         return Ok(Outcome::Skipped {
-            reason: "It is not a picture, a film or a song.".into(),
+            reason: Failure::NotMediaFile.error(),
         });
     };
     if kind == MediaKind::Image && super::media_plan::image_format_of(&name).is_none() {
         progress.add_bytes(size);
         return Ok(Outcome::Skipped {
-            reason: "This kind of picture cannot be reduced here.".into(),
+            reason: Failure::CannotReduceKind.error(),
         });
     }
     let source_meta = fs::metadata(path)?;
     if !source_meta.is_file() {
         return Ok(Outcome::Skipped {
-            reason: "It is not a file.".into(),
+            reason: Failure::NotAFile.error(),
         });
     }
     let out_dir = match &job.dest_dir {
@@ -571,11 +565,11 @@ fn reduce_one(
         None => path
             .parent()
             .map(Path::to_path_buf)
-            .ok_or_else(|| OpError::Other("The file has no folder.".into()))?,
+            .ok_or_else(|| Failure::NoFolder.error())?,
     };
     let options = &job.options;
-    let extension = extension_for(kind, options, &name)
-        .ok_or_else(|| OpError::Unsupported("This kind of file cannot be reduced here.".into()))?;
+    let extension =
+        extension_for(kind, options, &name).ok_or_else(|| Failure::CannotReduceKind.error())?;
     let work = Work::make(&out_dir)?;
     let made = work.0.join(format!("{index}.{extension}"));
     let (plan, source_probe) = plan_for(tools, kind, options, path, &made, None, cancel)?;
@@ -603,7 +597,7 @@ fn reduce_one(
     })?;
     if !finished.success() {
         return Ok(Outcome::Failed {
-            error: finished.sentence("It could not be reduced").to_string(),
+            error: finished.failure(Step::Reduce),
         });
     }
     if reported < size {
@@ -613,7 +607,7 @@ fn reduce_one(
         Ok(meta) if meta.len() > 0 => meta,
         _ => {
             return Ok(Outcome::Failed {
-                error: "It could not be reduced: the program wrote nothing.".into(),
+                error: Failure::ProgramWroteNothing.error(),
             });
         }
     };
@@ -621,7 +615,7 @@ fn reduce_one(
     // Open the new file again before it replaces or sits beside anything.
     if let Some(problem) = verify(tools, kind, &made, source_probe.as_ref(), cancel)? {
         return Ok(Outcome::Failed {
-            error: format!("The new file did not pass its check: {problem}"),
+            error: Failure::NewFileFailedCheck(problem).error(),
         });
     }
     if out_meta.len() >= size {
@@ -702,27 +696,27 @@ fn verify(
     made: &Path,
     source: Option<&Probe>,
     cancel: &Cancel,
-) -> Result<Option<String>, OpError> {
+) -> Result<Option<CheckProblem>, OpError> {
     let Some(found) = probe(tools, made, cancel) else {
         if tools.ffprobe.is_some() {
-            return Ok(Some("it cannot be opened.".into()));
+            return Ok(Some(CheckProblem::CannotOpen));
         }
         return Ok(None);
     };
     match kind {
         MediaKind::Image => {
             if found.width.unwrap_or(0) == 0 || found.height.unwrap_or(0) == 0 {
-                return Ok(Some("it has no picture.".into()));
+                return Ok(Some(CheckProblem::NoPicture));
             }
         }
         MediaKind::Video => {
             if !found.has_video {
-                return Ok(Some("it has no picture.".into()));
+                return Ok(Some(CheckProblem::NoPicture));
             }
         }
         MediaKind::Audio => {
             if !found.has_audio {
-                return Ok(Some("it has no sound.".into()));
+                return Ok(Some(CheckProblem::NoSound));
             }
         }
     }
@@ -730,7 +724,10 @@ fn verify(
         && let (Some(before), Some(after)) = (source.and_then(|p| p.duration), found.duration)
         && after < before * 0.9 - 0.5
     {
-        return Ok(Some(format!("it is {after:.1} s long, not {before:.1} s.")));
+        return Ok(Some(CheckProblem::TooShort {
+            after_tenths: (after * 10.0).round() as u32,
+            before_tenths: (before * 10.0).round() as u32,
+        }));
     }
     Ok(None)
 }

@@ -37,7 +37,7 @@ use super::pack_plan::{
 };
 use super::tool::{self, Stream};
 use super::trash::{Trashed, trash};
-use super::{OpError, Progress, rename_noreplace};
+use super::{Failure, IoKind, OpError, Progress, Step, rename_noreplace};
 
 /// What kind of thing an archive entry is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -111,10 +111,10 @@ fn left_out(options: &PackOptions, name: &str, rel: &str) -> bool {
 /// them.
 pub fn scan(roots: &[PathBuf], options: &PackOptions, cancel: &Cancel) -> Result<Scan, OpError> {
     if roots.is_empty() {
-        return Err(OpError::Other("There is nothing to compress.".into()));
+        return Err(Failure::NothingToCompress.error());
     }
     if roots.iter().any(|path| !path.is_absolute()) {
-        return Err(OpError::Other("The paths must be absolute.".into()));
+        return Err(Failure::PathsNotAbsolute.error());
     }
     let parent = common_parent(roots);
     let mut scan = Scan::default();
@@ -125,11 +125,9 @@ pub fn scan(roots: &[PathBuf], options: &PackOptions, cancel: &Cancel) -> Result
         }
         let rel = root
             .strip_prefix(&parent)
-            .map_err(|_| OpError::Other("The paths have nothing in common.".into()))?;
+            .map_err(|_| Failure::NoCommonParent.error())?;
         if rel.as_os_str().is_empty() {
-            return Err(OpError::Other(
-                "The root folder cannot be compressed.".into(),
-            ));
+            return Err(Failure::RootNotCompressible.error());
         }
         let mut ancestry = Vec::new();
         visit(root, rel, options, cancel, &mut scan, &mut ancestry)?;
@@ -187,11 +185,11 @@ fn visit(
         let mut entries: Vec<_> = match fs::read_dir(path) {
             Ok(entries) => entries.collect::<Result<_, _>>()?,
             Err(error) => {
-                return Err(OpError::Other(format!(
-                    "“{}” could not be read: {}",
-                    name,
-                    super::plain(&error)
-                )));
+                return Err(Failure::FolderUnreadable {
+                    name: name.to_string(),
+                    kind: IoKind::of(&error),
+                }
+                .error());
             }
         };
         entries.sort_by_key(|entry| entry.file_name());
@@ -211,9 +209,10 @@ fn visit(
     }
     if kind.is_file() {
         if !readable(path) {
-            return Err(OpError::Other(format!(
-                "“{name}” cannot be read: you do not have permission."
-            )));
+            return Err(Failure::FileNoPermission {
+                name: name.to_string(),
+            }
+            .error());
         }
         scan.items.push(Item {
             rel: rel.to_path_buf(),
@@ -293,7 +292,7 @@ impl Work {
                 Err(error) => return Err(error.into()),
             }
         }
-        Err(OpError::Other("A work folder could not be made.".into()))
+        Err(Failure::WorkFolder.error())
     }
 }
 
@@ -339,18 +338,17 @@ fn name_taken(dir: &Path, name: &str) -> bool {
 }
 
 /// The first format's reason it cannot carry these names, if one cannot.
-fn carry_problem(format: Format, items: &[Item]) -> Option<String> {
+fn carry_problem(format: Format, items: &[Item]) -> Option<Failure> {
     if format != Format::SevenZip {
         return None;
     }
     items.iter().find_map(|item| {
         let bytes = item.rel.as_os_str().as_bytes();
         if std::str::from_utf8(bytes).is_err() {
-            Some(format!(
-                "“{}” has a name that {} cannot store. Choose .zip or a .tar format.",
-                item.rel.to_string_lossy(),
-                format.extension()
-            ))
+            Some(Failure::NameNotStorable {
+                name: item.rel.to_string_lossy().into_owned(),
+                extension: format.extension().to_string(),
+            })
         } else {
             None
         }
@@ -359,15 +357,14 @@ fn carry_problem(format: Format, items: &[Item]) -> Option<String> {
 
 /// 7-Zip drops a name that is not valid UTF-8 without a word, so a zip made
 /// by it (a locked one) cannot carry such names either.
-fn locked_zip_problem(options: &PackOptions, items: &[Item]) -> Option<String> {
+fn locked_zip_problem(options: &PackOptions, items: &[Item]) -> Option<Failure> {
     if options.format == Format::Zip && options.password.is_some() {
         return items.iter().find_map(|item| {
-            std::str::from_utf8(item.rel.as_os_str().as_bytes()).is_err().then(|| {
-                format!(
-                    "“{}” has a name that a locked .zip cannot store. Remove the password or choose .tar.",
-                    item.rel.to_string_lossy()
-                )
-            })
+            std::str::from_utf8(item.rel.as_os_str().as_bytes())
+                .is_err()
+                .then(|| Failure::NameNotStorableLocked {
+                    name: item.rel.to_string_lossy().into_owned(),
+                })
         });
     }
     None
@@ -378,10 +375,10 @@ fn locked_zip_problem(options: &PackOptions, items: &[Item]) -> Option<String> {
 pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packed, OpError> {
     let options = job.options.clone().normalised();
     if let Some(reason) = options.format.unavailable() {
-        return Err(OpError::Unsupported(reason));
+        return Err(reason);
     }
     if !fs::metadata(&job.dest_dir)?.is_dir() {
-        return Err(OpError::Other("The destination is not a folder.".into()));
+        return Err(Failure::DestinationNotFolder.error());
     }
     for root in &job.roots {
         root.symlink_metadata()?;
@@ -392,14 +389,12 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
     progress.set_scanning(false);
     let scanned = scanned?;
     if scanned.items.is_empty() {
-        return Err(OpError::Other(
-            "There is nothing to compress: every item was left out.".into(),
-        ));
+        return Err(Failure::EverythingLeftOut.error());
     }
     if let Some(problem) = carry_problem(options.format, &scanned.items)
         .or_else(|| locked_zip_problem(&options, &scanned.items))
     {
-        return Err(OpError::Other(problem));
+        return Err(problem.error());
     }
     let parent = common_parent(&job.roots);
     let canonical_dest = fs::canonicalize(&job.dest_dir)?;
@@ -409,9 +404,7 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
             && fs::canonicalize(root).is_ok_and(|root| canonical_dest.starts_with(root))
     });
     if inside && options.delete_originals {
-        return Err(OpError::Other(
-            "The originals cannot be removed when the archive is saved inside them.".into(),
-        ));
+        return Err(Failure::OriginalsHoldArchive.error());
     }
     progress.add_total(scanned.bytes, scanned.items.len() as u64);
 
@@ -486,7 +479,7 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
         }
     };
     if !finished.success() {
-        return Err(finished.sentence("The archive could not be made"));
+        return Err(finished.failure(Step::MakeArchive));
     }
     // A split 7-Zip archive is `name.001`, `name.002`, ...: the first is the one to open.
     let first_name = if options.format == Format::SevenZip && options.split_mib.is_some() {
@@ -496,9 +489,7 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
     };
     let archive_in_work = work.0.join(&first_name);
     if !archive_in_work.exists() {
-        return Err(OpError::Other(
-            "The archive could not be made: the program wrote nothing.".into(),
-        ));
+        return Err(Failure::ProgramWroteNothing.error());
     }
 
     // Read it back before it gets its name.
@@ -506,7 +497,7 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
     let check = check_specs(&options, &archive_in_work, &work.0)?;
     let tested = tool::run(&check.test, cancel, &mut |_, _| {})?;
     if !tested.success() {
-        return Err(tested.sentence("The new archive did not pass its check"));
+        return Err(tested.failure(Step::CheckArchive));
     }
     let lists_seven = check
         .list
@@ -523,13 +514,14 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
         .iter()
         .any(|name| tool::bytes_of(name).contains(&b'\n'));
     if !listing.success() {
-        return Err(listing.sentence("The new archive could not be listed"));
+        return Err(listing.failure(Step::ListNewArchive));
     }
     if !has_line_breaks && listed != scanned.items.len() as u64 {
-        return Err(OpError::Other(format!(
-            "The new archive is missing items: it holds {listed} of {}.",
-            scanned.items.len()
-        )));
+        return Err(Failure::ArchiveMissingItems {
+            listed,
+            expected: scanned.items.len() as u64,
+        }
+        .error());
     }
     if cancel.is_cancelled() {
         return Err(OpError::Cancelled);
@@ -1170,7 +1162,7 @@ mod tests {
         let mut job = job(&root.join("a.log"), &dest, Format::Zip);
         job.options.excludes = Excludes::parse("*.log").unwrap();
         let error = run(&job).unwrap_err();
-        assert!(error.to_string().contains("left out"), "{error}");
+        assert_eq!(error, Failure::EverythingLeftOut.error());
         assert_eq!(fs::read_dir(&dest).unwrap().count(), 0);
     }
 
@@ -1194,11 +1186,9 @@ mod tests {
             Format::Zip,
         );
         inside.options.delete_originals = true;
-        assert!(
-            run(&inside)
-                .unwrap_err()
-                .to_string()
-                .contains("saved inside")
+        assert_eq!(
+            run(&inside).unwrap_err(),
+            Failure::OriginalsHoldArchive.error()
         );
     }
 

@@ -23,8 +23,8 @@ use std::ffi::OsString;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use super::OpError;
 use super::tool::{self, Input, Spec};
+use super::{Failure, OpError};
 
 /// An archive kind.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -126,8 +126,8 @@ impl Format {
     }
 
     /// Why this machine cannot make the format, or `None` when it can.
-    pub fn unavailable(self) -> Option<String> {
-        let missing = |name: &str| Some(format!("{name} is not installed."));
+    pub fn unavailable(self) -> Option<OpError> {
+        let missing = |name: &str| Some(OpError::Missing(name.to_string()));
         match self {
             Format::Zip => {
                 if tool::on_path("zip") || tool::seven_zip().is_some() {
@@ -161,25 +161,23 @@ impl Format {
     }
 
     /// Why a password cannot be used with the format here, or `None`.
-    pub fn lock_unavailable(self) -> Option<String> {
+    pub fn lock_unavailable(self) -> Option<OpError> {
         if !self.can_lock() {
-            return Some("This format cannot be locked with a password.".into());
+            return Some(Failure::CannotLock.error());
         }
         if tool::seven_zip().is_none() {
-            return Some("A password needs 7-Zip, which is not installed.".into());
+            return Some(Failure::LockNeedsSevenZip.error());
         }
         None
     }
 
     /// Why volumes cannot be made here, or `None`.
-    pub fn split_unavailable(self) -> Option<String> {
+    pub fn split_unavailable(self) -> Option<OpError> {
         match self {
             Format::Zip if tool::on_path("zip") || tool::seven_zip().is_some() => None,
             Format::SevenZip if tool::seven_zip().is_some() => None,
-            Format::Zip | Format::SevenZip => {
-                Some("The program for this format is not installed.".into())
-            }
-            _ => Some("Only .zip and .7z can be cut into volumes.".into()),
+            Format::Zip | Format::SevenZip => Some(Failure::SplitNeedsProgram.error()),
+            _ => Some(Failure::SplitOnlyZipAnd7z.error()),
         }
     }
 }
@@ -263,15 +261,6 @@ impl fmt::Debug for Password {
 
 /// The sizes a volume can be, in MiB. `None` is one file.
 pub const SPLIT_SIZES_MIB: [u64; 5] = [100, 650, 700, 2048, 4095];
-
-/// The words for a volume size: "100 MB", "2 GB".
-pub fn split_label(mib: u64) -> String {
-    if mib >= 1024 && mib % 1024 == 0 {
-        format!("{} GB", mib / 1024)
-    } else {
-        format!("{mib} MB")
-    }
-}
 
 /// Everything that decides what an archive holds and how.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -364,18 +353,6 @@ pub enum NameCheck {
 }
 
 impl NameCheck {
-    /// The sentence for the field's inline error, or `None` when fine.
-    pub fn message(self) -> Option<&'static str> {
-        match self {
-            NameCheck::Ok => None,
-            NameCheck::Empty => Some("Enter a name for the archive."),
-            NameCheck::HasSlash => Some("A name cannot contain a slash."),
-            NameCheck::Reserved => Some("That name cannot be used."),
-            NameCheck::TooLong => Some("That name is too long."),
-            NameCheck::Taken => Some("A file with this name already exists here."),
-        }
-    }
-
     /// Can the archive be made with the name as it is? A taken name can,
     /// once the person picks keep both or replace.
     pub fn is_usable(self) -> bool {
@@ -468,16 +445,33 @@ pub fn free_base(base: &str, format: Format, taken: impl Fn(&str) -> bool) -> St
 // Exclude patterns
 // ---------------------------------------------------------------------------
 
-/// Why a pattern was refused.
+/// What is wrong with a pattern.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PatternProblem {
+    /// There are more patterns than [`PATTERN_LIMIT`].
+    TooMany,
+    /// The pattern is longer than a name can be.
+    TooLong,
+    /// The pattern holds a null character.
+    NullCharacter,
+    /// A backslash ends the pattern.
+    TrailingBackslash,
+    /// A `[` is never closed.
+    OpenClass,
+}
+
+/// Why a pattern was refused: the pattern (cut to its start when it is the
+/// whole list) and the problem.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PatternError {
     pub pattern: String,
-    pub reason: &'static str,
+    pub problem: PatternProblem,
 }
 
 impl fmt::Display for PatternError {
+    /// A short English line for the log.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "“{}”: {}", self.pattern, self.reason)
+        write!(f, "{:?}: {:?}", self.pattern, self.problem)
     }
 }
 
@@ -515,7 +509,7 @@ impl Excludes {
         if patterns.len() > PATTERN_LIMIT {
             return Err(PatternError {
                 pattern: text.chars().take(24).collect(),
-                reason: "there are too many patterns",
+                problem: PatternProblem::TooMany,
             });
         }
         Ok(Excludes { patterns })
@@ -544,17 +538,17 @@ impl Excludes {
 }
 
 fn check_pattern(pattern: &str) -> Result<(), PatternError> {
-    let refuse = |reason| {
+    let refuse = |problem| {
         Err(PatternError {
             pattern: pattern.to_string(),
-            reason,
+            problem,
         })
     };
     if pattern.len() > NAME_LIMIT * 2 {
-        return refuse("the pattern is too long");
+        return refuse(PatternProblem::TooLong);
     }
     if pattern.contains('\0') {
-        return refuse("a pattern cannot hold a null character");
+        return refuse(PatternProblem::NullCharacter);
     }
     let chars: Vec<char> = pattern.chars().collect();
     let mut at = 0;
@@ -562,7 +556,7 @@ fn check_pattern(pattern: &str) -> Result<(), PatternError> {
         match chars[at] {
             '\\' => {
                 if at + 1 >= chars.len() {
-                    return refuse("a backslash must be followed by a character");
+                    return refuse(PatternProblem::TrailingBackslash);
                 }
                 at += 2;
             }
@@ -579,7 +573,7 @@ fn check_pattern(pattern: &str) -> Result<(), PatternError> {
                     end += 1;
                 }
                 if end >= chars.len() {
-                    return refuse("a [ is never closed");
+                    return refuse(PatternProblem::OpenClass);
                 }
                 at = end + 1;
             }
@@ -1077,7 +1071,7 @@ mod tests {
         assert_eq!(check_name("fine", Format::Zip, taken), NameCheck::Taken);
         assert_eq!(check_name("fine", Format::TarGz, taken), NameCheck::Ok);
         assert!(NameCheck::Taken.is_usable() && !NameCheck::Empty.is_usable());
-        assert!(NameCheck::Ok.message().is_none() && NameCheck::Taken.message().is_some());
+        assert!(NameCheck::Ok.is_usable());
     }
 
     #[test]
@@ -1140,12 +1134,12 @@ mod tests {
     #[test]
     fn broken_patterns_are_refused_with_a_reason() {
         assert_eq!(
-            Excludes::parse("a[bc").unwrap_err().reason,
-            "a [ is never closed"
+            Excludes::parse("a[bc").unwrap_err().problem,
+            PatternProblem::OpenClass
         );
         assert_eq!(
-            Excludes::parse("ok, trailing\\").unwrap_err().reason,
-            "a backslash must be followed by a character"
+            Excludes::parse("ok, trailing\\").unwrap_err().problem,
+            PatternProblem::TrailingBackslash
         );
         assert!(Excludes::parse("[]]").is_ok());
         let many = (0..=PATTERN_LIMIT)
@@ -1192,13 +1186,6 @@ mod tests {
         }
         .normalised();
         assert!(empty.password.is_none());
-    }
-
-    #[test]
-    fn split_sizes_have_words() {
-        assert_eq!(split_label(100), "100 MB");
-        assert_eq!(split_label(2048), "2 GB");
-        assert_eq!(split_label(4095), "4095 MB");
     }
 
     fn names(list: &[&str]) -> Vec<PathBuf> {

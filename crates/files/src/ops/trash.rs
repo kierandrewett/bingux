@@ -32,7 +32,7 @@ use super::transfer::{ConflictPolicy, move_to};
 use super::trash_info::{
     disk_use, forget_sizes, info_mtime, info_path, info_text, is_bin, record_size, unique_name,
 };
-use super::{OpError, Progress, rename_noreplace};
+use super::{Failure, IoKind, OpError, Progress, rename_noreplace};
 
 /// One item moved to the bin: enough to put it back.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -187,7 +187,7 @@ impl Context {
 }
 
 fn no_home() -> OpError {
-    OpError::Other("Your home folder could not be found.".into())
+    Failure::NoHome.error()
 }
 
 /// Is `path` already inside a bin?
@@ -457,11 +457,11 @@ pub(super) enum Placing {
 /// to hear about, not a drive without a bin.
 fn home_dirs(bin: &Path) -> Result<(), OpError> {
     make_trash_dirs(bin).map_err(|error| {
-        OpError::Other(format!(
-            "The Trash folder {} could not be made: {}",
-            bin.display(),
-            super::plain(&error)
-        ))
+        Failure::TrashFolderNotMade {
+            path: bin.display().to_string(),
+            kind: IoKind::of(&error),
+        }
+        .error()
     })
 }
 
@@ -572,18 +572,16 @@ fn copy_into(src: &Path, bin: &Path, in_trash: &Path, copying: Copying) -> Resul
     };
     let Some(landed) = landed.first() else {
         let _ = fs::remove_dir(&staging);
-        return Err(OpError::Other(
-            "It could not be copied into the Trash.".into(),
-        ));
+        return Err(Failure::NotCopiedIntoTrash.error());
     };
     // The original is gone now, so a failure here leaves the only copy in the
     // staging folder and says so.
     rename_noreplace(landed, in_trash).map_err(|error| {
-        OpError::Other(format!(
-            "It was copied to {} but could not be put in the Trash: {}",
-            staging.display(),
-            super::plain(&error)
-        ))
+        Failure::CopiedNotTrashed {
+            path: staging.display().to_string(),
+            kind: IoKind::of(&error),
+        }
+        .error()
     })?;
     let _ = fs::remove_dir(&staging);
     Ok(())
@@ -612,7 +610,7 @@ pub(super) fn trash_into(
     make_trash_dirs(bin)?;
     let name = src
         .file_name()
-        .ok_or_else(|| OpError::Other("That cannot be moved to the Trash.".into()))?
+        .ok_or_else(|| Failure::CannotMoveToTrash.error())?
         .to_os_string();
     let was_dir = src.symlink_metadata().is_ok_and(|meta| meta.is_dir());
     let recorded = match top {

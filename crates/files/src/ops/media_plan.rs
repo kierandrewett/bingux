@@ -26,6 +26,7 @@ use crate::Category;
 
 use super::pack_plan::Level;
 use super::tool::{self, Input, Spec};
+use super::{Failure, OpError};
 
 /// What kind of media a file is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -121,27 +122,27 @@ impl Tools {
     }
 
     /// Why pictures cannot be reduced here, or `None`.
-    pub fn image_unavailable(&self) -> Option<String> {
+    pub fn image_unavailable(&self) -> Option<OpError> {
         if self.magick.is_some() || self.ffmpeg.is_some() {
             None
         } else {
-            Some("ImageMagick and ffmpeg are not installed.".into())
+            Some(Failure::NoPictureTools.error())
         }
     }
 
     /// Why films and songs cannot be reduced here, or `None`.
-    pub fn av_unavailable(&self) -> Option<String> {
+    pub fn av_unavailable(&self) -> Option<OpError> {
         if self.ffmpeg.is_none() {
-            Some("ffmpeg is not installed.".into())
+            Some(OpError::Missing("ffmpeg".into()))
         } else if self.ffprobe.is_none() {
-            Some("ffprobe is not installed.".into())
+            Some(OpError::Missing("ffprobe".into()))
         } else {
             None
         }
     }
 
     /// Why `kind` cannot be reduced here, or `None`.
-    pub fn unavailable(&self, kind: MediaKind) -> Option<String> {
+    pub fn unavailable(&self, kind: MediaKind) -> Option<OpError> {
         match kind {
             MediaKind::Image => self.image_unavailable(),
             MediaKind::Video | MediaKind::Audio => self.av_unavailable(),
@@ -149,23 +150,39 @@ impl Tools {
     }
 
     /// Why a picture cannot be written as `format`, or `None`.
-    pub fn image_format_unavailable(&self, format: ImageFormat) -> Option<String> {
+    pub fn image_format_unavailable(&self, format: ImageFormat) -> Option<OpError> {
         if let Some(reason) = self.image_unavailable() {
             return Some(reason);
         }
+        let no_encoder = |name: &str| {
+            Some(
+                Failure::NoPictureEncoder {
+                    format: name.to_string(),
+                }
+                .error(),
+            )
+        };
         match format {
             ImageFormat::Keep => None,
             ImageFormat::Jpeg => (!(self.magick_writes("JPEG") || self.has_encoder("mjpeg")))
-                .then(|| "No JPEG encoder is installed.".to_string()),
+                .then(|| no_encoder("JPEG"))
+                .flatten(),
             ImageFormat::Png => (!(self.magick_writes("PNG") || self.has_encoder("png")))
-                .then(|| "No PNG encoder is installed.".to_string()),
+                .then(|| no_encoder("PNG"))
+                .flatten(),
             ImageFormat::Webp => (!(self.magick_writes("WEBP") || self.has_encoder("libwebp")))
-                .then(|| "No WebP encoder is installed.".to_string()),
+                .then(|| no_encoder("WebP"))
+                .flatten(),
             ImageFormat::Avif => {
                 if self.ffmpeg.is_none() {
-                    Some("AVIF needs ffmpeg, which is not installed.".into())
+                    Some(Failure::AvifNeedsFfmpeg.error())
                 } else if !(self.has_encoder("libsvtav1") || self.has_encoder("libaom-av1")) {
-                    Some("ffmpeg here has no AV1 encoder.".into())
+                    Some(
+                        Failure::NoCodecEncoder {
+                            codec: "AV1".into(),
+                        }
+                        .error(),
+                    )
                 } else {
                     None
                 }
@@ -174,21 +191,30 @@ impl Tools {
     }
 
     /// Why a video cannot be made with `codec`, or `None`.
-    pub fn video_codec_unavailable(&self, codec: VideoCodec) -> Option<String> {
+    pub fn video_codec_unavailable(&self, codec: VideoCodec) -> Option<OpError> {
         if let Some(reason) = self.av_unavailable() {
             return Some(reason);
         }
         let any = codec.encoders().iter().any(|name| self.has_encoder(name));
-        (!any).then(|| format!("ffmpeg here has no {} encoder.", codec.label()))
+        (!any).then(|| {
+            Failure::NoCodecEncoder {
+                codec: codec.label().to_string(),
+            }
+            .error()
+        })
     }
 
     /// Why audio cannot be made with `codec`, or `None`.
-    pub fn audio_codec_unavailable(&self, codec: AudioCodec) -> Option<String> {
+    pub fn audio_codec_unavailable(&self, codec: AudioCodec) -> Option<OpError> {
         if let Some(reason) = self.av_unavailable() {
             return Some(reason);
         }
-        (!self.has_encoder(codec.encoder()))
-            .then(|| format!("ffmpeg here has no {} encoder.", codec.label()))
+        (!self.has_encoder(codec.encoder())).then(|| {
+            Failure::NoCodecEncoder {
+                codec: codec.label().to_string(),
+            }
+            .error()
+        })
     }
 
     /// The video encoder to use for `codec`: the first the machine has.
@@ -760,18 +786,18 @@ pub fn image_plan(
     input: &Path,
     out: &Path,
     probe: Option<&Probe>,
-) -> Result<Plan, String> {
+) -> Result<Plan, OpError> {
     let name = input
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let target = match options.format {
-        ImageFormat::Keep => image_format_of(&name)
-            .ok_or_else(|| "This kind of picture cannot be reduced here.".to_string())?,
+        ImageFormat::Keep => {
+            image_format_of(&name).ok_or_else(|| Failure::CannotReduceKind.error())?
+        }
         other => other,
     };
-    let source = image_format_of(&name)
-        .ok_or_else(|| "This kind of picture cannot be reduced here.".to_string())?;
+    let source = image_format_of(&name).ok_or_else(|| Failure::CannotReduceKind.error())?;
     if let Some(reason) = tools.image_format_unavailable(target) {
         return Err(reason);
     }
@@ -791,7 +817,7 @@ pub fn image_plan(
         let program = tools
             .magick
             .as_ref()
-            .ok_or_else(|| "ImageMagick is not installed.".to_string())?;
+            .ok_or_else(|| OpError::Missing("ImageMagick".into()))?;
         let mut spec = Spec::new(program).nice(true).arg("-").arg("-auto-orient");
         if let Some(cap) = options.max_dimension {
             spec = spec.arg("-resize").arg(format!("{cap}x{cap}>"));
@@ -841,7 +867,7 @@ pub fn image_plan(
     let ffmpeg = tools
         .ffmpeg
         .as_ref()
-        .ok_or_else(|| "ffmpeg is not installed.".to_string())?;
+        .ok_or_else(|| OpError::Missing("ffmpeg".into()))?;
     let mut spec = quiet_ffmpeg(ffmpeg).arg("-i").arg(file_url(input));
     if let (Some(cap), Some(probe)) = (options.max_dimension, probe)
         && let (Some(width), Some(height)) = (probe.width, probe.height)
@@ -980,17 +1006,20 @@ pub fn video_plan(
     out: &Path,
     probe: &Probe,
     window: Option<(f64, f64)>,
-) -> Result<Plan, String> {
+) -> Result<Plan, OpError> {
     if let Some(reason) = tools.video_codec_unavailable(options.codec) {
         return Err(reason);
     }
     let ffmpeg = tools
         .ffmpeg
         .as_ref()
-        .ok_or_else(|| "ffmpeg is not installed.".to_string())?;
-    let encoder = tools
-        .video_encoder(options.codec)
-        .ok_or_else(|| format!("ffmpeg here has no {} encoder.", options.codec.label()))?;
+        .ok_or_else(|| OpError::Missing("ffmpeg".into()))?;
+    let encoder = tools.video_encoder(options.codec).ok_or_else(|| {
+        Failure::NoCodecEncoder {
+            codec: options.codec.label().to_string(),
+        }
+        .error()
+    })?;
     let mut spec = quiet_ffmpeg(ffmpeg);
     if let Some((start, length)) = window {
         spec = spec
@@ -1025,7 +1054,7 @@ pub fn video_plan(
         Sound::Kbps(kbps) if keep_sound => {
             let sound = tools
                 .sound_encoder(options.codec)
-                .ok_or_else(|| "ffmpeg here has no encoder for the sound.".to_string())?;
+                .ok_or_else(|| Failure::NoSoundEncoder.error())?;
             spec.args(["-c:a", sound, "-b:a"]).arg(format!("{kbps}k"))
         }
         _ => spec.arg("-an"),
@@ -1050,14 +1079,14 @@ pub fn audio_plan(
     out: &Path,
     probe: &Probe,
     window: Option<(f64, f64)>,
-) -> Result<Plan, String> {
+) -> Result<Plan, OpError> {
     if let Some(reason) = tools.audio_codec_unavailable(options.codec) {
         return Err(reason);
     }
     let ffmpeg = tools
         .ffmpeg
         .as_ref()
-        .ok_or_else(|| "ffmpeg is not installed.".to_string())?;
+        .ok_or_else(|| OpError::Missing("ffmpeg".into()))?;
     let mut spec = quiet_ffmpeg(ffmpeg);
     if let Some((start, length)) = window {
         spec = spec
@@ -1219,8 +1248,8 @@ mod tests {
     fn tools_say_why_a_kind_is_missing() {
         let none = Tools::default();
         assert_eq!(
-            none.unavailable(MediaKind::Video).as_deref(),
-            Some("ffmpeg is not installed.")
+            none.unavailable(MediaKind::Video),
+            Some(OpError::Missing("ffmpeg".into()))
         );
         assert!(none.unavailable(MediaKind::Image).is_some());
         assert!(tools().unavailable(MediaKind::Audio).is_none());
@@ -1229,8 +1258,8 @@ mod tests {
             ..tools()
         };
         assert_eq!(
-            no_probe.unavailable(MediaKind::Video).as_deref(),
-            Some("ffprobe is not installed.")
+            no_probe.unavailable(MediaKind::Video),
+            Some(OpError::Missing("ffprobe".into()))
         );
         let only_ffmpeg = Tools {
             magick: None,
@@ -1252,8 +1281,13 @@ mod tests {
             ..tools.clone()
         };
         assert_eq!(
-            no_x265.video_codec_unavailable(VideoCodec::H265).as_deref(),
-            Some("ffmpeg here has no H.265 (MP4) encoder.")
+            no_x265.video_codec_unavailable(VideoCodec::H265),
+            Some(
+                Failure::NoCodecEncoder {
+                    codec: "H.265 (MP4)".into()
+                }
+                .error()
+            )
         );
         assert!(no_x265.audio_codec_unavailable(AudioCodec::Opus).is_some());
         assert!(tools.image_format_unavailable(ImageFormat::Avif).is_none());
@@ -1262,10 +1296,13 @@ mod tests {
             ..tools
         };
         assert_eq!(
-            no_av1
-                .image_format_unavailable(ImageFormat::Avif)
-                .as_deref(),
-            Some("ffmpeg here has no AV1 encoder.")
+            no_av1.image_format_unavailable(ImageFormat::Avif),
+            Some(
+                Failure::NoCodecEncoder {
+                    codec: "AV1".into()
+                }
+                .error()
+            )
         );
     }
 

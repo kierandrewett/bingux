@@ -26,7 +26,7 @@ use super::names::keep_both_name;
 use super::transfer::{Conflict, ConflictPolicy, Resolution, move_to};
 use super::trash::{Context, Copying, Trashed, trash_in};
 use super::trash_info::{TrashItem, forget_sizes, item_in, split_extension_bytes};
-use super::{OpError, Progress, rename_noreplace};
+use super::{Failure, OpError, Progress, rename_noreplace};
 
 /// One item to put back and what stands in the way.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -227,12 +227,11 @@ fn decide(policy: &ConflictPolicy, conflict: &Conflict) -> Resolution {
     }
 }
 
-fn quoted(path: &Path) -> String {
-    format!(
-        "“{}”",
-        path.file_name()
-            .map_or_else(|| path.to_string_lossy(), |name| name.to_string_lossy())
-    )
+/// The name of `path` as the person sees it, without quotes.
+fn name_of(path: &Path) -> String {
+    path.file_name()
+        .map_or_else(|| path.to_string_lossy(), |name| name.to_string_lossy())
+        .into_owned()
 }
 
 fn restore_one(
@@ -245,10 +244,10 @@ fn restore_one(
 ) -> Result<Option<Restored>, OpError> {
     let item = &entry.item;
     let Some(mut target) = entry.target.clone() else {
-        return Err(OpError::Other(format!(
-            "There is no record of where {} came from. Use Restore to… to choose a folder.",
-            quoted(&item.in_trash)
-        )));
+        return Err(Failure::NoRecord {
+            name: name_of(&item.in_trash),
+        }
+        .error());
     };
     let Some(parent) = target.parent().map(Path::to_path_buf) else {
         return Err(OpError::Invalid(crate::location::NameError::Empty));
@@ -269,15 +268,15 @@ fn restore_one(
                 target = parent.join(name);
             }
             Resolution::Replace => {
-                let ctx = ctx
-                    .ok_or_else(|| OpError::Other("Your home folder could not be found.".into()))?;
+                let ctx = ctx.ok_or_else(|| Failure::NoHome.error())?;
                 // What is there goes to the Trash, so Replace can be undone.
                 let moved = trash_in(ctx, std::slice::from_ref(&target), Copying::Small).map_err(
                     |error| {
-                        OpError::Other(format!(
-                            "{} could not be moved to the Trash to make room: {error}",
-                            quoted(&target)
-                        ))
+                        Failure::NotMovedToMakeRoom {
+                            name: name_of(&target),
+                            why: Box::new(error),
+                        }
+                        .error()
                     },
                 )?;
                 displaced = moved.into_iter().next();
@@ -311,18 +310,18 @@ fn restore_one(
 fn prepare_folder(parent: &Path, target: &Path, create_missing: bool) -> Result<(), OpError> {
     match fs::metadata(parent) {
         Ok(meta) if meta.is_dir() => Ok(()),
-        Ok(_) => Err(OpError::Other(format!(
-            "{} is not a folder, so {} cannot be put back there.",
-            parent.display(),
-            quoted(target)
-        ))),
+        Ok(_) => Err(Failure::PutBackNotFolder {
+            parent: parent.display().to_string(),
+            name: name_of(target),
+        }
+        .error()),
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
             if !create_missing {
-                return Err(OpError::Other(format!(
-                    "The folder {} no longer exists, so {} cannot be put back.",
-                    parent.display(),
-                    quoted(target)
-                )));
+                return Err(Failure::PutBackFolderGone {
+                    parent: parent.display().to_string(),
+                    name: name_of(target),
+                }
+                .error());
             }
             let made = missing_folders(target);
             fs::create_dir_all(parent).map_err(|error| restore_io_error(error, target))?;
@@ -374,20 +373,12 @@ fn restore_io_error(error: io::Error, target: &Path) -> OpError {
         || "its folder".to_owned(),
         |parent| parent.display().to_string(),
     );
-    let name = quoted(target);
+    let name = name_of(target);
     match error.raw_os_error() {
-        Some(libc::EACCES | libc::EPERM) => OpError::Other(format!(
-            "You do not have permission to put {name} back in {parent}."
-        )),
-        Some(libc::EROFS) => OpError::Other(format!(
-            "{parent} is on a read-only drive, so {name} cannot be put back there."
-        )),
-        Some(libc::ENOTDIR) => OpError::Other(format!(
-            "{parent} is not a folder, so {name} cannot be put back there."
-        )),
-        Some(libc::ENOENT) => OpError::Other(format!(
-            "The folder {parent} no longer exists, so {name} cannot be put back."
-        )),
+        Some(libc::EACCES | libc::EPERM) => Failure::PutBackDenied { parent, name }.error(),
+        Some(libc::EROFS) => Failure::PutBackReadOnly { parent, name }.error(),
+        Some(libc::ENOTDIR) => Failure::PutBackNotFolder { parent, name }.error(),
+        Some(libc::ENOENT) => Failure::PutBackFolderGone { parent, name }.error(),
         _ => OpError::from(error),
     }
 }
@@ -505,12 +496,12 @@ mod tests {
         assert_eq!(plan.missing_folders(), [deep.clone(), deep.join("er")]);
         // Not asked: it fails, says which folder, and moves nothing.
         let failure = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap_err();
-        let OpError::Other(text) = &failure.error else {
-            panic!("{failure:?}")
-        };
         assert!(
-            text.contains("no longer exists") && text.contains("er"),
-            "{text}"
+            matches!(
+                &failure.error,
+                OpError::Failed(Failure::PutBackFolderGone { parent, .. }) if parent.ends_with("er")
+            ),
+            "{failure:?}"
         );
         assert!(items[0].in_trash.exists());
         assert!(failure.done.is_empty());
@@ -634,12 +625,9 @@ mod tests {
         );
         assert!(plan.without_unknown().entries.is_empty());
         let failure = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap_err();
-        let OpError::Other(text) = failure.error else {
-            panic!()
-        };
         assert!(
-            text.contains("no record") && text.contains("Restore to"),
-            "{text}"
+            matches!(&failure.error, OpError::Failed(Failure::NoRecord { .. })),
+            "{failure:?}"
         );
         let into = temp.dir("home/chosen");
         let plan = plan_restore_in(Some(&ctx.home_trash), &paths, Some(&into));
@@ -693,10 +681,13 @@ mod tests {
         let failure = run(&ctx, &plan, true, &ConflictPolicy::Skip).unwrap_err();
         assert_eq!(failure.done.len(), 1);
         assert_eq!(failure.done[0].to, first);
-        let OpError::Other(text) = &failure.error else {
-            panic!("{:?}", failure.error)
-        };
-        assert!(text.contains("not a folder"), "{text}");
+        assert!(
+            matches!(
+                &failure.error,
+                OpError::Failed(Failure::PutBackNotFolder { .. })
+            ),
+            "{failure:?}"
+        );
         assert!(first.exists() && items[1].in_trash.exists());
     }
 
@@ -713,38 +704,54 @@ mod tests {
         let plan = plan_of(&ctx, &items, None);
         let failure = run(&ctx, &plan, false, &ConflictPolicy::Skip).unwrap_err();
         fs::set_permissions(&locked, fs::Permissions::from_mode(0o755)).unwrap();
-        let OpError::Other(text) = &failure.error else {
-            panic!("{:?}", failure.error)
-        };
         assert!(
-            text.contains("permission") && text.contains("locked") && text.contains("a.txt"),
-            "{text}"
+            matches!(
+                &failure.error,
+                OpError::Failed(Failure::PutBackDenied { parent, name })
+                    if parent.ends_with("locked") && name == "a.txt"
+            ),
+            "{failure:?}"
         );
         assert!(items[0].in_trash.exists(), "it stays in the Trash");
     }
 
     #[test]
-    fn io_failures_are_worded_with_the_item_and_the_folder() {
+    fn io_failures_name_the_item_and_the_folder() {
         let target = Path::new("/mnt/usb/Photos/a.jpg");
-        let text = |code: i32| match restore_io_error(io::Error::from_raw_os_error(code), target) {
-            OpError::Other(text) => text,
-            other => panic!("{other:?}"),
-        };
+        let parent = || "/mnt/usb/Photos".to_owned();
+        let name = || "a.jpg".to_owned();
+        let got = |code: i32| restore_io_error(io::Error::from_raw_os_error(code), target);
         assert_eq!(
-            text(libc::EROFS),
-            "/mnt/usb/Photos is on a read-only drive, so “a.jpg” cannot be put back there."
+            got(libc::EROFS),
+            Failure::PutBackReadOnly {
+                parent: parent(),
+                name: name()
+            }
+            .error()
         );
         assert_eq!(
-            text(libc::EACCES),
-            "You do not have permission to put “a.jpg” back in /mnt/usb/Photos."
+            got(libc::EACCES),
+            Failure::PutBackDenied {
+                parent: parent(),
+                name: name()
+            }
+            .error()
         );
         assert_eq!(
-            text(libc::ENOTDIR),
-            "/mnt/usb/Photos is not a folder, so “a.jpg” cannot be put back there."
+            got(libc::ENOTDIR),
+            Failure::PutBackNotFolder {
+                parent: parent(),
+                name: name()
+            }
+            .error()
         );
         assert_eq!(
-            text(libc::ENOENT),
-            "The folder /mnt/usb/Photos no longer exists, so “a.jpg” cannot be put back."
+            got(libc::ENOENT),
+            Failure::PutBackFolderGone {
+                parent: parent(),
+                name: name()
+            }
+            .error()
         );
         assert_eq!(
             restore_io_error(io::Error::from_raw_os_error(libc::ENOSPC), target),

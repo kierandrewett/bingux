@@ -9,7 +9,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::OpError;
+use super::{Failure, OpError};
 
 /// Is `name` an executable file in a folder of `PATH`?
 fn on_path(name: &str) -> bool {
@@ -159,7 +159,7 @@ pub(super) fn make_scratch(dir: &Path) -> Result<PathBuf, OpError> {
             Err(error) => return Err(error.into()),
         }
     }
-    Err(OpError::Other("A work folder could not be made.".into()))
+    Err(Failure::WorkFolder.error())
 }
 
 #[cfg(test)]
@@ -245,20 +245,17 @@ mod tests {
         let temp = Temp::new("extract-bad");
         let text = temp.write("notes.txt", "x");
         let dest = temp.dir("dest");
-        assert!(matches!(
-            extract(&text, &dest),
-            Err(OpError::Unsupported(_))
-        ));
+        assert_eq!(extract(&text, &dest), Err(Failure::CannotOpenKind.error()));
         if on_path("tar") {
             let junk = temp.write("junk.tar", "this is not a tar file");
             let error = extract(&junk, &dest).unwrap_err();
-            assert!(matches!(error, OpError::Other(_)), "{error:?}");
+            assert!(matches!(error, OpError::Failed(_)), "{error:?}");
             assert_eq!(fs::read_dir(&dest).unwrap().count(), 0);
         }
         assert_eq!(
             extract(&temp.path().join("missing.zip"), &dest).map_err(|e| matches!(
                 e,
-                OpError::NotFound | OpError::Unsupported(_) | OpError::Missing(_)
+                OpError::NotFound | OpError::Failed(_) | OpError::Missing(_)
             )),
             Err(true)
         );

@@ -29,7 +29,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use crate::mounts::{self, WriteTarget};
 
-use super::{OpError, Progress};
+use super::{Failure, IoKind, OpError, Progress};
 
 /// How hard to flush what is written to one drive. Ordered: a bigger level
 /// does everything a smaller one does.
@@ -244,39 +244,26 @@ impl<'a> Durable<'a> {
         }
         for (mount_point, label) in devices {
             self.flusher.filesystem(mount_point).map_err(|error| {
-                OpError::Other(format!(
-                    "Could not finish writing to {label}: {}",
-                    sentence(&error)
-                ))
+                Failure::DriveFinish {
+                    label: label.to_string(),
+                    kind: IoKind::of(&error),
+                }
+                .error()
             })?;
         }
         Ok(())
     }
 }
 
-fn sentence(error: &io::Error) -> String {
-    let text = error.to_string();
-    let text = text.split(" (os error").next().unwrap_or(&text);
-    let mut chars = text.chars();
-    let mut out: String = match chars.next() {
-        Some(first) => first.to_uppercase().chain(chars).collect(),
-        None => "The drive did not answer".into(),
-    };
-    if !out.ends_with('.') {
-        out.push('.');
-    }
-    out
-}
-
 fn write_error(level: &Level, error: &io::Error) -> OpError {
-    match level {
-        Level::Device(device) => OpError::Other(format!(
-            "Could not write to {}: {}",
-            device.label,
-            sentence(error)
-        )),
-        _ => OpError::Other(format!("Could not write to the drive: {}", sentence(error))),
+    Failure::DriveWrite {
+        label: match level {
+            Level::Device(device) => Some(device.label.to_string()),
+            _ => None,
+        },
+        kind: IoKind::of(error),
     }
+    .error()
 }
 
 /// Make the names just changed in `dirs` durable, for operations that are a
@@ -475,12 +462,13 @@ mod tests {
         durable.dir_changed_in_destination(temp.path(), &Level::Lazy);
         let progress = Progress::new();
         let error = durable.finish(&progress).unwrap_err();
-        let OpError::Other(text) = error else {
-            panic!("{error:?}")
-        };
-        assert!(
-            text.starts_with("Could not finish writing to STICK"),
-            "{text}"
+        assert_eq!(
+            error,
+            Failure::DriveFinish {
+                label: "STICK".to_owned(),
+                kind: IoKind::Unreadable,
+            }
+            .error()
         );
         assert_eq!(progress.flushed_to(), None);
         assert_eq!(progress.finishing(), None);
