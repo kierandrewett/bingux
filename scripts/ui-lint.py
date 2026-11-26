@@ -360,6 +360,8 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/platform/testing.rs": "test fixture (cfg(test)): a private dbus-daemon started by a test, no window thread",
     "crates/ui/src/source_scan.rs": "test-only (cfg(test)): walks the workspace sources for the source-scan tests, no window thread",
     "crates/ui/src/snapshot.rs": "the headless test runner, no window",
+    "crates/ui/src/preview/test_host.rs": "test-only (cfg(test)): builds bingux-preview-host with a nested cargo once per test process, no window thread",
+    "crates/ui/src/controls/tab_tests.rs": "test: sleeps three frames before a drag so a frame of the strip is due, headless runner, no window thread",
     "crates/ui/src/files/tab_tests.rs": "test fixtures: a few temporary folders written before the headless window mounts, no window thread",
     "crates/ui/src/files/place_tests.rs": "test fixtures: two temporary folders written before the headless window mounts, no window thread",
     "crates/ui/src/files/search_tests.rs": "test fixtures: a folder tree written before the headless window mounts, no window thread",
