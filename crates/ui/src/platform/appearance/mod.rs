@@ -196,6 +196,19 @@ fn enabled(list: Option<&str>) -> Vec<Source> {
         .collect()
 }
 
+/// What a process that has called `runtime::isolate_system_settings` (a test, a
+/// capture, a sweep) may read: the environment's pins and nothing of the
+/// person's desktop. That is the portal and `gsettings`, which ask the running
+/// session, and also `bingux.toml` and GTK's `settings.ini`, which are the
+/// person's own files: a `gtk-enable-animations=false` in one of them made
+/// every motion test see a session that asks for reduced motion.
+fn isolated(sources: Vec<Source>) -> Vec<Source> {
+    sources
+        .into_iter()
+        .filter(|source| *source == Source::Environment)
+        .collect()
+}
+
 /// The appearance of the first frame: the environment and the defaults, with
 /// nothing read from the system. Cheap and non-blocking, so `render` may call
 /// it; [`current`] follows on a worker.
@@ -211,14 +224,14 @@ pub fn startup() -> Appearance {
 /// own time limit. Call it off the UI thread.
 pub fn current() -> Appearance {
     crate::runtime::assert_off_ui_thread("platform::appearance::current");
-    let sources = enabled(std::env::var("BINGUX_APPEARANCE_SOURCES").ok().as_deref());
-    let isolated = crate::runtime::system_settings_isolated();
+    let mut sources = enabled(std::env::var("BINGUX_APPEARANCE_SOURCES").ok().as_deref());
+    if crate::runtime::system_settings_isolated() {
+        sources = isolated(sources);
+    }
     let mut layers: Vec<(Source, Reading)> = Vec::new();
     for source in sources {
         let reading = match source {
             Source::Environment => environment::read(&|name: &str| std::env::var(name)),
-            // A capture or a test never asks the person's desktop.
-            Source::Portal | Source::Gsettings if isolated => continue,
             Source::Portal => match portal::read() {
                 Some(reading) => reading,
                 None => continue,
@@ -236,6 +249,9 @@ pub fn current() -> Appearance {
 /// The interface font family `bingux.toml` names (`appearance.font_family`),
 /// when it names one. Blocks like [`current`]; the font is read once at start.
 pub fn configured_font_family() -> Option<String> {
+    if crate::runtime::system_settings_isolated() {
+        return None;
+    }
     config::font_family()
 }
 
@@ -365,6 +381,19 @@ mod tests {
             [Source::Environment, Source::Config, Source::Gsettings]
         );
         assert_eq!(enabled(Some("nonsense")), [Source::Environment]);
+    }
+
+    #[test]
+    fn an_isolated_process_reads_the_environment_and_nothing_of_the_persons_desktop() {
+        // A test or a capture takes the pins and the defaults: not the portal
+        // or gsettings (the running session), and not `bingux.toml` or GTK's
+        // `settings.ini` (the person's files). A source added later is left
+        // out until someone decides it reads nothing of the person's.
+        assert_eq!(isolated(enabled(None)), [Source::Environment]);
+        assert_eq!(
+            isolated(enabled(Some("portal, config, gtk, gsettings"))),
+            [Source::Environment]
+        );
     }
 
     #[test]

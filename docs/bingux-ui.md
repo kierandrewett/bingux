@@ -3440,8 +3440,12 @@ returned `Watch` stops all of them.
 `BINGUX_APPEARANCE_SOURCES=config,gsettings` restricts which sources are read
 (the environment always is), to try one layer on a machine that has all of
 them. `BINGUX_APPEARANCE_MONITOR=0` starts no listener. A process that has
-called `runtime::isolate_system_settings` (a capture, a sweep) never asks the
-portal or `gsettings`, so its tokens do not depend on the person's desktop.
+called `runtime::isolate_system_settings` (the headless `Snapshot`, so every
+test, capture and sweep) reads the environment's pins and nothing else: it
+never asks the portal or `gsettings` and never reads `bingux.toml` or GTK's
+`settings.ini`, so its tokens do not depend on the person's desktop. Pin a
+value for such a run with `BINGUX_REDUCED_MOTION`, `BINGUX_COLOR_SCHEME` and
+the others of the first row of the table above.
 
 ### Opening links and files
 
