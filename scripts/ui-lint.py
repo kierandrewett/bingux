@@ -28,6 +28,12 @@ inspector plugin, so every bingux-ui app has the inspector and its
 Ctrl+Alt+Shift+I shortcut by construction. A bare `LaunchConfig`, `freya::launch`
 or an import of Freya's `launch` anywhere else fails here.
 
+One more holds the localisation rule (scripts/literal_text.py): a string a person reads is a message of the app's
+Fluent catalogue, never a literal passed to a bingux-ui call that shows its argument (`.title("Songs")`,
+`action_button("Retry", ..)`, `.tooltip(format!(..))`, `.keywords([..])`), never a plural chosen with `if n == 1`,
+never a number written with its unit by hand. ALLOWED in that file holds the exceptions, each with its reason;
+`--self-test` plants every case.
+
 One more covers the QML shell (shell/bingux): every icon name its QML, JavaScript and Python
 asks for, and every one the daemons send it, is a Bingux icon (shell/bingux/icons) or is
 mapped to one in BinguxIconAliases.js; none is left to the Adwaita theme. `--self-test` runs
@@ -40,6 +46,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from crate_dirs import crate_dir  # noqa: E402
+import literal_text  # noqa: E402
 
 # The rules of design/rules.json each kind of finding holds, and the words that tell the kinds
 # apart in this script's output (read by scripts/rules-check.py; a kind with no ID holds no rule yet).
@@ -57,6 +64,7 @@ RULE_IDS = {
     "app-about": [],
     "shell-icon": [],
     "own-loop": ["MO-04", "MO-10"],
+    "literal-text": [],
 }
 RULE_MESSAGES = {
     "direct-styling": r"styles a box directly",
@@ -72,6 +80,7 @@ RULE_MESSAGES = {
     "raw-press": r"a press handler on a bare box",
     "app-about": r"starts an Application without",
     "own-loop": r"a looping animation",
+    "literal-text": r"literal text .* in .*: a (?:string a person reads|plural is chosen|number is written)",
 }
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -776,11 +785,14 @@ def shell_icon_self_test() -> list[str]:
 
 def main() -> int:
     if "--self-test" in sys.argv[1:]:
-        failures = shell_icon_self_test()
+        failures = shell_icon_self_test() + literal_text.self_test()
         for failure in failures:
             print(f"ui-lint --self-test: {failure}")
         if not failures:
-            print("ui-lint --self-test: the shell icon check fails on a name the Bingux set lacks")
+            print(
+                "ui-lint --self-test: the shell icon check fails on a name the Bingux set lacks; "
+                "the literal text check fails on every planted literal, plural and hand-written unit"
+            )
         return 1 if failures else 0
     problems = []
     for source in SOURCES:
@@ -807,10 +819,14 @@ def main() -> int:
     abouts = about_problems()
     loops = loop_problems()
     icons = shell_icon_problems()
-    everything = problems + launches + blocking + panics + abouts + loops + icons
+    literals = literal_text.problems()
+    everything = problems + launches + blocking + panics + abouts + loops + icons + literals
     for problem in everything:
         print(problem)
     if everything:
+        if literals:
+            counts = literal_text.per_crate(literal_text.scan())
+            print("\nliteral text per crate: " + ", ".join(f"{name} {count}" for name, count in sorted(counts.items())))
         print(
             f"\nui-lint: {len(everything)} problem(s). Style boxes with tokens from "
             "crates/ui/src/style/; start windows with Application::run."

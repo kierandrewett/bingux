@@ -5435,6 +5435,14 @@ A message a translation lacks falls back to `en-US`, never to its ID.
   an ID, attribute or variable the source does not have, or a file with no
   source. It prints, per language, how many messages still fall back
   (`--missing` lists them).
+- `scripts/ui-lint.py` (in `make check-static`; the checker is `scripts/literal_text.py`) fails on a string
+  literal with a letter in it passed to a bingux-ui call that shows it (`.title("Songs")`, `action_button("Retry", ..)`,
+  `.tooltip(format!(..))`, `.keywords([..])`, `.toast(..)`, `app_info!(description = ..)`), on a plural chosen with
+  `if n == 1` and on `format!("{} km", n)`. It reads which calls take text from this crate's own public functions
+  (a string parameter named `title`, `label`, `text`, `tooltip`, ...), so a new text API is covered with no list
+  to edit; a function that takes text but is not for people (a test or automation helper) is named in
+  `NOT_TEXT_FNS`. A literal that is right by design is an entry of `ALLOWED` with its reason (a brand name,
+  a key chord, a fixture). `ui-lint.py --self-test` plants every case.
 - `i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "calculator").assert_clean()`
   in a crate's tests fails on a `tr!` ID the source lacks, wrong variables, or
   a message nothing uses (`i18n_id!` counts as a use).

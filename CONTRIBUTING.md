@@ -182,6 +182,28 @@ builder, icon, style token or behaviour) must land with its entry in the
 tooltip` in `crates/ui` holds the same rule for the cases a page
    cannot reach (a clipped box, a scrolled one, a narrow window).
 
+Localisation, from the first commit of an app. Every string a person reads is a message of the
+app's [Project Fluent](https://projectfluent.org) catalogue (`apps/<app>/locale/en-US/<app>.ftl`), shown with
+`tr!("id")`: a title, a label, a tooltip, a placeholder, a screen reader name, search keywords, a toast, a dialog,
+an error a person sees. A count is a number variable that the message selects on (never `if n == 1` in Rust), a
+sentence is one message with variables (never `format!` joining fragments), and numbers, sizes, durations and dates
+are written by `bingux_ui::format` or by the message (never `format!("{} km", n)`). Three checks hold it:
+
+- `python3 scripts/ui-lint.py` (in `make check-static`, and the `ui-lint` check of `make rules-check`) fails on a
+  string literal with a letter in it passed to a bingux-ui call that shows its argument (`.title("Songs")`,
+  `action_button("Retry", ..)`, `.tooltip(format!(..))`, `.keywords([..])`, `.toast(..)`, `app_info!(description = ..)`),
+  on a plural chosen in Rust and on a number written with its unit by hand. The calls are read from the source of
+  bingux-ui (a public function with a string parameter called `title`, `label`, `text`, `tooltip`, ...), so a new
+  text API is covered the day it is added. A literal that is right by design (a brand name, a key name, a test
+  fixture) is an entry of `ALLOWED` in `scripts/literal_text.py` with its reason; never a blanket entry for
+  a whole app. `python3 scripts/ui-lint.py --self-test` plants every case.
+- `bingux_ui::i18n::check::crate_catalogue(env!("CARGO_MANIFEST_DIR"), "<app>").assert_clean()` in the app's
+  tests: every `tr!` ID exists, with the variables it passes, and no message is unused.
+- `python3 scripts/ftl-check.py`: syntax, duplicates and translations that have drifted from en-US.
+
+A new app starts from "Migrating an app" in `docs/bingux-ui.md`, "Localisation". Run it with
+`BINGUX_PSEUDO_LOCALE=accented` (anything plain is still a literal) and, for a Settings change, `make overflow-check`.
+
 Visual integrity (`design/rules.md` CK-01, 02, 03, 06, 07, 08, 09, 12, 13, 14, 15, 16, 18, 19, 20, 22, 25). Each of
 these takes `--fixtures` (the check on its own known-bad and clean cases,
 which needs no binary), most take `--build` and `--show-allowed`, and a finding names the rule IDs of
