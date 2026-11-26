@@ -87,11 +87,11 @@ $XDG_RUNTIME_DIR/bingux-browser/<id>/                 the engine's sockets
 ```json
 {
     "version": 1,
-    "default": "k3p9x2qa",
+    "default": "k3p7x2qa",
     "ask_at_start": false,
     "profiles": [
-        { "id": "k3p9x2qa", "name": "Personal", "colour": "blue", "created": 1795651200 },
-        { "id": "w7m4c8tz", "name": "Work", "colour": "orange", "created": 1795737600, "deleting": true }
+        { "id": "k3p7x2qa", "name": "Personal", "colour": "blue", "created": 1795651200 },
+        { "id": "w7m4c6tz", "name": "Work", "colour": "orange", "created": 1795737600, "deleting": true }
     ]
 }
 ```

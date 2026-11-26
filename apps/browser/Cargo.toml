@@ -31,6 +31,8 @@ freya = { version = "0.5.0-rc.10", features = ["borderless", "titlebar"] }
 # The browser is a thin frame around bingux-ui's web view control.
 bingux-ui = { path = "../../crates/ui", features = ["web-view"] }
 libc = "0.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [dev-dependencies]
 # The tests of the UI logic run over the in-memory engine double.

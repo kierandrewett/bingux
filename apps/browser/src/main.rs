@@ -6,6 +6,7 @@
 //! new tab. `--private` starts a window of its own whose tabs keep nothing.
 
 mod model;
+mod profile;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod target;
@@ -43,7 +44,10 @@ fn main() {
         // so it is not the running window's second launch.
         arguments.remove(0);
         if let Ok(program) = std::env::current_exe() {
-            let error = std::process::Command::new(program).env(PRIVATE, "1").args(arguments).exec();
+            let error = std::process::Command::new(program)
+                .env(PRIVATE, "1")
+                .args(arguments)
+                .exec();
             eprintln!("bingux-browser: could not start a private window: {error}");
         }
         std::process::exit(1);
@@ -56,7 +60,11 @@ fn main() {
         }
     };
     let options = Options { private };
-    let id = if private { "bingux-browser-private" } else { "bingux-browser" };
+    let id = if private {
+        "bingux-browser-private"
+    } else {
+        "bingux-browser"
+    };
     Application::new(id)
         .title("Browser")
         .size(1100.0, 760.0)
@@ -78,12 +86,17 @@ fn main() {
 /// Start the engine, with the profile of this window.
 #[cfg(not(any(feature = "vivarium", feature = "dynamic-load")))]
 fn start_engine(_private: bool) -> Result<Engine, String> {
-    Err("this build has no engine. Build it with the `vivarium` feature, against a Vivarium SDK.".to_string())
+    Err(
+        "this build has no engine. Build it with the `vivarium` feature, against a Vivarium SDK."
+            .to_string(),
+    )
 }
 
 #[cfg(any(feature = "vivarium", feature = "dynamic-load"))]
 fn start_engine(private: bool) -> Result<Engine, String> {
     // An engine that does not start is not a reason to exit: the window opens and says why
     // (a profile folder that is not safe, a sandbox it cannot reach), and offers to try again.
-    Ok(Engine(bingux_ui::web_view::engine::start(bingux_ui::web_view::engine::Config::from_environment(private))))
+    Ok(Engine(bingux_ui::web_view::engine::start(
+        bingux_ui::web_view::engine::Config::from_environment(private),
+    )))
 }
