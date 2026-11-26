@@ -171,6 +171,9 @@ fn menu_control(ctx: Ctx) -> Element {
 #[derive(PartialEq)]
 pub struct Toolbar {
     pub ctx: Ctx,
+    /// The toolbar is the window's header (`Screen` paints its tone and the
+    /// hairline under it); otherwise it is a bar of its own over the page.
+    pub in_header: bool,
 }
 
 impl Component for Toolbar {
@@ -190,12 +193,14 @@ impl Component for Toolbar {
                     grow_children(),
                     items(Align::Center),
                     gap(S1),
-                    px(S2),
-                    py(S1),
-                    bg(Paint::Bg),
-                    border(Line::HairlineBottom),
                 ],
             );
+        if !self.in_header {
+            bar = bar.tw(
+                &tokens,
+                &[px(S2), py(S1), bg(Paint::Bg), border(Line::HairlineBottom)],
+            );
+        }
         if is_compact() {
             // A phone: the connection, the address, the tabs and the menu. The
             // history is in the bar below.

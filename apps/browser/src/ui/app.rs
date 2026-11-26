@@ -2,10 +2,10 @@
 //! banners, the find bar and the page. On a phone there is no strip: the
 //! address bar is on top, the history below, and the tabs are a list.
 
-use bingux_ui::web_view::PageEnvironment;
-use bingux_ui::web_view::queue::Signal;
 use bingux_ui::prelude::*;
 use bingux_ui::shell::with_window;
+use bingux_ui::web_view::PageEnvironment;
+use bingux_ui::web_view::queue::Signal;
 use freya::prelude::*;
 
 use crate::model::browser::{Browser, EngineStatus, Options};
@@ -71,7 +71,8 @@ impl Component for Content {
         let options = self.options;
         // What pages see of the window's look: its scheme, accent, motion and
         // text scale, sent again whenever they change.
-        let environment = PageEnvironment::from_tokens(&tokens, bingux_ui::stress::text_scale(), Vec::new());
+        let environment =
+            PageEnvironment::from_tokens(&tokens, bingux_ui::access::text_scale(), Vec::new());
         let browser = use_state({
             let engine = engine.clone();
             let environment = environment.clone();
@@ -111,7 +112,11 @@ impl Component for Content {
         // again. The first tabs open once the window exists.
         let first: Vec<String> = {
             let launched = opened_by(&location);
-            if launched.is_empty() { self.start.clone() } else { launched }
+            if launched.is_empty() {
+                self.start.clone()
+            } else {
+                launched
+            }
         };
         use_hook({
             let engine = engine.clone();
@@ -158,12 +163,19 @@ impl Component for Content {
         // The window's title follows the tab on show.
         let (title, fullscreen, failed, key, find_open, empty_window) = {
             let browser = ctx.browser.read();
-            let title = browser.active().map_or_else(String::new, |tab| tab.display_title());
+            let title = browser
+                .active()
+                .map_or_else(String::new, |tab| tab.display_title());
             (
                 title,
                 browser.fullscreen,
                 match &browser.engine {
-                    EngineStatus::Failed { message, code, cause, restartable } => Some((message.clone(), *code, *cause, *restartable)),
+                    EngineStatus::Failed {
+                        message,
+                        code,
+                        cause,
+                        restartable,
+                    } => Some((message.clone(), *code, *cause, *restartable)),
                     _ => None,
                 },
                 browser.tabs.active_key(),
@@ -172,15 +184,18 @@ impl Component for Content {
             )
         };
         let private = options.private;
-        use_side_effect_with_deps(&(title.clone(), private), move |(title, private): &(String, bool)| {
-            let name = match (title.is_empty(), private) {
-                (true, true) => "Private browsing \u{2013} Browser".to_string(),
-                (true, false) => "Browser".to_string(),
-                (false, true) => format!("{title} \u{2013} Private browsing"),
-                (false, false) => format!("{title} \u{2013} Browser"),
-            };
-            with_window(move |window| window.set_title(&name));
-        });
+        use_side_effect_with_deps(
+            &(title.clone(), private),
+            move |(title, private): &(String, bool)| {
+                let name = match (title.is_empty(), private) {
+                    (true, true) => "Private browsing \u{2013} Browser".to_string(),
+                    (true, false) => "Browser".to_string(),
+                    (false, true) => format!("{title} \u{2013} Private browsing"),
+                    (false, false) => format!("{title} \u{2013} Browser"),
+                };
+                with_window(move |window| window.set_title(&name));
+            },
+        );
         // The window says it is the one the person is in, so the page shows a caret.
         let focused = bingux_ui::runtime::window_focus();
         use_side_effect_with_deps(&*focused.read(), move |focused: &bool| {
@@ -218,35 +233,71 @@ impl Component for Content {
                 .child(FindBar { ctx, key })
         });
         let compact = is_compact();
+        // On a desktop the toolbar is the window's header and the tabs its strip
+        // (`Screen`); a phone and a full-screen page keep the column of their own.
+        let framed = !compact && !fullscreen;
         let body = rect()
-            .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children(), bg(Paint::Bg)])
-            .maybe_child((!fullscreen).then(|| Toolbar { ctx }))
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h_flex(),
+                    flex_col(),
+                    grow_children(),
+                    bg(Paint::Bg),
+                ],
+            )
+            .maybe_child((compact && !fullscreen).then(|| Toolbar {
+                ctx,
+                in_header: false,
+            }))
             .maybe_child((!fullscreen).then(|| PermissionBanner { ctx }))
-            .child(rect().tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children()]).child(page).maybe_child(find))
+            .child(
+                rect()
+                    .tw(&tokens, &[w_full(), h_flex(), flex_col(), grow_children()])
+                    .child(page)
+                    .maybe_child(find),
+            )
             .maybe_child((compact && !fullscreen).then(|| PhoneBottom { ctx }))
             .child(Popovers { ctx })
             .child(PromptHost { ctx })
             .child(ContextMenuHost { ctx });
 
         let root = rect()
-            .tw(&tokens, &[w_full(), h_full(), flex_col(), grow_children(), bg(Paint::Bg)])
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    h_full(),
+                    flex_col(),
+                    grow_children(),
+                    bg(Paint::Bg),
+                ],
+            )
             .on_key_down(shortcuts);
-        if compact || fullscreen {
+        if !framed {
             return root.child(body).into_element();
         }
-        // The tabs stand on the toolbar: the header bar is transparent over the
-        // frame's strip, and the strip, from the left, is its title.
-        let header = HeaderBar::new(title)
-            .fill(Paint::Transparent)
+        // The tabs are the strip above the toolbar, with the window's buttons; the
+        // toolbar is the header of the tab on show.
+        let tabs = HeaderBar::new(title.clone())
             .trailing(WindowControls)
             .tab_slot(strip(ctx));
-        root.child(tab_frame(header, body)).into_element()
+        let header = HeaderBar::new(title).title_slot(Toolbar {
+            ctx,
+            in_header: true,
+        });
+        root.child(Screen::new(header).strip(tabs).content(body))
+            .into_element()
     }
 }
 
 /// Whether the tab on show is the blank one a launch without an address makes.
 fn first_is_blank(ctx: Ctx) -> bool {
-    ctx.browser.peek().active().is_some_and(|tab| tab.is_blank())
+    ctx.browser
+        .peek()
+        .active()
+        .is_some_and(|tab| tab.is_blank())
 }
 
 /// Opens the page's context menu when the engine asks for it. It draws
@@ -259,22 +310,32 @@ struct ContextMenuHost {
 impl Component for ContextMenuHost {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
-        let id = ctx.browser.read().menu.as_ref().map(|menu| (menu.tab, menu.request, menu.target.position.0 as i32, menu.target.position.1 as i32));
-        use_side_effect_with_deps(&id, move |id: &Option<(u64, Option<bingux_ui::web_view::RequestId>, i32, i32)>| {
-            if id.is_none() {
-                return;
-            }
-            let Some(menu) = ctx.browser.peek().menu.clone() else {
-                return;
-            };
-            let (x, y) = *ctx.chrome.page_origin.peek();
-            let at = (x + menu.target.position.0, y + menu.target.position.1);
-            let items = super::menus::context_items(ctx, &menu);
-            // The engine waits for the menu to be closed: it is told now, since
-            // what the menu does is the browser's, not the page's.
-            ctx.with(|browser| browser.dismiss_menu());
-            ctx.overlays.show_menu(at, items);
+        let id = ctx.browser.read().menu.as_ref().map(|menu| {
+            (
+                menu.tab,
+                menu.request,
+                menu.target.position.0 as i32,
+                menu.target.position.1 as i32,
+            )
         });
+        use_side_effect_with_deps(
+            &id,
+            move |id: &Option<(u64, Option<bingux_ui::web_view::RequestId>, i32, i32)>| {
+                if id.is_none() {
+                    return;
+                }
+                let Some(menu) = ctx.browser.peek().menu.clone() else {
+                    return;
+                };
+                let (x, y) = *ctx.chrome.page_origin.peek();
+                let at = (x + menu.target.position.0, y + menu.target.position.1);
+                let items = super::menus::context_items(ctx, &menu);
+                // The engine waits for the menu to be closed: it is told now, since
+                // what the menu does is the browser's, not the page's.
+                ctx.with(|browser| browser.dismiss_menu());
+                ctx.overlays.show_menu(at, items);
+            },
+        );
         rect().width(Size::px(0.0)).height(Size::px(0.0))
     }
 }
