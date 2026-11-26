@@ -34,7 +34,7 @@ impl Query {
 
     /// The compiled pattern, or the reason it does not compile (for a
     /// regular expression the person is still typing).
-    pub fn compile(&self) -> Result<Regex, String> {
+    pub fn compile(&self) -> Result<Regex, PatternError> {
         let pattern = if self.regex {
             self.text.clone()
         } else {
@@ -58,27 +58,48 @@ impl Query {
     }
 }
 
-fn describe_error(error: &regex::Error) -> String {
+/// Why a query does not compile.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PatternError {
+    /// The pattern has a mistake the regex engine names, in its own words
+    /// (the line after `error:`, with a capital).
+    Syntax(String),
+    /// The pattern builds a machine that is too large.
+    TooLarge,
+    /// Not a valid pattern, with no reason given.
+    Invalid,
+}
+
+impl std::fmt::Display for PatternError {
+    /// A short English line for logs.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PatternError::Syntax(detail) => f.write_str(detail),
+            PatternError::TooLarge => f.write_str("the pattern is too large"),
+            PatternError::Invalid => f.write_str("not a valid pattern"),
+        }
+    }
+}
+
+fn describe_error(error: &regex::Error) -> PatternError {
     match error {
         regex::Error::Syntax(text) => {
             let last = text
                 .lines()
                 .filter(|line| line.starts_with("error:"))
                 .next_back();
-            match last {
-                Some(line) => {
-                    let message = line.trim_start_matches("error:").trim();
-                    let mut chars = message.chars();
-                    match chars.next() {
-                        Some(first) => first.to_uppercase().chain(chars).collect(),
-                        None => "Not a valid pattern".into(),
-                    }
-                }
-                None => "Not a valid pattern".into(),
+            let Some(line) = last else {
+                return PatternError::Invalid;
+            };
+            let message = line.trim_start_matches("error:").trim();
+            let mut chars = message.chars();
+            match chars.next() {
+                Some(first) => PatternError::Syntax(first.to_uppercase().chain(chars).collect()),
+                None => PatternError::Invalid,
             }
         }
-        regex::Error::CompiledTooBig(_) => "The pattern is too large".into(),
-        _ => "Not a valid pattern".into(),
+        regex::Error::CompiledTooBig(_) => PatternError::TooLarge,
+        _ => PatternError::Invalid,
     }
 }
 
@@ -295,7 +316,10 @@ mod tests {
             ..Query::default()
         };
         let error = query.compile().unwrap_err();
-        assert!(error.to_lowercase().contains("unclosed"), "{error}");
+        assert!(
+            matches!(&error, PatternError::Syntax(detail) if detail.to_lowercase().contains("unclosed")),
+            "{error}"
+        );
     }
 
     #[test]

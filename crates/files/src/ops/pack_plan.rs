@@ -68,19 +68,6 @@ impl Format {
         self.extension()
     }
 
-    /// Why a person would pick it, in a few words.
-    pub fn note(self) -> &'static str {
-        match self {
-            Format::Zip => "Works everywhere",
-            Format::TarGz => "Fast, common on Linux and Mac",
-            Format::TarXz => "Smaller, slower, Linux and Mac",
-            Format::TarZst => "Fast and small, newer systems",
-            Format::TarBz2 => "Smaller than gzip, slower",
-            Format::SevenZip => "Smallest, needs 7-Zip to open",
-            Format::Tar => "No compression, keeps permissions",
-        }
-    }
-
     /// The format of a file name, by its ending.
     pub fn from_name(name: &str) -> Option<Format> {
         let lower = name.to_lowercase();
@@ -192,14 +179,6 @@ pub enum Level {
 
 impl Level {
     pub const ALL: [Level; 3] = [Level::Fastest, Level::Balanced, Level::Smallest];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Level::Fastest => "Fastest",
-            Level::Balanced => "Balanced",
-            Level::Smallest => "Smallest",
-        }
-    }
 
     /// The number `zip`, `gzip`, `xz` and `bzip2` take: 1, 6 or 9.
     fn digit(self) -> &'static str {

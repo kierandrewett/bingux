@@ -46,15 +46,6 @@ impl LineEnding {
         }
     }
 
-    /// The longer name a menu shows.
-    pub fn describe(self) -> &'static str {
-        match self {
-            LineEnding::Lf => "Unix and macOS (LF)",
-            LineEnding::CrLf => "Windows (CRLF)",
-            LineEnding::Cr => "Classic Mac OS (CR)",
-        }
-    }
-
     pub const ALL: [LineEnding; 3] = [LineEnding::Lf, LineEnding::CrLf, LineEnding::Cr];
 }
 
@@ -78,59 +69,79 @@ impl Default for FileFormat {
 
 impl FileFormat {
     /// The status bar's name for the encoding: `UTF-8`, `UTF-16 LE`,
-    /// `Windows-1252`, with `with BOM` for a UTF-8 file that has one.
+    /// `Windows-1252`.
     pub fn encoding_label(&self) -> String {
-        let name = encoding_label(self.encoding);
-        if self.bom && self.encoding == UTF_8 {
-            format!("{name} with BOM")
-        } else {
-            name
-        }
+        encoding_label(self.encoding)
+    }
+
+    /// Whether the status bar adds that the file has a byte order mark: a
+    /// UTF-8 file that has one.
+    pub fn shows_bom(&self) -> bool {
+        self.bom && self.encoding == UTF_8
     }
 }
 
-/// A readable name for an encoding.
+/// The name of an encoding as programs write it: `UTF-8`, `Windows-1252`,
+/// `Mac Roman`. These are names, not sentences.
 pub fn encoding_label(encoding: &'static Encoding) -> String {
     match encoding.name() {
         "UTF-16LE" => "UTF-16 LE".into(),
         "UTF-16BE" => "UTF-16 BE".into(),
-        "windows-874" => "Windows-874 (Thai)".into(),
         name if name.starts_with("windows-") => format!("Windows-{}", &name[8..]),
         "macintosh" => "Mac Roman".into(),
         "x-mac-cyrillic" => "Mac Cyrillic".into(),
         "gbk" => "GBK".into(),
-        "x-user-defined" => "User defined".into(),
         name => name.to_owned(),
     }
 }
 
+/// The script or region a group of encodings serves; the window names each.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Script {
+    Unicode,
+    Western,
+    CentralEuropean,
+    Baltic,
+    Cyrillic,
+    Greek,
+    Turkish,
+    Hebrew,
+    Arabic,
+    Vietnamese,
+    Thai,
+    Chinese,
+    Japanese,
+    Korean,
+    Other,
+}
+
 /// The encodings a person can reopen or save a file in, grouped by script,
 /// in the order a menu lists them.
-pub fn encodings() -> Vec<(&'static str, Vec<&'static Encoding>)> {
+pub fn encodings() -> Vec<(Script, Vec<&'static Encoding>)> {
     use encoding_rs::*;
     vec![
-        ("Unicode", vec![UTF_8, UTF_16LE, UTF_16BE]),
+        (Script::Unicode, vec![UTF_8, UTF_16LE, UTF_16BE]),
         (
-            "Western",
+            Script::Western,
             vec![WINDOWS_1252, ISO_8859_15, MACINTOSH, IBM866],
         ),
-        ("Central European", vec![WINDOWS_1250, ISO_8859_2]),
-        ("Baltic", vec![WINDOWS_1257, ISO_8859_4, ISO_8859_13]),
+        (Script::CentralEuropean, vec![WINDOWS_1250, ISO_8859_2]),
+        (Script::Baltic, vec![WINDOWS_1257, ISO_8859_4, ISO_8859_13]),
         (
-            "Cyrillic",
+            Script::Cyrillic,
             vec![WINDOWS_1251, KOI8_R, KOI8_U, ISO_8859_5, X_MAC_CYRILLIC],
         ),
-        ("Greek", vec![WINDOWS_1253, ISO_8859_7]),
-        ("Turkish", vec![WINDOWS_1254]),
-        ("Hebrew", vec![WINDOWS_1255, ISO_8859_8]),
-        ("Arabic", vec![WINDOWS_1256, ISO_8859_6]),
-        ("Vietnamese", vec![WINDOWS_1258]),
-        ("Thai", vec![WINDOWS_874]),
-        ("Chinese", vec![GB18030, GBK, BIG5]),
-        ("Japanese", vec![SHIFT_JIS, EUC_JP, ISO_2022_JP]),
-        ("Korean", vec![EUC_KR]),
+        (Script::Greek, vec![WINDOWS_1253, ISO_8859_7]),
+        (Script::Turkish, vec![WINDOWS_1254]),
+        (Script::Hebrew, vec![WINDOWS_1255, ISO_8859_8]),
+        (Script::Arabic, vec![WINDOWS_1256, ISO_8859_6]),
+        (Script::Vietnamese, vec![WINDOWS_1258]),
+        (Script::Thai, vec![WINDOWS_874]),
+        (Script::Chinese, vec![GB18030, GBK, BIG5]),
+        (Script::Japanese, vec![SHIFT_JIS, EUC_JP, ISO_2022_JP]),
+        (Script::Korean, vec![EUC_KR]),
         (
-            "Other",
+            Script::Other,
             vec![ISO_8859_3, ISO_8859_10, ISO_8859_14, ISO_8859_16],
         ),
     ]

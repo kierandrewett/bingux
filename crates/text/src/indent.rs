@@ -31,14 +31,6 @@ impl Indent {
             Indent::Spaces(width) => width.max(1) as usize,
         }
     }
-
-    /// The status bar's words: `Tabs`, `Spaces: 4`.
-    pub fn label(self) -> String {
-        match self {
-            Indent::Tabs => "Tabs".into(),
-            Indent::Spaces(width) => format!("Spaces: {width}"),
-        }
-    }
 }
 
 /// How many lines detection reads.

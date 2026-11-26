@@ -493,7 +493,6 @@ pub fn pack(job: &PackJob, progress: &Progress, cancel: &Cancel) -> Result<Packe
     }
 
     // Read it back before it gets its name.
-    progress.set_current("Checking the archive");
     let check = check_specs(&options, &archive_in_work, &work.0)?;
     let tested = tool::run(&check.test, cancel, &mut |_, _| {})?;
     if !tested.success() {

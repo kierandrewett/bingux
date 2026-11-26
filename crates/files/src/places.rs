@@ -39,6 +39,26 @@ pub enum PlaceKind {
     Bookmark,
 }
 
+impl PlaceKind {
+    /// The name the backend gives a standard place: an identifier, not text
+    /// for a person. A row whose name is still this one is worded by the
+    /// window in the language shown; any other name is the person's own.
+    pub fn backend_name(self) -> Option<&'static str> {
+        Some(match self {
+            PlaceKind::Recent => "Recent",
+            PlaceKind::Home => "Home",
+            PlaceKind::Desktop => "Desktop",
+            PlaceKind::Documents => "Documents",
+            PlaceKind::Downloads => "Downloads",
+            PlaceKind::Music => "Music",
+            PlaceKind::Pictures => "Pictures",
+            PlaceKind::Videos => "Videos",
+            PlaceKind::Trash => "Trash",
+            PlaceKind::Computer | PlaceKind::Volume | PlaceKind::Bookmark => return None,
+        })
+    }
+}
+
 /// One row of the sidebar.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Place {

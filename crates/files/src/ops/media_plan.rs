@@ -45,14 +45,6 @@ impl MediaKind {
             _ => None,
         }
     }
-
-    pub fn label(self) -> &'static str {
-        match self {
-            MediaKind::Image => "Pictures",
-            MediaKind::Video => "Videos",
-            MediaKind::Audio => "Audio",
-        }
-    }
 }
 
 /// What this machine has to work with.
@@ -292,13 +284,15 @@ impl ImageFormat {
         ImageFormat::Png,
     ];
 
-    pub fn label(self) -> &'static str {
+    /// The format's name (`JPEG`, `PNG`); none for keeping the format, which
+    /// the window words.
+    pub fn label(self) -> Option<&'static str> {
         match self {
-            ImageFormat::Keep => "Keep format",
-            ImageFormat::Jpeg => "JPEG",
-            ImageFormat::Webp => "WebP",
-            ImageFormat::Avif => "AVIF",
-            ImageFormat::Png => "PNG",
+            ImageFormat::Keep => None,
+            ImageFormat::Jpeg => Some("JPEG"),
+            ImageFormat::Webp => Some("WebP"),
+            ImageFormat::Avif => Some("AVIF"),
+            ImageFormat::Png => Some("PNG"),
         }
     }
 
@@ -521,7 +515,7 @@ impl AudioCodec {
             AudioCodec::Opus => "Opus",
             AudioCodec::Aac => "AAC",
             AudioCodec::Mp3 => "MP3",
-            AudioCodec::Flac => "FLAC (lossless)",
+            AudioCodec::Flac => "FLAC",
         }
     }
 
