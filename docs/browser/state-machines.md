@@ -770,9 +770,17 @@ enum Touch {
 
 ### Dependency
 
-`TouchScroller` runs only when `Capabilities::touch` is false (`W/view.rs:201-234`), and the real engine says
-`touch: false` (`W/engine/caps.rs:97`). If the capability branches are deleted on the assumption that the engine
-does touch, this finding goes with them. Ask before doing F8.
+`TouchScroller` runs only when `Capabilities::touch` is false (`W/view.rs:201-234`), and the real engine backend says
+`touch: false` (`W/engine/caps.rs:97`) with the comment "the engine announces no touch input". That comment is out of
+date. Vivarium has touch points, pan and pinch (`vivarium_input.h:137`, `vv_session_send_touch`, engine test
+`t_input_touch.c`), and its `docs/rust.md` says touch, gestures and IME are no longer engine gaps. DOM touch events
+are not built yet (`vivarium_input.h:137`).
+
+So F8 has two parts. The enum fixes the tremor bug in the scroller as it is today. Proposal, not yet verified: send
+fingers to the engine (`engine/convert.rs` already converts them) and let its scroll code pan, as Firefox does. That
+needs proof on the real engine that a tap clicks, a drag pans and a long press opens the context menu. Until then
+`Capabilities::touch` stays as the switch between the two paths, and the tests cover both. Do not delete it on the
+claim that the engine has no touch.
 
 ### Red test first
 
@@ -984,7 +992,7 @@ in `browser/mod.rs:57` and `menus/host.rs:20,27`, which BrowserMainMenu is editi
 | 5    | `profile`                 | Medium | Medium | 9            | None                                                               |
 | 6    | `find`                    | Medium | Low    | 7            | After BrowserSlice3 (capability check at `find/mod.rs:64`)         |
 | 7    | `downloads`               | Low    | Low    | 6            | After BrowserSlice3 (`clear_finished_downloads`)                   |
-| 8    | `touch`                   | Low    | Low    | 1            | Ask Kieran: touch capability branch                                |
+| 8    | `touch`                   | Low    | Low    | 1            | Keep the touch switch; prove engine tap, pan, long press first     |
 | 9    | `chrome`: `Card`, `Entry` | Low    | Medium | 6            | After BrowserMainMenu                                              |
 | 10   | `store`                   | Low    | Medium | 1            | Only if the store is edited again                                  |
 | 11   | `backend`                 | Low    | Low    | 3            | Only if the backend is edited again                                |
@@ -1043,6 +1051,6 @@ I will not edit any of these until Main says go, and not a file another agent ha
 ### Questions for Main
 
 1. Should a tab switch end a page's fullscreen (my proposal), or keep it until the person leaves (F4)?
-2. Is the touch scroller (F8) staying? It depends on the `touch` capability branch.
+2. Partly answered: the engine has touch (`t_input_touch.c`). Whether fingers go to it depends on a real-engine check.
 3. May I add `fail_next_creates` to the test double (F3)? It is a test fixture in `crates/ui`.
 4. Order with GeckoNaming: do they land `engine/` renames before commits 3 and 4?
