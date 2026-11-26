@@ -14,11 +14,6 @@ use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
 use crate::new_tab::NewTabPage;
 use crate::settings::SettingsPage;
 
-/// The layers the load bar rises above the page: freya paints the nodes of one layer in
-/// the order of their ids, and a layer is a node's depth, so a bar only one layer up shares
-/// layers with the page's own content and may be painted under it.
-const LOAD_BAR_LAYER: i16 = 16;
-
 /// What the area holds, copied out of the browser so no lock is held while
 /// the elements are built.
 enum Shown {
@@ -128,7 +123,7 @@ impl Component for PageArea {
             rect()
                 .component("LoadProgress")
                 .position(Position::new_absolute().top(0.0).left(0.0))
-                .layer(Layer::Relative(LOAD_BAR_LAYER))
+                .layer(Layer::Relative(1))
                 .interactive(false)
                 .tw(&tokens, &[w_full()])
                 .child(progress_bar(f64::from(fraction.max(0.05))))
