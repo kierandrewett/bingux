@@ -30,16 +30,20 @@ impl Component for EngineFailedPage {
         // there is a way on, and how the engine ended, when it ran.
         let mut under = Vec::new();
         if page.restart {
-            view = view.action("Start again", move |_: ()| {
+            view = view.action(tr!("browser-engine-restart-button"), move |_: ()| {
                 ctx.with(|browser| browser.restart_engine())
             });
             under.push(
-                action_button("Close window", move |_: ()| window.close())
-                    .flat()
-                    .into_element(),
+                action_button(tr!("browser-engine-close-button"), move |_: ()| {
+                    window.close()
+                })
+                .flat()
+                .into_element(),
             );
         } else {
-            view = view.action("Close window", move |_: ()| window.close());
+            view = view.action(tr!("browser-engine-close-button"), move |_: ()| {
+                window.close()
+            });
         }
         if !page.detail.is_empty() {
             under.push(caption(page.detail));

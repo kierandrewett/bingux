@@ -483,3 +483,34 @@ browser-profile-which-description = Each profile keeps its own history, cookies 
 browser-title = Browser
 # The description of the app, in the About window.
 browser-description = Browse the web
+
+## Engine failure
+## The page that stands in the whole window when the engine is gone.
+
+# Title when the engine crashed or did something it must not.
+browser-engine-crashed-title = Web pages stopped working
+# $restart is yes when a new engine may be started and the tabs are kept, no otherwise.
+browser-engine-crashed-description = The part of the browser that shows web pages stopped unexpectedly. { $restart ->
+        [yes] Your tabs are kept: start again to open them where they were.
+       *[no] Close this window and open the browser again.
+    }
+# $message is the engine's own account.
+browser-engine-violation-description = The part that shows web pages did something it must not, so the browser ended it: { $message }. { $restart ->
+        [yes] Your tabs are kept: start again to open them where they were.
+       *[no] Close this window and open the browser again.
+    }
+browser-engine-locked-title = This profile is in use
+browser-engine-locked-description = Another copy of the browser is using the same profile. Close it, then try again.
+browser-engine-sandbox-title = The browser could not start safely
+# $message is the engine's own account.
+browser-engine-sandbox-description = It could not set up the protection that keeps web pages away from your files, so it did not run: { $message }.
+browser-engine-unsafe-title = The profile folder is not safe
+# $message names the folder and the rule the engine gave.
+browser-engine-unsafe-description = The browser did not start because it does not trust its profile folder: { $message }. Make the folder yours alone (no access for anyone else, no links out of it), then try again.
+browser-engine-start-failed-title = The browser could not start
+browser-engine-start-failed-description = { $message }. Check how the browser was installed, then try again.
+# How the engine ended, for the person who searches for it.
+browser-engine-signal-detail = Ended by signal { $signal }
+browser-engine-exit-detail = Exit status { $code }
+browser-engine-restart-button = Start again
+browser-engine-close-button = Close window

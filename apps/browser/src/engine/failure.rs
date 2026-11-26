@@ -1,6 +1,7 @@
 //! What the page says when the engine itself is gone.
 
 use bingux_ui::icons::Icon;
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::FailureCause;
 
 /// The page that stands in the whole window when the engine is gone: nothing
@@ -21,8 +22,8 @@ impl EnginePage {
     fn exit_text(code: u32) -> String {
         match code {
             0 => String::new(),
-            129..=192 => format!("Ended by signal {}", code - 128),
-            code => format!("Exit status {code}"),
+            129..=192 => tr!("browser-engine-signal-detail", signal = code - 128),
+            code => tr!("browser-engine-exit-detail", code = code),
         }
     }
 
@@ -41,48 +42,41 @@ impl EnginePage {
             .strip_prefix("profile_dir: ")
             .unwrap_or(message)
             .trim_end_matches('.');
-        let kept = if restartable {
-            " Your tabs are kept: start again to open them where they were."
-        } else {
-            " Close this window and open the browser again."
-        };
+        let restart = if restartable { "yes" } else { "no" };
         let (icon, title, text) = match cause {
             FailureCause::Crashed => (
                 Icon::DialogError,
-                "Web pages stopped working".to_string(),
-                format!("The part of the browser that shows web pages stopped unexpectedly.{kept}"),
+                tr!("browser-engine-crashed-title"),
+                tr!("browser-engine-crashed-description", restart = restart),
             ),
             FailureCause::ProtocolViolation => (
                 Icon::DialogError,
-                "Web pages stopped working".to_string(),
-                format!(
-                    "The part that shows web pages did something it must not, so the browser ended it: {message}.{kept}"
+                tr!("browser-engine-crashed-title"),
+                tr!(
+                    "browser-engine-violation-description",
+                    message = message,
+                    restart = restart
                 ),
             ),
             FailureCause::ProfileLocked => (
                 Icon::DialogWarning,
-                "This profile is in use".to_string(),
-                "Another copy of the browser is using the same profile. Close it, then try again."
-                    .to_string(),
+                tr!("browser-engine-locked-title"),
+                tr!("browser-engine-locked-description"),
             ),
             FailureCause::SandboxFloor => (
                 Icon::DialogWarning,
-                "The browser could not start safely".to_string(),
-                format!(
-                    "It could not set up the protection that keeps web pages away from your files, so it did not run: {message}."
-                ),
+                tr!("browser-engine-sandbox-title"),
+                tr!("browser-engine-sandbox-description", message = message),
             ),
             FailureCause::ProfileUnsafe => (
                 Icon::DialogWarning,
-                "The profile folder is not safe".to_string(),
-                format!(
-                    "The browser did not start because it does not trust its profile folder: {message}. Make the folder yours alone (no access for anyone else, no links out of it), then try again."
-                ),
+                tr!("browser-engine-unsafe-title"),
+                tr!("browser-engine-unsafe-description", message = message),
             ),
             FailureCause::StartFailed => (
                 Icon::DialogError,
-                "The browser could not start".to_string(),
-                format!("{message}. Check how the browser was installed, then try again."),
+                tr!("browser-engine-start-failed-title"),
+                tr!("browser-engine-start-failed-description", message = message),
             ),
         };
         Self {
@@ -101,6 +95,7 @@ mod tests {
 
     #[test]
     fn a_crash_says_the_tabs_are_kept_when_a_restart_is_safe_and_how_it_ended() {
+        crate::locale::register();
         let page = EnginePage::of(
             FailureCause::Crashed,
             "the engine process was killed",
@@ -122,6 +117,7 @@ mod tests {
 
     #[test]
     fn an_unsafe_profile_names_the_folder_and_the_rule_the_engine_gave() {
+        crate::locale::register();
         let page = EnginePage::of(
             FailureCause::ProfileUnsafe,
             "profile_dir: /home/u/.local/share/bingux-browser/profile is writable by group or others.",
@@ -142,6 +138,7 @@ mod tests {
 
     #[test]
     fn the_librarys_own_prefix_is_not_said_twice() {
+        crate::locale::register();
         let page = EnginePage::of(
             FailureCause::ProfileUnsafe,
             "invalid configuration `profile_dir`: profile_dir: /p is writable by group or others (mode 0777); another user could replace its contents.",
@@ -161,6 +158,7 @@ mod tests {
 
     #[test]
     fn every_cause_has_a_page_with_a_title_and_words() {
+        crate::locale::register();
         for cause in [
             FailureCause::Crashed,
             FailureCause::ProtocolViolation,
