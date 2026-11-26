@@ -247,28 +247,6 @@ fn the_pages_of_the_browser_are_reached_by_their_names() {
 }
 
 #[test]
-fn zoom_steps_along_the_ladder_and_resets() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "example.com");
-    browser.run(Command::ZoomIn);
-    browser.run(Command::ZoomIn);
-    assert_eq!(browser.tabs.get(key).unwrap().zoom, 1.2);
-    let session = browser.session_of(key).unwrap();
-    assert!(double.calls().contains(&Call::SetZoom(session, 1.2)));
-    browser.run(Command::ZoomReset);
-    assert_eq!(browser.tabs.get(key).unwrap().zoom, 1.0);
-    browser.apply(bingux_ui::web_view::BrowserEvent::tab(
-        session,
-        TabEvent::Zoom(1.5),
-    ));
-    assert_eq!(
-        browser.tabs.get(key).unwrap().zoom,
-        1.5,
-        "the page's own Ctrl+wheel is followed"
-    );
-}
-
-#[test]
 fn a_crashed_tab_shows_the_crash_page_and_a_reload_loads_it_again() {
     let (mut browser, double) = browser();
     let key = go(&mut browser, "crash.example.net");

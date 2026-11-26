@@ -11,7 +11,7 @@ use crate::model::address::{self, Typed};
 use crate::model::shortcuts::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
-use crate::model::zoom;
+use crate::zoom;
 
 /// How many closed tabs Reopen closed tab remembers.
 const CLOSED_LIMIT: usize = 25;

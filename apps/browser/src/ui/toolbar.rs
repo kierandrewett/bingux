@@ -9,7 +9,7 @@ use freya::prelude::*;
 use crate::model::downloads::Downloads;
 use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
-use crate::model::zoom;
+use crate::zoom;
 
 use super::address::AddressBar;
 use super::ctx::Ctx;

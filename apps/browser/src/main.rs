@@ -15,6 +15,7 @@ mod profile;
 mod snapshot_mode;
 mod target;
 mod ui;
+mod zoom;
 
 use std::ffi::OsString;
 use std::os::unix::process::CommandExt;

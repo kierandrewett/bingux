@@ -9,7 +9,7 @@ use crate::model::address;
 use crate::model::shortcuts::{self, Command};
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
-use crate::model::zoom;
+use crate::zoom;
 
 use super::ctx::Ctx;
 

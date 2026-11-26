@@ -39,34 +39,4 @@ pub fn is_default(zoom: f64) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn the_keys_walk_the_ladder_both_ways() {
-        assert_eq!(zoom_in(1.0), 1.1);
-        assert_eq!(zoom_in(1.1), 1.2);
-        assert_eq!(zoom_out(1.0), 0.9);
-        assert_eq!(zoom_out(0.67), 0.5);
-    }
-
-    #[test]
-    fn a_level_between_steps_goes_to_the_next_one() {
-        assert_eq!(zoom_in(1.05), 1.1);
-        assert_eq!(zoom_out(1.05), 1.0);
-    }
-
-    #[test]
-    fn the_ladder_ends_stay_put() {
-        assert_eq!(zoom_in(5.0), 5.0);
-        assert_eq!(zoom_out(0.3), 0.3);
-    }
-
-    #[test]
-    fn percent_rounds() {
-        assert_eq!(percent(1.1), 110);
-        assert_eq!(percent(0.6667), 67);
-        assert!(is_default(1.004));
-        assert!(!is_default(1.1));
-    }
-}
+mod tests;

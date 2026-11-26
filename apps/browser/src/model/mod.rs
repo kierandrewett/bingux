@@ -15,7 +15,6 @@ pub mod shortcuts;
 pub mod suggest;
 pub mod tab;
 pub mod tabs;
-pub mod zoom;
 
 #[cfg(test)]
 mod engine_tests;
