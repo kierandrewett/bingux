@@ -35,11 +35,11 @@ fn prepare() -> Result<(), String> {
         return Ok(());
     }
     let exe = std::env::current_exe().map_err(|error| format!("this test binary: {error}"))?;
-    // `<target>/<profile>/deps/<test binary>`: the helper goes to
-    // `<target>/<profile>`, where `host_program` looks one level above `deps`.
-    let target = exe
-        .ancestors()
-        .nth(3)
+    // `<target>/<profile>/deps/<test binary>` (or `<target>/<profile>/build/<package>/<hash>/out/
+    // <test binary>` in cargo's newer layout): the helper goes to `<target>/<profile>`, where
+    // `host_program` looks.
+    let target = super::host_link::cargo_profile_dir(&exe)
+        .and_then(Path::parent)
         .ok_or_else(|| format!("{} is not inside a cargo target directory", exe.display()))?;
     let manifest =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../services/preview-host/Cargo.toml");

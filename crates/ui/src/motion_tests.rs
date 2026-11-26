@@ -1,7 +1,7 @@
 //! Reveal, frame by frame: the height of a revealed block through an open, a
 //! close and a close that is turned around half way. Each test steps the
-//! headless app one 16 ms frame at a time and reads where the box below the
-//! reveal sits.
+//! headless app one frame of 16 ms of motion at a time and reads where the box
+//! below the reveal sits.
 
 use std::time::Duration;
 
@@ -12,6 +12,13 @@ use crate::snapshot::Snapshot;
 use crate::theme::provide_tokens;
 
 const FRAME: Duration = Duration::from_millis(16);
+/// What one step of the animation clock moves every animation by, in milliseconds: the animation
+/// counts whole milliseconds, so this is the 34 ms tick cap at [`SPEED`], 16.5 ms, cut to 16.
+const SPEED: f32 = 0.4853;
+/// The wall time of a frame: longer than the 34 ms tick cap, so the cap decides how far an
+/// animation moves, not the load of the machine (a frame that took 50 ms moves it as far as one
+/// that took 40).
+const WALL: Duration = Duration::from_millis(40);
 const SIZE: (f32, f32) = (400.0, 500.0);
 /// The header that toggles the reveal.
 const HEADER: f32 = 40.0;
@@ -58,6 +65,7 @@ impl Component for Scene {
 fn shot(start_open: bool) -> Snapshot {
     let mut shot = Snapshot::new(move || Scene { start_open }.into(), SIZE);
     shot.settle(Duration::from_millis(100));
+    shot.runner().animation_clock().set_speed(SPEED);
     shot
 }
 
@@ -77,11 +85,16 @@ fn click_header(shot: &mut Snapshot) {
     shot.click(50.0, HEADER / 2.0);
 }
 
-/// The marker's top edge after each of `frames` frames.
+/// The marker's top edge after each of `frames` frames of 16 ms of motion, whatever the load of
+/// the machine.
 fn run(shot: &mut Snapshot, frames: usize) -> Vec<f32> {
     (0..frames)
         .map(|_| {
-            shot.settle(FRAME);
+            shot.runner().poll_n(WALL, 1);
+            // The tick that `poll_n` ended with is taken by the animations on the next poll: run
+            // it, so the frame shows every tick so far.
+            shot.runner().handle_events_immediately();
+            shot.runner().sync_and_update();
             marker_top(shot)
         })
         .collect()
@@ -104,7 +117,10 @@ fn opening_grows_the_height_smoothly_to_the_content() {
         tops.windows(2).all(|pair| pair[1] >= pair[0]),
         "never shrinks: {tops:?}"
     );
-    assert!(tops.iter().any(|top| *top > HEADER + 1.0 && *top < HEADER + BODY - 1.0));
+    assert!(
+        tops.iter()
+            .any(|top| *top > HEADER + 1.0 && *top < HEADER + BODY - 1.0)
+    );
     assert_eq!(*tops.last().unwrap(), HEADER + BODY);
     // No frame jumps by more than a third of the content: the edge moves
     // continuously.
@@ -123,7 +139,10 @@ fn closing_shrinks_the_height_smoothly_with_no_empty_box() {
         tops.windows(2).all(|pair| pair[1] <= pair[0]),
         "never grows: {tops:?}"
     );
-    assert!(tops.iter().any(|top| *top > HEADER + 1.0 && *top < HEADER + BODY - 1.0));
+    assert!(
+        tops.iter()
+            .any(|top| *top > HEADER + 1.0 && *top < HEADER + BODY - 1.0)
+    );
     assert_eq!(*tops.last().unwrap(), HEADER);
     assert!(
         tops.windows(2).all(|pair| pair[0] - pair[1] < BODY / 3.0),
@@ -148,7 +167,10 @@ fn turning_a_close_around_continues_from_the_current_height() {
     click_header(&mut shot);
     let closing = run(&mut shot, 4);
     let turned_at = *closing.last().unwrap();
-    assert!(turned_at < HEADER + BODY && turned_at > HEADER, "{turned_at}");
+    assert!(
+        turned_at < HEADER + BODY && turned_at > HEADER,
+        "{turned_at}"
+    );
     click_header(&mut shot);
     let opening = run(&mut shot, 14);
     // The first frame after the turn is next to where it was, not at either end.
@@ -235,6 +257,7 @@ impl Component for ExpanderScene {
 fn expander(start_open: bool) -> Snapshot {
     let mut shot = Snapshot::new(move || ExpanderScene { start_open }.into(), SIZE);
     shot.settle(Duration::from_millis(100));
+    shot.runner().animation_clock().set_speed(SPEED);
     shot
 }
 
@@ -248,7 +271,8 @@ fn an_expander_closes_by_animating_its_height_with_no_empty_box() {
     assert!(closed < open, "{closed} < {open}");
     assert!(tops.windows(2).all(|pair| pair[1] <= pair[0]), "{tops:?}");
     assert!(
-        tops.iter().any(|top| *top < open - 2.0 && *top > closed + 2.0),
+        tops.iter()
+            .any(|top| *top < open - 2.0 && *top > closed + 2.0),
         "the edge passes between the two heights: {tops:?}"
     );
     // The first frame has already started to close.
@@ -331,7 +355,11 @@ mod strips {
                     .into(),
                 Kind::Tree => {
                     let expanded = use_state(move || {
-                        if start { HashSet::from([1_u64]) } else { HashSet::new() }
+                        if start {
+                            HashSet::from([1_u64])
+                        } else {
+                            HashSet::new()
+                        }
                     });
                     let selected = use_state(|| None::<u64>);
                     let mut root = TreeNode::new(1, "Container");
@@ -382,14 +410,64 @@ mod strips {
         let desktop = |size: (f32, f32)| (size.0 / 2.0, 16.0 + 28.0 + 24.0);
         for (label, size) in [("desktop", DESKTOP), ("phone", PHONE)] {
             let at = desktop(size);
-            record(&format!("expander-close-{label}"), Strip { kind: Kind::Expander, open: true }, size, at, 14, None);
-            record(&format!("expander-open-{label}"), Strip { kind: Kind::Expander, open: false }, size, at, 14, None);
-            record(&format!("nested-open-{label}"), Strip { kind: Kind::Nested, open: false }, size, at, 14, None);
+            record(
+                &format!("expander-close-{label}"),
+                Strip {
+                    kind: Kind::Expander,
+                    open: true,
+                },
+                size,
+                at,
+                14,
+                None,
+            );
+            record(
+                &format!("expander-open-{label}"),
+                Strip {
+                    kind: Kind::Expander,
+                    open: false,
+                },
+                size,
+                at,
+                14,
+                None,
+            );
+            record(
+                &format!("nested-open-{label}"),
+                Strip {
+                    kind: Kind::Nested,
+                    open: false,
+                },
+                size,
+                at,
+                14,
+                None,
+            );
         }
-        record("expander-interrupted", Strip { kind: Kind::Expander, open: true }, DESKTOP, desktop(DESKTOP), 16, Some(5));
+        record(
+            "expander-interrupted",
+            Strip {
+                kind: Kind::Expander,
+                open: true,
+            },
+            DESKTOP,
+            desktop(DESKTOP),
+            16,
+            Some(5),
+        );
         // The chevron of the first row.
         for (label, size) in [("desktop", DESKTOP), ("phone", PHONE)] {
-            record(&format!("tree-expand-{label}"), Strip { kind: Kind::Tree, open: false }, size, (16.0 + 4.0 + 12.0, 16.0 + 14.0), 14, None);
+            record(
+                &format!("tree-expand-{label}"),
+                Strip {
+                    kind: Kind::Tree,
+                    open: false,
+                },
+                size,
+                (16.0 + 4.0 + 12.0, 16.0 + 14.0),
+                14,
+                None,
+            );
         }
     }
 }

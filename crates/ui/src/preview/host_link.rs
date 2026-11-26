@@ -191,14 +191,15 @@ fn host_program_from(
         if beside.is_file() {
             return Some(beside);
         }
-        // `cargo test` runs from `target/<profile>/deps`; the binary is a level up.
+        // `cargo test` runs from `target/<profile>/deps`, or from `target/<profile>/build/
+        // <package>/<hash>/out` in cargo's newer layout; the helper is in `target/<profile>`.
         #[cfg(debug_assertions)]
         {
-            if dir.file_name().is_some_and(|name| name == "deps")
-                && let Some(above) = dir
-                    .parent()
-                    .map(|parent| parent.join(NAME))
-                    .filter(|candidate| candidate.is_file())
+            if let Some(above) = exe
+                .as_deref()
+                .and_then(cargo_profile_dir)
+                .map(|profile| profile.join(NAME))
+                .filter(|candidate| candidate.is_file())
             {
                 return Some(above);
             }
@@ -207,6 +208,20 @@ fn host_program_from(
     std::env::split_paths(&path?)
         .map(|dir| dir.join(NAME))
         .find(|candidate| candidate.is_file())
+}
+
+/// The `target/<profile>` directory a cargo-built test executable is in: the parent of the
+/// nearest `deps` (cargo's classic layout) or `build` (the newer one, which puts an executable in
+/// `build/<package>/<hash>/out`) directory above it.
+#[cfg(any(debug_assertions, test))]
+pub(super) fn cargo_profile_dir(exe: &Path) -> Option<&Path> {
+    exe.ancestors()
+        .skip(1)
+        .find(|dir| {
+            dir.file_name()
+                .is_some_and(|name| name == "deps" || name == "build")
+        })
+        .and_then(Path::parent)
 }
 
 /// Whether previews of films, songs and documents can run: the helper is installed.
@@ -849,6 +864,20 @@ mod tests {
             host_program_from(None, Some(deps.join("test")), None),
             None,
             "a release build does not look above deps/"
+        );
+        // Cargo's newer layout keeps a test executable in `build/<package>/<hash>/out`, not `deps/`.
+        let out = dir.join("debug/build/bingux-ui/0123456789abcdef/out");
+        #[cfg(debug_assertions)]
+        assert_eq!(
+            host_program_from(None, Some(out.join("test")), None),
+            Some(program.clone()),
+            "above build/<package>/<hash>/out"
+        );
+        #[cfg(not(debug_assertions))]
+        assert_eq!(
+            host_program_from(None, Some(out.join("test")), None),
+            None,
+            "a release build does not look above build/"
         );
         assert_eq!(
             host_program_from(None, Some(dir.join("debug/bingux-files")), None),
