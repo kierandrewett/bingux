@@ -13,8 +13,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::profile::lock::{Held, LockError, ProfileLock};
-use crate::profile::places::Places;
+use crate::profiles::lock::{Held, LockError, ProfileLock};
+use crate::profiles::places::Places;
 use crate::store::files::{self, Problem};
 
 /// The registry format this build reads and writes.
@@ -279,7 +279,7 @@ impl Profiles {
     /// Reads the registry (an empty one when there is none), lets `change`
     /// change it and writes it back, all under the registry's lock. Nothing
     /// is written when `change` refuses.
-    pub(super) fn change<T, E: From<RegistryProblem>>(
+    pub(crate) fn change<T, E: From<RegistryProblem>>(
         &self,
         change: impl FnOnce(&mut Registry) -> Result<T, E>,
     ) -> Result<T, E> {

@@ -15,7 +15,7 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::profile::registry::Id;
+use crate::profiles::registry::Id;
 
 /// The browser's own top folders.
 #[derive(Clone, Debug, PartialEq, Eq)]

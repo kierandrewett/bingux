@@ -33,11 +33,13 @@ use bingux_ui::prelude::Application;
 use crate::browser::{Options, Profile};
 mod error_pages;
 mod history;
+mod profiles;
 mod settings;
 use crate::engine::Engine;
-use crate::profile::open::{Opened, open, open_private};
-use crate::profile::places::{Folders, Places};
-use crate::ui::{App, Gate, GateWindow, Handoff};
+use crate::profiles::open::{Opened, open, open_private};
+use crate::profiles::places::{Folders, Places};
+use crate::profiles::{Gate, GateWindow};
+use crate::ui::{App, Handoff};
 
 const USAGE: &str = "Usage: bingux-browser [--private] [--profile NAME] [ADDRESS | WORDS | FILE]...\n\
 \n\
@@ -202,7 +204,7 @@ fn main() {
             // A profile another window has open: its application id, so this
             // launch hands its addresses to that window instead of showing this.
             let id = match &state {
-                profile::open::ProfileState::InUse { app_id, .. } => app_id.clone(),
+                profiles::open::ProfileState::InUse { app_id, .. } => app_id.clone(),
                 _ => "bingux-browser".to_string(),
             };
             run_gate(&id, Gate::Problem(state));

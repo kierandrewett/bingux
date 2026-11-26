@@ -18,8 +18,8 @@ use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use crate::browser::{Browser, Options, Profile};
 use crate::model::tabs::Place;
-use crate::profile::open::{Opened, open, open_private};
-use crate::profile::places::Places;
+use crate::profiles::open::{Opened, open, open_private};
+use crate::profiles::places::Places;
 use crate::store::files::{remove_tree, tests::temp};
 use crate::store::keeping::{Keeping, NotSaved};
 

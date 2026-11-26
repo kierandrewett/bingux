@@ -12,7 +12,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use crate::profile::registry::{Entry, Id, Profiles, RegistryProblem};
+use crate::profiles::registry::{Entry, Id, Profiles, RegistryProblem};
 use crate::store::files::{self, Problem};
 
 /// The name and colour of the profile made from the old folder, or of the
@@ -142,7 +142,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::profile::places::Places;
+    use crate::profiles::places::Places;
     use crate::store::files::{remove_tree, tests::temp};
 
     struct Rig {

@@ -15,7 +15,7 @@ use bingux_ui::search::SearchService;
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use crate::browser::{Browser, Options, Profile};
-use crate::profile::places::{Folders, Places};
+use crate::profiles::places::{Folders, Places};
 use crate::settings::Settings;
 use crate::store::files::{self, Problem, remove_tree, tests::temp};
 use crate::store::keeping::{Keeping, NotSaved};

@@ -8,9 +8,9 @@ use bingux_ui::prelude::*;
 use bingux_ui::task::spawn_blocking;
 use freya::prelude::*;
 
-use crate::profile::open::ProfileState;
-use crate::profile::places::Places;
-use crate::profile::registry::Profiles;
+use crate::profiles::open::ProfileState;
+use crate::profiles::places::Places;
+use crate::profiles::registry::Profiles;
 
 /// What the window shows.
 #[derive(Clone, Debug, PartialEq)]

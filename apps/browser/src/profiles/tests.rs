@@ -4,9 +4,9 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
-use crate::profile::lock::ProfileLock;
-use crate::profile::places::Places;
-use crate::profile::registry::*;
+use crate::profiles::lock::ProfileLock;
+use crate::profiles::places::Places;
+use crate::profiles::registry::*;
 use crate::store::files::remove_tree;
 use crate::store::files::tests::temp;
 

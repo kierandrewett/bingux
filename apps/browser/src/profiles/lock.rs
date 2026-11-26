@@ -8,7 +8,7 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use crate::profile::places::Folders;
+use crate::profiles::places::Folders;
 use crate::store::files::{Problem, private_dir};
 
 /// Why a profile could not be locked.
@@ -93,7 +93,7 @@ impl Held {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profile::places::Places;
+    use crate::profiles::places::Places;
     use crate::store::files::{remove_tree, tests::temp};
 
     #[test]

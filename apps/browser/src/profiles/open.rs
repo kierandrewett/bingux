@@ -8,10 +8,10 @@
 
 use std::path::PathBuf;
 
-use crate::profile::lock::{LockError, ProfileLock};
 use crate::profile::migrate::{self, Migrated, MigrationError};
-use crate::profile::places::{Folders, Places};
-use crate::profile::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
+use crate::profiles::lock::{LockError, ProfileLock};
+use crate::profiles::places::{Folders, Places};
+use crate::profiles::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
 use crate::settings::{Settings, SettingsProblem};
 use crate::store::files::{self, Problem};
 
@@ -225,7 +225,7 @@ pub fn open(places: &Places, asked: Option<&str>) -> Opened {
                 let id = entry.id.clone();
                 lock_and_read(Some(entry), folders, stale_cache, Some(&id))
             }
-            Err(crate::profile::registry::ChangeError::Registry(problem)) => {
+            Err(crate::profiles::registry::ChangeError::Registry(problem)) => {
                 Opened::Problem(registry_state(problem, places))
             }
             Err(other) => Opened::Problem(ProfileState::RegistryDamaged {

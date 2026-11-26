@@ -30,7 +30,7 @@ use bingux_ui::search::{Index, SearchService};
 use rusqlite::Connection;
 
 use crate::history::{self, CAP, Change, INDEX, Page};
-use crate::profile::places::Folders;
+use crate::profiles::places::Folders;
 use crate::settings::{Settings, SettingsProblem};
 use crate::store::keeping::{Keeping, NotSaved, damaged_name};
 use files::Problem;
