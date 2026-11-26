@@ -6,7 +6,7 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::downloads::button::downloads_button;
+use crate::downloads::DownloadsButton;
 use crate::navigation::NavButtons;
 use crate::site_info::ConnectionButton;
 use crate::tabs::TabKind;
@@ -107,7 +107,7 @@ impl Component for Toolbar {
                 zoom: read.zoom,
             }));
         if !downloads.list().is_empty() {
-            bar = bar.child(downloads_button(ctx, &downloads));
+            bar = bar.child(DownloadsButton::element(ctx, &downloads));
         }
         bar.child(menu_control()).into_element()
     }
@@ -151,7 +151,7 @@ impl Component for PhoneBottom {
                 read.can_forward,
             ))
             .child(NavButtons::reload(ctx, read.key, read.loading, read.is_web))
-            .child(downloads_button(ctx, &downloads))
+            .child(DownloadsButton::element(ctx, &downloads))
     }
 }
 

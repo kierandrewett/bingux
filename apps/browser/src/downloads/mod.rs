@@ -2,80 +2,90 @@
 
 use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 
-/// `bytes` as people read it: `1.2 MB`. Powers of 1000, as a file manager
-/// shows them.
-pub fn size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
-    if bytes < 1000 {
-        return format!("{bytes} B");
-    }
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1000.0 && unit + 1 < UNITS.len() {
-        value /= 1000.0;
-        unit += 1;
-    }
-    if value >= 100.0 {
-        format!("{value:.0} {}", UNITS[unit])
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
-    }
-}
+/// One download of the engine, read for the list: how far it is, and what its line says.
+pub struct Transfer<'a>(pub &'a DownloadInfo);
 
-/// The time left for `remaining` bytes at `speed`: `12 s`, `3 min`, `2 h`.
-pub fn time_left(remaining: u64, speed: u64) -> Option<String> {
-    if speed == 0 {
-        return None;
-    }
-    let seconds = remaining.div_ceil(speed);
-    Some(match seconds {
-        0..=59 => format!("{seconds} s"),
-        60..=3599 => format!("{} min", seconds.div_ceil(60)),
-        _ => format!("{} h", seconds.div_ceil(3600)),
-    })
-}
-
-/// How far a download is, 0 to 1, or `None` when the total is not known.
-pub fn fraction(download: &DownloadInfo) -> Option<f64> {
-    let total = download.total.filter(|total| *total > 0)?;
-    Some((download.received as f64 / total as f64).clamp(0.0, 1.0))
-}
-
-/// The line under a download's name.
-pub fn status_line(download: &DownloadInfo) -> String {
-    match download.state {
-        DownloadState::Running => {
-            let done = match download.total {
-                Some(total) => format!("{} of {}", size(download.received), size(total)),
-                None => size(download.received),
-            };
-            let rate = (download.speed > 0).then(|| format!("{}/s", size(download.speed)));
-            let left = download
-                .total
-                .and_then(|total| {
-                    time_left(total.saturating_sub(download.received), download.speed)
-                })
-                .map(|left| format!("{left} left"));
-            // Each part is one unbreakable word run: a line may wrap between
-            // them, never inside "1.1 MB/s".
-            [Some(done), rate, left]
-                .into_iter()
-                .flatten()
-                .map(|part| part.replace(' ', "\u{a0}"))
-                .collect::<Vec<_>>()
-                .join(" \u{b7} ")
+impl Transfer<'_> {
+    /// `bytes` as people read it: `1.2 MB`. Powers of 1000, as a file manager
+    /// shows them.
+    fn size(bytes: u64) -> String {
+        const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
+        if bytes < 1000 {
+            return format!("{bytes} B");
         }
-        DownloadState::Paused => match download.total {
-            Some(total) => format!(
-                "Paused \u{b7} {} of {}",
-                size(download.received),
-                size(total)
-            ),
-            None => format!("Paused \u{b7} {}", size(download.received)),
-        },
-        DownloadState::Finished => size(download.received),
-        DownloadState::Failed => "Failed".to_string(),
-        DownloadState::Cancelled => "Cancelled".to_string(),
+        let mut value = bytes as f64;
+        let mut unit = 0;
+        while value >= 1000.0 && unit + 1 < UNITS.len() {
+            value /= 1000.0;
+            unit += 1;
+        }
+        if value >= 100.0 {
+            format!("{value:.0} {}", UNITS[unit])
+        } else {
+            format!("{value:.1} {}", UNITS[unit])
+        }
+    }
+
+    /// The time left for `remaining` bytes at `speed`: `12 s`, `3 min`, `2 h`.
+    fn time_left(remaining: u64, speed: u64) -> Option<String> {
+        if speed == 0 {
+            return None;
+        }
+        let seconds = remaining.div_ceil(speed);
+        Some(match seconds {
+            0..=59 => format!("{seconds} s"),
+            60..=3599 => format!("{} min", seconds.div_ceil(60)),
+            _ => format!("{} h", seconds.div_ceil(3600)),
+        })
+    }
+
+    /// How far a download is, 0 to 1, or `None` when the total is not known.
+    pub fn fraction(&self) -> Option<f64> {
+        let download = self.0;
+        let total = download.total.filter(|total| *total > 0)?;
+        Some((download.received as f64 / total as f64).clamp(0.0, 1.0))
+    }
+
+    /// The line under a download's name.
+    pub fn status_line(&self) -> String {
+        let download = self.0;
+        match download.state {
+            DownloadState::Running => {
+                let done = match download.total {
+                    Some(total) => {
+                        format!("{} of {}", Self::size(download.received), Self::size(total))
+                    }
+                    None => Self::size(download.received),
+                };
+                let rate =
+                    (download.speed > 0).then(|| format!("{}/s", Self::size(download.speed)));
+                let left = download
+                    .total
+                    .and_then(|total| {
+                        Self::time_left(total.saturating_sub(download.received), download.speed)
+                    })
+                    .map(|left| format!("{left} left"));
+                // Each part is one unbreakable word run: a line may wrap between
+                // them, never inside "1.1 MB/s".
+                [Some(done), rate, left]
+                    .into_iter()
+                    .flatten()
+                    .map(|part| part.replace(' ', "\u{a0}"))
+                    .collect::<Vec<_>>()
+                    .join(" \u{b7} ")
+            }
+            DownloadState::Paused => match download.total {
+                Some(total) => format!(
+                    "Paused \u{b7} {} of {}",
+                    Self::size(download.received),
+                    Self::size(total)
+                ),
+                None => format!("Paused \u{b7} {}", Self::size(download.received)),
+            },
+            DownloadState::Finished => Self::size(download.received),
+            DownloadState::Failed => "Failed".to_string(),
+            DownloadState::Cancelled => "Cancelled".to_string(),
+        }
     }
 }
 
@@ -162,8 +172,13 @@ impl Downloads {
     }
 }
 
-pub mod button;
-pub mod popover;
+mod button;
+mod popover;
+mod state;
+
+pub use button::DownloadsButton;
+pub use popover::DownloadsPopover;
+pub use state::CardState;
 
 #[cfg(test)]
 mod tests;

@@ -29,51 +29,67 @@ fn info(id: u64, state: DownloadState, received: u64, total: Option<u64>) -> Dow
 
 #[test]
 fn sizes_read_in_powers_of_a_thousand() {
-    assert_eq!(size(0), "0 B");
-    assert_eq!(size(999), "999 B");
-    assert_eq!(size(1_000), "1.0 kB");
-    assert_eq!(size(1_234_567), "1.2 MB");
-    assert_eq!(size(84_000_000), "84.0 MB");
-    assert_eq!(size(840_000_000), "840 MB");
-    assert_eq!(size(2_500_000_000_000), "2.5 TB");
+    assert_eq!(Transfer::size(0), "0 B");
+    assert_eq!(Transfer::size(999), "999 B");
+    assert_eq!(Transfer::size(1_000), "1.0 kB");
+    assert_eq!(Transfer::size(1_234_567), "1.2 MB");
+    assert_eq!(Transfer::size(84_000_000), "84.0 MB");
+    assert_eq!(Transfer::size(840_000_000), "840 MB");
+    assert_eq!(Transfer::size(2_500_000_000_000), "2.5 TB");
 }
 
 #[test]
 fn time_left_rounds_up_and_needs_a_speed() {
-    assert_eq!(time_left(5_000_000, 1_000_000).as_deref(), Some("5 s"));
-    assert_eq!(time_left(61_000_000, 1_000_000).as_deref(), Some("2 min"));
-    assert_eq!(time_left(7_300_000_000, 1_000_000).as_deref(), Some("3 h"));
-    assert_eq!(time_left(1, 0), None);
+    assert_eq!(
+        Transfer::time_left(5_000_000, 1_000_000).as_deref(),
+        Some("5 s")
+    );
+    assert_eq!(
+        Transfer::time_left(61_000_000, 1_000_000).as_deref(),
+        Some("2 min")
+    );
+    assert_eq!(
+        Transfer::time_left(7_300_000_000, 1_000_000).as_deref(),
+        Some("3 h")
+    );
+    assert_eq!(Transfer::time_left(1, 0), None);
 }
 
 #[test]
 fn a_running_download_says_how_far_how_fast_and_how_long() {
     let running = info(1, DownloadState::Running, 3_200_000, Some(8_400_000));
     assert_eq!(
-        status_line(&running),
+        Transfer(&running).status_line(),
         "3.2\u{a0}MB\u{a0}of\u{a0}8.4\u{a0}MB \u{b7} 1.0\u{a0}MB/s \u{b7} 6\u{a0}s\u{a0}left"
     );
-    assert_eq!(fraction(&running).map(|f| (f * 100.0).round()), Some(38.0));
+    assert_eq!(
+        Transfer(&running).fraction().map(|f| (f * 100.0).round()),
+        Some(38.0)
+    );
     let unknown = info(2, DownloadState::Running, 500, None);
-    assert_eq!(fraction(&unknown), None);
-    assert!(status_line(&unknown).starts_with("500\u{a0}B"));
+    assert_eq!(Transfer(&unknown).fraction(), None);
+    assert!(Transfer(&unknown).status_line().starts_with("500\u{a0}B"));
 }
 
 #[test]
 fn the_other_states_read_plainly() {
     assert_eq!(
-        status_line(&info(1, DownloadState::Finished, 2_000, Some(2_000))),
+        Transfer(&info(1, DownloadState::Finished, 2_000, Some(2_000))).status_line(),
         "2.0 kB"
     );
     assert_eq!(
-        status_line(&info(1, DownloadState::Failed, 0, None)),
+        Transfer(&info(1, DownloadState::Failed, 0, None)).status_line(),
         "Failed"
     );
     assert_eq!(
-        status_line(&info(1, DownloadState::Cancelled, 0, None)),
+        Transfer(&info(1, DownloadState::Cancelled, 0, None)).status_line(),
         "Cancelled"
     );
-    assert!(status_line(&info(1, DownloadState::Paused, 1_000, Some(2_000))).starts_with("Paused"));
+    assert!(
+        Transfer(&info(1, DownloadState::Paused, 1_000, Some(2_000)))
+            .status_line()
+            .starts_with("Paused")
+    );
 }
 
 #[test]

@@ -642,7 +642,7 @@ mod tests {
 
     fn open(shot: &mut Snapshot) -> bool {
         let _ = shot;
-        ctx().chrome.downloads_open.peek().clone()
+        ctx().downloads_popover.is_open()
     }
 
     fn window() -> (Snapshot, Rig) {

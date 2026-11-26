@@ -11,6 +11,7 @@ use freya::prelude::*;
 use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
 use crate::commands::{Command, Platform};
+use crate::downloads::CardState;
 use crate::engine::{self, Engine};
 use crate::find::{BarState, FindBar};
 use crate::menus::ContextMenuHost;
@@ -119,8 +120,6 @@ impl Component for Content {
             }
         });
         let chrome = Chrome {
-            downloads_open: use_state(|| false),
-            downloads_anchor: use_state(Area::default),
             page_origin: use_state(|| (0.0, 0.0)),
         };
         let ctx = Ctx {
@@ -129,6 +128,7 @@ impl Component for Content {
             address: FieldState::use_new(),
             site_info: PopoverState::use_new(),
             find: BarState::use_new(),
+            downloads_popover: CardState::use_new(),
             prompts: DialogFields::use_new(),
             overlays,
             window,

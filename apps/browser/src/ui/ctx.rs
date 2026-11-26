@@ -14,6 +14,7 @@ use crate::address::FieldState;
 use crate::browser::{Browser, Notice, UiRequest};
 use crate::commands::Command;
 use crate::commands::Platform;
+use crate::downloads::CardState;
 use crate::find::BarState;
 use crate::prompts::DialogFields;
 use crate::site_info::PopoverState;
@@ -22,9 +23,7 @@ use crate::site_info::PopoverState;
 /// window, not to a tab.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Chrome {
-    pub downloads_open: State<bool>,
     /// Where the controls that open popovers are, in the window.
-    pub downloads_anchor: State<Area>,
     /// Where the page area starts in the window: a context menu opens at the
     /// pointer's place in the page plus this.
     pub page_origin: State<(f32, f32)>,
@@ -38,6 +37,7 @@ pub struct Ctx {
     pub address: FieldState,
     pub site_info: PopoverState,
     pub find: BarState,
+    pub downloads_popover: CardState,
     pub prompts: DialogFields,
     pub overlays: Overlays,
     pub window: Window,
@@ -96,14 +96,12 @@ impl Ctx {
     }
 
     fn act(self, requests: Vec<UiRequest>) {
-        let chrome = self.chrome;
         for request in requests {
             match request {
                 UiRequest::FocusAddress => self.address.focus(),
                 UiRequest::OpenFind => self.find.focus(),
                 UiRequest::OpenDownloads => {
-                    let mut open = chrome.downloads_open;
-                    open.set(true);
+                    self.downloads_popover.open();
                     self.browser.clone().write().downloads.mark_seen();
                 }
                 UiRequest::OpenPageInfo => self.site_info.open(),
