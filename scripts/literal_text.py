@@ -1081,8 +1081,8 @@ def self_test() -> list[str]:
             hits = findings_of(source, "apps/x/src/a.rs", apis)
             if hits:
                 failures.append(f"reported though it is fine ({what}): {hits}")
-        if not allowed("literal-text", "apps/browser/src/a.rs", "Songs"):
-            failures.append("the apps/browser entry of ALLOWED does not cover the browser")
+        if allowed("literal-text", "apps/browser/src/a.rs", "Songs"):
+            failures.append("ALLOWED covers the browser, which has no literal text left")
         if allowed("literal-text", "apps/clock/src/a.rs", "Songs"):
             failures.append("ALLOWED covers a file it should not")
         for entry in ALLOWED:
