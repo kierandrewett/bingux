@@ -226,6 +226,7 @@ impl GeckoBackend {
             Entry {
                 session: Arc::new(session),
                 surface: PageSurface::new(),
+                visible: false,
             },
         );
         tab
@@ -455,6 +456,9 @@ impl BrowserBackend for GeckoBackend {
     }
 
     fn set_visible(&self, tab: TabId, visible: bool, focused: bool) -> Done {
+        if let Some(entry) = lock(&self.shared.state).live.get_mut(&tab) {
+            entry.visible = visible;
+        }
         self.call(tab, "showing a tab", |session| {
             session.set_window_state(convert::window_state(visible, focused))
         })
@@ -533,11 +537,11 @@ impl BrowserBackend for GeckoBackend {
         self.control_download(download, DownloadAction::Remove)
     }
 
-    /// ABI 2.0 has no call that tells a page its fullscreen ended: the page
-    /// asks (`VV_REQUEST_FULLSCREEN`, which this backend does not subscribe
-    /// to, so the engine's default refuses it) and the engine reports
-    /// (`ContentDelegate::on_fullscreen_changed`). The window's own fullscreen
-    /// is the window's.
+    /// The window's own fullscreen is the window's. A page that asked
+    /// (`VV_REQUEST_FULLSCREEN`, answered in `on_fullscreen_request`) leaves
+    /// it when the person presses Escape in the page: the engine ends it and
+    /// reports `on_fullscreen_changed`. ABI 2.0 has no call to end it from the
+    /// host, so nothing is sent here.
     fn set_fullscreen(&self, _tab: TabId, _on: bool) -> Done {
         Ok(())
     }

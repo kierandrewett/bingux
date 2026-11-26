@@ -217,3 +217,41 @@ fn print_and_unsupported_things_say_so() {
     assert_eq!(notices.len(), 1);
     assert!(notices[0].error);
 }
+
+// Failures the fullscreen keys guard against:
+//   1. Escape swallowed by the browser while a page is fullscreen, so the page
+//      stays fullscreen in the engine and the window leaves it alone;
+//   2. Escape forwarded to the page during F11 fullscreen, so F11 cannot be
+//      left with Escape;
+//   3. a page entering fullscreen in a background tab taking the window.
+#[test]
+fn escape_is_the_browsers_for_f11_and_the_pages_for_page_fullscreen() {
+    use bingux_ui::web_view::{BrowserEvent, TabEvent, TabId};
+    let (mut browser, double) = browser();
+    assert!(!browser.escape_leaves_window_fullscreen());
+    browser.run(Command::Fullscreen);
+    assert!(
+        browser.escape_leaves_window_fullscreen(),
+        "F11 is left with Escape"
+    );
+    browser.run(Command::Fullscreen);
+    let tab = browser
+        .tabs
+        .active()
+        .expect("tab")
+        .session
+        .expect("session");
+    double.emit(BrowserEvent::tab(TabId(tab.0), TabEvent::Fullscreen(true)));
+    browser.poll();
+    assert!(browser.fullscreen, "the page's fullscreen fills the window");
+    assert!(
+        !browser.escape_leaves_window_fullscreen(),
+        "Escape goes to the page, which ends it"
+    );
+    double.emit(BrowserEvent::tab(TabId(tab.0), TabEvent::Fullscreen(false)));
+    browser.poll();
+    assert!(
+        !browser.fullscreen,
+        "the engine ended it and the window follows"
+    );
+}

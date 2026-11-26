@@ -130,6 +130,15 @@ impl Browser {
         }
     }
 
+    /// Escape belongs to the browser when the window is fullscreen by its own
+    /// doing (F11). A page that asked for fullscreen takes Escape itself: the
+    /// engine ends it and says so (the tab's fullscreen flag), and the window
+    /// follows. Forwarding is the only way out the engine offers, and it
+    /// leaves the page's own state right.
+    pub fn escape_leaves_window_fullscreen(&self) -> bool {
+        self.fullscreen && !self.tabs.active().is_some_and(|tab| tab.fullscreen)
+    }
+
     /// Close tab `key`. The last one closes the window.
     pub fn close_tab(&mut self, key: u64) {
         let was = self.tabs.active_key();

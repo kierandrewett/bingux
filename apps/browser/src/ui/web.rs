@@ -57,8 +57,11 @@ impl Component for TabPage {
             });
         })
         .on_host_key(move |input: KeyInput| {
-            // Escape leaves a fullscreen page, whatever the page says.
-            if input.key == Key::Named(NamedKey::Escape) && ctx.browser.peek().fullscreen {
+            // Escape leaves the window's own fullscreen. A fullscreen page gets
+            // the key and ends itself.
+            if input.key == Key::Named(NamedKey::Escape)
+                && ctx.browser.peek().escape_leaves_window_fullscreen()
+            {
                 ctx.with(|browser| browser.run(Command::Fullscreen));
                 return true;
             }

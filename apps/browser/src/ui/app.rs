@@ -262,7 +262,9 @@ impl Component for Content {
             if let Some(command) = ctx.platform.window_command(&event.key, event.modifiers) {
                 event.stop_propagation();
                 ctx.with(|browser| browser.run(command));
-            } else if event.key == Key::Named(NamedKey::Escape) && ctx.browser.peek().fullscreen {
+            } else if event.key == Key::Named(NamedKey::Escape)
+                && ctx.browser.peek().escape_leaves_window_fullscreen()
+            {
                 event.stop_propagation();
                 ctx.with(|browser| browser.run(Command::Fullscreen));
             }

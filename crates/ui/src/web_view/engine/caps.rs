@@ -34,6 +34,7 @@ pub(super) const ANSWERED: &[RequestKind] = &[
     RequestKind::FilePicker,
     RequestKind::ContextMenu,
     RequestKind::Download,
+    RequestKind::Fullscreen,
 ];
 
 /// Subscribes to the kinds the browser answers that the engine can send, and
@@ -113,7 +114,11 @@ mod tests {
     fn only_the_kinds_the_browser_answers_are_subscribed() {
         assert!(ANSWERED.contains(&RequestKind::NewWindow));
         assert!(
-            !ANSWERED.contains(&RequestKind::Fullscreen),
+            ANSWERED.contains(&RequestKind::Fullscreen),
+            "a page can fill the screen only when the host answers"
+        );
+        assert!(
+            !ANSWERED.contains(&RequestKind::PointerLock),
             "a kind with no prompt gets the engine's safe default"
         );
         assert!(!ANSWERED.contains(&RequestKind::ExtensionApi));

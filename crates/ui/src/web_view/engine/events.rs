@@ -34,7 +34,8 @@ use vivarium::prompts::{
 use vivarium::request::{Ask, RequestClosed, Responder};
 use vivarium::security::{SecurityDelegate, SecurityInfo, SecurityReport};
 use vivarium::session::{
-    CloseReason, ContentDelegate, SessionClosed, SessionDelegate, SessionId, SessionReady,
+    CloseReason, ContentDelegate, FullscreenReply, ModeFlags, ModeRequest, SessionClosed,
+    SessionDelegate, SessionId, SessionReady,
 };
 
 use super::requests::{self, Open};
@@ -249,6 +250,30 @@ impl ContentDelegate for Host<'_> {
 
     fn on_fullscreen_changed(&mut self, session: SessionId, entering: bool) {
         self.tab(session, TabEvent::Fullscreen(entering));
+    }
+
+    /// A page asks to fill the screen. A tab the person is looking at may
+    /// (the window then follows `on_fullscreen_changed`); a hidden tab may
+    /// not, and neither does a page that asks while no tab is shown. Leaving
+    /// is always granted.
+    fn on_fullscreen_request(
+        &mut self,
+        session: SessionId,
+        ask: Ask<ModeRequest>,
+        reply: Responder<FullscreenReply>,
+    ) {
+        let visible = lock(&self.shared.state)
+            .live
+            .get(&tab_of(session))
+            .is_some_and(|entry| entry.visible);
+        let allowed = !ask.payload.flags.contains(ModeFlags::ENTER) || visible;
+        let answer = if allowed {
+            FullscreenReply::Granted
+        } else {
+            FullscreenReply::Refused
+        };
+        // An engine that ended the question first needs no answer.
+        let _ = reply.answer(answer);
     }
 }
 

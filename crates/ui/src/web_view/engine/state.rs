@@ -29,6 +29,9 @@ pub(super) fn tab_of(session: SessionId) -> TabId {
 pub(super) struct Entry {
     pub session: Arc<Session>,
     pub surface: Arc<PageSurface>,
+    /// The person is looking at the tab (`set_visible`); a hidden tab may not
+    /// take the screen.
+    pub visible: bool,
 }
 
 /// A question the engine waits on: the tab that asked, and the responder
