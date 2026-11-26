@@ -168,8 +168,13 @@ impl Launch {
         });
     }
 
+    /// The window that says why the browser cannot open, or asks which
+    /// profile. It shows no page, so it takes no other launch: a launch
+    /// behind it starts a copy of its own, which waits for the profile.
     fn run_gate(id: &str, gate: Gate) {
-        Self::application(id).run(move || GateWindow { gate: gate.clone() });
+        Self::application(id)
+            .refuse_launches()
+            .run(move || GateWindow { gate: gate.clone() });
     }
 
     fn start_or_exit(folders: Option<&Folders>) -> Engine {
