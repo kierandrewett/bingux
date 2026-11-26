@@ -628,7 +628,7 @@ impl Component for Editor {
                             repeat_end.set(RepeatEnd::After(value.max(1) as u32));
                         })
                         .range(1, 999)
-                        .suffix(" times"),
+                        .value_text(tr!("calendar-repeat-times", count = count)),
                     );
                 }
                 RepeatEnd::Never => {}

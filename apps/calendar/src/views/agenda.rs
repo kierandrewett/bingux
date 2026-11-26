@@ -105,10 +105,13 @@ impl Component for AgendaView {
                     .child(
                         rect()
                             .tw(&tokens, &[w_full(), flex_row(), justify(Align::Center)])
-                            .child(action_button("Show 45 more days", move |_| {
-                                let next = *span.peek() + 45;
-                                span.set(next);
-                            })),
+                            .child(action_button(
+                                tr!("calendar-show-more-days", count = 45),
+                                move |_| {
+                                    let next = *span.peek() + 45;
+                                    span.set(next);
+                                },
+                            )),
                     ),
             )
             .into_element()

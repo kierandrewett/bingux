@@ -250,15 +250,15 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
         .map(|c| (c.id.clone(), c.name.clone()))
         .collect();
     let count = parsed.items.len();
-    let message = if count == 1 {
-        tr!("calendar-imported-one")
-    } else {
-        tr!("calendar-imported-many", count = count)
-    };
+    let message = tr!("calendar-imported", count = count);
     let note = if parsed.warnings.is_empty() {
         message
     } else {
-        format!("{message} {}", parsed.warnings[0])
+        tr!(
+            "calendar-import-note",
+            message = message,
+            warning = parsed.warnings[0].clone()
+        )
     };
     overlays.show_dialog(
         dialog(tr!("calendar-import-events"), note)
@@ -285,11 +285,7 @@ fn confirm_import(model: Model, overlays: Overlays, name: String, parsed: Arc<ic
                     })
                     .collect();
                 model.apply(changes);
-                overlays.toast(if count == 1 {
-                    tr!("calendar-imported-one")
-                } else {
-                    tr!("calendar-imported-many", count = count)
-                });
+                overlays.toast(tr!("calendar-imported", count = count));
             }),
     );
 }

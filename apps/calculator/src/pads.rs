@@ -414,7 +414,11 @@ pub fn bit_keys(calc: &Calc, bits: &[bool]) -> Vec<KeypadKey> {
             keypad_key(if *set { "1" } else { "0" }, move |_: ()| {
                 calc.toggle_bit(index)
             })
-            .name(format!("Bit {index}, {}", if *set { "on" } else { "off" }))
+            .name(if *set {
+                tr!("calculator-key-bit-on", index = index)
+            } else {
+                tr!("calculator-key-bit-off", index = index)
+            })
             .tone(KeyTone::Plain)
             .active(*set)
         })

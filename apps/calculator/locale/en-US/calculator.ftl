@@ -120,6 +120,9 @@ calculator-key-angle-degrees =
 calculator-key-random = Random number
 # $digit (String) - A to F
 calculator-key-hex-digit = Hex digit { $digit }
+# A key of the bit grid. $index (Number) - the bit, counted from zero at the right
+calculator-key-bit-on = Bit { $index }, on
+calculator-key-bit-off = Bit { $index }, off
 calculator-key-percent = Percent
 calculator-key-divide = Divide
 calculator-key-multiply = Multiply

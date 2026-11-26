@@ -21,6 +21,7 @@ calendar-today = Today
 calendar-none = None
 calendar-never = Never
 calendar-next = Next
+calendar-previous = Previous
 calendar-search = Search
 
 ## Errors and results
@@ -183,14 +184,58 @@ calendar-close = Close
 calendar-read-failed = Could not read { $name }. Check that you can open the file.
 calendar-not-calendar = Could not import { $name }. It is not a calendar file.
 calendar-no-events-to-import = { $name } has no events to import.
-calendar-imported-one = Imported 1 event.
-calendar-imported-many = Imported { $count } events.
+# A toast and a line of the import dialog. $count (Number) - how many events
+calendar-imported = { $count ->
+    [one] Imported { $count } event.
+   *[other] Imported { $count } events.
+}
+# The import dialog's line with the first thing that was skipped. $message (Text) - what was imported, $warning (Text) - what the file read said
+calendar-import-note = { $message } { $warning }
 # Agenda day headings.
 calendar-yesterday = Yesterday
 calendar-tomorrow = Tomorrow
 calendar-nothing-coming-up = Nothing coming up
-calendar-no-events-in-days = There are no events in the next { $days } days.
+# $days (Number) - how many days the agenda looks ahead
+calendar-no-events-in-days = { $days ->
+    [one] There are no events in the next day.
+   *[other] There are no events in the next { $days } days.
+}
 calendar-add-event = Add event
 calendar-no-events = No events
 calendar-no-results = No results
 calendar-nothing-matches = Nothing matches “{ $query }”.
+
+## Header menu, reminders and the agenda's button
+
+# The toast of a reminder with no notification service. $title (Text) - the event, $body (Text) - when and where
+calendar-reminder-toast = { $title }. { $body }
+# The value of the stepper after "Ends after". $count (Number) - how many repeats
+calendar-repeat-times = { $count ->
+    [one] { $count } time
+   *[other] { $count } times
+}
+calendar-new-calendar-ellipsis = New calendar…
+calendar-import-events-ellipsis = Import events…
+# The button at the end of the agenda. $count (Number) - how many more days it adds
+calendar-show-more-days = { $count ->
+    [one] Show { $count } more day
+   *[other] Show { $count } more days
+}
+
+# The text of the keyboard shortcuts dialog, one line to a shortcut.
+calendar-keyboard-shortcuts-body =
+    T  Go to today
+    N  New event
+    1 to 5  Day, Week, Month, Year, Agenda
+    Left, Right  Previous, next
+    Up, Down  A week back, ahead (Month); choose an event (Week, Day)
+    Enter  Open the chosen event, or choose the first of the day (Month)
+    Escape  Let go of the chosen event, or clear the search
+    Page Up, Page Down  A month back, ahead
+    Ctrl+F or /  Search
+    Delete  Delete the chosen event
+    Ctrl+Shift+?  About Calendar
+
+    In a week or a day, drag over empty time to make an event, drag an event to
+    move it, and drag its top or bottom edge to change when it starts or ends.
+    Press a day twice to make an event on it.

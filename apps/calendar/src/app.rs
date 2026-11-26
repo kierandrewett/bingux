@@ -82,7 +82,11 @@ impl Component for Content {
                         }
                         Message::Watch(WatchEvent::Changed) => model.reload(),
                         Message::Watch(WatchEvent::Reminder { title, body }) => {
-                            overlays.toast(format!("{title}. {body}"));
+                            overlays.toast(tr!(
+                                "calendar-reminder-toast",
+                                title = title,
+                                body = body
+                            ));
                         }
                         Message::SaveFailed(_) => overlays.toast(tr!("calendar-save-failed")),
                     }

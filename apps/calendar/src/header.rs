@@ -128,7 +128,8 @@ pub fn header_bar(
     let shown = *model.view.read();
     let title = title_of(&model);
 
-    let previous = icon_button(Icon::GoPrevious, move |_| model.step(-1)).tooltip("Previous");
+    let previous =
+        icon_button(Icon::GoPrevious, move |_| model.step(-1)).tooltip(&tr!("calendar-previous"));
     let next = icon_button(Icon::GoNext, move |_| model.step(1)).tooltip(&tr!("calendar-next"));
     let today = action_button(tr!("calendar-today"), move |_| model.today());
     let views = view_switcher(
@@ -266,10 +267,10 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
             editor::new_event(model, window, overlays)
         })
         .shortcut("N"),
-        menu_item("New calendar\u{2026}", move |_| {
+        menu_item(tr!("calendar-new-calendar-ellipsis"), move |_| {
             calendars::add(model, overlays, &tokens)
         }),
-        menu_item("Import events\u{2026}", move |_| {
+        menu_item(tr!("calendar-import-events-ellipsis"), move |_| {
             calendars::import(model, window, overlays)
         }),
         menu_separator(),
@@ -284,28 +285,14 @@ fn main_menu(model: Model, window: Window, overlays: Overlays, tokens: Tokens) -
         menu_separator(),
         menu_item(tr!("calendar-keyboard-shortcuts"), move |_| {
             overlays.show_dialog(
-                dialog(tr!("calendar-keyboard-shortcuts"), SHORTCUTS).cancel(tr!("calendar-close")),
+                dialog(
+                    tr!("calendar-keyboard-shortcuts"),
+                    tr!("calendar-keyboard-shortcuts-body"),
+                )
+                .cancel(tr!("calendar-close")),
             );
         }),
     ];
     items.extend(bingux_ui::about::app_menu_items(overlays));
     items
 }
-
-/// What the shortcuts dialog says.
-const SHORTCUTS: &str = "\
-T  Go to today\n\
-N  New event\n\
-1 to 5  Day, Week, Month, Year, Agenda\n\
-Left, Right  Previous, next\n\
-Up, Down  A week back, ahead (Month); choose an event (Week, Day)\n\
-Enter  Open the chosen event, or choose the first of the day (Month)\n\
-Escape  Let go of the chosen event, or clear the search\n\
-Page Up, Page Down  A month back, ahead\n\
-Ctrl+F or /  Search\n\
-Delete  Delete the chosen event\n\
-Ctrl+Shift+?  About Calendar\n\
-\n\
-In a week or a day, drag over empty time to make an event, drag an event to\n\
-move it, and drag its top or bottom edge to change when it starts or ends.\n\
-Press a day twice to make an event on it.";

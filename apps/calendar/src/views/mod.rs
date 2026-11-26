@@ -45,7 +45,7 @@ pub fn shown(occurrences: Vec<Occurrence>) -> Vec<Occurrence> {
 /// What an empty title is called.
 pub fn title_of(occurrence: &Occurrence) -> String {
     if occurrence.summary.trim().is_empty() {
-        "New event".to_string()
+        tr!("calendar-new-event")
     } else {
         occurrence.summary.clone()
     }
