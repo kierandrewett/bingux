@@ -45,6 +45,9 @@ pub(super) struct Runtime {
     /// Whether the engine took `Session::find`, once a session has asked it
     /// (`caps::taken`); unset until then.
     pub find: OnceLock<bool>,
+    /// Set to `false` when the engine said it has no clear-data call (an
+    /// older engine build); unset until a clear has been tried.
+    pub clear_history: OnceLock<bool>,
     downloads: PathBuf,
     /// The engine failed: its queue has nothing more to say.
     failed: AtomicBool,
@@ -91,6 +94,7 @@ impl Runtime {
             dispatcher: engine.dispatcher(),
             capabilities: caps::capabilities(&accepted, download_control),
             find: OnceLock::new(),
+            clear_history: OnceLock::new(),
             engine,
             downloads: config.downloads.clone(),
             failed: AtomicBool::new(false),

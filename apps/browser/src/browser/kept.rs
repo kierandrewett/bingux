@@ -4,6 +4,8 @@
 //! once in a toast. History itself is the store's and the bingux-ui
 //! searchable `history`; the window only sends it what was visited.
 
+use bingux_ui::web_view::BackendError;
+
 use super::Browser;
 use crate::store::Event;
 use crate::store::{ClearScope, Keeping, Part};
@@ -78,10 +80,13 @@ impl Browser {
             return;
         };
         store.clear_history();
-        if self.engine.capabilities().clear_history {
-            self.engine
-                .call(&mut self.out, |backend| backend.clear_history());
+        // An engine that has no call for it says so on the first try, and
+        // the scope (and so the words) follow what it said.
+        match self.engine.backend().clear_history() {
+            Ok(()) | Err(BackendError::Unsupported(_)) => {}
+            Err(error) => self.out.fail(&error),
         }
+        self.engine.refresh();
         let text = self.history_clear_scope().cleared_text();
         self.out.notify(text);
     }

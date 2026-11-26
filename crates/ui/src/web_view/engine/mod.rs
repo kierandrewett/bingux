@@ -293,6 +293,8 @@ impl BrowserBackend for GeckoBackend {
             .map_or_else(Capabilities::default, |runtime| Capabilities {
                 // Learned from the first session (`learn_find`).
                 find: runtime.find.get().copied().unwrap_or(false),
+                // Offered until an engine says it has no such call.
+                clear_history: runtime.clear_history.get().copied().unwrap_or(true),
                 ..runtime.capabilities
             })
     }
@@ -565,7 +567,10 @@ impl BrowserBackend for GeckoBackend {
             .map(|_| ())
             .map_err(|error| match error.status() {
                 Some(Status::EngineFailed) => BackendError::EngineGone,
-                Some(Status::Unsupported) => BackendError::Unsupported("clearing history"),
+                Some(Status::Unsupported) => {
+                    let _ = runtime.clear_history.set(false);
+                    BackendError::Unsupported("clearing history")
+                }
                 _ => BackendError::Engine(error.to_string()),
             })
     }

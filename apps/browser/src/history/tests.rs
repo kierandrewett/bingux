@@ -234,7 +234,7 @@ fn an_engine_that_cannot_clear_visits_is_said_so_and_not_asked() {
     browser.clear_history();
     let told = browser.take_notices();
     assert!(told[0].text.contains("Link colours"), "{}", told[0].text);
-    assert!(double.calls().is_empty());
+    assert!(!browser.history_clear_scope().link_colours);
     drop(browser);
     Files::remove_tree(&root).unwrap();
 }
