@@ -14,14 +14,13 @@ use crate::address::FieldState;
 use crate::browser::{Browser, Notice, UiRequest};
 use crate::commands::Command;
 use crate::commands::Platform;
+use crate::find::BarState;
 use crate::site_info::PopoverState;
 
 /// The states of the chrome that are not the browser's: they belong to the
 /// window, not to a tab.
 #[derive(Clone, Copy, PartialEq)]
 pub struct Chrome {
-    /// Counts the requests to focus the find field.
-    pub focus_find: State<u32>,
     pub downloads_open: State<bool>,
     /// Where the controls that open popovers are, in the window.
     pub downloads_anchor: State<Area>,
@@ -42,6 +41,7 @@ pub struct Ctx {
     pub chrome: Chrome,
     pub address: FieldState,
     pub site_info: PopoverState,
+    pub find: BarState,
     pub overlays: Overlays,
     pub window: Window,
     pub platform: Platform,
@@ -103,11 +103,7 @@ impl Ctx {
         for request in requests {
             match request {
                 UiRequest::FocusAddress => self.address.focus(),
-                UiRequest::OpenFind => {
-                    let mut focus = chrome.focus_find;
-                    let next = *focus.peek() + 1;
-                    focus.set(next);
-                }
+                UiRequest::OpenFind => self.find.focus(),
                 UiRequest::OpenDownloads => {
                     let mut open = chrome.downloads_open;
                     open.set(true);

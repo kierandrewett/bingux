@@ -144,7 +144,7 @@ impl Browser {
                 if started {
                     tab.gone = None;
                     tab.cert = None;
-                    tab.find.result = None;
+                    tab.find.clear_result();
                     tab.hover = None;
                     tab.audio.playing = false;
                 }
@@ -217,7 +217,7 @@ impl Browser {
             }
             TabEvent::FindResult { current, total } => {
                 if let Some(tab) = self.tabs.get_mut(key) {
-                    tab.find.result = Some((current, total));
+                    tab.find.on_result(current, total);
                 }
             }
         }

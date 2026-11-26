@@ -15,9 +15,9 @@ fn find_is_not_found_only_after_a_search_with_no_matches() {
     assert!(!find.not_found());
     find.text = "x".to_string();
     assert!(!find.not_found(), "no answer yet");
-    find.result = Some((0, 0));
+    find.on_result(0, 0);
     assert!(find.not_found());
-    find.result = Some((1, 4));
+    find.on_result(1, 4);
     assert!(!find.not_found());
 }
 
@@ -29,18 +29,18 @@ fn find_asks_the_engine_and_shows_the_count() {
     assert_eq!(browser.take_ui(), [UiRequest::OpenFind]);
     browser.find(key, "example", true, true);
     browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().find.result, Some((1, 3)));
+    assert_eq!(browser.tabs.get(key).unwrap().find.result(), Some((1, 3)));
     browser.run(Command::FindNext);
     browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().find.result, Some((2, 3)));
+    assert_eq!(browser.tabs.get(key).unwrap().find.result(), Some((2, 3)));
     browser.run(Command::FindPrevious);
     browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().find.result, Some((1, 3)));
+    assert_eq!(browser.tabs.get(key).unwrap().find.result(), Some((1, 3)));
     browser.find(key, "ab", true, true);
     browser.poll();
     assert!(browser.tabs.get(key).unwrap().find.not_found());
     browser.close_find(key);
-    assert!(!browser.tabs.get(key).unwrap().find.open);
+    assert!(!browser.tabs.get(key).unwrap().find.is_open());
     assert!(
         double
             .calls()

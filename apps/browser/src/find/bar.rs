@@ -25,15 +25,14 @@ impl Component for FindBar {
             .map(|tab| tab.find.clone())
             .unwrap_or_default();
         let text = use_state({
-            let initial = find.text.clone();
+            let initial = find.text().to_string();
             move || initial
         });
-        let (match_case, highlight_all, whole_words) =
-            (find.match_case, find.highlight_all, find.whole_words);
+        let (match_case, whole_words, highlight_all) = find.options();
         find_card(text)
             .placeholder("Find in page")
-            .result(find.result)
-            .focus_requests(ctx.chrome.focus_find.read().to_owned())
+            .result(find.result())
+            .focus_requests(ctx.find.requests())
             .options(vec![
                 FindOption::new("Match case", match_case, move |on: bool| {
                     ctx.with(|browser| {

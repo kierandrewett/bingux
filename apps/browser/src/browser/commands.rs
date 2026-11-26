@@ -4,7 +4,7 @@
 
 use bingux_ui::web_view::input::{EditCommand, PageInput};
 use bingux_ui::web_view::requests::DownloadState;
-use bingux_ui::web_view::{DownloadId, FindQuery, TabId};
+use bingux_ui::web_view::{DownloadId, TabId};
 
 use super::{Browser, ClosedTab, UiRequest, ViewSize};
 use crate::address::{Internal, Typed};
@@ -451,55 +451,30 @@ impl Browser {
 
     /// Open the find bar of tab `key`.
     pub fn open_find(&mut self, key: u64) {
-        // The engine took the call, or did not, at its first session: after
-        // the window read what the engine can do, when it opened with none.
-        self.engine.refresh();
-        if !self.engine.capabilities().find {
-            self.out
-                .notify("Find in page is not available in this engine yet.");
-            return;
-        }
         if let Some(tab) = self.tabs.get_mut(key) {
-            tab.find.open = true;
+            tab.find.open(&mut self.engine, &mut self.out);
         }
-        self.out.request(UiRequest::OpenFind);
     }
 
     /// Close the find bar and clear what it highlighted.
     pub fn close_find(&mut self, key: u64) {
-        let Some(session) = self.session_of(key) else {
-            return;
-        };
         if let Some(tab) = self.tabs.get_mut(key) {
-            tab.find.open = false;
-            tab.find.result = None;
+            tab.find.close(tab.session, &self.engine, &mut self.out);
         }
-        self.engine_call(|backend| backend.find_stop(session));
     }
 
     /// The text of the find bar changed, or Enter asked for the next match.
     pub fn find(&mut self, key: u64, text: &str, forward: bool, restart: bool) {
-        let Some(session) = self.session_of(key) else {
-            return;
-        };
-        let Some(tab) = self.tabs.get_mut(key) else {
-            return;
-        };
-        tab.find.text = text.to_string();
-        if text.is_empty() {
-            tab.find.result = None;
-            self.engine_call(|backend| backend.find_stop(session));
-            return;
+        if let Some(tab) = self.tabs.get_mut(key) {
+            tab.find.search(
+                tab.session,
+                text,
+                forward,
+                restart,
+                &self.engine,
+                &mut self.out,
+            );
         }
-        let query = FindQuery {
-            text: text.to_string(),
-            forward,
-            match_case: tab.find.match_case,
-            whole_words: tab.find.whole_words,
-            highlight_all: tab.find.highlight_all,
-            restart,
-        };
-        self.engine_call(|backend| backend.find(session, &query));
     }
 
     /// Match case, whole words or highlight all changed.
@@ -510,14 +485,14 @@ impl Browser {
         whole_words: bool,
         highlight_all: bool,
     ) {
-        let Some(tab) = self.tabs.get_mut(key) else {
-            return;
-        };
-        tab.find.match_case = match_case;
-        tab.find.whole_words = whole_words;
-        tab.find.highlight_all = highlight_all;
-        let text = tab.find.text.clone();
-        self.find(key, &text, true, true);
+        if let Some(tab) = self.tabs.get_mut(key) {
+            tab.find.set_options(
+                tab.session,
+                (match_case, whole_words, highlight_all),
+                &self.engine,
+                &mut self.out,
+            );
+        }
     }
 
     // ---- Downloads ---------------------------------------------------------------
@@ -572,15 +547,10 @@ impl Browser {
     }
 
     pub(crate) fn find_step(&mut self, key: u64, forward: bool) {
-        let Some(tab) = self.tabs.get(key) else {
-            return;
-        };
-        if tab.find.text.is_empty() {
-            self.open_find(key);
-            return;
+        if let Some(tab) = self.tabs.get_mut(key) {
+            tab.find
+                .step(tab.session, forward, &mut self.engine, &mut self.out);
         }
-        let text = tab.find.text.clone();
-        self.find(key, &text, forward, false);
     }
 
     /// The tab whose engine session is `session`.

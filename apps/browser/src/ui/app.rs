@@ -12,7 +12,7 @@ use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
 use crate::commands::{Command, Platform};
 use crate::engine::{self, Engine};
-use crate::find::FindBar;
+use crate::find::{BarState, FindBar};
 use crate::model::tabs::Place;
 use crate::site_info::PopoverState;
 
@@ -118,7 +118,6 @@ impl Component for Content {
             }
         });
         let chrome = Chrome {
-            focus_find: use_state(|| 0_u32),
             downloads_open: use_state(|| false),
             downloads_anchor: use_state(Area::default),
             menu_anchor: use_state(Area::default),
@@ -131,6 +130,7 @@ impl Component for Content {
             chrome,
             address: FieldState::use_new(),
             site_info: PopoverState::use_new(),
+            find: BarState::use_new(),
             overlays,
             window,
             platform: Platform::current(),
@@ -209,7 +209,7 @@ impl Component for Content {
                     _ => None,
                 },
                 browser.tabs.active_key(),
-                browser.active().is_some_and(|tab| tab.find.open),
+                browser.active().is_some_and(|tab| tab.find.is_open()),
                 browser.tabs.is_empty(),
             )
         };
