@@ -971,7 +971,7 @@ Everything above is a recommendation until Main or Kieran says go. The numbering
 | D14 | Flags: `--private` and `--profile NAME`. Gecko: `-private-window` (`BrowserContentHandler.sys.mjs:663`), `-P <profile>`, `--profile <path>` (`toolkit/xre/nsAppRunner.cpp:2198-2199`). Environment: `BINGUX_BROWSER_PRIVATE`, `BINGUX_BROWSER_OPEN_PROFILE`    | Rename to `--private-window` and `-P NAME`; `--profile` then means a path, as Gecko; `run.sh` and docs follow                      |
 | D15 | Palette ids such as `browser.reopen-tab` are strings in a shortcut file                                                                                                                                                                                        | Rename with their variant if no user file holds them; otherwise keep and map                                                       |
 | D16 | The product's name: `Browser`, a plain noun. Gecko's is a brand (`Firefox`). The term decides it in one place                                                                                                                                                  | Keep `Browser` for now; the term makes a later name a one-line change                                                              |
-| D17 | The first profile is "Personal". Gecko's name for the profile that was there first is `original-profile-name = Original profile` (PF)                                                                                                                          | Keep "Personal" (a person's word); note the clash with the container named Personal                                                |
+| D17 | "Original profile" for the profile that existed first, as Firefox (`SelectableProfileService.sys.mjs:1615`, PF `original-profile-name`). Our first-run move is that case                                                                                       |
 
 ## Findings that are not renames
 
@@ -990,3 +990,26 @@ Found while reading. Each is small, and none is changed by this file.
 | F9  | `profiles::Places` is the profile's folders. "Places" is Gecko's name for history and bookmarks, which `docs/browser/parity.md` plans under the same word                                     |
 | F10 | `browser-start-over` has no feature prefix, which breaks the id rule of `docs/bingux-ui.md`                                                                                                   |
 | F11 | Gecko writes variables in camel case (`$tabCount`, `$origin`). Bingux's are single words or snake case (`$count`, `$host`). Keep Bingux's: the Rust call sites name them                      |
+
+## Decisions taken
+
+Main, 2026-11-26, from Kieran's rule that Gecko at `FIREFOX_160_0_RELEASE` wins unless it conflicts with his own
+rulings. Phase 2 starts when Main says go.
+
+| #         | Taken                                                                                                                                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1        | Gecko's words in sentence case (Proton-era Firefox menus are sentence case too)                                                                                                                                        |
+| D2        | Remove the two link-colours and two devtools-private messages. Keep engine text only where Firefox shows the same, such as the tab-crashed page                                                                        |
+| D3        | Code `Preferences` (`about:preferences`); the visible label is "Settings", as in Firefox                                                                                                                               |
+| D4        | `about:preferences` and `about:newtab` are canonical; `bingux:` goes; `about:config` is left to the engine                                                                                                             |
+| D5        | One question per kind in Gecko's words. For kinds Firefox never asks about (autoplay, storage, pop-ups, clipboard), do what Firefox does: a blocked indicator or notification bar. A behaviour change, in its own step |
+| D6        | Gecko's address bar action text: `Visit`, `Search with { $engine }`                                                                                                                                                    |
+| D7        | `crates/ui` `PermissionKind` and `HistoryEntry` take Gecko's names (`geo`, `desktop-notification`, `autoplay-media`, `popup`, `SessionHistoryEntry`)                                                                   |
+| D8-D11    | Firefox's exact wording at the pinned tag: crash page, sign-in title, `Full screen` as its FTL spells it, copy video link and copy audio link                                                                          |
+| D12       | Ids follow Firefox's families (`appmenu-*`, and so on)                                                                                                                                                                 |
+| D13       | As D8                                                                                                                                                                                                                  |
+| D14       | `--private-window`, `-P NAME`, `--profile PATH`, as Firefox                                                                                                                                                            |
+| D15       | Palette ids follow Firefox's                                                                                                                                                                                           |
+| D16       | A `-brand-short-name` term                                                                                                                                                                                             |
+| D17       | "Original profile" for the profile that existed first, as Firefox (`SelectableProfileService.sys.mjs:1615`, PF `original-profile-name`). Our first-run move is that case                                               |
+| F1, F6-F7 | Zoom steps become Gecko's 26 `zoomValues`; the source locale is en-US: `Canceled`, `colors`, curly apostrophes                                                                                                         |
