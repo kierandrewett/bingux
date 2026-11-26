@@ -146,6 +146,7 @@ fn a_page_load_in_the_window_is_recorded_and_a_private_window_records_none() {
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),
+            known: Vec::new(),
         },
     );
     browser.open_tab("https://example.com/", Place::End, true);
@@ -176,6 +177,7 @@ fn clear_history_empties_the_file_and_the_index_and_asks_the_engine_to_forget_vi
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),
+            known: Vec::new(),
         },
     );
     browser.open_tab("https://secret.example/private-page", Place::End, true);
@@ -225,6 +227,7 @@ fn an_engine_that_cannot_clear_visits_is_said_so_and_not_asked() {
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),
+            known: Vec::new(),
         },
     );
     browser.poll();
@@ -302,6 +305,7 @@ fn a_damaged_file_is_left_as_it_is_until_start_over_moves_it_aside() {
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),
+            known: Vec::new(),
         },
     );
     browser.open_tab("https://example.com/", Place::End, true);

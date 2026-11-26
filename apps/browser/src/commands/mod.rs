@@ -47,12 +47,47 @@ pub enum Command {
     PageInfo,
     ViewSource,
     Print,
+    /// Ask whether to forget the history, and forget it when the person says so.
+    ClearHistory,
     /// Open the developer tools for the page. The engine cannot yet.
     DevTools,
     /// Play the page's video in a window of its own. The engine cannot yet.
     PictureInPicture,
     /// An editing command for the page, only while the page has the focus.
     Edit(EditCommand),
+}
+
+impl Command {
+    /// The shortcut a menu and a palette show for the command, as the person
+    /// reads it; `None` for a command with no key of its own. `Platform::window_command`
+    /// is where the key is bound, and a test holds the two together.
+    pub fn keys(self) -> Option<&'static str> {
+        Some(match self {
+            Command::NewTab => "Ctrl+T",
+            Command::NewPrivateWindow => "Ctrl+Shift+P",
+            Command::ReopenTab => "Ctrl+Shift+T",
+            Command::CloseTab => "Ctrl+W",
+            Command::NextTab => "Ctrl+Tab",
+            Command::PreviousTab => "Ctrl+Shift+Tab",
+            Command::FocusAddress => "Ctrl+L",
+            Command::Find => "Ctrl+F",
+            Command::Reload => "Ctrl+R",
+            Command::Back => "Alt+Left",
+            Command::Forward => "Alt+Right",
+            Command::ZoomIn => "Ctrl+=",
+            Command::ZoomOut => "Ctrl+-",
+            Command::ZoomReset => "Ctrl+0",
+            Command::Fullscreen => "F11",
+            Command::Downloads => "Ctrl+Shift+Y",
+            Command::ClearHistory => "Ctrl+Shift+Delete",
+            Command::Settings => "Ctrl+,",
+            Command::PageInfo => "Ctrl+I",
+            Command::ViewSource => "Ctrl+U",
+            Command::Print => "Ctrl+P",
+            Command::DevTools => "F12",
+            _ => return None,
+        })
+    }
 }
 
 #[cfg(test)]

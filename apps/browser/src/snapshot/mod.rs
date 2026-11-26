@@ -148,12 +148,18 @@ pub(crate) fn run_command(shot: &mut Snapshot, command: Command) {
 /// controls.
 #[cfg(test)]
 pub(crate) fn window(start: &'static [&'static str]) -> (Snapshot, Rig) {
+    window_of(start, (1100.0, 700.0))
+}
+
+/// [`window`] at `size`: a phone is 390 by 800.
+#[cfg(test)]
+pub(crate) fn window_of(start: &'static [&'static str], size: (f32, f32)) -> (Snapshot, Rig) {
     CTX.with(|slot| slot.set(None));
     let rig = Rig {
         double: TestDoubleBackend::new(),
     };
     let scenario = scenario("press", start, nothing);
-    let mut shot = Snapshot::new(app(&rig, &scenario), (1100.0, 700.0));
+    let mut shot = Snapshot::new(app(&rig, &scenario), size);
     wait(&mut shot, 800);
     (shot, rig)
 }

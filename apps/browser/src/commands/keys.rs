@@ -83,6 +83,7 @@ impl Platform {
                     NamedKey::Tab => return Some(Command::PreviousTab),
                     NamedKey::PageDown => return Some(Command::MoveTabRight),
                     NamedKey::PageUp => return Some(Command::MoveTabLeft),
+                    NamedKey::Delete => return Some(Command::ClearHistory),
                     _ => {}
                 }
             }

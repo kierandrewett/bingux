@@ -192,11 +192,21 @@ impl Browser {
 
     /// Open the tab closed last, where it was.
     pub fn reopen_closed(&mut self) {
-        let Some(closed) = self.closed.pop() else {
+        if self.closed.is_empty() {
             self.out
                 .notify(tr!("browser-tabs-none-to-reopen-notification"));
             return;
-        };
+        }
+        self.reopen_closed_at(self.closed.len() - 1);
+    }
+
+    /// Open the closed tab at `index` of `closed` (the newest is last), where
+    /// it was, and take it off the list.
+    pub fn reopen_closed_at(&mut self, index: usize) {
+        if index >= self.closed.len() {
+            return;
+        }
+        let closed = self.closed.remove(index);
         let key = match closed.kind {
             TabKind::Settings => Some(self.open_settings()),
             TabKind::Web => self.create_web(&closed.url, Place::End, true, None),
@@ -204,6 +214,15 @@ impl Browser {
         if let (Some(key), true) = (key, closed.pinned) {
             self.tabs.set_pinned(key, true);
         }
+    }
+
+    /// Open the window of the profile with registry id `id`. This window's own
+    /// profile is already open here, so that asks for nothing.
+    pub fn open_profile(&mut self, id: &str) {
+        if self.profile.as_ref().is_some_and(|(own, _)| own == id) {
+            return;
+        }
+        self.out.request(UiRequest::OpenProfile(id.to_string()));
     }
 
     /// A second tab at the same address, next to this one.

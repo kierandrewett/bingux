@@ -280,6 +280,20 @@ impl Profiles {
             .unwrap_or_default())
     }
 
+    /// Every profile as (id, name), oldest first, for a window's menu. A
+    /// registry that cannot be read, or a window of a folder named by
+    /// `BINGUX_BROWSER_PROFILE`, has none: the menu says so.
+    pub fn known(&self) -> Vec<(String, String)> {
+        if self.places.named.is_some() {
+            return Vec::new();
+        }
+        self.list()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|entry| (entry.id.as_str().to_string(), entry.name))
+            .collect()
+    }
+
     /// Reads the registry (an empty one when there is none), lets `change`
     /// change it and writes it back, all under the registry's lock. Nothing
     /// is written when `change` refuses.

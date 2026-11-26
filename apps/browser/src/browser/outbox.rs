@@ -27,6 +27,11 @@ pub enum UiRequest {
     Fullscreen(bool),
     /// Start another browser window whose tabs are all private.
     NewPrivateWindow,
+    /// Start the window of another profile, by its registry id (it takes the
+    /// window already open for it, if there is one).
+    OpenProfile(String),
+    /// Ask whether to forget the history.
+    ConfirmClearHistory,
     /// Close the window: its last tab is gone.
     CloseWindow,
 }

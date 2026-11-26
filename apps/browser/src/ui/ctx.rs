@@ -117,6 +117,8 @@ impl Ctx {
                         .as_ref()
                         .map(|(id, _)| id.clone()),
                 ),
+                UiRequest::OpenProfile(id) => crate::profiles::ProfileWindow::open(id),
+                UiRequest::ConfirmClearHistory => crate::history::ClearDialog::open(self),
                 UiRequest::CloseWindow => self.window.close(),
             }
         }

@@ -7,6 +7,7 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::downloads::DownloadsButton;
+use crate::menus::MainMenuButton;
 use crate::navigation::{BackButton, ForwardButton, ReloadButton};
 use crate::site_info::ConnectionButton;
 use crate::tabs::TabKind;
@@ -40,16 +41,6 @@ impl Reading {
             is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web),
             tabs: browser.tabs.len(),
         }
-    }
-}
-
-/// The main menu button.
-#[derive(PartialEq)]
-struct MainMenuButton;
-
-impl Component for MainMenuButton {
-    fn render(&self) -> impl IntoElement {
-        app_menu(Vec::new())
     }
 }
 
@@ -114,7 +105,7 @@ impl Component for Toolbar {
                     ctx,
                     count: read.tabs,
                 })
-                .child(MainMenuButton)
+                .child(MainMenuButton { ctx })
                 .into_element();
         }
         bar = bar
@@ -145,7 +136,7 @@ impl Component for Toolbar {
         if !downloads.list().is_empty() {
             bar = bar.child(DownloadsButton { ctx });
         }
-        bar.child(MainMenuButton).into_element()
+        bar.child(MainMenuButton { ctx }).into_element()
     }
 }
 

@@ -307,6 +307,8 @@ browser-command-devtools-title = Developer tools
 browser-command-devtools-unavailable-title = Developer tools (not available in this engine)
 # Disabled command: the engine has no picture-in-picture window to open yet.
 browser-command-picture-in-picture-unavailable-title = Picture-in-picture (not available in this engine)
+browser-command-clear-history-title = Clear history
+browser-command-page-info-title = Page information
 browser-command-go-to-tab-title = Go to a tab
 # The keys that go to tab 1 to 8, and the last tab. The modifier is Alt on Linux, Ctrl elsewhere.
 browser-command-go-to-tab-keys = Alt+1 to 9
@@ -356,6 +358,73 @@ browser-menu-copy-failed = { $what ->
     }
 # Entry of the page menu for selected text. $engine is the search engine, $text the selection (cut short with an ellipsis).
 browser-menu-search-for = Search { $engine } for “{ $text }”
+
+## Main menu
+## The rows of the menu behind the "Main menu" button, in the order of the design (Window 07). A row whose
+## feature is not built is disabled, and its "-unavailable" message is the tooltip that says why.
+
+# The label of the zoom row; its buttons follow.
+browser-main-menu-zoom = Zoom
+# Tooltips of the zoom row's buttons. $keys is the shortcut.
+browser-main-menu-zoom-out = Zoom out ({ $keys })
+browser-main-menu-zoom-in = Zoom in ({ $keys })
+browser-main-menu-zoom-reset = Reset zoom ({ $keys })
+browser-main-menu-fullscreen = Full screen ({ $keys })
+# The zoom level shown between the minus and plus buttons. $percent is the level.
+browser-main-menu-zoom-level = { NUMBER($percent) }%
+browser-main-menu-new-window = New window
+browser-main-menu-new-window-unavailable = A profile has one window for now: a second window of it would share its lock and its engine. A private window or another profile's window opens beside this one.
+browser-main-menu-profile = Profile
+browser-main-menu-profile-none = This window has no profile to show.
+browser-main-menu-new-profile = New profile…
+browser-main-menu-new-profile-unavailable = Profiles are made in Settings, which has no Profiles page yet.
+browser-main-menu-manage-profiles = Manage profiles
+browser-main-menu-manage-profiles-unavailable = Settings has no Profiles page yet.
+browser-main-menu-history = History
+browser-main-menu-show-history = Show all history
+browser-main-menu-show-history-unavailable = The history page is not built yet. The address bar already searches the history.
+browser-main-menu-clear-history = Clear history…
+# A disabled row of the History menu when no tab was closed in this window.
+browser-main-menu-no-closed-tabs = No recently closed tabs
+browser-main-menu-bookmarks = Bookmarks
+browser-main-menu-bookmarks-unavailable = Bookmarks are not built yet: there is no store for them.
+browser-main-menu-passwords = Passwords
+browser-main-menu-passwords-unavailable = Passwords are not built yet: there is no password manager or store.
+browser-main-menu-share = Share
+browser-main-menu-share-copy-link = Copy link
+browser-main-menu-share-apps = More apps…
+browser-main-menu-share-apps-unavailable = Sharing to an app needs the system share portal, which Bingux does not have yet.
+browser-main-menu-more-tools = More tools
+browser-main-menu-save-page = Save page as…
+browser-main-menu-save-page-unavailable = The engine cannot save a page with its files yet. Save page as PDF writes a PDF.
+browser-main-menu-translate = Translate page
+browser-main-menu-translate-unavailable = Translation is not built yet.
+browser-main-menu-devtools-unavailable = This engine has no developer tools to open.
+browser-main-menu-devtools-private = Developer tools are not available in a private window.
+browser-main-menu-print-unavailable = This engine cannot write a page to a PDF.
+
+## Main menu on a phone
+## The sheet of Phone 09. A row whose feature is not built shows its reason under its name: a finger has no tooltip.
+
+browser-phone-menu-bookmark = Bookmark
+browser-phone-menu-reading-list = Reading list
+browser-phone-menu-reading-list-unavailable = The reading list is not built yet.
+browser-phone-menu-desktop-site = Desktop site
+browser-phone-menu-desktop-site-unavailable = The engine cannot change a tab's browser identity yet.
+browser-phone-menu-extensions = Extensions
+browser-phone-menu-extensions-unavailable = The engine has no extension support yet.
+# The value of the Downloads row while some are running. $count is how many.
+browser-phone-menu-downloads-running = { $count } running
+
+## Clear history
+## The question before history is forgotten.
+
+browser-clear-history-title = Clear browsing history?
+# $count is how many pages the history holds.
+browser-clear-history-description = { $count ->
+        [one] This forgets the 1 page this profile has visited, and stops the address bar suggesting it. Downloads and site permissions stay.
+       *[other] This forgets the { $count } pages this profile has visited, and stops the address bar suggesting them. Downloads and site permissions stay.
+    }
 
 ## Tabs
 ## What a tab is called, the list a phone shows, and what is said when a tab or a pop-up goes.

@@ -9,6 +9,7 @@
 //! History is private data: errors name the file and the SQLite code, never
 //! an address.
 
+mod clear_dialog;
 mod database;
 mod page;
 mod search;
@@ -16,6 +17,7 @@ mod search;
 #[cfg(test)]
 mod tests;
 
+pub use clear_dialog::ClearDialog;
 pub use database::Database;
 pub use page::{Change, Page};
 pub use search::History;

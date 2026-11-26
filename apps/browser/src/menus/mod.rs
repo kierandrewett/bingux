@@ -1,12 +1,19 @@
-//! The menus: the main menu, a tab's menu and the page's context menu.
+//! The menus: the main menu (and the sheet that is its phone form), a tab's menu and
+//! the page's context menu.
 
 mod host;
+mod main;
+mod phone;
 #[cfg(feature = "snapshot")]
 mod snapshot;
+#[cfg(test)]
+mod tests;
 #[cfg(feature = "snapshot")]
 pub(crate) use snapshot::scenarios;
 
 pub use host::ContextMenuHost;
+pub use main::MainMenuButton;
+pub use phone::PhoneMenu;
 
 use bingux_ui::prelude::*;
 use bingux_ui::web_view::input::EditCommand;

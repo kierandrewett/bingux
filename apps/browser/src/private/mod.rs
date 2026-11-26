@@ -10,8 +10,9 @@ mod tests;
 #[cfg(feature = "snapshot")]
 pub(crate) use snapshot::scenarios;
 
-use bingux_ui::task::spawn_blocking;
-use freya::prelude::spawn;
+use std::ffi::OsString;
+
+use crate::app::Launch;
 
 /// The private window, started from this one.
 pub struct PrivateWindow;
@@ -19,24 +20,11 @@ pub struct PrivateWindow;
 impl PrivateWindow {
     /// Start a private window. Nothing waits for it.
     pub fn open(profile: Option<String>) {
-        spawn(async move {
-            spawn_blocking(move || {
-                let Ok(program) = std::env::current_exe() else {
-                    return;
-                };
-                let mut command = std::process::Command::new(program);
-                command.arg("--private");
-                if let Some(profile) = profile {
-                    command.arg("--profile").arg(profile);
-                }
-                if let Ok(mut child) = command.spawn() {
-                    // Reaped on a thread of its own, so it never becomes a zombie.
-                    std::thread::spawn(move || {
-                        let _ = child.wait();
-                    });
-                }
-            })
-            .await;
-        });
+        let mut arguments: Vec<OsString> = vec!["--private".into()];
+        if let Some(profile) = profile {
+            arguments.push("--profile".into());
+            arguments.push(profile.into());
+        }
+        Launch::start_copy(arguments);
     }
 }

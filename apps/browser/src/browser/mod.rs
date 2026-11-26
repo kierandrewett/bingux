@@ -79,6 +79,10 @@ pub struct Profile {
     /// The profile's writer; `None` for a private window and a window
     /// without a profile, which keep nothing.
     pub store: Option<Store>,
+    /// Every profile of the registry as (id, name), oldest first: what the
+    /// main menu's Profile row lists. Read when the browser starts, off the
+    /// UI thread.
+    pub known: Vec<(String, String)>,
 }
 
 impl Default for Profile {
@@ -90,6 +94,7 @@ impl Default for Profile {
             settings: Settings::default(),
             settings_keeping: Keeping::NotSaved(NotSaved::NoProfile),
             store: None,
+            known: Vec::new(),
         }
     }
 }
@@ -104,6 +109,7 @@ impl Profile {
             settings,
             settings_keeping: Keeping::NotSaved(NotSaved::Private),
             store: None,
+            known: Vec::new(),
         }
     }
 }
@@ -130,6 +136,8 @@ pub struct Browser {
     /// The profile the window belongs to: its registry id and name, `None`
     /// for a window opened without one.
     pub profile: Option<(String, String)>,
+    /// Every profile as (id, name), for the main menu's Profile row.
+    pub profiles: Vec<(String, String)>,
     pub view: ViewSize,
     /// What the browser has said and the window has not yet shown or done.
     pub(crate) out: Outbox,
@@ -168,6 +176,7 @@ impl Browser {
             settings_keeping: Keeping::Loading,
             store: profile.store,
             profile: profile.id.zip(profile.name),
+            profiles: profile.known,
             view: ViewSize {
                 width: 1024,
                 height: 640,

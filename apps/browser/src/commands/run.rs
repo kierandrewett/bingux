@@ -18,6 +18,11 @@ impl Browser {
                 self.out.request(UiRequest::FocusAddress);
             }
             Command::NewPrivateWindow => self.out.request(UiRequest::NewPrivateWindow),
+            Command::ClearHistory => {
+                if self.history_len() > 0 {
+                    self.out.request(UiRequest::ConfirmClearHistory);
+                }
+            }
             Command::CloseTab => self.close_tab(key),
             Command::ReopenTab => self.reopen_closed(),
             Command::NextTab => self.step(1),

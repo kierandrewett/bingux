@@ -45,6 +45,7 @@ fn window(root: &Path) -> Browser {
             settings,
             settings_keeping: keeping,
             store: Some(store),
+            known: Vec::new(),
         },
     )
 }

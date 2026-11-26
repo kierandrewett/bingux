@@ -10,7 +10,7 @@ use crate::browser::{Options, Profile};
 use crate::engine::Engine;
 use crate::profiles::{Folders, Places};
 use crate::profiles::{Gate, GateWindow};
-use crate::profiles::{Opened, Waiting};
+use crate::profiles::{Opened, Profiles, Waiting};
 use crate::store;
 use crate::ui::{App, Handoff};
 
@@ -42,6 +42,26 @@ impl Launch {
             Err(error) => eprintln!("bingux-browser: could not find this program: {error}"),
         }
         std::process::exit(1);
+    }
+
+    /// Starts another copy of this program with `arguments`, as a window of its
+    /// own, and does not wait for it. A copy that asks for a profile another
+    /// copy holds hands its launch to that copy (`profiles::Waiting`).
+    pub fn start_copy(arguments: Vec<OsString>) {
+        freya::prelude::spawn(async move {
+            bingux_ui::task::spawn_blocking(move || {
+                let Ok(program) = std::env::current_exe() else {
+                    return;
+                };
+                if let Ok(mut child) = std::process::Command::new(program).args(arguments).spawn() {
+                    // Reaped on a thread of its own, so it never becomes a zombie.
+                    std::thread::spawn(move || {
+                        let _ = child.wait();
+                    });
+                }
+            })
+            .await;
+        });
     }
 
     pub fn run(arguments: &[OsString]) {
@@ -109,6 +129,7 @@ impl Launch {
                     settings: opened.settings,
                     settings_keeping,
                     store,
+                    known: Profiles::new(places.clone()).known(),
                 };
                 // The lock is held until the process ends.
                 let _lock = opened.lock;
