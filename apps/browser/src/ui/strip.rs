@@ -7,7 +7,7 @@ use crate::commands::Command;
 use crate::model::tab::{Tab, TabKind};
 
 use super::ctx::Ctx;
-use crate::menus::tab_items;
+use crate::menus::TabMenu;
 
 /// What a tab shows of what it is doing: a crash first, then a question
 /// waiting for the person, then loading, then sound.
@@ -59,7 +59,7 @@ pub fn strip(ctx: Ctx) -> TabStrip {
         .on_reorder(move |(key, to): (u64, usize)| ctx.with(|browser| browser.move_tab(key, to)))
         .on_status(move |key: u64| ctx.with(|browser| browser.toggle_mute(key)));
     for tab in browser.tabs.all() {
-        strip = strip.tab_menu(tab.key, tab_items(ctx, tab));
+        strip = strip.tab_menu(tab.key, TabMenu::items(ctx, tab));
     }
     strip
 }

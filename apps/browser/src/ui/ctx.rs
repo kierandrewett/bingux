@@ -112,7 +112,7 @@ impl Ctx {
                     let anchor = *chrome.menu_anchor.peek();
                     self.overlays.show_menu(
                         (anchor.min_x(), anchor.max_y()),
-                        crate::menus::main_menu(self),
+                        crate::menus::MainMenu::items(self),
                     );
                 }
                 UiRequest::Fullscreen(on) => with_window(move |window| {

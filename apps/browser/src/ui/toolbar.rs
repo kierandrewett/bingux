@@ -6,7 +6,7 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::menus::main_menu;
+use crate::menus::MainMenu;
 use crate::model::downloads::Downloads;
 use crate::model::tab::TabKind;
 use crate::site_info::ConnectionButton;
@@ -110,7 +110,7 @@ fn menu_control(ctx: Ctx) -> Element {
     let mut anchor = ctx.chrome.menu_anchor;
     rect()
         .on_sized(move |event: Event<SizedEventData>| anchor.set_if_modified(event.area))
-        .child(menu_button("Main menu", main_menu(ctx)).icon(Icon::OpenMenu))
+        .child(menu_button("Main menu", MainMenu::items(ctx)).icon(Icon::OpenMenu))
         .into_element()
 }
 

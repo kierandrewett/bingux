@@ -33,7 +33,7 @@ impl Component for ContextMenuHost {
                 };
                 let (x, y) = *ctx.chrome.page_origin.peek();
                 let at = (x + menu.target.position.0, y + menu.target.position.1);
-                let items = super::context_items(ctx, &menu);
+                let items = super::ContextMenu::items(ctx, &menu);
                 // The engine waits for the menu to be closed: it is told now, since
                 // what the menu does is the browser's, not the page's.
                 ctx.with(|browser| browser.dismiss_menu());
