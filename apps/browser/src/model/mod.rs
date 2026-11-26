@@ -9,7 +9,6 @@ pub mod address;
 pub mod browser;
 pub mod downloads;
 pub mod failure;
-pub mod history;
 pub mod keeping;
 pub mod permissions;
 pub mod security;

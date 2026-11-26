@@ -5,6 +5,7 @@
 //! started and take effect the next time it starts.
 
 use bingux_ui::prelude::*;
+use bingux_ui::search;
 use bingux_ui::web_view::{
     CheckStatus, EngineInfo, EngineState, ProcessSandbox, RemoteSettings, SecurityCheck,
     SecurityReport,
@@ -12,8 +13,25 @@ use bingux_ui::web_view::{
 use freya::prelude::*;
 
 use crate::model::address::ENGINES;
+use crate::model::keeping::Keeping;
+use crate::profile::history;
 
 use super::ctx::Ctx;
+
+/// The history row's second line: why history is not kept, or how many
+/// pages it holds.
+pub fn history_text(has_history: bool, keeping: &Keeping, pages: u64) -> String {
+    if let Some(why) = keeping.text("History") {
+        return why;
+    }
+    if !has_history {
+        return "Not kept in this window".to_string();
+    }
+    match pages {
+        1 => "1 page kept in this profile".to_string(),
+        _ => format!("{pages} pages kept in this profile"),
+    }
+}
 
 /// What the host's choice of Remote Settings means for the person.
 pub fn remote_settings_text(mode: RemoteSettings, server: Option<&str>) -> String {
@@ -151,15 +169,19 @@ impl Component for SettingsPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
-        let (info, selected, remembered, visited) = {
+        let (info, selected, remembered, has_history, history_keeping, scope) = {
             let browser = ctx.browser.read();
             (
                 browser.backend().info(),
                 browser.settings.engine_index(),
                 browser.permissions.origins().len(),
-                browser.history.len(),
+                browser.has_history(),
+                browser.history_keeping.clone(),
+                browser.history_clear_scope(),
             )
         };
+        // The count is the searchable's, so it follows every visit and Clear.
+        let pages = search::use_search_with(history::everything(), has_history).total;
         let engines: Vec<(String, String)> = ENGINES
             .iter()
             .enumerate()
@@ -178,23 +200,29 @@ impl Component for SettingsPage {
                     },
                 )),
         );
-        let privacy = Group::new("Privacy".to_string())
-            .row(
-                row("Browsing history")
-                    .subtitle(if visited == 1 {
-                        "1 page remembered while this window is open".to_string()
-                    } else {
-                        format!("{visited} pages remembered while this window is open")
-                    })
-                    .trailing(
-                        action_button("Clear", move |_: ()| {
-                            ctx.with(|browser| browser.history.clear());
-                            ctx.overlays.toast("History cleared");
-                        })
-                        .enabled(visited > 0)
-                        .compact(),
-                    ),
+        let mut history_row =
+            row("Browsing history").subtitle(history_text(has_history, &history_keeping, pages));
+        history_row = if history_keeping.can_start_over() {
+            history_row.trailing(
+                action_button("Start over", move |_: ()| {
+                    ctx.with(|browser| browser.start_over_history());
+                })
+                .compact(),
             )
+        } else {
+            history_row.trailing(
+                action_button("Clear", move |_: ()| {
+                    ctx.with(|browser| browser.clear_history());
+                })
+                .enabled(has_history && pages > 0)
+                .compact(),
+            )
+        };
+        let mut privacy = Group::new("Privacy".to_string()).row(history_row);
+        if let Some(kept) = scope.text() {
+            privacy = privacy.description(kept);
+        }
+        let privacy = privacy
             .row(
                 row("Site permissions")
                     .subtitle(if remembered == 1 {
@@ -211,7 +239,7 @@ impl Component for SettingsPage {
                         .compact(),
                     ),
             )
-            .footer("The browser keeps these only while the window is open.");
+            .footer("Site permissions are kept only while the window is open.");
         let settings = &info.settings;
         let mut engine = Group::new("Engine".to_string())
             .description("Chosen by whoever starts the browser, and read once at start.")

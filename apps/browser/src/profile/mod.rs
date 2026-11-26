@@ -8,6 +8,7 @@
 //! its own.
 
 pub mod files;
+pub mod history;
 pub mod lock;
 pub mod migrate;
 pub mod open;
@@ -16,6 +17,8 @@ pub mod registry;
 pub mod settings;
 pub mod store;
 
+#[cfg(test)]
+mod history_tests;
 #[cfg(test)]
 mod registry_tests;
 #[cfg(test)]

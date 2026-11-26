@@ -1,7 +1,6 @@
 //! The list under the address bar while it is being typed in.
 
 use super::address::{self, SearchEngine, Typed};
-use super::history::History;
 
 /// Where a suggestion came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,12 +33,26 @@ pub struct OpenTab {
     pub url: String,
 }
 
+/// A page from the `history` searchable: its hits, best first, are the
+/// history rows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Visited {
+    pub url: String,
+    pub title: String,
+}
+
 /// The most rows the list shows.
 pub const LIMIT: usize = 7;
 
 /// The rows for what is typed: the typed text first (go there, or search for
-/// it), then open tabs that match, then history.
-pub fn suggest(typed: &str, engine: &SearchEngine, tabs: &[OpenTab], history: &History) -> Vec<Suggestion> {
+/// it), then open tabs that match, then the hits of the `history` searchable
+/// for it, in the order the search ranked them.
+pub fn suggest(
+    typed: &str,
+    engine: &SearchEngine,
+    tabs: &[OpenTab],
+    history: &[Visited],
+) -> Vec<Suggestion> {
     let first = match address::classify(typed) {
         Typed::Nothing => return Vec::new(),
         Typed::Address(url) => Suggestion {
@@ -58,19 +71,23 @@ pub fn suggest(typed: &str, engine: &SearchEngine, tabs: &[OpenTab], history: &H
     let mut rows = vec![first];
     let query = typed.trim().to_lowercase();
     for tab in tabs {
-        let matches = query
-            .split_whitespace()
-            .all(|word| tab.url.to_lowercase().contains(word) || tab.title.to_lowercase().contains(word));
+        let matches = query.split_whitespace().all(|word| {
+            tab.url.to_lowercase().contains(word) || tab.title.to_lowercase().contains(word)
+        });
         if matches && !tab.url.is_empty() && rows.len() < LIMIT {
             rows.push(Suggestion {
                 source: Source::Tab(tab.key),
-                title: if tab.title.is_empty() { address::display(&tab.url) } else { tab.title.clone() },
+                title: if tab.title.is_empty() {
+                    address::display(&tab.url)
+                } else {
+                    tab.title.clone()
+                },
                 detail: address::display(&tab.url),
                 url: tab.url.clone(),
             });
         }
     }
-    for visit in history.matching(typed, LIMIT) {
+    for visit in history {
         if rows.len() >= LIMIT {
             break;
         }
@@ -80,7 +97,11 @@ pub fn suggest(typed: &str, engine: &SearchEngine, tabs: &[OpenTab], history: &H
         }
         rows.push(Suggestion {
             source: Source::History,
-            title: if visit.title.is_empty() { address::display(&visit.url) } else { visit.title.clone() },
+            title: if visit.title.is_empty() {
+                address::display(&visit.url)
+            } else {
+                visit.title.clone()
+            },
             detail: address::display(&visit.url),
             url: visit.url.clone(),
         });
@@ -93,22 +114,33 @@ mod tests {
     use super::*;
     use crate::model::address::ENGINES;
 
-    fn history() -> History {
-        let mut history = History::new();
-        history.record("https://example.com/", "Example Domain");
-        history.record("https://docs.example.org/guide", "The example guide");
-        history
+    fn visited(url: &str, title: &str) -> Visited {
+        Visited {
+            url: url.to_string(),
+            title: title.to_string(),
+        }
+    }
+
+    /// Hits of the `history` searchable, as it ranked them.
+    fn history() -> Vec<Visited> {
+        vec![
+            visited("https://example.com/", "Example Domain"),
+            visited("https://docs.example.org/guide", "The example guide"),
+        ]
     }
 
     #[test]
     fn the_first_row_is_what_was_typed() {
-        let rows = suggest("example.com", &ENGINES[0], &[], &History::new());
+        let rows = suggest("example.com", &ENGINES[0], &[], &[]);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].source, Source::Typed);
         assert_eq!(rows[0].title, "Go to example.com");
         assert_eq!(rows[0].url, "https://example.com");
-        let rows = suggest("rust book", &ENGINES[0], &[], &History::new());
-        assert_eq!(rows[0].title, "Search DuckDuckGo for \u{201c}rust book\u{201d}");
+        let rows = suggest("rust book", &ENGINES[0], &[], &[]);
+        assert_eq!(
+            rows[0].title,
+            "Search DuckDuckGo for \u{201c}rust book\u{201d}"
+        );
         assert_eq!(rows[0].url, "https://duckduckgo.com/?q=rust+book");
     }
 
@@ -127,15 +159,17 @@ mod tests {
         let rows = suggest("example", &ENGINES[0], &tabs, &history());
         let sources: Vec<Source> = rows.iter().map(|row| row.source.clone()).collect();
         assert_eq!(sources, [Source::Typed, Source::Tab(7), Source::History]);
-        assert_eq!(rows[2].url, "https://docs.example.org/guide", "the open page is not offered twice");
+        assert_eq!(
+            rows[2].url, "https://docs.example.org/guide",
+            "the open page is not offered twice"
+        );
     }
 
     #[test]
     fn the_list_is_never_longer_than_the_limit() {
-        let mut history = History::new();
-        for index in 0..30 {
-            history.record(&format!("https://site{index}.example/"), "Site");
-        }
+        let history: Vec<Visited> = (0..30)
+            .map(|index| visited(&format!("https://site{index}.example/"), "Site"))
+            .collect();
         assert_eq!(suggest("site", &ENGINES[0], &[], &history).len(), LIMIT);
     }
 }

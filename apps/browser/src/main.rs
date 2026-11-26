@@ -137,16 +137,19 @@ fn main() {
             }
             let engine = start_or_exit(Some(&opened.folders));
             let settings_keeping = profile::store::keeping_of(opened.settings_problem.as_ref());
-            let (store, settings_keeping) =
-                match profile::store::Store::open(&opened.folders, settings_keeping.clone()) {
-                    Ok(store) => (Some(store), settings_keeping),
-                    Err(error) => (
-                        None,
-                        model::keeping::Keeping::NotSaved(model::keeping::NotSaved::Failed(
-                            error.to_string(),
-                        )),
-                    ),
-                };
+            let (store, settings_keeping) = match profile::store::Store::open(
+                &opened.folders,
+                settings_keeping.clone(),
+                bingux_ui::search::service(),
+            ) {
+                Ok(store) => (Some(store), settings_keeping),
+                Err(error) => (
+                    None,
+                    model::keeping::Keeping::NotSaved(model::keeping::NotSaved::Failed(
+                        error.to_string(),
+                    )),
+                ),
+            };
             let profile = Profile {
                 id: opened
                     .entry

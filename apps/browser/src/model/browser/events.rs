@@ -127,8 +127,8 @@ impl Browser {
                 if let Some(tab) = self.tabs.get_mut(key) {
                     tab.title = title.clone();
                 }
-                if !private {
-                    self.history.set_title(&url, &title);
+                if !private && let Some(store) = &self.store {
+                    store.set_title(&url, &title);
                 }
             }
             TabEvent::Load {
@@ -152,8 +152,11 @@ impl Browser {
                 tab.load.error = error;
                 let finished_page = !loading && tab.load.error.is_none() && !tab.is_blank();
                 let (url, title) = (tab.url.clone(), tab.title.clone());
-                if finished_page && !private {
-                    self.history.record(&url, &title);
+                if finished_page
+                    && !private
+                    && let Some(store) = &self.store
+                {
+                    store.record_visit(&url, &title);
                 }
             }
             TabEvent::Security(security) => {

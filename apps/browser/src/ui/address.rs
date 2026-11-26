@@ -12,10 +12,12 @@ use std::rc::Rc;
 
 use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
+use bingux_ui::search;
 use freya::prelude::*;
 
-use crate::model::suggest::{self, OpenTab, Source, Suggestion};
+use crate::model::suggest::{self, OpenTab, Source, Suggestion, Visited};
 use crate::model::tabs::Place;
+use crate::profile::history;
 
 use super::ctx::Ctx;
 
@@ -67,10 +69,21 @@ impl Component for AddressBar {
             let browser = ctx.browser.read();
             (
                 browser.tabs.active_key(),
-                browser.active().map(|tab| tab.address_text()).unwrap_or_default(),
+                browser
+                    .active()
+                    .map(|tab| tab.address_text())
+                    .unwrap_or_default(),
             )
         };
         let editing = typing();
+        // History is the profile's `history` searchable, asked off the UI
+        // thread as the text changes; a private window has none.
+        let typed = address.read().clone();
+        let has_history = ctx.browser.read().has_history();
+        let found = search::use_search_with(
+            history::suggestions(&typed),
+            editing && has_history && !typed.trim().is_empty(),
+        );
         // What the list offers: only while the person has changed the text.
         let rows: Vec<Suggestion> = if editing {
             let browser = ctx.browser.read();
@@ -84,17 +97,21 @@ impl Component for AddressBar {
                     url: tab.url.clone(),
                 })
                 .collect();
-            suggest::suggest(&address.read(), browser.search(), &open, &browser.history)
+            let visited: Vec<Visited> = found.hits.iter().map(history::visited).collect();
+            suggest::suggest(&typed, browser.search(), &open, &visited)
         } else {
             Vec::new()
         };
 
         // The field follows the page while nobody is typing in it.
-        use_side_effect_with_deps(&(key, shown.clone(), editing), move |(_, shown, editing): &(u64, String, bool)| {
-            if !*editing {
-                address.set(shown.clone());
-            }
-        });
+        use_side_effect_with_deps(
+            &(key, shown.clone(), editing),
+            move |(_, shown, editing): &(u64, String, bool)| {
+                if !*editing {
+                    address.set(shown.clone());
+                }
+            },
+        );
         // The keyboard leaving the field ends the typing, unless the pointer is
         // on a row (a press on it takes the keyboard for a moment).
         use_side_effect_with_deps(&focused, move |focused: &bool| {
@@ -114,7 +131,8 @@ impl Component for AddressBar {
                 highlight.set(None);
                 match chosen {
                     Some(Suggestion {
-                        source: Source::Tab(tab), ..
+                        source: Source::Tab(tab),
+                        ..
                     }) => ctx.with(|browser| browser.select(tab)),
                     Some(row) if alt => {
                         ctx.with(|browser| browser.open_tab(&row.url, Place::AfterActive, true));
@@ -131,7 +149,11 @@ impl Component for AddressBar {
         let wanted = chrome.focus_address.read().to_owned();
         let mut field = text_field(address, submit)
             .fill_width()
-            .placeholder(if is_compact() { "Search or address" } else { "Search or enter an address" })
+            .placeholder(if is_compact() {
+                "Search or address"
+            } else {
+                "Search or enter an address"
+            })
             .leading(Icon::Search)
             .a11y_id(id)
             .revert_to(shown.clone())
@@ -184,9 +206,13 @@ impl Component for AddressBar {
             .on_sized(move |event: Event<SizedEventData>| field_area.set_if_modified(event.area))
             .child(rect().key(wanted).tw(&tokens, &[w_full()]).child(field))
             .child(
-                popover(open, &anchor, rect().width(Size::fill()).children(list).into_element())
-                    .attached()
-                    .on_dismiss(move |_: ()| typing.set(false)),
+                popover(
+                    open,
+                    &anchor,
+                    rect().width(Size::fill()).children(list).into_element(),
+                )
+                .attached()
+                .on_dismiss(move |_: ()| typing.set(false)),
             )
     }
 }
@@ -199,7 +225,11 @@ mod tests {
     fn the_arrows_walk_the_list_and_come_back_to_the_typed_text() {
         assert_eq!(move_highlight(None, 3, true), Some(0));
         assert_eq!(move_highlight(Some(0), 3, true), Some(1));
-        assert_eq!(move_highlight(Some(2), 3, true), None, "past the last is the typed text again");
+        assert_eq!(
+            move_highlight(Some(2), 3, true),
+            None,
+            "past the last is the typed text again"
+        );
         assert_eq!(move_highlight(None, 3, false), Some(2));
         assert_eq!(move_highlight(Some(1), 3, false), Some(0));
         assert_eq!(move_highlight(Some(0), 3, false), None);

@@ -1,9 +1,11 @@
 //! What the profile's store says about keeping, turned into state: the
-//! settings page reads [`Browser::settings_keeping`], and a part that stops
-//! being kept is told once in a toast.
+//! settings page reads [`Browser::settings_keeping`] and
+//! [`Browser::history_keeping`], and a part that stops being kept is told
+//! once in a toast. History itself is the store's and the bingux-ui
+//! searchable `history`; the window only sends it what was visited.
 
 use super::Browser;
-use crate::model::keeping::{Keeping, NotSaved};
+use crate::model::keeping::{ClearScope, Keeping, NotSaved};
 use crate::profile::store::Event;
 
 impl Browser {
@@ -15,6 +17,7 @@ impl Browser {
         for event in store.take_events() {
             match event {
                 Event::Settings(keeping) => self.kept_settings(keeping),
+                Event::History(keeping) => self.kept_history(keeping),
             }
         }
     }
@@ -32,6 +35,65 @@ impl Browser {
             self.notify(text);
         }
         self.settings_keeping = keeping;
+    }
+
+    /// How keeping the history goes now, told as the settings are.
+    fn kept_history(&mut self, keeping: Keeping) {
+        if keeping == self.history_keeping {
+            return;
+        }
+        if !by_design(&keeping)
+            && let Some(text) = keeping.text("History")
+        {
+            self.notify(text);
+        }
+        self.history_keeping = keeping;
+    }
+
+    /// Whether this window has the `history` searchable: a window of a
+    /// profile. A private window, and one without a profile, have none.
+    pub fn has_history(&self) -> bool {
+        self.store.is_some()
+    }
+
+    /// How many pages the history holds.
+    pub fn history_len(&self) -> usize {
+        self.store.as_ref().map_or(0, |store| store.history_len())
+    }
+
+    /// What Clear history reaches. The engine has no call that forgets the
+    /// visits it keeps for link colours (Places) yet: that is Vivarium
+    /// proposal V1 (`docs/browser/profiles-and-store.md`).
+    pub fn history_clear_scope(&self) -> ClearScope {
+        ClearScope {
+            history: self.has_history(),
+            link_colours: false,
+        }
+    }
+
+    /// Forget the history: the file and the searchable. The toast says what
+    /// it does not reach.
+    pub fn clear_history(&mut self) {
+        let Some(store) = &self.store else {
+            return;
+        };
+        store.clear_history();
+        let text = match self.history_clear_scope().text() {
+            Some(kept) => format!("History cleared. {kept}"),
+            None => "History cleared".to_string(),
+        };
+        self.notify(text);
+    }
+
+    /// The history file could not be read: move it aside and keep history
+    /// in a new one. Only offered for a damaged file.
+    pub fn start_over_history(&mut self) {
+        if !self.history_keeping.can_start_over() {
+            return;
+        }
+        if let Some(store) = &self.store {
+            store.start_over_history();
+        }
     }
 
     /// Wake `waker` when the store has something to say.

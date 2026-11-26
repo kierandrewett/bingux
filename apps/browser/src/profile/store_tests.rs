@@ -11,6 +11,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
+use bingux_ui::search::SearchService;
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use super::files::{self, Problem, remove_tree, tests::temp};
@@ -29,7 +30,7 @@ fn window(root: &Path) -> Browser {
     let folders = folders(root);
     let (settings, problem) = Settings::read(&folders.settings());
     let keeping = keeping_of(problem.as_ref());
-    let store = Store::open(&folders, keeping.clone()).unwrap();
+    let store = Store::open(&folders, keeping.clone(), &SearchService::new()).unwrap();
     Browser::with_profile(
         TestDoubleBackend::new(),
         Options::default(),

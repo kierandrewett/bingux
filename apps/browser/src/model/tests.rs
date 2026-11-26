@@ -160,16 +160,14 @@ fn a_new_appearance_reaches_the_engine_once_and_decides_the_scheme_of_new_tabs()
 }
 
 #[test]
-fn history_collects_finished_pages_but_not_in_a_private_window() {
-    let (mut browser, _) = browser();
-    go(&mut browser, "example.com");
-    assert_eq!(browser.history.matching("example", 5).len(), 1);
-
+fn a_private_window_has_no_history_and_its_tabs_are_private() {
+    // History itself is the profile store's: `profile/history_tests.rs`.
     let double = TestDoubleBackend::new();
     let mut private = Browser::new(double, Options { private: true });
     private.open_tab("example.com", Place::End, true);
     private.poll();
-    assert!(private.history.is_empty());
+    assert!(!private.has_history());
+    assert_eq!(private.history_len(), 0);
     assert!(private.tabs.active().unwrap().private);
 }
 

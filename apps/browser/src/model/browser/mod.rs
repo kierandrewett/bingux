@@ -22,7 +22,6 @@ use bingux_ui::web_view::{
 
 use super::address::{ENGINES, SearchEngine};
 use super::downloads::Downloads;
-use super::history::History;
 use super::keeping::{Keeping, NotSaved};
 use super::permissions::Permissions;
 use super::shortcuts::Command;
@@ -149,7 +148,8 @@ pub struct Browser {
     pub tabs: TabList,
     pub closed: Vec<ClosedTab>,
     pub downloads: Downloads,
-    pub history: History,
+    /// Whether the history is kept.
+    pub history_keeping: Keeping,
     pub permissions: Permissions,
     pub engine: EngineStatus,
     /// The settings of the window's profile.
@@ -195,7 +195,11 @@ impl Browser {
             tabs: TabList::new(),
             closed: Vec::new(),
             downloads: Downloads::new(),
-            history: History::new(),
+            history_keeping: if profile.store.is_some() {
+                Keeping::Loading
+            } else {
+                profile.settings_keeping.clone()
+            },
             permissions: Permissions::new(),
             engine: EngineStatus::Starting,
             settings: profile.settings,
