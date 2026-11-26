@@ -16,8 +16,9 @@ use freya::prelude::*;
 use super::actions::error_words;
 use super::compress::{Fields, location_row};
 use super::compress_model::{
-    Check, Draft, Subject, audio_codecs_unavailable, dimension_label, height_label,
-    image_formats_unavailable, quality_key, rate_label, summary, video_codecs_unavailable,
+    Check, Draft, Subject, audio_codec_words, audio_codecs_unavailable, dimension_label,
+    height_label, image_format_words, image_formats_unavailable, media_kind_words, quality_key,
+    rate_label, summary, video_codecs_unavailable,
 };
 use crate::controls::{dropdown, form_field, segmented};
 use crate::group::{Group, form_row};
@@ -55,11 +56,14 @@ fn keyed<T: Copy>(
 
 /// A group, or, when the kind cannot be made here, the one row that says why.
 fn missing(kind: MediaKind, reason: String) -> Element {
-    Group::titled(kind.label())
+    Group::titled(&media_kind_words(kind))
         .row(
-            row(crate::tr!("ui-compress-media-cannot", kind = kind.label()))
-                .subtitle(reason)
-                .enabled(false),
+            row(crate::tr!(
+                "ui-compress-media-cannot",
+                kind = media_kind_words(kind)
+            ))
+            .subtitle(reason)
+            .enabled(false),
         )
         .into()
 }
@@ -103,7 +107,7 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
     let formats = keyed(
         &ImageFormat::ALL,
         |f| f.key().to_string(),
-        |f| f.label().to_string(),
+        |f| image_format_words(f),
     );
     let format_row = form_row(
         crate::tr!("ui-compress-format"),
@@ -332,7 +336,7 @@ fn songs(m: &Media<'_>, tools: &Tools) -> Element {
     let codecs = keyed(
         &AudioCodec::ALL,
         |c| c.key().to_string(),
-        |c| c.label().to_string(),
+        |c| audio_codec_words(c),
     );
     let codec_row = form_row(
         crate::tr!("ui-compress-format"),

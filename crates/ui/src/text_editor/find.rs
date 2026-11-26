@@ -115,10 +115,18 @@ impl FindState {
         }
         let pattern = match query.compile() {
             Ok(pattern) => pattern,
-            Err(message) => {
+            Err(problem) => {
                 matches.set(Rc::new(Matches::default()));
                 current.set(None);
-                error.set(Some(message));
+                error.set(Some(match problem {
+                    bingux_text::search::PatternError::Syntax(detail) => detail,
+                    bingux_text::search::PatternError::TooLarge => {
+                        crate::tr!("ui-text-find-pattern-too-large")
+                    }
+                    bingux_text::search::PatternError::Invalid => {
+                        crate::tr!("ui-text-find-pattern-invalid")
+                    }
+                }));
                 return;
             }
         };

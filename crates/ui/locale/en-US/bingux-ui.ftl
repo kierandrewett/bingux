@@ -2060,6 +2060,8 @@ ui-toolbar-more = More
 
 ui-text-find-searching = Searching…
 ui-text-find-none = No results
+ui-text-find-pattern-invalid = Not a valid pattern
+ui-text-find-pattern-too-large = The pattern is too large
 # $current (Number) - the match shown; $total (Number) - how many matches; $more is 1 when the count stopped at its limit
 ui-text-find-position = { $current } of { $total }{ $more ->
     [1] +
@@ -2384,3 +2386,23 @@ ui-files-check-no-picture = it has no picture.
 ui-files-check-no-sound = it has no sound.
 # $after (String) - seconds long now, such as 3.2; $before (String) - seconds long before
 ui-files-check-too-short = it is { $after } s long, not { $before } s.
+
+## Files: descriptive labels of the Compress and Reduce forms
+
+# $label (Text) - the format's ending, such as .zip; $note (Text) - why to pick it
+ui-compress-format-option = { $label }, { $note }
+ui-compress-note-zip = works everywhere
+ui-compress-note-tar-gz = fast, common on Linux and Mac
+ui-compress-note-tar-xz = smaller, slower, Linux and Mac
+ui-compress-note-tar-zst = fast and small, newer systems
+ui-compress-note-tar-bz2 = smaller than gzip, slower
+ui-compress-note-seven-zip = smallest, needs 7-Zip to open
+ui-compress-note-tar = no compression, keeps permissions
+ui-compress-level-fastest = Fastest
+ui-compress-level-balanced = Balanced
+ui-compress-level-smallest = Smallest
+ui-compress-kind-pictures = Pictures
+ui-compress-kind-videos = Videos
+ui-compress-kind-audio = Audio
+ui-compress-keep-format = Keep format
+ui-compress-codec-flac = FLAC (lossless)

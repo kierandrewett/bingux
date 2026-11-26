@@ -59,29 +59,27 @@ pub(crate) struct Section {
     pub items: Vec<Item>,
 }
 
-/// The row's label: the standard places the backend names in English
-/// (Recent, Home, the user folders, Trash) are read from the catalogue, so they
-/// follow the language. A name that is anything else (a bookmark, a user folder
-/// the person renamed or the desktop already localised) is shown as it is.
+/// The row's label: the standard places the backend names itself
+/// ([`PlaceKind::backend_name`]) are read from the catalogue, so they follow
+/// the language. A name that is anything else (a bookmark, a user folder the
+/// person renamed or the desktop already localised) is shown as it is.
 fn place_label(place: &Place) -> String {
-    let named = |english: &str, text: String| {
-        if place.name == english {
-            text
-        } else {
-            place.name.clone()
-        }
+    let text = match place.kind {
+        PlaceKind::Recent => crate::tr!("ui-files-root-recent"),
+        PlaceKind::Home => crate::tr!("ui-files-root-home"),
+        PlaceKind::Trash => crate::tr!("ui-files-root-trash"),
+        PlaceKind::Desktop => crate::tr!("ui-files-place-desktop"),
+        PlaceKind::Documents => crate::tr!("ui-files-place-documents"),
+        PlaceKind::Downloads => crate::tr!("ui-files-place-downloads"),
+        PlaceKind::Music => crate::tr!("ui-files-place-music"),
+        PlaceKind::Pictures => crate::tr!("ui-files-place-pictures"),
+        PlaceKind::Videos => crate::tr!("ui-files-place-videos"),
+        _ => return place.name.clone(),
     };
-    match place.kind {
-        PlaceKind::Recent => named("Recent", crate::tr!("ui-files-root-recent")),
-        PlaceKind::Home => named("Home", crate::tr!("ui-files-root-home")),
-        PlaceKind::Trash => named("Trash", crate::tr!("ui-files-root-trash")),
-        PlaceKind::Desktop => named("Desktop", crate::tr!("ui-files-place-desktop")),
-        PlaceKind::Documents => named("Documents", crate::tr!("ui-files-place-documents")),
-        PlaceKind::Downloads => named("Downloads", crate::tr!("ui-files-place-downloads")),
-        PlaceKind::Music => named("Music", crate::tr!("ui-files-place-music")),
-        PlaceKind::Pictures => named("Pictures", crate::tr!("ui-files-place-pictures")),
-        PlaceKind::Videos => named("Videos", crate::tr!("ui-files-place-videos")),
-        _ => place.name.clone(),
+    if place.kind.backend_name() == Some(place.name.as_str()) {
+        text
+    } else {
+        place.name.clone()
     }
 }
 
@@ -264,7 +262,10 @@ pub(crate) enum UsageLine {
 
 /// `Not mounted, 16 GB`.
 pub(crate) fn volume_text(volume: &Volume) -> String {
-    crate::tr!("ui-files-places-not-mounted", size = display::size(volume.size))
+    crate::tr!(
+        "ui-files-places-not-mounted",
+        size = display::size(volume.size)
+    )
 }
 
 /// `230 GB free of 465 GB`.
@@ -438,7 +439,11 @@ mod tests {
         let titles: Vec<_> = out.iter().map(|section| section.title.clone()).collect();
         assert_eq!(
             titles,
-            [None, Some("Bookmarks".to_string()), Some("Drives".to_string())]
+            [
+                None,
+                Some("Bookmarks".to_string()),
+                Some("Drives".to_string())
+            ]
         );
         let drives: Vec<_> = out[2]
             .items

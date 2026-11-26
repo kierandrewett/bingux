@@ -19,9 +19,9 @@ use std::path::PathBuf;
 
 use bingux_files::Entry;
 use bingux_files::ops::{
-    Excludes, Format, ImageFormat, MediaKind, NameCheck, OnConflict, PackOptions, Password,
-    ReduceOptions, Tools, VideoCodec, VideoQuality, check_name, file_name, free_base,
-    suggested_base,
+    AudioCodec, Excludes, Format, ImageFormat, Level, MediaKind, NameCheck, OnConflict,
+    PackOptions, Password, ReduceOptions, Tools, VideoCodec, VideoQuality, check_name, file_name,
+    free_base, suggested_base,
 };
 
 use super::actions::{error_words, name_check_words, pattern_words};
@@ -244,6 +244,59 @@ pub fn split_size_words(mib: u64) -> String {
         crate::tr!("ui-compress-split-gb", count = mib / 1024)
     } else {
         crate::tr!("ui-compress-split-mb", count = mib)
+    }
+}
+
+/// Why a person would pick an archive format, in a few words that read after
+/// its name: `.zip, works everywhere`.
+pub fn format_option_words(format: Format) -> String {
+    let note = match format {
+        Format::Zip => crate::tr!("ui-compress-note-zip"),
+        Format::TarGz => crate::tr!("ui-compress-note-tar-gz"),
+        Format::TarXz => crate::tr!("ui-compress-note-tar-xz"),
+        Format::TarZst => crate::tr!("ui-compress-note-tar-zst"),
+        Format::TarBz2 => crate::tr!("ui-compress-note-tar-bz2"),
+        Format::SevenZip => crate::tr!("ui-compress-note-seven-zip"),
+        Format::Tar => crate::tr!("ui-compress-note-tar"),
+    };
+    crate::tr!(
+        "ui-compress-format-option",
+        label = format.label(),
+        note = note
+    )
+}
+
+/// The words for a compression level.
+pub fn level_words(level: Level) -> String {
+    match level {
+        Level::Fastest => crate::tr!("ui-compress-level-fastest"),
+        Level::Balanced => crate::tr!("ui-compress-level-balanced"),
+        Level::Smallest => crate::tr!("ui-compress-level-smallest"),
+    }
+}
+
+/// The words for a kind of media: the group title of the Reduce form.
+pub fn media_kind_words(kind: MediaKind) -> String {
+    match kind {
+        MediaKind::Image => crate::tr!("ui-compress-kind-pictures"),
+        MediaKind::Video => crate::tr!("ui-compress-kind-videos"),
+        MediaKind::Audio => crate::tr!("ui-compress-kind-audio"),
+    }
+}
+
+/// A picture format in a dropdown: its name, or the words for keeping it.
+pub fn image_format_words(format: ImageFormat) -> String {
+    match format.label() {
+        Some(name) => name.to_string(),
+        None => crate::tr!("ui-compress-keep-format"),
+    }
+}
+
+/// A song codec in a dropdown: its name, with what matters about it.
+pub fn audio_codec_words(codec: AudioCodec) -> String {
+    match codec {
+        AudioCodec::Flac => crate::tr!("ui-compress-codec-flac"),
+        other => other.label().to_string(),
     }
 }
 

@@ -41,8 +41,9 @@ use super::actions::{Env, error_words};
 use super::chooser::choose;
 use super::compress_media::{Media, media_groups};
 use super::compress_model::{
-    Check, Draft, Mode, Subject, Typed, World, check, name_is_taken, pack_options, reduce_options,
-    result_name, split_size_words, unavailable_formats, usable_format,
+    Check, Draft, Mode, Subject, Typed, World, check, format_option_words, level_words,
+    name_is_taken, pack_options, reduce_options, result_name, split_size_words,
+    unavailable_formats, usable_format,
 };
 use super::compress_run::{run_pack, run_reduce};
 use crate::controls::{dropdown, form_field, segmented};
@@ -734,12 +735,7 @@ pub(super) fn location_row(folder: &std::path::Path, choose: EventHandler<()>) -
 fn format_options() -> Vec<(String, String)> {
     Format::ALL
         .into_iter()
-        .map(|format| {
-            (
-                format.label().to_string(),
-                format!("{}, {}", format.label(), format.note().to_lowercase()),
-            )
-        })
+        .map(|format| (format.label().to_string(), format_option_words(format)))
         .collect()
 }
 
@@ -831,7 +827,7 @@ fn archive_groups(
         segmented(
             Level::ALL
                 .into_iter()
-                .map(|level| (level_key(level).to_string(), level.label().to_string()))
+                .map(|level| (level_key(level).to_string(), level_words(level)))
                 .collect(),
             level_key(draft.pack.level),
             move |key: String| {

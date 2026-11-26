@@ -6,6 +6,11 @@
 
 use std::fmt;
 
+use unicode_segmentation::UnicodeSegmentation;
+
+use crate::format::{self, DatePart};
+use crate::locale::Locale;
+
 /// A day of the week.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Weekday {
@@ -42,57 +47,61 @@ impl Weekday {
         Weekday::from_index(i64::from(self.index()) + days)
     }
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Weekday::Mon => "Monday",
-            Weekday::Tue => "Tuesday",
-            Weekday::Wed => "Wednesday",
-            Weekday::Thu => "Thursday",
-            Weekday::Fri => "Friday",
-            Weekday::Sat => "Saturday",
-            Weekday::Sun => "Sunday",
-        }
+    /// "Monday", in the language of the locale.
+    pub fn name(self) -> String {
+        self.written().long().format()
     }
 
-    /// "Mon".
-    pub fn short(self) -> &'static str {
-        &self.name()[..3]
+    /// "Monday", in the language of `locale`.
+    pub fn name_in(self, locale: &Locale) -> String {
+        self.written().locale(locale).long().format()
     }
 
-    /// "M": one letter, for a narrow column.
-    pub fn narrow(self) -> &'static str {
-        &self.name()[..1]
+    /// "Mon", in the language of the locale.
+    pub fn short(self) -> String {
+        self.written().short().format()
+    }
+
+    /// "M": one letter, for a narrow column: the first letter of the short
+    /// name.
+    pub fn narrow(self) -> String {
+        self.short()
+            .graphemes(true)
+            .next()
+            .unwrap_or_default()
+            .to_string()
     }
 
     /// Whether this is a Saturday or a Sunday.
     pub fn is_weekend(self) -> bool {
         matches!(self, Weekday::Sat | Weekday::Sun)
     }
+
+    /// The weekday alone, as the formatter writes it. 1 January 2024 was a
+    /// Monday.
+    fn written(self) -> format::Date {
+        format::Date::civil(2024, 1, 1 + self.index()).part(DatePart::Weekday)
+    }
 }
 
-const MONTHS: [&str; 12] = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
-
-/// "March" for month 3. Months outside 1 to 12 wrap.
-pub fn month_name(month: u8) -> &'static str {
-    MONTHS[usize::from(month.max(1) - 1) % 12]
+/// "March" for month 3, in the language of the locale. Months outside 1 to 12
+/// wrap.
+pub fn month_name(month: u8) -> String {
+    month_written(month).long().format()
 }
 
-/// "Mar" for month 3.
-pub fn month_short(month: u8) -> &'static str {
-    &month_name(month)[..3]
+/// "March" for month 3, in the language of `locale`.
+pub fn month_name_in(month: u8, locale: &Locale) -> String {
+    month_written(month).locale(locale).long().format()
+}
+
+/// "Mar" for month 3, in the language of the locale.
+pub fn month_short(month: u8) -> String {
+    month_written(month).short().format()
+}
+
+fn month_written(month: u8) -> format::Date {
+    format::Date::civil(2024, (month.max(1) - 1) % 12 + 1, 1).part(DatePart::Month)
 }
 
 /// A day of the Gregorian calendar.
@@ -225,24 +234,32 @@ impl Date {
         ((thursday.days() - jan1.days()) / 7 + 1) as u32
     }
 
-    /// "12 March 2025".
+    /// "12 March 2025", in the order and language of the locale.
     pub fn long(self) -> String {
-        format!("{} {} {}", self.day, month_name(self.month), self.year)
+        self.written().long().format()
     }
 
-    /// "Wed 12 Mar".
+    /// "12 March 2025" in the order and language of `locale`.
+    pub fn long_in(self, locale: &Locale) -> String {
+        self.written().locale(locale).long().format()
+    }
+
+    /// "Wed 12 Mar", in the order and language of the locale.
     pub fn short(self) -> String {
-        format!(
-            "{} {} {}",
-            self.weekday().short(),
-            self.day,
-            month_short(self.month)
-        )
+        self.written()
+            .medium()
+            .weekday()
+            .part(DatePart::DayMonth)
+            .format()
     }
 
-    /// "March 2025".
+    /// "March 2025", in the order and language of the locale.
     pub fn month_year(self) -> String {
-        format!("{} {}", month_name(self.month), self.year)
+        self.written().long().part(DatePart::MonthYear).format()
+    }
+
+    fn written(self) -> format::Date {
+        format::Date::civil(self.year, self.month, self.day)
     }
 
     /// "2025-03-12", the form `parse` reads.
@@ -391,6 +408,21 @@ pub fn parse_clock(text: &str, prefer_pm: bool) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn names_follow_the_locale_and_come_from_its_data() {
+        let en = Locale::parse("en-GB").unwrap();
+        let de = Locale::parse("de-DE").unwrap();
+        let ja = Locale::parse("ja-JP").unwrap();
+        assert_eq!(Weekday::Wed.name_in(&en), "Wednesday");
+        assert_eq!(Weekday::Wed.name_in(&de), "Mittwoch");
+        assert_eq!(Weekday::Wed.name_in(&ja), "水曜日");
+        assert_eq!(month_name_in(3, &en), "March");
+        assert_eq!(month_name_in(3, &de), "März");
+        assert_eq!(month_name_in(3, &ja), "3月");
+        assert_eq!(d(2025, 3, 12).long_in(&en), "12 March 2025");
+        assert_eq!(d(2025, 3, 12).long_in(&de), "12. März 2025");
+    }
 
     fn d(y: i32, m: u8, day: u8) -> Date {
         Date::new(y, m, day).unwrap()
