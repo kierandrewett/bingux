@@ -1,11 +1,14 @@
 # Browser: permissions in Gecko 160
 
-**Proposal. Needs Kieran's approval.** Nothing here is built, and nothing here is part of the naming plan
-(`naming.md`). The naming work changes words and identifiers only: the browser keeps asking and denying exactly as it
-does today. This file records what Firefox does at `FIREFOX_160_0_RELEASE`, kind by kind, so that Kieran can choose
-whether any behaviour should follow.
+**Approved 2026-11-26 (follow Firefox 160).** Kieran's rule is Gecko's behaviour as well as its names, and he did not
+object to the proposal below. It is its own step in the phase 2 plan, after the permission naming step (`naming.md`,
+step 8b). Nothing here is built yet.
 
-Paths are relative to the Gecko root, read on the vivarium box. `:N` is a line at the tag.
+This file records what Firefox does at `FIREFOX_160_0_RELEASE`, kind by kind, what the engine gives the browser to do
+the same, and what Vivarium would have to add.
+
+Paths are relative to the Gecko root, read on the vivarium box. `:N` is a line at the tag. Paths under Vivarium are
+relative to `~/dev/vivarium`.
 
 ## What the browser does today
 
@@ -42,21 +45,44 @@ Paths are relative to the Gecko root, read on the vivarium box. `:N` is a line a
 | clipboard read (no id)                                    | not stored; absent from `SitePermissions` (`:867-1091`) | **No prompt.** `navigator.clipboard.readText()` or `read()` opens a one-item "Paste" menu at the pointer; the page gets the text only if the person chooses it | `toolkit/modules/ClipboardContextMenu.sys.mjs:11,161`; `textActions.ftl` `text-action-paste` |
 | storage access                                            | Not offered                                             | A prompt                                                                                                                                                       | Missing feature; the engine may not request it                                               |
 
-## Proposal
+## What to build
 
-Each line needs Kieran's approval before anyone builds it. None changes what a page can do by default except where
-it says so.
+Four changes. Together they follow Firefox 160 for these four kinds.
 
-1. **Pop-ups.** Block without a question, as the toast already does. Replace the toast with Firefox's notification
-   bar, "prevented this site from opening a pop-up window", with a button that offers to show the blocked pop-up.
-   Keep the per-site Allow and Block choice in the site information panel.
-2. **Autoplay.** Block audible media by default, as Firefox's `media.autoplay.default = 1`. Show an indicator in the
-   address bar and offer Block Audio, Block Audio and Video, and Allow Audio and Video in the site information panel.
-   No question.
-3. **Clipboard read.** Do not store a permission. Show a one-item "Paste" menu at the pointer, as
-   `ClipboardContextMenu` does, and let the page read only what the person chooses to paste.
-4. **Persistent storage.** No change: Firefox asks, so the banner stays and takes Firefox's question.
+1. **Pop-ups.** Blocked by default, with no question. Firefox's notification bar, "prevented this site from opening a
+   pop-up window", and its address bar indicator replace the toast. Keep the per-site Allow and Block choice in the
+   site information panel.
+2. **Autoplay.** Audible media blocked by default, with no question. The address bar indicator, and the site
+   information panel's Block Audio, Block Audio and Video, and Allow Audio and Video.
+3. **Clipboard read.** No stored permission and no banner. A one-item "Paste" menu at the pointer, as
+   `ClipboardContextMenu` does. The page reads only what the person chooses to paste.
+4. **Persistent storage.** No change to behaviour: Firefox asks, so the banner stays and takes Firefox's question.
 
-The words for the four kinds stay in the naming plan as they are written there: the question for persistent storage
-is Firefox's; the questions for pop-ups, autoplay and clipboard exist only for as long as the browser still asks them.
-If Kieran approves 1 to 3, those three questions and their `-prompt` messages go away with the behaviour change.
+Once 1 to 3 land, the banner no longer asks about pop-ups, autoplay or clipboard, so their `-prompt` messages and
+`PermissionBanner` branches go with them.
+
+## What the engine gives the browser
+
+Checked in `~/dev/vivarium` at `cb216ae`. "Vivarium change" means Vivarium cannot do it today.
+
+| Need                               | Vivarium today                                                                                                                                                                          | The browser must                                                                                                               | Vivarium change                                                                                                             |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Pop-up blocker on                  | Pref `dom.disable_open_during_load` is on the host's allowlist (bool, `src/vivarium/protocol/vivarium_pref_allow.h:44`). The engine keeps Gecko's default, `false` (`docs/abi.md:1412`) | Set it `true` at start, as Firefox's profile does (`firefox.js:1305`)                                                          | None                                                                                                                        |
+| How the pref gets there            | `vv_engine_config.prefs`, and `vv_engine_pref_set` (`docs/abi.md:487`); the Rust crate has `Config::prefs` (`crates/vivarium/src/config/mod.rs:281`)                                    | Add a `prefs` list to `web_view::engine::Config` and pass it on. It has none today (`crates/ui/src/web_view/engine/config.rs`) | None. The change is in `crates/ui`                                                                                          |
+| Bar text and count                 | `VV_EVENT_POPUP_BLOCKED`: the count and the first address (`docs/abi.md:1412`)                                                                                                          | Show the bar and the indicator                                                                                                 | None                                                                                                                        |
+| "Allow pop-ups for this site"      | A `popup` permission in the host's store lets the opens through (`docs/abi.md:847`)                                                                                                     | Write ALLOW with `vv_contextual_identity_permission_set`                                                                       | None                                                                                                                        |
+| "Show { address }" for each pop-up | No list of blocked addresses, and no call to open one                                                                                                                                   | Offer the one item Firefox's menu starts with, or leave it out                                                                 | **Yes, optional**: the list, and a call that opens one                                                                      |
+| Autoplay default                   | `media.autoplay.default` (0 to 5) and `media.autoplay.blocking_policy` are on the allowlist (`:49-50`); Gecko's default is `1`, block audible                                           | Nothing at start. Set the pref only for a person's global choice                                                               | None                                                                                                                        |
+| Autoplay indicator                 | No event for "autoplay was blocked" (`docs/research/api-parity.md:186`, PM7: "the blocked indicator missing")                                                                           | Show the indicator when the page was blocked                                                                                   | **Yes**: an event per session, or a readable state                                                                          |
+| Autoplay per site                  | Type `autoplay-media` is settable, with ALLOW, DENY or DEFAULT (`docs/abi.md:845-847`)                                                                                                  | Allow Audio and Video is ALLOW; Block Audio is DENY                                                                            | **Yes** for Block Audio and Video, a third state (`SitePermissions.sys.mjs:877`) `[INFERENCE: the store code was not read]` |
+| Clipboard read                     | A `PERMISSION` request with one item `CLIPBOARD_READ`, never stored; then a `CLIPBOARD_READ` request for the data (`docs/abi.md:867-868`)                                               | Show the Paste menu at the last pointer position; `ACCEPT` with the system clipboard, else `REFUSE`                            | None                                                                                                                        |
+| Persistent storage                 | `PERSISTENT_STORAGE` is raised as a request (`docs/abi.md:850`)                                                                                                                         | Keep the banner, with Firefox's question                                                                                       | None. The quota-flag question (`docs/abi.md:857-862`) is separate and stays Kieran's                                        |
+
+Vivarium changes to list for Main:
+
+1. A "blocked autoplay" event for a session (or a readable temporary state). Needed for the address bar indicator.
+2. A third `autoplay-media` state, Block Audio and Video, in the permission store. Needed for the site information panel.
+3. Optional: the addresses of blocked pop-ups and a call that opens one. Needed only for Firefox's per-pop-up menu items.
+
+The pref change in `crates/ui` is the browser's side: a `prefs` list on the engine config, set to
+`dom.disable_open_during_load = true` for every window, private or not.
