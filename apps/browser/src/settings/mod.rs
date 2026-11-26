@@ -6,6 +6,10 @@
 //! engine, by its stable id. Fields this build does not know (a newer
 //! browser's) are kept on write; a file from a newer version is never written.
 
+mod page;
+
+pub use page::SettingsPage;
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};

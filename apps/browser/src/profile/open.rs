@@ -12,7 +12,7 @@ use crate::profile::lock::{LockError, ProfileLock};
 use crate::profile::migrate::{self, Migrated, MigrationError};
 use crate::profile::places::{Folders, Places};
 use crate::profile::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
-use crate::profile::settings::{Settings, SettingsProblem};
+use crate::settings::{Settings, SettingsProblem};
 use crate::store::files::{self, Problem};
 
 /// Why no profile could be opened: what the window shows instead.

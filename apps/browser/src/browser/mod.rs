@@ -28,7 +28,7 @@ use crate::model::downloads::Downloads;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::TabList;
 use crate::permissions::Permissions;
-use crate::profile::settings::Settings;
+use crate::settings::Settings;
 use crate::store::Store;
 use crate::store::keeping::{Keeping, NotSaved};
 

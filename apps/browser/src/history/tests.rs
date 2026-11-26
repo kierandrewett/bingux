@@ -26,7 +26,7 @@ use crate::browser::{Browser, Options, Profile};
 use crate::history::{self, Change, INDEX};
 use crate::model::tabs::Place;
 use crate::profile::places::{Folders, Places};
-use crate::profile::settings::Settings;
+use crate::settings::Settings;
 use crate::store::files::{remove_tree, tests::temp};
 use crate::store::keeping::{Keeping, NotSaved};
 use crate::store::{Event, Store};

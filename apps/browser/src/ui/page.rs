@@ -9,9 +9,9 @@ use freya::prelude::*;
 use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
 use crate::model::tab::Page;
 use crate::new_tab::NewTabPage;
+use crate::settings::SettingsPage;
 
 use super::ctx::Ctx;
-use super::settings::SettingsPage;
 use super::web::{Surface, TabPage};
 
 /// What the area holds, copied out of the browser so no lock is held while

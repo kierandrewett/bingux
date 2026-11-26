@@ -9,7 +9,6 @@ mod pages;
 mod phone;
 mod popovers;
 mod private;
-mod settings;
 mod strip;
 mod toolbar;
 mod web;

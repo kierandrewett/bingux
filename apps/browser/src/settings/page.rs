@@ -16,7 +16,7 @@ use crate::address::SearchEngine;
 use crate::history;
 use crate::store::keeping::{Keeping, Part};
 
-use super::ctx::Ctx;
+use crate::ui::Ctx;
 
 /// The search engine row's second line: what it is for, or why a change
 /// is not kept.

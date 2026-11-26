@@ -12,7 +12,6 @@ pub mod migrate;
 pub mod open;
 pub mod places;
 pub mod registry;
-pub mod settings;
 
 #[cfg(test)]
 mod private_tests;
