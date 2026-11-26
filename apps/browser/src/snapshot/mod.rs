@@ -154,6 +154,7 @@ pub(crate) fn window(start: &'static [&'static str]) -> (Snapshot, Rig) {
 /// [`window`] at `size`: a phone is 390 by 800.
 #[cfg(test)]
 pub(crate) fn window_of(start: &'static [&'static str], size: (f32, f32)) -> (Snapshot, Rig) {
+    crate::locale::register();
     CTX.with(|slot| slot.set(None));
     let rig = Rig {
         double: TestDoubleBackend::new(),

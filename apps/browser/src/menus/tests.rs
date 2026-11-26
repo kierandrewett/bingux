@@ -99,7 +99,11 @@ fn the_zoom_row_steps_the_zoom_and_leaves_the_menu_open() {
     assert!(shot.click_name("Zoom out (Ctrl+-)"));
     wait(&mut shot, 300);
     assert_eq!(zoom(), 110);
-    // Reset by the level's button is covered by the keyboard test below.
+    // The level is also the reset button; pressed by its name, because the toolbar's zoom
+    // chip shows the same text and a press on the text could land on either.
+    assert!(shot.click_name("Reset zoom (Ctrl+0)"));
+    wait(&mut shot, 300);
+    assert_eq!(zoom(), 100);
 }
 
 #[test]
