@@ -288,3 +288,49 @@ browser-command-print-title = Print…
 browser-command-go-to-tab-title = Go to a tab
 # The keys that go to tab 1 to 8, and the last tab. The modifier is Alt on Linux, Ctrl elsewhere.
 browser-command-go-to-tab-keys = Alt+1 to 9
+
+## Menus
+## A tab's menu and the page's context menu.
+
+browser-menu-reload-tab = Reload tab
+browser-menu-duplicate-tab = Duplicate tab
+browser-menu-unpin-tab = Unpin tab
+browser-menu-pin-tab = Pin tab
+browser-menu-unmute-tab = Unmute tab
+browser-menu-mute-tab = Mute tab
+browser-menu-close-others = Close other tabs
+browser-menu-close-after = Close tabs to the right
+browser-menu-open-link = Open link in new tab
+browser-menu-copy-link = Copy link address
+browser-menu-open-image = Open image in new tab
+browser-menu-copy-image = Copy image address
+browser-menu-open-video = Open video in new tab
+browser-menu-open-audio = Open audio in new tab
+browser-menu-copy-media = Copy media address
+browser-menu-undo = Undo
+browser-menu-redo = Redo
+browser-menu-cut = Cut
+browser-menu-copy = Copy
+browser-menu-paste = Paste
+browser-menu-select-all = Select all
+browser-menu-back = Back
+browser-menu-forward = Forward
+browser-menu-reload = Reload
+browser-menu-view-source = View page source
+browser-menu-copy-page = Copy page address
+# Toast after copying an address. $what is link, image, media or page.
+browser-menu-copied = { $what ->
+        [link] Link address copied
+        [image] Image address copied
+        [media] Media address copied
+       *[page] Page address copied
+    }
+# Toast when the clipboard cannot be written. $what is as above.
+browser-menu-copy-failed = { $what ->
+        [link] Could not copy the link address
+        [image] Could not copy the image address
+        [media] Could not copy the media address
+       *[page] Could not copy the page address
+    }
+# Entry of the page menu for selected text. $engine is the search engine, $text the selection (cut short with an ellipsis).
+browser-menu-search-for = Search { $engine } for “{ $text }”

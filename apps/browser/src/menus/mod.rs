@@ -25,30 +25,39 @@ impl TabMenu {
         let key = tab.key;
         let mut items = Vec::new();
         if tab.kind == TabKind::Web {
-            items.push(menu_item("Reload tab", move |_: ()| {
+            items.push(menu_item(tr!("browser-menu-reload-tab"), move |_: ()| {
                 ctx.with(|browser| browser.reload(key, false))
             }));
-            items.push(menu_item("Duplicate tab", move |_: ()| {
-                ctx.with(|browser| browser.duplicate_tab(key))
-            }));
+            items.push(menu_item(
+                tr!("browser-menu-duplicate-tab"),
+                move |_: ()| ctx.with(|browser| browser.duplicate_tab(key)),
+            ));
         }
         let pinned = tab.pinned;
         items.push(menu_item(
-            if pinned { "Unpin tab" } else { "Pin tab" },
+            if pinned {
+                tr!("browser-menu-unpin-tab")
+            } else {
+                tr!("browser-menu-pin-tab")
+            },
             move |_: ()| ctx.with(|browser| browser.set_pinned(key, !pinned)),
         ));
         if tab.audio.playing || tab.audio.muted {
             let muted = tab.audio.muted;
             items.push(menu_item(
-                if muted { "Unmute tab" } else { "Mute tab" },
+                if muted {
+                    tr!("browser-menu-unmute-tab")
+                } else {
+                    tr!("browser-menu-mute-tab")
+                },
                 move |_: ()| ctx.with(|browser| browser.toggle_mute(key)),
             ));
         }
         items.push(menu_separator());
-        items.push(menu_item("Close other tabs", move |_: ()| {
+        items.push(menu_item(tr!("browser-menu-close-others"), move |_: ()| {
             ctx.with(|browser| browser.close_others(key))
         }));
-        items.push(menu_item("Close tabs to the right", move |_: ()| {
+        items.push(menu_item(tr!("browser-menu-close-after"), move |_: ()| {
             ctx.with(|browser| browser.close_after(key))
         }));
         items
@@ -62,10 +71,10 @@ impl ContextMenu {
     /// Copy `text` to the clipboard.
     fn copy(ctx: Ctx, text: String, what: &str) {
         match freya::clipboard::Clipboard::set(text) {
-            Ok(()) => ctx.overlays.toast(format!("{what} copied")),
+            Ok(()) => ctx.overlays.toast(tr!("browser-menu-copied", what = what)),
             Err(_) => ctx
                 .overlays
-                .toast(format!("Could not copy the {}", what.to_lowercase())),
+                .toast(tr!("browser-menu-copy-failed", what = what)),
         }
     }
 
@@ -100,18 +109,18 @@ impl ContextMenu {
         };
         if let Some((href, _)) = link {
             groups.push(vec![
-                menu_item("Open link in new tab", open_tab(href.clone())),
-                menu_item("Copy link address", {
+                menu_item(tr!("browser-menu-open-link"), open_tab(href.clone())),
+                menu_item(tr!("browser-menu-copy-link"), {
                     let href = href.clone();
-                    move |_: ()| Self::copy(ctx, href.clone(), "Link address")
+                    move |_: ()| Self::copy(ctx, href.clone(), "link")
                 }),
             ]);
         }
         if let Some(source) = image {
             groups.push(vec![
-                menu_item("Open image in new tab", open_tab(source.clone())),
-                menu_item("Copy image address", move |_: ()| {
-                    Self::copy(ctx, source.clone(), "Image address")
+                menu_item(tr!("browser-menu-open-image"), open_tab(source.clone())),
+                menu_item(tr!("browser-menu-copy-image"), move |_: ()| {
+                    Self::copy(ctx, source.clone(), "image")
                 }),
             ]);
         }
@@ -119,34 +128,34 @@ impl ContextMenu {
             groups.push(vec![
                 menu_item(
                     if video {
-                        "Open video in new tab"
+                        tr!("browser-menu-open-video")
                     } else {
-                        "Open audio in new tab"
+                        tr!("browser-menu-open-audio")
                     },
                     open_tab(source.clone()),
                 ),
-                menu_item("Copy media address", move |_: ()| {
-                    Self::copy(ctx, source.clone(), "Media address")
+                menu_item(tr!("browser-menu-copy-media"), move |_: ()| {
+                    Self::copy(ctx, source.clone(), "media")
                 }),
             ]);
         }
-        let edit = |label: &str, command: EditCommand| {
+        let edit = |label: String, command: EditCommand| {
             menu_item(label, move |_: ()| {
                 ctx.with(|browser| browser.run(Command::Edit(command)))
             })
         };
         if editable {
             let mut items = vec![
-                edit("Undo", EditCommand::Undo),
-                edit("Redo", EditCommand::Redo),
+                edit(tr!("browser-menu-undo"), EditCommand::Undo),
+                edit(tr!("browser-menu-redo"), EditCommand::Redo),
                 menu_separator(),
             ];
-            items.push(edit("Cut", EditCommand::Cut));
+            items.push(edit(tr!("browser-menu-cut"), EditCommand::Cut));
             if !password {
-                items.push(edit("Copy", EditCommand::Copy));
+                items.push(edit(tr!("browser-menu-copy"), EditCommand::Copy));
             }
-            items.push(edit("Paste", EditCommand::Paste));
-            items.push(edit("Select all", EditCommand::SelectAll));
+            items.push(edit(tr!("browser-menu-paste"), EditCommand::Paste));
+            items.push(edit(tr!("browser-menu-select-all"), EditCommand::SelectAll));
             groups.push(items);
         } else if let Some(text) = selection.filter(|text| !text.trim().is_empty()) {
             let shown: String = text.trim().chars().take(24).collect();
@@ -156,42 +165,48 @@ impl ContextMenu {
                 ""
             };
             groups.push(vec![
-                edit("Copy", EditCommand::Copy),
+                edit(tr!("browser-menu-copy"), EditCommand::Copy),
                 menu_item(
-                    format!("Search {search_name} for \u{201c}{shown}{ellipsis}\u{201d}"),
+                    tr!(
+                        "browser-menu-search-for",
+                        engine = search_name,
+                        text = format!("{shown}{ellipsis}")
+                    ),
                     open_tab(text.trim().to_string()),
                 ),
             ]);
         }
         let mut page = vec![
             {
-                let item = menu_item("Back", move |_: ()| ctx.with(|browser| browser.back(key)));
+                let item = menu_item(tr!("browser-menu-back"), move |_: ()| {
+                    ctx.with(|browser| browser.back(key))
+                });
                 if can_back { item } else { item.disabled() }
             },
             {
-                let item = menu_item("Forward", move |_: ()| {
+                let item = menu_item(tr!("browser-menu-forward"), move |_: ()| {
                     ctx.with(|browser| browser.forward(key))
                 });
                 if can_forward { item } else { item.disabled() }
             },
-            menu_item("Reload", move |_: ()| {
+            menu_item(tr!("browser-menu-reload"), move |_: ()| {
                 ctx.with(|browser| browser.reload(key, false))
             }),
         ];
         let plain_page = groups.is_empty();
         if plain_page {
             page.push(menu_separator());
-            page.push(edit("Select all", EditCommand::SelectAll));
+            page.push(edit(tr!("browser-menu-select-all"), EditCommand::SelectAll));
             let source = format!("view-source:{url}");
-            let item = menu_item("View page source", open_tab(source));
+            let item = menu_item(tr!("browser-menu-view-source"), open_tab(source));
             page.push(if url.is_empty() || url.starts_with("view-source:") {
                 item.disabled()
             } else {
                 item
             });
-            page.push(menu_item("Copy page address", {
+            page.push(menu_item(tr!("browser-menu-copy-page"), {
                 let url = url.clone();
-                move |_: ()| Self::copy(ctx, Address::new(&url).display(), "Page address")
+                move |_: ()| Self::copy(ctx, Address::new(&url).display(), "page")
             }));
         }
         groups.push(page);
