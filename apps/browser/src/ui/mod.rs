@@ -2,7 +2,6 @@
 
 mod app;
 mod ctx;
-mod find;
 mod gate;
 mod menus;
 mod page;

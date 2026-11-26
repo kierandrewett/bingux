@@ -4,7 +4,7 @@
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use super::ctx::Ctx;
+use crate::ui::Ctx;
 
 #[derive(PartialEq)]
 pub struct FindBar {

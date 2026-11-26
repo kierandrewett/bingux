@@ -9,6 +9,7 @@ use bingux_ui::web_view::requests::{
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
 use crate::address::Address;
+use crate::find::Find;
 use crate::zoom::Zoom;
 
 /// What a tab holds.
@@ -40,25 +41,6 @@ impl Prompt {
             | Self::Select(id, _)
             | Self::FilePicker(id, _) => *id,
         }
-    }
-}
-
-/// The search of the page.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Find {
-    pub open: bool,
-    pub text: String,
-    pub match_case: bool,
-    pub whole_words: bool,
-    pub highlight_all: bool,
-    /// `(current, total)` of the last search; `None` before one.
-    pub result: Option<(u32, u32)>,
-}
-
-impl Find {
-    /// The search found nothing.
-    pub fn not_found(&self) -> bool {
-        !self.text.is_empty() && self.result.is_some_and(|(_, total)| total == 0)
     }
 }
 
@@ -238,17 +220,5 @@ mod tests {
         );
         assert_eq!(web("").page(), Page::NewTab);
         assert_eq!(Tab::blank(3, TabKind::Settings).page(), Page::Settings);
-    }
-
-    #[test]
-    fn find_is_not_found_only_after_a_search_with_no_matches() {
-        let mut find = Find::default();
-        assert!(!find.not_found());
-        find.text = "x".to_string();
-        assert!(!find.not_found(), "no answer yet");
-        find.result = Some((0, 0));
-        assert!(find.not_found());
-        find.result = Some((1, 4));
-        assert!(!find.not_found());
     }
 }

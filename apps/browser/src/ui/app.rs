@@ -12,11 +12,11 @@ use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
 use crate::commands::{Command, Platform};
 use crate::engine::{self, Engine};
+use crate::find::FindBar;
 use crate::model::tabs::Place;
 use crate::site_info::PopoverState;
 
 use super::ctx::{Chrome, Ctx};
-use super::find::FindBar;
 use super::page::PageArea;
 use super::pages;
 use super::popovers::Popovers;

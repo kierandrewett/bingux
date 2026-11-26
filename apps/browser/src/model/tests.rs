@@ -23,7 +23,7 @@ use bingux_ui::web_view::requests::{
 };
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
 use bingux_ui::web_view::{
-    BrowserBackend, BrowserEvent, Capabilities, DownloadId, GoneReason, Response, TabEvent, TabId,
+    BrowserBackend, BrowserEvent, DownloadId, GoneReason, Response, TabEvent, TabId,
 };
 
 use super::tab::{Page, TabKind};
@@ -359,47 +359,6 @@ fn a_request_for_a_tab_that_is_gone_is_refused() {
 }
 
 #[test]
-fn find_asks_the_engine_and_shows_the_count() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "example.com");
-    browser.open_find(key);
-    assert_eq!(browser.take_ui(), [UiRequest::OpenFind]);
-    browser.find(key, "example", true, true);
-    browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().find.result, Some((1, 3)));
-    browser.run(Command::FindNext);
-    browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().find.result, Some((2, 3)));
-    browser.run(Command::FindPrevious);
-    browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().find.result, Some((1, 3)));
-    browser.find(key, "ab", true, true);
-    browser.poll();
-    assert!(browser.tabs.get(key).unwrap().find.not_found());
-    browser.close_find(key);
-    assert!(!browser.tabs.get(key).unwrap().find.open);
-    assert!(
-        double
-            .calls()
-            .iter()
-            .any(|call| matches!(call, Call::FindStop(_)))
-    );
-}
-
-#[test]
-fn find_says_so_when_the_engine_cannot() {
-    let double = TestDoubleBackend::with_capabilities(Capabilities {
-        find: false,
-        ..Capabilities::all()
-    });
-    let mut browser = Browser::new(double, Options::default());
-    let key = browser.open_tab("example.com", Place::End, true).unwrap();
-    browser.open_find(key);
-    assert!(browser.take_ui().is_empty());
-    assert_eq!(browser.take_notices().len(), 1);
-}
-
-#[test]
 fn downloads_are_listed_with_a_notice_and_can_be_controlled() {
     let (mut browser, double) = browser();
     go(&mut browser, "files.example.net");
@@ -522,31 +481,6 @@ fn clearing_the_list_has_the_engine_forget_what_is_over_and_nothing_else() {
     );
     let left: Vec<DownloadId> = browser.downloads.list().iter().map(|d| d.id).collect();
     assert_eq!(left, [DownloadId(9), DownloadId(8)]);
-}
-
-#[test]
-fn what_the_engine_took_of_find_is_read_again_when_the_bar_opens() {
-    let double = TestDoubleBackend::with_capabilities(Capabilities {
-        find: false,
-        ..Capabilities::all()
-    });
-    let mut browser = Browser::new(double.clone(), Options::default());
-    let key = browser.open_tab("example.com", Place::End, true).unwrap();
-    // The engine took the call at the first session, after the window read
-    // what it could do.
-    double.set_capabilities(Capabilities::all());
-    browser.open_find(key);
-    assert!(browser.engine.capabilities().find);
-    assert!(
-        browser.take_notices().is_empty(),
-        "no word of find being absent"
-    );
-    assert!(
-        browser
-            .take_ui()
-            .iter()
-            .any(|ui| matches!(ui, UiRequest::OpenFind))
-    );
 }
 
 #[test]

@@ -10,6 +10,7 @@ mod address;
 mod browser;
 mod commands;
 mod engine;
+mod find;
 mod locale;
 mod model;
 mod permissions;
