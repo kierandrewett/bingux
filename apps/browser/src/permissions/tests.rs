@@ -11,6 +11,7 @@ const SITE: &str = "https://maps.example";
 
 #[test]
 fn a_prompt_names_the_site_and_what_it_wants() {
+    crate::locale::register();
     assert_eq!(
         Permissions::prompt_text(SITE, &[PermissionKind::Geolocation]),
         "maps.example wants to know your location"
@@ -28,12 +29,13 @@ fn a_prompt_names_the_site_and_what_it_wants() {
                 PermissionKind::Screen
             ]
         ),
-        "maps.example wants to use your camera, use your microphone and share your screen"
+        "maps.example wants to use your camera, use your microphone, and share your screen"
     );
 }
 
 #[test]
 fn a_decision_is_only_reused_when_it_covers_everything_asked() {
+    crate::locale::register();
     let mut permissions = Permissions::new();
     let both = [PermissionKind::Camera, PermissionKind::Microphone];
     assert_eq!(permissions.decided(SITE, &both), None);
@@ -61,6 +63,7 @@ fn a_decision_is_only_reused_when_it_covers_everything_asked() {
 
 #[test]
 fn a_decision_can_be_forgotten_and_listed() {
+    crate::locale::register();
     let mut permissions = Permissions::new();
     permissions.remember(
         SITE,
@@ -88,6 +91,7 @@ fn a_decision_can_be_forgotten_and_listed() {
 
 #[test]
 fn a_permission_prompt_waits_and_a_remembered_answer_is_reused() {
+    crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "perm.example.net");
     let Some(crate::model::tab::Prompt::Permission(_, request)) = browser.prompt(key).cloned()
@@ -126,6 +130,7 @@ fn a_permission_prompt_waits_and_a_remembered_answer_is_reused() {
 
 #[test]
 fn a_refused_permission_that_is_not_remembered_asks_again() {
+    crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "perm.example.net");
     browser.answer_permission(key, false, false);

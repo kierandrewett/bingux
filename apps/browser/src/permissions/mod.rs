@@ -6,6 +6,8 @@ mod banner;
 
 use std::collections::BTreeMap;
 
+use bingux_ui::format::List;
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::requests::PermissionKind;
 
 use crate::address::Address;
@@ -33,19 +35,35 @@ impl Permissions {
     /// What a permission is called to a person.
     pub fn label(kind: &PermissionKind) -> String {
         match kind {
-            PermissionKind::Geolocation => "Know your location",
-            PermissionKind::Notifications => "Show notifications",
-            PermissionKind::Camera => "Use your camera",
-            PermissionKind::Microphone => "Use your microphone",
-            PermissionKind::Screen => "Share your screen",
-            PermissionKind::Clipboard => "See what you copied",
-            PermissionKind::Midi => "Use your MIDI devices",
-            PermissionKind::Autoplay => "Play sound on its own",
-            PermissionKind::PersistentStorage => "Keep data when space is low",
-            PermissionKind::Popups => "Open pop-up windows",
-            PermissionKind::Other(name) => return name.clone(),
+            PermissionKind::Geolocation => tr!("browser-permissions-geolocation-label"),
+            PermissionKind::Notifications => tr!("browser-permissions-notifications-label"),
+            PermissionKind::Camera => tr!("browser-permissions-camera-label"),
+            PermissionKind::Microphone => tr!("browser-permissions-microphone-label"),
+            PermissionKind::Screen => tr!("browser-permissions-screen-label"),
+            PermissionKind::Clipboard => tr!("browser-permissions-clipboard-label"),
+            PermissionKind::Midi => tr!("browser-permissions-midi-label"),
+            PermissionKind::Autoplay => tr!("browser-permissions-autoplay-label"),
+            PermissionKind::PersistentStorage => tr!("browser-permissions-storage-label"),
+            PermissionKind::Popups => tr!("browser-permissions-popups-label"),
+            PermissionKind::Other(name) => name.clone(),
         }
-        .to_string()
+    }
+
+    /// What a permission is, to read as part of a sentence: `know your location`.
+    fn want(kind: &PermissionKind) -> String {
+        match kind {
+            PermissionKind::Geolocation => tr!("browser-permissions-geolocation-want"),
+            PermissionKind::Notifications => tr!("browser-permissions-notifications-want"),
+            PermissionKind::Camera => tr!("browser-permissions-camera-want"),
+            PermissionKind::Microphone => tr!("browser-permissions-microphone-want"),
+            PermissionKind::Screen => tr!("browser-permissions-screen-want"),
+            PermissionKind::Clipboard => tr!("browser-permissions-clipboard-want"),
+            PermissionKind::Midi => tr!("browser-permissions-midi-want"),
+            PermissionKind::Autoplay => tr!("browser-permissions-autoplay-want"),
+            PermissionKind::PersistentStorage => tr!("browser-permissions-storage-want"),
+            PermissionKind::Popups => tr!("browser-permissions-popups-want"),
+            PermissionKind::Other(name) => name.to_lowercase(),
+        }
     }
 
     /// The sentence of a prompt: `example.com wants to know your location and use your camera`.
@@ -56,18 +74,13 @@ impl Permissions {
         } else {
             host
         };
-        let mut wants: Vec<String> = kinds.iter().map(Self::label).collect();
-        let last = wants.pop();
-        let list = match (wants.is_empty(), last) {
-            (true, Some(only)) => only.to_lowercase(),
-            (false, Some(last)) => format!(
-                "{} and {}",
-                wants.join(", ").to_lowercase(),
-                last.to_lowercase()
-            ),
-            (_, None) => "do something".to_string(),
+        let wants: Vec<String> = kinds.iter().map(Self::want).collect();
+        let wants = if wants.is_empty() {
+            tr!("browser-permissions-prompt-nothing")
+        } else {
+            List::and(&wants).format()
         };
-        format!("{host} wants to {list}")
+        tr!("browser-permissions-prompt", host = host, wants = wants)
     }
 
     /// What names `kind`, whatever the language shown.

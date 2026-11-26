@@ -125,3 +125,35 @@ browser-site-info-permissions-footer = Choices you made for this site. Reset one
 browser-site-info-allowed = Allowed
 browser-site-info-blocked = Blocked
 browser-site-info-reset-button = Reset
+
+## Permissions
+## What a page asks to use. Each kind has a label (a row of the page info) and
+## a want (part of the question: "example.com wants to know your location").
+
+browser-permissions-geolocation-label = Know your location
+browser-permissions-geolocation-want = know your location
+browser-permissions-notifications-label = Show notifications
+browser-permissions-notifications-want = show notifications
+browser-permissions-camera-label = Use your camera
+browser-permissions-camera-want = use your camera
+browser-permissions-microphone-label = Use your microphone
+browser-permissions-microphone-want = use your microphone
+browser-permissions-screen-label = Share your screen
+browser-permissions-screen-want = share your screen
+browser-permissions-clipboard-label = See what you copied
+browser-permissions-clipboard-want = see what you copied
+browser-permissions-midi-label = Use your MIDI devices
+browser-permissions-midi-want = use your MIDI devices
+browser-permissions-autoplay-label = Play sound on its own
+browser-permissions-autoplay-want = play sound on its own
+browser-permissions-storage-label = Keep data when space is low
+browser-permissions-storage-want = keep data when space is low
+browser-permissions-popups-label = Open pop-up windows
+browser-permissions-popups-want = open pop-up windows
+# The question. $host is the site, $wants what it asks for, joined as a list ("a, b, and c").
+browser-permissions-prompt = { $host } wants to { $wants }
+# Said in place of $wants when the page asked for nothing the browser can name.
+browser-permissions-prompt-nothing = do something
+browser-permissions-block-button = Block
+browser-permissions-allow-once-button = Allow this time
+browser-permissions-allow-button = Allow

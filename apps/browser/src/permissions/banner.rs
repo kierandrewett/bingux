@@ -40,13 +40,14 @@ impl Component for PermissionBanner {
         let banner = banner(text.unwrap_or_else(|| shown.read().clone()))
             .kind(BannerKind::Info)
             .icon(Icon::DialogInformation)
-            .action("Block", move |_: ()| {
+            .action(tr!("browser-permissions-block-button"), move |_: ()| {
                 ctx.with(|browser| browser.answer_permission(key, false, true))
             })
-            .action("Allow this time", move |_: ()| {
-                ctx.with(|browser| browser.answer_permission(key, true, false))
-            })
-            .action("Allow", move |_: ()| {
+            .action(
+                tr!("browser-permissions-allow-once-button"),
+                move |_: ()| ctx.with(|browser| browser.answer_permission(key, true, false)),
+            )
+            .action(tr!("browser-permissions-allow-button"), move |_: ()| {
                 ctx.with(|browser| browser.answer_permission(key, true, true))
             })
             .dismissible(move |_: ()| {
