@@ -295,10 +295,11 @@ fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
                 }
                 undo::push(&env, Step::Trash(trashed));
                 let again = env.clone();
-                env.overlays
-                    .toast_with_action(moved_text(&moved), "Undo", move |_: ()| {
-                        super::transfer::undo(&again)
-                    });
+                env.overlays.toast_with_action(
+                    moved_text(&moved),
+                    crate::tr!("ui-undo"),
+                    move |_: ()| super::transfer::undo(&again),
+                );
                 report_refusals(&env, then);
             }
             Err(error) => trash_failed(&env, attempted, error),

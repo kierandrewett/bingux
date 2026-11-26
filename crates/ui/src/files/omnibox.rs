@@ -714,15 +714,23 @@ impl Component for LocationField {
                         .into_iter()
                         .map(|(label, when)| {
                             let selected = find_now.filters.modified == Some(when);
-                            Element::from(omni_chip(label, selected, move |_: ()| {
-                                toggle_modified(&mut find.write().filters, when);
-                            }))
+                            Element::from(omni_chip(
+                                crate::i18n::text(label),
+                                selected,
+                                move |_: ()| {
+                                    toggle_modified(&mut find.write().filters, when);
+                                },
+                            ))
                         })
                         .chain(SIZE_CHIPS.into_iter().map(|(label, size)| {
                             let selected = find_now.filters.size == Some(size);
-                            Element::from(omni_chip(label, selected, move |_: ()| {
-                                toggle_size(&mut find.write().filters, size);
-                            }))
+                            Element::from(omni_chip(
+                                crate::i18n::text(label),
+                                selected,
+                                move |_: ()| {
+                                    toggle_size(&mut find.write().filters, size);
+                                },
+                            ))
                         }))
                         .chain(other_filters(&find_now.filters).into_iter().map(
                             |(key, label): (FilterKey, String)| {

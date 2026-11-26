@@ -182,9 +182,15 @@ pub(super) fn toggle_kind(filters: &mut Filters, kind: Kind) {
 
 /// The ages the chips offer, each with the ID of the message that names it.
 pub(super) const WHEN_CHIPS: [(&str, Modified); 3] = [
-    ("Today", Modified::Today),
-    ("This week", Modified::Days(7)),
-    ("This year", Modified::ThisYear),
+    (crate::i18n_id!("ui-files-omni-when-today"), Modified::Today),
+    (
+        crate::i18n_id!("ui-files-omni-when-week"),
+        Modified::Days(7),
+    ),
+    (
+        crate::i18n_id!("ui-files-omni-when-year"),
+        Modified::ThisYear,
+    ),
 ];
 
 /// Keep what changed in `when`; again, and every age is kept.
@@ -200,8 +206,14 @@ const MB: u64 = 1_000_000;
 
 /// The sizes the chips offer, each with the ID of the message that names it.
 pub(super) const SIZE_CHIPS: [(&str, SizeCond); 2] = [
-    ("Under 1 MB", SizeCond::Lt(MB)),
-    ("Over 100 MB", SizeCond::Gt(100 * MB)),
+    (
+        crate::i18n_id!("ui-files-omni-size-small"),
+        SizeCond::Lt(MB),
+    ),
+    (
+        crate::i18n_id!("ui-files-omni-size-large"),
+        SizeCond::Gt(100 * MB),
+    ),
 ];
 
 /// Keep the files of `size`; again, and every size is kept.

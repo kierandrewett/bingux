@@ -166,8 +166,11 @@ impl Component for SelectTextView {
         let label = text.copy_label.clone();
         let items = move || {
             let copy = copy.clone();
-            overlays
-                .map(|overlays| vec![menu_item(label, move |_| copy_text(overlays, copy.clone()))])
+            overlays.map(|overlays| {
+                vec![menu_item(label.clone(), move |_| {
+                    copy_text(overlays, copy.clone())
+                })]
+            })
         };
         let touch_items = items.clone();
         let right_items = items;

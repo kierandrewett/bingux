@@ -2337,12 +2337,9 @@ impl Component for ChoiceList {
             )
             .child(Element::from(list))
             .maybe_child((hidden > 0).then(|| {
-                rect()
-                    .tw(&tokens, &[w_full(), px(GUTTER)])
-                    .child(CAPTION.label(
-                        &tokens,
-                        format!("{hidden} more. Keep typing to narrow the list."),
-                    ))
+                rect().tw(&tokens, &[w_full(), px(GUTTER)]).child(
+                    CAPTION.label(&tokens, crate::tr!("ui-rows-more-choices", count = hidden)),
+                )
             }))
     }
 }

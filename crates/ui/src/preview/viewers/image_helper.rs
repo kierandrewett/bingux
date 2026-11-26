@@ -196,7 +196,10 @@ impl Component for HelperPicture {
                 };
                 let mut view = ZoomView::new(Some((width as f32, height as f32)), draw)
                     .start(start)
-                    .label(format!("Picture: {}", self.resolved.source.name()))
+                    .label(crate::tr!(
+                        "ui-preview-picture-a11y",
+                        name = self.resolved.source.name()
+                    ))
                     .keys_when(move || keyboard.held());
                 if let Some(handle) = self.nav.zoom {
                     view = view.handle(handle);

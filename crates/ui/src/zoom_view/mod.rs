@@ -709,9 +709,10 @@ impl Component for ZoomView {
 
         let zoomed = !view.is_fit();
         let dragging = drag.read().is_some();
-        let label = handle
-            .percent()
-            .unwrap_or_else(|| format!("{}%", (view.zoom * 100.0).round() as u32));
+        let label = handle.percent().unwrap_or_else(|| {
+            crate::format::Percent::new(f64::from((view.zoom * 100.0).round() as u32) / 100.0)
+                .format()
+        });
         let label_width = crate::controls::path_label::measure_text("3200%", CAPTION) + 8.0;
         let pill = (self.controls && (*hovering.read() || zoomed)).then(|| {
             let at_fit = view.is_fit() && handle.fit_mode() == Some(FitMode::Fit);

@@ -789,8 +789,14 @@ fn sort_menu<T: 'static, K: Clone + Eq + Hash + 'static>(
         .collect();
     items.push(crate::shell::menu_separator());
     for (label, direction) in [
-        ("Ascending", SortDirection::Ascending),
-        ("Descending", SortDirection::Descending),
+        (
+            crate::tr!("ui-table-sort-ascending"),
+            SortDirection::Ascending,
+        ),
+        (
+            crate::tr!("ui-table-sort-descending"),
+            SortDirection::Descending,
+        ),
     ] {
         let latest = latest.clone();
         let column = sorted.map_or(sortable[0].id, |order| order.column);

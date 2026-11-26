@@ -2611,7 +2611,10 @@ impl Component for CloseTab {
                     .size(size)
                     .glyph(glyph)
                     .radius(Radius::Pill)
-                    .tooltip(&format!("Close {}", self.title))
+                    .tooltip(crate::tr!(
+                        "ui-tab-close-named.tooltip",
+                        title = self.title.as_str()
+                    ))
                     .pointer_only(),
             )
             .into_element()

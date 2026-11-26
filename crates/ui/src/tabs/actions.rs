@@ -375,32 +375,48 @@ impl<P: TabContent> Tabs<P> {
         let new_tab = new_tab.into();
         let can_reopen = self.set.read().can_reopen();
         vec![
-            Command::new("tabs.new", "New tab", move |_| new_tab.call(()))
-                .shortcut("Ctrl+T")
-                .group(CommandGroup::File)
-                .section("tabs"),
-            Command::new("tabs.close", "Close tab", move |_| self.close_active())
-                .shortcut("Ctrl+W")
-                .group(CommandGroup::File)
-                .section("tabs"),
-            Command::new("tabs.reopen", "Reopen closed tab", move |_| self.reopen())
-                .shortcut("Ctrl+Shift+T")
-                .enabled(can_reopen)
-                .group(CommandGroup::File)
-                .section("tabs"),
-            Command::new("tabs.next", "Next tab", move |_| self.step(1))
-                .shortcut("Ctrl+Tab")
-                .shortcut("Ctrl+Page Down")
-                .group(CommandGroup::Window)
-                .section("tabs"),
-            Command::new("tabs.previous", "Previous tab", move |_| self.step(-1))
-                .shortcut("Ctrl+Shift+Tab")
-                .shortcut("Ctrl+Page Up")
-                .group(CommandGroup::Window)
-                .section("tabs"),
-            Command::key_hint("tabs.go-to", "Go to a tab", "Alt+1 to 9")
-                .group(CommandGroup::Window)
-                .section("tabs"),
+            Command::new("tabs.new", crate::tr!("ui-tab-cmd-new"), move |_| {
+                new_tab.call(())
+            })
+            .shortcut("Ctrl+T")
+            .group(CommandGroup::File)
+            .section("tabs"),
+            Command::new("tabs.close", crate::tr!("ui-tab-close"), move |_| {
+                self.close_active()
+            })
+            .shortcut("Ctrl+W")
+            .group(CommandGroup::File)
+            .section("tabs"),
+            Command::new("tabs.reopen", crate::tr!("ui-tab-reopen"), move |_| {
+                self.reopen()
+            })
+            .shortcut("Ctrl+Shift+T")
+            .enabled(can_reopen)
+            .group(CommandGroup::File)
+            .section("tabs"),
+            Command::new("tabs.next", crate::tr!("ui-tab-cmd-next"), move |_| {
+                self.step(1)
+            })
+            .shortcut("Ctrl+Tab")
+            .shortcut("Ctrl+Page Down")
+            .group(CommandGroup::Window)
+            .section("tabs"),
+            Command::new(
+                "tabs.previous",
+                crate::tr!("ui-tab-cmd-previous"),
+                move |_| self.step(-1),
+            )
+            .shortcut("Ctrl+Shift+Tab")
+            .shortcut("Ctrl+Page Up")
+            .group(CommandGroup::Window)
+            .section("tabs"),
+            Command::key_hint(
+                "tabs.go-to",
+                crate::tr!("ui-tab-cmd-go-to"),
+                crate::tr!("ui-tab-cmd-go-to.keys"),
+            )
+            .group(CommandGroup::Window)
+            .section("tabs"),
         ]
     }
 }

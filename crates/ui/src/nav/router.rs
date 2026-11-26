@@ -660,11 +660,16 @@ impl Component for NotFound {
         let table = router.table();
         let target = table.up(&self.location);
         let home = table.home();
-        let page = status_page(Icon::DialogWarning, "Page not found")
-            .description(self.location.to_string());
+        let page = status_page(
+            Icon::DialogWarning,
+            crate::tr!("ui-nav-page-not-found-title"),
+        )
+        .description(self.location.to_string());
         match target {
-            Some(up) => page.action("Go up", move |_| router.navigate_to(&up)),
-            None => page.action("Go home", move |_| router.navigate_to(&home)),
+            Some(up) => page.action(crate::tr!("ui-nav-go-up"), move |_| router.navigate_to(&up)),
+            None => page.action(crate::tr!("ui-nav-go-home"), move |_| {
+                router.navigate_to(&home)
+            }),
         }
     }
 }

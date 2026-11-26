@@ -386,10 +386,12 @@ impl Component for FindBar {
                         menu_item(crate::tr!("ui-text-find-match-case"), move |_| case.set(!c))
                             .checked(c)
                             .shortcut("Alt+C"),
-                        menu_item("Whole words", move |_| whole.set(!word))
-                            .checked(word)
-                            .shortcut("Alt+W"),
-                        menu_item("Regular expression", move |_| regex.set(!r))
+                        menu_item(crate::tr!("ui-text-find-whole-words"), move |_| {
+                            whole.set(!word)
+                        })
+                        .checked(word)
+                        .shortcut("Alt+W"),
+                        menu_item(crate::tr!("ui-text-find-regex"), move |_| regex.set(!r))
                             .checked(r)
                             .shortcut("Alt+R"),
                     ],
@@ -509,7 +511,10 @@ impl Component for FindBar {
                     .tooltip(crate::tr!("ui-text-find-next.tooltip"))
                     .enabled(has_matches),
             )
-            .child(icon_button(Icon::WindowClose, move |_| close()).tooltip("Close (Escape)"));
+            .child(
+                icon_button(Icon::WindowClose, move |_| close())
+                    .tooltip(crate::tr!("ui-text-find-close.tooltip")),
+            );
 
         let replace_row = replacing.then(|| {
             let one_handle = handle.clone();
@@ -731,7 +736,8 @@ impl Component for GoToLineBar {
                     .child(CAPTION.in_ink(Ink::Muted).label(&tokens, hint).max_lines(1)),
             )
             .child(
-                icon_button(Icon::WindowClose, move |_| button_close()).tooltip("Close (Escape)"),
+                icon_button(Icon::WindowClose, move |_| button_close())
+                    .tooltip(crate::tr!("ui-text-find-close.tooltip")),
             )
     }
 }
@@ -751,8 +757,32 @@ mod tests {
     }
 
     #[test]
-    fn grouping() {
-        assert_eq!(group(12345), "12,345");
-        assert_eq!(group(999), "999");
+    fn counts_are_written_in_the_language_shown() {
+        assert_eq!(
+            crate::tr!(
+                "ui-text-find-position",
+                current = 3,
+                total = 12345,
+                more = 0
+            ),
+            "3 of 12,345"
+        );
+        assert_eq!(
+            crate::tr!(
+                "ui-text-find-position",
+                current = 1,
+                total = 10_000,
+                more = 1
+            ),
+            "1 of 10,000+"
+        );
+        assert_eq!(
+            crate::tr!("ui-text-find-count", total = 1, more = 0),
+            "1 result"
+        );
+        assert_eq!(
+            crate::tr!("ui-text-find-count", total = 10_000, more = 1),
+            "10,000+ results"
+        );
     }
 }

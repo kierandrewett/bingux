@@ -392,11 +392,17 @@ impl Component for MediaControls {
         let toggle = {
             let on_action = on_action.clone();
             let (icon, tip) = if state.ended {
-                (Icon::MediaPlaybackStart, "Play again (K)")
+                (
+                    Icon::MediaPlaybackStart,
+                    crate::tr!("ui-preview-play-again.tooltip"),
+                )
             } else if state.playing {
                 (Icon::Pause, crate::tr!("ui-preview-pause.tooltip"))
             } else {
-                (Icon::MediaPlaybackStart, "Play (K)")
+                (
+                    Icon::MediaPlaybackStart,
+                    crate::tr!("ui-preview-play.tooltip"),
+                )
             };
             icon_button(icon, move |_| on_action.call(ControlAction::Toggle))
                 .ink(Ink::OnFloating)

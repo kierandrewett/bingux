@@ -158,10 +158,12 @@ fn zoom_items(current: &str, on_action: &EventHandler<DocumentAction>) -> Vec<Me
         ),
         (crate::tr!("ui-preview-zoom-fit-page"), ZoomChoice::FitPage),
     ];
-    choices.extend(
-        [50, 75, 100, 125, 150, 200, 300, 400]
-            .map(|percent| (format!("{percent}%"), ZoomChoice::Percent(percent))),
-    );
+    choices.extend([50, 75, 100, 125, 150, 200, 300, 400].map(|percent| {
+        (
+            super::pdf_layout::percent_label(percent),
+            ZoomChoice::Percent(percent),
+        )
+    }));
     choices
         .into_iter()
         .map(|(label, choice)| {
