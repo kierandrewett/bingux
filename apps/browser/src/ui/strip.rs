@@ -3,7 +3,7 @@
 
 use bingux_ui::prelude::*;
 
-use crate::model::shortcuts::Command;
+use crate::commands::Command;
 use crate::model::tab::{Tab, TabKind};
 
 use super::ctx::Ctx;

@@ -8,7 +8,7 @@ use bingux_ui::web_view::{DownloadId, FindQuery, TabId};
 
 use super::{Browser, ClosedTab, Notice, UiRequest, ViewSize};
 use crate::address::{Internal, Typed};
-use crate::model::shortcuts::Command;
+use crate::commands::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
 use crate::zoom::Zoom;

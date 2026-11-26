@@ -10,8 +10,8 @@ use freya::prelude::*;
 
 use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
+use crate::commands::{Command, Platform, window_command};
 use crate::engine::{self, Engine};
-use crate::model::shortcuts::{Command, Platform, window_command};
 use crate::model::tabs::Place;
 
 use super::ctx::{Chrome, Ctx};

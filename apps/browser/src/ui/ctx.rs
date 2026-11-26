@@ -12,8 +12,8 @@ use freya::prelude::*;
 
 use crate::address::FieldState;
 use crate::browser::{Browser, Notice, UiRequest};
-use crate::model::shortcuts::Command;
-use crate::model::shortcuts::Platform;
+use crate::commands::Command;
+use crate::commands::Platform;
 
 /// The states of the chrome that are not the browser's: they belong to the
 /// window, not to a tab.

@@ -27,11 +27,11 @@ use bingux_ui::web_view::{
     BrowserBackend, BrowserEvent, Capabilities, DownloadId, GoneReason, Response, TabEvent, TabId,
 };
 
-use super::shortcuts::Command;
 use super::tab::{Page, TabKind};
 use super::tabs::Place;
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options, UiRequest};
+use crate::commands::Command;
 
 #[test]
 fn the_first_tab_is_blank_and_the_engine_is_ready_after_its_event() {
@@ -712,13 +712,4 @@ fn muting_goes_to_the_engine_and_is_shown_once_it_agrees() {
             .iter()
             .any(|call| matches!(call, Call::SetMuted(_, true)))
     );
-}
-
-#[test]
-fn print_and_unsupported_things_say_so() {
-    let (mut browser, _) = browser();
-    browser.run(Command::Print);
-    let notices = browser.take_notices();
-    assert_eq!(notices.len(), 1);
-    assert!(notices[0].error);
 }

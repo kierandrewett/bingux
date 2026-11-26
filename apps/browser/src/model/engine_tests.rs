@@ -9,10 +9,10 @@ use bingux_ui::web_view::{
     BrowserBackend, BrowserEvent, Capabilities, Disposition, EngineEvent, FailureCause, NewWindow,
 };
 
-use super::shortcuts::Command;
 use super::tabs::Place;
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options};
+use crate::commands::Command;
 use crate::engine;
 
 fn failed(browser: &Browser) -> Option<(FailureCause, bool, u32)> {

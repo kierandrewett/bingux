@@ -6,7 +6,7 @@ use bingux_ui::web_view::requests::ContextTarget;
 
 use crate::address::Address;
 use crate::browser::PendingMenu;
-use crate::model::shortcuts::{self, Command};
+use crate::commands::{self, Command};
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
 use crate::zoom::Zoom;
@@ -17,7 +17,7 @@ use super::ctx::Ctx;
 fn command_item(ctx: Ctx, label: &str, command: Command) -> MenuItem {
     let item = menu_item(label, move |_: ()| ctx.with(|browser| browser.run(command)));
     // A phone has no keyboard to learn the keys from, and no room for them.
-    match shortcuts::label(ctx.platform, command) {
+    match commands::label(ctx.platform, command) {
         Some(keys) if !is_compact() => item.shortcut(keys),
         _ => item,
     }
@@ -78,7 +78,7 @@ pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {
 }
 
 /// What the shortcuts dialog says.
-pub fn shortcut_text(platform: shortcuts::Platform) -> String {
+pub fn shortcut_text(platform: commands::Platform) -> String {
     let rows = [
         ("New tab", Command::NewTab),
         ("Close tab", Command::CloseTab),
@@ -101,10 +101,10 @@ pub fn shortcut_text(platform: shortcuts::Platform) -> String {
     let mut lines: Vec<String> = rows
         .iter()
         .filter_map(|(name, command)| {
-            shortcuts::label(platform, *command).map(|keys| format!("{keys}  {name}"))
+            commands::label(platform, *command).map(|keys| format!("{keys}  {name}"))
         })
         .collect();
-    let digit = if platform == shortcuts::Platform::Linux {
+    let digit = if platform == commands::Platform::Linux {
         "Alt+1 to 9"
     } else {
         "Ctrl+1 to 9"

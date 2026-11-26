@@ -2,7 +2,7 @@
 
 use bingux_ui::web_view::BackendError;
 
-use crate::model::shortcuts::Command;
+use crate::commands::Command;
 
 /// A message for the person that is not part of a page: a toast.
 #[derive(Clone, Debug, PartialEq, Eq)]

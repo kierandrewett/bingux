@@ -8,6 +8,7 @@
 
 mod address;
 mod browser;
+mod commands;
 mod engine;
 mod locale;
 mod model;

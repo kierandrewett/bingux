@@ -4,7 +4,7 @@ use bingux_ui::web_view::requests::{DownloadState, Request, RequestKind};
 use bingux_ui::web_view::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
 
 use super::{Browser, Notice, PendingMenu, UiRequest};
-use crate::model::shortcuts::Command;
+use crate::commands::Command;
 use crate::model::tab::Prompt;
 use crate::zoom::Zoom;
 

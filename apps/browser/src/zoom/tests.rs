@@ -5,7 +5,7 @@ use bingux_ui::web_view::test_double::Call;
 
 use super::*;
 use crate::browser::testing::{browser, go};
-use crate::model::shortcuts::Command;
+use crate::commands::Command;
 
 #[test]
 fn the_keys_walk_the_ladder_both_ways() {

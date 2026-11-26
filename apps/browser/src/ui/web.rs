@@ -12,7 +12,7 @@ use bingux_ui::frame_view::{KeyInput, ViewSize};
 use bingux_ui::web_view::{PageSurface, TabId, web_view};
 use freya::prelude::*;
 
-use crate::model::shortcuts::{Command, page_command};
+use crate::commands::{Command, page_command};
 
 use crate::engine::Engine;
 
