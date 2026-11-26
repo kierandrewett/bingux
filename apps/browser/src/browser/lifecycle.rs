@@ -86,6 +86,65 @@ impl Browser {
         }
     }
 
+    /// Open the developer tools of tab `key` in a tab of their own, next to
+    /// it and in front. The engine makes the toolbox a session and closes it
+    /// after its target; a private tab is refused by the engine.
+    pub fn open_devtools(&mut self, key: u64) {
+        let page = self
+            .tabs
+            .get(key)
+            .filter(|tab| tab.kind == TabKind::Web && !tab.is_blank())
+            .map(|tab| tab.private);
+        let (Some(private), Some(session)) = (page, self.session_of(key)) else {
+            self.out.notice(Notice {
+                error: true,
+                text: tr!("browser-devtools-no-page"),
+                action: None,
+            });
+            return;
+        };
+        if !self.engine.capabilities().devtools || private {
+            self.out.notice(Notice {
+                error: true,
+                text: if private {
+                    tr!("browser-devtools-private")
+                } else {
+                    tr!("browser-devtools-unavailable")
+                },
+                action: None,
+            });
+            return;
+        }
+        let view = self.view;
+        let toolbox =
+            match self
+                .engine
+                .backend()
+                .open_devtools(session, view.width, view.height, view.scale)
+            {
+                Ok(toolbox) => toolbox,
+                Err(error) => {
+                    self.out.fail(&error);
+                    return;
+                }
+            };
+        let new = self.tabs.next_key();
+        let mut tab = Tab::blank(new, TabKind::Web);
+        tab.session = Some(toolbox);
+        tab.url = "about:devtools-toolbox".to_string();
+        tab.opener = Some(key);
+        tab.load.loading = true;
+        let was = self.tabs.active_key();
+        self.tabs.insert(tab, Place::After(key), true);
+        if was != self.tabs.active_key()
+            && let Some(session) = self.session_of(was)
+        {
+            self.engine.call(&mut self.out, |backend| {
+                backend.set_visible(session, false, false)
+            });
+        }
+    }
+
     /// The engine ended a question itself: what the window showed for it
     /// goes, since nothing is left to answer.
     pub(crate) fn request_closed(&mut self, session: TabId, id: RequestId) {

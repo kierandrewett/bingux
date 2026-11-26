@@ -265,6 +265,9 @@ impl Config {
             })
             .remote_settings(self.remote_settings_choice())
             .sandbox_floor(SandboxFloor::Standard)
+            // A browser offers developer tools (F12). The engine still refuses a
+            // toolbox for a private tab and for another toolbox.
+            .allow_devtools(true)
             .limits(Limits {
                 max_content_processes: self.content_processes,
                 ..Limits::default()

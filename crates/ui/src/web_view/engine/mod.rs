@@ -40,6 +40,7 @@ use vivarium::navigation::{CachePolicy, NewWindowReply};
 use vivarium::operation::OpOptions;
 use vivarium::print::{PrintFlags, PrintOptions};
 use vivarium::security::CheckStatus as Check;
+use vivarium::session::DevtoolsConfig;
 use vivarium::session::{Session, SessionConfig};
 
 pub use config::{Config, EngineFolders, WebrtcChoice, locale_tag};
@@ -552,6 +553,27 @@ impl BrowserBackend for GeckoBackend {
                 lock(&self.shared.state).prints.remove(&tag);
                 failed(&error, tab, "printing")
             })
+    }
+
+    /// The toolbox is a session of the engine: it becomes a tab, with its own
+    /// frames and input, and closes after its target.
+    fn open_devtools(
+        &self,
+        tab: TabId,
+        width: u32,
+        height: u32,
+        scale: f32,
+    ) -> Result<TabId, BackendError> {
+        let runtime = self.runtime()?;
+        let target = self.session(tab)?;
+        let toolbox = runtime
+            .engine
+            .open_devtools(
+                &target,
+                DevtoolsConfig::new(width.max(1), height.max(1)).scale(scale),
+            )
+            .map_err(|error| failed(&error, tab, "developer tools"))?;
+        Ok(self.adopt(toolbox))
     }
 
     /// Every visit of every site and window (Places, which colours

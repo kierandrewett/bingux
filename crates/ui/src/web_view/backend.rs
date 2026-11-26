@@ -80,6 +80,8 @@ pub struct Capabilities {
     pub composition: bool,
     /// Printing the page to a PDF file.
     pub print: bool,
+    /// The engine's developer tools, as a tab of their own.
+    pub devtools: bool,
     /// Forgetting the engine's own record of visited pages, which colours
     /// visited links.
     pub clear_history: bool,
@@ -106,6 +108,7 @@ impl Capabilities {
             touch: true,
             composition: true,
             print: true,
+            devtools: true,
             clear_history: true,
             form_pickers: true,
             favicons: true,
@@ -340,6 +343,20 @@ pub trait BrowserBackend: Send + Sync + 'static {
     /// job; `TabEvent::Printed` says where the file is, or why there is none.
     fn print_pdf(&self, _tab: TabId, _file_name: &str) -> Done {
         Err(BackendError::Unsupported("printing"))
+    }
+
+    /// Opens the developer tools of `tab` in a tab of their own, `width` by
+    /// `height` logical pixels at `scale`, and returns it. The engine closes
+    /// it when `tab` closes, and refuses a private tab (the toolbox keeps its
+    /// state in the profile).
+    fn open_devtools(
+        &self,
+        _tab: TabId,
+        _width: u32,
+        _height: u32,
+        _scale: f32,
+    ) -> Result<TabId, BackendError> {
+        Err(BackendError::Unsupported("developer tools"))
     }
 
     /// Forgets every visit the engine kept, in every window, so links that

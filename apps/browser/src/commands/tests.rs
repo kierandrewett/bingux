@@ -265,6 +265,22 @@ fn escape_is_the_browsers_for_f11_and_the_pages_for_page_fullscreen() {
 //   2. the engine called with no tab, or on a hidden one;
 //   3. a print the engine cannot do (no capability) saying nothing.
 #[test]
+fn print_on_a_page_says_where_the_pdf_went() {
+    let (mut browser, _double) = browser();
+    crate::browser::testing::go(&mut browser, "https://example.com/");
+    browser.take_notices();
+    browser.run(Command::Print);
+    browser.poll();
+    let notices = browser.out.take_notices();
+    assert!(
+        notices
+            .iter()
+            .any(|notice| !notice.error && notice.text.contains("Saved the page as a PDF")),
+        "{notices:?}"
+    );
+}
+
+#[test]
 fn print_asks_the_engine_for_a_pdf_named_after_the_page() {
     use bingux_ui::web_view::test_double::Call;
     let (mut browser, double) = browser();
@@ -297,28 +313,51 @@ fn print_asks_the_engine_for_a_pdf_named_after_the_page() {
     );
 }
 
-// Failures the two commands the engine cannot do guard against:
-//   1. F12 or the menu row doing nothing at all, so the person thinks the
-//      browser is broken;
-//   2. a toast that claims the tools opened.
+// Failures the developer tools and picture-in-picture commands guard against:
+//   1. F12 doing nothing at all, so the person thinks the browser is broken;
+//   2. a toast that claims the tools opened when they did not;
+//   3. the toolbox opened in the background, or not as a tab of its own, or
+//      for a private page (the engine refuses it);
+//   4. picture-in-picture pretending to work when the engine has no window.
 #[test]
-fn developer_tools_and_picture_in_picture_say_the_engine_cannot() {
+fn picture_in_picture_says_the_engine_cannot() {
     let (mut browser, double) = browser();
-    for (command, words) in [
-        (Command::DevTools, "Developer tools are not available"),
-        (
-            Command::PictureInPicture,
-            "Picture-in-picture is not available",
-        ),
-    ] {
-        browser.run(command);
-        let notices = browser.out.take_notices();
-        assert!(
-            notices
-                .iter()
-                .any(|notice| notice.error && notice.text.contains(words)),
-            "{notices:?}"
-        );
-    }
+    browser.run(Command::PictureInPicture);
+    let notices = browser.out.take_notices();
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.error
+                && notice.text.contains("Picture-in-picture is not available")),
+        "{notices:?}"
+    );
     assert!(double.calls().is_empty(), "nothing was asked of the engine");
+}
+
+#[test]
+fn f12_opens_the_toolbox_of_a_page_in_a_tab_in_front_of_it() {
+    use bingux_ui::web_view::test_double::Call;
+    let (mut browser, double) = browser();
+    browser.run(Command::DevTools);
+    let notices = browser.out.take_notices();
+    assert!(
+        notices
+            .iter()
+            .any(|notice| notice.error && notice.text.contains("no web page")),
+        "a blank tab has nothing to inspect: {notices:?}"
+    );
+    let page = crate::browser::testing::go(&mut browser, "https://example.com/");
+    let tabs_before = browser.tabs.all().len();
+    double.clear_calls();
+    browser.run(Command::DevTools);
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::OpenDevtools(_)))
+    );
+    assert_eq!(browser.tabs.all().len(), tabs_before + 1);
+    let toolbox = browser.tabs.active().expect("active");
+    assert_ne!(toolbox.key, page, "the toolbox is in front");
+    assert_eq!(toolbox.opener, Some(page));
 }

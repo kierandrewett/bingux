@@ -68,6 +68,8 @@ pub enum Call {
     /// A page printed to a PDF with this file name.
     PrintPdf(TabId, String),
     ClearHistory,
+    /// The developer tools of a tab, in a tab of their own.
+    OpenDevtools(TabId),
     Respond(TabId, RequestId, Response),
     CancelDownload(DownloadId),
     PauseDownload(DownloadId),
@@ -100,6 +102,9 @@ struct TabState {
 
 #[derive(Default)]
 struct Inner {
+    /// The engine has no clear-data call and says so when asked, as an older
+    /// engine build does: `clear_history` turns false after the first try.
+    lacks_clear_call: bool,
     next_tab: u32,
     next_request: u32,
     next_download: u64,
@@ -149,6 +154,12 @@ impl TestDoubleBackend {
     /// taken (find is learned from the first session).
     pub fn set_capabilities(&self, capabilities: Capabilities) {
         *lock(&self.capabilities) = capabilities;
+    }
+
+    /// The engine has no clear-data call, and finds that out when it is asked
+    /// (the capability is offered until then).
+    pub fn lacks_clear_call(&self) {
+        lock(&self.inner).lacks_clear_call = true;
     }
 
     fn build(capabilities: Capabilities, auto_finish: bool) -> Arc<Self> {
@@ -971,11 +982,36 @@ impl BrowserBackend for TestDoubleBackend {
         })
     }
 
+    fn open_devtools(
+        &self,
+        tab: TabId,
+        width: u32,
+        height: u32,
+        scale: f32,
+    ) -> Result<TabId, BackendError> {
+        if !lock(&self.capabilities).devtools {
+            return Err(BackendError::Unsupported("developer tools"));
+        }
+        self.with_tab(tab, Call::OpenDevtools(tab), |_, _| ())?;
+        self.create_tab(&TabConfig {
+            url: "about:devtools-toolbox".to_string(),
+            width,
+            height,
+            scale,
+            opener: Some(tab),
+            ..TabConfig::default()
+        })
+    }
+
     fn clear_history(&self) -> Done {
         if !lock(&self.capabilities).clear_history {
             return Err(BackendError::Unsupported("clearing the engine's history"));
         }
         let mut inner = lock(&self.inner);
+        if inner.lacks_clear_call {
+            lock(&self.capabilities).clear_history = false;
+            return Err(BackendError::Unsupported("clearing the engine's history"));
+        }
         inner.calls.push(Call::ClearHistory);
         if inner.failed {
             return Err(BackendError::EngineGone);

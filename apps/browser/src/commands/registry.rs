@@ -16,7 +16,7 @@ pub struct Registry;
 impl Registry {
     /// Every command with a key or a menu entry, with what applies now.
     pub fn commands(ctx: Ctx) -> Vec<Listed> {
-        let (zoom, can_find, can_download, can_reopen, is_web) = {
+        let (zoom, can_find, can_download, can_devtools, can_reopen, is_web) = {
             let browser = ctx.browser.read();
             let tab = browser.active();
             (
@@ -24,6 +24,7 @@ impl Registry {
                     .percent(),
                 browser.engine.capabilities().find,
                 browser.engine.capabilities().downloads,
+                browser.engine.capabilities().devtools,
                 !browser.closed.is_empty(),
                 tab.is_some_and(|tab| tab.kind == TabKind::Web && !tab.is_blank()),
             )
@@ -182,16 +183,20 @@ impl Registry {
                 true,
                 true,
             ),
-            // Both are listed so the person finds them, and disabled with
-            // the reason in the title: the engine has no call for either
-            // (docs/browser/parity.md, Tools 08 and 10).
+            // Picture-in-picture is listed so the person finds it, and
+            // disabled with the reason in the title: the engine has no call
+            // for it (docs/browser/parity.md, Tools 10).
             (
                 "browser.devtools",
-                tr!("browser-command-devtools-unavailable-title"),
+                if can_devtools {
+                    tr!("browser-command-devtools-title")
+                } else {
+                    tr!("browser-command-devtools-unavailable-title")
+                },
                 Command::DevTools,
                 "F12",
                 true,
-                false,
+                can_devtools && is_web,
             ),
             (
                 "browser.picture-in-picture",

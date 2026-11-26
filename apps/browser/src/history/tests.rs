@@ -198,13 +198,13 @@ fn clear_history_empties_the_file_and_the_index_and_asks_the_engine_to_forget_vi
     );
     let told = browser.take_notices();
     assert_eq!(told[0].text, "History cleared");
+    assert!(browser.history_clear_scope().link_colours);
     assert!(
         double
             .calls()
             .contains(&bingux_ui::web_view::test_double::Call::ClearHistory),
         "the engine forgets its visits, so visited links stop looking visited"
     );
-    assert!(browser.history_clear_scope().link_colours);
     drop(browser);
     Files::remove_tree(&root).unwrap();
 }
@@ -212,10 +212,8 @@ fn clear_history_empties_the_file_and_the_index_and_asks_the_engine_to_forget_vi
 #[test]
 fn an_engine_that_cannot_clear_visits_is_said_so_and_not_asked() {
     crate::locale::register();
-    let double = TestDoubleBackend::with_capabilities(bingux_ui::web_view::Capabilities {
-        clear_history: false,
-        ..bingux_ui::web_view::Capabilities::all()
-    });
+    let double = TestDoubleBackend::new();
+    double.lacks_clear_call();
     let root = Files::temp();
     let search = SearchService::new();
     let mut browser = Browser::with_profile(

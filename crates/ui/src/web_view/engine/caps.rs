@@ -100,6 +100,7 @@ pub(super) fn capabilities(accepted: &[RequestKind], download_control: bool) -> 
         composition: false,
         // `Session::print_pdf` and `Engine::clear_data`: calls the crate wraps.
         print: true,
+        devtools: true,
         clear_history: true,
         form_pickers: asks(RequestKind::Select) && asks(RequestKind::FilePicker),
         // `ContentDelegate::on_favicon`: an event, nothing to announce.

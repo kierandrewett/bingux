@@ -98,8 +98,12 @@ browser-commands-print-unavailable = Printing is not available in this engine ye
 browser-print-saved = Saved the page as a PDF: { $path }
 # Toast when printing fails. $reason is the engine's message.
 browser-print-failed = Could not print the page: { $reason }
-# Toast when F12 is pressed: the engine cannot be told to start its developer tools.
-browser-devtools-unavailable = Developer tools are not available in this engine yet.
+# Toast when F12 is pressed and the engine has no developer tools.
+browser-devtools-unavailable = Developer tools are not available in this engine.
+# Toast when F12 is pressed in a private tab: the toolbox keeps its state in the profile.
+browser-devtools-private = Developer tools are not available in a private window.
+# Toast when F12 is pressed on a page that is not a web page (a blank tab, Settings).
+browser-devtools-no-page = There is no web page to inspect here.
 # Toast when picture-in-picture is asked for: the engine has no such window.
 browser-picture-in-picture-unavailable = Picture-in-picture is not available in this engine yet.
 # Toast when Print is chosen on a page that is not a web page (a blank tab, Settings).
@@ -298,7 +302,8 @@ browser-command-downloads-title = Downloads
 browser-command-settings-title = Settings
 browser-command-view-source-title = View page source
 browser-command-print-title = Save page as PDF
-# Disabled menu row: the reason is part of the title because the engine has no developer tools to open yet.
+browser-command-devtools-title = Developer tools
+# Disabled menu row: the reason is part of the title because the engine has no developer tools to open.
 browser-command-devtools-unavailable-title = Developer tools (not available in this engine)
 # Disabled command: the engine has no picture-in-picture window to open yet.
 browser-command-picture-in-picture-unavailable-title = Picture-in-picture (not available in this engine)
