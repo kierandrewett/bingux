@@ -21,18 +21,63 @@ use crate::tabs::Place;
 
 use crate::ui::Ctx;
 
+/// What the address field shows: the page's address, or what the person typed
+/// (Gecko's urlbar keeps `userTypedValue` the same way).
+///
+/// Why an enum: "typing" and "the highlighted suggestion" were two states
+/// that had to be set and cleared together in six places. The highlight means
+/// nothing while the field follows the page, and dismissing the list cleared
+/// one and not the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum UrlbarValue {
+    /// The field shows the address of the page. Nobody is typing in it.
+    Page,
+    /// The person changed the text: it is theirs until they submit or leave.
+    /// `highlight` is the suggestion the arrow keys have reached.
+    Typed { highlight: Option<usize> },
+}
+
+impl UrlbarValue {
+    /// The person typed: editing, with no row reached yet.
+    pub(super) fn after_typing() -> Self {
+        Self::Typed { highlight: None }
+    }
+
+    /// Whether the text belongs to the person.
+    pub(super) fn is_typed(self) -> bool {
+        matches!(self, Self::Typed { .. })
+    }
+
+    /// The suggestion the keys have reached, if the person is editing.
+    pub(super) fn highlight(self) -> Option<usize> {
+        match self {
+            Self::Page => None,
+            Self::Typed { highlight } => highlight,
+        }
+    }
+
+    /// An arrow key with `rows` suggestions listed. A field that follows the
+    /// page lists none, so it does not move.
+    pub(super) fn arrowed(self, rows: usize, down: bool) -> Self {
+        match self {
+            Self::Page => Self::Page,
+            Self::Typed { highlight } => Self::Typed {
+                highlight: FieldState::move_highlight(highlight, rows, down),
+            },
+        }
+    }
+}
+
 /// The states of the address field that belong to the window, not to a tab.
 #[derive(Clone, Copy, PartialEq)]
 pub struct FieldState {
     /// The text of the field.
     text: State<String>,
-    /// The person has changed it: it is theirs until they submit or leave.
-    typing: State<bool>,
+    /// Whether the field follows the page or the person is typing in it.
+    entry: State<UrlbarValue>,
     /// Counts the requests to focus the field. A new count is a new field
     /// that takes the focus with its text selected.
     focus: State<u32>,
-    /// The suggestion the keys have reached.
-    highlight: State<Option<usize>>,
     /// The field's box, which the suggestions hang from.
     area: State<Area>,
 }
@@ -42,17 +87,16 @@ impl FieldState {
     pub fn use_new() -> Self {
         Self {
             text: use_state(String::new),
-            typing: use_state(|| false),
+            entry: use_state(|| UrlbarValue::Page),
             focus: use_state(|| 0_u32),
-            highlight: use_state(|| None),
             area: use_state(Area::default),
         }
     }
 
     /// Put the cursor in the field, with its text selected.
     pub fn focus(self) {
-        let mut typing = self.typing;
-        typing.set(false);
+        let mut entry = self.entry;
+        entry.set(UrlbarValue::Page);
         let mut focus = self.focus;
         let next = *focus.peek() + 1;
         focus.set(next);
@@ -94,9 +138,8 @@ impl Component for AddressBar {
         let focus = use_focus(id);
         let mut hovered = use_state(|| None::<usize>);
         let enter_with_alt = use_hook(|| Rc::new(Cell::new(false)));
-        let mut typing = state.typing;
+        let mut entry = state.entry;
         let mut address = state.text;
-        let mut highlight = state.highlight;
         let mut field_area = state.area;
         let focused = focus().is_focused();
 
@@ -110,7 +153,7 @@ impl Component for AddressBar {
                     .unwrap_or_default(),
             )
         };
-        let editing = typing();
+        let editing = entry().is_typed();
         // History is the profile's `history` searchable, asked off the UI
         // thread as the text changes; a private window has none.
         let typed = address.read().clone();
@@ -150,9 +193,8 @@ impl Component for AddressBar {
         // The keyboard leaving the field ends the typing, unless the pointer is
         // on a row (a press on it takes the keyboard for a moment).
         use_side_effect_with_deps(&focused, move |focused: &bool| {
-            if !*focused && *typing.peek() && hovered.peek().is_none() {
-                typing.set(false);
-                highlight.set(None);
+            if !*focused && entry.peek().is_typed() && hovered.peek().is_none() {
+                entry.set(UrlbarValue::Page);
             }
         });
 
@@ -160,10 +202,13 @@ impl Component for AddressBar {
             let rows = rows.clone();
             let enter_with_alt = enter_with_alt.clone();
             move |text: String| {
-                let chosen = (*highlight.peek()).and_then(|at| rows.get(at)).cloned();
+                let chosen = entry
+                    .peek()
+                    .highlight()
+                    .and_then(|at| rows.get(at))
+                    .cloned();
                 let alt = enter_with_alt.replace(false);
-                typing.set(false);
-                highlight.set(None);
+                entry.set(UrlbarValue::Page);
                 match chosen {
                     Some(Suggestion {
                         source: Source::Tab(tab),
@@ -193,18 +238,14 @@ impl Component for AddressBar {
             .a11y_id(id)
             .revert_to(shown.clone())
             .on_change(move |_: String| {
-                typing.set(true);
-                highlight.set(None);
+                entry.set(UrlbarValue::after_typing());
             })
             .on_arrow(move |step: f64| {
                 // Up is a positive step in a field, and Up goes to the row above.
-                let next = FieldState::move_highlight(*highlight.peek(), count, step < 0.0);
-                highlight.set(next);
+                let next = entry.peek().arrowed(count, step < 0.0);
+                entry.set(next);
             })
-            .on_escape(move |_: ()| {
-                typing.set(false);
-                highlight.set(None);
-            })
+            .on_escape(move |_: ()| entry.set(UrlbarValue::Page))
             .on_enter_modifiers({
                 let enter_with_alt = enter_with_alt.clone();
                 move |held: Modifiers| enter_with_alt.set(held.contains(Modifiers::ALT))
@@ -219,10 +260,9 @@ impl Component for AddressBar {
             .map(|(at, row)| {
                 let target = row.clone();
                 suggestion_row(row.icon(), row.title.clone(), row.detail.clone())
-                    .highlighted(hovered().is_none() && highlight() == Some(at))
+                    .highlighted(hovered().is_none() && entry().highlight() == Some(at))
                     .on_press(move |_: ()| {
-                        typing.set(false);
-                        highlight.set(None);
+                        entry.set(UrlbarValue::Page);
                         match target.source {
                             Source::Tab(tab) => ctx.with(|browser| browser.select(tab)),
                             _ => ctx.with(|browser| browser.navigate(key, &target.url)),
@@ -247,7 +287,7 @@ impl Component for AddressBar {
                     rect().width(Size::fill()).children(list).into_element(),
                 )
                 .attached()
-                .on_dismiss(move |_: ()| typing.set(false)),
+                .on_dismiss(move |_: ()| entry.set(UrlbarValue::Page)),
             )
     }
 }

@@ -170,3 +170,33 @@ fn the_arrows_walk_the_list_and_come_back_to_the_typed_text() {
     assert_eq!(FieldState::move_highlight(Some(0), 3, false), None);
     assert_eq!(FieldState::move_highlight(None, 0, true), None);
 }
+
+#[test]
+fn a_field_that_follows_the_page_has_no_highlight_and_typing_starts_with_none() {
+    use super::field::UrlbarValue;
+
+    let page = UrlbarValue::Page;
+    assert!(!page.is_typed());
+    assert_eq!(page.highlight(), None);
+    assert_eq!(
+        page.arrowed(3, true),
+        UrlbarValue::Page,
+        "a field that lists nothing does not move"
+    );
+    let typed = UrlbarValue::after_typing();
+    assert!(typed.is_typed());
+    assert_eq!(typed.highlight(), None, "no row is reached by typing");
+}
+
+#[test]
+fn the_arrows_move_the_highlight_only_while_the_person_is_typing() {
+    use super::field::UrlbarValue;
+
+    let first = UrlbarValue::after_typing().arrowed(3, true);
+    assert_eq!(first.highlight(), Some(0));
+    let second = first.arrowed(3, true);
+    assert_eq!(second.highlight(), Some(1));
+    assert!(second.is_typed(), "the person is still typing");
+    // Typing again forgets the row the keys had reached.
+    assert_eq!(UrlbarValue::after_typing().highlight(), None);
+}
