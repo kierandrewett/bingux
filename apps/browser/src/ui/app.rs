@@ -14,7 +14,7 @@ use crate::commands::{Command, Platform};
 use crate::engine::{self, Engine};
 use crate::find::{BarState, FindBar};
 use crate::model::tabs::Place;
-use crate::prompts::PromptHost;
+use crate::prompts::{DialogFields, PromptHost};
 use crate::site_info::PopoverState;
 
 use super::ctx::{Chrome, Ctx};
@@ -122,8 +122,6 @@ impl Component for Content {
             downloads_anchor: use_state(Area::default),
             menu_anchor: use_state(Area::default),
             page_origin: use_state(|| (0.0, 0.0)),
-            dialog_text: use_state(String::new),
-            dialog_password: use_state(String::new),
         };
         let ctx = Ctx {
             browser,
@@ -131,6 +129,7 @@ impl Component for Content {
             address: FieldState::use_new(),
             site_info: PopoverState::use_new(),
             find: BarState::use_new(),
+            prompts: DialogFields::use_new(),
             overlays,
             window,
             platform: Platform::current(),

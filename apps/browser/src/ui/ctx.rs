@@ -15,6 +15,7 @@ use crate::browser::{Browser, Notice, UiRequest};
 use crate::commands::Command;
 use crate::commands::Platform;
 use crate::find::BarState;
+use crate::prompts::DialogFields;
 use crate::site_info::PopoverState;
 
 /// The states of the chrome that are not the browser's: they belong to the
@@ -28,10 +29,6 @@ pub struct Chrome {
     /// Where the page area starts in the window: a context menu opens at the
     /// pointer's place in the page plus this.
     pub page_origin: State<(f32, f32)>,
-    /// The text of a page's `prompt` or of an authentication, while its dialog
-    /// is open.
-    pub dialog_text: State<String>,
-    pub dialog_password: State<String>,
 }
 
 /// Everything a component of the window needs.
@@ -42,6 +39,7 @@ pub struct Ctx {
     pub address: FieldState,
     pub site_info: PopoverState,
     pub find: BarState,
+    pub prompts: DialogFields,
     pub overlays: Overlays,
     pub window: Window,
     pub platform: Platform,

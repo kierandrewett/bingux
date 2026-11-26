@@ -1,0 +1,27 @@
+//! `<input type=file>`, through the file chooser every Bingux app has.
+
+use bingux_ui::files::choose;
+use bingux_ui::prelude::*;
+use bingux_ui::web_view::requests::{PickerMode, PickerRequest};
+
+use crate::ui::Ctx;
+
+/// The file chooser a page asked for.
+pub struct PickerPrompt;
+
+impl PickerPrompt {
+    pub fn show(ctx: Ctx, key: u64, request: &PickerRequest) {
+        let chooser = match request.mode {
+            PickerMode::Open => ChooserRequest::open().title("Choose a file"),
+            PickerMode::OpenMany => ChooserRequest::open().multiple(true).title("Choose files"),
+            PickerMode::Folder => ChooserRequest::select_folder(),
+            PickerMode::Save => {
+                ChooserRequest::save(request.suggested_name.clone().unwrap_or_default())
+            }
+        };
+        choose(ctx.window, chooser, move |chosen| {
+            let paths = chosen.map(|chosen| chosen.paths).unwrap_or_default();
+            ctx.with(|browser| browser.answer_picker(key, paths));
+        });
+    }
+}

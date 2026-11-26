@@ -1,0 +1,74 @@
+//! `alert`, `confirm`, `prompt` and `beforeunload`.
+
+use bingux_ui::prelude::*;
+use bingux_ui::web_view::requests::{DialogKind, DialogRequest};
+use freya::prelude::*;
+
+use crate::address::Address;
+use crate::ui::Ctx;
+
+/// A question of the page that wants an answer in a dialog.
+pub struct DialogPrompt;
+
+impl DialogPrompt {
+    fn field(state: State<String>) -> Element {
+        text_field(state, |_: String| {})
+            .fill_width()
+            .autofocus()
+            .into()
+    }
+
+    pub fn show(ctx: Ctx, key: u64, request: &DialogRequest) {
+        let host = Address::new(&request.origin).host();
+        let title = match &request.kind {
+            DialogKind::BeforeUnload => "Leave this page?".to_string(),
+            _ if host.is_empty() => "This page says".to_string(),
+            _ => format!("{host} says"),
+        };
+        let answer = move |accept: bool| {
+            move |_: ()| {
+                let text = ctx.prompts.text.peek().clone();
+                ctx.with(|browser| browser.answer_dialog(key, accept, accept.then_some(text)));
+            }
+        };
+        let message = if request.kind == DialogKind::BeforeUnload && request.message.is_empty() {
+            "Changes you made may not be saved.".to_string()
+        } else {
+            request.message.clone()
+        };
+        let shown = match &request.kind {
+            DialogKind::Alert => dialog(title, message)
+                .response("OK", ResponseKind::Suggested, answer(true))
+                .default_action("ok")
+                .cancel_action("ok"),
+            DialogKind::Confirm => dialog(title, message)
+                .action(CANCEL_ID, "Cancel", ResponseKind::Default, answer(false))
+                .response("OK", ResponseKind::Suggested, answer(true))
+                .default_action("ok"),
+            DialogKind::Prompt { default } => {
+                let mut text = ctx.prompts.text;
+                text.set(default.clone());
+                dialog(title, message)
+                    .content(Self::field(ctx.prompts.text))
+                    .action(CANCEL_ID, "Cancel", ResponseKind::Default, answer(false))
+                    .response("OK", ResponseKind::Suggested, answer(true))
+                    .default_action("ok")
+            }
+            DialogKind::BeforeUnload => dialog(title, message)
+                .action(
+                    CANCEL_ID,
+                    "Stay on page",
+                    ResponseKind::Default,
+                    answer(false),
+                )
+                .response("Leave", ResponseKind::Destructive, answer(true))
+                .default_action(CANCEL_ID),
+        };
+        ctx.overlays
+            .show_dialog(shown.cancel_action(if request.kind == DialogKind::Alert {
+                "ok"
+            } else {
+                CANCEL_ID
+            }));
+    }
+}

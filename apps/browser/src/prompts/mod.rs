@@ -2,14 +2,24 @@
 //! permission, a dialog, a password, a list, a file. The first prompt of a tab
 //! is the one on screen.
 
+mod auth;
+mod dialog;
 mod host;
+mod picker;
+mod select;
+mod state;
 
 use bingux_ui::web_view::RequestId;
 use bingux_ui::web_view::requests::{
     AuthRequest, DialogRequest, PermissionRequest, PickerRequest, SelectRequest,
 };
 
+pub use auth::AuthPrompt;
+pub use dialog::DialogPrompt;
 pub use host::PromptHost;
+pub use picker::PickerPrompt;
+pub use select::SelectPrompt;
+pub use state::DialogFields;
 
 /// Something the page asked that waits for the person. The tab keeps them in
 /// the order they came and shows the first.
