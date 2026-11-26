@@ -24,7 +24,7 @@ the history manager (slice 5), passwords (slice 11).
 | Question                | Answer                                                                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | What is a profile       | A folder with its own engine profile, its own browser store and its own engine process. Not a container                                                 |
-| Where history lives     | A browser-side SQLite store in the profile folder. Places stays in the engine for link colours only (see "History: Places or the browser")              |
+| Where history lives     | A browser-side SQLite store in the profile folder, registered as the bingux-ui searchable `history`. Places in the engine keeps link colours only       |
 | Settings format         | `settings.json`, replaced atomically. Readable by a private window without opening a database                                                           |
 | Relational data         | `browser.sqlite`: history now; bookmarks, reading list, custom search engines and the download list later, as schema steps                              |
 | Registry                | `profiles.json` next to the profile folders, replaced atomically, written under `profiles.lock`                                                         |
@@ -208,9 +208,64 @@ already says. Places stays inside the engine for link colours. The cost is a sec
 the engine, and it has one consequence the browser must be honest about:
 
 - **Clear history clears the browser's store, not the engine's Places.** Until Vivarium has the clear-data call
-  below, visited-link colours (and `engine/places.sqlite`) keep what the person cleared. The settings row says so in
-  its subtitle ("Link colours on pages are kept until the engine can clear them"); it does not pretend. `parity.md`
-  W15 is closed by this slice; this gap is recorded there as a Vivarium dependency.
+  below, visited-link colours (and `engine/places.sqlite`) keep what the person cleared.
+- **That is model state, not copy.** `Browser::history_clear_scope()` says what Clear history reaches: the browser's
+  history always, the engine's link colours only when the backend can clear visits. The settings row's subtitle and
+  the toast after Clear are built from it ("Link colours on pages are kept until the engine can clear them"), so they
+  change by themselves when V1 lands.
+- `parity.md` W15 is closed by this slice; this gap is recorded there as a Vivarium dependency.
+
+### History as a searchable
+
+The browser model's principle 2 ("One search", `bingux-doop/docs/apps/browser-model.md`): the browser registers its
+searchables with the bingux-ui search service, and every search box is the one omnibox with a scope. History is the
+first searchable this slice builds; open tabs, bookmarks, reading list, commands, settings pages and downloads follow
+with their slices, each as its own index.
+
+The service today (`UI/search.rs`, `crates/search`, `design/search.md`):
+
+- An app implements `Searchable` (`name`, `schema`, `documents()`), calls `search::register` once, and the process-wide
+  `SearchService` loads it on the worker pool. `search::index(name)` gives the `Index` for `upsert`, `delete` and
+  `clear` when the data changes.
+- A component asks with `use_search_with(Search, active)`: off the UI thread, a newer query drops the older one, the
+  previous hits stay while the next run is going.
+- Ranking is the engine's: words, typo, proximity, attribute (field weight, then position), exactness, then BM25F.
+  A request `sort` comes before those rules; `_score` is a sort key, so `sort("_score:desc")` followed by a field sort
+  keeps relevance first and uses the field only to break ties.
+- `Schema::external` defaults to false: nothing leaves the process unless an index asks.
+
+The history searchable, built in step 6:
+
+| Part            | Shape                                                                                                                       |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Index name      | `history`. One per process, and a process has one profile                                                                   |
+| Document id     | The page's URL (unique in `pages`)                                                                                          |
+| Searched fields | `host` 10 (without `www.`), `title` 8, `path` 2 (the rest of the address)                                                   |
+| Other fields    | `uri` (the URL: what choosing the hit opens), `visit_count`, `last_visit` (unix ms), both sortable and filterable           |
+| Loading         | `documents()` reads `pages` on the worker through its own read-only connection (WAL lets it read beside the store's writer) |
+| Changes         | The store's thread upserts the one page after each recorded visit or title, and clears the index on Clear history           |
+| Exposure        | `external(false)`: Spotlight never sees history                                                                             |
+
+The address field's query:
+
+```rust
+Search::new(typed).index("history").limit(suggest::LIMIT).sort("_score:desc").sort("last_visit:desc").sort("visit_count:desc")
+```
+
+- **Ranking now:** relevance first, so a page whose host begins with what is typed comes before one that only has it
+  in the title or path; then the latest visit, then the most visits.
+- **Ranking later:** `visit_count`, `last_visit` and every visit's time in `visits` are the inputs Firefox's frecency
+  uses (a visit count weighted by how recent each visit is). Blending a number into relevance needs a ranking rule the
+  search engine does not have (`design/search.md` section 6.1 rejects `function_score`). That is a bingux-ui change
+  with a second user to name (Files' recent places, Media's play counts), made when the omnibox needs it, not here.
+- **Limits:** the address field asks for `suggest::LIMIT` (7) hits; a Library page pages with `offset` up to the
+  engine's `MAX_PAGE` (1000). The index holds at most the store's cap of 50,000 pages, well inside the engine's
+  default `Limits`.
+- **One path:** `History::matching` and its scoring (`B/model/history.rs`, `parity.md` P9) are deleted. The pure
+  `suggest()` takes the history hits as rows instead of the `History` struct, so it stays tested without a window.
+- **A private or guest window registers no history index.** It records no visit (as today), so its address field
+  shows the typed row and open tabs only. A profile whose store cannot be kept (`NotSaved`) still registers the
+  index: the visits of this run are found, they are only not written.
 
 ### Vivarium proposals (not built; nothing in `~/dev/vivarium` is changed)
 
@@ -251,7 +306,8 @@ data" or "reset" command. Rust: `Engine::clear_data(ClearData) -> Result<Operati
 Who uses it: every embedder that is not a browser and shows pages it did not choose to remember: Mail's sign-in
 sheet, a help viewer, a documentation app, a kiosk. The browser itself does not set it.
 
-Neither proposal blocks this slice. Both go to the Vivarium owner as proposals with these embedders named.
+Neither proposal blocks this slice. Status (2026-11-26): V1 passes Kieran's test (Mail and other embedders must clear a
+site's data) and Main takes it to Vivarium. V2 stays a proposal with the embedders named above.
 
 ## Migration from today's single directory
 
@@ -293,7 +349,8 @@ an engine profile under `$XDG_RUNTIME_DIR` removed with the window, `config.rs` 
 - **It belongs to a profile for its settings only.** Opened from a window it gets that profile's id
   (`--profile ID`); from the command line, the default profile's. It reads that profile's `settings.json` and the
   registry with plain reads. It opens no SQLite file, takes no `flock`, creates no lock file and writes no setting.
-- **Its history** lives in memory (as today) and goes with the window.
+- **Its history:** it records none (as today: `Options::private` keeps visits out), and it registers no `history`
+  searchable.
 - **A setting changed in a private window** applies to that window and is not saved; the model's settings state is
   `NotSaved(Private)` so the page can say "Changes here last until this window closes".
 - **A guest window** (Settings 10) is a private window that reads no profile at all: default settings, no registry
@@ -417,9 +474,10 @@ One commit per step, each with its red and green runs in the body.
 5. **Settings persisted.** The search engine survives a new `Browser`; stable ids; unknown fields and an unknown
    engine kept. Damaged, too new and disk full (a real `ENOSPC` from `/dev/full`) each give their `Keeping` state; a
    later good write clears it.
-6. **History persisted.** Visits and late titles survive a new store; Clear history empties the file; the cap trims.
-   Damaged (garbage bytes), too new (`user_version` 99), full (`max_page_count`, a real `SQLITE_FULL`) and locked each
-   give their state. Start over keeps the damaged file.
+6. **History persisted and searchable.** Visits and late titles survive a new store; Clear history empties the file and
+   the index, and its scope says the engine's link colours stay; the cap trims. The `history` searchable loads what
+   the file holds and ranks a host prefix first. Damaged (garbage bytes), too new (`user_version` 99), full
+   (`max_page_count`, a real `SQLITE_FULL`) and locked each give their state. Start over keeps the damaged file.
 7. **Private window writes nothing.** The tree walk of "Isolation".
 8. **Settings page and docs.** The page shows each `Keeping` state. `docs/browser.md` ("where things live") and
    `run.sh` updated; `parity.md` rows W15, W19 and Settings 10 updated.
