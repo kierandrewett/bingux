@@ -13,6 +13,12 @@
 //! written over: its part stays [`NotSaved`] until the person chooses Start
 //! over, which moves the file aside first.
 
+pub mod files;
+pub mod keeping;
+
+#[cfg(test)]
+mod tests;
+
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -23,11 +29,11 @@ use std::time::{Duration, Instant};
 use bingux_ui::search::{Index, SearchService};
 use rusqlite::Connection;
 
-use super::files::{self, Problem};
-use super::history::{self, CAP, Change, INDEX, Page};
-use super::places::Folders;
-use super::settings::{Settings, SettingsProblem};
-use crate::model::keeping::{Keeping, NotSaved, damaged_name};
+use crate::profile::history::{self, CAP, Change, INDEX, Page};
+use crate::profile::places::Folders;
+use crate::profile::settings::{Settings, SettingsProblem};
+use crate::store::keeping::{Keeping, NotSaved, damaged_name};
+use files::Problem;
 
 /// How long history waits in memory before it is written.
 const BATCH: Duration = Duration::from_secs(1);

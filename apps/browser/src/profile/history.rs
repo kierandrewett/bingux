@@ -17,10 +17,10 @@ use std::time::Duration;
 use bingux_ui::search::{Document, Hit, Schema, Search};
 use rusqlite::{Connection, ErrorCode, OpenFlags, TransactionBehavior, params};
 
-use super::files::Problem;
 use crate::address::Address;
 use crate::address::{Suggestion, Visited};
-use crate::model::keeping::NotSaved;
+use crate::store::files::Problem;
+use crate::store::keeping::NotSaved;
 
 /// The name of the searchable: one per process, and a process has one profile.
 pub const INDEX: &str = "history";

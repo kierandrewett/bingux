@@ -14,12 +14,12 @@ use std::path::Path;
 use bingux_ui::search::SearchService;
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
-use super::files::{self, Problem, remove_tree, tests::temp};
-use super::places::{Folders, Places};
-use super::settings::Settings;
-use super::store::{Store, keeping_of, not_saved};
 use crate::browser::{Browser, Options, Profile};
-use crate::model::keeping::{Keeping, NotSaved};
+use crate::profile::places::{Folders, Places};
+use crate::profile::settings::Settings;
+use crate::store::files::{self, Problem, remove_tree, tests::temp};
+use crate::store::keeping::{Keeping, NotSaved};
+use crate::store::{Store, keeping_of, not_saved};
 
 fn folders(root: &Path) -> Folders {
     Places::named_folders(root)

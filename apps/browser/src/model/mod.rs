@@ -7,7 +7,6 @@
 
 pub mod downloads;
 pub mod failure;
-pub mod keeping;
 pub mod tab;
 pub mod tabs;
 

@@ -8,8 +8,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use super::files::{Problem, private_dir};
-use super::places::Folders;
+use crate::profile::places::Folders;
+use crate::store::files::{Problem, private_dir};
 
 /// Why a profile could not be locked.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -92,9 +92,9 @@ impl Held {
 
 #[cfg(test)]
 mod tests {
-    use super::super::files::{remove_tree, tests::temp};
-    use super::super::places::Places;
     use super::*;
+    use crate::profile::places::Places;
+    use crate::store::files::{remove_tree, tests::temp};
 
     #[test]
     fn a_second_open_of_the_same_profile_is_in_use_until_the_first_lets_go() {

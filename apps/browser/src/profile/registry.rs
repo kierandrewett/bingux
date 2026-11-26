@@ -13,9 +13,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::files::{self, Problem};
-use super::lock::{Held, LockError, ProfileLock};
-use super::places::Places;
+use crate::profile::lock::{Held, LockError, ProfileLock};
+use crate::profile::places::Places;
+use crate::store::files::{self, Problem};
 
 /// The registry format this build reads and writes.
 pub const VERSION: u32 = 1;
@@ -448,7 +448,7 @@ impl Profiles {
     /// Nothing in a profile folder is touched. Returns where the old list went.
     pub fn start_over(&self) -> Result<std::path::PathBuf, RegistryProblem> {
         let path = self.places.registry();
-        let kept = crate::model::keeping::damaged_name(&path);
+        let kept = crate::store::keeping::damaged_name(&path);
         {
             let _held = Held::wait(&self.places.registry_lock()).map_err(|error| io(&error))?;
             match std::fs::rename(&path, &kept) {

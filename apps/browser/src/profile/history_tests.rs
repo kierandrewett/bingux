@@ -22,14 +22,14 @@ use bingux_ui::search::{Cancel, SearchService};
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 use rusqlite::Connection;
 
-use super::files::{remove_tree, tests::temp};
-use super::history::{self, Change, INDEX};
-use super::places::{Folders, Places};
-use super::settings::Settings;
-use super::store::{Event, Store};
 use crate::browser::{Browser, Options, Profile};
-use crate::model::keeping::{Keeping, NotSaved};
 use crate::model::tabs::Place;
+use crate::profile::history::{self, Change, INDEX};
+use crate::profile::places::{Folders, Places};
+use crate::profile::settings::Settings;
+use crate::store::files::{remove_tree, tests::temp};
+use crate::store::keeping::{Keeping, NotSaved};
+use crate::store::{Event, Store};
 
 fn folders(root: &Path) -> Folders {
     Places::named_folders(root)

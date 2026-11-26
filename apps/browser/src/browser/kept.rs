@@ -5,8 +5,8 @@
 //! searchable `history`; the window only sends it what was visited.
 
 use super::Browser;
-use crate::model::keeping::{ClearScope, Keeping, NotSaved, Part};
-use crate::profile::store::Event;
+use crate::store::Event;
+use crate::store::keeping::{ClearScope, Keeping, NotSaved, Part};
 
 impl Browser {
     /// Take in what the store has said since the last call.

@@ -12,8 +12,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use super::files::{self, Problem};
-use super::registry::{Entry, Id, Profiles, RegistryProblem};
+use crate::profile::registry::{Entry, Id, Profiles, RegistryProblem};
+use crate::store::files::{self, Problem};
 
 /// The name and colour of the profile made from the old folder, or of the
 /// first profile when there was none.
@@ -141,9 +141,9 @@ pub fn first_run(profiles: &Profiles) -> Result<Migrated, MigrationError> {
 mod tests {
     use std::fs;
 
-    use super::super::files::{remove_tree, tests::temp};
-    use super::super::places::Places;
     use super::*;
+    use crate::profile::places::Places;
+    use crate::store::files::{remove_tree, tests::temp};
 
     struct Rig {
         dir: PathBuf,

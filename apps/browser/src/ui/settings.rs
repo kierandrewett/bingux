@@ -13,8 +13,8 @@ use bingux_ui::web_view::{
 use freya::prelude::*;
 
 use crate::address::SearchEngine;
-use crate::model::keeping::{Keeping, Part};
 use crate::profile::history;
+use crate::store::keeping::{Keeping, Part};
 
 use super::ctx::Ctx;
 
@@ -316,7 +316,7 @@ mod tests {
 
     #[test]
     fn each_keeping_state_is_said_on_the_page() {
-        use crate::model::keeping::NotSaved;
+        use crate::store::keeping::NotSaved;
         crate::locale::register();
         let not = |why| Keeping::NotSaved(why);
         assert_eq!(

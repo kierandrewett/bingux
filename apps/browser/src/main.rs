@@ -20,6 +20,7 @@ mod prompts;
 mod site_info;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
+mod store;
 mod target;
 mod ui;
 mod zoom;
@@ -146,12 +147,12 @@ fn main() {
             if let Some(cache) = opened.stale_cache.take() {
                 // The old engine cache goes on a thread of its own: it can be large.
                 std::thread::spawn(move || {
-                    let _ = profile::files::remove_tree(&cache);
+                    let _ = store::files::remove_tree(&cache);
                 });
             }
             let engine = start_or_exit(Some(&opened.folders));
-            let settings_keeping = profile::store::keeping_of(opened.settings_problem.as_ref());
-            let (store, settings_keeping) = match profile::store::Store::open(
+            let settings_keeping = store::keeping_of(opened.settings_problem.as_ref());
+            let (store, settings_keeping) = match store::Store::open(
                 &opened.folders,
                 settings_keeping.clone(),
                 bingux_ui::search::service(),
@@ -159,7 +160,7 @@ fn main() {
                 Ok(store) => (Some(store), settings_keeping),
                 Err(error) => (
                     None,
-                    model::keeping::Keeping::NotSaved(model::keeping::NotSaved::Failed(
+                    store::keeping::Keeping::NotSaved(store::keeping::NotSaved::Failed(
                         error.to_string(),
                     )),
                 ),

@@ -4,11 +4,11 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
-use super::files::remove_tree;
-use super::files::tests::temp;
-use super::lock::ProfileLock;
-use super::places::Places;
-use super::registry::*;
+use crate::profile::lock::ProfileLock;
+use crate::profile::places::Places;
+use crate::profile::registry::*;
+use crate::store::files::remove_tree;
+use crate::store::files::tests::temp;
 
 struct Rig {
     dir: PathBuf,

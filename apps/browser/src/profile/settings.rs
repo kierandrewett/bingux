@@ -11,8 +11,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use super::files::{self, Problem};
 use crate::address::SearchEngine;
+use crate::store::files::{self, Problem};
 
 /// The settings format this build reads and writes.
 pub const VERSION: u32 = 1;
@@ -99,8 +99,8 @@ impl Settings {
 mod tests {
     use std::fs;
 
-    use super::super::files::{remove_tree, replace, tests::temp};
     use super::*;
+    use crate::store::files::{remove_tree, replace, tests::temp};
 
     #[test]
     fn no_file_is_the_defaults_and_settings_survive_a_write_and_a_read() {

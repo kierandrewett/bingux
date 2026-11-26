@@ -25,12 +25,12 @@ use bingux_ui::web_view::{BrowserBackend, PageEnvironment, RequestId, TabConfig,
 use crate::address::SearchEngine;
 use crate::engine::Engine;
 use crate::model::downloads::Downloads;
-use crate::model::keeping::{Keeping, NotSaved};
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::TabList;
 use crate::permissions::Permissions;
 use crate::profile::settings::Settings;
-use crate::profile::store::Store;
+use crate::store::Store;
+use crate::store::keeping::{Keeping, NotSaved};
 
 /// How a window is set up.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

@@ -7,7 +7,6 @@
 //! opens the profile before the window exists, and the store has a thread of
 //! its own.
 
-pub mod files;
 pub mod history;
 pub mod lock;
 pub mod migrate;
@@ -15,7 +14,6 @@ pub mod open;
 pub mod places;
 pub mod registry;
 pub mod settings;
-pub mod store;
 
 #[cfg(test)]
 mod history_tests;
@@ -23,5 +21,3 @@ mod history_tests;
 mod private_tests;
 #[cfg(test)]
 mod registry_tests;
-#[cfg(test)]
-mod store_tests;

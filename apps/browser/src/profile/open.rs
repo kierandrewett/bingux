@@ -8,12 +8,12 @@
 
 use std::path::PathBuf;
 
-use super::files::{self, Problem};
-use super::lock::{LockError, ProfileLock};
-use super::migrate::{self, Migrated, MigrationError};
-use super::places::{Folders, Places};
-use super::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
-use super::settings::{Settings, SettingsProblem};
+use crate::profile::lock::{LockError, ProfileLock};
+use crate::profile::migrate::{self, Migrated, MigrationError};
+use crate::profile::places::{Folders, Places};
+use crate::profile::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
+use crate::profile::settings::{Settings, SettingsProblem};
+use crate::store::files::{self, Problem};
 
 /// Why no profile could be opened: what the window shows instead.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -225,7 +225,7 @@ pub fn open(places: &Places, asked: Option<&str>) -> Opened {
                 let id = entry.id.clone();
                 lock_and_read(Some(entry), folders, stale_cache, Some(&id))
             }
-            Err(super::registry::ChangeError::Registry(problem)) => {
+            Err(crate::profile::registry::ChangeError::Registry(problem)) => {
                 Opened::Problem(registry_state(problem, places))
             }
             Err(other) => Opened::Problem(ProfileState::RegistryDamaged {
@@ -269,8 +269,8 @@ pub fn open_private(places: &Places, asked: Option<&str>) -> Opened {
 mod tests {
     use std::fs;
 
-    use super::super::files::{remove_tree, tests::temp};
     use super::*;
+    use crate::store::files::{remove_tree, tests::temp};
 
     struct Rig {
         dir: PathBuf,
