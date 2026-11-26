@@ -80,22 +80,92 @@ pub struct Store {
     thread: Option<JoinHandle<()>>,
 }
 
+/// The connection to the history file, as the writer holds it.
+///
+/// Why an enum: the connection and the "index is stale" flag were two fields,
+/// and the flag means something only while a connection is open.
+enum Connection {
+    /// Not open: the file was never opened, or opening it failed. A write
+    /// tries to open it again.
+    Shut,
+    /// Open. `index_stale` is set when the file was opened after the search
+    /// index was filled (an earlier open failed): the next good write fills
+    /// the index from the file again, older pages included.
+    Open {
+        database: Database,
+        index_stale: bool,
+    },
+}
+
+/// The history changes that wait to be written, and when.
+///
+/// Why an enum: `pending` and `due` were two fields that had to agree. A
+/// batch with a time and nothing to write, or changes with no time, were
+/// both representable. The third state, stuck, is real: a write failed and
+/// the changes stay queued, with no time set, until the next change, a flush
+/// or the end of the thread tries again.
+enum Batch {
+    /// Nothing waits.
+    Empty,
+    /// Changes wait. They are written at `due`.
+    Waiting { pending: Vec<Change>, due: Instant },
+    /// A write failed. The changes stay, and nothing is scheduled.
+    Stuck { pending: Vec<Change> },
+}
+
+impl Batch {
+    /// A change arrived. Empty and stuck batches start a new wait; a waiting
+    /// one keeps its time, so a busy browser writes once a second, not once
+    /// for each page.
+    fn push(&mut self, change: Change) {
+        *self = match std::mem::replace(self, Batch::Empty) {
+            Batch::Empty => Batch::Waiting {
+                pending: vec![change],
+                due: Instant::now() + BATCH,
+            },
+            Batch::Waiting { mut pending, due } => {
+                pending.push(change);
+                Batch::Waiting { pending, due }
+            }
+            Batch::Stuck { mut pending } => {
+                pending.push(change);
+                Batch::Waiting {
+                    pending,
+                    due: Instant::now() + BATCH,
+                }
+            }
+        };
+    }
+
+    /// When the thread must wake to write, if it must.
+    fn due(&self) -> Option<Instant> {
+        match self {
+            Batch::Waiting { due, .. } => Some(*due),
+            Batch::Empty | Batch::Stuck { .. } => None,
+        }
+    }
+
+    /// Take what waits, leaving the batch empty. The caller puts it back as
+    /// stuck if the write fails.
+    fn take(&mut self) -> Vec<Change> {
+        match std::mem::replace(self, Batch::Empty) {
+            Batch::Empty => Vec::new(),
+            Batch::Waiting { pending, .. } | Batch::Stuck { pending } => pending,
+        }
+    }
+}
+
 /// What the thread owns.
 struct Writer {
     settings_path: PathBuf,
     settings: Keeping,
     history_path: PathBuf,
     history: Keeping,
-    database: Option<Database>,
+    connection: Connection,
     /// Changes not written yet, oldest first.
-    pending: Vec<Change>,
-    /// When `pending` is written.
-    due: Option<Instant>,
+    batch: Batch,
     index: Arc<Index>,
     cap: usize,
-    /// The file was opened after the index was filled: the next good write
-    /// fills the index from it again, older pages included.
-    stale_index: bool,
     outbox: Arc<Mutex<Outbox>>,
 }
 
@@ -156,7 +226,10 @@ impl Writer {
         });
         match loaded {
             Ok((database, pages)) => {
-                self.database = Some(database);
+                self.connection = Connection::Open {
+                    database,
+                    index_stale: false,
+                };
                 if let Err(error) = self.index.replace_all(pages.iter().map(Page::document)) {
                     self.report_history(Keeping::NotSaved(NotSaved::Failed(format!(
                         "the history index: {error}"
@@ -175,11 +248,14 @@ impl Writer {
         if !self.history.is_writable() {
             return false;
         }
-        if self.database.is_none() {
+        if let Connection::Shut = self.connection {
             match Database::open(&self.history_path) {
                 Ok(database) => {
-                    self.database = Some(database);
-                    self.stale_index = true;
+                    // Shut to open, late: the index was filled without this file.
+                    self.connection = Connection::Open {
+                        database,
+                        index_stale: true,
+                    };
                 }
                 Err(why) => {
                     self.report_history(Keeping::NotSaved(why));
@@ -225,55 +301,61 @@ impl Writer {
 
     fn queue(&mut self, change: Change) {
         self.index_change(&change);
-        self.pending.push(change);
-        if self.due.is_none() {
-            self.due = Some(Instant::now() + BATCH);
-        }
+        self.batch.push(change);
     }
 
     /// Fills the index from the file again when it was opened late.
     fn reload_index(&mut self) {
-        if !std::mem::take(&mut self.stale_index) {
+        let Connection::Open {
+            database,
+            index_stale,
+        } = &mut self.connection
+        else {
+            return;
+        };
+        if !std::mem::take(index_stale) {
             return;
         }
-        if let Some(database) = &self.database
-            && let Ok(pages) = database.pages()
-        {
+        if let Ok(pages) = database.pages() {
             let _ = self.index.replace_all(pages.iter().map(Page::document));
         }
     }
 
     /// Writes what has queued. On failure it stays queued for the next try.
     fn commit(&mut self) {
-        self.due = None;
-        if self.pending.is_empty() {
+        let pending = self.batch.take();
+        if pending.is_empty() {
             return;
         }
+        // Waiting to stuck, unless the write below succeeds: the changes
+        // stay queued, and the next try is the next change or a flush.
         if !self.can_write() {
+            self.batch = Batch::Stuck { pending };
             return;
         }
-        let Some(database) = self.database.as_mut() else {
+        let Connection::Open { database, .. } = &mut self.connection else {
+            self.batch = Batch::Stuck { pending };
             return;
         };
-        let written = database.write(&self.pending);
-        match written {
+        match database.write(&pending) {
             Ok(()) => {
-                self.pending.clear();
                 self.reload_index();
                 self.report_history(Keeping::Saved);
             }
-            Err(error) => self.report_history(Keeping::NotSaved(Database::not_saved(&error))),
+            Err(error) => {
+                self.batch = Batch::Stuck { pending };
+                self.report_history(Keeping::NotSaved(Database::not_saved(&error)));
+            }
         }
     }
 
     fn clear_history(&mut self) {
-        self.pending.clear();
-        self.due = None;
+        self.batch = Batch::Empty;
         self.index.clear();
         if !self.can_write() {
             return;
         }
-        let Some(database) = self.database.as_mut() else {
+        let Connection::Open { database, .. } = &mut self.connection else {
             return;
         };
         let cleared = database.clear();
@@ -288,7 +370,7 @@ impl Writer {
             return;
         };
         let detail = detail.clone();
-        self.database = None;
+        self.connection = Connection::Shut;
         let path = &self.history_path;
         let files = [
             path.clone(),
@@ -305,7 +387,10 @@ impl Writer {
         self.history = Keeping::Loading;
         match Database::open(&self.history_path) {
             Ok(database) => {
-                self.database = Some(database);
+                self.connection = Connection::Open {
+                    database,
+                    index_stale: false,
+                };
                 self.report_history(Keeping::Saved);
                 self.commit();
             }
@@ -314,7 +399,7 @@ impl Writer {
     }
 
     fn next(&self, commands: &Receiver<Command>) -> Result<Option<Command>, ()> {
-        match self.due {
+        match self.batch.due() {
             None => commands.recv().map(Some).map_err(|_| ()),
             Some(due) => {
                 match commands.recv_timeout(due.saturating_duration_since(Instant::now())) {
@@ -374,12 +459,10 @@ impl Store {
             settings,
             history_path: folders.store(),
             history: Keeping::Loading,
-            database: None,
-            pending: Vec::new(),
-            due: None,
+            connection: Connection::Shut,
+            batch: Batch::Empty,
             index: Arc::clone(&index),
             cap,
-            stale_index: false,
             outbox: Arc::clone(&outbox),
         };
         let (commands, receiver) = mpsc::channel();

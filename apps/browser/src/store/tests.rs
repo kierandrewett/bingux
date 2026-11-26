@@ -171,3 +171,50 @@ fn a_private_window_and_a_window_without_a_profile_say_nothing_in_a_toast() {
         Keeping::NotSaved(NotSaved::NoProfile)
     );
 }
+
+fn visit(url: &str) -> crate::history::Change {
+    crate::history::Change::Visit {
+        url: url.to_string(),
+        title: String::new(),
+        at: 0,
+    }
+}
+
+#[test]
+fn a_batch_has_a_time_only_while_changes_wait_for_it() {
+    use super::Batch;
+
+    let mut batch = Batch::Empty;
+    assert_eq!(batch.due(), None, "nothing waits, so nothing is scheduled");
+    batch.push(visit("https://a.example/"));
+    let due = batch.due().expect("a change starts the wait");
+    batch.push(visit("https://b.example/"));
+    assert_eq!(
+        batch.due(),
+        Some(due),
+        "more changes join the batch and keep its time"
+    );
+    assert_eq!(batch.take().len(), 2);
+    assert_eq!(batch.due(), None, "a taken batch is empty again");
+}
+
+#[test]
+fn a_batch_whose_write_failed_waits_for_the_next_change_and_loses_nothing() {
+    use super::Batch;
+
+    let mut batch = Batch::Stuck {
+        pending: vec![visit("https://a.example/")],
+    };
+    assert_eq!(
+        batch.due(),
+        None,
+        "a stuck batch schedules no retry by itself"
+    );
+    batch.push(visit("https://b.example/"));
+    assert!(batch.due().is_some(), "the next change starts a new wait");
+    assert_eq!(
+        batch.take().len(),
+        2,
+        "the change that failed is still there"
+    );
+}
