@@ -391,10 +391,11 @@ fn page_box(
 
 /// An absolutely placed box inside a page.
 fn rect_at(x: f32, y: f32, width: f32, height: f32) -> Rect_ {
-    // ui-lint: allow(page boxes take the renderer's measured pixel size)
     rect()
         .position(Position::new_absolute().left(x).top(y))
+        // ui-lint: allow(page boxes take the renderer's measured pixel size)
         .width(Size::px(width.max(1.0)))
+        // ui-lint: allow(page boxes take the renderer's measured pixel size)
         .height(Size::px(height.max(1.0)))
 }
 
@@ -1161,10 +1162,10 @@ impl Component for Reading {
                 } else {
                     (vw - width) / 2.0
                 };
-                // ui-lint: allow(a page's left offset is computed from the viewport width and pan)
                 Element::from(
                     row.child(
                         rect()
+                            // ui-lint: allow(a page's left offset is computed from the viewport width and pan)
                             .margin(Gaps::new(0.0, 0.0, 0.0, left))
                             .child(page_box(
                                 &tokens,
@@ -1194,10 +1195,10 @@ impl Component for Reading {
                 .spacing(GAP)
                 .children(rows),
         );
-        // ui-lint: allow(the page gap is the document layout's measured geometry)
         let pages_view = ScrollView::new_controlled(scroll)
             .width(Size::fill())
             .height(Size::fill())
+            // ui-lint: allow(the page gap is the document layout's measured geometry)
             .spacing(GAP)
             .child(column);
 
@@ -1281,15 +1282,16 @@ impl Component for Reading {
                 *side_tab.read()
             };
             let list: Element = match tab {
-                // ui-lint: allow(ScrollView takes a plain spacing and has no tw; the insets are the thumb layout's measured geometry)
                 SideTab::Pages => ScrollView::new_controlled(side_scroll)
                     .key("pages")
                     .width(Size::fill())
                     .height(Size::fill())
+                    // ui-lint: allow(ScrollView takes a plain spacing and has no tw; the thumb layout's measured geometry)
                     .spacing(PAGES_SPACING)
                     .child(
                         rect()
                             .width(Size::fill())
+                            // ui-lint: allow(the insets are the thumb layout's measured geometry)
                             .padding(Gaps::new(S4_PX, 0.0, S4_PX, 0.0))
                             .children(rows),
                     )

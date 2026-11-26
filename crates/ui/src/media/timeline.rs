@@ -328,6 +328,7 @@ impl Component for Timeline {
                     builder.set_value(text.clone());
                 }
             })
+            // ui-lint: allow(the bar takes the measured row width less the two time labels)
             .width(if self.times {
                 Size::px((*row_width.read() - 2.0 * Dim::Box24.px()).max(0.0))
             } else {

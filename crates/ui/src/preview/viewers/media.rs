@@ -312,10 +312,10 @@ impl Component for Playback {
                         &tokens,
                         &[flex_row(), justify(Align::Center), px(bar_margin)],
                     )
-                    // ui-lint: allow(the bar is as wide as the measured viewport less its two margins)
                     .child(
                         MediaControls::new(controls_state, on_action.clone())
                             .docked(docked)
+                            // ui-lint: allow(the bar is as wide as the measured viewport less its two margins)
                             .width(vw - 2.0 * bar_margin.px())
                             .into_element(),
                     ),

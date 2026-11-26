@@ -22,8 +22,8 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use bingux_preview_core::font::{self, FontFacts, Installed};
 use bingux_preview_core::Loaded;
+use bingux_preview_core::font::{self, FontFacts, Installed};
 use freya::prelude::*;
 
 use super::{Stage, tool_bar};
@@ -57,8 +57,13 @@ fn alias_of(bytes: &[u8]) -> String {
 /// Give the font to the text engine, once, and return the name to draw it by.
 fn register(data: &Arc<[u8]>) -> String {
     let alias = alias_of(data);
-    let mut registered = REGISTERED.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-    if registered.get_or_insert_with(HashSet::new).insert(alias.clone()) {
+    let mut registered = REGISTERED
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if registered
+        .get_or_insert_with(HashSet::new)
+        .insert(alias.clone())
+    {
         Platform::get().load_font(alias.clone(), bytes::Bytes::copy_from_slice(data));
     }
     alias
@@ -69,9 +74,15 @@ fn facts_line(facts: &FontFacts) -> String {
     let mut parts = Vec::new();
     parts.extend(facts.style.clone());
     parts.extend(facts.version.clone());
-    parts.push(crate::tr!("ui-preview-font-glyphs", count = u64::from(facts.glyphs)));
+    parts.push(crate::tr!(
+        "ui-preview-font-glyphs",
+        count = u64::from(facts.glyphs)
+    ));
     if facts.faces > 1 {
-        parts.push(crate::tr!("ui-preview-font-faces", count = u64::from(facts.faces)));
+        parts.push(crate::tr!(
+            "ui-preview-font-faces",
+            count = u64::from(facts.faces)
+        ));
     }
     parts.join(" · ")
 }
@@ -138,13 +149,17 @@ impl Component for Cell {
             .component("FontCell")
             .width(Size::px(CELL))
             .height(Size::px(CELL))
-            .tw(&tokens, &[flex_row(), center(), rounded(Radius::Control), bg(fill)])
+            .tw(
+                &tokens,
+                &[flex_row(), center(), rounded(Radius::Control), bg(fill)],
+            )
             .on_pointer_enter(move |_| hovering.set(true))
             .on_pointer_leave(move |_| hovering.set(false))
             .on_press(move |_| on_select.call(character))
             .child(
                 BODY.label(&tokens, character.to_string())
                     .font_family(self.alias.clone())
+                    // ui-lint: allow(a specimen shows the font at its own size, not at a text style's)
                     .font_size(GLYPH_SIZE)
                     .max_lines(1),
             )
@@ -177,7 +192,12 @@ impl Component for GridRow {
 }
 
 /// Put the font in the person's font folder off the UI thread and say so.
-fn install(facts: &FontFacts, name: String, mut installed: State<bool>, overlays: Option<crate::shell::Overlays>) {
+fn install(
+    facts: &FontFacts,
+    name: String,
+    mut installed: State<bool>,
+    overlays: Option<crate::shell::Overlays>,
+) {
     let Some(dir) = font::user_font_dir() else {
         if let Some(overlays) = overlays {
             overlays.toast(crate::tr!("ui-preview-font-install-failed"));
@@ -229,7 +249,8 @@ impl Component for FontView {
             let facts = facts.clone();
             let file_name = file_name.clone();
             move || {
-                font::user_font_dir().is_some_and(|dir| font::is_installed(facts.data.bytes(), &file_name, &dir))
+                font::user_font_dir()
+                    .is_some_and(|dir| font::is_installed(facts.data.bytes(), &file_name, &dir))
             }
         });
         let sample = use_state(String::new);
@@ -249,12 +270,20 @@ impl Component for FontView {
         } else {
             typed
         };
-        let sizes: &[f32] = if dedicated { &DEDICATED_SIZES } else { &GLANCE_SIZES };
+        let sizes: &[f32] = if dedicated {
+            &DEDICATED_SIZES
+        } else {
+            &GLANCE_SIZES
+        };
         let specimen = sizes.iter().map(|size| {
             Element::from(
                 rect()
-                    .tw(&tokens, &[w_full(), flex_row(), items(Align::Center), gap(S3)])
+                    .tw(
+                        &tokens,
+                        &[w_full(), flex_row(), items(Align::Center), gap(S3)],
+                    )
                     .child(
+                        // ui-lint: allow(the size numbers' column is one 24 px space step wide, so every specimen starts at the same edge)
                         rect().width(Size::px(S6.px())).child(
                             CAPTION
                                 .in_ink(Ink::Muted)
@@ -267,6 +296,7 @@ impl Component for FontView {
                         rect().tw(&tokens, &[w_flex(), clip()]).child(
                             BODY.label(&tokens, text.clone())
                                 .font_family(alias.clone())
+                                // ui-lint: allow(the point of a specimen is its size)
                                 .font_size(*size)
                                 .max_lines(1)
                                 .text_overflow(TextOverflow::Ellipsis),
@@ -294,7 +324,14 @@ impl Component for FontView {
                         } else {
                             crate::tr!("ui-preview-font-install")
                         },
-                        move |_| install(&facts_for_install, install_name.clone(), installed, overlays),
+                        move |_| {
+                            install(
+                                &facts_for_install,
+                                install_name.clone(),
+                                installed,
+                                overlays,
+                            )
+                        },
                     )
                     .compact()
                     .enabled(!install_now),
@@ -345,10 +382,16 @@ impl Component for FontView {
                     .child(
                         BODY.label(&tokens, character.to_string())
                             .font_family(alias.clone())
+                            // ui-lint: allow(a specimen shows the font at its own size, not at a text style's)
                             .font_size(GLYPH_SIZE)
                             .max_lines(1),
                     )
-                    .child(CAPTION.in_ink(Ink::Muted).label(&tokens, code_point(character)).max_lines(1))
+                    .child(
+                        CAPTION
+                            .in_ink(Ink::Muted)
+                            .label(&tokens, code_point(character))
+                            .max_lines(1),
+                    )
                     .maybe_child(copy),
             )
         });
@@ -370,6 +413,7 @@ impl Component for FontView {
                                     rect().tw(&tokens, &[w_full(), pb(S2)]).child(
                                         BODY.label(&tokens, facts.family.clone())
                                             .font_family(alias.clone())
+                                            // ui-lint: allow(the family name is set in the font being previewed, at a display size)
                                             .font_size(NAME_SIZE)
                                             .max_lines(1)
                                             .text_overflow(TextOverflow::Ellipsis),
@@ -400,7 +444,10 @@ impl Component for FontView {
                                 .in_ink(Ink::Muted)
                                 .label(
                                     &tokens,
-                                    crate::tr!("ui-preview-font-characters", count = characters.len()),
+                                    crate::tr!(
+                                        "ui-preview-font-characters",
+                                        count = characters.len()
+                                    ),
                                 )
                                 .max_lines(1),
                         ),
@@ -432,7 +479,10 @@ mod tests {
     #[test]
     fn the_grid_has_at_least_one_column() {
         assert_eq!(columns(0.0, 14.0), 1);
-        assert_eq!(columns(10_000.0, 14.0), ((10_000.0 - 2.0 * 14.0) / CELL).floor() as usize);
+        assert_eq!(
+            columns(10_000.0, 14.0),
+            ((10_000.0 - 2.0 * 14.0) / CELL).floor() as usize
+        );
         assert!(columns(400.0, 14.0) >= 8);
     }
 
