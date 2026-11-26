@@ -27,6 +27,7 @@ fn folders(root: &Path) -> Folders {
 
 /// A window of the profile in `root`, as `main` opens it.
 fn window(root: &Path) -> Browser {
+    crate::locale::register();
     let folders = folders(root);
     let (settings, problem) = Settings::read(&folders.settings());
     let keeping = keeping_of(problem.as_ref());

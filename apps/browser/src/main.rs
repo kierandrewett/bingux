@@ -6,6 +6,7 @@
 //! opens it in a new tab. `--private` starts a window of its own whose tabs keep
 //! nothing. Each profile is a process of its own (`docs/browser/profiles-and-store.md`).
 
+mod locale;
 mod model;
 mod profile;
 #[cfg(feature = "snapshot")]
@@ -100,6 +101,7 @@ fn restart(private: bool, profile: Option<&str>, arguments: &[OsString]) -> ! {
 
 fn main() {
     let arguments: Vec<OsString> = std::env::args_os().skip(1).collect();
+    locale::register();
     #[cfg(feature = "snapshot")]
     if arguments.first().is_some_and(|first| first == "--snapshot") {
         snapshot_mode::run(&arguments[1..]);

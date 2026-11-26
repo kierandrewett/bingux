@@ -23,7 +23,7 @@ use super::ctx::Ctx;
 pub fn settings_text(keeping: &Keeping) -> String {
     keeping
         .text(Part::Settings)
-        .unwrap_or_else(|| "Used for words typed in the address bar".to_string())
+        .unwrap_or_else(|| tr!("browser-settings-search-engine-subtitle"))
 }
 
 /// The history row's second line: why history is not kept, or how many
@@ -33,12 +33,9 @@ pub fn history_text(has_history: bool, keeping: &Keeping, pages: u64) -> String 
         return why;
     }
     if !has_history {
-        return "Not kept in this window".to_string();
+        return tr!("browser-history-not-kept");
     }
-    match pages {
-        1 => "1 page kept in this profile".to_string(),
-        _ => format!("{pages} pages kept in this profile"),
-    }
+    tr!("browser-history-pages", count = pages)
 }
 
 /// What the host's choice of Remote Settings means for the person.
@@ -211,10 +208,10 @@ impl Component for SettingsPage {
         );
         if settings_keeping.can_start_over() {
             search = search.row(
-                row("Settings file")
-                    .subtitle("Kept aside as it is, and a new one written")
+                row(tr!("browser-settings-file"))
+                    .subtitle(tr!("browser-settings-file-subtitle"))
                     .trailing(
-                        action_button("Start over", move |_: ()| {
+                        action_button(tr!("browser-start-over"), move |_: ()| {
                             ctx.with(|browser| browser.start_over_settings());
                         })
                         .compact(),
@@ -225,7 +222,7 @@ impl Component for SettingsPage {
             row("Browsing history").subtitle(history_text(has_history, &history_keeping, pages));
         history_row = if history_keeping.can_start_over() {
             history_row.trailing(
-                action_button("Start over", move |_: ()| {
+                action_button(tr!("browser-start-over"), move |_: ()| {
                     ctx.with(|browser| browser.start_over_history());
                 })
                 .compact(),
@@ -260,7 +257,7 @@ impl Component for SettingsPage {
                         .compact(),
                     ),
             )
-            .footer("Site permissions are kept only while the window is open.");
+            .footer(tr!("browser-permissions-footer"));
         let settings = &info.settings;
         let mut engine = Group::new("Engine".to_string())
             .description("Chosen by whoever starts the browser, and read once at start.")
@@ -320,6 +317,7 @@ mod tests {
     #[test]
     fn each_keeping_state_is_said_on_the_page() {
         use crate::model::keeping::NotSaved;
+        crate::locale::register();
         let not = |why| Keeping::NotSaved(why);
         assert_eq!(
             settings_text(&Keeping::Saved),

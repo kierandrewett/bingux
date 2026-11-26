@@ -36,6 +36,7 @@ fn folders(root: &Path) -> Folders {
 }
 
 fn open(root: &Path, search: &Arc<SearchService>) -> Store {
+    crate::locale::register();
     Store::open(&folders(root), Keeping::Saved, search).unwrap()
 }
 

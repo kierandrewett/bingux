@@ -78,10 +78,7 @@ impl Browser {
             return;
         };
         store.clear_history();
-        let text = match self.history_clear_scope().text() {
-            Some(kept) => format!("History cleared. {kept}"),
-            None => "History cleared".to_string(),
-        };
+        let text = self.history_clear_scope().cleared_text();
         self.notify(text);
     }
 

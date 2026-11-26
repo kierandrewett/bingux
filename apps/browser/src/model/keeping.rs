@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use bingux_ui::tr;
+
 /// Whether a part of the profile is being kept on disk.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Keeping {
@@ -45,26 +47,11 @@ pub enum Part {
 }
 
 impl Part {
-    fn name(self) -> &'static str {
+    /// The `$part` the catalogue's messages select on.
+    fn id(self) -> &'static str {
         match self {
-            Self::Settings => "Settings",
-            Self::History => "History",
-        }
-    }
-
-    /// "is" or "are", as the name needs.
-    fn is(self) -> &'static str {
-        match self {
-            Self::Settings => "are",
-            Self::History => "is",
-        }
-    }
-
-    /// "it" or "them".
-    fn it(self) -> &'static str {
-        match self {
-            Self::Settings => "them",
-            Self::History => "it",
+            Self::Settings => "settings",
+            Self::History => "history",
         }
     }
 }
@@ -76,25 +63,16 @@ impl Keeping {
         let Self::NotSaved(why) = self else {
             return None;
         };
-        let (what, is, it) = (part.name(), part.is(), part.it());
-        let lower = what.to_lowercase();
+        let part = part.id();
         Some(match why {
-            NotSaved::Private => "Changes here last until this window closes".to_string(),
-            NotSaved::NoProfile => format!("This window has no profile: {lower} {is} not kept"),
-            NotSaved::DiskFull => format!("The disk is full: {lower} {is} not being saved"),
-            NotSaved::ReadOnly => {
-                format!("{what} cannot be saved: the profile folder is read-only")
-            }
-            NotSaved::Busy => format!(
-                "Another program is using the {lower} file: trying again with the next change"
-            ),
-            NotSaved::TooNew { .. } => {
-                format!("This profile was used by a newer Browser. Update Browser to keep {lower}")
-            }
-            NotSaved::Damaged { .. } => {
-                format!("{what} could not be read. Start over to keep {it} again")
-            }
-            NotSaved::Failed(text) => format!("{what} {is} not being saved: {text}"),
+            NotSaved::Private => tr!("browser-keeping-private"),
+            NotSaved::NoProfile => tr!("browser-keeping-no-profile", part = part),
+            NotSaved::DiskFull => tr!("browser-keeping-disk-full", part = part),
+            NotSaved::ReadOnly => tr!("browser-keeping-read-only", part = part),
+            NotSaved::Busy => tr!("browser-keeping-busy", part = part),
+            NotSaved::TooNew { .. } => tr!("browser-keeping-too-new", part = part),
+            NotSaved::Damaged { .. } => tr!("browser-keeping-damaged", part = part),
+            NotSaved::Failed(error) => tr!("browser-keeping-failed", part = part, error = error),
         })
     }
 
@@ -125,10 +103,18 @@ pub struct ClearScope {
 }
 
 impl ClearScope {
-    /// What the person is told after Clear history, and on the settings row.
-    pub fn text(self) -> Option<&'static str> {
-        (self.history && !self.link_colours)
-            .then_some("Link colours on pages are kept until the engine can clear them")
+    /// What the settings page says Clear history does not reach.
+    pub fn text(self) -> Option<String> {
+        (self.history && !self.link_colours).then(|| tr!("browser-history-link-colours-kept"))
+    }
+
+    /// The toast after Clear history.
+    pub fn cleared_text(self) -> String {
+        if self.text().is_some() {
+            tr!("browser-history-cleared-link-colours-kept")
+        } else {
+            tr!("browser-history-cleared")
+        }
     }
 }
 
@@ -138,6 +124,7 @@ mod tests {
 
     #[test]
     fn only_a_state_that_keeps_nothing_has_words() {
+        crate::locale::register();
         assert_eq!(Keeping::Saved.text(Part::History), None);
         assert_eq!(Keeping::Loading.text(Part::History), None);
         let full = Keeping::NotSaved(NotSaved::DiskFull);
@@ -160,6 +147,7 @@ mod tests {
 
     #[test]
     fn clear_history_says_what_it_does_not_reach() {
+        crate::locale::register();
         let today = ClearScope {
             history: true,
             link_colours: false,
