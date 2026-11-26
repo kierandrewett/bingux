@@ -6,13 +6,13 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
+use crate::menus::main_menu;
 use crate::model::downloads::Downloads;
 use crate::model::tab::TabKind;
 use crate::site_info::ConnectionButton;
 use crate::zoom::{Zoom, ZoomChip};
 
 use super::ctx::Ctx;
-use super::menus::main_menu;
 use crate::address::AddressBar;
 
 /// What the toolbar reads of the tab on show.

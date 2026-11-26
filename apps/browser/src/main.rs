@@ -33,6 +33,7 @@ use crate::browser::{Options, Profile};
 mod error_pages;
 mod first_run;
 mod history;
+mod menus;
 mod private;
 mod profiles;
 mod settings;

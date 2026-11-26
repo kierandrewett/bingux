@@ -1,5 +1,9 @@
 //! The menus: the main menu, a tab's menu and the page's context menu.
 
+mod host;
+
+pub use host::ContextMenuHost;
+
 use bingux_ui::prelude::*;
 use bingux_ui::web_view::input::EditCommand;
 use bingux_ui::web_view::requests::ContextTarget;
@@ -11,7 +15,7 @@ use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
 use crate::zoom::Zoom;
 
-use super::ctx::Ctx;
+use crate::ui::Ctx;
 
 /// The main menu, from the button at the right of the toolbar.
 pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {

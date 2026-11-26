@@ -2,7 +2,6 @@
 
 mod app;
 mod ctx;
-mod menus;
 mod page;
 mod pages;
 mod phone;

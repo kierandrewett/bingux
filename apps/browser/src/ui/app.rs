@@ -13,6 +13,7 @@ use crate::browser::{Browser, Options, Profile};
 use crate::commands::{Command, Platform};
 use crate::engine::{self, Engine};
 use crate::find::{BarState, FindBar};
+use crate::menus::ContextMenuHost;
 use crate::model::tabs::Place;
 use crate::prompts::{DialogFields, PromptHost};
 use crate::site_info::PopoverState;
@@ -327,44 +328,4 @@ fn first_is_blank(ctx: Ctx) -> bool {
         .peek()
         .active()
         .is_some_and(|tab| tab.is_blank())
-}
-
-/// Opens the page's context menu when the engine asks for it. It draws
-/// nothing.
-#[derive(PartialEq)]
-struct ContextMenuHost {
-    ctx: Ctx,
-}
-
-impl Component for ContextMenuHost {
-    fn render(&self) -> impl IntoElement {
-        let ctx = self.ctx;
-        let id = ctx.browser.read().menu.as_ref().map(|menu| {
-            (
-                menu.tab,
-                menu.request,
-                menu.target.position.0 as i32,
-                menu.target.position.1 as i32,
-            )
-        });
-        use_side_effect_with_deps(
-            &id,
-            move |id: &Option<(u64, Option<bingux_ui::web_view::RequestId>, i32, i32)>| {
-                if id.is_none() {
-                    return;
-                }
-                let Some(menu) = ctx.browser.peek().menu.clone() else {
-                    return;
-                };
-                let (x, y) = *ctx.chrome.page_origin.peek();
-                let at = (x + menu.target.position.0, y + menu.target.position.1);
-                let items = super::menus::context_items(ctx, &menu);
-                // The engine waits for the menu to be closed: it is told now, since
-                // what the menu does is the browser's, not the page's.
-                ctx.with(|browser| browser.dismiss_menu());
-                ctx.overlays.show_menu(at, items);
-            },
-        );
-        rect().width(Size::px(0.0)).height(Size::px(0.0))
-    }
 }
