@@ -9,7 +9,7 @@ use freya::prelude::*;
 use crate::model::downloads::Downloads;
 use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
-use crate::zoom::Zoom;
+use crate::zoom::{Zoom, ZoomChip};
 
 use super::address::AddressBar;
 use super::ctx::Ctx;
@@ -116,22 +116,6 @@ fn connection_button(ctx: Ctx, read: &Reading) -> Element {
         .into_element()
 }
 
-/// The zoom, as a button that puts it back to 100 %, while it is not 100 %.
-fn zoom_chip(ctx: Ctx, read: &Reading) -> Option<Element> {
-    if read.zoom.is_default() {
-        return None;
-    }
-    let key = read.key;
-    Some(
-        action_button(format!("{}%", read.zoom.percent()), move |_: ()| {
-            ctx.with(|browser| browser.set_zoom(key, Zoom::DEFAULT));
-        })
-        .flat()
-        .compact()
-        .into(),
-    )
-}
-
 /// The downloads button; busy while something downloads.
 fn downloads_button(ctx: Ctx, downloads: &Downloads) -> Element {
     let mut anchor = ctx.chrome.downloads_anchor;
@@ -218,7 +202,11 @@ impl Component for Toolbar {
             .child(reload_button(ctx, &read))
             .child(connection_button(ctx, &read))
             .child(AddressBar { ctx })
-            .maybe_child(zoom_chip(ctx, &read));
+            .maybe_child((!read.zoom.is_default()).then_some(ZoomChip {
+                ctx,
+                key: read.key,
+                zoom: read.zoom,
+            }));
         if !downloads.list().is_empty() {
             bar = bar.child(downloads_button(ctx, &downloads));
         }

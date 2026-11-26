@@ -3,6 +3,10 @@
 
 use bingux_ui::web_view::TabId;
 
+mod chip;
+
+pub use chip::ZoomChip;
+
 use crate::browser::Outbox;
 use crate::engine::Engine;
 
