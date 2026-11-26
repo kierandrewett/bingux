@@ -602,11 +602,17 @@ def run_job(job: dict, workdir: Path, timeout: int) -> dict:
     return {"name": job["name"], "status": status, "shots": read_lint(lint), "log": str(log)}
 
 
+SIZE_TAGS = {PHONE: "phone", "320x600": "small"}
+
+
 def settings_jobs(pages: list[str], sizes: list[str]) -> list[dict]:
     binary = str(TARGET / "debug" / "bingux-settings")
     jobs = []
     for size in sizes:
-        tag = "phone" if size == PHONE else "desktop"
+        # A job's name is its capture directory, jsonl and cache: two sizes must not share one, or
+        # two runs in parallel (overflow-check.py --jobs 2) write the same files and each reads a
+        # mixture of the two.
+        tag = SIZE_TAGS.get(size, "desktop" if size == DESKTOP else size)
         for page in pages:
             jobs.append(
                 {
