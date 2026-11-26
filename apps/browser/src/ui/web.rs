@@ -12,7 +12,7 @@ use bingux_ui::frame_view::{KeyInput, ViewSize};
 use bingux_ui::web_view::{PageSurface, TabId, web_view};
 use freya::prelude::*;
 
-use crate::commands::{Command, page_command};
+use crate::commands::Command;
 
 use crate::engine::Engine;
 
@@ -64,7 +64,7 @@ impl Component for TabPage {
             }
             // The browser's shortcuts come first: a page cannot take
             // Ctrl+T, and Ctrl+C is the engine's own copy.
-            match page_command(ctx.platform, &input.key, input.modifiers) {
+            match ctx.platform.page_command(&input.key, input.modifiers) {
                 Some(command) => {
                     ctx.with(|browser| browser.run(command));
                     true

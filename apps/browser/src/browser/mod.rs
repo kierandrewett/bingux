@@ -133,7 +133,7 @@ pub struct Browser {
     pub profile: Option<(String, String)>,
     pub view: ViewSize,
     /// What the browser has said and the window has not yet shown or done.
-    out: Outbox,
+    pub(crate) out: Outbox,
     pub menu: Option<PendingMenu>,
     pub fullscreen: bool,
     /// The tabs of an engine that failed, with the session each had: a restart

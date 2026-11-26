@@ -6,9 +6,8 @@ use bingux_ui::web_view::input::{EditCommand, PageInput};
 use bingux_ui::web_view::requests::DownloadState;
 use bingux_ui::web_view::{DownloadId, FindQuery, TabId};
 
-use super::{Browser, ClosedTab, Notice, UiRequest, ViewSize};
+use super::{Browser, ClosedTab, UiRequest, ViewSize};
 use crate::address::{Internal, Typed};
-use crate::commands::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
 use crate::zoom::Zoom;
@@ -547,88 +546,17 @@ impl Browser {
         self.downloads.clear_finished();
     }
 
-    // ---- Commands -----------------------------------------------------------------
-
-    /// Run a shortcut or a menu command on the tab on show.
-    pub fn run(&mut self, command: Command) {
-        let key = self.tabs.active_key();
-        match command {
-            Command::NewTab => {
-                self.open_tab("", Place::AfterActive, true);
-                self.out.request(UiRequest::FocusAddress);
-            }
-            Command::NewPrivateWindow => self.out.request(UiRequest::NewPrivateWindow),
-            Command::CloseTab => self.close_tab(key),
-            Command::ReopenTab => self.reopen_closed(),
-            Command::NextTab => self.step(1),
-            Command::PreviousTab => self.step(-1),
-            Command::GoToTab(n) => {
-                if let Some(target) = self.tabs.nth(n) {
-                    self.select(target);
-                }
-            }
-            Command::LastTab => {
-                if let Some(target) = self.tabs.last() {
-                    self.select(target);
-                }
-            }
-            Command::MoveTabLeft => self.shift_tab(key, -1),
-            Command::MoveTabRight => self.shift_tab(key, 1),
-            Command::FocusAddress => self.out.request(UiRequest::FocusAddress),
-            Command::Find => self.open_find(key),
-            Command::FindNext => self.find_step(key, true),
-            Command::FindPrevious => self.find_step(key, false),
-            Command::Reload => self.reload(key, false),
-            Command::ReloadBypassCache => self.reload(key, true),
-            Command::Back => self.back(key),
-            Command::Forward => self.forward(key),
-            Command::ZoomIn => self.zoom_by(key, Zoom::stepped_in),
-            Command::ZoomOut => self.zoom_by(key, Zoom::stepped_out),
-            Command::ZoomReset => self.set_zoom(key, Zoom::DEFAULT),
-            Command::Fullscreen => {
-                let on = !self.fullscreen;
-                self.out.request(UiRequest::Fullscreen(on));
-                self.fullscreen = on;
-                if let Some(session) = self.session_of(key) {
-                    self.engine_call(|backend| backend.set_fullscreen(session, on));
-                }
-            }
-            Command::Downloads => self.out.request(UiRequest::OpenDownloads),
-            Command::Settings => {
-                self.open_settings();
-            }
-            Command::PageInfo => self.out.request(UiRequest::OpenPageInfo),
-            Command::ViewSource => {
-                let url = self
-                    .tabs
-                    .active()
-                    .filter(|tab| tab.kind == TabKind::Web && !tab.is_blank())
-                    .map(|tab| tab.url.clone());
-                if let Some(url) = url.filter(|url| !url.starts_with("view-source:")) {
-                    self.open_tab(&format!("view-source:{url}"), Place::AfterActive, true);
-                }
-            }
-            Command::Print => self.out.notice(Notice {
-                error: true,
-                text: "Printing is not available in this engine yet.".to_string(),
-                action: None,
-            }),
-            Command::MainMenu => self.out.request(UiRequest::OpenMainMenu),
-            Command::Edit(edit) => self.send_edit(key, edit),
-        }
-    }
-
-    fn send_edit(&mut self, key: u64, edit: EditCommand) {
+    pub(crate) fn send_edit(&mut self, key: u64, edit: EditCommand) {
         self.send(key, PageInput::Edit(edit));
     }
 
-    fn step(&mut self, by: isize) {
+    pub(crate) fn step(&mut self, by: isize) {
         if let Some(target) = self.tabs.step(by) {
             self.select(target);
         }
     }
 
-    fn shift_tab(&mut self, key: u64, by: isize) {
+    pub(crate) fn shift_tab(&mut self, key: u64, by: isize) {
         let Some(at) = self.tabs.position(key) else {
             return;
         };
@@ -636,14 +564,14 @@ impl Browser {
         self.tabs.move_to(key, to);
     }
 
-    fn zoom_by(&mut self, key: u64, step: fn(Zoom) -> Zoom) {
+    pub(crate) fn zoom_by(&mut self, key: u64, step: fn(Zoom) -> Zoom) {
         let Some(current) = self.tabs.get(key).map(|tab| tab.zoom) else {
             return;
         };
         self.set_zoom(key, step(current));
     }
 
-    fn find_step(&mut self, key: u64, forward: bool) {
+    pub(crate) fn find_step(&mut self, key: u64, forward: bool) {
         let Some(tab) = self.tabs.get(key) else {
             return;
         };

@@ -7,37 +7,13 @@
 //! macOS; Alt+1 to 9 for a tab on Linux and Ctrl+1 to 9 elsewhere, as Firefox
 //! does.
 
+mod keys;
+mod menu_item;
+mod run;
+
 use bingux_ui::web_view::input::EditCommand;
-use freya::prelude::{Key, Modifiers, NamedKey};
 
-/// Which family of conventions applies.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Platform {
-    Linux,
-    Windows,
-    Mac,
-}
-
-impl Platform {
-    /// The platform this build runs on.
-    pub const fn current() -> Self {
-        if cfg!(target_os = "macos") {
-            Self::Mac
-        } else if cfg!(target_os = "windows") {
-            Self::Windows
-        } else {
-            Self::Linux
-        }
-    }
-
-    /// The name of the main shortcut modifier, for menus.
-    pub const fn main_key(self) -> &'static str {
-        match self {
-            Self::Mac => "\u{2318}",
-            Self::Linux | Self::Windows => "Ctrl",
-        }
-    }
-}
+pub use keys::Platform;
 
 /// What a shortcut does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,265 +51,58 @@ pub enum Command {
     Edit(EditCommand),
 }
 
-/// The four modifiers a shortcut is made of. Lock keys do not matter.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Held {
-    ctrl: bool,
-    alt: bool,
-    shift: bool,
-    meta: bool,
-}
-
-impl Held {
-    fn of(modifiers: Modifiers) -> Self {
-        Self {
-            ctrl: modifiers.contains(Modifiers::CONTROL),
-            alt: modifiers.contains(Modifiers::ALT),
-            shift: modifiers.contains(Modifiers::SHIFT),
-            meta: modifiers.contains(Modifiers::META),
-        }
-    }
-
-    /// Exactly the main modifier of `platform` and `extra`.
-    fn main(self, platform: Platform, shift: bool, alt: bool) -> bool {
-        let (main, other) = match platform {
-            Platform::Mac => (self.meta, self.ctrl),
-            Platform::Linux | Platform::Windows => (self.ctrl, self.meta),
-        };
-        main && !other && self.shift == shift && self.alt == alt
-    }
-
-    fn none(self) -> bool {
-        !self.ctrl && !self.alt && !self.shift && !self.meta
-    }
-
-    fn only_alt(self) -> bool {
-        self.alt && !self.ctrl && !self.shift && !self.meta
-    }
-
-    fn only_shift(self) -> bool {
-        self.shift && !self.ctrl && !self.alt && !self.meta
-    }
-}
-
-fn is(key: &Key, text: &str) -> bool {
-    matches!(key, Key::Character(typed) if typed.eq_ignore_ascii_case(text))
-}
-
-fn named(key: &Key, name: NamedKey) -> bool {
-    *key == Key::Named(name)
-}
-
-/// The shortcut of the window: a key typed anywhere in it.
-pub fn window_command(platform: Platform, key: &Key, modifiers: Modifiers) -> Option<Command> {
-    let held = Held::of(modifiers);
-    let plain = held.main(platform, false, false);
-    let shifted = held.main(platform, true, false);
-    let mac = platform == Platform::Mac;
-
-    // Back, Forward and the function keys.
-    if held.only_alt() && !mac {
-        match key {
-            Key::Named(NamedKey::ArrowLeft) => return Some(Command::Back),
-            Key::Named(NamedKey::ArrowRight) => return Some(Command::Forward),
-            _ if is(key, "d") => return Some(Command::FocusAddress),
-            _ => {}
-        }
-    }
-    if mac && held.main(platform, false, false) {
-        if is(key, "[") {
-            return Some(Command::Back);
-        }
-        if is(key, "]") {
-            return Some(Command::Forward);
-        }
-    }
-    if held.none() {
-        match key {
-            Key::Named(NamedKey::F5) => return Some(Command::Reload),
-            Key::Named(NamedKey::F3) => return Some(Command::FindNext),
-            Key::Named(NamedKey::F11) => return Some(Command::Fullscreen),
-            Key::Named(NamedKey::F10) => return Some(Command::MainMenu),
-            _ => {}
-        }
-    }
-    if held.only_shift() {
-        match key {
-            Key::Named(NamedKey::F3) => return Some(Command::FindPrevious),
-            Key::Named(NamedKey::F5) => return Some(Command::ReloadBypassCache),
-            _ => {}
-        }
-    }
-    if !mac && plain {
-        if let Key::Named(named_key) = key {
-            match named_key {
-                NamedKey::F5 => return Some(Command::ReloadBypassCache),
-                NamedKey::F4 => return Some(Command::CloseTab),
-                NamedKey::Tab => return Some(Command::NextTab),
-                NamedKey::PageDown => return Some(Command::NextTab),
-                NamedKey::PageUp => return Some(Command::PreviousTab),
-                _ => {}
-            }
-        }
-    }
-    if shifted {
-        if let Key::Named(named_key) = key {
-            match named_key {
-                NamedKey::Tab => return Some(Command::PreviousTab),
-                NamedKey::PageDown => return Some(Command::MoveTabRight),
-                NamedKey::PageUp => return Some(Command::MoveTabLeft),
-                _ => {}
-            }
-        }
-        match key {
-            _ if is(key, "t") => return Some(Command::ReopenTab),
-            _ if is(key, "p") => return Some(Command::NewPrivateWindow),
-            _ if is(key, "r") => return Some(Command::ReloadBypassCache),
-            _ if is(key, "y") => return Some(Command::Downloads),
-            _ if is(key, "g") => return Some(Command::FindPrevious),
-            // Plus is Shift and equals on most layouts.
-            _ if is(key, "+") => return Some(Command::ZoomIn),
-            _ if is(key, "]") && mac => return Some(Command::NextTab),
-            _ if is(key, "[") && mac => return Some(Command::PreviousTab),
-            _ => {}
-        }
-    }
-    if mac && held.main(platform, false, true) {
-        match key {
-            Key::Named(NamedKey::ArrowRight) => return Some(Command::NextTab),
-            Key::Named(NamedKey::ArrowLeft) => return Some(Command::PreviousTab),
-            _ => {}
-        }
-    }
-    if plain {
-        match key {
-            _ if is(key, "t") => return Some(Command::NewTab),
-            _ if is(key, "w") => return Some(Command::CloseTab),
-            _ if is(key, "l") => return Some(Command::FocusAddress),
-            _ if is(key, "f") => return Some(Command::Find),
-            _ if is(key, "g") => return Some(Command::FindNext),
-            _ if is(key, "r") => return Some(Command::Reload),
-            _ if is(key, "i") => return Some(Command::PageInfo),
-            _ if is(key, "u") => return Some(Command::ViewSource),
-            _ if is(key, "p") => return Some(Command::Print),
-            _ if is(key, ",") => return Some(Command::Settings),
-            _ if is(key, "+") || is(key, "=") => return Some(Command::ZoomIn),
-            _ if is(key, "-") => return Some(Command::ZoomOut),
-            _ if is(key, "0") => return Some(Command::ZoomReset),
-            _ => {}
-        }
-        // Ctrl+1 to 8 is a tab on Windows and for everybody on macOS; 9 is the last.
-        if platform != Platform::Linux {
-            if let Some(command) = digit(key) {
-                return Some(command);
-            }
-        }
-    }
-    if platform == Platform::Linux && held.only_alt() {
-        if let Some(command) = digit(key) {
-            return Some(command);
-        }
-    }
-    None
-}
-
-/// Tab `n` for a digit key; 9 is the last tab.
-fn digit(key: &Key) -> Option<Command> {
-    let Key::Character(text) = key else {
-        return None;
-    };
-    let digit = text.chars().next()?.to_digit(10)?;
-    match digit {
-        1..=8 => Some(Command::GoToTab(digit as usize)),
-        9 => Some(Command::LastTab),
-        _ => None,
-    }
-}
-
-/// A shortcut for a key typed while the page has the focus: the window's, then
-/// the editing commands. Everything else belongs to the page.
-pub fn page_command(platform: Platform, key: &Key, modifiers: Modifiers) -> Option<Command> {
-    if let Some(command) = window_command(platform, key, modifiers) {
-        return Some(command);
-    }
-    let held = Held::of(modifiers);
-    if held.main(platform, false, false) {
-        return match key {
-            _ if is(key, "x") => Some(Command::Edit(EditCommand::Cut)),
-            _ if is(key, "c") => Some(Command::Edit(EditCommand::Copy)),
-            _ if is(key, "v") => Some(Command::Edit(EditCommand::Paste)),
-            _ if is(key, "a") => Some(Command::Edit(EditCommand::SelectAll)),
-            _ if is(key, "z") => Some(Command::Edit(EditCommand::Undo)),
-            _ if is(key, "y") && platform != Platform::Mac => {
-                Some(Command::Edit(EditCommand::Redo))
-            }
-            _ => None,
-        };
-    }
-    if held.main(platform, true, false) {
-        return match key {
-            _ if is(key, "v") => Some(Command::Edit(EditCommand::PastePlain)),
-            _ if is(key, "z") => Some(Command::Edit(EditCommand::Redo)),
-            _ => None,
-        };
-    }
-    // Shift+Insert and Ctrl+Insert are the old paste and copy.
-    if held.only_shift() && named(key, NamedKey::Insert) {
-        return Some(Command::Edit(EditCommand::Paste));
-    }
-    None
-}
-
-/// The shortcut shown beside a menu entry.
-pub fn label(platform: Platform, command: Command) -> Option<String> {
-    let main = platform.main_key();
-    let join = |keys: &str| {
-        if platform == Platform::Mac {
-            keys.replace('+', "")
-        } else {
-            keys.to_string()
-        }
-    };
-    let text = match command {
-        Command::NewTab => format!("{main}+T"),
-        Command::NewPrivateWindow => format!("{main}+Shift+P"),
-        Command::CloseTab => format!("{main}+W"),
-        Command::ReopenTab => format!("{main}+Shift+T"),
-        Command::FocusAddress => format!("{main}+L"),
-        Command::Find => format!("{main}+F"),
-        Command::FindNext => "F3".to_string(),
-        Command::FindPrevious => "Shift+F3".to_string(),
-        Command::Reload => format!("{main}+R"),
-        Command::ReloadBypassCache => format!("{main}+Shift+R"),
-        Command::Back => {
+impl Command {
+    /// The shortcut shown beside a menu entry.
+    pub fn label(self, platform: Platform) -> Option<String> {
+        let main = platform.main_key();
+        let join = |keys: &str| {
             if platform == Platform::Mac {
-                format!("{main}+[")
+                keys.replace('+', "")
             } else {
-                "Alt+Left".to_string()
+                keys.to_string()
             }
-        }
-        Command::Forward => {
-            if platform == Platform::Mac {
-                format!("{main}+]")
-            } else {
-                "Alt+Right".to_string()
+        };
+        let text = match self {
+            Command::NewTab => format!("{main}+T"),
+            Command::NewPrivateWindow => format!("{main}+Shift+P"),
+            Command::CloseTab => format!("{main}+W"),
+            Command::ReopenTab => format!("{main}+Shift+T"),
+            Command::FocusAddress => format!("{main}+L"),
+            Command::Find => format!("{main}+F"),
+            Command::FindNext => "F3".to_string(),
+            Command::FindPrevious => "Shift+F3".to_string(),
+            Command::Reload => format!("{main}+R"),
+            Command::ReloadBypassCache => format!("{main}+Shift+R"),
+            Command::Back => {
+                if platform == Platform::Mac {
+                    format!("{main}+[")
+                } else {
+                    "Alt+Left".to_string()
+                }
             }
-        }
-        Command::ZoomIn if platform == Platform::Mac => return Some("\u{2318}+".to_string()),
-        Command::ZoomIn => format!("{main}++"),
-        Command::ZoomOut => format!("{main}+-"),
-        Command::ZoomReset => format!("{main}+0"),
-        Command::Fullscreen => "F11".to_string(),
-        Command::Downloads => format!("{main}+Shift+Y"),
-        Command::Settings => format!("{main}+,"),
-        Command::PageInfo => format!("{main}+I"),
-        Command::ViewSource => format!("{main}+U"),
-        Command::Print => format!("{main}+P"),
-        Command::NextTab => format!("{main}+Tab"),
-        Command::PreviousTab => format!("{main}+Shift+Tab"),
-        _ => return None,
-    };
-    Some(join(&text))
+            Command::Forward => {
+                if platform == Platform::Mac {
+                    format!("{main}+]")
+                } else {
+                    "Alt+Right".to_string()
+                }
+            }
+            Command::ZoomIn if platform == Platform::Mac => return Some("\u{2318}+".to_string()),
+            Command::ZoomIn => format!("{main}++"),
+            Command::ZoomOut => format!("{main}+-"),
+            Command::ZoomReset => format!("{main}+0"),
+            Command::Fullscreen => "F11".to_string(),
+            Command::Downloads => format!("{main}+Shift+Y"),
+            Command::Settings => format!("{main}+,"),
+            Command::PageInfo => format!("{main}+I"),
+            Command::ViewSource => format!("{main}+U"),
+            Command::Print => format!("{main}+P"),
+            Command::NextTab => format!("{main}+Tab"),
+            Command::PreviousTab => format!("{main}+Shift+Tab"),
+            _ => return None,
+        };
+        Some(join(&text))
+    }
 }
 
 #[cfg(test)]

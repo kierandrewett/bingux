@@ -13,16 +13,6 @@ use crate::zoom::Zoom;
 
 use super::ctx::Ctx;
 
-/// A menu entry that runs `command`, with its shortcut beside it.
-fn command_item(ctx: Ctx, label: &str, command: Command) -> MenuItem {
-    let item = menu_item(label, move |_: ()| ctx.with(|browser| browser.run(command)));
-    // A phone has no keyboard to learn the keys from, and no room for them.
-    match commands::label(ctx.platform, command) {
-        Some(keys) if !is_compact() => item.shortcut(keys),
-        _ => item,
-    }
-}
-
 /// The main menu, from the button at the right of the toolbar.
 pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {
     let (zoom_text, can_find, can_download, can_reopen, is_web) = {
@@ -37,37 +27,33 @@ pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {
         )
     };
     let mut items = vec![
-        command_item(ctx, "New tab", Command::NewTab),
-        command_item(ctx, "Private window", Command::NewPrivateWindow),
+        Command::NewTab.menu_item(ctx, "New tab"),
+        Command::NewPrivateWindow.menu_item(ctx, "Private window"),
     ];
-    let reopen = command_item(ctx, "Reopen closed tab", Command::ReopenTab);
+    let reopen = Command::ReopenTab.menu_item(ctx, "Reopen closed tab");
     items.push(if can_reopen {
         reopen
     } else {
         reopen.disabled()
     });
     items.push(menu_separator());
-    items.push(command_item(ctx, "Zoom in", Command::ZoomIn));
-    items.push(command_item(ctx, "Zoom out", Command::ZoomOut));
-    items.push(command_item(
-        ctx,
-        &format!("Reset zoom ({zoom_text}%)"),
-        Command::ZoomReset,
-    ));
+    items.push(Command::ZoomIn.menu_item(ctx, "Zoom in"));
+    items.push(Command::ZoomOut.menu_item(ctx, "Zoom out"));
+    items.push(Command::ZoomReset.menu_item(ctx, &format!("Reset zoom ({zoom_text}%)")));
     items.push(menu_separator());
-    let find = command_item(ctx, "Find in page", Command::Find);
+    let find = Command::Find.menu_item(ctx, "Find in page");
     items.push(if can_find { find } else { find.disabled() });
-    let downloads = command_item(ctx, "Downloads", Command::Downloads);
+    let downloads = Command::Downloads.menu_item(ctx, "Downloads");
     items.push(if can_download {
         downloads
     } else {
         downloads.disabled()
     });
-    let source = command_item(ctx, "View page source", Command::ViewSource);
+    let source = Command::ViewSource.menu_item(ctx, "View page source");
     items.push(if is_web { source } else { source.disabled() });
-    items.push(command_item(ctx, "Print\u{2026}", Command::Print));
+    items.push(Command::Print.menu_item(ctx, "Print\u{2026}"));
     items.push(menu_separator());
-    items.push(command_item(ctx, "Settings", Command::Settings));
+    items.push(Command::Settings.menu_item(ctx, "Settings"));
     let overlays = ctx.overlays;
     let platform = ctx.platform;
     items.push(menu_item("Keyboard shortcuts", move |_: ()| {
@@ -101,7 +87,9 @@ pub fn shortcut_text(platform: commands::Platform) -> String {
     let mut lines: Vec<String> = rows
         .iter()
         .filter_map(|(name, command)| {
-            commands::label(platform, *command).map(|keys| format!("{keys}  {name}"))
+            command
+                .label(platform)
+                .map(|keys| format!("{keys}  {name}"))
         })
         .collect();
     let digit = if platform == commands::Platform::Linux {

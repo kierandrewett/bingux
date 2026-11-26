@@ -10,7 +10,7 @@ use freya::prelude::*;
 
 use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
-use crate::commands::{Command, Platform, window_command};
+use crate::commands::{Command, Platform};
 use crate::engine::{self, Engine};
 use crate::model::tabs::Place;
 
@@ -240,7 +240,7 @@ impl Component for Content {
         }
 
         let shortcuts = move |event: Event<KeyboardEventData>| {
-            if let Some(command) = window_command(ctx.platform, &event.key, event.modifiers) {
+            if let Some(command) = ctx.platform.window_command(&event.key, event.modifiers) {
                 event.stop_propagation();
                 ctx.with(|browser| browser.run(command));
             } else if event.key == Key::Named(NamedKey::Escape) && ctx.browser.peek().fullscreen {
