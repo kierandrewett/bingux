@@ -525,16 +525,13 @@ impl Component for Content {
                 }))
                 .into()
         };
-        let mut header = HeaderBar::new("")
-            .title_start(true)
-            .title_slot(title_slot)
-            .leading(
-                icon_button(Icon::DocumentOpen, move |_| open(())).tooltip(&copy::open_tooltip()),
-            );
+        let mut header = HeaderBar::new("").title_start(true).title_slot(title_slot);
+        // The pages are a sidebar at the start of the window: the start toggle,
+        // which opens the bar.
         if document {
             let mut sidebar_state = sidebar;
-            header = header.leading(
-                icon_button(Icon::SidebarShow, move |_| {
+            header = header.pane_toggle(
+                pane_toggle(PanelSide::Start, move |_| {
                     let shown = *sidebar_state.peek();
                     sidebar_state.set(!shown);
                 })
@@ -542,6 +539,9 @@ impl Component for Content {
                 .tooltip(&copy::pages_tooltip()),
             );
         }
+        header = header.leading(
+            icon_button(Icon::DocumentOpen, move |_| open(())).tooltip(&copy::open_tooltip()),
+        );
         let cropping_now = cropping.read().is_some();
         if picture && !compact && !cropping_now {
             if current.as_deref().is_some_and(edit::can_copy) {
