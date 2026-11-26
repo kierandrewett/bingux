@@ -673,9 +673,8 @@ f)` shows the value (read each time the row draws, so it follows the presses whi
   key it is anywhere else (it closes a submenu). The row itself does nothing when pressed.
 - **`MenuItem::detail(text)`** is a muted word at the trailing edge, before a submenu's arrow: the current value of
   what the row opens (`Profile  Personal`). A menu with any detail is `Dim::MenuWide`.
-- **`MenuItem::tooltip(text)`** is a bubble when the pointer rests on the row, a disabled row included: it is where a
-  row says why it is disabled. A touch shows no tooltip, so a phone's sheet puts the reason under the row's name
-  instead. Tips that belong to an open menu (these, and a control's name) open over it: the menu is why they are
+- **`MenuItem::tooltip(text)`** is a bubble when the pointer rests on the row, a disabled row included: it names
+  what a row's label cannot (the shortcut's meaning, a long value). A touch shows no tooltip. Tips that belong to an open menu (these, and a control's name) open over it: the menu is why they are
   there, so only a dialog, choice or sheet keeps them down (`Router::modal_open_beyond_menus`).
 
 `shell/menu_controls_tests.rs` holds the pointer, the keyboard, a control that closes the menu, the detail and the tip;

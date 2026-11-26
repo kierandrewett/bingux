@@ -3,6 +3,7 @@
 use crate::snapshot::{Rig, Scenario, ctx, scenario, wait};
 use bingux_ui::snapshot::Snapshot;
 
+/// The main menu, open, over a page: the rows of the design in its order.
 fn menu(shot: &mut Snapshot, _: &Rig) {
     wait(shot, 500);
     shot.click_name("Main menu");
@@ -61,23 +62,18 @@ fn menu_history(shot: &mut Snapshot, rig: &Rig) {
     wait(shot, 500);
 }
 
+/// Share ›, open.
 fn menu_share(shot: &mut Snapshot, rig: &Rig) {
     menu(shot, rig);
     shot.click_text("Share");
     wait(shot, 500);
 }
 
+/// More tools ›, open.
 fn menu_tools(shot: &mut Snapshot, rig: &Rig) {
     menu(shot, rig);
     shot.click_text("More tools");
     wait(shot, 500);
-}
-
-/// The pointer rests on a row whose feature is not built: the tooltip says why.
-fn menu_unavailable(shot: &mut Snapshot, rig: &Rig) {
-    menu(shot, rig);
-    shot.hover_text("Passwords");
-    wait(shot, 1000);
 }
 
 /// A right click on the link of the double's page.
@@ -97,7 +93,6 @@ pub(crate) fn scenarios() -> Vec<Scenario> {
         scenario("menu-history", &["example.com"], menu_history),
         scenario("menu-share", &["example.com"], menu_share),
         scenario("menu-tools", &["example.com"], menu_tools),
-        scenario("menu-unavailable", &["example.com"], menu_unavailable),
         scenario("context", &["example.com"], context),
     ]
 }

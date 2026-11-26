@@ -29,14 +29,9 @@ impl Registry {
         ) = {
             let browser = ctx.browser.read();
             let tab = browser.active();
-            let caps = browser.engine.capabilities();
             (
                 tab.map_or(crate::zoom::Zoom::DEFAULT, |tab| tab.zoom)
                     .percent(),
-                caps.find,
-                caps.downloads,
-                caps.devtools,
-                caps.print,
                 !browser.closed.is_empty(),
                 tab.is_some_and(|tab| tab.kind == TabKind::Web && !tab.is_blank()),
                 browser.history_len() > 0,
@@ -90,7 +85,7 @@ impl Registry {
                 "browser.find",
                 tr!("browser-command-find-title"),
                 Command::Find,
-                can_find,
+                true,
             ),
             (
                 "browser.reload",
@@ -138,7 +133,7 @@ impl Registry {
                 "browser.downloads",
                 tr!("browser-command-downloads-title"),
                 Command::Downloads,
-                can_download,
+                true,
             ),
             (
                 "browser.clear-history",
@@ -168,26 +163,13 @@ impl Registry {
                 "browser.print",
                 tr!("browser-command-print-title"),
                 Command::Print,
-                can_print && is_web,
+                is_web,
             ),
             (
                 "browser.devtools",
-                if can_devtools {
-                    tr!("browser-command-devtools-title")
-                } else {
-                    tr!("browser-command-devtools-unavailable-title")
-                },
+                tr!("browser-command-devtools-title"),
                 Command::DevTools,
-                can_devtools && is_web,
-            ),
-            // Picture-in-picture is listed so the person finds it, and
-            // disabled with the reason in the title: the engine has no call
-            // for it (docs/browser/parity.md, Tools 10).
-            (
-                "browser.picture-in-picture",
-                tr!("browser-command-picture-in-picture-unavailable-title"),
-                Command::PictureInPicture,
-                false,
+                is_web,
             ),
         ];
         let mut listed: Vec<Listed> = rows

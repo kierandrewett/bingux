@@ -62,13 +62,9 @@ fn the_rows_are_the_designs_in_the_designs_order() {
     let order = [
         "Zoom",
         "New tab",
-        "New window",
         "New private window",
-        "Profile",
         "History",
-        "Bookmarks",
         "Downloads",
-        "Passwords",
         "Find in page",
         "Save page as PDF",
         "Share",
@@ -169,40 +165,22 @@ fn new_tab_opens_a_tab() {
 }
 
 #[test]
-fn a_row_of_a_feature_that_is_not_built_does_nothing_and_says_why() {
-    for (title, reason) in [
-        ("New window", "A profile has one window for now"),
-        ("Passwords", "Passwords are not built yet"),
-    ] {
-        let (mut shot, _rig) = window();
-        let before = tab_count();
-        open(&mut shot);
-        assert!(!says(&mut shot, reason), "{title}: no reason until asked");
-        assert!(shot.click_text(title), "{title} is a row");
-        wait(&mut shot, 300);
-        assert_eq!(tab_count(), before, "{title} does nothing");
-        assert!(
-            shows(&mut shot, "Zoom"),
-            "{title}: the menu stays open on a dead row"
-        );
-        // The press put its row's tip down: the pointer leaves and comes back to rest.
-        shot.hover(2.0, 2.0);
-        assert!(shot.hover_text(title));
-        wait(&mut shot, 900);
-        assert!(says(&mut shot, reason), "{title} says why: {reason}");
-    }
-}
-
-#[test]
-fn bookmarks_is_a_dead_submenu_with_its_reason() {
+fn a_feature_that_is_not_built_has_no_row() {
     let (mut shot, _rig) = window();
     open(&mut shot);
-    assert!(shot.click_text("Bookmarks"));
-    wait(&mut shot, 300);
-    shot.hover(2.0, 2.0);
-    assert!(shot.hover_text("Bookmarks"));
-    wait(&mut shot, 900);
-    assert!(says(&mut shot, "Bookmarks are not built yet"));
+    for title in [
+        "New window",
+        "Bookmarks",
+        "Passwords",
+        "Show all history",
+        "Save page as…",
+        "Translate page",
+        "Help",
+    ] {
+        assert!(!shows(&mut shot, title), "{title} has no row");
+    }
+    // Nor a row that says it is not available, or not built.
+    assert!(!says(&mut shot, "Not built"), "no reason is shown on a row");
 }
 
 #[test]
@@ -225,7 +203,6 @@ fn history_lists_the_closed_tabs_and_a_row_reopens_its_tab() {
     open(&mut shot);
     assert!(shot.click_text("History"));
     wait(&mut shot, 300);
-    assert!(shows(&mut shot, "Show all history"));
     let closed = ctx()
         .browser
         .peek()
@@ -275,7 +252,10 @@ fn the_profile_row_names_this_windows_profile_and_lists_the_others() {
     assert!(shot.click_text("Profile"));
     wait(&mut shot, 300);
     assert!(shows(&mut shot, "Work"), "the other profile is a row");
-    assert!(shows(&mut shot, "New profile…"));
+    assert!(
+        !shows(&mut shot, "New profile…"),
+        "creating one is not built, so no row"
+    );
 }
 
 #[test]
@@ -309,7 +289,6 @@ fn share_copies_the_address() {
     open(&mut shot);
     assert!(shot.click_text("Share"));
     wait(&mut shot, 300);
-    assert!(shows(&mut shot, "More apps…"));
     assert!(shot.click_text("Copy link"));
     wait(&mut shot, 500);
     // The clipboard of a headless run may refuse: either way the person is told.
@@ -327,7 +306,6 @@ fn more_tools_view_source_opens_the_source_in_a_tab() {
     open(&mut shot);
     assert!(shot.click_text("More tools"));
     wait(&mut shot, 300);
-    assert!(shows(&mut shot, "Save page as…"));
     assert!(shot.click_text("View page source"));
     wait(&mut shot, 400);
     assert_eq!(tab_count(), before + 1);
@@ -364,34 +342,49 @@ mod phone {
     }
 
     #[test]
-    fn the_button_opens_a_sheet_with_the_designs_tiles_and_rows() {
+    fn the_button_opens_a_sheet_with_the_tiles_and_rows_that_exist() {
         let (mut shot, _rig) = window();
         assert!(shot.click_name("Main menu"));
         wait(&mut shot, 600);
+        for text in ["Forward", "Copy link", "Find", "Downloads", "Settings"] {
+            assert!(shot.hover_text(text), "the sheet has {text}");
+        }
         for text in [
-            "Forward",
-            "Copy link",
             "Bookmark",
-            "Find in page",
             "History",
-            "Bookmarks",
             "Reading list",
-            "Downloads",
             "Translate page",
             "Desktop site",
             "Extensions",
-            "Settings",
         ] {
-            assert!(shot.hover_text(text), "the sheet has {text}");
+            assert!(
+                !shot.hover_text(text),
+                "{text} is not built, so it has no row"
+            );
         }
+    }
+
+    #[test]
+    fn the_whole_sheet_fits_on_the_screen_without_scrolling() {
+        let (mut shot, _rig) = window();
+        assert!(shot.click_name("Main menu"));
+        wait(&mut shot, 600);
+        let bottom = shot
+            .runner()
+            .find_many(|node, element| {
+                let label = Label::try_downcast(element)?;
+                (label.text == "Settings").then(|| node.layout().area.max_y())
+            })
+            .into_iter()
+            .fold(f32::MIN, f32::max);
         assert!(
-            shot.hover_text("The reading list is not built yet"),
-            "a dead row says why under its name, as a finger has no tooltip"
+            bottom < 800.0,
+            "Settings is on screen at 390 by 800: {bottom}"
         );
     }
 
     #[test]
-    fn a_row_does_its_work_and_closes_the_sheet() {
+    fn the_rows_do_their_work_and_close_the_sheet() {
         let (mut shot, _rig) = window();
         assert!(shot.click_name("Main menu"));
         wait(&mut shot, 600);
@@ -401,6 +394,12 @@ mod phone {
             ctx().downloads_popover.is_open(),
             "the list of downloads opened"
         );
-        assert!(!shot.hover_text("Reading list"), "the sheet closed");
+        assert!(!shot.hover_text("Copy link"), "the sheet closed");
+
+        assert!(shot.click_name("Main menu"));
+        wait(&mut shot, 600);
+        assert!(shot.click_text("Settings"));
+        wait(&mut shot, 500);
+        assert!(active_is(|tab| tab.kind == TabKind::Settings));
     }
 }

@@ -1,39 +1,44 @@
-//! The main menu of a phone: a sheet with four quick buttons and the rows of
-//! the library and the page's tools (Phone 09). A row whose feature is not
-//! built is dimmed and says why under its name, since a finger has no tooltip.
+//! The main menu of a phone: a sheet with three quick buttons (Forward, Copy link, Find)
+//! and the rows of the library that exist (Downloads, Settings), as in the design
+//! (Phone 09). The desktop menu is a cascade of submenus, which a finger cannot use, so
+//! a phone gets a sheet. A feature that is not built has no tile or row, as on the desktop.
 
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use super::main::{MainMenu, Reading};
-use crate::address::Address;
 use crate::commands::Command;
 use crate::ui::Ctx;
 
-/// The phone's main menu.
+/// The phone's main menu: a sheet whose presses close it first and then do their work,
+/// so what they open (the find bar, the list of downloads) is not left under the sheet.
 #[derive(PartialEq)]
 pub struct PhoneMenu {
     ctx: Ctx,
 }
 
 impl PhoneMenu {
-    /// How many rows the sheet lists.
-    const ROWS: f32 = 8.0;
+    /// How many rows the sheet lists. The sheet is sized from it.
+    const ROWS: f32 = 2.0;
 
     /// Open the sheet over the window.
     pub fn open(ctx: Ctx) {
-        // The sheet is as tall as its content: the popup measures nothing here.
+        // The popup measures nothing here (a body of rows in a window that already holds
+        // the page takes the most the window allows), so the height is asked for: the
+        // header, the row of buttons and the rows. The popup limits it to the window.
         let height = Dim::Header.px()
             + Dim::Hairline.px()
             + 2.0 * S4.px()
-            + 2.0 * (Dim::Button.px() + 2.0 * S3.px())
-            + S4.px()
-            + Self::ROWS * Dim::RowTall.px();
+            + Dim::Button.px()
+            + S6.px()
+            + Self::ROWS * Dim::RowSubtitle.px();
         ctx.window
             .open(popup(tr!("ui-main-menu"), PhoneMenu { ctx }).size(Dim::PopupWidth.px(), height));
     }
 
-    /// A quick button: closes the sheet, then does what it says.
+    /// A quick button. It closes the sheet before it acts, so the find bar or the page
+    /// it opens is not under the sheet. `window` is passed in, not read here, because
+    /// hooks may only be read while the component renders.
     fn tile(
         &self,
         window: Window,
@@ -53,15 +58,6 @@ impl PhoneMenu {
         .enabled(enabled)
         .into_element()
     }
-
-    /// A row of a feature that is not built: dimmed, with the reason under it.
-    fn unavailable(title: String, icon: Icon, reason: String) -> Element {
-        row(title)
-            .leading(icon)
-            .subtitle(reason)
-            .enabled(false)
-            .into()
-    }
 }
 
 impl Component for PhoneMenu {
@@ -69,6 +65,7 @@ impl Component for PhoneMenu {
         let ctx = self.ctx;
         let window = use_window();
         let tokens = use_tokens();
+        // One read of the browser, so the tiles and rows agree with each other.
         let read = Reading::of(ctx);
         let url = read.url.clone();
         let tiles = vec![
@@ -88,27 +85,28 @@ impl Component for PhoneMenu {
             ),
             self.tile(
                 window,
-                tr!("browser-phone-menu-bookmark"),
-                Icon::NonStarred,
-                false,
-                |_| {},
-            ),
-            self.tile(
-                window,
-                tr!("browser-command-find-title"),
+                tr!("browser-phone-menu-find"),
                 Icon::Search,
-                read.find,
+                true,
                 |ctx| ctx.run(Command::Find),
             ),
         ];
+        // The tiles share the width equally, as the design's row of four does.
+        let tiles = rect()
+            .tw(&tokens, &[flex_row(), grow_children(), w_full(), gap(S1)])
+            .children(
+                tiles
+                    .into_iter()
+                    .map(|tile| rect().width(Size::flex(1.0)).child(tile).into_element()),
+            );
         let downloads = {
             let line = row(tr!("browser-command-downloads-title"))
                 .leading(Icon::FolderDownload)
-                .enabled(read.downloads)
                 .on_press(move |_: ()| {
                     window.close();
                     ctx.run(Command::Downloads);
                 });
+            // The design's value of this row: how many are running, when any are.
             if read.running > 0 {
                 line.value(tr!(
                     "browser-phone-menu-downloads-running",
@@ -119,37 +117,7 @@ impl Component for PhoneMenu {
             }
         };
         let rows = vec![
-            Self::unavailable(
-                tr!("browser-main-menu-history"),
-                Icon::DocumentOpenRecent,
-                tr!("browser-main-menu-show-history-unavailable"),
-            ),
-            Self::unavailable(
-                tr!("browser-main-menu-bookmarks"),
-                Icon::Bookmarks,
-                tr!("browser-main-menu-bookmarks-unavailable"),
-            ),
-            Self::unavailable(
-                tr!("browser-phone-menu-reading-list"),
-                Icon::DocumentOpen,
-                tr!("browser-phone-menu-reading-list-unavailable"),
-            ),
             downloads.into(),
-            Self::unavailable(
-                tr!("browser-main-menu-translate"),
-                Icon::Network,
-                tr!("browser-main-menu-translate-unavailable"),
-            ),
-            Self::unavailable(
-                tr!("browser-phone-menu-desktop-site"),
-                Icon::Desktop,
-                tr!("browser-phone-menu-desktop-site-unavailable"),
-            ),
-            Self::unavailable(
-                tr!("browser-phone-menu-extensions"),
-                Icon::PreferencesOther,
-                tr!("browser-phone-menu-extensions-unavailable"),
-            ),
             row(tr!("browser-command-settings-title"))
                 .leading(Icon::PreferencesSystem)
                 .navigates()
@@ -160,14 +128,15 @@ impl Component for PhoneMenu {
                 .into(),
         ];
         popup_column()
-            .children(tile_rows(&tokens, tiles, Dim::Button.px()))
+            .child(tiles)
             .child(Group::new(None::<String>).rows(rows))
     }
 }
 
 impl MainMenu {
-    /// Copy the address of the page to the clipboard and say so.
+    /// Copy the address of the page to the clipboard and say so. On the desktop menu and
+    /// the phone sheet alike, so both say the same thing.
     pub(super) fn copy_link(ctx: Ctx, url: &str) {
-        super::ContextMenu::copy(ctx, Address::new(url).display(), "page");
+        super::ContextMenu::copy(ctx, crate::address::Address::new(url).display(), "page");
     }
 }

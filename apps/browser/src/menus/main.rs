@@ -1,9 +1,15 @@
-//! The main menu: the rows of the design (Window 07) in its order. Zoom with
-//! its steps and Full screen, the three ways to open a window, the profile,
-//! the library (History, Bookmarks, Downloads, Passwords), the page's tools
-//! (Find, Print, Share, More tools), Settings; bingux-ui adds its Command palette,
-//! Keyboard shortcuts and About after them. A row whose feature is not built is disabled and says why in a
-//! tooltip (`docs/browser/parity.md`, Window 07): nothing here pretends to work.
+//! The main menu: the rows of the design (Window 07), in its order. Zoom with its steps
+//! and Full screen, New tab, the private window, the profile, History, Downloads, the
+//! page's tools (Find, Print to PDF, Share, More tools) and Settings. bingux-ui adds its
+//! Command palette, Keyboard shortcuts and About after them.
+//!
+//! A feature that is not built has no row. The row comes with the feature, so nothing
+//! here is dimmed to say "not yet" (`docs/browser/parity.md`, "Main menu: entry by
+//! entry"). The rows that are dimmed follow the page, not the engine: a page tool has
+//! nothing to act on while the tab shows no page.
+//!
+//! On a phone the same button opens `PhoneMenu`, a sheet, because a finger wants rows
+//! the width of the screen and a cascade of submenus does not fit.
 
 use bingux_ui::prelude::MenuItem;
 use bingux_ui::prelude::*;
@@ -18,7 +24,9 @@ use crate::ui::Ctx;
 /// How many recently closed tabs the History submenu lists.
 const CLOSED_SHOWN: usize = 8;
 
-/// The main menu button: a menu on a desktop, a sheet on a phone.
+/// The main menu button: a menu on a desktop, a sheet on a phone. It is a component
+/// because the menu's rows are read when the toolbar draws, so a change to the tab
+/// (a closed tab, a new zoom level) is in the rows the next time they open.
 #[derive(PartialEq)]
 pub struct MainMenuButton {
     pub ctx: Ctx,
@@ -36,19 +44,17 @@ impl Component for MainMenuButton {
     }
 }
 
-/// What the menu reads of the window when it is built.
+/// What the menu reads of the window when it is built. One read of the browser per
+/// build keeps the rows consistent with each other: they are all of the same moment.
 pub(super) struct Reading {
     /// The active tab shows a web page.
     pub(super) is_web: bool,
     /// The active tab has an engine session, so zoom and full screen apply.
     pub(super) zoomable: bool,
     pub(super) can_forward: bool,
+    /// The address of the active tab, for Copy link.
     pub(super) url: String,
-    pub(super) find: bool,
-    pub(super) downloads: bool,
-    pub(super) print: bool,
-    pub(super) devtools: bool,
-    pub(super) private: bool,
+    /// How many pages the history holds: Clear history has nothing to do at zero.
     pub(super) pages: usize,
     /// Closed tabs, newest first, each with its index in `Browser::closed`.
     pub(super) closed: Vec<(usize, String)>,
@@ -63,17 +69,11 @@ impl Reading {
     pub(super) fn of(ctx: Ctx) -> Self {
         let browser = ctx.browser.read();
         let tab = browser.active();
-        let caps = browser.engine.capabilities();
         Reading {
             is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web && !tab.is_blank()),
             zoomable: tab.is_some_and(|tab| tab.session.is_some()),
             can_forward: tab.is_some_and(|tab| tab.can_forward),
             url: tab.map(|tab| tab.url.clone()).unwrap_or_default(),
-            find: caps.find,
-            downloads: caps.downloads,
-            print: caps.print,
-            devtools: caps.devtools,
-            private: browser.options.private,
             pages: browser.history_len(),
             closed: browser
                 .closed
@@ -97,7 +97,8 @@ impl Reading {
     }
 }
 
-/// The rows of the main menu.
+/// The rows of the main menu. A type with no state: the rows are built from a `Reading`
+/// each time, and each method makes one row or one submenu.
 pub struct MainMenu;
 
 impl MainMenu {
@@ -105,7 +106,9 @@ impl MainMenu {
     /// Keyboard shortcuts and About after them.
     pub fn items(ctx: Ctx) -> Vec<MenuItem> {
         let read = Reading::of(ctx);
-        vec![
+        // The order is the design's. Separators fall between its groups: the page's zoom,
+        // the windows, the library, the page's tools, Settings.
+        let mut items = vec![
             Self::zoom(ctx, &read),
             menu_separator(),
             Self::command(
@@ -114,40 +117,33 @@ impl MainMenu {
                 tr!("browser-command-new-tab-title"),
                 true,
             ),
-            Self::unavailable(
-                tr!("browser-main-menu-new-window"),
-                tr!("browser-main-menu-new-window-unavailable"),
-            ),
             Self::command(
                 ctx,
                 Command::NewPrivateWindow,
                 tr!("browser-command-private-window-title"),
                 true,
             ),
-            Self::profile(ctx, &read),
+        ];
+        // A window with no registered profile (a test, a folder named by the environment)
+        // has nothing to show, so the row is left out.
+        items.extend(Self::profile(ctx, &read));
+        items.extend([
             menu_separator(),
             Self::history(ctx, &read),
-            submenu(tr!("browser-main-menu-bookmarks"), Vec::new())
-                .disabled()
-                .tooltip(tr!("browser-main-menu-bookmarks-unavailable")),
             Self::command(
                 ctx,
                 Command::Downloads,
                 tr!("browser-command-downloads-title"),
-                read.downloads,
-            ),
-            Self::unavailable(
-                tr!("browser-main-menu-passwords"),
-                tr!("browser-main-menu-passwords-unavailable"),
+                true,
             ),
             menu_separator(),
+            Self::command(ctx, Command::Find, tr!("browser-command-find-title"), true),
             Self::command(
                 ctx,
-                Command::Find,
-                tr!("browser-command-find-title"),
-                read.find,
+                Command::Print,
+                tr!("browser-command-print-title"),
+                read.is_web,
             ),
-            Self::print(ctx, &read),
             Self::share(ctx, &read),
             Self::tools(ctx, &read),
             menu_separator(),
@@ -157,11 +153,12 @@ impl MainMenu {
                 tr!("browser-command-settings-title"),
                 true,
             ),
-        ]
+        ]);
+        items
     }
 
     /// A row that runs `command`, with its shortcut, dimmed when `enabled` is
-    /// not.
+    /// not: a row for a page is dimmed while there is no page.
     pub(super) fn command(ctx: Ctx, command: Command, title: String, enabled: bool) -> MenuItem {
         let item = menu_item(title, move |_: ()| ctx.run(command));
         let item = match command.keys() {
@@ -171,15 +168,12 @@ impl MainMenu {
         if enabled { item } else { item.disabled() }
     }
 
-    /// A row of a feature that is not built: disabled, and `reason` is its
-    /// tooltip.
-    fn unavailable(title: String, reason: String) -> MenuItem {
-        menu_item(title, |_: ()| {}).disabled().tooltip(reason)
-    }
-
-    /// Zoom: out, the level (a press resets it), in, and Full screen.
+    /// Zoom: out, the level (a press resets it), in, and Full screen. The level is read
+    /// when the row draws, so it follows the presses while the menu stays open. Full
+    /// screen closes the menu first: the menu would otherwise stay over the page.
     fn zoom(ctx: Ctx, read: &Reading) -> MenuItem {
         let keys = |command: Command| command.keys().unwrap_or_default();
+        // Zoom is a tab's, and a tab with no engine session (Settings) has none to set.
         let on = read.zoomable;
         menu_controls(
             tr!("browser-main-menu-zoom"),
@@ -228,19 +222,14 @@ impl MainMenu {
 
     /// Profile ›: the profiles of the registry with this window's ticked.
     /// Another profile's row starts its window (or brings forward the one
-    /// that has it open).
-    fn profile(ctx: Ctx, read: &Reading) -> MenuItem {
-        let title = tr!("browser-main-menu-profile");
-        let Some((own, name)) = read.profile.clone() else {
-            return submenu(title, Vec::new())
-                .disabled()
-                .tooltip(tr!("browser-main-menu-profile-none"));
-        };
+    /// that has it open). A window with no registered profile has no row.
+    fn profile(ctx: Ctx, read: &Reading) -> Option<MenuItem> {
+        let (own, name) = read.profile.clone()?;
         let mut known = read.profiles.clone();
         if !known.iter().any(|(id, _)| *id == own) {
             known.insert(0, (own.clone(), name.clone()));
         }
-        let mut rows: Vec<MenuItem> = known
+        let rows: Vec<MenuItem> = known
             .into_iter()
             .map(|(id, label)| {
                 let ticked = id == own;
@@ -251,26 +240,13 @@ impl MainMenu {
                 .checked(ticked)
             })
             .collect();
-        rows.push(menu_separator());
-        rows.push(Self::unavailable(
-            tr!("browser-main-menu-new-profile"),
-            tr!("browser-main-menu-new-profile-unavailable"),
-        ));
-        rows.push(Self::unavailable(
-            tr!("browser-main-menu-manage-profiles"),
-            tr!("browser-main-menu-manage-profiles-unavailable"),
-        ));
-        submenu(title, rows).detail(name)
+        Some(submenu(tr!("browser-main-menu-profile"), rows).detail(name))
     }
 
-    /// History ›: the history page (not built), Clear history, and the tabs
-    /// closed in this window, newest first, each reopened by its row.
+    /// History ›: Clear history, and the tabs closed in this window, newest
+    /// first, each reopened by its row.
     fn history(ctx: Ctx, read: &Reading) -> MenuItem {
         let mut rows = vec![
-            Self::unavailable(
-                tr!("browser-main-menu-show-history"),
-                tr!("browser-main-menu-show-history-unavailable"),
-            ),
             Self::command(
                 ctx,
                 Command::ClearHistory,
@@ -292,64 +268,23 @@ impl MainMenu {
         submenu(tr!("browser-main-menu-history"), rows)
     }
 
-    /// The page as a PDF: the one thing the engine prints to.
-    fn print(ctx: Ctx, read: &Reading) -> MenuItem {
-        let item = Self::command(
-            ctx,
-            Command::Print,
-            tr!("browser-command-print-title"),
-            read.print && read.is_web,
-        );
-        if read.print {
-            item
-        } else {
-            item.tooltip(tr!("browser-main-menu-print-unavailable"))
-        }
-    }
-
-    /// Share ›: copy the address; sharing to an app needs a portal.
+    /// Share ›: copy the address.
     fn share(ctx: Ctx, read: &Reading) -> MenuItem {
         let url = read.url.clone();
         let copy = menu_item(tr!("browser-main-menu-share-copy-link"), move |_: ()| {
             Self::copy_link(ctx, &url)
         });
-        let rows = vec![
-            if read.is_web { copy } else { copy.disabled() },
-            Self::unavailable(
-                tr!("browser-main-menu-share-apps"),
-                tr!("browser-main-menu-share-apps-unavailable"),
-            ),
-        ];
-        submenu(tr!("browser-main-menu-share"), rows)
+        submenu(
+            tr!("browser-main-menu-share"),
+            vec![if read.is_web { copy } else { copy.disabled() }],
+        )
     }
 
     /// More tools ›: what the page offers beyond reading it.
     fn tools(ctx: Ctx, read: &Reading) -> MenuItem {
-        let devtools = Self::command(
-            ctx,
-            Command::DevTools,
-            tr!("browser-command-devtools-title"),
-            read.devtools && read.is_web && !read.private,
-        );
-        let devtools = if !read.devtools {
-            devtools.tooltip(tr!("browser-main-menu-devtools-unavailable"))
-        } else if read.private {
-            devtools.tooltip(tr!("browser-main-menu-devtools-private"))
-        } else {
-            devtools
-        };
         submenu(
             tr!("browser-main-menu-more-tools"),
             vec![
-                Self::unavailable(
-                    tr!("browser-main-menu-save-page"),
-                    tr!("browser-main-menu-save-page-unavailable"),
-                ),
-                Self::unavailable(
-                    tr!("browser-main-menu-translate"),
-                    tr!("browser-main-menu-translate-unavailable"),
-                ),
-                menu_separator(),
                 Self::command(
                     ctx,
                     Command::PageInfo,
@@ -362,7 +297,12 @@ impl MainMenu {
                     tr!("browser-command-view-source-title"),
                     read.is_web,
                 ),
-                devtools,
+                Self::command(
+                    ctx,
+                    Command::DevTools,
+                    tr!("browser-command-devtools-title"),
+                    read.is_web,
+                ),
             ],
         )
     }
