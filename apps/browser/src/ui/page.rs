@@ -9,7 +9,9 @@ use freya::prelude::*;
 use crate::tabs::Page;
 
 use super::ctx::Ctx;
+use super::dock::DockedPage;
 use super::web::{Surface, TabPage};
+use crate::devtools::DockedToolbox;
 use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
 use crate::new_tab::NewTabPage;
 use crate::settings::SettingsPage;
@@ -17,7 +19,12 @@ use crate::settings::SettingsPage;
 /// What the area holds, copied out of the browser so no lock is held while
 /// the elements are built.
 enum Shown {
-    Web(bingux_ui::web_view::TabId, Surface),
+    /// A web page, and the toolbox docked under it when one is open.
+    Web(
+        bingux_ui::web_view::TabId,
+        Surface,
+        Option<(DockedToolbox, Surface)>,
+    ),
     NewTab,
     Settings,
     Crashed(bingux_ui::web_view::GoneReason),
@@ -48,11 +55,15 @@ impl Component for PageArea {
                 Page::Web => tab
                     .session
                     .and_then(|session| {
-                        browser
-                            .engine
-                            .backend()
+                        let backend = browser.engine.backend();
+                        let toolbox = tab.toolbox.and_then(|docked| {
+                            backend
+                                .surface(docked.handle.session())
+                                .map(|surface| (docked, Surface(surface)))
+                        });
+                        backend
                             .surface(session)
-                            .map(|surface| Shown::Web(session, Surface(surface)))
+                            .map(|surface| Shown::Web(session, Surface(surface), toolbox))
                     })
                     .unwrap_or(Shown::Waiting),
                 Page::NewTab => Shown::NewTab,
@@ -69,14 +80,31 @@ impl Component for PageArea {
             )
         };
         let body: Element = match shown {
-            Shown::Web(session, surface) => TabPage {
-                ctx,
-                engine: self.engine.clone(),
-                key,
-                session,
-                surface,
+            Shown::Web(session, surface, toolbox) => {
+                let page: Element = TabPage {
+                    ctx,
+                    engine: self.engine.clone(),
+                    key,
+                    session,
+                    surface,
+                }
+                .into();
+                match toolbox {
+                    // The page keeps its own view, so its keys and sizing do
+                    // not change when a toolbox docks under it.
+                    Some((docked, toolbox_surface)) => DockedPage {
+                        ctx,
+                        key,
+                        page,
+                        toolbox: docked,
+                        surface: toolbox_surface,
+                        session: docked.handle.session(),
+                        backend: self.engine.clone(),
+                    }
+                    .into(),
+                    None => page,
+                }
             }
-            .into(),
             Shown::NewTab => NewTabPage { ctx, key }.into(),
             Shown::Settings => SettingsPage { ctx }.into(),
             Shown::Crashed(reason) => CrashedPage { ctx, key, reason }.into(),

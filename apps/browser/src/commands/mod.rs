@@ -49,10 +49,10 @@ pub enum Command {
     Print,
     /// Ask whether to forget the history, and forget it when the person says so.
     ClearHistory,
-    /// Open the developer tools for the page. The engine cannot yet.
+    /// Toggle the developer tools of the tab on show: open its toolbox docked
+    /// under the page, or close it when it is open. A tab with no web page
+    /// (blank, Settings) has nothing to inspect, so it does nothing there.
     DevTools,
-    /// Play the page's video in a window of its own. The engine cannot yet.
-    PictureInPicture,
     /// An editing command for the page, only while the page has the focus.
     Edit(EditCommand),
 }

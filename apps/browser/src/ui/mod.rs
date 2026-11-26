@@ -2,6 +2,7 @@
 
 mod app;
 mod ctx;
+mod dock;
 mod page;
 mod popovers;
 mod toolbar;

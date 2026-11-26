@@ -21,6 +21,7 @@ use crate::web_view::input::PageInput;
 use crate::web_view::report::SecurityReport;
 use crate::web_view::requests::Response;
 use crate::web_view::surface::PageSurface;
+use crate::web_view::toolbox::Toolbox;
 
 /// Why an operation did not happen.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -78,13 +79,6 @@ pub struct Capabilities {
     pub touch: bool,
     /// Input method composition with a preedit string.
     pub composition: bool,
-    /// Printing the page to a PDF file.
-    pub print: bool,
-    /// The engine's developer tools, as a tab of their own.
-    pub devtools: bool,
-    /// Forgetting the engine's own record of visited pages, which colours
-    /// visited links.
-    pub clear_history: bool,
     /// `<select>` lists and `<input type=file>`.
     pub form_pickers: bool,
     /// Mute, pin and the like need no engine; this is only for the icons of
@@ -107,9 +101,6 @@ impl Capabilities {
             audio: true,
             touch: true,
             composition: true,
-            print: true,
-            devtools: true,
-            clear_history: true,
             form_pickers: true,
             favicons: true,
         }
@@ -341,30 +332,29 @@ pub trait BrowserBackend: Send + Sync + 'static {
     /// Prints the tab's page to a PDF in the downloads folder, named after
     /// `file_name` (never overwriting a file). Returns once the engine has the
     /// job; `TabEvent::Printed` says where the file is, or why there is none.
-    fn print_pdf(&self, _tab: TabId, _file_name: &str) -> Done {
-        Err(BackendError::Unsupported("printing"))
-    }
+    fn print_pdf(&self, tab: TabId, file_name: &str) -> Done;
 
-    /// Opens the developer tools of `tab` in a tab of their own, `width` by
-    /// `height` logical pixels at `scale`, and returns it. The engine closes
-    /// it when `tab` closes, and refuses a private tab (the toolbox keeps its
-    /// state in the profile).
+    /// Opens the developer tools of `target` as a [`Toolbox`]: a session the
+    /// caller draws, `width` by `height` logical pixels at `scale`, wherever it
+    /// docks it. The engine closes the toolbox when `target` closes (the
+    /// toolbox's session then says `TabEvent::Closed`), and refuses a private
+    /// target and a second toolbox for one target.
     fn open_devtools(
         &self,
-        _tab: TabId,
-        _width: u32,
-        _height: u32,
-        _scale: f32,
-    ) -> Result<TabId, BackendError> {
-        Err(BackendError::Unsupported("developer tools"))
-    }
+        target: TabId,
+        width: u32,
+        height: u32,
+        scale: f32,
+    ) -> Result<Toolbox, BackendError>;
+
+    /// Closes a toolbox the caller no longer shows. A toolbox the engine
+    /// already ended with its target is not an error.
+    fn close_devtools(&self, toolbox: Toolbox) -> Done;
 
     /// Forgets every visit the engine kept, in every window, so links that
     /// were visited stop looking visited in the pages that are open.
     /// `EngineEvent::HistoryCleared` says when it is done.
-    fn clear_history(&self) -> Done {
-        Err(BackendError::Unsupported("clearing the engine's history"))
-    }
+    fn clear_history(&self) -> Done;
 
     /// The answer to a `BrowserEvent::Request`.
     fn respond(&self, _tab: TabId, _request: RequestId, _response: Response) -> Done {

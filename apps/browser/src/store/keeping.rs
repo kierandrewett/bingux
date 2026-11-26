@@ -152,32 +152,6 @@ impl NotSaved {
     }
 }
 
-/// What Clear history reaches.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ClearScope {
-    /// The browser's own history: the store and the search index.
-    pub history: bool,
-    /// The engine's visited-link colours (Places). Only when the engine can
-    /// clear them (Vivarium proposal V1).
-    pub link_colours: bool,
-}
-
-impl ClearScope {
-    /// What the settings page says Clear history does not reach.
-    pub fn text(self) -> Option<String> {
-        (self.history && !self.link_colours).then(|| tr!("browser-history-link-colours-kept"))
-    }
-
-    /// The toast after Clear history.
-    pub fn cleared_text(self) -> String {
-        if self.text().is_some() {
-            tr!("browser-history-cleared-link-colours-kept")
-        } else {
-            tr!("browser-history-cleared")
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,20 +177,5 @@ mod tests {
             .can_start_over()
         );
         assert!(!Keeping::NotSaved(NotSaved::DiskFull).can_start_over());
-    }
-
-    #[test]
-    fn clear_history_says_what_it_does_not_reach() {
-        crate::locale::register();
-        let today = ClearScope {
-            history: true,
-            link_colours: false,
-        };
-        assert!(today.text().unwrap().contains("Link colours"));
-        let with_v1 = ClearScope {
-            history: true,
-            link_colours: true,
-        };
-        assert_eq!(with_v1.text(), None);
     }
 }

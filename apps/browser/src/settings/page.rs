@@ -184,7 +184,7 @@ impl Component for SettingsPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
-        let (info, selected, remembered, settings_keeping, has_history, history_keeping, scope) = {
+        let (info, selected, remembered, settings_keeping, has_history, history_keeping) = {
             let browser = ctx.browser.read();
             (
                 browser.engine.backend().info(),
@@ -193,7 +193,6 @@ impl Component for SettingsPage {
                 browser.settings_keeping.clone(),
                 browser.has_history(),
                 browser.history_keeping.clone(),
-                browser.history_clear_scope(),
             )
         };
         // The count is the searchable's, so it follows every visit and Clear.
@@ -246,11 +245,8 @@ impl Component for SettingsPage {
                 .compact(),
             )
         };
-        let mut privacy = Group::new(tr!("browser-settings-privacy-title")).row(history_row);
-        if let Some(kept) = scope.text() {
-            privacy = privacy.description(kept);
-        }
-        let privacy = privacy
+        let privacy = Group::new(tr!("browser-settings-privacy-title"))
+            .row(history_row)
             .row(
                 row(tr!("browser-settings-permissions-label"))
                     .subtitle(tr!("browser-settings-permissions-kept", count = remembered))

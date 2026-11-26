@@ -143,6 +143,9 @@ pub struct Browser {
     pub(crate) out: Outbox,
     pub menu: Option<PendingMenu>,
     pub fullscreen: bool,
+    /// The share of the content area a page keeps when a toolbox is docked
+    /// under it. The window remembers the last one the splitter was dragged to.
+    pub devtools_page_share: f32,
     /// The tabs of an engine that failed, with the session each had: a restart
     /// opens them again from what the engine had saved of them.
     pub(crate) lost: Vec<(u64, TabId)>,
@@ -185,6 +188,7 @@ impl Browser {
             out: Outbox::default(),
             menu: None,
             fullscreen: false,
+            devtools_page_share: crate::devtools::DEFAULT_PAGE_SHARE,
             lost: Vec::new(),
             start: None,
         };

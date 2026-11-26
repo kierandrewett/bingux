@@ -10,6 +10,7 @@ mod address;
 mod app;
 mod browser;
 mod commands;
+mod devtools;
 mod downloads;
 mod engine;
 mod error_pages;

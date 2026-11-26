@@ -75,12 +75,7 @@ impl Browser {
                 }
             }
             Command::Print => self.print(key),
-            Command::DevTools => self.open_devtools(key),
-            Command::PictureInPicture => self.out.notice(Notice {
-                error: true,
-                text: tr!("browser-picture-in-picture-unavailable"),
-                action: None,
-            }),
+            Command::DevTools => self.toggle_devtools(key),
             Command::Edit(edit) => self.send_edit(key, edit),
         }
     }
@@ -89,29 +84,17 @@ impl Browser {
 impl Browser {
     /// Print the page of tab `key` to a PDF. The engine has no printer or
     /// print preview to offer; what it has is the PDF, written to the
-    /// downloads folder, and the toast says where.
+    /// downloads folder, and the toast says where the file went.
     fn print(&mut self, key: u64) {
         let page = self
             .tabs
             .get(key)
             .filter(|tab| tab.kind == TabKind::Web && !tab.is_blank())
             .map(|tab| tab.print_file_name());
+        // A tab with no web page has nothing to print: do nothing.
         let (Some(name), Some(session)) = (page, self.session_of(key)) else {
-            self.out.notice(Notice {
-                error: true,
-                text: tr!("browser-print-no-page"),
-                action: None,
-            });
             return;
         };
-        if !self.engine.capabilities().print {
-            self.out.notice(Notice {
-                error: true,
-                text: tr!("browser-commands-print-unavailable"),
-                action: None,
-            });
-            return;
-        }
         self.engine
             .call(&mut self.out, |backend| backend.print_pdf(session, &name));
     }

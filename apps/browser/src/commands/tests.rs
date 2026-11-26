@@ -177,6 +177,11 @@ fn function_keys_do_not_need_a_modifier() {
         f(NamedKey::F12, Modifiers::default()),
         Some(Command::DevTools)
     );
+    assert_eq!(
+        Platform::Linux.window_command(&ch("I"), CTRL | Modifiers::SHIFT),
+        Some(Command::DevTools),
+        "Ctrl+Shift+I toggles the toolbox as F12 does"
+    );
 }
 
 #[test]
@@ -211,15 +216,6 @@ fn the_window_does_not_take_the_editing_keys() {
     // In the address bar Ctrl+C is the field's, not a command for the page.
     assert_eq!(Platform::Linux.window_command(&ch("c"), CTRL), None);
     assert_eq!(Platform::Linux.window_command(&ch("a"), CTRL), None);
-}
-
-#[test]
-fn print_and_unsupported_things_say_so() {
-    let (mut browser, _) = browser();
-    browser.run(Command::Print);
-    let notices = browser.take_notices();
-    assert_eq!(notices.len(), 1);
-    assert!(notices[0].error);
 }
 
 // Failures the fullscreen keys guard against:
@@ -311,53 +307,4 @@ fn print_asks_the_engine_for_a_pdf_named_after_the_page() {
             .any(|notice| !notice.error && notice.text.contains("Saved the page as a PDF")),
         "{notices:?}"
     );
-}
-
-// Failures the developer tools and picture-in-picture commands guard against:
-//   1. F12 doing nothing at all, so the person thinks the browser is broken;
-//   2. a toast that claims the tools opened when they did not;
-//   3. the toolbox opened in the background, or not as a tab of its own, or
-//      for a private page (the engine refuses it);
-//   4. picture-in-picture pretending to work when the engine has no window.
-#[test]
-fn picture_in_picture_says_the_engine_cannot() {
-    let (mut browser, double) = browser();
-    browser.run(Command::PictureInPicture);
-    let notices = browser.out.take_notices();
-    assert!(
-        notices
-            .iter()
-            .any(|notice| notice.error
-                && notice.text.contains("Picture-in-picture is not available")),
-        "{notices:?}"
-    );
-    assert!(double.calls().is_empty(), "nothing was asked of the engine");
-}
-
-#[test]
-fn f12_opens_the_toolbox_of_a_page_in_a_tab_in_front_of_it() {
-    use bingux_ui::web_view::test_double::Call;
-    let (mut browser, double) = browser();
-    browser.run(Command::DevTools);
-    let notices = browser.out.take_notices();
-    assert!(
-        notices
-            .iter()
-            .any(|notice| notice.error && notice.text.contains("no web page")),
-        "a blank tab has nothing to inspect: {notices:?}"
-    );
-    let page = crate::browser::testing::go(&mut browser, "https://example.com/");
-    let tabs_before = browser.tabs.all().len();
-    double.clear_calls();
-    browser.run(Command::DevTools);
-    assert!(
-        double
-            .calls()
-            .iter()
-            .any(|call| matches!(call, Call::OpenDevtools(_)))
-    );
-    assert_eq!(browser.tabs.all().len(), tabs_before + 1);
-    let toolbox = browser.tabs.active().expect("active");
-    assert_ne!(toolbox.key, page, "the toolbox is in front");
-    assert_eq!(toolbox.opener, Some(page));
 }

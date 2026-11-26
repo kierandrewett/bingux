@@ -4,11 +4,11 @@
 //! once in a toast. History itself is the store's and the bingux-ui
 //! searchable `history`; the window only sends it what was visited.
 
-use bingux_ui::web_view::BackendError;
+use bingux_ui::prelude::tr;
 
 use super::Browser;
 use crate::store::Event;
-use crate::store::{ClearScope, Keeping, Part};
+use crate::store::{Keeping, Part};
 
 impl Browser {
     /// Take in what the store has said since the last call.
@@ -63,32 +63,18 @@ impl Browser {
         self.store.as_ref().map_or(0, |store| store.history_len())
     }
 
-    /// What Clear history reaches: the browser's own history, and the
-    /// engine's visits (Places, which colours visited links) when the engine
-    /// can forget them (`Engine::clear_data`).
-    pub fn history_clear_scope(&self) -> ClearScope {
-        ClearScope {
-            history: self.has_history(),
-            link_colours: self.engine.capabilities().clear_history,
-        }
-    }
-
-    /// Forget the history: the file and the searchable. The toast says what
-    /// it does not reach.
+    /// Forget the history: the browser's file and searchable, then the
+    /// engine's own record of visits (Places), which is what colours visited
+    /// links. The engine answers when it is done (`HistoryCleared`); only a
+    /// failure is news then.
     pub fn clear_history(&mut self) {
         let Some(store) = &self.store else {
             return;
         };
         store.clear_history();
-        // An engine that has no call for it says so on the first try, and
-        // the scope (and so the words) follow what it said.
-        match self.engine.backend().clear_history() {
-            Ok(()) | Err(BackendError::Unsupported(_)) => {}
-            Err(error) => self.out.fail(&error),
-        }
-        self.engine.refresh();
-        let text = self.history_clear_scope().cleared_text();
-        self.out.notify(text);
+        self.engine
+            .call(&mut self.out, |backend| backend.clear_history());
+        self.out.notify(tr!("browser-history-cleared"));
     }
 
     /// The history file could not be read: move it aside and keep history

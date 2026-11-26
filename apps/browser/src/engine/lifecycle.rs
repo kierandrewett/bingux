@@ -28,6 +28,8 @@ impl Browser {
             tab.hover = None;
             tab.prompts.clear();
             tab.cert = None;
+            // The toolbox session went with the engine.
+            tab.toolbox = None;
         }
         self.menu = None;
         self.engine.status = Status::Failed {

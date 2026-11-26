@@ -17,16 +17,7 @@ pub struct Registry;
 impl Registry {
     /// Every command with a key, with what applies now.
     pub fn commands(ctx: Ctx) -> Vec<Listed> {
-        let (
-            zoom,
-            can_find,
-            can_download,
-            can_devtools,
-            can_print,
-            can_reopen,
-            is_web,
-            has_history,
-        ) = {
+        let (zoom, can_reopen, is_web, has_history) = {
             let browser = ctx.browser.read();
             let tab = browser.active();
             (

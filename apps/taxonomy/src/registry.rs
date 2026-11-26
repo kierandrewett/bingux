@@ -569,6 +569,7 @@ pub static ENTRIES: &[Entry] = &[
             "SurfaceStats",
             "BrowserBackend",
             "TabConfig",
+            "Toolbox",
             "TestDoubleBackend",
         ],
         body: Body::States(frames::WEB_VIEW),

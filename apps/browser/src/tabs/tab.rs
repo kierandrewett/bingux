@@ -7,6 +7,7 @@ use bingux_ui::web_view::requests::CertError;
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
 use crate::address::Address;
+use crate::devtools::DockedToolbox;
 use crate::find::Find;
 use crate::prompts::Prompt;
 use crate::zoom::Zoom;
@@ -64,6 +65,8 @@ pub struct Tab {
     pub find: Find,
     /// The tab this one was opened from, for which tab comes next on close.
     pub opener: Option<u64>,
+    /// The developer tools docked under the page, when they are open.
+    pub toolbox: Option<DockedToolbox>,
 }
 
 impl Tab {
@@ -94,6 +97,7 @@ impl Tab {
             prompts: VecDeque::new(),
             find: Find::default(),
             opener: None,
+            toolbox: None,
         }
     }
 

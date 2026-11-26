@@ -5,8 +5,8 @@
 //!   1. visits, or a title that arrives after the load, lost at the next start;
 //!   2. Clear history that leaves the pages in the file (free pages, the
 //!      write-ahead log) or in the index;
-//!   3. Clear history that claims to reach the engine's link colours when the
-//!      engine cannot, or leaves visited links coloured when it can;
+//!   3. Clear history that does not ask the engine to forget its visits, so
+//!      visited links stay coloured;
 //!   4. a history that grows without bound;
 //!   5. the address field's ranking putting a title match above a host that
 //!      begins with what was typed;
@@ -158,7 +158,6 @@ fn a_page_load_in_the_window_is_recorded_and_a_private_window_records_none() {
 
     let private = Browser::new(TestDoubleBackend::new(), Options { private: true });
     assert!(!private.has_history());
-    assert_eq!(private.history_clear_scope().history, false);
     drop(browser);
     Files::remove_tree(&root).unwrap();
 }
@@ -200,42 +199,12 @@ fn clear_history_empties_the_file_and_the_index_and_asks_the_engine_to_forget_vi
     );
     let told = browser.take_notices();
     assert_eq!(told[0].text, "History cleared");
-    assert!(browser.history_clear_scope().link_colours);
     assert!(
         double
             .calls()
             .contains(&bingux_ui::web_view::test_double::Call::ClearHistory),
         "the engine forgets its visits, so visited links stop looking visited"
     );
-    drop(browser);
-    Files::remove_tree(&root).unwrap();
-}
-
-#[test]
-fn an_engine_that_cannot_clear_visits_is_said_so_and_not_asked() {
-    crate::locale::register();
-    let double = TestDoubleBackend::new();
-    double.lacks_clear_call();
-    let root = Files::temp();
-    let search = SearchService::new();
-    let mut browser = Browser::with_profile(
-        double.clone(),
-        Options::default(),
-        Profile {
-            id: None,
-            name: None,
-            settings: Settings::default(),
-            settings_keeping: Keeping::Saved,
-            store: Some(open(&root, &search)),
-            known: Vec::new(),
-        },
-    );
-    browser.poll();
-    double.clear_calls();
-    browser.clear_history();
-    let told = browser.take_notices();
-    assert!(told[0].text.contains("Link colours"), "{}", told[0].text);
-    assert!(!browser.history_clear_scope().link_colours);
     drop(browser);
     Files::remove_tree(&root).unwrap();
 }

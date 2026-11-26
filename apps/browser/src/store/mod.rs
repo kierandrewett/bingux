@@ -20,7 +20,7 @@ mod keeping;
 mod tests;
 
 pub use files::{Files, Problem};
-pub use keeping::{ClearScope, Keeping, NotSaved, Part};
+pub use keeping::{Keeping, NotSaved, Part};
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};

@@ -100,6 +100,14 @@ impl Browser {
             self.accept_new_tab(session, *new, url, window);
             return;
         }
+        // A toolbox is a session no tab owns. Only its end matters here: the
+        // engine closes it after its target.
+        if let Some(owner) = self.toolbox_owner(session) {
+            if matches!(event, TabEvent::Closed { .. }) {
+                self.toolbox_ended(owner);
+            }
+            return;
+        }
         let Some(key) = self.key_of(session) else {
             return;
         };

@@ -39,6 +39,7 @@ use crate::web_view::requests::{
     CertError, ContextTarget, DownloadInfo, DownloadState, Request, RequestKind, Response,
 };
 use crate::web_view::surface::PageSurface;
+use crate::web_view::toolbox::Toolbox;
 
 pub use sites::{fix_up, host_of};
 
@@ -70,6 +71,8 @@ pub enum Call {
     ClearHistory,
     /// The developer tools of a tab, in a tab of their own.
     OpenDevtools(TabId),
+    /// A toolbox the browser closed.
+    CloseDevtools(Toolbox),
     Respond(TabId, RequestId, Response),
     CancelDownload(DownloadId),
     PauseDownload(DownloadId),
@@ -102,9 +105,9 @@ struct TabState {
 
 #[derive(Default)]
 struct Inner {
-    /// The engine has no clear-data call and says so when asked, as an older
-    /// engine build does: `clear_history` turns false after the first try.
-    lacks_clear_call: bool,
+    /// The toolbox session of each target that has one: the engine allows one
+    /// per target, and closes it after the target.
+    toolboxes: BTreeMap<TabId, TabId>,
     next_tab: u32,
     next_request: u32,
     next_download: u64,
@@ -154,12 +157,6 @@ impl TestDoubleBackend {
     /// taken (find is learned from the first session).
     pub fn set_capabilities(&self, capabilities: Capabilities) {
         *lock(&self.capabilities) = capabilities;
-    }
-
-    /// The engine has no clear-data call, and finds that out when it is asked
-    /// (the capability is offered until then).
-    pub fn lacks_clear_call(&self) {
-        lock(&self.inner).lacks_clear_call = true;
     }
 
     fn build(capabilities: Capabilities, auto_finish: bool) -> Arc<Self> {
@@ -733,6 +730,16 @@ impl BrowserBackend for TestDoubleBackend {
             inner.tabs.remove(&tab);
             self.queue
                 .push(BrowserEvent::tab(tab, TabEvent::Closed { error: None }));
+            // The engine closes a toolbox after its target, and says why.
+            if let Some(toolbox) = inner.toolboxes.remove(&tab) {
+                inner.tabs.remove(&toolbox);
+                self.queue.push(BrowserEvent::tab(
+                    toolbox,
+                    TabEvent::Closed {
+                        error: Some("TargetClosed".to_string()),
+                    },
+                ));
+            }
         })
     }
 
@@ -970,9 +977,6 @@ impl BrowserBackend for TestDoubleBackend {
     }
 
     fn print_pdf(&self, tab: TabId, file_name: &str) -> Done {
-        if !lock(&self.capabilities).print {
-            return Err(BackendError::Unsupported("printing"));
-        }
         self.with_tab(tab, Call::PrintPdf(tab, file_name.to_string()), |_, tab| {
             // The double has no PDF: it says the file is where a download would be.
             self.queue.push(BrowserEvent::tab(
@@ -982,36 +986,48 @@ impl BrowserBackend for TestDoubleBackend {
         })
     }
 
+    /// The toolbox is a session of its own, as in the engine: it has a surface
+    /// and a size, it is not a tab of the strip, and it ends with its target.
     fn open_devtools(
         &self,
-        tab: TabId,
+        target: TabId,
         width: u32,
         height: u32,
         scale: f32,
-    ) -> Result<TabId, BackendError> {
-        if !lock(&self.capabilities).devtools {
-            return Err(BackendError::Unsupported("developer tools"));
+    ) -> Result<Toolbox, BackendError> {
+        self.with_tab(target, Call::OpenDevtools(target), |_, _| ())?;
+        if lock(&self.inner).toolboxes.contains_key(&target) {
+            // The engine answers Busy to a second toolbox for one target.
+            return Err(BackendError::Engine("VV_ERR_BUSY".to_string()));
         }
-        self.with_tab(tab, Call::OpenDevtools(tab), |_, _| ())?;
-        self.create_tab(&TabConfig {
+        let session = self.create_tab(&TabConfig {
             url: "about:devtools-toolbox".to_string(),
             width,
             height,
             scale,
-            opener: Some(tab),
+            opener: Some(target),
             ..TabConfig::default()
-        })
+        })?;
+        lock(&self.inner).toolboxes.insert(target, session);
+        Ok(Toolbox::new(session))
+    }
+
+    fn close_devtools(&self, toolbox: Toolbox) -> Done {
+        let mut inner = lock(&self.inner);
+        inner.calls.push(Call::CloseDevtools(toolbox));
+        inner
+            .toolboxes
+            .retain(|_, session| *session != toolbox.session());
+        inner.tabs.remove(&toolbox.session());
+        self.queue.push(BrowserEvent::tab(
+            toolbox.session(),
+            TabEvent::Closed { error: None },
+        ));
+        Ok(())
     }
 
     fn clear_history(&self) -> Done {
-        if !lock(&self.capabilities).clear_history {
-            return Err(BackendError::Unsupported("clearing the engine's history"));
-        }
         let mut inner = lock(&self.inner);
-        if inner.lacks_clear_call {
-            lock(&self.capabilities).clear_history = false;
-            return Err(BackendError::Unsupported("clearing the engine's history"));
-        }
         inner.calls.push(Call::ClearHistory);
         if inner.failed {
             return Err(BackendError::EngineGone);

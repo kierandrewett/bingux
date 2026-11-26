@@ -109,6 +109,7 @@ impl Browser {
                 backend.set_visible(session, false, false)
             });
         }
+        self.set_toolbox_visible(was, false);
         if let Some(session) = self.session_of(now) {
             let ViewSize {
                 width,
@@ -120,6 +121,7 @@ impl Browser {
                 backend.set_visible(session, true, true)
             });
         }
+        self.set_toolbox_visible(now, true);
         // A menu belongs to the page it was asked on.
         if self.menu.as_ref().is_some_and(|menu| menu.tab != now) {
             self.dismiss_menu();
@@ -148,6 +150,13 @@ impl Browser {
         if let Some(session) = tab.session {
             self.engine
                 .call(&mut self.out, |backend| backend.close_tab(session));
+        }
+        // The engine closes a toolbox after its target; letting go of ours now
+        // frees its surface without waiting for that.
+        if let Some(docked) = tab.toolbox {
+            self.engine.call(&mut self.out, |backend| {
+                backend.close_devtools(docked.handle)
+            });
         }
         // What the tab was waiting for will never be answered by anyone.
         if !(tab.is_blank() && tab.kind == TabKind::Web) {
@@ -183,6 +192,7 @@ impl Browser {
                     backend.set_visible(session, true, true)
                 });
             }
+            self.set_toolbox_visible(now, true);
             if self.fullscreen {
                 self.fullscreen = false;
                 self.out.request(UiRequest::Fullscreen(false));

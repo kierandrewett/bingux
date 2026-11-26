@@ -150,7 +150,7 @@ event. No thread of the browser waits on the engine.
   permission store, and touch input (fingers become a click, a scroll and a held press, `touch.rs`). A file
   picker opens files only: the engine asks for no folder and no place to save. Right click opens the
   browser's own page menu (Back, Forward, Reload, Select all, source) while the engine does not ask for its
-  context menu. Favicons arrive as addresses only, so tabs show a glyph. There is no print and no "focus
+  context menu. Favicons arrive as addresses only, so tabs show a glyph. Print saves the page as a PDF in the downloads folder (no print dialog or printers). F12 or Ctrl+Shift+I toggles the developer tools: the engine's toolbox docks under the page in the same tab, with a draggable splitter (`apps/browser/src/devtools`). There is no "focus
   order ran out" event. A page that asked for fullscreen is not told when the person leaves it: ABI 2.0 has
   no call for that (the window's own fullscreen is the window's).
 - **A long address** is cut at the edge of the address field (bingux-ui's `TextField` clips; there is no

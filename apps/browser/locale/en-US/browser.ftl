@@ -62,8 +62,6 @@ browser-history-pages =
     }
 # Second line of the browsing history row in a window that keeps none.
 browser-history-not-kept = Not kept in this window
-# Under the privacy group: what Clear history does not reach.
-browser-history-link-colours-kept = Link colours on pages are kept until the engine can clear them
 # Toast when the engine could not forget visited links after Clear history. $reason is its message.
 browser-history-engine-clear-failed = The engine could not forget visited links: { $reason }
 browser-permissions-footer = Site permissions are kept only while the window is open.
@@ -71,7 +69,6 @@ browser-permissions-footer = Site permissions are kept only while the window is 
 ## Toasts
 
 browser-history-cleared = History cleared
-browser-history-cleared-link-colours-kept = History cleared. Link colours on pages are kept until the engine can clear them
 
 ## Zoom
 
@@ -91,23 +88,11 @@ browser-address-search-for = Search { $engine } for “{ $words }”
 
 ## Commands
 
-# Toast shown when Print is chosen and the engine has no print call.
-browser-commands-print-unavailable = Printing is not available in this engine yet.
 
 # Toast after Print: the page was saved as a PDF. $path is where.
 browser-print-saved = Saved the page as a PDF: { $path }
 # Toast when printing fails. $reason is the engine's message.
 browser-print-failed = Could not print the page: { $reason }
-# Toast when F12 is pressed and the engine has no developer tools.
-browser-devtools-unavailable = Developer tools are not available in this engine.
-# Toast when F12 is pressed in a private tab: the toolbox keeps its state in the profile.
-browser-devtools-private = Developer tools are not available in a private window.
-# Toast when F12 is pressed on a page that is not a web page (a blank tab, Settings).
-browser-devtools-no-page = There is no web page to inspect here.
-# Toast when picture-in-picture is asked for: the engine has no such window.
-browser-picture-in-picture-unavailable = Picture-in-picture is not available in this engine yet.
-# Toast when Print is chosen on a page that is not a web page (a blank tab, Settings).
-browser-print-no-page = There is no web page to print here.
 
 ## Site information
 ## The card under the connection button.

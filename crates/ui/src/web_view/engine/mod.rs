@@ -59,6 +59,7 @@ use crate::web_view::input::PageInput;
 use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
 use crate::web_view::requests::Response;
 use crate::web_view::surface::PageSurface;
+use crate::web_view::toolbox::Toolbox;
 
 /// The tags of operations that are not a search (a search carries its tab's
 /// number, which is below 2^32): the high bits name the kind.
@@ -294,8 +295,6 @@ impl BrowserBackend for GeckoBackend {
             .map_or_else(Capabilities::default, |runtime| Capabilities {
                 // Learned from the first session (`learn_find`).
                 find: runtime.find.get().copied().unwrap_or(false),
-                // Offered until an engine says it has no such call.
-                clear_history: runtime.clear_history.get().copied().unwrap_or(true),
                 ..runtime.capabilities
             })
     }
@@ -555,25 +554,34 @@ impl BrowserBackend for GeckoBackend {
             })
     }
 
-    /// The toolbox is a session of the engine: it becomes a tab, with its own
-    /// frames and input, and closes after its target.
+    /// The toolbox is a session of the engine with its own frames and input.
+    /// It is kept with the tabs' sessions (so `surface`, `set_size`, `send`
+    /// reach it) but the browser never lists it as a tab. The engine closes it
+    /// after its target.
     fn open_devtools(
         &self,
-        tab: TabId,
+        target: TabId,
         width: u32,
         height: u32,
         scale: f32,
-    ) -> Result<TabId, BackendError> {
+    ) -> Result<Toolbox, BackendError> {
         let runtime = self.runtime()?;
-        let target = self.session(tab)?;
+        let session = self.session(target)?;
         let toolbox = runtime
             .engine
             .open_devtools(
-                &target,
+                &session,
                 DevtoolsConfig::new(width.max(1), height.max(1)).scale(scale),
             )
-            .map_err(|error| failed(&error, tab, "developer tools"))?;
-        Ok(self.adopt(toolbox))
+            .map_err(|error| failed(&error, target, "developer tools"))?;
+        Ok(Toolbox::new(self.adopt(toolbox)))
+    }
+
+    /// Dropping the session closes the toolbox; a toolbox the engine already
+    /// ended with its target has no entry left, which is not an error.
+    fn close_devtools(&self, toolbox: Toolbox) -> Done {
+        lock(&self.shared.state).live.remove(&toolbox.session());
+        Ok(())
     }
 
     /// Every visit of every site and window (Places, which colours
@@ -589,10 +597,7 @@ impl BrowserBackend for GeckoBackend {
             .map(|_| ())
             .map_err(|error| match error.status() {
                 Some(Status::EngineFailed) => BackendError::EngineGone,
-                Some(Status::Unsupported) => {
-                    let _ = runtime.clear_history.set(false);
-                    BackendError::Unsupported("clearing history")
-                }
+                Some(Status::Unsupported) => BackendError::Unsupported("clearing history"),
                 _ => BackendError::Engine(error.to_string()),
             })
     }

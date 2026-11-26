@@ -54,6 +54,7 @@ pub mod queue;
 pub mod report;
 pub mod requests;
 pub mod surface;
+pub mod toolbox;
 pub mod touch;
 pub mod view;
 
@@ -73,4 +74,5 @@ pub use page::{Audio, GoneReason, HistoryEntry, LoadError, LoadState, Security, 
 pub use report::{CheckStatus, ProcessSandbox, SecurityCheck, SecurityReport};
 pub use requests::{Request, RequestKind, Response};
 pub use surface::PageSurface;
+pub use toolbox::Toolbox;
 pub use view::{WebView, web_view};
