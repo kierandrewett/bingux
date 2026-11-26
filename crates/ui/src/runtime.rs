@@ -109,6 +109,60 @@ pub fn metadata(path: impl AsRef<std::path::Path>) -> std::io::Result<std::fs::M
     std::fs::metadata(path)
 }
 
+/// `std::fs::File::open` with the UI-thread check.
+pub fn open_file(path: impl AsRef<std::path::Path>) -> std::io::Result<std::fs::File> {
+    assert_off_ui_thread("fs::File::open");
+    std::fs::File::open(path)
+}
+
+/// Start `line` on its own: not a child the caller waits for, in its own
+/// process group so a signal to this program does not reach it, with its
+/// output dropped. A thread reaps it when it ends. Starting a program reads
+/// it from disk (a launcher on a network share is slow), so call it on a
+/// worker, or use [`spawn_detached_then`] from an event handler.
+pub fn spawn_detached<S: AsRef<std::ffi::OsStr>>(
+    line: &[S],
+    working_directory: Option<&std::path::Path>,
+) -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    assert_off_ui_thread("process::spawn");
+    let Some((program, arguments)) = line.split_first() else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "empty command",
+        ));
+    };
+    let mut command = Command::new(program);
+    command
+        .args(arguments)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .process_group(0);
+    if let Some(directory) = working_directory {
+        command.current_dir(directory);
+    }
+    let mut child = command.spawn()?;
+    std::thread::spawn(move || {
+        let _ = child.wait();
+    });
+    Ok(())
+}
+
+/// [`spawn_detached`] on the worker pool, calling `done` with the outcome on
+/// the UI thread. For an event handler: the window does not wait for the
+/// program to be found and started.
+pub fn spawn_detached_then<S: AsRef<std::ffi::OsStr> + Send + 'static>(
+    line: Vec<S>,
+    working_directory: Option<PathBuf>,
+    done: impl FnOnce(std::io::Result<()>) + 'static,
+) {
+    background_then(
+        move || spawn_detached(&line, working_directory.as_deref()),
+        done,
+    );
+}
+
 /// `BINGUX_SLOW_SOURCES_MS=N` makes every command run through [`run`] wait N
 /// milliseconds before it starts, as a slow `nmcli` or `wpctl` would. The wait
 /// is inside the call, so a call that wrongly runs on the UI thread freezes
@@ -173,7 +227,10 @@ pub fn run_with_stdin(
             std::io::ErrorKind::NotFound => {
                 CommandError(crate::tr!("ui-command-missing", feature = feature(program)))
             }
-            _ => CommandError(crate::tr!("ui-command-not-started", feature = feature(program))),
+            _ => CommandError(crate::tr!(
+                "ui-command-not-started",
+                feature = feature(program)
+            )),
         })?;
     if let (Some(data), Some(mut pipe)) = (stdin, child.stdin.take()) {
         use std::io::Write;
@@ -216,7 +273,10 @@ pub fn run_with_stdin(
                 )));
             }
             Err(_) => {
-                return Err(CommandError(crate::tr!("ui-command-failed", feature = feature(program))));
+                return Err(CommandError(crate::tr!(
+                    "ui-command-failed",
+                    feature = feature(program)
+                )));
             }
         }
     };

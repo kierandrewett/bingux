@@ -43,7 +43,7 @@ pub(super) use clipboard::is_cut;
 pub(super) use failure_text::{name_check as name_check_words, pattern as pattern_words};
 pub(super) use names::{check_name, stem_chars};
 pub(super) use op_error::text as error_words;
-pub(super) use open_with::{App, apps_for, launch, open_default, warm as warm_open_with};
+pub(super) use open_with::{App, apps_for, launch_then, open_default, warm as warm_open_with};
 
 /// The sidebar's Empty Trash asks the file view beside it to empty the Trash:
 /// the view owns the busy line and the status notice the work reports in. The
@@ -729,18 +729,21 @@ pub(super) fn run(env: &Env, selected: &[Entry], command: Command) {
         Command::Open => open(env, selected),
         Command::Preview => env.preview.call(()),
         Command::OpenWith(app) => {
-            if let [entry] = selected
-                && let Err(error) = open_with::launch(&app, &entry.path)
-            {
-                notify(
-                    env.ui,
-                    crate::tr!(
-                        "ui-files-action-could-not-start",
-                        app = app.name.to_string(),
-                        error = error.to_string()
-                    ),
-                    true,
-                );
+            if let [entry] = selected {
+                let (ui, name) = (env.ui, app.name.to_string());
+                open_with::launch_then(&app, &entry.path, move |started| {
+                    if let Err(error) = started {
+                        notify(
+                            ui,
+                            crate::tr!(
+                                "ui-files-action-could-not-start",
+                                app = name,
+                                error = error.to_string()
+                            ),
+                            true,
+                        );
+                    }
+                });
             }
         }
         Command::OpenInNewTab => {

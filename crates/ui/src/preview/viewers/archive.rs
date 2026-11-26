@@ -120,7 +120,9 @@ fn extract_all(archive: PathBuf, overlays: Option<crate::shell::Overlays>, mut b
     };
     busy.set(true);
     spawn(async move {
-        let result = crate::task::spawn_blocking(move || bingux_files::ops::extract(&archive, &folder)).await;
+        let result =
+            crate::task::spawn_blocking(move || bingux_files::ops::extract(&archive, &folder))
+                .await;
         busy.set(false);
         let Some(overlays) = overlays else {
             return;
@@ -135,7 +137,7 @@ fn extract_all(archive: PathBuf, overlays: Option<crate::shell::Overlays>, mut b
                     crate::tr!("ui-preview-archive-extracted", name = name),
                     crate::tr!("ui-preview-archive-show-in-files"),
                     move |_: ()| {
-                        let _ = crate::files::show_in_files(&made);
+                        crate::files::show_in_files(&made, |_| {});
                     },
                 );
             }

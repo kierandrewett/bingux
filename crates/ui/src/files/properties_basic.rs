@@ -14,7 +14,7 @@ use super::display;
 use freya::prelude::*;
 use freya::torin::prelude::Size2D;
 
-use super::actions::{apps_for, launch};
+use super::actions::{apps_for, launch_then};
 use super::file_icon::{FileIcon, FileKind, file_icon_view};
 use super::properties::Page;
 use super::properties_words::{
@@ -281,13 +281,16 @@ fn open_with(page: &Page) -> Option<Group> {
         open = open.row(row(name.clone()).leading_app(app.icon.clone()).on_press(
             EventHandler::new(move |()| {
                 overlays.dismiss_dialog();
-                if let Err(error) = launch(&app, &path) {
-                    overlays.toast(crate::tr!(
-                        "ui-files-props-open-failed",
-                        name = name.clone(),
-                        error = error.to_string()
-                    ));
-                }
+                let name = name.clone();
+                launch_then(&app, &path, move |started| {
+                    if let Err(error) = started {
+                        overlays.toast(crate::tr!(
+                            "ui-files-props-open-failed",
+                            name = name,
+                            error = error.to_string()
+                        ));
+                    }
+                });
             }),
         ));
     }

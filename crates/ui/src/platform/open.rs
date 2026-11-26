@@ -24,7 +24,6 @@
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::{Command, Stdio};
 
 use zbus::zvariant::{OwnedFd, OwnedObjectPath, Value};
 
@@ -106,7 +105,7 @@ pub fn open_uri(uri: &str) -> Result<Via, OpenError> {
 /// Open a file or a folder in its default application.
 pub fn open_file(path: &Path) -> Result<Via, OpenError> {
     crate::runtime::assert_off_ui_thread("platform::open::open_file");
-    let metadata = std::fs::metadata(path)
+    let metadata = crate::runtime::metadata(path)
         .map_err(|_| OpenError::Invalid(crate::tr!("ui-open-gone-error")))?;
     let folder = metadata.is_dir();
     if !folder && portal_open_file(path) {
@@ -209,21 +208,12 @@ fn launch(entry: &DesktopEntry, arguments: &Arguments<'_>) -> Result<(), OpenErr
 }
 
 fn xdg_open(target: &str) -> Result<Via, OpenError> {
-    use std::os::unix::process::CommandExt;
-    let mut child = Command::new("xdg-open")
-        .arg(target)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0)
-        .spawn()
-        .map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => OpenError::NoApplication,
-            _ => OpenError::Failed(crate::tr!("ui-open-not-started-error")),
-        })?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
+    apps::spawn(&["xdg-open".to_owned(), target.to_owned()], None).map_err(|error| match error
+        .kind()
+    {
+        std::io::ErrorKind::NotFound => OpenError::NoApplication,
+        _ => OpenError::Failed(crate::tr!("ui-open-not-started-error")),
+    })?;
     Ok(Via::XdgOpen)
 }
 
@@ -239,7 +229,7 @@ fn portal_open_uri(uri: &str) -> bool {
 }
 
 fn portal_open_file(path: &Path) -> bool {
-    let Ok(file) = std::fs::File::open(path) else {
+    let Ok(file) = crate::runtime::open_file(path) else {
         return false;
     };
     let descriptor = OwnedFd::from(std::os::fd::OwnedFd::from(file));

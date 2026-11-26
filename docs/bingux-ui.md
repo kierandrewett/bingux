@@ -173,6 +173,13 @@ you can see. The rule for an application: **nothing on the UI thread waits.**
 `nmcli` on the UI thread` on stderr, once per call site, with a backtrace.
   The window marks its thread when it first renders, so start-up work before
   the window (fonts, the font family) is allowed to wait.
+- Start a program with `runtime::spawn_detached` on a worker, or
+  `spawn_detached_then(line, dir, done)` from an event handler: loading a
+  launcher from a slow disk waits on that disk, so a press handler must not.
+  `platform::apps::spawn_then`, `files::show_in_files(path, done)` and Open
+  with are built on it. A burst of change notices (`gsettings monitor`, a theme
+  switch writing a dozen keys) is one read: `Feed::clear` drops the burst
+  before the reader reads.
 - Ask nothing in `render`. A page draws from what it has: cached values or a
   placeholder model behind `veiled` (`loading.rs` in Settings), so the first
   frame is the final layout. Things a placeholder needs from the machine are
@@ -5370,6 +5377,14 @@ location, scroll and open tabs stay. Shortcut labels (`Ctrl+Shift+P` is
 `Strg+Umschalt+P` in German), the command groups, the palette, the shortcuts
 sheet, undo titles, the About window, previews, charts and the colour picker
 all come from the `bingux-ui` catalogue (`crates/ui/locale/en-US/bingux-ui.ftl`).
+
+A language switch does not make the window wait. The bundles of the new
+language are built on the worker pool (every catalogue of every language in the
+chain is parsed: 58 ms with 31 catalogues and one language, 200 ms with three,
+measured), and the window keeps its words until they are swapped in, when
+`revision()` changes and every window follows it. The first bundles are built
+by `Application::run` (`i18n::warm()`) before the window exists; a worker or a
+test that finds them stale builds them itself.
 
 ### Where catalogues live
 

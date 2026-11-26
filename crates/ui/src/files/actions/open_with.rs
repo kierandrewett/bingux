@@ -4,12 +4,11 @@
 //! Desktop entries are optional on a Bingux system: with none, the list is
 //! empty and the menu says so. Nothing here needs a particular distribution.
 
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-use crate::platform::apps::{Arguments, expand_exec, spawn};
+use crate::platform::apps::{Arguments, expand_exec, spawn_then};
 
 /// How many applications the menu lists for one type.
 const MENU_LIMIT: usize = 12;
@@ -94,7 +93,7 @@ fn data_dirs() -> Vec<PathBuf> {
 fn scan() -> Vec<App> {
     let mut found: Vec<App> = Vec::new();
     for dir in data_dirs() {
-        let Ok(entries) = fs::read_dir(&dir) else {
+        let Ok(entries) = crate::runtime::read_dir(&dir) else {
             continue;
         };
         for entry in entries.flatten() {
@@ -105,7 +104,7 @@ fn scan() -> Vec<App> {
             {
                 continue;
             }
-            if let Ok(text) = fs::read_to_string(&path)
+            if let Ok(text) = crate::runtime::read_to_string(&path)
                 && let Some(app) = parse_desktop_entry(&text)
             {
                 found.push(app);
@@ -176,9 +175,15 @@ fn command_line(app: &App, path: &Path) -> Vec<String> {
 }
 
 /// Start `app` on `path`. It runs on its own: it is not a child of the file
-/// view's work, and its output is dropped.
-pub(in crate::files) fn launch(app: &App, path: &Path) -> io::Result<()> {
-    spawn(&command_line(app, path), None)
+/// view's work, and its output is dropped. Finding and starting the program
+/// is the pool's work, not the press handler's (the program may live on a
+/// network share); `done` is called on the UI thread with how it went.
+pub(in crate::files) fn launch_then(
+    app: &App,
+    path: &Path,
+    done: impl FnOnce(io::Result<()>) + 'static,
+) {
+    spawn_then(command_line(app, path), None, done);
 }
 
 /// Open `path` in the application the system names for its type, as a

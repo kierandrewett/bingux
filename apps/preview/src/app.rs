@@ -405,10 +405,12 @@ impl Component for Content {
         let show_in_files = {
             let current = current.clone();
             move || {
-                if let Some(file) = &current
-                    && files::show_in_files(file).is_err()
-                {
-                    overlays.toast(copy::show_in_files_failed());
+                if let Some(file) = &current {
+                    files::show_in_files(file, move |shown| {
+                        if shown.is_err() {
+                            overlays.toast(copy::show_in_files_failed());
+                        }
+                    });
                 }
             }
         };

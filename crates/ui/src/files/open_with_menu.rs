@@ -9,9 +9,8 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
-use super::actions::{App, apps_for, launch, open_default};
+use super::actions::{App, apps_for, launch_then, open_default};
 use crate::app_icon::AppChoice;
 use crate::shell::{MenuItem, app_menu_items};
 
@@ -45,9 +44,12 @@ pub fn open_with_items(
         else {
             return;
         };
-        if launch(app, &path).is_err() {
-            on_error(app.name.clone());
-        }
+        let (name, on_error) = (app.name.clone(), on_error.clone());
+        launch_then(app, &path, move |started| {
+            if started.is_err() {
+                on_error(name);
+            }
+        });
     })
 }
 
@@ -60,22 +62,20 @@ pub fn open_in_default_application(path: &Path, failed: impl FnOnce(String) + 's
 
 /// Show `path` in its folder, selected, in the Bingux file manager; when that
 /// is not installed, open the folder with whatever the system opens folders with.
-pub fn show_in_files(path: &Path) -> io::Result<()> {
-    let spawn = |program: &str, argument: &Path| {
-        Command::new(program)
-            .arg(argument)
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn()
-            .map(|mut child| {
-                std::thread::spawn(move || {
-                    let _ = child.wait();
-                });
-            })
-    };
-    match spawn("bingux-files", path) {
-        Ok(()) => Ok(()),
-        Err(_) => spawn("xdg-open", path.parent().unwrap_or(path)),
-    }
+/// It returns at once; `done` is called on the UI thread with how it went.
+pub fn show_in_files(path: &Path, done: impl FnOnce(io::Result<()>) + 'static) {
+    let path = path.to_owned();
+    crate::runtime::background_then(
+        move || {
+            let program = |name: &str, argument: &Path| {
+                crate::runtime::spawn_detached(
+                    &[std::ffi::OsStr::new(name), argument.as_os_str()],
+                    None,
+                )
+            };
+            program("bingux-files", &path)
+                .or_else(|_| program("xdg-open", path.parent().unwrap_or(&path)))
+        },
+        done,
+    );
 }

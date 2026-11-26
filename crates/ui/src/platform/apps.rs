@@ -14,7 +14,6 @@
 use std::collections::{HashMap, HashSet};
 use std::io;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
 
 /// One application's desktop entry, reduced to what opening a file needs.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -227,7 +226,7 @@ pub fn is_installed(entry: &DesktopEntry) -> bool {
 
 fn is_executable(path: &Path) -> bool {
     use std::os::unix::fs::PermissionsExt;
-    path.metadata()
+    crate::runtime::metadata(path)
         .is_ok_and(|meta| meta.is_file() && meta.permissions().mode() & 0o111 != 0)
 }
 
@@ -246,7 +245,7 @@ pub fn find_entry(dirs: &Dirs, id: &str) -> Option<DesktopEntry> {
             );
         }
         for path in candidates {
-            if let Ok(text) = std::fs::read_to_string(&path)
+            if let Ok(text) = crate::runtime::read_to_string(&path)
                 && let Some(mut entry) = parse_entry(id, &text)
             {
                 entry.path = Some(path);
@@ -289,7 +288,7 @@ pub fn default_for(dirs: &Dirs, mime: &str) -> Option<DesktopEntry> {
     let lists: Vec<HashMap<String, HashMap<String, Vec<String>>>> = dirs
         .mimeapps_lists()
         .iter()
-        .filter_map(|path| std::fs::read_to_string(path).ok())
+        .filter_map(|path| crate::runtime::read_to_string(path).ok())
         .map(|text| parse_associations(&text))
         .collect();
     let mut removed: HashSet<String> = HashSet::new();
@@ -323,7 +322,7 @@ pub fn default_for(dirs: &Dirs, mime: &str) -> Option<DesktopEntry> {
         }
     }
     for dir in dirs.application_dirs() {
-        let Ok(text) = std::fs::read_to_string(dir.join("mimeinfo.cache")) else {
+        let Ok(text) = crate::runtime::read_to_string(dir.join("mimeinfo.cache")) else {
             continue;
         };
         let cache = parse_associations(&text);
@@ -357,7 +356,7 @@ pub fn scan(dirs: &Dirs) -> Vec<DesktopEntry> {
                 continue;
             }
             seen.insert(id.clone());
-            if let Ok(text) = std::fs::read_to_string(&path)
+            if let Ok(text) = crate::runtime::read_to_string(&path)
                 && let Some(mut entry) = parse_entry(&id, &text)
                 && is_installed(&entry)
             {
@@ -382,7 +381,7 @@ fn entry_id(root: &Path, path: &Path) -> Option<String> {
 
 fn walk_desktop_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    let Ok(entries) = std::fs::read_dir(dir) else {
+    let Ok(entries) = crate::runtime::read_dir(dir) else {
         return files;
     };
     for entry in entries.flatten() {
@@ -555,29 +554,21 @@ pub fn path_of_file_uri(uri: &str) -> Option<PathBuf> {
     Some(PathBuf::from(std::ffi::OsString::from_vec(decoded)))
 }
 
-/// Start `line` on its own: not a child the caller waits for, in its own process
-/// group so a signal to this program does not reach it, with its output
-/// dropped. A thread reaps it when it ends.
+/// Start `line` on its own: see [`crate::runtime::spawn_detached`]. Call it on
+/// a worker, or use [`spawn_then`] from an event handler.
 pub fn spawn(line: &[String], working_directory: Option<&Path>) -> io::Result<()> {
-    use std::os::unix::process::CommandExt;
-    let Some((program, arguments)) = line.split_first() else {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "empty command"));
-    };
-    let mut command = Command::new(program);
-    command
-        .args(arguments)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .process_group(0);
-    if let Some(directory) = working_directory {
-        command.current_dir(directory);
-    }
-    let mut child = command.spawn()?;
-    std::thread::spawn(move || {
-        let _ = child.wait();
-    });
-    Ok(())
+    crate::runtime::spawn_detached(line, working_directory)
+}
+
+/// [`spawn`] on the worker pool, calling `done` with the outcome on the UI
+/// thread: for a press handler, which must not wait for a launcher that lives
+/// on a slow disk.
+pub fn spawn_then(
+    line: Vec<String>,
+    working_directory: Option<PathBuf>,
+    done: impl FnOnce(io::Result<()>) + 'static,
+) {
+    crate::runtime::spawn_detached_then(line, working_directory, done);
 }
 
 #[cfg(test)]
