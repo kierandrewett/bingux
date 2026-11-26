@@ -9,6 +9,9 @@
 //! History is private data: errors name the file and the SQLite code, never
 //! an address.
 
+#[cfg(test)]
+mod tests;
+
 use std::fs::OpenOptions;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::Path;

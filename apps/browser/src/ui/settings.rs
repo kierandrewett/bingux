@@ -13,7 +13,7 @@ use bingux_ui::web_view::{
 use freya::prelude::*;
 
 use crate::address::SearchEngine;
-use crate::profile::history;
+use crate::history;
 use crate::store::keeping::{Keeping, Part};
 
 use super::ctx::Ctx;

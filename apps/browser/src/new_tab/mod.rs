@@ -5,7 +5,7 @@ use bingux_ui::search;
 use freya::prelude::*;
 
 use crate::address::Address;
-use crate::profile::history;
+use crate::history;
 use crate::ui::Ctx;
 
 /// How many visited pages the new tab page lists.

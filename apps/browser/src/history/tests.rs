@@ -23,8 +23,8 @@ use bingux_ui::web_view::test_double::TestDoubleBackend;
 use rusqlite::Connection;
 
 use crate::browser::{Browser, Options, Profile};
+use crate::history::{self, Change, INDEX};
 use crate::model::tabs::Place;
-use crate::profile::history::{self, Change, INDEX};
 use crate::profile::places::{Folders, Places};
 use crate::profile::settings::Settings;
 use crate::store::files::{remove_tree, tests::temp};

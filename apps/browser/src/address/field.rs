@@ -16,8 +16,8 @@ use bingux_ui::search;
 use freya::prelude::*;
 
 use super::{OpenTab, Source, Suggestion, Visited};
+use crate::history;
 use crate::model::tabs::Place;
-use crate::profile::history;
 
 use crate::ui::Ctx;
 

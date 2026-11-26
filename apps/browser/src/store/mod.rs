@@ -29,7 +29,7 @@ use std::time::{Duration, Instant};
 use bingux_ui::search::{Index, SearchService};
 use rusqlite::Connection;
 
-use crate::profile::history::{self, CAP, Change, INDEX, Page};
+use crate::history::{self, CAP, Change, INDEX, Page};
 use crate::profile::places::Folders;
 use crate::profile::settings::{Settings, SettingsProblem};
 use crate::store::keeping::{Keeping, NotSaved, damaged_name};
