@@ -271,6 +271,25 @@ impl Date {
     /// `12 Mar 2025`, `12 March` and `March 12 2025`. A date with no year is
     /// in `reference`'s year.
     pub fn parse(text: &str, reference: Date, month_first: bool) -> Option<Date> {
+        Date::parse_with(text, reference, month_first, None)
+    }
+
+    /// [`parse`](Self::parse) with month names read in `locale`.
+    pub fn parse_in(
+        text: &str,
+        reference: Date,
+        month_first: bool,
+        locale: &Locale,
+    ) -> Option<Date> {
+        Date::parse_with(text, reference, month_first, Some(locale))
+    }
+
+    fn parse_with(
+        text: &str,
+        reference: Date,
+        month_first: bool,
+        locale: Option<&Locale>,
+    ) -> Option<Date> {
         let text = text.trim().to_lowercase();
         let words: Vec<&str> = text
             .split(|c: char| c.is_whitespace() || c == ',' || c == '/' || c == '-' || c == '.')
@@ -281,10 +300,23 @@ impl Date {
                 .parse()
                 .ok()
         };
+        // The locale's names first, then the source language's (en-US), so
+        // `March 3` still reads under another locale.
+        let source = Locale::parse("en-US");
         let month_of = |word: &str| -> Option<u8> {
-            (1..=12u8).find(|month| {
-                let name = month_name(*month).to_lowercase();
-                word.len() >= 3 && name.starts_with(word)
+            if word.len() < 3 {
+                return None;
+            }
+            let starts = |name: String| name.to_lowercase().starts_with(word);
+            let by_locale = (1..=12u8).find(|month| {
+                starts(match locale {
+                    Some(locale) => month_name_in(*month, locale),
+                    None => month_name(*month),
+                })
+            });
+            by_locale.or_else(|| {
+                let source = source.as_ref()?;
+                (1..=12u8).find(|month| starts(month_name_in(*month, source)))
             })
         };
         let year_of = |value: i32| if value < 100 { 2000 + value } else { value };
@@ -408,6 +440,21 @@ pub fn parse_clock(text: &str, prefer_pm: bool) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn typed_dates_read_the_locales_month_names_and_then_english() {
+        let de = Locale::parse("de-DE").unwrap();
+        let today = d(2025, 1, 1);
+        let parse = |text: &str| Date::parse_in(text, today, false, &de);
+        // The locale's own names.
+        assert_eq!(parse("März 3"), Some(d(2025, 3, 3)));
+        assert_eq!(parse("3 Dezember 2024"), Some(d(2024, 12, 3)));
+        // The source language still works under another locale.
+        assert_eq!(parse("March 3"), Some(d(2025, 3, 3)));
+        assert_eq!(parse("3 Mar"), Some(d(2025, 3, 3)));
+        assert_eq!(parse("Dec 25"), Some(d(2025, 12, 25)));
+        assert_eq!(parse("25 may 2026"), Some(d(2026, 5, 25)));
+    }
 
     #[test]
     fn names_follow_the_locale_and_come_from_its_data() {
