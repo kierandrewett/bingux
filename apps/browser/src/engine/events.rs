@@ -235,7 +235,7 @@ impl Browser {
                     tab.audio.playing = false;
                     tab.hover = None;
                     // Its questions can no longer be answered.
-                    tab.prompts.clear();
+                    tab.prompts.drop_all();
                 }
                 if self.menu.as_ref().is_some_and(|menu| menu.tab == key) {
                     self.menu = None;
@@ -326,7 +326,7 @@ impl Browser {
 
     fn queue_prompt(&mut self, key: u64, prompt: Prompt) {
         if let Some(tab) = self.tabs.get_mut(key) {
-            tab.prompts.push_back(prompt);
+            tab.prompts.push(prompt);
         }
     }
 

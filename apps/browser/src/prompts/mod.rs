@@ -6,6 +6,7 @@ mod auth;
 mod dialog;
 mod host;
 mod picker;
+mod queue;
 mod select;
 mod state;
 
@@ -18,6 +19,7 @@ pub use auth::AuthPrompt;
 pub use dialog::DialogPrompt;
 pub use host::PromptHost;
 pub use picker::PickerPrompt;
+pub use queue::Prompts;
 pub use select::SelectPrompt;
 pub use state::DialogFields;
 

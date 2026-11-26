@@ -1,6 +1,7 @@
 //! The page or the proxy asks who you are.
 
 use bingux_ui::prelude::*;
+use bingux_ui::web_view::RequestId;
 use bingux_ui::web_view::requests::AuthRequest;
 use freya::prelude::*;
 
@@ -10,7 +11,8 @@ use crate::ui::Ctx;
 pub struct AuthPrompt;
 
 impl AuthPrompt {
-    pub fn show(ctx: Ctx, key: u64, request: &AuthRequest) {
+    /// Show the sign-in dialog for question `id` of tab `key`.
+    pub fn show(ctx: Ctx, key: u64, id: RequestId, request: &AuthRequest) {
         let mut name = ctx.prompts.text;
         let mut password = ctx.prompts.password;
         name.set(String::new());
@@ -51,7 +53,7 @@ impl AuthPrompt {
                     tr!("browser-prompt-cancel-button"),
                     ResponseKind::Default,
                     move |_: ()| {
-                        ctx.with(|browser| browser.answer_auth(key, None));
+                        ctx.with(|browser| browser.answer_auth(key, id, None));
                     },
                 )
                 .response(
@@ -62,7 +64,7 @@ impl AuthPrompt {
                             ctx.prompts.text.peek().clone(),
                             ctx.prompts.password.peek().clone(),
                         );
-                        ctx.with(|browser| browser.answer_auth(key, Some(credentials)));
+                        ctx.with(|browser| browser.answer_auth(key, id, Some(credentials)));
                     },
                 )
                 .default_action("sign_in")

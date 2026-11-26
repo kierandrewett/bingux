@@ -3,89 +3,88 @@
 
 use std::path::PathBuf;
 
-use bingux_ui::web_view::Response;
+use bingux_ui::web_view::{RequestId, Response};
 
 use super::Browser;
 use crate::prompts::Prompt;
 
 impl Browser {
-    /// The prompt of tab `key` that waits first.
+    /// The prompt of tab `key` that waits first: the one on screen.
     pub fn prompt(&self, key: u64) -> Option<&Prompt> {
         self.tabs.get(key)?.prompts.front()
     }
 
-    /// Take the first prompt of tab `key` off its queue.
-    fn take_prompt(&mut self, key: u64) -> Option<Prompt> {
-        self.tabs.get_mut(key)?.prompts.pop_front()
+    /// Question `id` of tab `key`, if it still waits. An answer is for one
+    /// question, named by the id the dialog was built with. When the engine
+    /// ended that question first, there is nothing to answer, and the answer
+    /// must not fall on the next question in the queue.
+    fn waiting(&self, key: u64, id: RequestId) -> Option<Prompt> {
+        self.tabs.get(key)?.prompts.get(id).cloned()
     }
 
-    /// The answer to a permission prompt. `remember` keeps it for the site.
-    pub fn answer_permission(&mut self, key: u64, allow: bool, remember: bool) {
-        let Some(Prompt::Permission(id, request)) = self.prompt(key).cloned() else {
+    /// Take question `id` of tab `key` off its queue.
+    fn take_prompt(&mut self, key: u64, id: RequestId) -> Option<Prompt> {
+        self.tabs.get_mut(key)?.prompts.take(id)
+    }
+
+    /// Send `response` to the engine for question `id` of tab `key`.
+    fn respond(&mut self, key: u64, id: RequestId, response: Response) {
+        if let Some(session) = self.session_of(key) {
+            self.engine.call(&mut self.out, |backend| {
+                backend.respond(session, id, response)
+            });
+        }
+    }
+
+    /// The answer to the permission question `id`. `remember` keeps it for
+    /// the site.
+    pub fn answer_permission(&mut self, key: u64, id: RequestId, allow: bool, remember: bool) {
+        let Some(Prompt::Permission(_, request)) = self.waiting(key, id) else {
             return;
         };
-        self.take_prompt(key);
+        self.take_prompt(key, id);
         if remember {
             self.permissions
                 .remember(&request.origin, &request.kinds, allow);
         }
-        if let Some(session) = self.session_of(key) {
-            self.engine.call(&mut self.out, |backend| {
-                backend.respond(session, id, Response::Permission { allow, remember })
-            });
-        }
+        self.respond(key, id, Response::Permission { allow, remember });
     }
 
-    /// The answer to `alert`, `confirm`, `prompt` or `beforeunload`.
-    pub fn answer_dialog(&mut self, key: u64, accept: bool, text: Option<String>) {
-        let Some(Prompt::Dialog(id, _)) = self.prompt(key).cloned() else {
+    /// The answer to the `alert`, `confirm`, `prompt` or `beforeunload`
+    /// question `id`.
+    pub fn answer_dialog(&mut self, key: u64, id: RequestId, accept: bool, text: Option<String>) {
+        let Some(Prompt::Dialog(..)) = self.waiting(key, id) else {
             return;
         };
-        self.take_prompt(key);
-        if let Some(session) = self.session_of(key) {
-            self.engine.call(&mut self.out, |backend| {
-                backend.respond(session, id, Response::Dialog { accept, text })
-            });
-        }
+        self.take_prompt(key, id);
+        self.respond(key, id, Response::Dialog { accept, text });
     }
 
-    /// A name and a password, or `None` to cancel.
-    pub fn answer_auth(&mut self, key: u64, credentials: Option<(String, String)>) {
-        let Some(Prompt::Auth(id, _)) = self.prompt(key).cloned() else {
+    /// A name and a password for the sign-in question `id`, or `None` to cancel.
+    pub fn answer_auth(&mut self, key: u64, id: RequestId, credentials: Option<(String, String)>) {
+        let Some(Prompt::Auth(..)) = self.waiting(key, id) else {
             return;
         };
-        self.take_prompt(key);
-        if let Some(session) = self.session_of(key) {
-            self.engine.call(&mut self.out, |backend| {
-                backend.respond(session, id, Response::Auth { credentials })
-            });
-        }
+        self.take_prompt(key, id);
+        self.respond(key, id, Response::Auth { credentials });
     }
 
-    /// The item chosen from a `<select>` list, or `None` to close it.
-    pub fn answer_select(&mut self, key: u64, index: Option<usize>) {
-        let Some(Prompt::Select(id, _)) = self.prompt(key).cloned() else {
+    /// The item chosen from the `<select>` list `id`, or `None` to close it.
+    pub fn answer_select(&mut self, key: u64, id: RequestId, index: Option<usize>) {
+        let Some(Prompt::Select(..)) = self.waiting(key, id) else {
             return;
         };
-        self.take_prompt(key);
-        if let Some(session) = self.session_of(key) {
-            self.engine.call(&mut self.out, |backend| {
-                backend.respond(session, id, Response::Select { index })
-            });
-        }
+        self.take_prompt(key, id);
+        self.respond(key, id, Response::Select { index });
     }
 
-    /// The files chosen for `<input type=file>`; none cancels.
-    pub fn answer_picker(&mut self, key: u64, paths: Vec<PathBuf>) {
-        let Some(Prompt::FilePicker(id, _)) = self.prompt(key).cloned() else {
+    /// The files chosen for the `<input type=file>` question `id`; none cancels.
+    pub fn answer_picker(&mut self, key: u64, id: RequestId, paths: Vec<PathBuf>) {
+        let Some(Prompt::FilePicker(..)) = self.waiting(key, id) else {
             return;
         };
-        self.take_prompt(key);
-        if let Some(session) = self.session_of(key) {
-            self.engine.call(&mut self.out, |backend| {
-                backend.respond(session, id, Response::FilePicker { paths })
-            });
-        }
+        self.take_prompt(key, id);
+        self.respond(key, id, Response::FilePicker { paths });
     }
 
     /// "Go back" on a certificate error page: no exception, and away from the

@@ -99,7 +99,8 @@ fn a_permission_prompt_waits_and_a_remembered_answer_is_reused() {
     };
     assert_eq!(request.kinds, [PermissionKind::Geolocation]);
     double.clear_calls();
-    browser.answer_permission(key, true, true);
+    let asked = browser.prompt(key).unwrap().id();
+    browser.answer_permission(key, asked, true, true);
     assert!(browser.prompt(key).is_none());
     assert!(double.calls().iter().any(|call| matches!(
         call,
@@ -132,7 +133,8 @@ fn a_refused_permission_that_is_not_remembered_asks_again() {
     crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "perm.example.net");
-    browser.answer_permission(key, false, false);
+    let asked = browser.prompt(key).unwrap().id();
+    browser.answer_permission(key, asked, false, false);
     let session = browser.session_of(key).unwrap();
     double.ask(
         session,

@@ -16,16 +16,19 @@ pub struct PermissionBanner {
 impl Component for PermissionBanner {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
-        let (key, text) = {
+        // The buttons answer the question the banner was drawn for (its id),
+        // not whichever is first when they are pressed.
+        let (key, id, text) = {
             let browser = ctx.browser.read();
             let key = browser.tabs.active_key();
-            let text = match browser.prompt(key) {
-                Some(Prompt::Permission(_, request)) => {
-                    Some(Permissions::prompt_text(&request.origin, &request.kinds))
-                }
-                _ => None,
-            };
-            (key, text)
+            match browser.prompt(key) {
+                Some(Prompt::Permission(id, request)) => (
+                    key,
+                    Some(*id),
+                    Some(Permissions::prompt_text(&request.origin, &request.kinds)),
+                ),
+                _ => (key, None, None),
+            }
         };
         // The banner keeps the last text while it closes, so it does not empty first.
         let mut shown = use_state(String::new);
@@ -37,22 +40,26 @@ impl Component for PermissionBanner {
         }
         let visible = text.is_some();
         let tokens = use_tokens();
+        // While the banner fades out there is no question: its buttons do nothing.
+        let answer = move |allow: bool, remember: bool| {
+            if let Some(id) = id {
+                ctx.with(|browser| browser.answer_permission(key, id, allow, remember));
+            }
+        };
         let banner = banner(text.unwrap_or_else(|| shown.read().clone()))
             .kind(BannerKind::Info)
             .icon(Icon::DialogInformation)
             .action(tr!("browser-permissions-block-button"), move |_: ()| {
-                ctx.with(|browser| browser.answer_permission(key, false, true))
+                answer(false, true)
             })
             .action(
                 tr!("browser-permissions-allow-once-button"),
-                move |_: ()| ctx.with(|browser| browser.answer_permission(key, true, false)),
+                move |_: ()| answer(true, false),
             )
             .action(tr!("browser-permissions-allow-button"), move |_: ()| {
-                ctx.with(|browser| browser.answer_permission(key, true, true))
+                answer(true, true)
             })
-            .dismissible(move |_: ()| {
-                ctx.with(|browser| browser.answer_permission(key, false, false))
-            })
+            .dismissible(move |_: ()| answer(false, false))
             .visible(visible)
             .gap(S1);
         // The pill stands one step in from the window's edge, like a toast.

@@ -1,15 +1,13 @@
 //! One tab: what the engine last said about its page, and what the browser
 //! has to show for it.
 
-use std::collections::VecDeque;
-
 use bingux_ui::web_view::requests::CertError;
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
 use crate::address::Address;
 use crate::devtools::DockedToolbox;
 use crate::find::Find;
-use crate::prompts::Prompt;
+use crate::prompts::Prompts;
 use crate::zoom::Zoom;
 use bingux_ui::prelude::tr;
 
@@ -60,7 +58,7 @@ pub struct Tab {
     pub hover: Option<String>,
     pub fullscreen: bool,
     pub cert: Option<(RequestId, CertError)>,
-    pub prompts: VecDeque<Prompt>,
+    pub prompts: Prompts,
     pub find: Find,
     /// The tab this one was opened from, for which tab comes next on close.
     pub opener: Option<u64>,
@@ -92,7 +90,7 @@ impl Tab {
             hover: None,
             fullscreen: false,
             cert: None,
-            prompts: VecDeque::new(),
+            prompts: Prompts::default(),
             find: Find::default(),
             opener: None,
             toolbox: None,

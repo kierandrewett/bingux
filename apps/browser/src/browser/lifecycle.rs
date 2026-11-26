@@ -91,7 +91,7 @@ impl Browser {
         if let Some(key) = self.key_of(session)
             && let Some(tab) = self.tabs.get_mut(key)
         {
-            tab.prompts.retain(|prompt| prompt.id() != id);
+            tab.prompts.closed(id);
             if tab.cert.as_ref().is_some_and(|(asked, _)| *asked == id) {
                 tab.cert = None;
             }

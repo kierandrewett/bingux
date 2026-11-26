@@ -1,6 +1,7 @@
 //! `alert`, `confirm`, `prompt` and `beforeunload`.
 
 use bingux_ui::prelude::*;
+use bingux_ui::web_view::RequestId;
 use bingux_ui::web_view::requests::{DialogKind, DialogRequest};
 use freya::prelude::*;
 
@@ -18,7 +19,9 @@ impl DialogPrompt {
             .into()
     }
 
-    pub fn show(ctx: Ctx, key: u64, request: &DialogRequest) {
+    /// Show the dialog for question `id` of tab `key`. Its buttons answer that
+    /// question and no other.
+    pub fn show(ctx: Ctx, key: u64, id: RequestId, request: &DialogRequest) {
         let host = Address::new(&request.origin).host();
         let title = match &request.kind {
             DialogKind::BeforeUnload => tr!("browser-prompt-leave-title"),
@@ -28,7 +31,7 @@ impl DialogPrompt {
         let answer = move |accept: bool| {
             move |_: ()| {
                 let text = ctx.prompts.text.peek().clone();
-                ctx.with(|browser| browser.answer_dialog(key, accept, accept.then_some(text)));
+                ctx.with(|browser| browser.answer_dialog(key, id, accept, accept.then_some(text)));
             }
         };
         let message = if request.kind == DialogKind::BeforeUnload && request.message.is_empty() {

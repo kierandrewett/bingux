@@ -26,7 +26,7 @@ impl Browser {
             tab.load.loading = false;
             tab.audio.playing = false;
             tab.hover = None;
-            tab.prompts.clear();
+            tab.prompts.drop_all();
             tab.cert = None;
             // The toolbox session went with the engine.
             tab.toolbox = None;
