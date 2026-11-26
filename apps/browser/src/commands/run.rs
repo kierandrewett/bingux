@@ -1,5 +1,7 @@
 //! What each command does to the browser: one call to the feature that owns it.
 
+use bingux_ui::prelude::tr;
+
 use super::Command;
 use crate::browser::{Browser, Notice, UiRequest};
 use crate::model::tab::TabKind;
@@ -68,7 +70,7 @@ impl Browser {
             }
             Command::Print => self.out.notice(Notice {
                 error: true,
-                text: "Printing is not available in this engine yet.".to_string(),
+                text: tr!("browser-commands-print-unavailable"),
                 action: None,
             }),
             Command::MainMenu => self.out.request(UiRequest::OpenMainMenu),

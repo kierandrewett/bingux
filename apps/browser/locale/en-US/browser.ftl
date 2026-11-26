@@ -86,3 +86,8 @@ browser-address-compact-placeholder = Search or address
 browser-address-go-to = Go to { $address }
 # First suggestion when what was typed is words. $engine is the name of the search engine, $words what was typed.
 browser-address-search-for = Search { $engine } for “{ $words }”
+
+## Commands
+
+# Toast shown when Print is chosen: the engine cannot print yet.
+browser-commands-print-unavailable = Printing is not available in this engine yet.
