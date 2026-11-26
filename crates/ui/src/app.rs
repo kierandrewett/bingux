@@ -352,6 +352,9 @@ impl Application {
         // What the window comes back to is read before the window exists.
         crate::document::preload_scene(&self.app_id);
         tune_allocator();
+        // The words of the language in force are read before the window exists,
+        // not in its first frame.
+        crate::i18n::warm();
         // Panics are never fatal: the panic hook, the failure log and the
         // relaunch plan exist before the first window and the first thread.
         crate::resilience::install_for_app();

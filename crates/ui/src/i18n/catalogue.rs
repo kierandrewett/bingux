@@ -83,7 +83,11 @@ pub(super) fn search_dirs(
     let value = |name: &str| var(name).filter(|text| !text.trim().is_empty());
     let mut dirs: Vec<PathBuf> = Vec::new();
     if let Some(list) = value("BINGUX_LOCALE_DIR") {
-        dirs.extend(list.split(':').filter(|dir| !dir.is_empty()).map(PathBuf::from));
+        dirs.extend(
+            list.split(':')
+                .filter(|dir| !dir.is_empty())
+                .map(PathBuf::from),
+        );
     }
     if cfg!(debug_assertions)
         && let Some(dir) = catalogue.source_dir()
@@ -121,7 +125,7 @@ pub(super) fn find(dirs: &[PathBuf], language: &str, catalogue: &Catalogue) -> O
 pub(super) fn languages(dirs: &[PathBuf], catalogues: &[Catalogue]) -> Vec<String> {
     let mut found: Vec<String> = Vec::new();
     for dir in dirs {
-        let Ok(entries) = std::fs::read_dir(dir) else {
+        let Ok(entries) = crate::runtime::read_dir(dir) else {
             continue;
         };
         for entry in entries.flatten() {
@@ -131,9 +135,12 @@ pub(super) fn languages(dirs: &[PathBuf], catalogues: &[Catalogue]) -> Vec<Strin
             if found.contains(&name) {
                 continue;
             }
-            let has_one = catalogues
-                .iter()
-                .any(|catalogue| entry.path().join(format!("{}.ftl", catalogue.domain)).is_file());
+            let has_one = catalogues.iter().any(|catalogue| {
+                entry
+                    .path()
+                    .join(format!("{}.ftl", catalogue.domain))
+                    .is_file()
+            });
             if has_one {
                 found.push(name);
             }

@@ -354,8 +354,6 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/typography.rs": "the monospace family is asked once, at start-up, before the window exists",
     "crates/ui/src/app.rs": "the single-instance socket and its listener thread",
     "crates/ui/src/app/single_instance.rs": "hand_off and claim run in Application::run before the window exists and before mark_ui_thread; Owner::drop removes the socket when the event loop has ended; the listener has a thread of its own",
-    "crates/ui/src/i18n/localiser.rs": "the bundles are built by the first message lookup and again when the locale, the pseudo-locale or the set of catalogues changes: one read of each language's few .ftl files, never per frame",
-    "crates/ui/src/i18n/catalogue.rs": "lists the language folders for localiser::build, in the same two situations (first lookup, locale change), never per frame",
     "crates/ui/src/i18n/check.rs": "the catalogue check: run by a test of the crate that owns the catalogue, never by an app",
     "crates/ui/src/i18n/tests.rs": "test fixtures: catalogues written to a temporary folder before the localiser reads them, no window thread",
     "crates/ui/src/platform/appearance/watch.rs": "the gsettings monitor child, spawned and read on the watcher's own thread, which lives as long as the child",

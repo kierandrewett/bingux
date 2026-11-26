@@ -3,7 +3,8 @@
 
 use std::borrow::Cow;
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex, PoisonError, RwLock, Weak};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError, RwLock, Weak};
 
 use fluent_bundle::concurrent::FluentBundle;
 use fluent_bundle::types::{FluentNumberStyle, FluentType};
@@ -48,32 +49,163 @@ impl Localiser {
     pub(super) fn direction(&self) -> Direction {
         self.direction
     }
-}
 
-static CURRENT: RwLock<Option<Arc<Localiser>>> = RwLock::new(None);
-
-/// What the bundles depend on: the locale's revision and ours.
-fn key() -> (u64, u64) {
-    (Locale::revision(), super::revision())
-}
-
-/// The localiser for the languages in force now.
-pub(super) fn current() -> Arc<Localiser> {
-    let key = key();
-    if let Some(localiser) = CURRENT.read().unwrap_or_else(PoisonError::into_inner).as_ref()
-        && localiser.key == key
-    {
-        return Arc::clone(localiser);
+    /// What the bundles were built under (see [`Holder`]'s `key`).
+    pub(super) fn key(&self) -> Key {
+        self.key
     }
-    let built = Arc::new(build(
+}
+
+/// What the bundles depend on: the locale's revision and the inputs' ([`super::inputs`]).
+pub(super) type Key = (u64, u64);
+
+/// The localiser that is shown, and what keeps it current.
+///
+/// Building one parses every catalogue of every language in the chain: tens
+/// of milliseconds with a few catalogues, hundreds with many (the build is
+/// measured in `docs/bingux-ui.md`, "Localisation"). The first build waits
+/// for nobody: it happens at start-up, before the window is mounted. A later
+/// change of locale, pseudo-locale or catalogues is different: the window is
+/// on screen, so a lookup on the UI thread keeps answering with the bundles it
+/// has while the pool builds the new ones, then swaps them in and tells the
+/// windows ([`Holder::done`]) to ask again. Any other thread (a worker, a
+/// test) that finds the bundles stale builds them itself, as it can wait.
+pub(super) struct Holder {
+    current: RwLock<Option<Arc<Localiser>>>,
+    /// A rebuild is queued or running; only one is.
+    rebuilding: AtomicBool,
+    /// How many times the bundles were swapped, for [`super::revision`]: a
+    /// window follows the language by it.
+    swaps: AtomicU64,
+    key: fn() -> Key,
+    build: fn(Key) -> Localiser,
+    done: fn(),
+}
+
+/// Clears [`Holder::rebuilding`] however the rebuild ends, a panic included.
+struct Rebuilding<'a>(&'a AtomicBool);
+
+impl Drop for Rebuilding<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
+    }
+}
+
+impl Holder {
+    pub(super) fn new(key: fn() -> Key, build: fn(Key) -> Localiser, done: fn()) -> Arc<Self> {
+        Arc::new(Self {
+            current: RwLock::new(None),
+            rebuilding: AtomicBool::new(false),
+            swaps: AtomicU64::new(0),
+            key,
+            build,
+            done,
+        })
+    }
+
+    pub(super) fn swaps(&self) -> u64 {
+        self.swaps.load(Ordering::Acquire)
+    }
+
+    fn held(&self) -> Option<Arc<Localiser>> {
+        self.current
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    fn store(&self, built: Localiser) -> Arc<Localiser> {
+        let built = Arc::new(built);
+        *self.current.write().unwrap_or_else(PoisonError::into_inner) = Some(Arc::clone(&built));
+        built
+    }
+
+    /// The localiser for what is in force now. `ui_thread`: the caller must
+    /// not wait, so stale bundles are answered while new ones are built.
+    pub(super) fn get(self: &Arc<Self>, ui_thread: bool) -> Arc<Localiser> {
+        let key = (self.key)();
+        match self.held() {
+            Some(held) if held.key == key => held,
+            Some(stale) if ui_thread => {
+                self.rebuild_on_the_pool();
+                stale
+            }
+            _ => self.store((self.build)(key)),
+        }
+    }
+
+    /// Something the bundles depend on changed. On the UI thread, with bundles
+    /// shown, this starts the rebuild and returns `true`: the windows are told
+    /// when it is done. Otherwise `false`: nothing is shown that could go
+    /// stale, or the caller may wait, and the next lookup builds.
+    pub(super) fn changed(self: &Arc<Self>, ui_thread: bool) -> bool {
+        if !ui_thread || self.held().is_none() {
+            return false;
+        }
+        self.rebuild_on_the_pool();
+        true
+    }
+
+    fn rebuild_on_the_pool(self: &Arc<Self>) {
+        if self.rebuilding.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let this = Arc::clone(self);
+        crate::task::spawn_detached("i18n-rebuild", move || this.rebuild());
+    }
+
+    /// Builds until what was built is what is in force, swapping each in, then
+    /// tells the windows.
+    fn rebuild(self: &Arc<Self>) {
+        let guard = Rebuilding(&self.rebuilding);
+        loop {
+            let key = (self.key)();
+            self.store((self.build)(key));
+            self.swaps.fetch_add(1, Ordering::AcqRel);
+            if (self.key)() == key {
+                break;
+            }
+        }
+        drop(guard);
+        (self.done)();
+        // A change that came after the last check and before the flag cleared
+        // found a rebuild running and started none.
+        if self.held().is_some_and(|held| held.key != (self.key)()) {
+            self.rebuild_on_the_pool();
+        }
+    }
+}
+
+static HOLDER: LazyLock<Arc<Holder>> = LazyLock::new(|| Holder::new(key, build_current, notify));
+
+fn key() -> Key {
+    (Locale::revision(), super::inputs())
+}
+
+fn build_current(key: Key) -> Localiser {
+    build(
         key,
         super::pseudo::current(),
         &Locale::preferred(),
         &catalogue::all(),
         &|name| std::env::var(name).ok(),
-    ));
-    *CURRENT.write().unwrap_or_else(PoisonError::into_inner) = Some(Arc::clone(&built));
-    built
+    )
+}
+
+/// The localiser for the languages in force now. On the UI thread it may be
+/// the one for the languages just left, until the pool has built the new one.
+pub(super) fn current() -> Arc<Localiser> {
+    HOLDER.get(crate::runtime::on_ui_thread())
+}
+
+/// How many times the bundles were swapped for newly built ones.
+pub(super) fn swaps() -> u64 {
+    HOLDER.swaps()
+}
+
+/// The locale, pseudo-locale or catalogues changed. See [`Holder::changed`].
+pub(super) fn changed() -> bool {
+    HOLDER.changed(crate::runtime::on_ui_thread())
 }
 
 fn langid(tag: &str) -> Option<LanguageIdentifier> {
@@ -109,13 +241,21 @@ pub(super) fn build(
         let mut bundle = new_bundle(SOURCE, pseudo == Pseudo::Rtl);
         bundle.bundle.set_transform(Some(pseudo.transform()));
         for catalogue in catalogues {
-            add(&mut bundle.bundle, catalogue.domain(), catalogue.source().to_string());
+            add(
+                &mut bundle.bundle,
+                catalogue.domain(),
+                catalogue.source().to_string(),
+            );
         }
         return Localiser {
             key,
             bundles: vec![bundle],
             chain: vec![pseudo.tag().to_string()],
-            direction: if pseudo == Pseudo::Rtl { Direction::Rtl } else { Direction::Ltr },
+            direction: if pseudo == Pseudo::Rtl {
+                Direction::Rtl
+            } else {
+                Direction::Ltr
+            },
             pseudo: Some(pseudo),
         };
     }
@@ -206,7 +346,7 @@ fn read(
 ) -> Option<String> {
     let (_, name) = installed.iter().find(|(id, _)| id == language)?;
     let path = catalogue::find(dirs, name, catalogue)?;
-    match std::fs::read_to_string(&path) {
+    match crate::runtime::read_to_string(&path) {
         Ok(text) => Some(text),
         Err(error) => {
             eprintln!("bingux-ui: could not read {}: {error}", path.display());
@@ -239,7 +379,10 @@ fn add(bundle: &mut FluentBundle<FluentResource>, domain: &str, text: String) {
         Ok(resource) => resource,
         Err((resource, errors)) => {
             for error in errors {
-                eprintln!("bingux-ui: {domain}.ftl: {error} at byte {}", error.pos.start);
+                eprintln!(
+                    "bingux-ui: {domain}.ftl: {error} at byte {}",
+                    error.pos.start
+                );
             }
             resource
         }
@@ -258,7 +401,10 @@ pub(super) fn source_terms(source: &str) -> String {
     let mut out = String::new();
     let mut inside = false;
     for line in source.lines() {
-        let starts_entry = line.chars().next().is_some_and(|c| !c.is_whitespace() && c != '}');
+        let starts_entry = line
+            .chars()
+            .next()
+            .is_some_and(|c| !c.is_whitespace() && c != '}');
         if starts_entry {
             inside = line.starts_with('-');
         }
@@ -309,10 +455,13 @@ fn isolate_args(args: &FluentArgs<'static>) -> Option<FluentArgs<'static>> {
 pub(super) fn has(id: &str) -> bool {
     let (name, attribute) = split(id);
     current().bundles.iter().any(|bundle| {
-        bundle.bundle.get_message(name).is_some_and(|message| match attribute {
-            Some(attribute) => message.get_attribute(attribute).is_some(),
-            None => message.value().is_some(),
-        })
+        bundle
+            .bundle
+            .get_message(name)
+            .is_some_and(|message| match attribute {
+                Some(attribute) => message.get_attribute(attribute).is_some(),
+                None => message.value().is_some(),
+            })
     })
 }
 
@@ -341,7 +490,9 @@ pub(super) fn format_in(
             continue;
         };
         let pattern = match attribute {
-            Some(attribute) => message.get_attribute(attribute).map(|attribute| attribute.value()),
+            Some(attribute) => message
+                .get_attribute(attribute)
+                .map(|attribute| attribute.value()),
             None => message.value(),
         };
         let Some(pattern) = pattern else {
@@ -355,7 +506,10 @@ pub(super) fn format_in(
             other => other,
         };
         let mut errors = Vec::new();
-        let text = bundle.bundle.format_pattern(pattern, args, &mut errors).into_owned();
+        let text = bundle
+            .bundle
+            .format_pattern(pattern, args, &mut errors)
+            .into_owned();
         if !errors.is_empty() {
             report(id, &format!("{errors:?}"));
         }
@@ -415,8 +569,12 @@ fn format_value(
         let most = most.map(|most| most.min(20) as u8);
         (least, most)
     };
-    let (least, most) = digits(options.minimum_fraction_digits, options.maximum_fraction_digits);
-    let explicit = options.minimum_fraction_digits.is_some() || options.maximum_fraction_digits.is_some();
+    let (least, most) = digits(
+        options.minimum_fraction_digits,
+        options.maximum_fraction_digits,
+    );
+    let explicit =
+        options.minimum_fraction_digits.is_some() || options.maximum_fraction_digits.is_some();
     Some(match options.style {
         FluentNumberStyle::Percent => {
             let mut percent = format::Percent::new(number.value).locale(&locale);
@@ -426,7 +584,9 @@ fn format_value(
             percent.format()
         }
         FluentNumberStyle::Currency => match &options.currency {
-            Some(code) => format::Currency::new(number.value, code).locale(&locale).format(),
+            Some(code) => format::Currency::new(number.value, code)
+                .locale(&locale)
+                .format(),
             None => format::Number::new(number.value).locale(&locale).format(),
         },
         FluentNumberStyle::Decimal => {
@@ -469,7 +629,10 @@ impl DateValue {
                 .with_time(precision)
                 .locale(locale)
                 .format(),
-            (Some(length), None) => format::Date::new(self.moment).length(length).locale(locale).format(),
+            (Some(length), None) => format::Date::new(self.moment)
+                .length(length)
+                .locale(locale)
+                .format(),
             (None, Some(precision)) => format::Time::new(self.moment)
                 .precision(precision)
                 .locale(locale)

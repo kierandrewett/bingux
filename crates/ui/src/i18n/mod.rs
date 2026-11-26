@@ -106,12 +106,30 @@ use crate::controls::direction::Direction;
 use crate::locale::Locale;
 
 /// Bumped by everything that changes which text a message gives: a catalogue
-/// registered, the locale or the pseudo-locale set.
+/// registered, the locale or the pseudo-locale set. What the bundles are built
+/// under; [`revision`] adds the swaps of the bundles to it.
 static REVISION: AtomicU64 = AtomicU64::new(0);
+
+fn inputs() -> u64 {
+    REVISION.load(Ordering::Relaxed)
+}
 
 fn bump() {
     REVISION.fetch_add(1, Ordering::Relaxed);
-    localiser::notify();
+    // A window that is showing words keeps them while the new bundles are built
+    // on the pool, and is told when they are in; one that shows none, or a
+    // caller that may wait, is told now and builds on its next lookup.
+    if !localiser::changed() {
+        localiser::notify();
+    }
+}
+
+/// Builds the bundles of the language in force now, on the calling thread:
+/// for an application's start-up, before its window is mounted, so the first
+/// frame does not read the catalogues. [`crate::app::Application::run`] calls
+/// it.
+pub fn warm() {
+    let _ = localiser::current();
 }
 
 /// The message `id` (or `id.attribute`) in the person's language, with no
@@ -174,9 +192,10 @@ pub fn direction() -> Direction {
 }
 
 /// A number that changes whenever the text of a message might: compare it to
-/// know when to redraw.
+/// know when to redraw. It changes when something the words depend on does,
+/// and again when the bundles built for it are swapped in.
 pub fn revision() -> u64 {
-    REVISION.load(Ordering::Relaxed)
+    inputs() + localiser::swaps()
 }
 
 /// The pseudo-locale in force, if any.

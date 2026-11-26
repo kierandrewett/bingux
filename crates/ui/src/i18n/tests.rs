@@ -204,3 +204,124 @@ fn bingux_ui_strings_are_there_with_no_install() {
     assert!(super::has("ui-dialog-cancel"));
     assert_eq!(crate::tr!("ui-dialog-cancel"), "Cancel");
 }
+
+// ---- A change of language does not make the window wait ---------------------
+//
+// Failure modes: a lookup on the UI thread builds every catalogue of every
+// language in the chain (58 ms with 31 catalogues and one language, 200 ms with
+// three languages); the window is not told when the new bundles are in; a
+// change that lands while the pool is building is lost, or the flag that says
+// "building" is left set.
+
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+
+use super::localiser::{Holder, Key};
+
+/// A build that takes as long as a locale with many catalogues does.
+fn slow_build(key: Key) -> Localiser {
+    std::thread::sleep(Duration::from_millis(150));
+    build(key, None, &[], &[Catalogue::new("demo", DEMO)], &|_| None)
+}
+
+fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !done() {
+        assert!(Instant::now() < deadline, "never happened: {what}");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+#[test]
+fn the_ui_thread_keeps_the_old_words_while_the_new_ones_are_built_and_is_told_when_they_are_in() {
+    static KEY: AtomicU64 = AtomicU64::new(1);
+    static TOLD: AtomicU64 = AtomicU64::new(0);
+    fn key() -> Key {
+        (0, KEY.load(Ordering::SeqCst))
+    }
+    fn told() {
+        TOLD.fetch_add(1, Ordering::SeqCst);
+    }
+    let holder = Holder::new(key, slow_build, told);
+    assert_eq!(
+        holder.get(true).key(),
+        (0, 1),
+        "the first build is made where it is asked"
+    );
+    KEY.store(2, Ordering::SeqCst);
+    assert!(
+        holder.changed(true),
+        "a rebuild starts, and the windows are told when it is done"
+    );
+    assert_eq!(TOLD.load(Ordering::SeqCst), 0);
+    let asked = Instant::now();
+    let meanwhile = holder.get(true);
+    assert!(
+        asked.elapsed() < Duration::from_millis(100),
+        "the UI thread waited {:?} for the build",
+        asked.elapsed()
+    );
+    assert_eq!(
+        meanwhile.key(),
+        (0, 1),
+        "the old bundles answer until the new are in"
+    );
+    wait_for("the windows told", || TOLD.load(Ordering::SeqCst) == 1);
+    assert_eq!(holder.get(true).key(), (0, 2));
+    assert_eq!(
+        holder.swaps(),
+        1,
+        "the window follows the swap by `revision`"
+    );
+}
+
+#[test]
+fn a_thread_that_may_wait_builds_the_new_bundles_itself() {
+    static KEY: AtomicU64 = AtomicU64::new(1);
+    static TOLD: AtomicU64 = AtomicU64::new(0);
+    fn key() -> Key {
+        (0, KEY.load(Ordering::SeqCst))
+    }
+    fn told() {
+        TOLD.fetch_add(1, Ordering::SeqCst);
+    }
+    let holder = Holder::new(key, slow_build, told);
+    assert_eq!(holder.get(false).key(), (0, 1));
+    KEY.store(2, Ordering::SeqCst);
+    assert!(
+        !holder.changed(false),
+        "nothing is built in the background for it"
+    );
+    assert_eq!(holder.get(false).key(), (0, 2), "the next lookup builds");
+    assert_eq!((holder.swaps(), TOLD.load(Ordering::SeqCst)), (0, 0));
+}
+
+#[test]
+fn a_change_while_the_pool_builds_is_built_after_it_and_the_windows_are_told_once() {
+    static KEY: AtomicU64 = AtomicU64::new(1);
+    static TOLD: AtomicU64 = AtomicU64::new(0);
+    fn key() -> Key {
+        (0, KEY.load(Ordering::SeqCst))
+    }
+    fn told() {
+        TOLD.fetch_add(1, Ordering::SeqCst);
+    }
+    let holder = Holder::new(key, slow_build, told);
+    holder.get(true);
+    KEY.store(2, Ordering::SeqCst);
+    assert!(holder.changed(true));
+    std::thread::sleep(Duration::from_millis(30));
+    KEY.store(3, Ordering::SeqCst);
+    assert!(
+        holder.changed(true),
+        "a second change joins the rebuild that runs"
+    );
+    wait_for("the last change shown", || {
+        TOLD.load(Ordering::SeqCst) == 1 && holder.get(true).key() == (0, 3)
+    });
+    assert!(holder.swaps() >= 1);
+    // The flag is clear: a later change starts a rebuild again.
+    KEY.store(4, Ordering::SeqCst);
+    assert!(holder.changed(true));
+    wait_for("the next change shown", || holder.get(true).key() == (0, 4));
+}
