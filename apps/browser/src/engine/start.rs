@@ -27,7 +27,7 @@ impl Engine {
         };
         // An engine that does not start is not a reason to exit: the window opens and says why
         // (a profile folder that is not safe, a sandbox it cannot reach), and offers to try again.
-        Ok(Engine(bingux_ui::web_view::engine::start(
+        Ok(Engine::new(bingux_ui::web_view::engine::start(
             Config::from_environment(folders),
         )))
     }
