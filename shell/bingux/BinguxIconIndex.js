@@ -170,6 +170,7 @@ var names = {
     "process-stop-symbolic": true,
     "screen-shared-symbolic": true,
     "send-to-symbolic": true,
+    "sidebar-show-right-symbolic": true,
     "sidebar-show-symbolic": true,
     "starred-symbolic": true,
     "swap-horizontal-symbolic": true,

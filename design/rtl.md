@@ -38,8 +38,8 @@ players and keyboards, and the handedness of a search glass), and Apple's right-
 
 ## Icons
 
-`#mirror_rtl` in `scripts/icons/labels.tsv`: go-next, go-previous, pan-end, sidebar-show, send-to,
-view-list, help-browser, emblem-symbolic-link. `Icon::mirrors_in_rtl()` must equal it (a test).
+`#mirror_rtl` in `scripts/icons/labels.tsv`: go-next, go-previous, pan-end, sidebar-show, sidebar-show-right,
+send-to, view-list, help-browser, emblem-symbolic-link. `Icon::mirrors_in_rtl()` must equal it (a test).
 
 ## Checks
 

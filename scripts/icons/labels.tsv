@@ -1,11 +1,11 @@
 # file | where the user sees it (label, surface) | the conventional metaphor | chat fork glyph + weight, or custom
 # Read by build.py (checks), map-fork.py (writes the <fork/> sources) and review.py (sheets). Names are Adwaita file names without -symbolic.svg.
-# The glyph column is `custom: ..` or `ForkName weight [scale=.. dx=.. dy=.. mirror=.. align=..]`. The weight is `bold` (1.5 px outline) or `fill`,
+# The glyph column is `custom: ..` or `ForkName weight [scale=.. dx=.. dy=.. mirror=.. flip=x align=..]`. The weight is `bold` (1.5 px outline) or `fill`,
 # the look of the icons as released in 5d49113; `regular` (1 px) is not used. `scale` is one factor on both axes (only Bluetooth uses it) and
 # `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/bingux-ui.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
-#policy action: checkbox-checked crop document-edit document-open-recent document-save edit-copy edit-delete edit-find-match-case edit-find-regex edit-find-whole-word find-location format-code format-quote format-text-bold format-text-italic format-text-plaintext format-text-strikethrough insert-link location-arrow media-playlist-repeat media-playlist-repeat-song media-playlist-shuffle object-rotate-left object-rotate-right pencil send-to sidebar-show system-switch-user view-filter view-fullscreen view-grid view-list view-list-ordered view-pin view-pip view-refresh view-restore zoom-fit-best zoom-in zoom-out
+#policy action: checkbox-checked crop document-edit document-open-recent document-save edit-copy edit-delete edit-find-match-case edit-find-regex edit-find-whole-word find-location format-code format-quote format-text-bold format-text-italic format-text-plaintext format-text-strikethrough insert-link location-arrow media-playlist-repeat media-playlist-repeat-song media-playlist-shuffle object-rotate-left object-rotate-right pencil send-to sidebar-show sidebar-show-right system-switch-user view-filter view-fullscreen view-grid view-list view-list-ordered view-pin view-pip view-refresh view-restore zoom-fit-best zoom-in zoom-out
 #policy control: go-next go-previous list-add list-drag-handle list-remove non-starred object-select open-menu pan-down pan-end pan-up system-log-out system-reboot swap-horizontal system-shutdown view-more window-close window-maximize window-minimize window-new window-restore
 #policy detail: folder-missing accessories-text-editor action-unavailable default-app-documents default-app-text focus-top-bar input-tablet input-touchpad mail-unread media-view-subtitles phone preferences-other utilities-terminal view-conceal view-reveal web-browser x-office-calendar
 #policy drawn: network-offline network-wireless network-wireless-disabled network-wireless-signal-excellent network-wireless-signal-good network-wireless-signal-none network-wireless-signal-ok network-wireless-signal-weak emblem-symbolic-link
@@ -18,11 +18,11 @@
 #exempt centre: audio-volume-low
 #exempt dots: network-wireless-disabled
 # Icons that are flipped left to right when the interface reads right to left, because what they draw has a direction in the reading order: a
-# chevron or arrow that points forward or back, the panel a sidebar toggle shows at the start edge, a list's bullets at the start, a paper
+# chevron or arrow that points forward or back, the panel a sidebar toggle shows at the start edge or at the end edge, a list's bullets at the start, a paper
 # plane that is sent. Not flipped: what is physical (a rotation, a speaker, a padlock, a fan), a media control (play points the way the
 # film runs), a check, a clock, a logo or a letter. design/rtl.md has the reasons. Checked by `build.py --check` and by the test
 # `icons::tests::mirrored_icons_are_the_ones_labels_tsv_names`.
-#mirror_rtl: go-next go-previous pan-end sidebar-show send-to view-list help-browser emblem-symbolic-link system-log-out
+#mirror_rtl: go-next go-previous pan-end sidebar-show sidebar-show-right send-to view-list help-browser emblem-symbolic-link system-log-out
 
 network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two 2 px arcs and a dot
 network-wireless-signal-none | Wi-Fi list row: no signal | ghost fan | custom: two 2 px arcs and a dot, all dim
@@ -137,6 +137,7 @@ view-more | More actions | three dots | DotsThreeVertical bold
 view-refresh | Refresh | circular arrow | ArrowClockwise bold
 object-rotate-right | Rotate | circular arrow | ArrowClockwise bold
 sidebar-show | Show sidebar | window with side pane | SidebarSimple fill
+sidebar-show-right | Show the pane at the end (preview, details) | window with side pane at the right | SidebarSimple fill flip=x
 focus-top-bar | Top bar | window with title bar | AppWindow fill
 edit-copy | Copy | two sheets | custom: two 1.5 px rounded squares of one radius, the back one cut away where the front one is
 edit-delete | Delete | trash can | Trash fill

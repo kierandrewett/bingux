@@ -449,6 +449,9 @@ def path_d(path: pathops.Path) -> str:
 #
 # 1. `mirror="left"|"right"`: keep that half and replace the other with its mirror image
 #    (for glyphs the fork draws a little lopsided, such as User);
+# 1b. `flip="x"` turns the whole drawing left to right about the middle of the box, for the glyph of
+#    the other side (a sidebar toggle for a panel at the end); the fork's path data is still
+#    written as it is, under a transform with a negative x scale;
 # 2. `scale` grows or shrinks the whole drawing about the middle of the box, by one factor
 #    on both axes (the fork leaves 1 to 2 px of margin around some glyphs);
 # 3. `dx`/`dy` move the whole drawing; on top of them `align="auto"` (the default for an
@@ -626,6 +629,11 @@ def fork_outline(attrs: dict[str, str], where: str) -> ForkOutline:
     mirror = attrs.get("mirror", "")
     if mirror not in ("", "left", "right"):
         raise BuildError(f"{where}: mirror must be left or right")
+    flip = attrs.get("flip", "")
+    if flip not in ("", "x"):
+        raise BuildError(f"{where}: flip must be x")
+    if flip and mirror:
+        raise BuildError(f"{where}: flip and mirror are two ways to change the drawing's sides; use one")
     align = attrs.get("align", "auto")
     if align not in ("auto", "none"):
         raise BuildError(f"{where}: align must be auto or none")
@@ -636,6 +644,10 @@ def fork_outline(attrs: dict[str, str], where: str) -> ForkOutline:
     natural = scaled_path(ds, 1 / 16)
     if mirror:
         natural = mirrored(natural, mirror)
+    if flip:
+        # The whole drawing turned left to right about the middle of the box: the same glyph for
+        # the other side (the sidebar toggle of a panel at the end).
+        natural = affine(natural, -1.0, 1.0, GRID, 0.0)
     # The drawing is scaled about the middle of the box, then moved by dx, dy.
     dx = parse_float(attrs, "dx") + (GRID / 2) * (1 - zoom)
     dy = parse_float(attrs, "dy") + (GRID / 2) * (1 - zoom)
@@ -646,6 +658,10 @@ def fork_outline(attrs: dict[str, str], where: str) -> ForkOutline:
         dx += min(max(shift_x, -left), GRID - right)
         dy += min(max(shift_y, -top), GRID - bottom)
     path = affine(natural, zoom, zoom, dx, dy)
+    if flip:
+        # x' = zoom * (16 - x / 16) + dx: the fork's own path data, turned by a negative x scale.
+        shift = f"translate({fmt(GRID * zoom + dx)} {fmt(dy)}) "
+        return ForkOutline(path, (ds, f"{shift}scale(-{fmt_scale(zoom / 16)} {fmt_scale(zoom / 16)})"))
     if not mirror:
         transform = f"translate({fmt(dx)} {fmt(dy)}) " if abs(dx) > EPS or abs(dy) > EPS else ""
         return ForkOutline(path, (ds, f"{transform}scale({fmt_scale(zoom / 16)})"))

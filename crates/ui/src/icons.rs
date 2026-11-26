@@ -16,7 +16,13 @@ use freya::prelude::*;
 pub enum Icon {
     GoPrevious,
     GoNext,
+    /// The sidebar toggle for a panel at the start edge (the left in a left to right
+    /// interface). Reach it through [`crate::shell::PanelSide::icon`]: a toggle's glyph
+    /// follows the side of its panel, see [`crate::shell::pane_toggle`].
     SidebarShow,
+    /// The sidebar toggle for a panel at the end edge (the right in a left to right
+    /// interface), the mirror image of [`Icon::SidebarShow`].
+    SidebarShowRight,
     Computer,
     PreferencesSystem,
     EmblemSystem,
@@ -272,10 +278,11 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 192] = [
+    pub const ALL: [Icon; 193] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
+        Self::SidebarShowRight,
         Self::Computer,
         Self::PreferencesSystem,
         Self::EmblemSystem,
@@ -473,6 +480,7 @@ impl Icon {
             Self::GoPrevious => include_bytes!("../icons/go-previous-symbolic.svg"),
             Self::GoNext => include_bytes!("../icons/go-next-symbolic.svg"),
             Self::SidebarShow => include_bytes!("../icons/sidebar-show-symbolic.svg"),
+            Self::SidebarShowRight => include_bytes!("../icons/sidebar-show-right-symbolic.svg"),
             Self::Computer => include_bytes!("../icons/computer-symbolic.svg"),
             Self::PreferencesSystem => include_bytes!("../icons/preferences-system-symbolic.svg"),
             Self::EmblemSystem => include_bytes!("../icons/emblem-system-symbolic.svg"),
@@ -812,6 +820,7 @@ impl Icon {
                 | Self::GoNext
                 | Self::PanEnd
                 | Self::SidebarShow
+                | Self::SidebarShowRight
                 | Self::SendTo
                 | Self::ViewList
                 | Self::HelpBrowser

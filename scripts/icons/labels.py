@@ -3,7 +3,8 @@
 Rows: `file | where it is used | metaphor | glyph`, where glyph is either
 `custom: <how it is drawn>` or `<ForkName> <weight> [key=value ...]` with the
 keys `scale` (one factor on both axes), `dx`, `dy` (pixels on the 16 grid), `mirror` (`left` or
-`right`: draw the other half as its mirror image) and `align` (`none` turns off the automatic
+`right`: draw the other half as its mirror image), `flip` (`x`: the whole drawing turned left to right,
+the glyph of the other side) and `align` (`none` turns off the automatic
 half pixel shift). A glyph is only ever scaled uniformly and moved.
 
 Directives, one per comment line, add the per-icon metadata the checks and the
@@ -27,7 +28,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 LABELS = HERE / "labels.tsv"
 FORK_SPEC = re.compile(r"^([A-Za-z0-9]+) (regular|bold|fill)((?: [a-z]+=[-0-9.a-z]+)*)$")
-ATTR_KEYS = ("scale", "dx", "dy", "mirror", "align")
+ATTR_KEYS = ("scale", "dx", "dy", "mirror", "flip", "align")
 DIRECTIVE = re.compile(r"^#(policy|symmetric|mark|exempt|mirror_rtl)(?: ([a-z-]+))?:\s*(.*)$")
 
 

@@ -27,7 +27,7 @@ object-select go-next go-previous pan-up pan-down pan-end edit-clear list-add li
 view-reveal view-conceal starred non-starred window-close window-minimize window-maximize window-restore
 
 [buttons-and-menus]
-open-menu view-more view-refresh object-rotate-right sidebar-show focus-top-bar edit-copy edit-delete
+open-menu view-more view-refresh object-rotate-right sidebar-show sidebar-show-right focus-top-bar edit-copy edit-delete
 user-trash view-filter find-location location-arrow document-edit pencil document-open send-to view-list view-grid
 media-playback-pause media-playback-stop preferences-system emblem-system folder folder-download bookmarks
 
