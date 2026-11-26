@@ -39,7 +39,7 @@ fn is_test_code(relative: &str) -> bool {
     relative.ends_with("tests.rs")
         || relative.ends_with("structure_tests.rs")
         || relative.ends_with("testing.rs")
-        || relative == "snapshot_mode.rs"
+        || relative.ends_with("/snapshot.rs")
         || relative.starts_with("snapshot/")
 }
 

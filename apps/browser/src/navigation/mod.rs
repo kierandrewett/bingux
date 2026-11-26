@@ -6,6 +6,11 @@ use freya::prelude::*;
 
 use crate::ui::Ctx;
 
+#[cfg(feature = "snapshot")]
+mod snapshot;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;
+
 /// Back: the tab goes one page back in its history.
 #[derive(PartialEq)]
 pub struct BackButton {

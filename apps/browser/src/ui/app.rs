@@ -145,7 +145,7 @@ impl Component for Content {
         };
         use_window_commands(crate::commands::Registry::commands(ctx));
         #[cfg(feature = "snapshot")]
-        crate::snapshot_mode::publish(ctx);
+        crate::snapshot::publish(ctx);
         // The engine's events and the profile store's wake the window: it
         // takes them in and sleeps again. The first tabs open once the window
         // exists.

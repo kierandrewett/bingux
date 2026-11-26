@@ -170,5 +170,9 @@ pub use button::DownloadsButton;
 pub use popover::DownloadsPopover;
 pub use state::CardState;
 
+#[cfg(feature = "snapshot")]
+mod snapshot;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;

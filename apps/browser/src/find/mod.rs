@@ -143,5 +143,9 @@ impl Find {
     }
 }
 
+#[cfg(feature = "snapshot")]
+mod snapshot;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;

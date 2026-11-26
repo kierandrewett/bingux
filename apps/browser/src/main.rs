@@ -27,7 +27,7 @@ mod prompts;
 mod settings;
 mod site_info;
 #[cfg(feature = "snapshot")]
-mod snapshot_mode;
+mod snapshot;
 mod store;
 mod tabs;
 mod target;
@@ -41,7 +41,7 @@ fn main() {
     locale::register();
     #[cfg(feature = "snapshot")]
     if arguments.first().is_some_and(|first| first == "--snapshot") {
-        snapshot_mode::run(&arguments[1..]);
+        snapshot::run(&arguments[1..]);
         return;
     }
     app::Launch::run(&arguments);

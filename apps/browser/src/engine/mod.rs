@@ -5,10 +5,14 @@ mod events;
 mod failed_page;
 mod failure;
 mod lifecycle;
+#[cfg(feature = "snapshot")]
+mod snapshot;
 mod start;
 mod status;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;
 
 use std::sync::Arc;
 

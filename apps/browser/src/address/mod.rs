@@ -13,5 +13,9 @@ pub use suggest::{OpenTab, Source, Suggestion, Visited};
 pub use typed::{Internal, Typed};
 pub use url::Address;
 
+#[cfg(feature = "snapshot")]
+mod snapshot;
 #[cfg(test)]
 mod tests;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;

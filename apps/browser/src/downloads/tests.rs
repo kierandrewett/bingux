@@ -261,3 +261,176 @@ fn clearing_the_list_has_the_engine_forget_what_is_over_and_nothing_else() {
     let left: Vec<DownloadId> = browser.downloads.list().iter().map(|d| d.id).collect();
     assert_eq!(left, [DownloadId(9), DownloadId(8)]);
 }
+
+/// The window's controls pressed the way a person presses them, over the test
+/// double: what opens the downloads list.
+///
+/// Failures these tests guard against:
+///   1. the toolbar's downloads button does nothing while a download runs,
+///      which is when the person wants it (the button was busy, and a busy
+///      icon button swallows presses);
+///   2. the toast's "Show" does not open the list;
+///   3. the button does nothing when nothing runs either (the control);
+///   4. Escape does not close the downloads list, which every popover is
+///      documented to do (a page that holds the keyboard hears it first);
+///   5. the downloads button's tooltip stays up behind the list that opens
+///      over it, peeking out from under its edge (a popover is a modal
+///      surface, and tips go down for those);
+///   6. a download that failed or was cancelled has no way to be tried
+///      again (the engine's Resume takes it from where it stopped).
+#[cfg(feature = "snapshot")]
+mod pressed {
+    use bingux_ui::snapshot::Snapshot;
+    use bingux_ui::web_view::BrowserEvent;
+    use freya::prelude::*;
+
+    use crate::commands::Command;
+    use crate::snapshot::{self, Rig, ctx, wait};
+    use crate::target::Target;
+
+    fn open(shot: &mut Snapshot) -> bool {
+        let _ = shot;
+        ctx().downloads_popover.is_open()
+    }
+
+    fn window() -> (Snapshot, Rig) {
+        snapshot::window(&["files.example.net"])
+    }
+
+    #[test]
+    fn the_downloads_button_opens_the_list_while_a_download_runs() {
+        let (mut shot, _rig) = window();
+        assert_eq!(ctx().browser.peek().downloads.active(), 1);
+        assert!(
+            shot.click_name("Downloads: 1 running"),
+            "the button is there"
+        );
+        wait(&mut shot, 400);
+        assert!(open(&mut shot));
+    }
+
+    #[test]
+    fn the_downloads_button_opens_the_list_when_nothing_runs() {
+        let (mut shot, rig) = window();
+        rig.double.advance_downloads(10_000_000);
+        wait(&mut shot, 400);
+        assert_eq!(ctx().browser.peek().downloads.active(), 0);
+        assert!(shot.click_name("Downloads"), "the button is there");
+        wait(&mut shot, 400);
+        assert!(open(&mut shot));
+    }
+
+    #[test]
+    fn the_toasts_show_opens_the_list() {
+        let (mut shot, _rig) = window();
+        // The button's words are drawn text, not an accessible name.
+        let shown = shot.runner().find_many(|node, element| {
+            let label = Label::try_downcast(element)?;
+            (label.text == "Show").then(|| Area::center(&node.layout().area))
+        });
+        let centre = shown.first().expect("the toast for the download is up");
+        shot.click(centre.x, centre.y);
+        wait(&mut shot, 400);
+        assert!(open(&mut shot));
+    }
+
+    #[test]
+    fn escape_closes_the_downloads_list() {
+        let (mut shot, _rig) = window();
+        // The person clicked into the page: it holds the keyboard.
+        shot.click(400.0, 400.0);
+        wait(&mut shot, 200);
+        let at = ctx();
+        shot.runner().run_in(|| at.run(Command::Downloads));
+        wait(&mut shot, 400);
+        assert!(open(&mut shot), "the list is open");
+        shot.run_script("key escape", Target::SCHEME)
+            .expect("a key");
+        wait(&mut shot, 400);
+        assert!(!open(&mut shot), "Escape closed it");
+    }
+
+    /// The drawn bubbles that say `text`: the visible one and its hidden
+    /// measuring copy are both labels, and a tip that is down has neither.
+    fn bubbles(shot: &mut Snapshot, text: &str) -> usize {
+        shot.runner()
+            .find_many(|_, element| {
+                let label = Label::try_downcast(element)?;
+                (label.text == text).then_some(())
+            })
+            .len()
+    }
+
+    #[test]
+    fn a_tooltip_goes_down_when_the_list_opens_over_its_button() {
+        let (mut shot, _rig) = window();
+        let tip = "Downloads: 1 running";
+        let button = shot.runner().find_many(|node, element| {
+            (element.accessibility().builder.label() == Some(tip))
+                .then(|| Area::center(&node.layout().area))
+        });
+        let at = button.first().expect("the button is there");
+        shot.runner()
+            .move_cursor((f64::from(at.x), f64::from(at.y)));
+        wait(&mut shot, 900);
+        assert!(
+            bubbles(&mut shot, tip) > 0,
+            "the tip is up while the pointer rests"
+        );
+        let window = ctx();
+        shot.runner().run_in(|| window.run(Command::Downloads));
+        wait(&mut shot, 900);
+        assert!(open(&mut shot), "the list is open");
+        assert_eq!(bubbles(&mut shot, tip), 0, "the tip went down with it");
+    }
+
+    /// A download the engine says failed: the page's own (id 1), as it stood.
+    fn fail_the_download(rig: &Rig) {
+        let mut failed = ctx().browser.peek().downloads.list()[0].clone();
+        failed.state = bingux_ui::web_view::requests::DownloadState::Failed;
+        failed.speed = 0;
+        rig.double.emit(BrowserEvent::Download(failed));
+    }
+
+    #[test]
+    fn a_failed_download_can_be_tried_again() {
+        use bingux_ui::web_view::requests::DownloadState;
+        use bingux_ui::web_view::test_double::Call;
+        let (mut shot, rig) = window();
+        let id = ctx().browser.peek().downloads.list()[0].id;
+        fail_the_download(&rig);
+        wait(&mut shot, 300);
+        assert_eq!(
+            ctx().browser.peek().downloads.list()[0].state,
+            DownloadState::Failed
+        );
+        let at = ctx();
+        shot.runner().run_in(|| at.run(Command::Downloads));
+        wait(&mut shot, 400);
+        assert!(
+            shot.click_name("Retry"),
+            "a failed download has a Retry button"
+        );
+        wait(&mut shot, 400);
+        assert!(
+            rig.double
+                .calls()
+                .iter()
+                .any(|call| matches!(call, Call::ResumeDownload(known) if *known == id)),
+            "the engine was asked to resume it"
+        );
+        assert_eq!(
+            ctx().browser.peek().downloads.list()[0].state,
+            DownloadState::Running
+        );
+    }
+
+    #[test]
+    fn a_download_that_runs_has_no_retry() {
+        let (mut shot, _rig) = window();
+        let at = ctx();
+        shot.runner().run_in(|| at.run(Command::Downloads));
+        wait(&mut shot, 400);
+        assert!(!shot.click_name("Retry"), "pause and cancel, not retry");
+    }
+}

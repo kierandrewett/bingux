@@ -3,8 +3,12 @@
 
 mod list;
 mod sheet;
+#[cfg(feature = "snapshot")]
+mod snapshot;
 mod strip;
 mod tab;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;
 
 pub use list::{Place, TabList};
 pub use sheet::TabsSheet;

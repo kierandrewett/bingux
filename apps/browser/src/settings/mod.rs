@@ -7,6 +7,10 @@
 //! browser's) are kept on write; a file from a newer version is never written.
 
 mod page;
+#[cfg(feature = "snapshot")]
+mod snapshot;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;
 
 pub use page::SettingsPage;
 

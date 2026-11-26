@@ -8,6 +8,11 @@ use crate::address::Address;
 use crate::history::History;
 use crate::ui::Ctx;
 
+#[cfg(feature = "snapshot")]
+mod snapshot;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;
+
 /// How many visited pages the new tab page lists.
 const RECENT: usize = 5;
 

@@ -1,6 +1,10 @@
 //! The menus: the main menu, a tab's menu and the page's context menu.
 
 mod host;
+#[cfg(feature = "snapshot")]
+mod snapshot;
+#[cfg(feature = "snapshot")]
+pub(crate) use snapshot::scenarios;
 
 pub use host::ContextMenuHost;
 
