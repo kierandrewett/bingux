@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::address::SearchEngine;
-use crate::store::files::{self, Problem};
+use crate::store::{Files, Problem};
 
 /// The settings format this build reads and writes.
 pub const VERSION: u32 = 1;
@@ -56,7 +56,7 @@ impl Settings {
     /// Reads `path`. A missing file is the defaults; a file that cannot be
     /// used gives the defaults and says why, and is left as it is.
     pub fn read(path: &Path) -> (Self, Option<SettingsProblem>) {
-        match files::read_if_present(path) {
+        match Files::read_if_present(path) {
             Ok(None) => (Self::default(), None),
             Ok(Some(bytes)) => match Self::parse(&bytes) {
                 Ok(settings) => (settings, None),
@@ -104,11 +104,11 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::store::files::{remove_tree, replace, tests::temp};
+    use crate::store::Files;
 
     #[test]
     fn no_file_is_the_defaults_and_settings_survive_a_write_and_a_read() {
-        let dir = temp();
+        let dir = Files::temp();
         let path = dir.join("settings.json");
         let (settings, problem) = Settings::read(&path);
         assert_eq!((settings.clone(), problem), (Settings::default(), None));
@@ -117,12 +117,12 @@ mod tests {
             search_engine: "wikipedia".to_string(),
             ..settings
         };
-        replace(&path, &chosen.encode()).unwrap();
+        Files::replace(&path, &chosen.encode()).unwrap();
         let (read, problem) = Settings::read(&path);
         assert_eq!(problem, None);
         assert_eq!(read, chosen);
         assert_eq!(SearchEngine::ALL[read.engine_index()].name, "Wikipedia");
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 
     #[test]
@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn a_damaged_or_newer_file_gives_the_defaults_and_says_why() {
-        let dir = temp();
+        let dir = Files::temp();
         let path = dir.join("settings.json");
         fs::write(&path, b"{ nope").unwrap();
         let (settings, problem) = Settings::read(&path);
@@ -154,6 +154,6 @@ mod tests {
                 supported: VERSION
             })
         );
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 }

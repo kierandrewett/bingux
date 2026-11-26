@@ -8,8 +8,8 @@ use std::time::Duration;
 use rusqlite::{Connection, ErrorCode, OpenFlags, TransactionBehavior, params};
 
 use super::{Change, Page};
-use crate::store::files::Problem;
-use crate::store::keeping::NotSaved;
+use crate::store::NotSaved;
+use crate::store::Problem;
 
 /// How long the store waits for another holder of the file's write lock.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);

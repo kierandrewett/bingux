@@ -12,8 +12,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::{Path, PathBuf};
 
-use crate::profiles::registry::{Entry, Id, Profiles, RegistryProblem};
-use crate::store::files::{self, Problem};
+use crate::profiles::{Entry, Id, Profiles, RegistryProblem};
+use crate::store::{Files, Problem};
 
 /// The name and colour of the profile made from the old folder, or of the
 /// first profile when there was none.
@@ -112,13 +112,13 @@ impl FirstRun {
             registry.profiles.push(personal.clone());
             registry.default = Some(id);
             if !old.is_dir() {
-                files::private_dir(&folders.engine).map_err(|error| failed(Problem::of(&error)))?;
+                Files::private_dir(&folders.engine).map_err(|error| failed(Problem::of(&error)))?;
                 return Ok(Migrated::Created(personal));
             }
             if Self::in_use(&old).map_err(|error| failed(Problem::of(&error)))? {
                 return Err(MigrationError::Waiting { old: old.clone() });
             }
-            let moved = files::private_dir(&folders.root)
+            let moved = Files::private_dir(&folders.root)
                 .and_then(|()| std::fs::rename(&old, &folders.engine));
             if let Err(error) = moved {
                 let _ = std::fs::remove_dir(&folders.root);
@@ -129,7 +129,7 @@ impl FirstRun {
             let old_crashes = places.old_crashes();
             if old_crashes.is_dir()
                 && let Some(parent) = folders.crash.parent()
-                && files::private_dir(parent).is_ok()
+                && Files::private_dir(parent).is_ok()
             {
                 let _ = std::fs::rename(&old_crashes, &folders.crash);
             }
@@ -147,8 +147,8 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::profiles::places::Places;
-    use crate::store::files::{remove_tree, tests::temp};
+    use crate::profiles::Places;
+    use crate::store::Files;
 
     struct Rig {
         dir: PathBuf,
@@ -157,7 +157,7 @@ mod tests {
 
     impl Rig {
         fn new() -> Self {
-            let dir = temp();
+            let dir = Files::temp();
             let profiles = Profiles::new(Places {
                 data: dir.join("data/bingux-browser"),
                 cache: dir.join("cache/bingux-browser"),
@@ -187,7 +187,7 @@ mod tests {
 
     impl Drop for Rig {
         fn drop(&mut self) {
-            let _ = remove_tree(&self.dir);
+            let _ = Files::remove_tree(&self.dir);
         }
     }
 

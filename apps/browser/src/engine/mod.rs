@@ -1,8 +1,10 @@
 //! The engine, the one thing behind the browser's pages: the handle every part
 //! of the browser calls it through, what it can do, and where it is.
 
+mod events;
 mod failed_page;
-pub mod failure;
+mod failure;
+mod lifecycle;
 mod start;
 mod status;
 #[cfg(test)]
@@ -24,6 +26,18 @@ pub struct Engine {
     capabilities: Capabilities,
     /// Where the engine is.
     pub status: Status,
+}
+
+impl<B: BrowserBackend + 'static> From<Arc<B>> for Engine {
+    fn from(backend: Arc<B>) -> Self {
+        Self::new(backend)
+    }
+}
+
+impl From<Arc<dyn BrowserBackend>> for Engine {
+    fn from(backend: Arc<dyn BrowserBackend>) -> Self {
+        Self::new(backend)
+    }
 }
 
 impl PartialEq for Engine {

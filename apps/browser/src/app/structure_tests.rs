@@ -49,15 +49,11 @@ fn before_tests(text: &str) -> &str {
         .map_or(text, |end| &text[..end])
 }
 
-/// `mod.rs` files that still declare public submodules: each is a path other parts of the
-/// browser reach into. The list only ever shrinks.
-const PUBLIC_SUBMODULES: &[&str] = &["engine/mod.rs", "profiles/mod.rs", "store/mod.rs"];
-
 #[test]
 fn a_feature_shows_its_api_and_hides_its_submodules() {
     for (file, text) in sources() {
         let relative = relative(&file);
-        if !relative.ends_with("/mod.rs") || PUBLIC_SUBMODULES.contains(&relative.as_str()) {
+        if !relative.ends_with("/mod.rs") {
             continue;
         }
         for (number, line) in before_tests(&text).lines().enumerate() {
@@ -70,9 +66,8 @@ fn a_feature_shows_its_api_and_hides_its_submodules() {
     }
 }
 
-/// Files whose job is free functions: the entry point, the registration of the catalogue and the
-/// helpers of files and directories, which have no type they are about.
-const FREE_FUNCTION_FILES: &[&str] = &["main.rs", "locale.rs", "store/files.rs"];
+/// Files whose job is free functions: the entry point and the registration of the catalogue.
+const FREE_FUNCTION_FILES: &[&str] = &["main.rs", "locale.rs"];
 
 #[test]
 fn behaviour_is_in_impl_blocks_of_the_type_it_is_about() {
@@ -104,15 +99,9 @@ fn behaviour_is_in_impl_blocks_of_the_type_it_is_about() {
 
 #[test]
 fn only_the_engine_speaks_to_the_backend() {
-    // `browser/` still applies the engine's events to the window; they move to
-    // `engine/events.rs` when the aggregate is split into flows.
-    const STILL_IN_BROWSER: &[&str] = &["browser/events.rs", "browser/mod.rs"];
     for (file, text) in sources() {
         let relative = relative(&file);
-        if is_test_code(&relative)
-            || relative.starts_with("engine/")
-            || STILL_IN_BROWSER.contains(&relative.as_str())
-        {
+        if is_test_code(&relative) || relative.starts_with("engine/") {
             continue;
         }
         let code = before_tests(&text);

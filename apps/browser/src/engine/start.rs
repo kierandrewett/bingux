@@ -1,7 +1,7 @@
 //! Starting the engine.
 
 use super::Engine;
-use crate::profiles::places::Folders;
+use crate::profiles::Folders;
 
 impl Engine {
     /// Start the engine in `folders`, or in a throwaway profile for a private window.

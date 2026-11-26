@@ -4,11 +4,10 @@ use std::fs;
 use std::os::unix::fs::MetadataExt;
 use std::path::PathBuf;
 
-use crate::profiles::lock::ProfileLock;
-use crate::profiles::places::Places;
-use crate::profiles::registry::*;
-use crate::store::files::remove_tree;
-use crate::store::files::tests::temp;
+use super::registry::*;
+use crate::profiles::Places;
+use crate::profiles::ProfileLock;
+use crate::store::Files;
 
 struct Rig {
     dir: PathBuf,
@@ -17,7 +16,7 @@ struct Rig {
 
 impl Rig {
     fn new() -> Self {
-        let dir = temp();
+        let dir = Files::temp();
         let places = Places {
             data: dir.join("data/bingux-browser"),
             cache: dir.join("cache/bingux-browser"),
@@ -38,7 +37,7 @@ impl Rig {
 
 impl Drop for Rig {
     fn drop(&mut self) {
-        let _ = remove_tree(&self.dir);
+        let _ = Files::remove_tree(&self.dir);
     }
 }
 

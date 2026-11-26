@@ -50,7 +50,8 @@ impl Browser {
                 self.out.request(UiRequest::Fullscreen(on));
                 self.fullscreen = on;
                 if let Some(session) = self.session_of(key) {
-                    self.engine_call(|backend| backend.set_fullscreen(session, on));
+                    self.engine
+                        .call(&mut self.out, |backend| backend.set_fullscreen(session, on));
                 }
             }
             Command::Downloads => self.out.request(UiRequest::OpenDownloads),

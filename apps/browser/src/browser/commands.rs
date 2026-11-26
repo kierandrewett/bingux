@@ -105,7 +105,9 @@ impl Browser {
             return;
         }
         if let Some(session) = self.session_of(was) {
-            self.engine_call(|backend| backend.set_visible(session, false, false));
+            self.engine.call(&mut self.out, |backend| {
+                backend.set_visible(session, false, false)
+            });
         }
         if let Some(session) = self.session_of(now) {
             let ViewSize {
@@ -113,7 +115,7 @@ impl Browser {
                 height,
                 scale,
             } = self.view;
-            self.engine_call(|backend| {
+            self.engine.call(&mut self.out, |backend| {
                 backend.set_size(session, width, height, scale)?;
                 backend.set_visible(session, true, true)
             });
@@ -135,7 +137,8 @@ impl Browser {
             return;
         };
         if let Some(session) = tab.session {
-            self.engine_call(|backend| backend.close_tab(session));
+            self.engine
+                .call(&mut self.out, |backend| backend.close_tab(session));
         }
         // What the tab was waiting for will never be answered by anyone.
         if !(tab.is_blank() && tab.kind == TabKind::Web) {
@@ -166,7 +169,7 @@ impl Browser {
                     height,
                     scale,
                 } = self.view;
-                self.engine_call(|backend| {
+                self.engine.call(&mut self.out, |backend| {
                     backend.set_size(session, width, height, scale)?;
                     backend.set_visible(session, true, true)
                 });
@@ -318,9 +321,12 @@ impl Browser {
         };
         if url.is_empty() {
             // The new tab page: the engine's page is blank behind it.
-            self.engine_call(|backend| backend.load(session, "about:blank"));
+            self.engine.call(&mut self.out, |backend| {
+                backend.load(session, "about:blank")
+            });
         } else {
-            self.engine_call(|backend| backend.load(session, url));
+            self.engine
+                .call(&mut self.out, |backend| backend.load(session, url));
         }
         if let Some(tab) = self.tabs.get_mut(key) {
             tab.url = url.to_string();
@@ -335,7 +341,7 @@ impl Browser {
     }
 
     /// A tab that had no session has one: show it as the engine's tab.
-    pub(super) fn shown_again(&mut self, key: u64) {
+    pub(crate) fn shown_again(&mut self, key: u64) {
         if key != self.tabs.active_key() {
             return;
         }
@@ -345,7 +351,7 @@ impl Browser {
                 height,
                 scale,
             } = self.view;
-            self.engine_call(|backend| {
+            self.engine.call(&mut self.out, |backend| {
                 backend.set_size(session, width, height, scale)?;
                 backend.set_visible(session, true, true)
             });
@@ -354,19 +360,23 @@ impl Browser {
 
     pub fn back(&mut self, key: u64) {
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.back(session));
+            self.engine
+                .call(&mut self.out, |backend| backend.back(session));
         }
     }
 
     pub fn forward(&mut self, key: u64) {
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.forward(session));
+            self.engine
+                .call(&mut self.out, |backend| backend.forward(session));
         }
     }
 
     pub fn go_to_history(&mut self, key: u64, index: usize) {
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.go_to_history(session, index));
+            self.engine.call(&mut self.out, |backend| {
+                backend.go_to_history(session, index)
+            });
         }
     }
 
@@ -393,12 +403,15 @@ impl Browser {
             tab.load.loading = true;
             tab.load.progress = 0.0;
         }
-        self.engine_call(|backend| backend.reload(session, bypass_cache));
+        self.engine.call(&mut self.out, |backend| {
+            backend.reload(session, bypass_cache)
+        });
     }
 
     pub fn stop(&mut self, key: u64) {
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.stop(session));
+            self.engine
+                .call(&mut self.out, |backend| backend.stop(session));
         }
         if let Some(tab) = self.tabs.get_mut(key) {
             tab.load.loading = false;
@@ -419,7 +432,7 @@ impl Browser {
         }
         self.view = next;
         if let Some(session) = self.session_of(self.tabs.active_key()) {
-            self.engine_call(|backend| {
+            self.engine.call(&mut self.out, |backend| {
                 backend.set_size(session, next.width, next.height, next.scale)
             });
         }
@@ -435,7 +448,8 @@ impl Browser {
     /// Send input to the page of tab `key`.
     pub fn send(&mut self, key: u64, input: PageInput) {
         if let Some(session) = self.session_of(key) {
-            self.engine_call(|backend| backend.send(session, input));
+            self.engine
+                .call(&mut self.out, |backend| backend.send(session, input));
         }
     }
 
@@ -517,7 +531,8 @@ impl Browser {
         if self.engine.capabilities().download_control {
             for id in over {
                 // The engine ignores an id it does not hold (a restart forgot it).
-                self.engine_call(|backend| backend.remove_download(id));
+                self.engine
+                    .call(&mut self.out, |backend| backend.remove_download(id));
             }
         }
         self.downloads.clear_finished();

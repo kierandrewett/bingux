@@ -6,11 +6,11 @@
 
 use super::Browser;
 use crate::store::Event;
-use crate::store::keeping::{ClearScope, Keeping, Part};
+use crate::store::{ClearScope, Keeping, Part};
 
 impl Browser {
     /// Take in what the store has said since the last call.
-    pub(super) fn take_store_events(&mut self) {
+    pub(crate) fn take_store_events(&mut self) {
         let Some(store) = &self.store else {
             return;
         };

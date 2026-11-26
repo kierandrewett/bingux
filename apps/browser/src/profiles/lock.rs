@@ -8,8 +8,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::path::Path;
 
-use crate::profiles::places::Folders;
-use crate::store::files::{Problem, private_dir};
+use crate::profiles::Folders;
+use crate::store::{Files, Problem};
 
 /// Why a profile could not be locked.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,7 +44,7 @@ impl ProfileLock {
     /// Takes the lock of the profile in `folders`, making its folder if it is
     /// missing. Never waits: a profile another process holds is `InUse`.
     pub fn take(folders: &Folders) -> Result<Self, LockError> {
-        private_dir(&folders.root).map_err(|error| LockError::Io(Problem::of(&error)))?;
+        Files::private_dir(&folders.root).map_err(|error| LockError::Io(Problem::of(&error)))?;
         Self::take_file(&folders.lock())
     }
 
@@ -93,12 +93,12 @@ impl Held {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::profiles::places::Places;
-    use crate::store::files::{remove_tree, tests::temp};
+    use crate::profiles::Places;
+    use crate::store::Files;
 
     #[test]
     fn a_second_open_of_the_same_profile_is_in_use_until_the_first_lets_go() {
-        let dir = temp();
+        let dir = Files::temp();
         let folders = Places::named_folders(&dir.join("p"));
         let first = ProfileLock::take(&folders).expect("the first open");
         // flock locks belong to the open file, so a second open in the same
@@ -106,13 +106,13 @@ mod tests {
         assert_eq!(ProfileLock::take(&folders).unwrap_err(), LockError::InUse);
         drop(first);
         assert!(ProfileLock::take(&folders).is_ok());
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 
     #[test]
     fn a_profile_on_a_read_only_folder_cannot_be_locked() {
         use std::os::unix::fs::PermissionsExt;
-        let dir = temp();
+        let dir = Files::temp();
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
         let folders = Places::named_folders(&dir.join("p"));
         assert_eq!(
@@ -120,6 +120,6 @@ mod tests {
             LockError::Io(Problem::ReadOnly)
         );
         std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 }

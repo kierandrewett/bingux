@@ -11,11 +11,11 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use crate::first_run::{self, FirstRun, Migrated, MigrationError};
-use crate::profiles::lock::{LockError, ProfileLock};
-use crate::profiles::places::{Folders, Places};
-use crate::profiles::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
+use crate::profiles::{Entry, Id, Profiles, RegistryProblem, Startup};
+use crate::profiles::{Folders, Places};
+use crate::profiles::{LockError, ProfileLock};
 use crate::settings::{Settings, SettingsProblem};
-use crate::store::files::{self, Problem};
+use crate::store::{Files, Problem};
 
 /// Why no profile could be opened: what the window shows instead.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -224,7 +224,7 @@ impl Opened {
                 }
             }
         };
-        if let Err(error) = files::private_dir(&folders.engine) {
+        if let Err(error) = Files::private_dir(&folders.engine) {
             return Self::Problem(ProfileState::Unwritable {
                 path: folders.engine.clone(),
                 problem: Problem::of(&error),
@@ -285,7 +285,7 @@ impl Opened {
                         let id = entry.id.clone();
                         Self::locked(Some(entry), folders, stale_cache, Some(&id), waiting)
                     }
-                    Err(crate::profiles::registry::ChangeError::Registry(problem)) => {
+                    Err(crate::profiles::ChangeError::Registry(problem)) => {
                         Self::Problem(ProfileState::of_registry(problem, places))
                     }
                     Err(other) => Self::Problem(ProfileState::RegistryDamaged {
@@ -332,7 +332,7 @@ mod tests {
     use std::fs;
 
     use super::*;
-    use crate::store::files::{remove_tree, tests::temp};
+    use crate::store::Files;
 
     struct Rig {
         dir: PathBuf,
@@ -341,7 +341,7 @@ mod tests {
 
     impl Rig {
         fn new() -> Self {
-            let dir = temp();
+            let dir = Files::temp();
             let places = Places {
                 data: dir.join("data/bingux-browser"),
                 cache: dir.join("cache/bingux-browser"),
@@ -355,7 +355,7 @@ mod tests {
 
     impl Drop for Rig {
         fn drop(&mut self) {
-            let _ = remove_tree(&self.dir);
+            let _ = Files::remove_tree(&self.dir);
         }
     }
 
@@ -536,7 +536,7 @@ mod tests {
         let personal = opened(Opened::start(&rig.places, None, &mut Waiting::none()));
         let mut chosen = Settings::default();
         chosen.search_engine = "startpage".to_string();
-        files::replace(&personal.folders.settings(), &chosen.encode()).unwrap();
+        Files::replace(&personal.folders.settings(), &chosen.encode()).unwrap();
         let Opened::Private { settings, from } = Opened::private(&rig.places, None) else {
             panic!("private");
         };

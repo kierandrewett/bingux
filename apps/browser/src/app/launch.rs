@@ -8,9 +8,9 @@ use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 use super::CommandLine;
 use crate::browser::{Options, Profile};
 use crate::engine::Engine;
-use crate::profiles::open::{Opened, Waiting};
-use crate::profiles::places::{Folders, Places};
+use crate::profiles::{Folders, Places};
 use crate::profiles::{Gate, GateWindow};
+use crate::profiles::{Opened, Waiting};
 use crate::store;
 use crate::ui::{App, Handoff};
 
@@ -83,12 +83,12 @@ impl Launch {
                 if let Some(cache) = opened.stale_cache.take() {
                     // The old engine cache goes on a thread of its own: it can be large.
                     std::thread::spawn(move || {
-                        let _ = store::files::remove_tree(&cache);
+                        let _ = store::Files::remove_tree(&cache);
                     });
                 }
                 let engine = Self::start_or_exit(Some(&opened.folders));
                 let settings_keeping =
-                    store::keeping::Keeping::of_settings(opened.settings_problem.as_ref());
+                    store::Keeping::of_settings(opened.settings_problem.as_ref());
                 let (store, settings_keeping) = match store::Store::open(
                     &opened.folders,
                     settings_keeping.clone(),
@@ -97,9 +97,7 @@ impl Launch {
                     Ok(store) => (Some(store), settings_keeping),
                     Err(error) => (
                         None,
-                        store::keeping::Keeping::NotSaved(store::keeping::NotSaved::Failed(
-                            error.to_string(),
-                        )),
+                        store::Keeping::NotSaved(store::NotSaved::Failed(error.to_string())),
                     ),
                 };
                 let profile = Profile {
@@ -137,7 +135,7 @@ impl Launch {
                 // A profile another window has open: its application id, so this
                 // launch hands its addresses to that window instead of showing this.
                 let id = match &state {
-                    crate::profiles::open::ProfileState::InUse { app_id, .. } => app_id.clone(),
+                    crate::profiles::ProfileState::InUse { app_id, .. } => app_id.clone(),
                     _ => "bingux-browser".to_string(),
                 };
                 Self::run_gate(&id, Gate::Problem(state));

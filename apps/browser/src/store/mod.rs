@@ -13,11 +13,14 @@
 //! written over: its part stays [`NotSaved`] until the person chooses Start
 //! over, which moves the file aside first.
 
-pub mod files;
-pub mod keeping;
+mod files;
+mod keeping;
 
 #[cfg(test)]
 mod tests;
+
+pub use files::{Files, Problem};
+pub use keeping::{ClearScope, Keeping, NotSaved, Part};
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -29,10 +32,8 @@ use std::time::{Duration, Instant};
 use bingux_ui::search::{Index, SearchService};
 
 use crate::history::{CAP, Change, Database, History, INDEX, Page};
-use crate::profiles::places::Folders;
+use crate::profiles::Folders;
 use crate::settings::Settings;
-use crate::store::keeping::{Keeping, NotSaved};
-use files::Problem;
 
 /// How long history waits in memory before it is written.
 const BATCH: Duration = Duration::from_secs(1);
@@ -122,7 +123,7 @@ impl Writer {
     }
 
     fn replace_settings(&mut self, bytes: &[u8]) {
-        let keeping = match files::replace(&self.settings_path, bytes) {
+        let keeping = match Files::replace(&self.settings_path, bytes) {
             Ok(()) => Keeping::Saved,
             Err(error) => Keeping::of_problem(&Problem::of(&error)),
         };
@@ -291,8 +292,8 @@ impl Writer {
         let path = &self.history_path;
         let files = [
             path.clone(),
-            files::beside(path, "-wal"),
-            files::beside(path, "-shm"),
+            Files::beside(path, "-wal"),
+            Files::beside(path, "-shm"),
         ];
         if let Err(error) = NotSaved::move_aside(&files) {
             self.report_history(Keeping::NotSaved(NotSaved::Damaged {

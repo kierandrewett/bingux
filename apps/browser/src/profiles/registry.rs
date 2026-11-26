@@ -13,9 +13,9 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
-use crate::profiles::lock::{Held, LockError, ProfileLock};
-use crate::profiles::places::Places;
-use crate::store::files::{self, Problem};
+use crate::profiles::Places;
+use crate::profiles::{Held, LockError, ProfileLock};
+use crate::store::{Files, Problem};
 
 /// The registry format this build reads and writes.
 pub const VERSION: u32 = 1;
@@ -42,7 +42,7 @@ impl Id {
     /// A new id, from 40 random bits.
     pub fn random() -> Self {
         const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
-        let bits = files::random_u64();
+        let bits = Files::random_u64();
         Self(
             (0..8)
                 .map(|at| ALPHABET[((bits >> (at * 5)) & 31) as usize] as char)
@@ -265,7 +265,7 @@ impl Profiles {
 
     /// The registry, or `None` when there is none yet.
     pub fn read(&self) -> Result<Option<Registry>, RegistryProblem> {
-        match files::read_if_present(&self.places.registry()) {
+        match Files::read_if_present(&self.places.registry()) {
             Ok(None) => Ok(None),
             Ok(Some(bytes)) => Registry::parse(&bytes).map(Some),
             Err(error) => Err(RegistryProblem::of_io(&error)),
@@ -287,7 +287,7 @@ impl Profiles {
         &self,
         change: impl FnOnce(&mut Registry) -> Result<T, E>,
     ) -> Result<T, E> {
-        files::private_dir(&self.places.data).map_err(|error| RegistryProblem::of_io(&error))?;
+        Files::private_dir(&self.places.data).map_err(|error| RegistryProblem::of_io(&error))?;
         let _held = Held::wait(&self.places.registry_lock())
             .map_err(|error| RegistryProblem::of_io(&error))?;
         let mut registry = self.read()?.unwrap_or_else(Registry::empty);
@@ -295,7 +295,7 @@ impl Profiles {
         let mut bytes = serde_json::to_vec_pretty(&registry)
             .map_err(|error| RegistryProblem::Damaged(error.to_string()))?;
         bytes.push(b'\n');
-        files::replace(&self.places.registry(), &bytes)
+        Files::replace(&self.places.registry(), &bytes)
             .map_err(|error| RegistryProblem::of_io(&error))?;
         Ok(result)
     }
@@ -314,9 +314,9 @@ impl Profiles {
                 }
             };
             let folders = self.places.folders(&id);
-            files::private_dir(&self.places.profiles())
+            Files::private_dir(&self.places.profiles())
                 .map_err(|error| RegistryProblem::of_io(&error))?;
-            files::private_dir(&folders.engine).map_err(|error| RegistryProblem::of_io(&error))?;
+            Files::private_dir(&folders.engine).map_err(|error| RegistryProblem::of_io(&error))?;
             let entry = Entry::new(id.clone(), &name, colour);
             registry.profiles.push(entry.clone());
             if registry
@@ -421,7 +421,7 @@ impl Profiles {
         let folders = self.places.folders(id);
         let crash_profile = folders.crash.parent().unwrap_or(Path::new("/nonexistent"));
         for dir in [&folders.cache, crash_profile, &folders.root] {
-            files::remove_tree(dir)
+            Files::remove_tree(dir)
                 .map_err(|error| ChangeError::Registry(RegistryProblem::of_io(&error)))?;
         }
         Ok(())
@@ -456,7 +456,7 @@ impl Profiles {
     /// Nothing in a profile folder is touched. Returns where the old list went.
     pub fn start_over(&self) -> Result<std::path::PathBuf, RegistryProblem> {
         let path = self.places.registry();
-        let kept = crate::store::keeping::NotSaved::damaged_name(&path);
+        let kept = crate::store::NotSaved::damaged_name(&path);
         {
             let _held = Held::wait(&self.places.registry_lock())
                 .map_err(|error| RegistryProblem::of_io(&error))?;
@@ -493,7 +493,7 @@ impl Profiles {
     /// Bytes the profile uses on disk: its folder and its cache.
     pub fn size(&self, id: &Id) -> u64 {
         let folders = self.places.folders(id);
-        files::size_of(&folders.root) + files::size_of(&folders.cache)
+        Files::size_of(&folders.root) + Files::size_of(&folders.cache)
     }
 
     /// What a start opens. `asked` is `--profile`: a name (any case) or an id.

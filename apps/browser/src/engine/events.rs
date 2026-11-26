@@ -1,10 +1,10 @@
-//! What the engine says, turned into state.
+//! What the engine says, turned into state: its events, and the questions it asks.
 
 use bingux_ui::prelude::tr;
 use bingux_ui::web_view::requests::{DownloadState, Request, RequestKind};
 use bingux_ui::web_view::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
 
-use super::{Browser, Notice, PendingMenu, UiRequest};
+use crate::browser::{Browser, Notice, PendingMenu, UiRequest};
 use crate::commands::Command;
 use crate::prompts::Prompt;
 use crate::zoom::Zoom;
@@ -247,7 +247,7 @@ impl Browser {
                     .decided(&permission.origin, &permission.kinds)
                 {
                     Some(allow) => {
-                        self.engine_call(|backend| {
+                        self.engine.call(&mut self.out, |backend| {
                             backend.respond(
                                 session,
                                 id,
@@ -283,7 +283,9 @@ impl Browser {
                         target,
                     });
                 } else {
-                    self.engine_call(|backend| backend.respond(session, id, Response::ContextMenu));
+                    self.engine.call(&mut self.out, |backend| {
+                        backend.respond(session, id, Response::ContextMenu)
+                    });
                 }
             }
         }
@@ -312,6 +314,8 @@ impl Browser {
             RequestKind::Select(_) => Response::Select { index: None },
             RequestKind::FilePicker(_) => Response::FilePicker { paths: Vec::new() },
         };
-        self.engine_call(|backend| backend.respond(session, id, response));
+        self.engine.call(&mut self.out, |backend| {
+            backend.respond(session, id, response)
+        });
     }
 }

@@ -42,116 +42,130 @@ impl Problem {
     }
 }
 
-/// Makes `dir` and its missing parents, each new one 0700, and sets `dir`
-/// itself to 0700 when it already existed.
-pub fn private_dir(dir: &Path) -> io::Result<()> {
-    DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
-    fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
-}
+/// The file operations the store and the profiles share: private folders, atomic replacement,
+/// removal. No type owns them, so this one does.
+pub struct Files;
 
-/// Writes all of `bytes` to `file` and waits until the disk has them.
-pub fn write_synced(file: &mut File, bytes: &[u8]) -> io::Result<()> {
-    file.write_all(bytes)?;
-    file.sync_all()
-}
-
-/// A name for a temporary file next to `path` that no other writer uses.
-fn temporary_beside(path: &Path) -> io::Result<PathBuf> {
-    let name = path
-        .file_name()
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?
-        .to_string_lossy()
-        .into_owned();
-    Ok(path.with_file_name(format!(
-        ".{name}.{}-{}.tmp",
-        std::process::id(),
-        random_u64()
-    )))
-}
-
-/// Replaces `path` with `bytes`, mode 0600: a reader sees the old file or the
-/// new one, never part of either, and a full disk leaves the old file whole.
-pub fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    let temporary = temporary_beside(path)?;
-    let written = (|| {
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .mode(0o600)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(&temporary)?;
-        file.set_permissions(fs::Permissions::from_mode(0o600))?;
-        write_synced(&mut file, bytes)?;
-        fs::rename(&temporary, path)
-    })();
-    if written.is_err() {
-        let _ = fs::remove_file(&temporary);
-        return written;
+impl Files {
+    /// Makes `dir` and its missing parents, each new one 0700, and sets `dir`
+    /// itself to 0700 when it already existed.
+    pub fn private_dir(dir: &Path) -> io::Result<()> {
+        DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
+        fs::set_permissions(dir, fs::Permissions::from_mode(0o700))
     }
-    sync_dir(path.parent().unwrap_or(Path::new(".")))
-}
 
-/// Waits until the disk has the names in `dir` (a rename into it).
-pub fn sync_dir(dir: &Path) -> io::Result<()> {
-    File::open(dir)?.sync_all()
-}
+    /// Writes all of `bytes` to `file` and waits until the disk has them.
+    pub fn write_synced(file: &mut File, bytes: &[u8]) -> io::Result<()> {
+        file.write_all(bytes)?;
+        file.sync_all()
+    }
 
-/// Reads `path` whole, or `None` when there is no such file.
-pub fn read_if_present(path: &Path) -> io::Result<Option<Vec<u8>>> {
-    match fs::read(path) {
-        Ok(bytes) => Ok(Some(bytes)),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error),
+    /// A name for a temporary file next to `path` that no other writer uses.
+    fn temporary_beside(path: &Path) -> io::Result<PathBuf> {
+        let name = path
+            .file_name()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?
+            .to_string_lossy()
+            .into_owned();
+        Ok(path.with_file_name(format!(
+            ".{name}.{}-{}.tmp",
+            std::process::id(),
+            Self::random_u64()
+        )))
+    }
+
+    /// Replaces `path` with `bytes`, mode 0600: a reader sees the old file or the
+    /// new one, never part of either, and a full disk leaves the old file whole.
+    pub fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
+        let temporary = Self::temporary_beside(path)?;
+        let written = (|| {
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .mode(0o600)
+                .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+                .open(&temporary)?;
+            file.set_permissions(fs::Permissions::from_mode(0o600))?;
+            Self::write_synced(&mut file, bytes)?;
+            fs::rename(&temporary, path)
+        })();
+        if written.is_err() {
+            let _ = fs::remove_file(&temporary);
+            return written;
+        }
+        Self::sync_dir(path.parent().unwrap_or(Path::new(".")))
+    }
+
+    /// Waits until the disk has the names in `dir` (a rename into it).
+    pub fn sync_dir(dir: &Path) -> io::Result<()> {
+        File::open(dir)?.sync_all()
+    }
+
+    /// Reads `path` whole, or `None` when there is no such file.
+    pub fn read_if_present(path: &Path) -> io::Result<Option<Vec<u8>>> {
+        match fs::read(path) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
+    /// A number that differs on every call: the standard library seeds its hash
+    /// keys from the kernel's random source once per thread and steps them for
+    /// each new state.
+    pub fn random_u64() -> u64 {
+        use std::hash::{BuildHasher, Hasher};
+        let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
+        hasher.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |since| since.as_nanos()),
+        );
+        hasher.finish()
+    }
+
+    /// Bytes used by the files below `dir`, without following symbolic links. A
+    /// folder that does not exist uses none.
+    pub fn size_of(dir: &Path) -> u64 {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|entry| match entry.file_type() {
+                Ok(kind) if kind.is_dir() => Self::size_of(&entry.path()),
+                Ok(kind) if kind.is_file() => entry.metadata().map_or(0, |meta| meta.len()),
+                _ => 0,
+            })
+            .sum()
+    }
+
+    /// Removes `dir` and everything below it, without following symbolic links
+    /// (`remove_dir_all` removes a link, never what it points to). A folder that
+    /// does not exist is already removed.
+    pub fn remove_tree(dir: &Path) -> io::Result<()> {
+        match fs::symlink_metadata(dir) {
+            Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error),
+            Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => fs::remove_file(dir),
+            Ok(_) => fs::remove_dir_all(dir),
+        }
+    }
+
+    /// `path` with `suffix` added to its name.
+    pub fn beside(path: &Path, suffix: &str) -> PathBuf {
+        let mut name = path.as_os_str().to_os_string();
+        name.push(suffix);
+        PathBuf::from(name)
     }
 }
 
-/// A number that differs on every call: the standard library seeds its hash
-/// keys from the kernel's random source once per thread and steps them for
-/// each new state.
-pub fn random_u64() -> u64 {
-    use std::hash::{BuildHasher, Hasher};
-    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-    hasher.write_u128(
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_or(0, |since| since.as_nanos()),
-    );
-    hasher.finish()
-}
-
-/// Bytes used by the files below `dir`, without following symbolic links. A
-/// folder that does not exist uses none.
-pub fn size_of(dir: &Path) -> u64 {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return 0;
-    };
-    entries
-        .flatten()
-        .map(|entry| match entry.file_type() {
-            Ok(kind) if kind.is_dir() => size_of(&entry.path()),
-            Ok(kind) if kind.is_file() => entry.metadata().map_or(0, |meta| meta.len()),
-            _ => 0,
-        })
-        .sum()
-}
-
-/// Removes `dir` and everything below it, without following symbolic links
-/// (`remove_dir_all` removes a link, never what it points to). A folder that
-/// does not exist is already removed.
-pub fn remove_tree(dir: &Path) -> io::Result<()> {
-    match fs::symlink_metadata(dir) {
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(error),
-        Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => fs::remove_file(dir),
-        Ok(_) => fs::remove_dir_all(dir),
+#[cfg(test)]
+impl Files {
+    /// A new folder of its own under the temporary folder, for a test.
+    pub(crate) fn temp() -> PathBuf {
+        tests::temp()
     }
-}
-
-/// `path` with `suffix` added to its name.
-pub fn beside(path: &Path, suffix: &str) -> PathBuf {
-    let mut name = path.as_os_str().to_os_string();
-    name.push(suffix);
-    PathBuf::from(name)
 }
 
 #[cfg(test)]
@@ -164,7 +178,7 @@ pub(crate) mod tests {
         let dir = std::env::temp_dir().join(format!(
             "bingux-browser-test-{}-{:x}",
             std::process::id(),
-            random_u64()
+            Files::random_u64()
         ));
         fs::create_dir_all(&dir).expect("a temporary folder");
         dir
@@ -178,7 +192,8 @@ pub(crate) mod tests {
             .write(true)
             .open("/dev/full")
             .expect("/dev/full");
-        let error = write_synced(&mut full, b"{}").expect_err("a full disk refuses the write");
+        let error =
+            Files::write_synced(&mut full, b"{}").expect_err("a full disk refuses the write");
         assert_eq!(Problem::of(&error), Problem::DiskFull);
         assert_eq!(
             Problem::of(&io::Error::from_raw_os_error(libc::EROFS)),
@@ -194,8 +209,8 @@ pub(crate) mod tests {
     fn a_replaced_file_is_private_and_whole() {
         let dir = temp();
         let path = dir.join("a.json");
-        replace(&path, b"one").unwrap();
-        replace(&path, b"two").unwrap();
+        Files::replace(&path, b"one").unwrap();
+        Files::replace(&path, b"two").unwrap();
         assert_eq!(fs::read(&path).unwrap(), b"two");
         assert_eq!(fs::metadata(&path).unwrap().mode() & 0o777, 0o600);
         let left: Vec<_> = fs::read_dir(&dir)
@@ -204,32 +219,32 @@ pub(crate) mod tests {
             .map(|entry| entry.file_name())
             .collect();
         assert_eq!(left, ["a.json"], "no temporary file is left behind");
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 
     #[test]
     fn a_failed_replace_leaves_the_old_file() {
         let dir = temp();
         let path = dir.join("a.json");
-        replace(&path, b"old").unwrap();
+        Files::replace(&path, b"old").unwrap();
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o500)).unwrap();
-        let error = replace(&path, b"new").expect_err("a read-only folder refuses");
+        let error = Files::replace(&path, b"new").expect_err("a read-only folder refuses");
         fs::set_permissions(&dir, fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(Problem::of(&error), Problem::ReadOnly);
         assert_eq!(fs::read(&path).unwrap(), b"old");
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 
     #[test]
     fn a_private_folder_is_0700_even_when_it_was_wider() {
         let dir = temp();
         let inner = dir.join("a/b");
-        private_dir(&inner).unwrap();
+        Files::private_dir(&inner).unwrap();
         assert_eq!(fs::metadata(&inner).unwrap().mode() & 0o777, 0o700);
         fs::set_permissions(&inner, fs::Permissions::from_mode(0o775)).unwrap();
-        private_dir(&inner).unwrap();
+        Files::private_dir(&inner).unwrap();
         assert_eq!(fs::metadata(&inner).unwrap().mode() & 0o777, 0o700);
-        remove_tree(&dir).unwrap();
+        Files::remove_tree(&dir).unwrap();
     }
 
     #[test]
@@ -239,10 +254,10 @@ pub(crate) mod tests {
         fs::write(outside.join("keep"), b"x").unwrap();
         fs::create_dir(dir.join("p")).unwrap();
         std::os::unix::fs::symlink(&outside, dir.join("p/link")).unwrap();
-        remove_tree(&dir.join("p")).unwrap();
+        Files::remove_tree(&dir.join("p")).unwrap();
         assert!(outside.join("keep").exists());
-        assert_eq!(size_of(&dir.join("p")), 0);
-        remove_tree(&dir).unwrap();
-        remove_tree(&outside).unwrap();
+        assert_eq!(Files::size_of(&dir.join("p")), 0);
+        Files::remove_tree(&dir).unwrap();
+        Files::remove_tree(&outside).unwrap();
     }
 }

@@ -17,10 +17,10 @@ use std::path::{Path, PathBuf};
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use crate::browser::{Browser, Options, Profile};
-use crate::profiles::open::{Opened, Waiting};
-use crate::profiles::places::Places;
-use crate::store::files::{remove_tree, tests::temp};
-use crate::store::keeping::{Keeping, NotSaved};
+use crate::profiles::Places;
+use crate::profiles::{Opened, Waiting};
+use crate::store::Files;
+use crate::store::{Keeping, NotSaved};
 use crate::tabs::Place;
 
 /// Path, size, modification time and mode of everything below `root`,
@@ -49,7 +49,7 @@ fn walk(root: &Path) -> BTreeMap<PathBuf, (u64, i64, i64, u32)> {
 
 #[test]
 fn a_private_window_leaves_every_file_as_it_was() {
-    let home = temp();
+    let home = Files::temp();
     let variables: Vec<(&str, PathBuf)> = vec![
         ("XDG_DATA_HOME", home.join("data")),
         ("XDG_CACHE_HOME", home.join("cache")),
@@ -101,7 +101,7 @@ fn a_private_window_leaves_every_file_as_it_was() {
         before,
         "nothing was created, changed or removed"
     );
-    remove_tree(&home).unwrap();
+    Files::remove_tree(&home).unwrap();
 }
 
 #[test]

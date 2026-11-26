@@ -24,11 +24,11 @@ use rusqlite::Connection;
 
 use crate::browser::{Browser, Options, Profile};
 use crate::history::{Change, Database, History, INDEX, Page};
-use crate::profiles::places::{Folders, Places};
+use crate::profiles::{Folders, Places};
 use crate::settings::Settings;
-use crate::store::files::{remove_tree, tests::temp};
-use crate::store::keeping::{Keeping, NotSaved};
+use crate::store::Files;
 use crate::store::{Event, Store};
+use crate::store::{Keeping, NotSaved};
 use crate::tabs::Place;
 
 fn folders(root: &Path) -> Folders {
@@ -95,7 +95,7 @@ fn aside(root: &Path, prefix: &str) -> Vec<PathBuf> {
 
 #[test]
 fn visits_and_a_late_title_survive_a_new_store() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     let store = open(&root, &search);
     store.record_visit("https://example.com/", "");
@@ -129,12 +129,12 @@ fn visits_and_a_late_title_survive_a_new_store() {
         .unwrap();
     assert_eq!(visits, 2, "each visit keeps its time");
     drop(store);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_page_load_in_the_window_is_recorded_and_a_private_window_records_none() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     let mut browser = Browser::with_profile(
         TestDoubleBackend::new(),
@@ -158,12 +158,12 @@ fn a_page_load_in_the_window_is_recorded_and_a_private_window_records_none() {
     assert!(!private.has_history());
     assert_eq!(private.history_clear_scope().history, false);
     drop(browser);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn clear_history_empties_the_file_and_the_index_and_says_what_it_does_not_reach() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     let mut browser = Browser::with_profile(
         TestDoubleBackend::new(),
@@ -201,12 +201,12 @@ fn clear_history_empties_the_file_and_the_index_and_says_what_it_does_not_reach(
     );
     assert!(!browser.history_clear_scope().link_colours);
     drop(browser);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn the_cap_keeps_the_pages_visited_last() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     let store = open(&root, &search);
     for name in ["one", "two", "three"] {
@@ -223,12 +223,12 @@ fn the_cap_keeps_the_pages_visited_last() {
         ["https://three.example/", "https://two.example/"]
     );
     drop(store);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn the_searchable_ranks_a_host_that_begins_with_the_text_first() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     let store = open(&root, &search);
     store.record_visit("https://example.com/", "Home");
@@ -250,12 +250,12 @@ fn the_searchable_ranks_a_host_that_begins_with_the_text_first() {
         "the host prefix first, though visited less and earlier"
     );
     drop(store);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_damaged_file_is_left_as_it_is_until_start_over_moves_it_aside() {
-    let root = temp();
+    let root = Files::temp();
     let path = folders(&root).store();
     let garbage = vec![0x5a_u8; 8192];
     fs::write(&path, &garbage).unwrap();
@@ -300,12 +300,12 @@ fn a_damaged_file_is_left_as_it_is_until_start_over_moves_it_aside() {
         .unwrap();
     assert_eq!(written, 1, "the visit of this run is in the new file");
     drop(browser);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_newer_browsers_file_is_neither_read_nor_written() {
-    let root = temp();
+    let root = Files::temp();
     let path = folders(&root).store();
     {
         let connection = Connection::open(&path).unwrap();
@@ -329,13 +329,13 @@ fn a_newer_browsers_file_is_neither_read_nor_written() {
     );
     drop(store);
     assert_eq!(fs::read(&path).unwrap(), before);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_full_database_is_disk_full() {
     // A real SQLITE_FULL: the file may not grow past its pages.
-    let root = temp();
+    let root = Files::temp();
     let path = folders(&root).store();
     let mut database = Database::open(&path).unwrap();
     let pages: i64 = database
@@ -356,12 +356,12 @@ fn a_full_database_is_disk_full() {
     let error = database.write(&many).unwrap_err();
     assert_eq!(Database::not_saved(&error), NotSaved::DiskFull);
     drop(database);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_read_only_folder_says_so_and_a_later_write_keeps_everything() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     fs::set_permissions(&root, fs::Permissions::from_mode(0o500)).unwrap();
     let store = open(&root, &search);
@@ -381,12 +381,12 @@ fn a_read_only_folder_says_so_and_a_later_write_keeps_everything() {
     store.flush();
     assert_eq!(store.history_len(), 2, "what waited was written");
     drop(store);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_file_another_program_holds_is_busy_until_it_lets_go() {
-    let root = temp();
+    let root = Files::temp();
     let search = SearchService::new();
     let store = open(&root, &search);
     store.flush();
@@ -404,5 +404,5 @@ fn a_file_another_program_holds_is_busy_until_it_lets_go() {
     assert_eq!(history_state(&store), Some(Keeping::Saved));
     drop(store);
     drop(holder);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }

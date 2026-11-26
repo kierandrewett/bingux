@@ -3,11 +3,10 @@
 //!
 //! `Browser` is plain data with methods. The UI reads it and calls its
 //! commands; the engine's events go through [`Browser::apply`]. It calls the
-//! [`BrowserBackend`] itself (the UI never does), so every rule about what a
+//! backend itself, through [`Engine`] (the UI never does), so every rule about what a
 //! command asks of the engine is here and testable over the test double.
 
 mod commands;
-mod events;
 mod kept;
 mod lifecycle;
 mod outbox;
@@ -19,10 +18,8 @@ mod tests;
 
 pub use outbox::{Notice, Outbox, UiRequest};
 
-use std::sync::Arc;
-
 use bingux_ui::web_view::requests::ContextTarget;
-use bingux_ui::web_view::{BrowserBackend, PageEnvironment, RequestId, TabConfig, TabId};
+use bingux_ui::web_view::{PageEnvironment, RequestId, TabConfig, TabId};
 
 use crate::address::SearchEngine;
 use crate::downloads::Downloads;
@@ -30,7 +27,7 @@ use crate::engine::Engine;
 use crate::permissions::Permissions;
 use crate::settings::Settings;
 use crate::store::Store;
-use crate::store::keeping::{Keeping, NotSaved};
+use crate::store::{Keeping, NotSaved};
 use crate::tabs::TabList;
 use crate::tabs::{Tab, TabKind};
 
@@ -129,7 +126,7 @@ pub struct Browser {
     /// Whether a change of the settings is kept.
     pub settings_keeping: Keeping,
     /// The writer of the profile, when this window keeps anything.
-    store: Option<Store>,
+    pub(crate) store: Option<Store>,
     /// The profile the window belongs to: its registry id and name, `None`
     /// for a window opened without one.
     pub profile: Option<(String, String)>,
@@ -140,26 +137,22 @@ pub struct Browser {
     pub fullscreen: bool,
     /// The tabs of an engine that failed, with the session each had: a restart
     /// opens them again from what the engine had saved of them.
-    lost: Vec<(u64, TabId)>,
+    pub(crate) lost: Vec<(u64, TabId)>,
     /// What the window was to start on when the engine was not there to start
     /// it: the first restart opens it.
-    start: Option<Vec<String>>,
+    pub(crate) start: Option<Vec<String>>,
 }
 
 impl Browser {
-    /// A browser with no tab yet and no profile. `backend` is the engine.
-    pub fn new(backend: Arc<dyn BrowserBackend>, options: Options) -> Self {
-        Self::with_profile(backend, options, Profile::default())
+    /// A browser with no tab yet and no profile.
+    pub fn new(engine: impl Into<Engine>, options: Options) -> Self {
+        Self::with_profile(engine, options, Profile::default())
     }
 
     /// A browser with no tab yet, in `profile`.
-    pub fn with_profile(
-        backend: Arc<dyn BrowserBackend>,
-        options: Options,
-        profile: Profile,
-    ) -> Self {
+    pub fn with_profile(engine: impl Into<Engine>, options: Options, profile: Profile) -> Self {
         let mut browser = Self {
-            engine: Engine::new(backend),
+            engine: engine.into(),
             options,
             environment: PageEnvironment::default(),
             tabs: TabList::new(),
@@ -227,14 +220,6 @@ impl Browser {
         }
     }
 
-    /// Run an engine call; what goes wrong becomes a notice.
-    pub(crate) fn engine_call(
-        &mut self,
-        call: impl FnOnce(&dyn BrowserBackend) -> bingux_ui::web_view::Done,
-    ) {
-        self.engine.call(&mut self.out, call);
-    }
-
     /// The window's appearance changed: every page sees the new one. The same
     /// value again does nothing.
     pub fn set_environment(&mut self, environment: PageEnvironment) {
@@ -243,7 +228,9 @@ impl Browser {
         }
         self.environment = environment;
         let environment = self.environment.clone();
-        self.engine_call(|backend| backend.set_environment(&environment));
+        self.engine.call(&mut self.out, |backend| {
+            backend.set_environment(&environment)
+        });
     }
 
     /// The notices not yet shown.

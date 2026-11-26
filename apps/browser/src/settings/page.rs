@@ -14,7 +14,7 @@ use freya::prelude::*;
 
 use crate::address::SearchEngine;
 use crate::history::History;
-use crate::store::keeping::{Keeping, Part};
+use crate::store::{Keeping, Part};
 
 use crate::ui::Ctx;
 
@@ -340,7 +340,7 @@ mod tests {
 
     #[test]
     fn each_keeping_state_is_said_on_the_page() {
-        use crate::store::keeping::NotSaved;
+        use crate::store::NotSaved;
         crate::locale::register();
         let not = |why| Keeping::NotSaved(why);
         assert_eq!(

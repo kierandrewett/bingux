@@ -19,11 +19,11 @@ use bingux_ui::search::SearchService;
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use crate::browser::{Browser, Options, Profile};
-use crate::profiles::places::{Folders, Places};
+use crate::profiles::{Folders, Places};
 use crate::settings::Settings;
 use crate::store::Store;
-use crate::store::files::{self, Problem, remove_tree, tests::temp};
-use crate::store::keeping::{Keeping, NotSaved};
+use crate::store::{Files, Problem};
+use crate::store::{Keeping, NotSaved};
 
 fn folders(root: &Path) -> Folders {
     Places::named_folders(root)
@@ -51,7 +51,7 @@ fn window(root: &Path) -> Browser {
 
 #[test]
 fn a_search_engine_chosen_in_the_window_survives_a_new_window() {
-    let root = temp();
+    let root = Files::temp();
     let mut browser = window(&root);
     assert_eq!(browser.settings_keeping, Keeping::Saved);
     browser.set_search_engine(2);
@@ -66,12 +66,12 @@ fn a_search_engine_chosen_in_the_window_survives_a_new_window() {
         .mode();
     assert_eq!(mode & 0o777, 0o600);
     drop(again);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_damaged_file_is_never_written_over_and_start_over_keeps_it_aside() {
-    let root = temp();
+    let root = Files::temp();
     let path = folders(&root).settings();
     fs::write(&path, b"{ not json").unwrap();
     let mut browser = window(&root);
@@ -97,12 +97,12 @@ fn a_damaged_file_is_never_written_over_and_start_over_keeps_it_aside() {
     assert_eq!(aside.len(), 1);
     assert_eq!(fs::read(aside[0].path()).unwrap(), b"{ not json");
     drop(browser);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_newer_browsers_file_is_left_as_it_is() {
-    let root = temp();
+    let root = Files::temp();
     let path = folders(&root).settings();
     let newer = br#"{"version":9,"search_engine":"startpage"}"#;
     fs::write(&path, newer).unwrap();
@@ -116,12 +116,12 @@ fn a_newer_browsers_file_is_left_as_it_is() {
     browser.flush_store();
     assert_eq!(fs::read(&path).unwrap(), newer);
     drop(browser);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
 fn a_read_only_folder_says_so_and_the_next_good_write_clears_it() {
-    let root = temp();
+    let root = Files::temp();
     let mut browser = window(&root);
     fs::set_permissions(&root, fs::Permissions::from_mode(0o500)).unwrap();
     browser.set_search_engine(1);
@@ -145,7 +145,7 @@ fn a_read_only_folder_says_so_and_the_next_good_write_clears_it() {
         "wikipedia"
     );
     drop(browser);
-    remove_tree(&root).unwrap();
+    Files::remove_tree(&root).unwrap();
 }
 
 #[test]
@@ -155,7 +155,7 @@ fn a_full_disk_is_disk_full() {
         .write(true)
         .open("/dev/full")
         .unwrap();
-    let error = files::write_synced(&mut full, b"{}").unwrap_err();
+    let error = Files::write_synced(&mut full, b"{}").unwrap_err();
     assert_eq!(
         Keeping::of_problem(&Problem::of(&error)),
         Keeping::NotSaved(NotSaved::DiskFull)

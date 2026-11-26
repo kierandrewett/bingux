@@ -20,7 +20,7 @@
 use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
 use bingux_ui::web_view::requests::{ContextTarget, RequestKind};
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
-use bingux_ui::web_view::{BrowserBackend, Response, TabEvent};
+use bingux_ui::web_view::{Response, TabEvent};
 
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options, UiRequest};
