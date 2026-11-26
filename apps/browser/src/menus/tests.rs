@@ -99,17 +99,9 @@ fn the_zoom_row_steps_the_zoom_and_leaves_the_menu_open() {
     assert!(shot.click_name("Zoom out (Ctrl+-)"));
     wait(&mut shot, 300);
     assert_eq!(zoom(), 110);
-    // The toolbar's zoom chip reads the same level. The menu is drawn below the toolbar,
-    // so the menu's level is the lower of the two labels: pressing the chip would not reset.
-    let level = shot.runner().find_many(|node, element| {
-        let label = Label::try_downcast(element)?;
-        (label.text == "110%").then(|| Area::center(&node.layout().area))
-    });
-    let level = level
-        .into_iter()
-        .max_by(|a, b| a.y.total_cmp(&b.y))
-        .expect("the level in the menu");
-    shot.click(level.x, level.y);
+    // The level is also the reset button; pressed by its name, because the toolbar's zoom
+    // chip shows the same text and a press on the text could land on either.
+    assert!(shot.click_name("Reset zoom (Ctrl+0)"));
     wait(&mut shot, 300);
     assert_eq!(zoom(), 100);
 }
