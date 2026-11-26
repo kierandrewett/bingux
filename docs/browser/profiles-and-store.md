@@ -106,7 +106,7 @@ $XDG_RUNTIME_DIR/bingux-browser/<id>/                 the engine's sockets
 | `created`      | Unix seconds, for the profile page and the order of the list                                                                                         |
 | `deleting`     | Set before a delete removes folders; a start finishes any profile marked so. Such a profile is never listed or opened                                |
 
-Operations (all in `B/profile/registry.rs`, all off the UI thread, each one read-change-replace under `profiles.lock`):
+Operations (all in `B/profiles/registry.rs`, all off the UI thread, each one read-change-replace under `profiles.lock`):
 
 | Operation                | Rule                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,7 +131,7 @@ write is a whole new file renamed over the old, so a reader sees the old file or
 { "version": 1, "search_engine": "duckduckgo" }
 ```
 
-- Today's only setting is the address bar's search engine (`B/profile/settings.rs`; the page picks from `address::ENGINES`).
+- Today's only setting is the address bar's search engine (`B/settings/mod.rs`; the page picks from `SearchEngine::ALL`).
   It is stored by a **stable id** (`duckduckgo`, `startpage`, `wikipedia`, `google`), not the index: reordering the
   list must not change anyone's choice. An unknown id reads as the default and is kept as written until the person
   picks another, so a newer browser's engine is not lost.
@@ -163,12 +163,12 @@ CREATE INDEX visits_at ON visits(at);
 CREATE INDEX pages_last_visit ON pages(last_visit);
 ```
 
-- `pages` is what the `history` searchable holds (url, title, count, last visit; `B/profile/history.rs`). `visits`
+- `pages` is what the `history` searchable holds (url, title, count, last visit; `B/history/database.rs`). `visits`
   keeps each visit's time, which the Library needs (Library 01: visits per day, filter by date, clear a range).
 - Opened with `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `secure_delete=ON` (deleted history is
   overwritten, not left in free pages) and a busy timeout. The same pattern as `crates/data-usage/src/schema.rs`:
   steps in a list, each run once in one immediate transaction, never edited after release.
-- **What is recorded:** the top-level loads of a non-private tab that finished without an error (`B/model/browser/events.rs`);
+- **What is recorded:** the top-level loads of a non-private tab that finished without an error (`B/engine/events.rs`);
   `about:`, `bingux:` and empty addresses are not (`history::is_recorded`). A title that arrives later updates the page.
 - **Cap:** the 50,000 most recently visited pages and their visits. A larger history is trimmed by the store's
   thread after start, oldest first. No age expiry: clearing a range is the person's tool (Library, slice 5).
@@ -261,7 +261,7 @@ Search::new(typed).index("history").limit(suggest::LIMIT).sort("_score:desc").so
 - **Limits:** the address field asks for `suggest::LIMIT` (7) hits; a Library page pages with `offset` up to the
   engine's `MAX_PAGE` (1000). The index holds at most the store's cap of 50,000 pages, well inside the engine's
   default `Limits`.
-- **One path:** `History::matching` and the in-memory `History` (`B/model/history.rs`, `parity.md` P9) are deleted. The
+- **One path:** `History::matching` and the in-memory `History` (the old `model/history.rs`, `parity.md` P9) are deleted. The
   pure `suggest()` takes the hits as `Visited` rows, so it stays tested without a window. The requests are
   `history::suggestions`, `history::recent` (the new tab page) and `history::everything` (the settings page's count).
 - **A private or guest window has no history index.** It has no store, records no visit, and its address field shows
@@ -373,9 +373,9 @@ an engine profile under `$XDG_RUNTIME_DIR` removed with the window, `config.rs` 
   window"), with Close.
 - **The registry** is changed by any profile's process (rename Work from Personal's Settings). Every change is
   read-change-replace under `flock` on `profiles.lock`, held only for that operation.
-- **Inside a process** the store (`B/profile/store.rs`) has one thread that owns the SQLite connection and writes
+- **Inside a process** the store (`B/store/mod.rs`) has one thread that owns the SQLite connection and writes
   `settings.json`. The model sends it commands (record a visit, set a title, clear, save settings, start over) over a
-  channel and takes its `Keeping` events through `Browser::poll` (`B/model/browser/kept.rs`), the same way engine
+  channel and takes its `Keeping` events through `Browser::poll` (`B/browser/kept.rs`), the same way engine
   events arrive. Nothing touches a file on the UI thread (`CONTRIBUTING.md`, "Nothing may block the UI thread").
 - **Writes are batched:** the thread commits what has queued at most once a second, on flush, and when the store is
   dropped with the window. A crash loses at most the last second of history.
@@ -394,7 +394,7 @@ Each failure is a value in the model, never a panic and never a silent loss. The
 - **One part of the store cannot be kept.** The window works; the settings page and a one-time toast say what is not
   kept.
 
-`ProfileState` (in `B/profile/open.rs`):
+`ProfileState` (in `B/profiles/open.rs`):
 
 | State                                 | When                                                          | What the window shows                                                                                                               | Actions           |
 | ------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -407,7 +407,7 @@ Each failure is a value in the model, never a panic and never a silent loss. The
 | `Unwritable { path, reason }`         | Folder cannot be created or locked: read-only mount, `EACCES` | "Browser cannot keep anything in <path>: <reason>"                                                                                  | Close             |
 | `UnknownProfile { asked }`            | `--profile` names no profile                                  | "There is no profile called <asked>"                                                                                                | Close             |
 
-`Keeping` (one for settings, one for history, in the `Browser` model; `B/model/keeping.rs`):
+`Keeping` (one for settings, one for history, in the `Browser` model; `B/store/keeping.rs`):
 
 | State                                   | When                                                                                              | What the person sees (settings page row subtitle; one toast the first time)                                                                                              |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
