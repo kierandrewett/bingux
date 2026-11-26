@@ -123,7 +123,9 @@ pub use unpack::{
     Inspection, Overwrite, UnpackOptions, Unpacked, check_password, extract, inspect, unpack,
 };
 
-/// Why an operation did not happen. Each one reads as a plain sentence.
+/// Why an operation did not happen, as a value. The window maps each kind to
+/// a message of its catalogue (`docs/files-errors.md`); `Display` is a short
+/// English line for logs and test failures, never for a person.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum OpError {
     /// Something with that name is already there.
@@ -136,15 +138,105 @@ pub enum OpError {
     Invalid(NameError),
     /// The caller stopped it.
     Cancelled,
-    /// This machine or drive cannot do it (a missing tool, a drive with no bin).
+    /// A program the operation needs is not installed: its name (`zip`,
+    /// `7-Zip`, `ffmpeg`), which is not a sentence.
+    Missing(String),
+    /// A call to the drive failed for a reason with a name.
+    Io(IoKind),
+    /// This machine or drive cannot do it, worded in English for the log.
+    /// Being replaced by kinds; see `docs/files-errors.md`.
     Unsupported(String),
-    /// Anything else, already worded for a person.
+    /// Anything else, worded in English for the log. Being replaced by kinds;
+    /// see `docs/files-errors.md`.
     Other(String),
     /// It cannot go to the bin, and why (see [`TrashRefusal`]).
     CannotTrash(TrashRefusal),
     /// Binning it takes a copy between two drives, and it is big: ask first,
     /// then use [`trash_copying`].
     CopyNeeded,
+}
+
+/// Why a call to the drive failed, when the reason has a name a person can act
+/// on. What the OS reports for anything else is [`IoKind::Unreadable`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IoKind {
+    /// No space is left on the drive.
+    Full,
+    /// The drive is mounted read-only.
+    ReadOnly,
+    /// The person's storage quota is used up.
+    QuotaFull,
+    /// A folder that has to be empty is not.
+    NotEmpty,
+    /// Another program holds the file or folder.
+    InUse,
+    /// The change is between two drives and cannot be done in one step.
+    BetweenDrives,
+    /// The drive took too long to answer.
+    TimedOut,
+    /// A folder was expected and it is something else.
+    NotAFolder,
+    /// A file was expected and it is a folder.
+    IsAFolder,
+    /// The name holds a character the drive does not allow.
+    BadName,
+    /// The drive cannot do this.
+    Unsupported,
+    /// The call was interrupted.
+    Interrupted,
+    /// The drive could not be read or written, for a reason with no name.
+    Unreadable,
+}
+
+impl IoKind {
+    /// The kind of an I/O error. The raw error goes to the log for whoever
+    /// looks into it.
+    pub fn of(error: &io::Error) -> IoKind {
+        use io::ErrorKind as Kind;
+        eprintln!("[bingux-files] {error}");
+        match error.raw_os_error() {
+            Some(libc::ENOSPC) => return IoKind::Full,
+            Some(libc::EROFS) => return IoKind::ReadOnly,
+            Some(libc::EXDEV) => return IoKind::BetweenDrives,
+            Some(libc::ENOTEMPTY) => return IoKind::NotEmpty,
+            Some(libc::EBUSY) => return IoKind::InUse,
+            Some(libc::EDQUOT) => return IoKind::QuotaFull,
+            _ => {}
+        }
+        match error.kind() {
+            Kind::ReadOnlyFilesystem => IoKind::ReadOnly,
+            Kind::StorageFull => IoKind::Full,
+            Kind::TimedOut | Kind::WouldBlock => IoKind::TimedOut,
+            Kind::NotADirectory => IoKind::NotAFolder,
+            Kind::IsADirectory => IoKind::IsAFolder,
+            Kind::DirectoryNotEmpty => IoKind::NotEmpty,
+            Kind::ResourceBusy => IoKind::InUse,
+            Kind::InvalidFilename => IoKind::BadName,
+            Kind::CrossesDevices => IoKind::BetweenDrives,
+            Kind::Unsupported => IoKind::Unsupported,
+            Kind::Interrupted => IoKind::Interrupted,
+            _ => IoKind::Unreadable,
+        }
+    }
+
+    /// A short English line for the log.
+    fn describe(self) -> &'static str {
+        match self {
+            IoKind::Full => "there is no space left on the drive",
+            IoKind::ReadOnly => "the drive is read-only",
+            IoKind::QuotaFull => "the storage quota is full",
+            IoKind::NotEmpty => "the folder is not empty",
+            IoKind::InUse => "the file or folder is in use",
+            IoKind::BetweenDrives => "that cannot be done between two drives in one step",
+            IoKind::TimedOut => "the drive took too long to answer",
+            IoKind::NotAFolder => "that is not a folder",
+            IoKind::IsAFolder => "that is a folder, not a file",
+            IoKind::BadName => "the name holds a character the drive does not allow",
+            IoKind::Unsupported => "the drive cannot do that",
+            IoKind::Interrupted => "the call was interrupted",
+            IoKind::Unreadable => "the drive could not be read or written",
+        }
+    }
 }
 
 impl fmt::Display for OpError {
@@ -155,6 +247,8 @@ impl fmt::Display for OpError {
             OpError::NotFound => f.write_str("That file or folder no longer exists."),
             OpError::Invalid(error) => error.fmt(f),
             OpError::Cancelled => f.write_str("The operation was cancelled."),
+            OpError::Missing(program) => write!(f, "{program} is not installed."),
+            OpError::Io(kind) => write!(f, "I/O failed: {}.", kind.describe()),
             OpError::Unsupported(text) | OpError::Other(text) => f.write_str(text),
             OpError::CannotTrash(refusal) => refusal.fmt(f),
             OpError::CopyNeeded => f.write_str(
@@ -180,18 +274,10 @@ impl From<io::Error> for OpError {
             io::ErrorKind::PermissionDenied => return OpError::Permission,
             _ => {}
         }
-        match error.raw_os_error() {
-            Some(libc::ENOSPC) => OpError::Other("There is no space left on the drive.".into()),
-            Some(libc::EROFS) => OpError::Other("The drive is read-only.".into()),
-            Some(libc::EXDEV) => {
-                OpError::Unsupported("That cannot be done between two drives in one step.".into())
-            }
-            Some(libc::ENAMETOOLONG) => OpError::Invalid(NameError::TooLong),
-            Some(libc::ENOTEMPTY) => OpError::Other("The folder is not empty.".into()),
-            Some(libc::EBUSY) => OpError::Other("The file or folder is in use.".into()),
-            Some(libc::EDQUOT) => OpError::Other("Your storage quota is full.".into()),
-            _ => OpError::Other(plain(&error)),
+        if error.raw_os_error() == Some(libc::ENAMETOOLONG) {
+            return OpError::Invalid(NameError::TooLong);
         }
+        OpError::Io(IoKind::of(&error))
     }
 }
 
@@ -491,21 +577,19 @@ mod tests {
         let denied = io::Error::from_raw_os_error(libc::EACCES);
         assert_eq!(OpError::from(denied), OpError::Permission);
         let full = io::Error::from_raw_os_error(libc::ENOSPC);
-        assert_eq!(
-            OpError::from(full).to_string(),
-            "There is no space left on the drive."
-        );
+        assert_eq!(OpError::from(full), OpError::Io(IoKind::Full));
         let long = io::Error::from_raw_os_error(libc::ENAMETOOLONG);
         assert_eq!(OpError::from(long), OpError::Invalid(NameError::TooLong));
     }
 
     #[test]
-    fn other_errors_read_as_a_sentence() {
+    fn other_errors_have_a_kind_not_a_sentence() {
         let error = io::Error::from_raw_os_error(libc::EIO);
-        let text = OpError::from(error).to_string();
-        assert!(!text.contains("os error"), "{text}");
-        assert!(text.ends_with('.'), "{text}");
-        assert!(text.chars().next().unwrap().is_uppercase(), "{text}");
+        assert_eq!(OpError::from(error), OpError::Io(IoKind::Unreadable));
+        let read_only = io::Error::from_raw_os_error(libc::EROFS);
+        assert_eq!(OpError::from(read_only), OpError::Io(IoKind::ReadOnly));
+        let across = io::Error::from_raw_os_error(libc::EXDEV);
+        assert_eq!(OpError::from(across), OpError::Io(IoKind::BetweenDrives));
     }
 
     #[test]

@@ -527,7 +527,7 @@ mod tests {
         let output = File::create(temp.path().join("out")).unwrap();
         // More than any drive holds.
         let error = check_space(&output, u64::MAX / 2).unwrap_err();
-        assert_eq!(error.to_string(), "There is no space left on the drive.");
+        assert_eq!(error, OpError::Io(crate::ops::IoKind::Full));
         assert!(check_space(&output, 1).is_ok());
     }
 

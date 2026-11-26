@@ -256,8 +256,10 @@ mod tests {
             assert_eq!(fs::read_dir(&dest).unwrap().count(), 0);
         }
         assert_eq!(
-            extract(&temp.path().join("missing.zip"), &dest)
-                .map_err(|e| matches!(e, OpError::NotFound | OpError::Unsupported(_))),
+            extract(&temp.path().join("missing.zip"), &dest).map_err(|e| matches!(
+                e,
+                OpError::NotFound | OpError::Unsupported(_) | OpError::Missing(_)
+            )),
             Err(true)
         );
     }

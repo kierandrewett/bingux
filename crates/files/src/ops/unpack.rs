@@ -73,7 +73,7 @@ pub struct Inspection {
 }
 
 fn missing(tool: &str) -> OpError {
-    OpError::Unsupported(format!("{tool} is not installed."))
+    OpError::Missing(tool.to_string())
 }
 
 fn kind_of(archive: &Path) -> Result<(Kind, String, usize), OpError> {

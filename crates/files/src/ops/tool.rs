@@ -226,9 +226,7 @@ fn command_of(spec: &Spec) -> Command {
 
 fn spawn_error(spec: &Spec, error: io::Error) -> OpError {
     match error.kind() {
-        io::ErrorKind::NotFound => {
-            OpError::Unsupported(format!("{} is not installed.", spec.name()))
-        }
+        io::ErrorKind::NotFound => OpError::Missing(spec.name()),
         _ => error.into(),
     }
 }
@@ -545,7 +543,7 @@ mod tests {
         let spec = Spec::new("definitely-not-a-program-bingux");
         assert_eq!(
             run(&spec, &Cancel::new(), &mut quiet()).unwrap_err(),
-            OpError::Unsupported("definitely-not-a-program-bingux is not installed.".into())
+            OpError::Missing("definitely-not-a-program-bingux".into())
         );
     }
 

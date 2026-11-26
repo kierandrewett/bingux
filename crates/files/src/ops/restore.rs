@@ -748,7 +748,7 @@ mod tests {
         );
         assert_eq!(
             restore_io_error(io::Error::from_raw_os_error(libc::ENOSPC), target),
-            OpError::Other("There is no space left on the drive.".into())
+            OpError::Io(crate::ops::IoKind::Full)
         );
     }
 

@@ -330,7 +330,7 @@ impl PackOptions {
 
     /// The program that makes the archive.
     pub fn maker(&self) -> Result<PathBuf, OpError> {
-        let missing = |name: &str| OpError::Unsupported(format!("{name} is not installed."));
+        let missing = |name: &str| OpError::Missing(name.to_string());
         match self.format {
             Format::Zip if self.password.is_some() => {
                 tool::seven_zip().ok_or_else(|| missing("7-Zip"))
@@ -849,8 +849,7 @@ pub fn build(
                 });
             };
             tar = tar.args(["-f", "-"]);
-            let found = tool::find(program)
-                .ok_or_else(|| OpError::Unsupported(format!("{program} is not installed.")))?;
+            let found = tool::find(program).ok_or_else(|| OpError::Missing(program.to_string()))?;
             let mut squeeze = Spec::new(found).nice(low);
             squeeze = match tar_kind {
                 Format::TarGz | Format::TarBz2 => {
@@ -940,8 +939,7 @@ pub fn check_specs(options: &PackOptions, archive: &Path, work: &Path) -> Result
     let options = options.clone().normalised();
     let split = options.split_mib.is_some();
     let seven = |action: &[&str]| -> Result<Spec, OpError> {
-        let program = tool::seven_zip()
-            .ok_or_else(|| OpError::Unsupported("7-Zip is not installed.".into()))?;
+        let program = tool::seven_zip().ok_or_else(|| OpError::Missing("7-Zip".to_string()))?;
         let mut spec = Spec::new(program).in_dir(work).nice(true).args(action);
         spec = spec.args(["-scsUTF-8", "-bd"]);
         // `-p` with no value means an empty password to 7-Zip when it opens an
@@ -979,8 +977,7 @@ pub fn check_specs(options: &PackOptions, archive: &Path, work: &Path) -> Result
             list: seven(&["l", "-ba"])?,
         }),
         _ => {
-            let tar = tool::find("tar")
-                .ok_or_else(|| OpError::Unsupported("tar is not installed.".into()))?;
+            let tar = tool::find("tar").ok_or_else(|| OpError::Missing("tar".to_string()))?;
             let list = Spec::new(tar)
                 .nice(true)
                 .args(["-t", "--quoting-style=literal", "-f"])
