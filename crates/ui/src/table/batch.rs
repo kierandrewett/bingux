@@ -88,14 +88,23 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for BatchBar<T, K> {
         let tokens = use_tokens();
         let latest = self.latest.clone();
         let mut buttons = Vec::new();
+        // A phone's bar is a touch row: an action that has an icon is that icon,
+        // named by its tooltip, so the count keeps the room it needs. Where the
+        // label is all an action has, it stays a labelled button.
+        let compact = crate::style::is_compact();
         for action in &self.actions {
             let latest = latest.clone();
             let run = action.on_press.clone();
-            let mut button = action_button(action.label.clone(), move |()| {
-                run(latest.get().selected_keys());
-            })
-            .flat()
-            .compact();
+            let press = move |()| run(latest.get().selected_keys());
+            if compact && let Some(icon) = action.icon {
+                let mut button = icon_button(icon, press).tooltip(&action.label);
+                if action.destructive {
+                    button = button.danger();
+                }
+                buttons.push(Element::from(button));
+                continue;
+            }
+            let mut button = action_button(action.label.clone(), press).flat().compact();
             if let Some(icon) = action.icon {
                 button = button.icon(icon);
             }
@@ -132,11 +141,18 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for BatchBar<T, K> {
                         ],
                     )
                     .child(
-                        rect().tw(&tokens, &[w_flex()]).child(
-                            EMPHASIS
-                                .label(&tokens, crate::tr!("ui-table-selected", count = self.count))
-                                .max_lines(1),
-                        ),
+                        rect()
+                            .tw(&tokens, &[w_flex()])
+                            .min_width(Size::px(0.0))
+                            .child(
+                                EMPHASIS
+                                    .label(
+                                        &tokens,
+                                        crate::tr!("ui-table-selected", count = self.count),
+                                    )
+                                    .max_lines(1)
+                                    .text_overflow(TextOverflow::Ellipsis),
+                            ),
                     )
                     .children(buttons)
                     .child(clear),

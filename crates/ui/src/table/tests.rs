@@ -8,10 +8,12 @@ use std::time::Duration;
 
 use freya::prelude::*;
 
-use super::{Column, SortDirection, data_table};
+use super::{Column, SortDirection, batch_action, data_table};
+use crate::icons::Icon;
 use crate::selection::Selection;
 use crate::snapshot::Snapshot;
 use crate::style::*;
+use crate::surface::use_tokens;
 use crate::theme::provide_tokens;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,5 +191,99 @@ fn the_selection_keeps_to_its_rows_through_a_sort() {
         *seen.borrow(),
         [4],
         "sorting does not change what is selected"
+    );
+}
+
+struct Picked;
+
+impl PartialEq for Picked {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+/// The window root of a phone: the density is held at compact, as a device
+/// preview does, and the table sits in a window host that reads it.
+impl Component for Picked {
+    fn render(&self) -> impl IntoElement {
+        use_hook(|| {
+            force_density(
+                Platform::get().current_window().id,
+                Some((SizeClass::Compact, PointerKind::Touch)),
+            )
+        });
+        provide_tokens();
+        crate::window::WindowHost::new(crate::shell::overlays::OverlayHost::new(PickedTable))
+    }
+}
+
+struct PickedTable;
+
+impl PartialEq for PickedTable {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl Component for PickedTable {
+    fn render(&self) -> impl IntoElement {
+        let tokens = use_tokens();
+        let rows = use_hook(|| Rc::new(items(12)));
+        let columns = use_hook(|| {
+            Rc::new(vec![
+                Column::text("name", "Name", |item: &Item| item.name.clone())
+                    .flex()
+                    .sort_by_text(),
+            ])
+        });
+        let selection = use_state(|| Selection::of([1_u32, 2, 3]));
+        rect().expanded().tw(&tokens, &[p(S4)]).child(
+            data_table(&rows, columns, |item: &Item| item.id)
+                .selection(selection)
+                .batch_actions(vec![
+                    batch_action("Copy names", |_: Vec<u32>| {}).icon(Icon::EditCopy),
+                    batch_action("Uninstall", |_: Vec<u32>| {})
+                        .icon(Icon::Delete)
+                        .destructive(),
+                ]),
+        )
+    }
+}
+
+/// The words and boxes of every label, as drawn.
+fn label_boxes(shot: &mut Snapshot) -> Vec<(String, Area)> {
+    shot.runner().find_many(|node, element| {
+        let label = Label::try_downcast(element)?;
+        Some((label.text.to_string(), node.layout().area))
+    })
+}
+
+/// Failure mode: on a phone the bar's count ("3 selected") was laid under its
+/// first action's words, because every action kept its label and the count was
+/// squeezed to nothing between them.
+#[test]
+fn on_a_phone_the_batch_bar_keeps_its_count_clear_of_its_actions() {
+    let mut shot = Snapshot::new(|| Picked.into_element(), (390.0, 700.0));
+    shot.settle(Duration::from_millis(400));
+    let labels = label_boxes(&mut shot);
+    let (_, count) = labels
+        .iter()
+        .find(|(text, _)| text == "3 selected")
+        .expect("the bar says how many rows are selected");
+    for (text, area) in &labels {
+        if text == "3 selected" {
+            continue;
+        }
+        let apart = area.max_x() <= count.min_x()
+            || area.min_x() >= count.max_x()
+            || area.max_y() <= count.min_y()
+            || area.min_y() >= count.max_y();
+        assert!(apart, "{text:?} {area:?} lies on the count {count:?}");
+    }
+    assert!(
+        labels
+            .iter()
+            .all(|(text, _)| text != "Copy names" && text != "Uninstall"),
+        "an action with an icon is that icon on a phone: {labels:?}"
     );
 }
