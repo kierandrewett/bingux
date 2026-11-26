@@ -14,15 +14,14 @@
 //!   `xdg-open bingux-settings://network/proxy` reaches the same path through
 //!   the desktop file's `x-scheme-handler`.
 
+mod single_instance;
+
 use std::cell::RefCell;
 use std::collections::VecDeque;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::task::{Poll, Waker};
-use std::time::Duration;
 
 use freya::prelude::*;
 
@@ -319,37 +318,23 @@ impl Application {
         };
 
         let socket = socket_path(&self.app_id);
-        let listener = match UnixStream::connect(&socket) {
-            Ok(running) => {
-                // One connection per address: the listener reads one line each.
-                let mut running = Some(running);
-                for line in &forwarded {
-                    let sent = match running.take() {
-                        Some(mut stream) => writeln!(stream, "{line}"),
-                        None => UnixStream::connect(&socket)
-                            .and_then(|mut stream| writeln!(stream, "{line}")),
-                    };
-                    if let Err(error) = sent {
-                        eprintln!("{}: could not reach the running copy: {error}", self.app_id);
-                        std::process::exit(1);
-                    }
-                }
-                return;
+        match single_instance::hand_off(&socket, &forwarded) {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(error) => {
+                eprintln!("{}: could not reach the running copy: {error}", self.app_id);
+                std::process::exit(1);
             }
-            Err(_) => {
-                // Nothing answered: any socket file is left over from a copy
-                // that is gone.
-                let _ = std::fs::remove_file(&socket);
-                match UnixListener::bind(&socket) {
-                    Ok(listener) => Some(listener),
-                    Err(error) => {
-                        eprintln!(
-                            "{}: running without a single-instance socket: {error}",
-                            self.app_id
-                        );
-                        None
-                    }
-                }
+        }
+        // Held until the event loop ends: dropping it removes the socket.
+        let mut owner = match single_instance::Owner::claim(&socket) {
+            Ok(owner) => Some(owner),
+            Err(error) => {
+                eprintln!(
+                    "{}: running without a single-instance socket: {error}",
+                    self.app_id
+                );
+                None
             }
         };
         let inbox = Arc::new(Inbox::default());
@@ -358,9 +343,12 @@ impl Application {
         for line in forwarded.iter().skip(1).filter(|line| !line.is_empty()) {
             inbox.push(line.clone());
         }
-        if let Some(listener) = listener {
+        if let Some(listener) = owner
+            .as_mut()
+            .and_then(single_instance::Owner::take_listener)
+        {
             let inbox = Arc::clone(&inbox);
-            std::thread::spawn(move || listen(listener, &inbox));
+            std::thread::spawn(move || single_instance::listen(listener, |line| inbox.push(line)));
         }
         let _ = INBOX.set(Arc::clone(&inbox));
         FORWARDED.with(|slot| *slot.borrow_mut() = Some(inbox));
@@ -710,20 +698,6 @@ impl Inbox {
             }
         })
         .await
-    }
-}
-
-/// Accept connections and pass each line on to the window. A client sends
-/// one address per connection; an empty line only raises the window.
-fn listen(listener: UnixListener, inbox: &Inbox) {
-    for stream in listener.incoming() {
-        let Ok(stream) = stream else { continue };
-        // A client that connects and says nothing must not hold the listener.
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-        let mut line = String::new();
-        if BufReader::new(stream).read_line(&mut line).is_ok() {
-            inbox.push(line.trim_end().to_string());
-        }
     }
 }
 
