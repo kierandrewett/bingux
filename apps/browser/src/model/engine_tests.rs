@@ -3,8 +3,6 @@
 //! and the controls follow what the engine says it can do. Over the in-memory
 //! test double.
 
-use std::sync::Arc;
-
 use bingux_ui::web_view::requests::{DialogKind, DialogRequest, RequestKind};
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
 use bingux_ui::web_view::{
@@ -13,24 +11,9 @@ use bingux_ui::web_view::{
 
 use super::shortcuts::Command;
 use super::tabs::Place;
+use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options};
 use crate::engine;
-
-fn browser() -> (Browser, Arc<TestDoubleBackend>) {
-    let double = TestDoubleBackend::new();
-    let mut browser = Browser::new(double.clone(), Options::default());
-    browser.open_tab("", Place::End, true);
-    browser.poll();
-    double.clear_calls();
-    (browser, double)
-}
-
-fn go(browser: &mut Browser, url: &str) -> u64 {
-    let key = browser.tabs.active_key();
-    browser.navigate(key, url);
-    browser.poll();
-    key
-}
 
 fn failed(browser: &Browser) -> Option<(FailureCause, bool, u32)> {
     match &browser.engine.status {

@@ -12,6 +12,8 @@ mod kept;
 mod lifecycle;
 mod outbox;
 mod prompts;
+#[cfg(test)]
+pub(crate) mod testing;
 
 pub use outbox::{Notice, Outbox, UiRequest};
 

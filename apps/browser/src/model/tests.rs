@@ -17,8 +17,6 @@
 //!   4. find learned from the first tab (the engine is asked with a session)
 //!      but the window keeps reading "not available" from before it.
 
-use std::sync::Arc;
-
 use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
 use bingux_ui::web_view::requests::{
     ContextTarget, DialogKind, DialogRequest, DownloadInfo, DownloadState, PermissionKind,
@@ -32,23 +30,8 @@ use bingux_ui::web_view::{
 use super::shortcuts::Command;
 use super::tab::{Page, TabKind};
 use super::tabs::Place;
+use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options, UiRequest};
-
-fn browser() -> (Browser, Arc<TestDoubleBackend>) {
-    let double = TestDoubleBackend::new();
-    let mut browser = Browser::new(double.clone(), Options::default());
-    browser.open_tab("", Place::End, true);
-    browser.poll();
-    double.clear_calls();
-    (browser, double)
-}
-
-fn go(browser: &mut Browser, url: &str) -> u64 {
-    let key = browser.tabs.active_key();
-    browser.navigate(key, url);
-    browser.poll();
-    key
-}
 
 #[test]
 fn the_first_tab_is_blank_and_the_engine_is_ready_after_its_event() {
