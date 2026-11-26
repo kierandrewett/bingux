@@ -6,7 +6,7 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::error_pages;
+use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
 use crate::model::tab::Page;
 use crate::new_tab::NewTabPage;
 
@@ -79,9 +79,15 @@ impl Component for PageArea {
             .into(),
             Shown::NewTab => NewTabPage { ctx, key }.into(),
             Shown::Settings => SettingsPage { ctx }.into(),
-            Shown::Crashed(reason) => error_pages::crashed(ctx, key, reason),
-            Shown::Cert(error) => error_pages::cert_error(ctx, key, &error),
-            Shown::Failed(error, url) => error_pages::failed(ctx, key, &error, &url),
+            Shown::Crashed(reason) => CrashedPage { ctx, key, reason }.into(),
+            Shown::Cert(error) => CertErrorPage { ctx, key, error }.into(),
+            Shown::Failed(error, url) => LoadFailedPage {
+                ctx,
+                key,
+                error,
+                url,
+            }
+            .into(),
             Shown::Waiting => status_page(Icon::WebBrowser, "Starting the engine").into_element(),
         };
         let status = hover.map(|address| {

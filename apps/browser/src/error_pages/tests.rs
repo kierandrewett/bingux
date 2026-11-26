@@ -17,7 +17,7 @@ fn error(name: &str) -> LoadError {
 
 #[test]
 fn an_unknown_host_names_the_host_and_offers_a_retry() {
-    let page = for_load_error(&error("NS_ERROR_UNKNOWN_HOST"), "missing.example");
+    let page = ErrorPage::for_load(&error("NS_ERROR_UNKNOWN_HOST"), "missing.example");
     assert!(page.text.contains("missing.example"));
     assert!(page.retry);
     assert_eq!(page.code, "NS_ERROR_UNKNOWN_HOST");
@@ -25,7 +25,7 @@ fn an_unknown_host_names_the_host_and_offers_a_retry() {
 
 #[test]
 fn an_error_the_browser_does_not_know_still_has_a_page() {
-    let page = for_load_error(&error("NS_ERROR_SOMETHING_NEW"), "a.example");
+    let page = ErrorPage::for_load(&error("NS_ERROR_SOMETHING_NEW"), "a.example");
     assert_eq!(page.title, "The page can\u{2019}t be shown");
     assert!(page.text.contains("a.example"));
     assert_eq!(page.code, "NS_ERROR_SOMETHING_NEW");
@@ -33,7 +33,7 @@ fn an_error_the_browser_does_not_know_still_has_a_page() {
 
 #[test]
 fn a_bad_address_is_not_worth_retrying() {
-    assert!(!for_load_error(&error("NS_ERROR_MALFORMED_URI"), "").retry);
+    assert!(!ErrorPage::for_load(&error("NS_ERROR_MALFORMED_URI"), "").retry);
 }
 
 #[test]
@@ -50,13 +50,13 @@ fn every_certificate_problem_has_a_sentence_that_names_the_site() {
         let mut cert = CertError::for_test("expired.example.net");
         cert.problem = problem;
         assert!(
-            cert_problem_text(&cert).contains("expired.example.net"),
+            CertSentence(&cert).text().contains("expired.example.net"),
             "{problem:?}"
         );
     }
     let cert = CertError::for_test("expired.example.net");
     assert!(
-        cert_problem_text(&cert).contains("12 March 2025"),
+        CertSentence(&cert).text().contains("12 March 2025"),
         "an expired certificate says when"
     );
 }
@@ -68,7 +68,7 @@ fn every_way_a_process_goes_away_has_a_page_that_offers_a_reload() {
         GoneReason::Killed,
         GoneReason::CleanExit,
     ] {
-        let page = for_process_gone(reason);
+        let page = ErrorPage::for_crash(reason);
         assert!(page.retry);
         assert!(!page.text.is_empty());
     }
