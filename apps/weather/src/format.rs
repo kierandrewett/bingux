@@ -2,7 +2,9 @@
 //! starts and stops, what a day is called, and how long a stretch of minutes
 //! reads.
 
+use bingux_ui::format::{Measure, Unit as UiUnit};
 use bingux_weather::time::{day_of, weekday};
+use bingux_weather::units::{Reading, Unit};
 use bingux_weather::{Forecast, Units};
 
 use bingux_ui::prelude::tr;
@@ -115,6 +117,77 @@ pub fn percent(value: f64) -> String {
 /// A temperature, or a dash for a value the service did not give.
 pub fn temperature(units: &Units, value: Option<f64>) -> String {
     value.map_or_else(|| "–".to_string(), |value| units.temperature(value))
+}
+
+/// The symbol of the speed unit on the wind dial: `km/h`, `mph`, `m/s`, as the
+/// language shown writes it.
+pub fn speed_symbol(units: &Units) -> String {
+    match units.speed {
+        bingux_weather::Speed::KilometresPerHour => tr!("weather-wind-symbol-kmh"),
+        bingux_weather::Speed::MilesPerHour => tr!("weather-wind-symbol-mph"),
+        bingux_weather::Speed::MetresPerSecond => tr!("weather-wind-symbol-ms"),
+    }
+}
+
+/// A reading written in the language shown: the number, the unit symbol and
+/// the space between them come from the locale.
+pub fn reading(reading: &Reading) -> String {
+    let unit = match reading.unit {
+        Unit::Degree => UiUnit::Degree,
+        Unit::Celsius => UiUnit::Celsius,
+        Unit::Fahrenheit => UiUnit::Fahrenheit,
+        Unit::KilometresPerHour => UiUnit::KilometresPerHour,
+        Unit::MilesPerHour => UiUnit::MilesPerHour,
+        Unit::MetresPerSecond => UiUnit::MetresPerSecond,
+        Unit::Millimetre => UiUnit::Millimetre,
+        Unit::Inch => UiUnit::Inch,
+        Unit::Hectopascal => UiUnit::Hectopascal,
+        Unit::InchOfMercury => UiUnit::InchOfMercury,
+        Unit::Metre => UiUnit::Metre,
+        Unit::Kilometre => UiUnit::Kilometre,
+        Unit::Mile => UiUnit::Mile,
+    };
+    // Round half away from zero, as the cards always have, and never write
+    // `-0`.
+    let factor = 10f64.powi(i32::from(reading.most));
+    let value = (reading.value * factor).round() / factor + 0.0;
+    Measure::new(value, unit)
+        .fraction_digits(reading.least, reading.most)
+        .format()
+}
+
+/// The readings of [`Units`] as text, so a page writes
+/// `units.speed(kmh)` and gets `12 km/h` in the language shown.
+pub trait UnitsText {
+    /// `21°`.
+    fn temperature(&self, celsius: f64) -> String;
+    /// `21 °C`.
+    fn temperature_with_unit(&self, celsius: f64) -> String;
+    fn speed(&self, kmh: f64) -> String;
+    fn rain(&self, millimetres: f64) -> String;
+    fn pressure(&self, hpa: f64) -> String;
+    fn distance(&self, metres: f64) -> String;
+}
+
+impl UnitsText for Units {
+    fn temperature(&self, celsius: f64) -> String {
+        reading(&self.temperature_reading(celsius))
+    }
+    fn temperature_with_unit(&self, celsius: f64) -> String {
+        reading(&self.temperature_with_unit_reading(celsius))
+    }
+    fn speed(&self, kmh: f64) -> String {
+        reading(&self.speed_reading(kmh))
+    }
+    fn rain(&self, millimetres: f64) -> String {
+        reading(&self.rain_reading(millimetres))
+    }
+    fn pressure(&self, hpa: f64) -> String {
+        reading(&self.pressure_reading(hpa))
+    }
+    fn distance(&self, metres: f64) -> String {
+        reading(&self.distance_reading(metres))
+    }
 }
 
 #[cfg(test)]

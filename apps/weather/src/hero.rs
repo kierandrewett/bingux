@@ -17,7 +17,7 @@ use bingux_weather::{Forecast, Units};
 use bytes::Bytes;
 use freya::prelude::*;
 
-use crate::format::{self, rain_outlook};
+use crate::format::{self, UnitsText, rain_outlook};
 use crate::glyph;
 use crate::sky;
 use crate::words;

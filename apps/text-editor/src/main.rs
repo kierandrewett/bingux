@@ -16,6 +16,7 @@ mod positions;
 mod prefs;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
+mod words;
 
 use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 

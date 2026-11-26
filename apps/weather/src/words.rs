@@ -1,6 +1,7 @@
 //! The app's words for the crate's enums and the sentences built from them.
 //! Each enum maps to one message per variant; the crate keeps no English.
 
+use crate::format::UnitsText;
 use bingux_ui::prelude::tr;
 use bingux_weather::astro::MoonPhase;
 use bingux_weather::codes::Condition;

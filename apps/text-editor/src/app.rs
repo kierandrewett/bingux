@@ -1253,7 +1253,7 @@ fn status_bar(
         .map(|ending| {
             let ending = *ending;
             let content = content.clone();
-            menu_item(ending.describe(), move |_| {
+            menu_item(crate::words::line_ending(ending), move |_| {
                 content.change_format(|format| format.line_ending = ending)
             })
             .checked(format.line_ending == ending)
@@ -1280,8 +1280,8 @@ fn status_bar(
     if compact {
         let mut items = vec![
             submenu(language.name.clone(), language_menu),
-            submenu(indent.label(), indent_menu),
-            submenu(format.encoding_label(), encoding_menu),
+            submenu(crate::words::indent(indent), indent_menu),
+            submenu(crate::words::encoding(&format), encoding_menu),
             submenu(format.line_ending.label(), ending_menu),
         ];
         if markdown {
@@ -1303,8 +1303,8 @@ fn status_bar(
             .into();
     }
     row.child(menu_button(language.name.clone(), language_menu))
-        .child(menu_button(indent.label(), indent_menu))
-        .child(menu_button(format.encoding_label(), encoding_menu))
+        .child(menu_button(crate::words::indent(indent), indent_menu))
+        .child(menu_button(crate::words::encoding(&format), encoding_menu))
         .child(menu_button(format.line_ending.label(), ending_menu))
         .into()
 }
@@ -1386,7 +1386,7 @@ fn indent_items(handle: EditorHandle, indent: Indent, tab_width: usize) -> Vec<M
     ] {
         let handle = handle.clone();
         items.push(
-            menu_item(choice.label(), move |_| {
+            menu_item(crate::words::indent(choice), move |_| {
                 handle.update(|editor| editor.settings.indent = choice)
             })
             .checked(indent == choice),
@@ -1427,7 +1427,7 @@ fn encoding_items(
         .iter()
         .map(|(group, list)| {
             submenu(
-                *group,
+                crate::words::script(*group),
                 list.iter()
                     .map(|encoding| {
                         let encoding = *encoding;
@@ -1445,7 +1445,7 @@ fn encoding_items(
         .iter()
         .map(|(group, list)| {
             submenu(
-                *group,
+                crate::words::script(*group),
                 list.iter()
                     .map(|encoding| {
                         let encoding = *encoding;

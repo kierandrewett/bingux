@@ -14,7 +14,7 @@ use bingux_weather::time::{HOUR, unix_now};
 use bingux_weather::{AirQuality, Forecast, Hour, Units, text};
 use freya::prelude::*;
 
-use crate::format;
+use crate::format::{self, UnitsText};
 use crate::glyph;
 use crate::hourly::HOURS;
 use crate::sky;
@@ -152,7 +152,7 @@ impl Details {
         };
         let mut body: Vec<Element> = Vec::new();
         let dial = compass(current.wind_direction.unwrap_or(0.0))
-            .centre(shown, self.units.speed_unit())
+            .centre(shown, format::speed_symbol(&self.units))
             .label(match current.wind_direction {
                 Some(degrees) => {
                     tr!(
@@ -526,7 +526,10 @@ impl Component for Trends {
             .iter()
             .map(|hour| hour.precipitation.unwrap_or(0.0))
             .sum();
-        let rain_unit = units.rain_unit();
+        let rain_unit = match units.rain {
+            bingux_weather::units::Rain::Millimetres => bingux_weather::units::Unit::Millimetre,
+            bingux_weather::units::Rain::Inches => bingux_weather::units::Unit::Inch,
+        };
         let rain = bar_chart([bingux_ui::charts::Series::new(
             tr!("weather-trends-precipitation"),
             rain_points,
@@ -541,11 +544,12 @@ impl Component for Trends {
             )
         }))
         .y_format(move |value| {
-            if value >= 10.0 || rain_unit == "mm" && value.fract() == 0.0 {
-                format!("{} {rain_unit}", value.round() as i64)
-            } else {
-                format!("{value:.2} {rain_unit}")
-            }
+            format::reading(&bingux_weather::units::Reading {
+                value,
+                unit: rain_unit,
+                least: 0,
+                most: if value >= 10.0 { 0 } else { 2 },
+            })
         })
         .label(tr!("weather-trends-precipitation.a11y"));
 

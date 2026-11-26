@@ -513,3 +513,8 @@ weather-ago-days = { $count ->
     [one] 1 day ago
    *[other] { $count } days ago
 }
+
+# The unit under the wind speed on the dial.
+weather-wind-symbol-kmh = km/h
+weather-wind-symbol-mph = mph
+weather-wind-symbol-ms = m/s

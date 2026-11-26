@@ -13,7 +13,7 @@ use bingux_weather::codes::{Condition, Sky};
 use bingux_weather::{Day, Forecast, Units};
 use freya::prelude::*;
 
-use crate::format;
+use crate::format::{self, UnitsText};
 use crate::glyph;
 use crate::sky;
 use crate::words;

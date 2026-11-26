@@ -123,3 +123,29 @@ text-editor-encode-as = Encode as
 text-editor-read-again-as = Read again as
 text-editor-bom = Byte order mark
 text-editor-group-editing = Editing
+
+## The status bar and its menus: what the text crate names as kinds
+
+text-editor-indent-tabs = Tabs
+# $width (Number) - how many spaces make one level
+text-editor-indent-spaces = Spaces: { $width }
+text-editor-ending-lf = Unix and macOS (LF)
+text-editor-ending-crlf = Windows (CRLF)
+text-editor-ending-cr = Classic Mac OS (CR)
+# $encoding (Text) - the name of the encoding, such as UTF-8
+text-editor-encoding-with-bom = { $encoding } with BOM
+text-editor-script-unicode = Unicode
+text-editor-script-western = Western
+text-editor-script-central-european = Central European
+text-editor-script-baltic = Baltic
+text-editor-script-cyrillic = Cyrillic
+text-editor-script-greek = Greek
+text-editor-script-turkish = Turkish
+text-editor-script-hebrew = Hebrew
+text-editor-script-arabic = Arabic
+text-editor-script-vietnamese = Vietnamese
+text-editor-script-thai = Thai
+text-editor-script-chinese = Chinese
+text-editor-script-japanese = Japanese
+text-editor-script-korean = Korean
+text-editor-script-other = Other

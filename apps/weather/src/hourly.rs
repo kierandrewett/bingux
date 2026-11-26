@@ -14,7 +14,7 @@ use bingux_weather::time::HOUR;
 use bingux_weather::{Forecast, Hour, Units, text};
 use freya::prelude::*;
 
-use crate::format;
+use crate::format::{self, UnitsText};
 use crate::glyph;
 use crate::words::{self, ClockText};
 
