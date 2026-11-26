@@ -123,9 +123,13 @@ impl Component for PopoverDemo {
         let anchor = area.read().clone();
         let content = rect()
             .tw_layout(&[flex_col(), w_full(), gap(S3)])
-            .child(Group::new(None::<String>).row(
-                row("Connection is secure").subtitle("What you send to this site is private on its way there.").leading(Icon::SecurityHigh),
-            ))
+            .child(
+                Group::new(None::<String>).row(
+                    row("Connection is secure")
+                        .subtitle("What you send to this site is private on its way there.")
+                        .leading(Icon::NetworkWirelessEncrypted),
+                ),
+            )
             .child(
                 Group::new("Site".to_string())
                     .row(property_row("Site", "example.com"))
@@ -133,8 +137,14 @@ impl Component for PopoverDemo {
             );
         rect()
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
-            .child(icon_button(Icon::SecurityHigh, move |_| open.set(true)).tooltip("Page info"))
-            .child(popover(open(), &anchor, content.into_element()).on_dismiss(move |_| open.set(false)))
+            .child(
+                icon_button(Icon::NetworkWirelessEncrypted, move |_| open.set(true))
+                    .tooltip("Page info"),
+            )
+            .child(
+                popover(open(), &anchor, content.into_element())
+                    .on_dismiss(move |_| open.set(false)),
+            )
     }
 }
 
@@ -161,10 +171,19 @@ impl Component for AttachedDemo {
         rect()
             .tw_layout(&[w_full()])
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
-            .child(text_field(text, |_| {}).fill_width().placeholder("Type to see suggestions").leading(Icon::Search))
             .child(
-                popover(!text.read().is_empty(), &anchor, rect().width(Size::fill()).children(rows).into_element())
-                    .attached(),
+                text_field(text, |_| {})
+                    .fill_width()
+                    .placeholder("Type to see suggestions")
+                    .leading(Icon::Search),
+            )
+            .child(
+                popover(
+                    !text.read().is_empty(),
+                    &anchor,
+                    rect().width(Size::fill()).children(rows).into_element(),
+                )
+                .attached(),
             )
     }
 }
@@ -173,9 +192,13 @@ pub const POPOVER: &[Spec] = &[
     Spec::live("Opens against its button", || PopoverDemo.into_element())
         .script("scroll 700, 600, -2600; wait 300; click-name Page info; wait 500; save {out}")
         .page(260.0),
-    Spec::live("Attached to a field: type to open the list", || AttachedDemo.into_element())
-        .script("scroll 700, 600, -3200; wait 300; click 717, 900; wait 200; type ex; wait 500; save {out}")
-        .page(260.0),
+    Spec::live("Attached to a field: type to open the list", || {
+        AttachedDemo.into_element()
+    })
+    .script(
+        "scroll 700, 600, -3200; wait 300; click 717, 900; wait 200; type ex; wait 500; save {out}",
+    )
+    .page(260.0),
 ];
 
 pub const TOOLTIP: &[Spec] = &[

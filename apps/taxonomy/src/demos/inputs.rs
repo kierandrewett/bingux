@@ -1,5 +1,6 @@
 //! Controls: text input, forms and selection.
 
+use bingux_ui::controls::TabStatus;
 use bingux_ui::controls::colour_picker::{colour_button, colour_chip, colour_picker};
 use bingux_ui::controls::direction::{Direction, directed};
 use bingux_ui::controls::fade_text::fade_text;

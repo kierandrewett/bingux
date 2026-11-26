@@ -33,7 +33,7 @@ fn status_of(tab: &Tab) -> Option<TabStatus> {
 pub fn icon_of(tab: &Tab) -> Icon {
     match tab.kind {
         TabKind::Settings => Icon::EmblemSystem,
-        TabKind::Web if tab.private => Icon::SecurityHigh,
+        TabKind::Web if tab.private => Icon::NetworkWirelessEncrypted,
         TabKind::Web => Icon::WebBrowser,
     }
 }

@@ -1,8 +1,8 @@
 //! How the connection of the page on show is described: the icon beside the
 //! address and the words in the page info.
 
-use bingux_ui::web_view::{Security, SecurityState};
 use bingux_ui::icons::Icon;
+use bingux_ui::web_view::{Security, SecurityState};
 
 /// How much the person should worry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,7 +28,11 @@ pub struct Summary {
 pub fn summarize(security: &Security, url: &str) -> Summary {
     let blank = url.is_empty() || url == "about:blank";
     // A file is local whatever the engine calls its connection.
-    let state = if url.starts_with("file://") { SecurityState::Local } else { security.state };
+    let state = if url.starts_with("file://") {
+        SecurityState::Local
+    } else {
+        security.state
+    };
     match state {
         _ if blank => Summary {
             icon: Icon::WebBrowser,
@@ -55,7 +59,7 @@ pub fn summarize(security: &Security, url: &str) -> Summary {
             detail: "Images or media on this page were loaded without encryption. Someone on the network could see or replace them.".to_string(),
         },
         SecurityState::Secure => Summary {
-            icon: Icon::SecurityHigh,
+            icon: Icon::NetworkWirelessEncrypted,
             tone: Tone::Good,
             headline: "Connection is secure".to_string(),
             detail: if security.extended_validation {
@@ -83,7 +87,7 @@ pub fn summarize(security: &Security, url: &str) -> Summary {
             detail: "The connection is being made; nothing is known about it yet.".to_string(),
         },
         SecurityState::Insecure => Summary {
-            icon: Icon::SecurityLow,
+            icon: Icon::DialogWarning,
             tone: Tone::Warning,
             headline: "Connection is not secure".to_string(),
             detail: "Anyone on the network could read this page and what you send to it. Do not enter passwords or card numbers here.".to_string(),
@@ -105,9 +109,15 @@ mod tests {
     #[test]
     fn a_secure_page_is_good_and_an_http_page_is_a_warning() {
         let secure = summarize(&security(SecurityState::Secure), "https://example.com");
-        assert_eq!((secure.tone, secure.icon), (Tone::Good, Icon::SecurityHigh));
+        assert_eq!(
+            (secure.tone, secure.icon),
+            (Tone::Good, Icon::NetworkWirelessEncrypted)
+        );
         let plain = summarize(&security(SecurityState::Insecure), "http://example.com");
-        assert_eq!((plain.tone, plain.icon), (Tone::Warning, Icon::SecurityLow));
+        assert_eq!(
+            (plain.tone, plain.icon),
+            (Tone::Warning, Icon::DialogWarning)
+        );
     }
 
     #[test]
@@ -134,7 +144,11 @@ mod tests {
             (SecurityState::Insecure, ""),
             (SecurityState::Insecure, "about:blank"),
         ] {
-            assert_eq!(summarize(&security(state), url).tone, Tone::Neutral, "{state:?} {url}");
+            assert_eq!(
+                summarize(&security(state), url).tone,
+                Tone::Neutral,
+                "{state:?} {url}"
+            );
         }
     }
 
@@ -144,6 +158,10 @@ mod tests {
             extended_validation: true,
             ..security(SecurityState::Secure)
         };
-        assert!(summarize(&ev, "https://bank.example").detail.contains("verified"));
+        assert!(
+            summarize(&ev, "https://bank.example")
+                .detail
+                .contains("verified")
+        );
     }
 }

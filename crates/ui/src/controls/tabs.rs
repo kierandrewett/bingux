@@ -2645,9 +2645,7 @@ impl Component for StatusMark {
         // begin dragging it.
         let slot = rect()
             .component("TabSound")
-            .width(Size::px(self.size.px()))
-            .height(Size::px(self.size.px()))
-            .tw(&tokens, &[flex_row(), center()])
+            .tw(&tokens, &[w(self.size), h(self.size), flex_row(), center()])
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation());
         let Some(on_status) = self.on_status.clone() else {
             return slot
