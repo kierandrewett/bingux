@@ -3,7 +3,6 @@
 //! and the controls follow what the engine says it can do. Over the in-memory
 //! test double.
 
-use bingux_ui::web_view::requests::{DialogKind, DialogRequest, RequestKind};
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
 use bingux_ui::web_view::{
     BrowserBackend, BrowserEvent, Capabilities, Disposition, EngineEvent, FailureCause, NewWindow,
@@ -214,34 +213,6 @@ fn a_restart_that_does_not_work_keeps_saying_why_with_the_new_words() {
         notices.iter().any(|notice| notice.error),
         "the person is told it did not work"
     );
-}
-
-#[test]
-fn the_engine_ending_a_question_takes_it_off_the_screen() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "dialog.example.net");
-    let session = browser.session_of(key).unwrap();
-    let asked = browser.prompt(key).unwrap().id();
-    double.close_request(session, asked);
-    browser.poll();
-    assert!(
-        browser.prompt(key).is_none(),
-        "its deadline passed: nothing is left to answer"
-    );
-    // A second question, then a certificate that was waiting.
-    let other = double.ask(
-        session,
-        RequestKind::Dialog(DialogRequest {
-            origin: "https://x.example".to_string(),
-            kind: DialogKind::Alert,
-            message: "Hi".to_string(),
-        }),
-    );
-    browser.poll();
-    assert_eq!(browser.prompt(key).map(|prompt| prompt.id()), Some(other));
-    double.close_request(session, other);
-    browser.poll();
-    assert!(browser.prompt(key).is_none());
 }
 
 fn popup(double: &TestDoubleBackend, browser: &mut Browser, window: NewWindow) -> u64 {

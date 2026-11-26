@@ -18,13 +18,9 @@
 //!      but the window keeps reading "not available" from before it.
 
 use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
-use bingux_ui::web_view::requests::{
-    ContextTarget, DialogKind, DialogRequest, DownloadInfo, DownloadState, RequestKind,
-};
+use bingux_ui::web_view::requests::{ContextTarget, DownloadInfo, DownloadState, RequestKind};
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
-use bingux_ui::web_view::{
-    BrowserBackend, BrowserEvent, DownloadId, GoneReason, Response, TabEvent, TabId,
-};
+use bingux_ui::web_view::{BrowserBackend, BrowserEvent, DownloadId, Response, TabEvent};
 
 use super::tab::{Page, TabKind};
 use super::tabs::Place;
@@ -220,71 +216,6 @@ fn settings_is_one_tab_that_is_found_again_and_becomes_a_page_when_navigated_awa
             .iter()
             .any(|call| matches!(call, Call::CreateTab(_)))
     );
-}
-
-#[test]
-fn dialogs_queue_in_order_and_each_is_answered_once() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "dialog.example.net");
-    let session = browser.session_of(key).unwrap();
-    double.ask(
-        session,
-        RequestKind::Dialog(DialogRequest {
-            origin: "https://dialog.example.net".to_string(),
-            kind: DialogKind::Alert,
-            message: "Second".to_string(),
-        }),
-    );
-    browser.poll();
-    assert_eq!(browser.tabs.get(key).unwrap().prompts.len(), 2);
-    assert!(browser.tabs.get(key).unwrap().needs_attention());
-    double.clear_calls();
-    browser.answer_dialog(key, true, None);
-    let Some(super::tab::Prompt::Dialog(_, second)) = browser.prompt(key) else {
-        panic!("the second dialog");
-    };
-    assert_eq!(second.message, "Second");
-    browser.answer_dialog(key, false, Some("typed".to_string()));
-    assert!(browser.prompt(key).is_none());
-    browser.answer_dialog(key, true, None);
-    let answers = double
-        .calls()
-        .iter()
-        .filter(|call| matches!(call, Call::Respond(..)))
-        .count();
-    assert_eq!(answers, 2, "a third answer has no question");
-}
-
-#[test]
-fn a_tab_that_crashes_drops_the_questions_it_can_no_longer_hear() {
-    let (mut browser, double) = browser();
-    let key = go(&mut browser, "dialog.example.net");
-    assert!(browser.prompt(key).is_some());
-    let session = browser.session_of(key).unwrap();
-    double.emit(bingux_ui::web_view::BrowserEvent::tab(
-        session,
-        TabEvent::ProcessGone(GoneReason::Killed),
-    ));
-    browser.poll();
-    assert!(browser.prompt(key).is_none());
-}
-
-#[test]
-fn a_request_for_a_tab_that_is_gone_is_refused() {
-    let (mut browser, double) = browser();
-    let stale = TabId(999);
-    double.ask(
-        stale,
-        RequestKind::Dialog(DialogRequest {
-            origin: "https://x.example".to_string(),
-            kind: DialogKind::Confirm,
-            message: "Hello?".to_string(),
-        }),
-    );
-    double.clear_calls();
-    browser.poll();
-    // The double has no such tab, so the refusal is recorded as a failed call.
-    assert!(double.calls().iter().any(|call| matches!(call, Call::Respond(t, _, Response::Dialog { accept: false, .. }) if *t == stale)));
 }
 
 #[test]

@@ -16,6 +16,7 @@ mod model;
 mod new_tab;
 mod permissions;
 mod profile;
+mod prompts;
 mod site_info;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;

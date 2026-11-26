@@ -5,7 +5,7 @@ use bingux_ui::web_view::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
 
 use super::{Browser, Notice, PendingMenu, UiRequest};
 use crate::commands::Command;
-use crate::model::tab::Prompt;
+use crate::prompts::Prompt;
 use crate::zoom::Zoom;
 
 impl Browser {

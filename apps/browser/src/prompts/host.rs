@@ -11,9 +11,9 @@ use bingux_ui::web_view::requests::{DialogKind, DialogRequest, PickerMode, Picke
 use freya::prelude::*;
 
 use crate::address::Address;
-use crate::model::tab::Prompt;
 
-use super::ctx::Ctx;
+use super::Prompt;
+use crate::ui::Ctx;
 
 /// Shows the dialog of the first prompt of the tab on show, once for each.
 /// It draws nothing of its own.

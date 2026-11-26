@@ -3,13 +3,12 @@
 
 use std::collections::VecDeque;
 
-use bingux_ui::web_view::requests::{
-    AuthRequest, CertError, DialogRequest, PermissionRequest, PickerRequest, SelectRequest,
-};
+use bingux_ui::web_view::requests::CertError;
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
 use crate::address::Address;
 use crate::find::Find;
+use crate::prompts::Prompt;
 use crate::zoom::Zoom;
 
 /// What a tab holds.
@@ -19,29 +18,6 @@ pub enum TabKind {
     Web,
     /// The browser's settings, drawn by the browser. No session.
     Settings,
-}
-
-/// Something the page asked that waits for the person. The tab keeps them in
-/// the order they came and shows the first.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Prompt {
-    Permission(RequestId, PermissionRequest),
-    Dialog(RequestId, DialogRequest),
-    Auth(RequestId, AuthRequest),
-    Select(RequestId, SelectRequest),
-    FilePicker(RequestId, PickerRequest),
-}
-
-impl Prompt {
-    pub fn id(&self) -> RequestId {
-        match self {
-            Self::Permission(id, _)
-            | Self::Dialog(id, _)
-            | Self::Auth(id, _)
-            | Self::Select(id, _)
-            | Self::FilePicker(id, _) => *id,
-        }
-    }
 }
 
 /// What the tab's content area shows.

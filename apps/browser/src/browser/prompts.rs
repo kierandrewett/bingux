@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use bingux_ui::web_view::Response;
 
 use super::Browser;
-use crate::model::tab::Prompt;
+use crate::prompts::Prompt;
 
 impl Browser {
     /// The prompt of tab `key` that waits first.

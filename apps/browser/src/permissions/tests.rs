@@ -94,8 +94,7 @@ fn a_permission_prompt_waits_and_a_remembered_answer_is_reused() {
     crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "perm.example.net");
-    let Some(crate::model::tab::Prompt::Permission(_, request)) = browser.prompt(key).cloned()
-    else {
+    let Some(crate::prompts::Prompt::Permission(_, request)) = browser.prompt(key).cloned() else {
         panic!("a permission prompt");
     };
     assert_eq!(request.kinds, [PermissionKind::Geolocation]);

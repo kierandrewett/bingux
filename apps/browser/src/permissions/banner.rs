@@ -3,8 +3,8 @@
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::model::tab::Prompt;
 use crate::permissions::Permissions;
+use crate::prompts::Prompt;
 use crate::ui::Ctx;
 
 /// The banner of a permission request.
