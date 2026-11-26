@@ -15,6 +15,7 @@
 mod backend;
 mod bin;
 mod clipboard;
+mod failure_text;
 mod names;
 mod op_error;
 mod open_with;
@@ -39,7 +40,9 @@ use crate::task::spawn_blocking;
 use crate::window::Window;
 
 pub(super) use clipboard::is_cut;
+pub(super) use failure_text::{name_check as name_check_words, pattern as pattern_words};
 pub(super) use names::{check_name, stem_chars};
+pub(super) use op_error::text as error_words;
 pub(super) use open_with::{App, apps_for, launch, open_default, warm as warm_open_with};
 
 /// The sidebar's Empty Trash asks the file view beside it to empty the Trash:

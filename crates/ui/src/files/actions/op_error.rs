@@ -6,7 +6,7 @@ use bingux_files::location::NameError;
 use bingux_files::ops::{IoKind, OpError};
 
 /// The sentence for `error`, in the language shown.
-pub(super) fn text(error: &OpError) -> String {
+pub(in crate::files) fn text(error: &OpError) -> String {
     match error {
         OpError::Exists => crate::tr!("ui-files-error-exists"),
         OpError::Permission => crate::tr!("ui-files-error-permission"),
@@ -22,12 +22,11 @@ pub(super) fn text(error: &OpError) -> String {
         OpError::Io(kind) => io(*kind),
         OpError::CannotTrash(refusal) => super::bin::refusal_text(refusal, false),
         OpError::CopyNeeded => crate::tr!("ui-files-error-copy-needed"),
-        // Still worded in English by the crate; being replaced by kinds.
-        OpError::Unsupported(text) | OpError::Other(text) => text.clone(),
+        OpError::Failed(failure) => super::failure_text::text(failure),
     }
 }
 
-fn io(kind: IoKind) -> String {
+pub(super) fn io(kind: IoKind) -> String {
     match kind {
         IoKind::Full => crate::tr!("ui-files-error-io-full"),
         IoKind::ReadOnly => crate::tr!("ui-files-error-io-read-only"),

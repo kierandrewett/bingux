@@ -957,6 +957,7 @@ impl Component for PlaceRow {
                     CAPTION
                         .label(&tokens, &crate::tr!("ui-files-places-not-responding"))
                         .max_lines(1)
+                        .text_overflow(TextOverflow::Ellipsis)
                         .into(),
                 ),
                 Some(crate::tr!("ui-files-places-not-responding")),

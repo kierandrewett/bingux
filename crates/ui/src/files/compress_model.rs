@@ -24,6 +24,7 @@ use bingux_files::ops::{
     suggested_base,
 };
 
+use super::actions::{error_words, name_check_words, pattern_words};
 use crate::i18n::Arg;
 
 /// What the dialog makes.
@@ -237,6 +238,15 @@ pub fn usable_format(wanted: Format) -> Format {
         .unwrap_or(wanted)
 }
 
+/// The words for a volume size: `100 MB`, `2 GB`.
+pub fn split_size_words(mib: u64) -> String {
+    if mib >= 1024 && mib % 1024 == 0 {
+        crate::tr!("ui-compress-split-gb", count = mib / 1024)
+    } else {
+        crate::tr!("ui-compress-split-mb", count = mib)
+    }
+}
+
 /// The formats a dropdown lists as unavailable, with the reason each is.
 pub fn unavailable_formats() -> Vec<(String, String)> {
     Format::ALL
@@ -244,7 +254,7 @@ pub fn unavailable_formats() -> Vec<(String, String)> {
         .filter_map(|format| {
             format
                 .unavailable()
-                .map(|why| (format.label().to_string(), why))
+                .map(|why| (format.label().to_string(), error_words(&why)))
         })
         .collect()
 }
@@ -265,10 +275,10 @@ fn check_archive(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Ch
     let name = check_name(&typed.name, format, taken);
     // A taken name is not an error: the person picks keep both or replace.
     if !name.is_usable() {
-        found.name = name.message().map(str::to_string);
+        found.name = name_check_words(name);
     }
     if let Err(error) = Excludes::parse(&typed.excludes) {
-        found.excludes = Some(format!("{error}."));
+        found.excludes = Some(pattern_words(&error));
     }
     if draft.locked && format.can_lock() {
         if typed.password.is_empty() {
@@ -280,7 +290,7 @@ fn check_archive(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Ch
     found.blocked = found
         .name
         .clone()
-        .or_else(|| format.unavailable())
+        .or_else(|| format.unavailable().map(|why| error_words(&why)))
         .or_else(|| found.excludes.clone())
         .or_else(|| found.password.clone())
         .or_else(|| found.confirm.clone());
@@ -297,7 +307,7 @@ fn check_reduce(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Che
         return;
     }
     if let Some(reason) = kinds.iter().find_map(|kind| tools.unavailable(*kind)) {
-        found.blocked = Some(reason);
+        found.blocked = Some(error_words(&reason));
         return;
     }
     if kinds.contains(&MediaKind::Image) {
@@ -307,18 +317,18 @@ fn check_reduce(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Che
             found.dimension = Some(error.message());
         }
         if let Some(reason) = tools.image_format_unavailable(draft.reduce.image.format) {
-            found.blocked = Some(reason);
+            found.blocked = Some(error_words(&reason));
         }
     }
     if kinds.contains(&MediaKind::Video)
         && let Some(reason) = tools.video_codec_unavailable(draft.reduce.video.codec)
     {
-        found.blocked = Some(reason);
+        found.blocked = Some(error_words(&reason));
     }
     if kinds.contains(&MediaKind::Audio)
         && let Some(reason) = tools.audio_codec_unavailable(draft.reduce.audio.codec)
     {
-        found.blocked = Some(reason);
+        found.blocked = Some(error_words(&reason));
     }
     found.blocked = found.blocked.take().or_else(|| found.dimension.clone());
 }
@@ -347,7 +357,7 @@ pub fn name_is_taken(draft: &Draft, typed: &Typed, existing: &HashSet<String>) -
 
 /// The pack options of a form, with its password.
 pub fn pack_options(draft: &Draft, typed: &Typed) -> Result<PackOptions, String> {
-    let excludes = Excludes::parse(&typed.excludes).map_err(|error| error.to_string())?;
+    let excludes = Excludes::parse(&typed.excludes).map_err(|error| pattern_words(&error))?;
     let mut options = draft.pack.clone();
     options.excludes = excludes;
     options.password = (draft.locked && options.format.can_lock() && !typed.password.is_empty())
@@ -408,7 +418,7 @@ pub fn image_formats_unavailable(tools: &Tools) -> Vec<(String, String)> {
         .filter_map(|format| {
             tools
                 .image_format_unavailable(format)
-                .map(|why| (format.key().to_string(), why))
+                .map(|why| (format.key().to_string(), error_words(&why)))
         })
         .collect()
 }
@@ -420,7 +430,7 @@ pub fn video_codecs_unavailable(tools: &Tools) -> Vec<(String, String)> {
         .filter_map(|codec| {
             tools
                 .video_codec_unavailable(codec)
-                .map(|why| (codec.key().to_string(), why))
+                .map(|why| (codec.key().to_string(), error_words(&why)))
         })
         .collect()
 }
@@ -432,7 +442,7 @@ pub fn audio_codecs_unavailable(tools: &Tools) -> Vec<(String, String)> {
         .filter_map(|codec| {
             tools
                 .audio_codec_unavailable(codec)
-                .map(|why| (codec.key().to_string(), why))
+                .map(|why| (codec.key().to_string(), error_words(&why)))
         })
         .collect()
 }

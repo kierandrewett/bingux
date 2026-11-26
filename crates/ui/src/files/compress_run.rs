@@ -25,7 +25,7 @@ use bingux_files::ops::{
 };
 use freya::prelude::*;
 
-use super::actions::{Busy, Env, notify, set};
+use super::actions::{Busy, Env, error_words, notify, set};
 use super::compress_model::{created_text, reduced_text};
 use crate::shell::{BannerKind, Toast};
 use crate::task::{spawn_blocking, spawn_detached};
@@ -412,8 +412,8 @@ fn reduced_toast(env: &Env, reduced: &Reduced) {
     // The first failure says why, in the program's words.
     if let Some(first) = failures.first() {
         let why = match &first.outcome {
-            bingux_files::ops::Outcome::Failed { error } => error.clone(),
-            bingux_files::ops::Outcome::Skipped { reason } => reason.clone(),
+            bingux_files::ops::Outcome::Failed { error } => error_words(error),
+            bingux_files::ops::Outcome::Skipped { reason } => error_words(reason),
             _ => String::new(),
         };
         if !why.is_empty() {

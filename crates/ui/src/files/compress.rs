@@ -32,17 +32,17 @@ use std::sync::{LazyLock, Mutex, PoisonError};
 use bingux_files::ops::prefs::Prefs;
 use bingux_files::ops::{
     Estimate, Format, Level, OnConflict, PackJob, ReduceJob, ReduceOptions, SPLIT_SIZES_MIB, Tools,
-    estimate, parallelism, split_label,
+    estimate, parallelism,
 };
 use bingux_files::{Cancel, ChooserRequest, Entry};
 use freya::prelude::*;
 
-use super::actions::Env;
+use super::actions::{Env, error_words};
 use super::chooser::choose;
 use super::compress_media::{Media, media_groups};
 use super::compress_model::{
     Check, Draft, Mode, Subject, Typed, World, check, name_is_taken, pack_options, reduce_options,
-    result_name, unavailable_formats, usable_format,
+    result_name, split_size_words, unavailable_formats, usable_format,
 };
 use super::compress_run::{run_pack, run_reduce};
 use crate::controls::{dropdown, form_field, segmented};
@@ -846,7 +846,7 @@ fn archive_groups(
     ));
 
     // ---- the password ------------------------------------------------------
-    let lock_reason = format.lock_unavailable();
+    let lock_reason = format.lock_unavailable().map(|why| error_words(&why));
     let can_lock = format.can_lock() && lock_reason.is_none();
     let mut lock = Group::titled(&crate::tr!("ui-compress-password"));
     lock = lock.row(
@@ -888,13 +888,13 @@ fn archive_groups(
         ));
 
     // ---- volumes -----------------------------------------------------------
-    let split_reason = format.split_unavailable();
+    let split_reason = format.split_unavailable().map(|why| error_words(&why));
     let mut split_options: Vec<(String, String)> =
         vec![("none".into(), crate::tr!("ui-compress-split-one"))];
     split_options.extend(SPLIT_SIZES_MIB.iter().map(|mib| {
         (
             mib.to_string(),
-            crate::tr!("ui-compress-split-each", size = split_label(*mib)),
+            crate::tr!("ui-compress-split-each", size = split_size_words(*mib)),
         )
     }));
     let volumes = Group::titled(&crate::tr!("ui-compress-volumes")).row(

@@ -13,6 +13,7 @@ use bingux_files::ops::{
 };
 use freya::prelude::*;
 
+use super::actions::error_words;
 use super::compress::{Fields, location_row};
 use super::compress_model::{
     Check, Draft, Subject, audio_codecs_unavailable, dimension_label, height_label,
@@ -76,7 +77,7 @@ pub(super) fn media_groups(m: &Media<'_>) -> Vec<Element> {
     };
     for kind in m.subject.kinds_present() {
         if let Some(reason) = tools.unavailable(kind) {
-            groups.push(missing(kind, reason));
+            groups.push(missing(kind, error_words(&reason)));
             continue;
         }
         groups.push(match kind {

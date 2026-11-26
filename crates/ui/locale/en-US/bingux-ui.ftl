@@ -2258,3 +2258,129 @@ ui-files-error-io-bad-name = Could not use that name. Choose another name.
 ui-files-error-io-unsupported = This drive cannot do that.
 ui-files-error-io-interrupted = It was interrupted. Try again.
 ui-files-error-io-unreadable = Could not read or write the drive. Check that it is connected, then try again.
+
+## Files: the problems of a compress name or an exclude pattern.
+
+ui-compress-name-empty = Enter a name for the archive.
+ui-compress-name-has-slash = A name cannot contain a slash.
+ui-compress-name-reserved = That name cannot be used.
+ui-compress-name-too-long = That name is too long.
+ui-compress-name-taken = A file with this name already exists here.
+# $pattern (String) - what was typed; the reason follows in its own message
+ui-files-pattern-too-many = Too many patterns: the most is 64.
+ui-files-pattern-too-long = { $pattern }: the pattern is too long.
+ui-files-pattern-null = { $pattern }: a pattern cannot hold a null character.
+ui-files-pattern-backslash = { $pattern }: a backslash must be followed by a character.
+ui-files-pattern-open-class = { $pattern }: a [ is never closed.
+# $count (Number) - megabytes
+ui-compress-split-mb = { $count } MB
+# $count (Number) - gigabytes
+ui-compress-split-gb = { $count } GB
+
+## Files: the step a program was on when it failed; the lead of ui-files-failure-tool-failed.
+
+ui-files-step-make-archive = The archive could not be made
+ui-files-step-check-archive = The new archive did not pass its check
+ui-files-step-list-new-archive = The new archive could not be listed
+ui-files-step-estimate-size = The size could not be estimated
+ui-files-step-reduce = It could not be reduced
+ui-files-step-read-archive = The archive could not be read
+ui-files-step-try-password = The password could not be tried
+ui-files-step-extract = The archive could not be extracted
+ui-files-step-other = It failed
+
+## Files: one message per kind of bingux_files::ops::Failure.
+
+ui-files-failure-work-folder = A work folder could not be made.
+ui-files-failure-nothing-to-compress = There is nothing to compress.
+ui-files-failure-everything-left-out = There is nothing to compress: every item was left out.
+ui-files-failure-nothing-to-reduce = There is nothing to reduce.
+ui-files-failure-paths-not-absolute = The paths must be absolute.
+ui-files-failure-no-common-parent = The paths have nothing in common.
+ui-files-failure-root-not-compressible = The root folder cannot be compressed.
+ui-files-failure-destination-not-folder = The destination is not a folder.
+ui-files-failure-originals-hold-archive = The originals cannot be removed when the archive is saved inside them.
+ui-files-failure-program-wrote-nothing = The archive could not be made: the program wrote nothing.
+# $listed (Number) - entries in the new archive; $expected (Number) - entries put in
+ui-files-failure-archive-missing-items = The new archive is missing items: it holds { $listed } of { $expected }.
+# $name (String) - the folder's name, quoted; $why (String) - the reason, a sentence
+ui-files-failure-folder-unreadable = { $name } could not be read: { $why }
+# $name (String) - the file's name, quoted
+ui-files-failure-file-no-permission = { $name } cannot be read: you do not have permission.
+# $name (String) - the name, quoted; $extension (String) - the format's ending, such as zip
+ui-files-failure-name-not-storable = { $name } has a name that { $extension } cannot store. Choose .zip or a .tar format.
+# $name (String) - the name, quoted
+ui-files-failure-name-not-storable-locked = { $name } has a name that a locked .zip cannot store. Remove the password or choose .tar.
+# $label (String) - the drive's name; $why (String) - the reason, a sentence
+ui-files-failure-drive-write-named = Could not write to { $label }: { $why }
+# $why (String) - the reason, a sentence
+ui-files-failure-drive-write = Could not write to the drive: { $why }
+# $label (String) - the drive's name; $why (String) - the reason, a sentence
+ui-files-failure-drive-finish = Could not finish writing to { $label }: { $why }
+ui-files-failure-root-rename = The root folder cannot be renamed.
+ui-files-failure-root-delete = The root folder cannot be deleted.
+ui-files-failure-inside-itself = A folder cannot be put inside itself.
+ui-files-failure-cannot-copy-or-move = That cannot be copied or moved.
+ui-files-failure-cannot-trash = That cannot be moved to the Trash.
+# $name (String) - the name, quoted
+ui-files-failure-did-not-arrive = { $name } did not arrive complete, so the original was left where it is.
+# $name (String) - the name, quoted
+ui-files-failure-changed-while-moving = { $name } changed while it was being moved, so the original was left where it is.
+# $name (String) - the folder's name, quoted
+ui-files-failure-folder-in-the-way = A folder called { $name } is there already, so a file cannot replace it.
+# $name (String) - the name, quoted
+ui-files-failure-not-regular-file = { $name } is not a regular file, so it cannot be copied.
+ui-files-failure-no-home = Your home folder could not be found.
+# $path (String) - the Trash folder's path; $why (String) - the reason, a sentence
+ui-files-failure-trash-folder-not-made = The Trash folder { $path } could not be made: { $why }
+ui-files-failure-not-copied-into-trash = It could not be copied into the Trash.
+# $path (String) - where the copy is; $why (String) - the reason, a sentence
+ui-files-failure-copied-not-trashed = It was copied to { $path } but could not be put in the Trash: { $why }
+# $name (String) - the name, quoted
+ui-files-failure-no-record = There is no record of where { $name } came from. Use Restore to… to choose a folder.
+# $name (String) - the name, quoted; $why (String) - the reason, a sentence
+ui-files-failure-not-moved-to-make-room = { $name } could not be moved to the Trash to make room: { $why }
+# $parent (String) - the folder; $name (String) - the name, quoted
+ui-files-failure-put-back-not-folder = { $parent } is not a folder, so { $name } cannot be put back there.
+ui-files-failure-put-back-folder-gone = The folder { $parent } no longer exists, so { $name } cannot be put back.
+ui-files-failure-put-back-denied = You do not have permission to put { $name } back in { $parent }.
+ui-files-failure-put-back-read-only = { $parent } is on a read-only drive, so { $name } cannot be put back there.
+ui-files-failure-video-unreadable = The video could not be read.
+ui-files-failure-no-picture = The file has no picture to reduce.
+ui-files-failure-audio-unreadable = The audio could not be read.
+ui-files-failure-no-sound = The file has no sound to reduce.
+ui-files-failure-null-in-path = The path holds a null character.
+ui-files-failure-no-folder = The file has no folder.
+# $step (String) - the step that failed, a sentence lead; $detail (String) - the program's own line
+ui-files-failure-tool-failed = { $step }: { $detail }.
+# $step (String) - the step that failed, a sentence lead
+ui-files-failure-tool-silent = { $step }: the program gave no reason.
+ui-files-failure-no-output-stream = The program gave no output stream.
+ui-files-failure-no-error-stream = The program gave no error stream.
+ui-files-failure-not-an-archive = That is not an archive.
+ui-files-failure-archive-escapes = The archive has files that would be put outside its folder, so it was not extracted.
+ui-files-failure-needs-password = This archive needs a password.
+ui-files-failure-wrong-password = The password is not right.
+ui-files-failure-nothing-extracted = Nothing was extracted.
+ui-files-failure-cannot-reduce-kind = This kind of file cannot be reduced here.
+ui-files-failure-cannot-open-kind = This kind of archive cannot be opened here.
+ui-files-failure-cannot-lock = This format cannot be locked with a password.
+ui-files-failure-lock-needs-seven-zip = A password needs 7-Zip, which is not installed.
+ui-files-failure-split-needs-program = The program for this format is not installed.
+ui-files-failure-split-only-zip-and-7z = Only .zip and .7z can be cut into volumes.
+# $format (String) - a picture format such as JPEG
+ui-files-failure-no-picture-encoder = No { $format } encoder is installed.
+ui-files-failure-no-sound-encoder = ffmpeg here has no encoder for the sound.
+ui-files-failure-not-media-file = It is not a picture, a film or a song.
+ui-files-failure-not-a-file = It is not a file.
+# $problem (String) - what is wrong with the new file, a clause
+ui-files-failure-new-file-failed-check = The new file did not pass its check: { $problem }
+ui-files-failure-avif-needs-ffmpeg = AVIF needs ffmpeg, which is not installed.
+# $codec (String) - a codec such as AV1 or H.264
+ui-files-failure-no-codec-encoder = ffmpeg here has no { $codec } encoder.
+ui-files-failure-no-picture-tools = ImageMagick and ffmpeg are not installed.
+ui-files-check-cannot-open = it cannot be opened.
+ui-files-check-no-picture = it has no picture.
+ui-files-check-no-sound = it has no sound.
+# $after (String) - seconds long now, such as 3.2; $before (String) - seconds long before
+ui-files-check-too-short = it is { $after } s long, not { $before } s.
