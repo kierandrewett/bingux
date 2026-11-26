@@ -460,7 +460,9 @@ fn sizes() -> Vec<(&'static str, (f32, f32))> {
 fn run_real(dir: &str, addresses: &[String]) {
     for (label, size) in sizes() {
         CTX.with(|slot| slot.set(None));
-        let config = bingux_ui::web_view::engine::Config::from_environment(true);
+        let config = bingux_ui::web_view::engine::Config::from_environment(
+            bingux_ui::web_view::engine::EngineFolders::Private,
+        );
         // An engine that does not start is a window that says so: the shot shows it.
         let engine = Engine(bingux_ui::web_view::engine::start(config));
         let start = addresses.to_vec();

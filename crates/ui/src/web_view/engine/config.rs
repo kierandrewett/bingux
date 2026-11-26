@@ -1,18 +1,13 @@
 //! What the host tells the engine: the profile and the folders around it, the
 //! folders it may read, how it learns about revoked certificates, who it says
-//! it is. All of it is chosen here, once, from the environment of the process
-//! that starts the browser, and shown on the settings page; the engine reads
-//! nothing else.
+//! it is. All of it is chosen here, once, when the host starts the engine,
+//! and shown on the settings page; the engine reads nothing else.
 //!
-//! Where things live (the XDG base directories, unless `BINGUX_BROWSER_PROFILE`
-//! names a profile, in which case everything stays below that profile):
+//! Where things live is the host's choice ([`EngineFolders`]): a browser with
+//! profiles names one profile's folders. Two more are fixed:
 //!
 //! | What | Where |
 //! | ---- | ----- |
-//! | profile | `$XDG_DATA_HOME/bingux-browser/profile` |
-//! | cache | `$XDG_CACHE_HOME/bingux-browser/engine` |
-//! | crash dumps (never uploaded) | `$XDG_STATE_HOME/bingux-browser/crashes` |
-//! | runtime sockets | `$XDG_RUNTIME_DIR/bingux-browser` |
 //! | downloads | `~/Downloads` |
 //! | a private window | one profile, with everything below it, in `$XDG_RUNTIME_DIR`, deleted with the window |
 
@@ -99,8 +94,28 @@ pub fn locale_tag(lang: &str) -> String {
     base.replace('_', "-")
 }
 
+/// Where the engine keeps things. The host chooses: a browser with profiles
+/// names one profile's folders, an app with one engine names its own, and
+/// bingux-ui reads no variable for it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum EngineFolders {
+    /// A private window: one throwaway profile in `$XDG_RUNTIME_DIR` (or the
+    /// temporary folder), with its cache, dumps and sockets below it, deleted
+    /// with the window.
+    Private,
+    /// A profile the host keeps, and the folders around it.
+    Profile {
+        profile: PathBuf,
+        cache: PathBuf,
+        /// Where crash dumps go (never uploaded).
+        crash: PathBuf,
+        /// Where the engine's sockets go; `None` puts them below the profile.
+        runtime: Option<PathBuf>,
+    },
+}
+
 impl Config {
-    /// The choices of this process. `BINGUX_BROWSER_PROFILE` names the profile,
+    /// The choices of this process for the engine's `folders`.
     /// `BINGUX_BROWSER_REMOTE_SETTINGS` is `off`, `security` or `mozilla` and
     /// `BINGUX_BROWSER_REMOTE_SETTINGS_SERVER` the mirror `security` reads from
     /// (without one, or without a choice, the security data comes from
@@ -108,15 +123,15 @@ impl Config {
     /// pages may read, `BINGUX_BROWSER_WEBRTC_IP_POLICY` (`default`,
     /// `default-public`, `public-only`, `relay-only`) asks for a WebRTC address
     /// policy and `VIVARIUM_SDK_DIR` names the engine.
-    pub fn from_environment(private: bool) -> Self {
-        Self::from_lookup(private, &|name| std::env::var(name).ok(), &|name| {
+    pub fn from_environment(folders: EngineFolders) -> Self {
+        Self::from_lookup(folders, &|name| std::env::var(name).ok(), &|name| {
             std::env::var_os(name)
         })
     }
 
     /// [`Config::from_environment`] over any source of variables.
     fn from_lookup(
-        private: bool,
+        folders: EngineFolders,
         var: &dyn Fn(&str) -> Option<String>,
         var_os: &dyn Fn(&str) -> Option<std::ffi::OsString>,
     ) -> Self {
@@ -127,23 +142,22 @@ impl Config {
                 .filter(|path| path.is_absolute())
         };
         let home = path("HOME").unwrap_or_else(|| PathBuf::from("/"));
-        let data = path("XDG_DATA_HOME").unwrap_or_else(|| home.join(".local/share"));
-        let cache_home = path("XDG_CACHE_HOME").unwrap_or_else(|| home.join(".cache"));
-        let state_home = path("XDG_STATE_HOME").unwrap_or_else(|| home.join(".local/state"));
-        let runtime_home = path("XDG_RUNTIME_DIR");
-        let named = path("BINGUX_BROWSER_PROFILE");
-        let profile = if private {
-            let run = runtime_home.clone().unwrap_or_else(std::env::temp_dir);
-            run.join(format!("bingux-browser-private-{}", std::process::id()))
-        } else {
-            named
-                .clone()
-                .unwrap_or_else(|| data.join("bingux-browser/profile"))
+        let private = folders == EngineFolders::Private;
+        let (profile, cache, crash, runtime) = match folders {
+            // A private window keeps its cache, dumps and sockets with its
+            // profile, so they go with it.
+            EngineFolders::Private => {
+                let run = path("XDG_RUNTIME_DIR").unwrap_or_else(std::env::temp_dir);
+                let profile = run.join(format!("bingux-browser-private-{}", std::process::id()));
+                (profile, None, None, None)
+            }
+            EngineFolders::Profile {
+                profile,
+                cache,
+                crash,
+                runtime,
+            } => (profile, Some(cache), Some(crash), runtime),
         };
-        // Everything but the profile is the XDG place only for the browser's
-        // own profile: a named profile (and a private window's) keeps its
-        // cache, dumps and sockets with it, so two profiles share nothing.
-        let own = !private && named.is_none();
         let server = nonempty(var("BINGUX_BROWSER_REMOTE_SETTINGS_SERVER"));
         let remote_settings = match var("BINGUX_BROWSER_REMOTE_SETTINGS").as_deref() {
             Some("off") => RemoteSettings::Off,
@@ -152,11 +166,6 @@ impl Config {
             _ => RemoteSettings::MozillaDirect,
         };
         let downloads = home.join("Downloads");
-        let cache = own.then(|| cache_home.join("bingux-browser/engine"));
-        let crash = own.then(|| state_home.join("bingux-browser/crashes"));
-        let runtime = own
-            .then(|| runtime_home.map(|run| run.join("bingux-browser")))
-            .flatten();
         // Folders `file://` pages may read: the usual ones of the home folder
         // that exist, and the ones the host names. The download folder is not
         // one of them: it is a folder of the engine's own, like the profile,
@@ -330,7 +339,7 @@ mod tests {
 
     use super::*;
 
-    fn config(private: bool, vars: &[(&str, &str)]) -> Config {
+    fn config(folders: EngineFolders, vars: &[(&str, &str)]) -> Config {
         let vars: HashMap<String, String> = vars
             .iter()
             .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
@@ -338,10 +347,20 @@ mod tests {
         let text = vars.clone();
         let os = vars;
         Config::from_lookup(
-            private,
+            folders,
             &move |name| text.get(name).cloned(),
             &move |name| os.get(name).map(OsString::from),
         )
+    }
+
+    /// The folders a host with profiles names for one of them.
+    fn host() -> EngineFolders {
+        EngineFolders::Profile {
+            profile: PathBuf::from("/h/.local/share/bingux-browser/profiles/k3p7x2qa/engine"),
+            cache: PathBuf::from("/h/.cache/bingux-browser/profiles/k3p7x2qa"),
+            crash: PathBuf::from("/h/.local/state/bingux-browser/profiles/k3p7x2qa/crashes"),
+            runtime: Some(PathBuf::from("/run/u/bingux-browser/k3p7x2qa")),
+        }
     }
 
     #[test]
@@ -353,82 +372,63 @@ mod tests {
     }
 
     #[test]
-    fn the_engines_folders_are_the_xdg_ones() {
-        let c = config(
-            false,
-            &[
-                ("HOME", "/home/a"),
-                ("XDG_DATA_HOME", "/data"),
-                ("XDG_CACHE_HOME", "/cache"),
-                ("XDG_STATE_HOME", "/state"),
-                ("XDG_RUNTIME_DIR", "/run/user/1"),
-            ],
+    fn the_folders_the_host_names_are_the_engines() {
+        let c = config(host(), &[("HOME", "/h"), ("XDG_DATA_HOME", "/elsewhere")]);
+        assert_eq!(
+            c.profile,
+            Path::new("/h/.local/share/bingux-browser/profiles/k3p7x2qa/engine"),
+            "the host's profile, not one made up from the XDG folders"
         );
-        assert_eq!(c.profile, Path::new("/data/bingux-browser/profile"));
         assert_eq!(
             c.cache.as_deref(),
-            Some(Path::new("/cache/bingux-browser/engine"))
+            Some(Path::new("/h/.cache/bingux-browser/profiles/k3p7x2qa"))
         );
         assert_eq!(
             c.crash.as_deref(),
-            Some(Path::new("/state/bingux-browser/crashes"))
+            Some(Path::new(
+                "/h/.local/state/bingux-browser/profiles/k3p7x2qa/crashes"
+            ))
         );
         assert_eq!(
             c.runtime.as_deref(),
-            Some(Path::new("/run/user/1/bingux-browser"))
+            Some(Path::new("/run/u/bingux-browser/k3p7x2qa"))
         );
-        assert_eq!(c.downloads, Path::new("/home/a/Downloads"));
+        assert!(!c.ephemeral);
+        assert_eq!(c.downloads, Path::new("/h/Downloads"));
         let settings = c.settings();
-        assert_eq!(
-            settings.crash_dir,
-            Path::new("/state/bingux-browser/crashes")
-        );
+        assert_eq!(settings.profile_dir, c.profile);
         assert_eq!(
             settings.cache_dir,
-            Path::new("/cache/bingux-browser/engine")
+            Path::new("/h/.cache/bingux-browser/profiles/k3p7x2qa")
         );
     }
 
     #[test]
-    fn without_xdg_variables_the_defaults_are_below_home() {
-        let c = config(false, &[("HOME", "/home/a")]);
-        assert_eq!(
-            c.profile,
-            Path::new("/home/a/.local/share/bingux-browser/profile")
-        );
-        assert_eq!(
-            c.cache.as_deref(),
-            Some(Path::new("/home/a/.cache/bingux-browser/engine"))
-        );
-        assert_eq!(
-            c.crash.as_deref(),
-            Some(Path::new("/home/a/.local/state/bingux-browser/crashes"))
-        );
-        assert_eq!(
-            c.runtime, None,
-            "no runtime directory, no sockets elsewhere"
+    fn the_web_view_reads_no_profile_variable_of_its_own() {
+        let c = config(host(), &[("BINGUX_BROWSER_PROFILE", "/tmp/p")]);
+        assert!(
+            c.profile.starts_with("/h/.local/share"),
+            "the host decides what BINGUX_BROWSER_PROFILE means"
         );
     }
 
     #[test]
-    fn a_named_profile_keeps_everything_with_it() {
-        let c = config(
-            false,
-            &[("HOME", "/home/a"), ("BINGUX_BROWSER_PROFILE", "/tmp/p")],
-        );
-        assert_eq!(c.profile, Path::new("/tmp/p"));
-        assert_eq!(
-            (c.cache.clone(), c.crash.clone(), c.runtime.clone()),
-            (None, None, None)
-        );
-        assert_eq!(c.settings().crash_dir, Path::new("/tmp/p/crashes"));
-        assert_eq!(c.settings().cache_dir, Path::new("/tmp/p/vivarium/cache"));
+    fn without_a_runtime_folder_the_sockets_stay_below_the_profile() {
+        let folders = EngineFolders::Profile {
+            profile: PathBuf::from("/tmp/p/engine"),
+            cache: PathBuf::from("/tmp/p/cache"),
+            crash: PathBuf::from("/tmp/p/crashes"),
+            runtime: None,
+        };
+        let c = config(folders, &[("HOME", "/h")]);
+        assert_eq!(c.runtime, None);
+        assert_eq!(c.directories().runtime, None);
     }
 
     #[test]
     fn a_private_window_has_a_profile_of_its_own_that_goes_with_it() {
         let c = config(
-            true,
+            EngineFolders::Private,
             &[("HOME", "/home/a"), ("XDG_RUNTIME_DIR", "/run/user/1")],
         );
         assert!(c.ephemeral);
@@ -448,15 +448,15 @@ mod tests {
     #[test]
     fn remote_settings_follow_the_choice_and_the_mirror() {
         assert_eq!(
-            config(false, &[]).remote_settings,
+            config(host(), &[]).remote_settings,
             RemoteSettings::MozillaDirect
         );
         assert_eq!(
-            config(false, &[("BINGUX_BROWSER_REMOTE_SETTINGS", "off")]).remote_settings,
+            config(host(), &[("BINGUX_BROWSER_REMOTE_SETTINGS", "off")]).remote_settings,
             RemoteSettings::Off
         );
         let mirrored = config(
-            false,
+            host(),
             &[(
                 "BINGUX_BROWSER_REMOTE_SETTINGS_SERVER",
                 "https://rs.example/v1",
@@ -472,7 +472,7 @@ mod tests {
         let asked_without_mirror = Config {
             remote_settings: RemoteSettings::SecurityOnly,
             remote_settings_server: None,
-            ..config(false, &[])
+            ..config(host(), &[])
         };
         assert_eq!(
             asked_without_mirror.remote_settings_choice(),
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn the_engine_names_itself_firefox_and_the_browser_for_everything_else() {
-        let c = config(false, &[("LANG", "de_DE.UTF-8")]);
+        let c = config(host(), &[("LANG", "de_DE.UTF-8")]);
         let identity = c.identity();
         assert_eq!(
             identity.ua_name.as_deref(),
@@ -496,19 +496,21 @@ mod tests {
 
     #[test]
     fn the_directories_reach_the_engine_configuration() {
-        let c = config(false, &[("HOME", "/h"), ("XDG_RUNTIME_DIR", "/run/u")]);
+        let c = config(host(), &[("HOME", "/h"), ("XDG_RUNTIME_DIR", "/run/u")]);
         let directories = c.directories();
         assert_eq!(
             directories.crash.as_deref(),
-            Some(Path::new("/h/.local/state/bingux-browser/crashes"))
+            Some(Path::new(
+                "/h/.local/state/bingux-browser/profiles/k3p7x2qa/crashes"
+            ))
         );
         assert_eq!(
             directories.cache.as_deref(),
-            Some(Path::new("/h/.cache/bingux-browser/engine"))
+            Some(Path::new("/h/.cache/bingux-browser/profiles/k3p7x2qa"))
         );
         assert_eq!(
             directories.runtime.as_deref(),
-            Some(Path::new("/run/u/bingux-browser"))
+            Some(Path::new("/run/u/bingux-browser/k3p7x2qa"))
         );
         assert_eq!(
             directories.download.as_deref(),
@@ -521,7 +523,7 @@ mod tests {
         // The engine refuses to start on such an overlap (it did, once the
         // first run had made ~/Downloads): the folder is left out instead.
         let c = config(
-            false,
+            host(),
             &[
                 ("HOME", "/h"),
                 (
@@ -539,8 +541,8 @@ mod tests {
 
     #[test]
     fn the_webrtc_policy_is_the_hosts_choice_and_the_page_says_the_engine_keeps_its_own() {
-        assert_eq!(config(false, &[]).webrtc, None);
-        let c = config(false, &[("BINGUX_BROWSER_WEBRTC_IP_POLICY", "relay-only")]);
+        assert_eq!(config(host(), &[]).webrtc, None);
+        let c = config(host(), &[("BINGUX_BROWSER_WEBRTC_IP_POLICY", "relay-only")]);
         assert_eq!(c.webrtc, Some(WebrtcChoice::RelayOnly));
         let said = c.settings().webrtc_ip_policy;
         assert!(
@@ -548,13 +550,13 @@ mod tests {
             "{said}"
         );
         assert!(
-            config(false, &[])
+            config(host(), &[])
                 .settings()
                 .webrtc_ip_policy
                 .contains("fixed policy")
         );
         assert_eq!(
-            config(false, &[("BINGUX_BROWSER_WEBRTC_IP_POLICY", "anything")]).webrtc,
+            config(host(), &[("BINGUX_BROWSER_WEBRTC_IP_POLICY", "anything")]).webrtc,
             None,
             "an unknown word is no choice"
         );

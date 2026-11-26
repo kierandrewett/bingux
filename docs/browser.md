@@ -22,8 +22,9 @@ VIVARIUM_SDK_DIR=/path/to/sdk apps/browser/run.sh [--private] [ADDRESS | WORDS |
 
 `run.sh` checks the SDK folder (`vivarium-engine`, `libvivarium.so`, `libvivarium.so.0`), puts it on
 `LD_LIBRARY_PATH`, builds with `--features vivarium` (`BINGUX_BROWSER_BUILD=release` for an optimised
-build; `--no-build` as the first argument starts what is built), keeps the profile under
-`$XDG_DATA_HOME/bingux-browser/profile` (override with `BINGUX_BROWSER_PROFILE`) and starts the window.
+build; `--no-build` as the first argument starts what is built) and starts the window. `BINGUX_BROWSER_PROFILE`
+names a profile folder outside the browser's own, for tests: the engine's profile is its `engine/` folder and its
+cache, dumps and sockets stay below it too.
 The engine only starts from a folder nobody but you or root can write to (and no ancestor
 either, sticky ones like `/tmp` excepted): `run.sh` warns when the SDK folder is group or world writable
 (`chmod -R go-w`; a development tree may set `VV_TRUST_ENGINE_PATH=1`). Cargo output goes to

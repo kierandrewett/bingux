@@ -7,7 +7,8 @@
 # libvivarium.so.0 beside it), libxul.so and include/vivarium.h. Everything else
 # has a default:
 #
-#   BINGUX_BROWSER_PROFILE   the profile, default $XDG_DATA_HOME/bingux-browser/profile
+#   BINGUX_BROWSER_PROFILE   unset: the browser's own profiles; set: a profile folder outside
+#                            them (engine/ and the store below it), for tests and development
 #   BINGUX_BROWSER_REMOTE_SETTINGS (off | security | mozilla) and
 #   BINGUX_BROWSER_REMOTE_SETTINGS_SERVER   where revocation data comes from
 #   BINGUX_BROWSER_FILE_DIRS extra folders file:// pages may read (path list)
@@ -47,10 +48,7 @@ fi
 
 export VIVARIUM_SDK_DIR
 export LD_LIBRARY_PATH="$VIVARIUM_SDK_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-data=${XDG_DATA_HOME:-$HOME/.local/share}
-export BINGUX_BROWSER_PROFILE=${BINGUX_BROWSER_PROFILE:-$data/bingux-browser/profile}
 export CARGO_TARGET_DIR=${CARGO_TARGET_DIR:-$root/build/cargo}
-mkdir -p "$BINGUX_BROWSER_PROFILE"
 
 profile=${BINGUX_BROWSER_BUILD:-debug}
 flags=()

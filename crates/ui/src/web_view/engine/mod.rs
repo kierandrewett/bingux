@@ -40,7 +40,7 @@ use vivarium::operation::OpOptions;
 use vivarium::security::CheckStatus as Check;
 use vivarium::session::{Session, SessionConfig};
 
-pub use config::{Config, WebrtcChoice, locale_tag};
+pub use config::{Config, EngineFolders, WebrtcChoice, locale_tag};
 
 use requests::Unanswered;
 use runtime::{Runtime, StartFailure};

@@ -52,7 +52,17 @@ fn main() {
         }
         std::process::exit(1);
     }
-    let engine = match start_engine(private) {
+    // A named profile (BINGUX_BROWSER_PROFILE) keeps everything below it;
+    // otherwise the engine stays where it was until profiles open from the
+    // registry.
+    let folders = (!private).then(|| {
+        let places = profile::places::Places::from_environment();
+        match &places.named {
+            Some(root) => profile::places::Places::named_folders(root),
+            None => places.old_folders(),
+        }
+    });
+    let engine = match start_engine(folders.as_ref()) {
         Ok(engine) => engine,
         Err(message) => {
             eprintln!("bingux-browser: {message}");
@@ -83,9 +93,9 @@ fn main() {
         });
 }
 
-/// Start the engine, with the profile of this window.
+/// Start the engine in `folders`, or in a throwaway profile for a private window.
 #[cfg(not(any(feature = "vivarium", feature = "dynamic-load")))]
-fn start_engine(_private: bool) -> Result<Engine, String> {
+fn start_engine(_folders: Option<&profile::places::Folders>) -> Result<Engine, String> {
     Err(
         "this build has no engine. Build it with the `vivarium` feature, against a Vivarium SDK."
             .to_string(),
@@ -93,10 +103,18 @@ fn start_engine(_private: bool) -> Result<Engine, String> {
 }
 
 #[cfg(any(feature = "vivarium", feature = "dynamic-load"))]
-fn start_engine(private: bool) -> Result<Engine, String> {
+fn start_engine(folders: Option<&profile::places::Folders>) -> Result<Engine, String> {
+    use bingux_ui::web_view::engine::{Config, EngineFolders, start};
+    let folders = match folders {
+        None => EngineFolders::Private,
+        Some(folders) => EngineFolders::Profile {
+            profile: folders.engine.clone(),
+            cache: folders.cache.clone(),
+            crash: folders.crash.clone(),
+            runtime: folders.runtime.clone(),
+        },
+    };
     // An engine that does not start is not a reason to exit: the window opens and says why
     // (a profile folder that is not safe, a sandbox it cannot reach), and offers to try again.
-    Ok(Engine(bingux_ui::web_view::engine::start(
-        bingux_ui::web_view::engine::Config::from_environment(private),
-    )))
+    Ok(Engine(start(Config::from_environment(folders))))
 }
