@@ -7,8 +7,8 @@ Paths:
 
 - `B/` is `apps/browser/src`.
 - `W/` is `crates/ui/src/web_view`.
-- `file:N` is a line in that file, as read at `988d5229`. Other agents are editing some of these files, so the
-  numbers may drift by a few lines.
+- `file:N` is a line in that file at `988d5229`, the commit the audit read. Read it with `git show 988d5229:PATH`.
+  Other agents have landed 22 commits since. "Changes since the audit" below says what that moved.
 
 ## What counts
 
@@ -40,6 +40,26 @@ Not read in full, only searched: the tests, the snapshot scenarios, `history/`, 
 
 No code was built or run. There is no cargo on this machine. The red tests below were checked against the test
 double's API (`W/test_double/mod.rs`), not executed.
+
+## Changes since the audit
+
+Twenty-two commits landed on `feat/apps` between `988d5229` and the push of this file (`04036f35`). I read the
+diffs of the files this audit cites. Three things change a finding. The rest only moves line numbers.
+
+| Change                                                                                    | Effect on the audit                                                                                     |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `Browser::escape_leaves_window_fullscreen` and the engine granting page fullscreen        | F4: Escape no longer does nothing after a switch back. The F11 and mirror findings stand                |
+| `open_devtools` writes `tab.load.loading = true` for its new tab, and reads `tab.private` | F2 has one more optimistic write. F5: `Tab.private` has a second reader                                 |
+| `Browser.profiles` and `Profile.known` (the profiles for the main menu)                   | F5: still `profile` as a pair, and the private-window bug is unchanged (`ui/ctx.rs` `NewPrivateWindow`) |
+
+Also new, and not a state machine:
+
+- `Command::ClearHistory` with `UiRequest::ConfirmClearHistory`, a dialog.
+- The print job map in `W/engine/state.rs` (`prints`, keyed by tag, so explicit).
+- `UiRequest::OpenProfile` and `TabEvent::Printed`.
+
+`menus/main.rs` and `menus/phone.rs` are new and were not audited. They belong to BrowserMainMenu. Re-check
+them before the chrome commit.
 
 ## Findings at a glance
 
@@ -408,16 +428,16 @@ The double hook is a small addition to `W/test_double/mod.rs`. It is a test fixt
 
 ### Where
 
-| Part                | Place                                                             |
-| ------------------- | ----------------------------------------------------------------- |
-| The window's belief | `browser/mod.rs:137` `fullscreen: bool`                           |
-| The page's request  | `tabs/tab.rs:61` `fullscreen: bool`                               |
-| The window itself   | `ui/ctx.rs:108-112` `UiRequest::Fullscreen(on)`, one way          |
-| F11                 | `commands/run.rs:48-56`                                           |
-| The page asks       | `engine/events.rs:189-197`                                        |
-| Tab switch          | `browser/commands.rs:127-130` (`shown`), `:177-180` (`close_tab`) |
-| Escape              | `ui/app.rs:265`, `ui/web.rs:61`                                   |
-| Chrome that hides   | `ui/app.rs:276,286,298,302,309`                                   |
+| Part                | Place                                                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| The window's belief | `browser/mod.rs:137` `fullscreen: bool`                                                                |
+| The page's request  | `tabs/tab.rs:61` `fullscreen: bool`                                                                    |
+| The window itself   | `ui/ctx.rs:108-112` `UiRequest::Fullscreen(on)`, one way                                               |
+| F11                 | `commands/run.rs:48-56`                                                                                |
+| The page asks       | `engine/events.rs:189-197`                                                                             |
+| Tab switch          | `browser/commands.rs:127-130` (`shown`), `:177-180` (`close_tab`)                                      |
+| Escape              | `ui/app.rs:265`, `ui/web.rs:61`; since `988d5229` both call `Browser::escape_leaves_window_fullscreen` |
+| Chrome that hides   | `ui/app.rs:276,286,298,302,309`                                                                        |
 
 ### The real states
 
@@ -436,19 +456,25 @@ A background tab can also hold a page's request without the window changing.
     - Switch to B. `shown` sets `Browser.fullscreen` false and asks the window to leave
       (`browser/commands.rs:127-130`). `A.fullscreen` stays true.
     - Switch back to A. Nothing re-enters. The window is windowed and A still thinks it is fullscreen.
-    - Escape does nothing, because it tests `Browser.fullscreen` (`ui/app.rs:265`, `ui/web.rs:61`).
+    - At `988d5229` Escape did nothing here, because it tested `Browser.fullscreen` (`ui/app.rs:265`, `ui/web.rs:61`).
+      Since `escape_leaves_window_fullscreen` it is forwarded to the page, which leaves and says so.
+      The window is still windowed, with its chrome showing, until then.
 - F11 is dropped by a tab switch. F11 sets `Browser.fullscreen` but not the tab's flag (`commands/run.rs:51`).
   `shown` then sees "fullscreen but the new tab is not" and leaves fullscreen. The person chose window
   fullscreen. Firefox keeps it across tabs.
 - The window leaves fullscreen without the browser knowing (a compositor shortcut). [INFERENCE] `UiRequest::Fullscreen`
   has no way back, so `Browser.fullscreen` stays true.
 - `Command::Fullscreen` calls `backend.set_fullscreen`, which is a no-op (`W/backend.rs:327`,
-  `W/engine/mod.rs:541`). The page is never told to leave.
+  `W/engine/mod.rs:541`). The page is never told to leave by F11. The page's own fullscreen is now granted
+  for a visible tab (`W/engine/events.rs` `on_fullscreen_request`, new since `988d5229`).
+- `escape_leaves_window_fullscreen` (`browser/commands.rs`, new) is `self.fullscreen && !active.fullscreen`. It is
+  a predicate over the two flags, so the combination logic is already spreading. `Fullscreen::escape_leaves_window`
+  would own it.
 
 ### User-visible bugs
 
 - F11 fullscreen vanishes when you change tab.
-- A page that was fullscreen and came back has no chrome hiding and no way to leave with Escape.
+- A page that was fullscreen and came back is a fullscreen page in a windowed window. Escape ends it.
 - No test covers any of it. `grep fullscreen` in tests finds only a snapshot scenario (`app/snapshot.rs:7`).
 
 ### Proposed explicit form
@@ -488,17 +514,18 @@ Decision for Kieran: should a tab switch end page fullscreen (the Firefox way)? 
 - `Browser.fullscreen: bool` becomes `Fullscreen`. `commands/run.rs:48-56`, `engine/events.rs:189-197`,
   `browser/commands.rs:127-130,177-180` call the methods.
 - `ui/app.rs:210,265,276,286` and `ui/web.rs:61` call `is_on()`.
-- `set_fullscreen` gets a real call when the engine has one. Until then `tab_changed` returns the tab to tell,
-  and the call is a no-op in `GeckoBackend`. That is the engine's gap, not a browser state.
+- `set_fullscreen` stays what it is. The engine now ends a page's fullscreen when Escape reaches it, so F11 and
+  page fullscreen need no call from the browser. `tab_changed` returns the tab whose page should be told to
+  leave, for when the engine has a call for it.
 
 ### Red tests first
 
-| Test                                                                        | Where                                      | Red because                                       |
-| --------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
-| `f11_survives_a_tab_switch`                                                 | `browser/tests.rs`                         | `shown` clears it today                           |
-| `a_page_that_was_fullscreen_is_left_when_you_leave_its_tab`                 | `browser/tests.rs`                         | `Tab.fullscreen` stays true today                 |
-| `escape_leaves_whatever_fullscreen_is_on`                                   | `app/snapshot.rs` scenario, or a `ui` test | `Browser.fullscreen` is false after a switch back |
-| `a_page_in_the_background_asking_for_fullscreen_does_not_change_the_window` | `browser/tests.rs`                         | Guards the refactor                               |
+| Test                                                                        | Where              | Red because                                                                              |
+| --------------------------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------- |
+| `f11_survives_a_tab_switch`                                                 | `browser/tests.rs` | `shown` clears it today                                                                  |
+| `a_page_that_was_fullscreen_is_left_when_you_leave_its_tab`                 | `browser/tests.rs` | `Tab.fullscreen` stays true today                                                        |
+| `escape_leaves_only_window_fullscreen`                                      | `browser/tests.rs` | Pins `escape_leaves_window_fullscreen` as a `Fullscreen` method. Green first, then moved |
+| `a_page_in_the_background_asking_for_fullscreen_does_not_change_the_window` | `browser/tests.rs` | Guards the refactor                                                                      |
 
 ## F5. Who the window is
 
@@ -795,8 +822,11 @@ Both focus counters stay. `find_card(..).focus_requests(u32)` is the SDK's API, 
 
 ### Overlap and order
 
-`MainMenuButton` and the main menu belong to BrowserMainMenu (`menus/`, `ui/toolbar.rs:46-54`). A `Card` that
-also lists the main menu is better, but do not start F9 until that agent's commit has landed.
+`MainMenuButton` and the main menu belong to BrowserMainMenu. At `988d5229` the button was a stub in
+`ui/toolbar.rs:46-54`. It is now in `menus/`, which I have not audited.
+
+A `Card` that also covers the main menu is better. Do not start F9 until that agent's work has landed and been
+read.
 
 ### Red tests first
 
@@ -866,7 +896,7 @@ Go with the finding whose commit touches them.
 | Field                                     | Evidence                                                                                                                                                                 | With             |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
 | `Tab.ready`                               | Written `engine/events.rs:100`, `engine/lifecycle.rs:25`. Never read                                                                                                     | F3               |
-| `Tab.private`                             | Copy of `Options.private`. One reader: `tabs/strip.rs:70`                                                                                                                | F5               |
+| `Tab.private`                             | Copy of `Options.private`. Readers: `tabs/strip.rs:70` and, since `988d5229`, `Browser::open_devtools` (`browser/lifecycle.rs`)                                          | F5               |
 | `Downloads.unseen`, `mark_seen`           | No UI reads it (F7)                                                                                                                                                      | F7               |
 | `Chrome` with one field                   | `ui/ctx.rs:25-30`. Its doc comment is two fragments joined                                                                                                               | any `ui/` change |
 | `Tab.history`, `history_index`, `favicon` | Written from events. Read only by tests (`browser/tests.rs:72`, `engine/tests.rs:135`). These are engine mirrors for planned features (`parity.md`), not machines. Leave | none             |
@@ -923,7 +953,8 @@ Kieran ruled these are being deleted. Do not turn them into states.
 | Find capability, learned from the first session                                       | `find/mod.rs:64-72`, `W/engine/mod.rs:234-247`, `W/engine/runtime.rs:47`                     |
 | Local context menu: `open_local_menu`, `PendingMenu.request: Option`, `on_local_menu` | `browser/prompts.rs:153-166`, `browser/mod.rs:55-57`, `ui/web.rs:75`, `W/view.rs:92,146-156` |
 | Download controls and the button's `can`                                              | `downloads/button.rs:23`, `downloads/popover.rs:31`, `browser/commands.rs:531`               |
-| `ClearScope.link_colours` (always false)                                              | `browser/kept.rs:67-72`                                                                      |
+| `ClearScope.link_colours` (now `capabilities().clear_history`; was always false)      | `browser/kept.rs:67-72`, `W/engine/runtime.rs` `clear_history: OnceLock` (new)               |
+| Print and devtools availability checks                                                | `commands/run.rs` `print`, `browser/lifecycle.rs` `open_devtools` (new since `988d5229`)     |
 | Touch: the scroller versus the engine's touch                                         | `W/view.rs:201-234`                                                                          |
 | Composition                                                                           | `W/view.rs:189`                                                                              |
 
@@ -982,12 +1013,12 @@ No commit changes a visible string or a layout, so the snapshots should not move
 
 Their files are inferred from their task names. Ask each before editing a shared file.
 
-| Agent           | Likely files                                                                                                    | Commits it touches                                                          |
-| --------------- | --------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| BrowserSlice3   | `commands/run.rs` (Print arm), `browser/kept.rs` (`ClearScope`), `settings/page.rs`, `clear_finished_downloads` | fullscreen (other arm of `run.rs`), find, downloads. Rebase after they land |
-| BrowserMainMenu | `menus/`, `ui/toolbar.rs` (`MainMenuButton`), `PendingMenu`, `browser/prompts.rs:135-166`                       | prompts (I touch only lines 12-133), chrome (wait)                          |
-| GeckoNaming     | A naming doc, and renames. [INFERENCE] `engine/` and `Engine` are likely targets                                | `Phase` and `Link`. Ask them to land first                                  |
-| UiSuiteGreen2   | [INFERENCE] `crates/ui` tests, from its task name                                                               | `LoadEvent` and touch (`W/` files)                                          |
+| Agent           | Likely files                                                                                                                               | Commits it touches                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| BrowserSlice3   | Landed since the audit: print, devtools and clear history in `commands/run.rs`, `browser/lifecycle.rs`, `browser/kept.rs`. More may follow | fullscreen (other arm of `run.rs`), find, downloads. Rebase before each |
+| BrowserMainMenu | `menus/` (`main.rs`, `phone.rs`, `host.rs`), `PendingMenu`, `browser/prompts.rs` `dismiss_menu`                                            | prompts (I touch only the answers), chrome (wait)                       |
+| GeckoNaming     | A naming doc, and renames. [INFERENCE] `engine/` and `Engine` are likely targets                                                           | `Phase` and `Link`. Ask them to land first                              |
+| UiSuiteGreen2   | [INFERENCE] `crates/ui` tests, from its task name                                                                                          | `LoadEvent` and touch (`W/` files)                                      |
 
 I will not edit any of these until Main says go, and not a file another agent has uncommitted.
 
