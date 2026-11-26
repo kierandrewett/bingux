@@ -21,9 +21,9 @@ impl DialogPrompt {
     pub fn show(ctx: Ctx, key: u64, request: &DialogRequest) {
         let host = Address::new(&request.origin).host();
         let title = match &request.kind {
-            DialogKind::BeforeUnload => "Leave this page?".to_string(),
-            _ if host.is_empty() => "This page says".to_string(),
-            _ => format!("{host} says"),
+            DialogKind::BeforeUnload => tr!("browser-prompt-leave-title"),
+            _ if host.is_empty() => tr!("browser-prompt-page-says-title"),
+            _ => tr!("browser-prompt-host-says-title", host = host.clone()),
         };
         let answer = move |accept: bool| {
             move |_: ()| {
@@ -32,36 +32,62 @@ impl DialogPrompt {
             }
         };
         let message = if request.kind == DialogKind::BeforeUnload && request.message.is_empty() {
-            "Changes you made may not be saved.".to_string()
+            tr!("browser-prompt-leave-description")
         } else {
             request.message.clone()
         };
         let shown = match &request.kind {
             DialogKind::Alert => dialog(title, message)
-                .response("OK", ResponseKind::Suggested, answer(true))
+                .response(
+                    tr!("browser-prompt-ok-button"),
+                    ResponseKind::Suggested,
+                    answer(true),
+                )
                 .default_action("ok")
                 .cancel_action("ok"),
             DialogKind::Confirm => dialog(title, message)
-                .action(CANCEL_ID, "Cancel", ResponseKind::Default, answer(false))
-                .response("OK", ResponseKind::Suggested, answer(true))
+                .action(
+                    CANCEL_ID,
+                    tr!("browser-prompt-cancel-button"),
+                    ResponseKind::Default,
+                    answer(false),
+                )
+                .response(
+                    tr!("browser-prompt-ok-button"),
+                    ResponseKind::Suggested,
+                    answer(true),
+                )
                 .default_action("ok"),
             DialogKind::Prompt { default } => {
                 let mut text = ctx.prompts.text;
                 text.set(default.clone());
                 dialog(title, message)
                     .content(Self::field(ctx.prompts.text))
-                    .action(CANCEL_ID, "Cancel", ResponseKind::Default, answer(false))
-                    .response("OK", ResponseKind::Suggested, answer(true))
+                    .action(
+                        CANCEL_ID,
+                        tr!("browser-prompt-cancel-button"),
+                        ResponseKind::Default,
+                        answer(false),
+                    )
+                    .response(
+                        tr!("browser-prompt-ok-button"),
+                        ResponseKind::Suggested,
+                        answer(true),
+                    )
                     .default_action("ok")
             }
             DialogKind::BeforeUnload => dialog(title, message)
                 .action(
                     CANCEL_ID,
-                    "Stay on page",
+                    tr!("browser-prompt-stay-button"),
                     ResponseKind::Default,
                     answer(false),
                 )
-                .response("Leave", ResponseKind::Destructive, answer(true))
+                .response(
+                    tr!("browser-prompt-leave-button"),
+                    ResponseKind::Destructive,
+                    answer(true),
+                )
                 .default_action(CANCEL_ID),
         };
         ctx.overlays

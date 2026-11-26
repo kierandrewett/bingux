@@ -12,8 +12,10 @@ pub struct PickerPrompt;
 impl PickerPrompt {
     pub fn show(ctx: Ctx, key: u64, request: &PickerRequest) {
         let chooser = match request.mode {
-            PickerMode::Open => ChooserRequest::open().title("Choose a file"),
-            PickerMode::OpenMany => ChooserRequest::open().multiple(true).title("Choose files"),
+            PickerMode::Open => ChooserRequest::open().title(tr!("browser-prompt-file-title")),
+            PickerMode::OpenMany => ChooserRequest::open()
+                .multiple(true)
+                .title(tr!("browser-prompt-files-title")),
             PickerMode::Folder => ChooserRequest::select_folder(),
             PickerMode::Save => {
                 ChooserRequest::save(request.suggested_name.clone().unwrap_or_default())

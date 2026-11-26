@@ -26,15 +26,24 @@ impl SelectPrompt {
         let mut chosen = ctx.prompts.text;
         chosen.set(first.to_string());
         ctx.overlays.show_dialog(
-            dialog("Choose an option", "")
+            dialog(tr!("browser-prompt-select-title"), "")
                 .content(Element::from(SelectBody { ctx, options }))
-                .action(CANCEL_ID, "Cancel", ResponseKind::Default, move |_: ()| {
-                    ctx.with(|browser| browser.answer_select(key, None));
-                })
-                .response("Choose", ResponseKind::Suggested, move |_: ()| {
-                    let index = ctx.prompts.text.peek().parse::<usize>().ok();
-                    ctx.with(|browser| browser.answer_select(key, index));
-                })
+                .action(
+                    CANCEL_ID,
+                    tr!("browser-prompt-cancel-button"),
+                    ResponseKind::Default,
+                    move |_: ()| {
+                        ctx.with(|browser| browser.answer_select(key, None));
+                    },
+                )
+                .response(
+                    tr!("browser-prompt-choose-button"),
+                    ResponseKind::Suggested,
+                    move |_: ()| {
+                        let index = ctx.prompts.text.peek().parse::<usize>().ok();
+                        ctx.with(|browser| browser.answer_select(key, index));
+                    },
+                )
                 .default_action("choose")
                 .cancel_action(CANCEL_ID),
         );

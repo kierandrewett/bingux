@@ -16,18 +16,18 @@ impl AuthPrompt {
         name.set(String::new());
         password.set(String::new());
         let who = if request.proxy {
-            format!("The proxy {} asks you to sign in", request.host)
+            tr!("browser-prompt-proxy-title", host = request.host.as_str())
         } else {
-            format!("Sign in to {}", request.host)
+            tr!("browser-prompt-sign-in-title", host = request.host.as_str())
         };
         let body = match (request.realm.is_empty(), request.retry) {
-            (false, true) => format!(
-                "{} \u{2014} the name or password was not accepted.",
-                request.realm
+            (false, true) => tr!(
+                "browser-prompt-realm-rejected-description",
+                realm = request.realm.as_str()
             ),
             (false, false) => request.realm.clone(),
-            (true, true) => "The name or password was not accepted.".to_string(),
-            (true, false) => "The site asks who you are.".to_string(),
+            (true, true) => tr!("browser-prompt-rejected-description"),
+            (true, false) => tr!("browser-prompt-who-description"),
         };
         let form = rect()
             .tw_layout(&[flex_col(), w_full(), gap(S2)])
@@ -35,27 +35,36 @@ impl AuthPrompt {
                 text_field(ctx.prompts.text, |_: String| {})
                     .fill_width()
                     .autofocus()
-                    .placeholder("Name"),
+                    .placeholder(tr!("browser-prompt-name-placeholder")),
             )
             .child(
                 text_field(ctx.prompts.password, |_: String| {})
                     .fill_width()
                     .password()
-                    .placeholder("Password"),
+                    .placeholder(tr!("browser-prompt-password-placeholder")),
             );
         ctx.overlays.show_dialog(
             dialog(who, body)
                 .content(form)
-                .action(CANCEL_ID, "Cancel", ResponseKind::Default, move |_: ()| {
-                    ctx.with(|browser| browser.answer_auth(key, None));
-                })
-                .response("Sign in", ResponseKind::Suggested, move |_: ()| {
-                    let credentials = (
-                        ctx.prompts.text.peek().clone(),
-                        ctx.prompts.password.peek().clone(),
-                    );
-                    ctx.with(|browser| browser.answer_auth(key, Some(credentials)));
-                })
+                .action(
+                    CANCEL_ID,
+                    tr!("browser-prompt-cancel-button"),
+                    ResponseKind::Default,
+                    move |_: ()| {
+                        ctx.with(|browser| browser.answer_auth(key, None));
+                    },
+                )
+                .response(
+                    tr!("browser-prompt-sign-in-button"),
+                    ResponseKind::Suggested,
+                    move |_: ()| {
+                        let credentials = (
+                            ctx.prompts.text.peek().clone(),
+                            ctx.prompts.password.peek().clone(),
+                        );
+                        ctx.with(|browser| browser.answer_auth(key, Some(credentials)));
+                    },
+                )
                 .default_action("sign_in")
                 .cancel_action(CANCEL_ID),
         );

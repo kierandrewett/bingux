@@ -231,3 +231,33 @@ browser-error-cert-details-button = Details…
 browser-error-cert-risk-description = Someone on the network could read or change what you send and receive. Go ahead only if you know why the certificate is wrong.
 # $problem is one sentence on what is wrong with the certificate; $host is the site.
 browser-error-cert-description = { $problem } Attackers might be trying to steal what you send to { $host }.
+
+## Page prompts
+## Dialogs a page opens: alert, confirm, prompt, leave, sign in, select, file.
+
+# Title of the dialog a page shows before it is closed with unsaved changes.
+browser-prompt-leave-title = Leave this page?
+# Title of a dialog from a page with no address to name.
+browser-prompt-page-says-title = This page says
+# Title of a dialog from a page. $host is the site.
+browser-prompt-host-says-title = { $host } says
+browser-prompt-leave-description = Changes you made may not be saved.
+browser-prompt-ok-button = OK
+browser-prompt-cancel-button = Cancel
+browser-prompt-stay-button = Stay on page
+browser-prompt-leave-button = Leave
+# Title of the sign-in dialog when a proxy asks. $host is its name.
+browser-prompt-proxy-title = The proxy { $host } asks you to sign in
+# Title of the sign-in dialog. $host is the site.
+browser-prompt-sign-in-title = Sign in to { $host }
+# $realm is what the site calls the place that asks.
+browser-prompt-realm-rejected-description = { $realm } — the name or password was not accepted.
+browser-prompt-rejected-description = The name or password was not accepted.
+browser-prompt-who-description = The site asks who you are.
+browser-prompt-name-placeholder = Name
+browser-prompt-password-placeholder = Password
+browser-prompt-sign-in-button = Sign in
+browser-prompt-select-title = Choose an option
+browser-prompt-choose-button = Choose
+browser-prompt-file-title = Choose a file
+browser-prompt-files-title = Choose files
