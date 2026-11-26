@@ -91,6 +91,12 @@ const fn scenario(name: &'static str, start: &'static [&'static str], run: Run) 
 
 fn nothing(_: &mut Snapshot, _: &Rig) {}
 
+/// A window that opens on a blank tab, with the address field focused: its
+/// caret stays solid while the picture is taken.
+fn blank(shot: &mut Snapshot, _: &Rig) {
+    wait_typing(shot, 600);
+}
+
 fn wait(shot: &mut Snapshot, ms: u64) {
     shot.settle(Duration::from_millis(ms));
 }
@@ -384,7 +390,7 @@ fn security_pending(shot: &mut Snapshot, rig: &Rig) {
 
 fn scenarios() -> Vec<Scenario> {
     vec![
-        scenario("newtab", &[], nothing),
+        scenario("newtab", &[], blank),
         scenario("page", &["example.com"], nothing),
         scenario("tabs", TABS, tabs),
         scenario("tab-menu", TABS, tab_menu),
@@ -425,7 +431,7 @@ fn scenarios() -> Vec<Scenario> {
         scenario("rtl", &["news.bingux.dev"], rtl),
         Scenario {
             private: true,
-            ..scenario("private", &[], nothing)
+            ..scenario("private", &[], blank)
         },
         Scenario {
             engine: Some(engine_of_today),
