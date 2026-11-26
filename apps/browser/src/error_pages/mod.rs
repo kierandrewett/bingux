@@ -5,6 +5,7 @@
 mod pages;
 
 use bingux_ui::icons::Icon;
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::requests::{CertError, CertProblem};
 use bingux_ui::web_view::{GoneReason, LoadError};
 
@@ -28,53 +29,50 @@ impl ErrorPage {
         let (icon, title, text, retry) = match error.name.as_str() {
             "NS_ERROR_UNKNOWN_HOST" => (
                 Icon::NetworkError,
-                "Can\u{2019}t find that site".to_string(),
-                format!(
-                    "The address {host} could not be found. Check it for typing mistakes, and that you are connected."
-                ),
+                tr!("browser-error-unknown-host-title"),
+                tr!("browser-error-unknown-host-description", host = host),
                 true,
             ),
             "NS_ERROR_CONNECTION_REFUSED" => (
                 Icon::NetworkError,
-                "The site refused the connection".to_string(),
-                format!("{host} is there, but is not accepting connections. It may be down."),
+                tr!("browser-error-refused-title"),
+                tr!("browser-error-refused-description", host = host),
                 true,
             ),
             "NS_ERROR_NET_TIMEOUT" => (
                 Icon::NetworkError,
-                "The site took too long".to_string(),
-                format!("{host} did not answer in time."),
+                tr!("browser-error-timeout-title"),
+                tr!("browser-error-timeout-description", host = host),
                 true,
             ),
             "NS_ERROR_OFFLINE" | "NS_ERROR_NET_RESET" | "NS_ERROR_NET_INTERRUPT" => (
                 Icon::NetworkOffline,
-                "You are offline".to_string(),
-                "The connection was lost. Check your network and try again.".to_string(),
+                tr!("browser-error-offline-title"),
+                tr!("browser-error-offline-description"),
                 true,
             ),
             "NS_ERROR_PROXY_CONNECTION_REFUSED" => (
                 Icon::NetworkError,
-                "The proxy refused the connection".to_string(),
-                "Check the proxy settings of the system.".to_string(),
+                tr!("browser-error-proxy-title"),
+                tr!("browser-error-proxy-description"),
                 true,
             ),
             "NS_ERROR_MALFORMED_URI" | "NS_ERROR_INVALID_CONTENT_ENCODING" => (
                 Icon::DialogWarning,
-                "That address is not valid".to_string(),
-                "Check it for typing mistakes.".to_string(),
+                tr!("browser-error-malformed-title"),
+                tr!("browser-error-malformed-description"),
                 false,
             ),
             "NS_ERROR_FILE_NOT_FOUND" | "NS_ERROR_FILE_ACCESS_DENIED" => (
                 Icon::DialogWarning,
-                "The file can\u{2019}t be opened".to_string(),
-                "It may have been moved, or this browser may not be allowed to read it."
-                    .to_string(),
+                tr!("browser-error-file-title"),
+                tr!("browser-error-file-description"),
                 false,
             ),
             _ => (
                 Icon::DialogWarning,
-                "The page can\u{2019}t be shown".to_string(),
-                format!("Loading {host} failed."),
+                tr!("browser-error-other-title"),
+                tr!("browser-error-other-description", host = host),
                 true,
             ),
         };
@@ -92,22 +90,22 @@ impl ErrorPage {
         match reason {
             GoneReason::Crashed => Self {
                 icon: Icon::DialogError,
-                title: "This tab crashed".to_string(),
-                text: "The page stopped working and was closed. Reload it to try again. Your other tabs are not affected.".to_string(),
+                title: tr!("browser-error-crashed-title"),
+                text: tr!("browser-error-crashed-description"),
                 code: "process crashed".to_string(),
                 retry: true,
             },
             GoneReason::Killed => Self {
                 icon: Icon::DialogError,
-                title: "This tab was stopped".to_string(),
-                text: "The system ended the process that showed the page, often because it ran out of memory. Reload it to try again.".to_string(),
+                title: tr!("browser-error-killed-title"),
+                text: tr!("browser-error-killed-description"),
                 code: "process killed".to_string(),
                 retry: true,
             },
             GoneReason::CleanExit => Self {
                 icon: Icon::DialogInformation,
-                title: "This tab was closed".to_string(),
-                text: "The process that showed the page has ended. Reload it to show it again.".to_string(),
+                title: tr!("browser-error-exited-title"),
+                text: tr!("browser-error-exited-description"),
                 code: "process exited".to_string(),
                 retry: true,
             },
@@ -125,24 +123,24 @@ impl CertSentence<'_> {
         let host = &error.host;
         match error.problem {
             CertProblem::Expired => match &error.valid_until {
-                Some(date) => format!("The certificate of {host} expired on {date}."),
-                None => format!("The certificate of {host} has expired."),
+                Some(date) => tr!(
+                    "browser-error-cert-expired-on",
+                    host = host.as_str(),
+                    date = date.as_str()
+                ),
+                None => tr!("browser-error-cert-expired", host = host.as_str()),
             },
-            CertProblem::NotYetValid => format!("The certificate of {host} is not valid yet."),
-            CertProblem::WrongHost => format!("The certificate is for another site, not {host}."),
-            CertProblem::SelfSigned => format!("{host} uses a certificate it signed itself."),
+            CertProblem::NotYetValid => tr!("browser-error-cert-not-yet", host = host.as_str()),
+            CertProblem::WrongHost => tr!("browser-error-cert-wrong-host", host = host.as_str()),
+            CertProblem::SelfSigned => tr!("browser-error-cert-self-signed", host = host.as_str()),
             CertProblem::UnknownIssuer => {
-                format!(
-                    "The certificate of {host} was issued by someone this browser does not trust."
-                )
+                tr!("browser-error-cert-unknown-issuer", host = host.as_str())
             }
             CertProblem::Revoked => {
-                format!("The certificate of {host} was revoked by the one who issued it.")
+                tr!("browser-error-cert-revoked", host = host.as_str())
             }
             CertProblem::Other => {
-                format!(
-                    "The certificate of {host} does not meet this browser\u{2019}s requirements."
-                )
+                tr!("browser-error-cert-other", host = host.as_str())
             }
         }
     }

@@ -176,3 +176,58 @@ browser-new-tab-private-title = Private browsing
 browser-new-tab-private-description = Nothing you do in this window is kept: no history, cookies or site data. Downloads you save stay on this computer.
 # Heading of the pages visited last, listed on the new tab page.
 browser-new-tab-recent-title = Recently visited
+
+## Error pages
+## What stands in the content area when a page could not be shown.
+
+browser-error-unknown-host-title = Can’t find that site
+# $host is the site the address names.
+browser-error-unknown-host-description = The address { $host } could not be found. Check it for typing mistakes, and that you are connected.
+browser-error-refused-title = The site refused the connection
+browser-error-refused-description = { $host } is there, but is not accepting connections. It may be down.
+browser-error-timeout-title = The site took too long
+browser-error-timeout-description = { $host } did not answer in time.
+browser-error-offline-title = You are offline
+browser-error-offline-description = The connection was lost. Check your network and try again.
+browser-error-proxy-title = The proxy refused the connection
+browser-error-proxy-description = Check the proxy settings of the system.
+browser-error-malformed-title = That address is not valid
+browser-error-malformed-description = Check it for typing mistakes.
+browser-error-file-title = The file can’t be opened
+browser-error-file-description = It may have been moved, or this browser may not be allowed to read it.
+browser-error-other-title = The page can’t be shown
+browser-error-other-description = Loading { $host } failed.
+# $date is the day the certificate stopped being valid, as the engine words it.
+browser-error-cert-expired-on = The certificate of { $host } expired on { $date }.
+browser-error-cert-expired = The certificate of { $host } has expired.
+browser-error-cert-not-yet = The certificate of { $host } is not valid yet.
+browser-error-cert-wrong-host = The certificate is for another site, not { $host }.
+browser-error-cert-self-signed = { $host } uses a certificate it signed itself.
+browser-error-cert-unknown-issuer = The certificate of { $host } was issued by someone this browser does not trust.
+browser-error-cert-revoked = The certificate of { $host } was revoked by the one who issued it.
+browser-error-cert-other = The certificate of { $host } does not meet this browser’s requirements.
+browser-error-crashed-title = This tab crashed
+browser-error-crashed-description = The page stopped working and was closed. Reload it to try again. Your other tabs are not affected.
+browser-error-killed-title = This tab was stopped
+browser-error-killed-description = The system ended the process that showed the page, often because it ran out of memory. Reload it to try again.
+browser-error-exited-title = This tab was closed
+browser-error-exited-description = The process that showed the page has ended. Reload it to show it again.
+browser-error-retry-button = Try again
+browser-error-reload-button = Reload tab
+# Rows of the certificate details dialog.
+browser-error-cert-site-label = Site
+browser-error-cert-problem-label = Problem
+browser-error-cert-issuer-label = Issued by
+browser-error-cert-fingerprint-label = Fingerprint
+# Shown in the details when the site cannot be overridden.
+browser-error-cert-no-override-description = This site asks to be reached only over a secure connection, so the browser does not let you go on.
+browser-error-cert-details-title = Certificate details
+browser-error-cert-close-button = Close
+browser-error-cert-proceed-button = Proceed (unsafe)
+browser-error-cert-title = Your connection is not private
+browser-error-cert-back-button = Go back
+browser-error-cert-details-button = Details…
+# Shown in the details when the person may go on.
+browser-error-cert-risk-description = Someone on the network could read or change what you send and receive. Go ahead only if you know why the certificate is wrong.
+# $problem is one sentence on what is wrong with the certificate; $host is the site.
+browser-error-cert-description = { $problem } Attackers might be trying to steal what you send to { $host }.

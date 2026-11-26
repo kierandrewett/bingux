@@ -27,7 +27,7 @@ impl Component for LoadFailedPage {
             .description(page.text)
             .child(caption(page.code));
         if page.retry {
-            view = view.action("Try again", move |_: ()| {
+            view = view.action(tr!("browser-error-retry-button"), move |_: ()| {
                 ctx.with(|browser| browser.reload(key, false))
             });
         }
@@ -49,7 +49,7 @@ impl Component for CrashedPage {
         let page = ErrorPage::for_crash(self.reason);
         status_page(page.icon, page.title)
             .description(page.text)
-            .action("Reload tab", move |_: ()| {
+            .action(tr!("browser-error-reload-button"), move |_: ()| {
                 ctx.with(|browser| browser.reload(key, false))
             })
     }
@@ -68,7 +68,9 @@ pub struct CertErrorPage {
 
 impl CertErrorPage {
     /// The text that tells a person who may proceed what it risks.
-    const RISK: &'static str = "Someone on the network could read or change what you send and receive. Go ahead only if you know why the certificate is wrong.";
+    fn risk() -> String {
+        tr!("browser-error-cert-risk-description")
+    }
 }
 
 impl Component for CertErrorPage {
@@ -79,27 +81,44 @@ impl Component for CertErrorPage {
         let shown = error.clone();
         let details = move |_: ()| {
             let mut group = Group::new(None::<String>)
-                .row(property_row("Site", shown.host.clone()))
-                .row(property_row("Problem", shown.code.clone()));
+                .row(property_row(
+                    tr!("browser-error-cert-site-label"),
+                    shown.host.clone(),
+                ))
+                .row(property_row(
+                    tr!("browser-error-cert-problem-label"),
+                    shown.code.clone(),
+                ));
             if let Some(issuer) = &shown.issuer {
-                group = group.row(property_row("Issued by", issuer.clone()));
+                group = group.row(property_row(
+                    tr!("browser-error-cert-issuer-label"),
+                    issuer.clone(),
+                ));
             }
             if let Some(print) = &shown.fingerprint {
-                group = group.row(property_row("Fingerprint", print.clone()));
+                group = group.row(property_row(
+                    tr!("browser-error-cert-fingerprint-label"),
+                    print.clone(),
+                ));
             }
             let note = if shown.overridable {
-                CertErrorPage::RISK
+                CertErrorPage::risk()
             } else {
-                "This site asks to be reached only over a secure connection, so the browser does not let you go on."
+                tr!("browser-error-cert-no-override-description")
             };
-            let mut dialog = dialog("Certificate details", note)
+            let mut dialog = dialog(tr!("browser-error-cert-details-title"), note)
                 .content(group)
-                .action(CANCEL_ID, "Close", ResponseKind::Default, |_: ()| {})
+                .action(
+                    CANCEL_ID,
+                    tr!("browser-error-cert-close-button"),
+                    ResponseKind::Default,
+                    |_: ()| {},
+                )
                 .default_action(CANCEL_ID)
                 .cancel_action(CANCEL_ID);
             if shown.overridable {
                 dialog = dialog.response(
-                    "Proceed (unsafe)",
+                    tr!("browser-error-cert-proceed-button"),
                     ResponseKind::Destructive,
                     move |_: ()| {
                         ctx.with(|browser| browser.cert_proceed(key));
@@ -108,14 +127,15 @@ impl Component for CertErrorPage {
             }
             ctx.overlays.show_dialog(dialog);
         };
-        status_page(Icon::DialogWarning, "Your connection is not private")
-            .description(format!(
-                "{} Attackers might be trying to steal what you send to {host}.",
-                CertSentence(error).text()
+        status_page(Icon::DialogWarning, tr!("browser-error-cert-title"))
+            .description(tr!(
+                "browser-error-cert-description",
+                problem = CertSentence(error).text(),
+                host = host.as_str()
             ))
-            .action("Go back", move |_: ()| {
+            .action(tr!("browser-error-cert-back-button"), move |_: ()| {
                 ctx.with(|browser| browser.cert_go_back(key))
             })
-            .child(action_button("Details\u{2026}", details).flat())
+            .child(action_button(tr!("browser-error-cert-details-button"), details).flat())
     }
 }

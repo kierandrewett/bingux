@@ -17,6 +17,7 @@ fn error(name: &str) -> LoadError {
 
 #[test]
 fn an_unknown_host_names_the_host_and_offers_a_retry() {
+    crate::locale::register();
     let page = ErrorPage::for_load(&error("NS_ERROR_UNKNOWN_HOST"), "missing.example");
     assert!(page.text.contains("missing.example"));
     assert!(page.retry);
@@ -25,6 +26,7 @@ fn an_unknown_host_names_the_host_and_offers_a_retry() {
 
 #[test]
 fn an_error_the_browser_does_not_know_still_has_a_page() {
+    crate::locale::register();
     let page = ErrorPage::for_load(&error("NS_ERROR_SOMETHING_NEW"), "a.example");
     assert_eq!(page.title, "The page can\u{2019}t be shown");
     assert!(page.text.contains("a.example"));
@@ -33,11 +35,13 @@ fn an_error_the_browser_does_not_know_still_has_a_page() {
 
 #[test]
 fn a_bad_address_is_not_worth_retrying() {
+    crate::locale::register();
     assert!(!ErrorPage::for_load(&error("NS_ERROR_MALFORMED_URI"), "").retry);
 }
 
 #[test]
 fn every_certificate_problem_has_a_sentence_that_names_the_site() {
+    crate::locale::register();
     for problem in [
         CertProblem::UnknownIssuer,
         CertProblem::SelfSigned,
@@ -63,6 +67,7 @@ fn every_certificate_problem_has_a_sentence_that_names_the_site() {
 
 #[test]
 fn every_way_a_process_goes_away_has_a_page_that_offers_a_reload() {
+    crate::locale::register();
     for reason in [
         GoneReason::Crashed,
         GoneReason::Killed,
@@ -76,6 +81,7 @@ fn every_way_a_process_goes_away_has_a_page_that_offers_a_reload() {
 
 #[test]
 fn a_crashed_tab_shows_the_crash_page_and_a_reload_loads_it_again() {
+    crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "crash.example.net");
     let tab = browser.tabs.get(key).unwrap();
@@ -95,6 +101,7 @@ fn a_crashed_tab_shows_the_crash_page_and_a_reload_loads_it_again() {
 
 #[test]
 fn a_load_that_fails_shows_its_page_until_the_next_load() {
+    crate::locale::register();
     let (mut browser, _) = browser();
     let key = go(&mut browser, "missing.example.net");
     assert!(
@@ -106,6 +113,7 @@ fn a_load_that_fails_shows_its_page_until_the_next_load() {
 
 #[test]
 fn a_certificate_error_can_be_refused_or_proceeded_past() {
+    crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "expired.example.net");
     assert!(matches!(
@@ -137,6 +145,7 @@ fn a_certificate_error_can_be_refused_or_proceeded_past() {
 
 #[test]
 fn a_certificate_that_cannot_be_overridden_cannot_be_proceeded_past() {
+    crate::locale::register();
     let (mut browser, double) = browser();
     let key = go(&mut browser, "pinned.example.net");
     double.clear_calls();
