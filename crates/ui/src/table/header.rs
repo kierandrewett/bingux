@@ -17,7 +17,7 @@ use super::ctx::{Columns, Latest};
 use super::model::{Plan, SortDirection, SortOrder, drop_slot, line_position};
 use super::row::{CHECK_CELL, side};
 use crate::component::ComponentName;
-use crate::controls::checkbox::CheckState;
+use crate::controls::checkbox::{CheckState, checkbox};
 use crate::controls::press::point_of;
 use crate::icons::{self, Icon};
 use crate::shell::panel::PanelTrigger;
@@ -80,6 +80,8 @@ impl<T, K> PartialEq for TableHeader<T, K> {
 impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for TableHeader<T, K> {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
+        // The select-all box is named by the heading it sits in.
+        crate::a11y::provide_field_label(&crate::tr!("ui-table-select-all.a11y"), None);
         let drag = use_state(|| None::<Drag>);
         let ignore_press = use_state(|| false);
         let last_edge = use_state(|| None::<(Instant, usize)>);
@@ -219,54 +221,17 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for TableHeader<T, K>
 
         let mark = self.marks.map(|state| {
             let latest = self.latest.clone();
-            let accent = state != CheckState::Off;
             rect()
                 .width(Size::px(CHECK_CELL))
                 .tw(&tokens, &[flex_row(), center(), h_full()])
-                .a11y_role(AccessibilityRole::CheckBox)
-                .a11y_alt(crate::tr!("ui-table-select-all.a11y"))
-                .on_press(move |event: Event<PressEventData>| {
-                    event.stop_propagation();
+                .child(checkbox(state, move |select: bool| {
                     let ctx = latest.get();
-                    if ctx.selecting() && state == CheckState::On {
-                        ctx.clear_selection();
-                    } else {
+                    if select {
                         ctx.select_all();
+                    } else {
+                        ctx.clear_selection();
                     }
-                })
-                .child(
-                    rect()
-                        .tw(
-                            &tokens,
-                            &[
-                                w(Dim::Box5),
-                                h(Dim::Box5),
-                                center(),
-                                rounded(Radius::Mark),
-                                bg(if accent {
-                                    Paint::Accent
-                                } else {
-                                    Paint::Transparent
-                                }),
-                                if accent {
-                                    border(Line::Stroke(Dim::Hairline, Paint::Accent))
-                                } else {
-                                    border(Line::Outline)
-                                },
-                            ],
-                        )
-                        .maybe_child(accent.then(|| {
-                            icons::icon(
-                                if state == CheckState::Mixed {
-                                    Icon::ListRemove
-                                } else {
-                                    Icon::Check
-                                },
-                                IconSize::Mark,
-                                Ink::OnAccent.color(&tokens),
-                            )
-                        })),
-                )
+                }))
         });
 
         rect()

@@ -75,8 +75,8 @@ pub(crate) fn selection_mark(tokens: &crate::theme::Tokens, selected: bool) -> E
         .tw(
             tokens,
             &[
-                w(Dim::Box5),
-                h(Dim::Box5),
+                w(Dim::Check),
+                h(Dim::Check),
                 center(),
                 rounded(Radius::Mark),
                 if selected {
