@@ -1440,6 +1440,24 @@ fn rest(shot: &mut Snapshot) {
     shot.settle(Duration::from_millis(500));
 }
 
+/// What one step of the animation clock moves every animation by, in milliseconds: the animation
+/// counts whole milliseconds, so this is the 34 ms tick cap at [`SPEED`], 16.5 ms, cut to 16.
+const SPEED: f32 = 0.4853;
+/// The wall time of a [`frame`]: longer than the 34 ms tick cap, so the cap decides how far an
+/// animation moves, not the load of the machine (a frame that took 50 ms moves it as far as one
+/// that took 40).
+const WALL: Duration = Duration::from_millis(40);
+
+/// One frame of 16 ms of motion whatever the load of the machine, once the animation clock is at
+/// [`SPEED`]: a test that limits the size of a step needs the step not to be the load's.
+fn frame(shot: &mut Snapshot) {
+    shot.runner().poll_n(WALL, 1);
+    // The tick that `poll_n` ended with is taken by the animations on the next poll: run it, so
+    // the frame shows every tick so far.
+    shot.runner().handle_events_immediately();
+    shot.runner().sync_and_update();
+}
+
 fn centre(area: &Area) -> (f32, f32) {
     (
         area.min_x() + area.width() / 2.0,
@@ -2133,6 +2151,7 @@ fn closing_a_tab_with_its_button_shrinks_it_away_and_the_others_widen() {
     // The selected tab shows its close button.
     let close = close_buttons(&mut shot)[0];
     let before = named(&mut shot, "Tab")[1].width();
+    shot.runner().animation_clock().set_speed(SPEED);
     shot.click(
         close.min_x() + close.width() / 2.0,
         close.min_y() + close.height() / 2.0,
@@ -2140,7 +2159,7 @@ fn closing_a_tab_with_its_button_shrinks_it_away_and_the_others_widen() {
     let mut widest_gap = 0.0_f32;
     let mut last_end: Option<f32> = None;
     for _ in 0..30 {
-        shot.settle(Duration::from_millis(16));
+        frame(&mut shot);
         let strip = one(&mut shot, "TabStrip");
         let tabs = named(&mut shot, "Tab");
         for tab in &tabs {
