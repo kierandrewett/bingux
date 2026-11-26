@@ -188,6 +188,38 @@ fn calm(env: Env, window: (f32, f32), at: &'static str) -> Rig {
     rig
 }
 
+/// How many steps in a row two windows must look the same to be taken for alike.
+const ALIKE: usize = 20;
+/// The most steps two windows are given to come to look the same.
+const ALIKE_CAP: usize = 300;
+
+/// Steps two windows that were made at different moments until they look the same, which is when
+/// their pages are settled and the difference left is the one the test is about.
+///
+/// A scroll bar leaves a window 3 s of wall time after the last scroll or pointer move in it (the
+/// idle timer of the vendored scroll view, which no animation clock drives) and then fades out
+/// over 400 ms, and the box of the bar stays as it was until the fade is over. A window that was
+/// pushed four times and one that was made calm a few seconds later are the same page with
+/// two bars at two moments of their lives, and which of them has gone depends on the load of the
+/// machine that ran them. Neither a count of steps nor a quiet spell tells that apart (the box is
+/// still while the bar fades), so the windows are stepped until they agree, with a cap that a
+/// real difference in the page runs out: the caller compares them either way.
+fn alike(a: &mut Rig, b: &mut Rig) {
+    let mut same = 0;
+    for _ in 0..ALIKE_CAP {
+        a.step();
+        b.step();
+        if a.now().signature() == b.now().signature() {
+            same += 1;
+            if same >= ALIKE {
+                return;
+            }
+        } else {
+            same = 0;
+        }
+    }
+}
+
 fn settle_diff(rig: &Rig, calm: &Rig, findings: &mut Findings, what: &str) {
     let a = rig.now().signature();
     let b = calm.now().signature();
@@ -371,6 +403,7 @@ fn the_page_after_a_spam_of_pushes_is_the_page_of_a_calm_run() {
         rig.steps(40);
         let mut quiet = calm(env, window, "network/saved");
         quiet.steps(40);
+        alike(&mut rig, &mut quiet);
         settle_diff(&rig, &quiet, findings, "four presses of the open row");
     });
 }
