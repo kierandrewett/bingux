@@ -29,6 +29,7 @@ use std::os::unix::process::CommandExt;
 use bingux_ui::prelude::Application;
 
 use crate::browser::{Options, Profile};
+mod error_pages;
 use crate::engine::Engine;
 use crate::profile::open::{Opened, open, open_private};
 use crate::profile::places::{Folders, Places};
