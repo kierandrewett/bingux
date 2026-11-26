@@ -605,14 +605,14 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for DataTable<T, K> {
                     page = page.description(detail.clone());
                 }
                 if let Some(retry) = &failure.retry {
-                    page = page.action("Try again", retry.clone());
+                    page = page.action(crate::tr!("ui-table-retry"), retry.clone());
                 }
                 page.into()
             }
             TableStatus::Loading => placeholder_rows(&tokens, &layout_plan, height, compact, marks),
             TableStatus::Ready if count == 0 => match &self.empty {
                 Some(empty) => empty.clone(),
-                None => status_page(Icon::ViewList, "Nothing to show").into(),
+                None => status_page(Icon::ViewList, crate::tr!("ui-table-empty")).into(),
             },
             TableStatus::Ready => {
                 let data = RowsData {
@@ -806,8 +806,8 @@ fn sort_menu<T: 'static, K: Clone + Eq + Hash + 'static>(
     let title = sorted
         .and_then(|order| specs.iter().find(|spec| spec.id == order.column))
         .map_or_else(
-            || "Sort".to_string(),
-            |spec| format!("Sort by {}", spec.title),
+            || crate::tr!("ui-table-sort"),
+            |spec| crate::tr!("ui-table-sort-by", column = spec.title.as_str()),
         );
     Some(
         rect()

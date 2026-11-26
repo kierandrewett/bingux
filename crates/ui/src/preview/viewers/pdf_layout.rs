@@ -91,7 +91,7 @@ impl Zoom {
         match self {
             Zoom::FitWidth => crate::tr!("ui-preview-zoom-fit-width"),
             Zoom::FitPage => crate::tr!("ui-preview-zoom-fit-page"),
-            Zoom::Percent(_) => format!("{}%", (scale / PX_PER_POINT * 100.0).round() as u32),
+            Zoom::Percent(_) => percent_label((scale / PX_PER_POINT * 100.0).round() as u32),
         }
     }
 
@@ -99,6 +99,11 @@ impl Zoom {
     pub fn percent_at(scale: f32) -> u32 {
         (scale / PX_PER_POINT * 100.0).round() as u32
     }
+}
+
+/// A zoom percentage as the person's language writes it: "125%".
+pub(super) fn percent_label(percent: u32) -> String {
+    crate::format::Percent::new(f64::from(percent) / 100.0).format()
 }
 
 /// Where the pages sit, top to bottom.
@@ -376,16 +381,16 @@ pub(super) fn find_status(
         String::new()
     } else if count == 0 {
         if searching {
-            "Searching\u{2026}".to_owned()
+            crate::tr!("ui-preview-find-searching")
         } else {
-            "No matches".to_owned()
+            crate::tr!("ui-preview-find-none")
         }
     } else {
-        format!(
-            "{} of {}{}",
-            current.map_or(1, |at| at + 1),
-            count,
-            if searching { "+" } else { "" }
+        crate::tr!(
+            "ui-preview-find-position",
+            current = current.map_or(1, |at| at + 1),
+            total = count,
+            more = u8::from(searching)
         )
     }
 }

@@ -36,10 +36,18 @@ pub fn find_result_text(text: &str, result: Option<(u32, u32)>, compact: bool) -
     match result {
         None => None,
         // A phone has no room for the long form beside the field and three buttons.
-        Some((_, 0)) if compact => Some("None".to_string()),
-        Some((_, 0)) => Some("Phrase not found".to_string()),
-        Some((current, total)) if compact => Some(format!("{current}/{total}")),
-        Some((current, total)) => Some(format!("{current} of {total}")),
+        Some((_, 0)) if compact => Some(crate::tr!("ui-findcard-none-short")),
+        Some((_, 0)) => Some(crate::tr!("ui-findcard-none")),
+        Some((current, total)) if compact => Some(crate::tr!(
+            "ui-findcard-position-short",
+            current = current,
+            total = total
+        )),
+        Some((current, total)) => Some(crate::tr!(
+            "ui-findcard-position",
+            current = current,
+            total = total
+        )),
     }
 }
 
@@ -53,7 +61,11 @@ pub struct FindOption {
 
 impl FindOption {
     pub fn new(label: impl Into<String>, on: bool, toggle: impl Into<EventHandler<bool>>) -> Self {
-        Self { label: label.into(), on, toggle: toggle.into() }
+        Self {
+            label: label.into(),
+            on,
+            toggle: toggle.into(),
+        }
     }
 }
 
@@ -188,38 +200,71 @@ impl Component for FindCard {
             }
         };
         let top = rect()
-            .tw(&tokens, &[w_full(), flex_row(), grow_children(), items(Align::Center), gap(S1)])
+            .tw(
+                &tokens,
+                &[
+                    w_full(),
+                    flex_row(),
+                    grow_children(),
+                    items(Align::Center),
+                    gap(S1),
+                ],
+            )
             .child(rect().key(self.focus).tw(&tokens, &[w_flex()]).child(field))
             .maybe_child(status.map(|status| {
                 let ink = if not_found { Ink::Danger } else { Ink::Muted };
-                Element::from(typography::CAPTION.in_ink(ink).label(&tokens, status).max_lines(1))
+                Element::from(
+                    typography::CAPTION
+                        .in_ink(ink)
+                        .label(&tokens, status)
+                        .max_lines(1),
+                )
             }))
-            .child(icon_button(Icon::PanUp, stepper(false)).tooltip("Previous match").enabled(!current.is_empty()))
-            .child(icon_button(Icon::PanDown, stepper(true)).tooltip("Next match").enabled(!current.is_empty()))
+            .child(
+                icon_button(Icon::PanUp, stepper(false))
+                    .tooltip(crate::tr!("ui-findcard-previous.tooltip"))
+                    .enabled(!current.is_empty()),
+            )
+            .child(
+                icon_button(Icon::PanDown, stepper(true))
+                    .tooltip(crate::tr!("ui-findcard-next.tooltip"))
+                    .enabled(!current.is_empty()),
+            )
             .child(
                 icon_button(Icon::WindowClose, move |_: ()| {
                     if let Some(close) = &close {
                         close.call(());
                     }
                 })
-                .tooltip("Close (Escape)"),
+                .tooltip(crate::tr!("ui-findcard-close.tooltip")),
             );
         let options = (!compact && !self.options.is_empty()).then(|| {
-            rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), px(S1)]).children(
-                self.options
-                    .iter()
-                    .map(|option| {
-                        let toggle = option.toggle.clone();
-                        checkbox(option.on, move |on: bool| toggle.call(on)).text(&option.label).into()
-                    })
-                    .collect::<Vec<Element>>(),
-            )
+            rect()
+                .tw(
+                    &tokens,
+                    &[flex_row(), items(Align::Center), gap(S3), px(S1)],
+                )
+                .children(
+                    self.options
+                        .iter()
+                        .map(|option| {
+                            let toggle = option.toggle.clone();
+                            checkbox(option.on, move |on: bool| toggle.call(on))
+                                .text(&option.label)
+                                .into()
+                        })
+                        .collect::<Vec<Element>>(),
+                )
         });
         let card = rect()
             .component("FindCard")
             .a11y_role(AccessibilityRole::Search)
             .a11y_alt(self.placeholder.clone())
-            .width(if compact { Size::fill() } else { Size::px(CARD_WIDTH) })
+            .width(if compact {
+                Size::fill()
+            } else {
+                Size::px(CARD_WIDTH)
+            })
             .tw(
                 &tokens,
                 &[
@@ -250,11 +295,27 @@ mod tests {
 
     #[test]
     fn the_card_says_which_match_of_how_many_or_that_there_are_none() {
-        assert_eq!(find_result_text("", Some((1, 3)), false), None, "nothing searched for");
+        assert_eq!(
+            find_result_text("", Some((1, 3)), false),
+            None,
+            "nothing searched for"
+        );
         assert_eq!(find_result_text("a", None, false), None, "no answer yet");
-        assert_eq!(find_result_text("a", Some((2, 5)), false).as_deref(), Some("2 of 5"));
-        assert_eq!(find_result_text("a", Some((0, 0)), false).as_deref(), Some("Phrase not found"));
-        assert_eq!(find_result_text("a", Some((2, 5)), true).as_deref(), Some("2/5"));
-        assert_eq!(find_result_text("a", Some((0, 0)), true).as_deref(), Some("None"));
+        assert_eq!(
+            find_result_text("a", Some((2, 5)), false).as_deref(),
+            Some("2 of 5")
+        );
+        assert_eq!(
+            find_result_text("a", Some((0, 0)), false).as_deref(),
+            Some("Phrase not found")
+        );
+        assert_eq!(
+            find_result_text("a", Some((2, 5)), true).as_deref(),
+            Some("2/5")
+        );
+        assert_eq!(
+            find_result_text("a", Some((0, 0)), true).as_deref(),
+            Some("None")
+        );
     }
 }

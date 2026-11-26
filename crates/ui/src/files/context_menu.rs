@@ -360,7 +360,13 @@ fn size_rows(looks: Looks) -> Vec<Row> {
         .iter()
         .copied()
         .filter(|px| kind_of(*px) == looks.kind)
-        .map(|px| Row::choice(&format!("{px} px"), px == looks.icon_px, Act::IconSize(px)))
+        .map(|px| {
+            Row::choice(
+                &crate::tr!("ui-compress-px", px = crate::i18n::Arg::text(px)),
+                px == looks.icon_px,
+                Act::IconSize(px),
+            )
+        })
         .collect()
 }
 

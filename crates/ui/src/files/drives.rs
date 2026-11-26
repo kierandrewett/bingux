@@ -122,7 +122,11 @@ impl Drives {
             match (outcome, overlays) {
                 (Ok(path), _) => then.call(Where::Folder(path)),
                 (Err(sentence), Some(overlays)) => {
-                    overlays.toast(format!("{label}: {sentence}"));
+                    overlays.toast(crate::tr!(
+                        "ui-files-drive-error",
+                        label = label.as_str(),
+                        sentence = sentence.as_str()
+                    ));
                 }
                 (Err(_), None) => {}
             }

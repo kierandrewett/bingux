@@ -50,8 +50,8 @@ use freya::prelude::*;
 
 pub use geometry::{Aspect, CropRect, Grip, MIN_SIDE, drag, fit_ratio, nudge, resize};
 
-use crate::controls::capture::{Capture, CaptureEvent, Phase, use_capture};
 use crate::component::ComponentName;
+use crate::controls::capture::{Capture, CaptureEvent, Phase, use_capture};
 use crate::controls::{action_button, dropdown, icon_button};
 use crate::icons::Icon;
 use crate::motion::Focusable;
@@ -332,7 +332,10 @@ impl Component for CropOverlay {
         // The content sits inside a margin the width of half a handle, so the handles
         // on the content's edges are not cut off by the overlay's own edge.
         let margin = S4.px();
-        let room = ((box_width - 2.0 * margin).max(0.0), (box_height - 2.0 * margin).max(0.0));
+        let room = (
+            (box_width - 2.0 * margin).max(0.0),
+            (box_height - 2.0 * margin).max(0.0),
+        );
         let scale = fit_scale(size, 0, room);
         let (frame_width, frame_height) = (size.0 * scale, size.1 * scale);
         let (frame_left, frame_top) = (
@@ -443,7 +446,7 @@ impl Component for CropOverlay {
             absolute(left, top, width, height).tw(&tokens, &[bg(Paint::Scrim)])
         };
 
-        let label = self.label.clone().unwrap_or_else(|| Grip::Move.name().to_owned());
+        let label = self.label.clone().unwrap_or_else(|| Grip::Move.name());
         let (pixel_width, pixel_height) = {
             let (_, _, w, h) = handle.pixels();
             (w, h)
@@ -452,7 +455,9 @@ impl Component for CropOverlay {
         let guide = match self.guide {
             Guide::Thirds if lit => {
                 let line = |left: f32, top: f32, width: f32, height: f32| {
-                    absolute(left, top, width, height).tw(&tokens, &[bg(Paint::Knob)]).opacity(0.5)
+                    absolute(left, top, width, height)
+                        .tw(&tokens, &[bg(Paint::Knob)])
+                        .opacity(0.5)
                 };
                 Some(
                     rect()
@@ -473,15 +478,10 @@ impl Component for CropOverlay {
                         .width(Size::px(width))
                         .height(Size::px(height))
                         .tw(&tokens, &[flex_row(), center()])
-                        .child(
-                            rect()
-                                .width(Size::px(round))
-                                .height(Size::px(round))
-                                .tw(
-                                    &tokens,
-                                    &[rounded(Radius::Pill), border(Line::Edge(Paint::Knob))],
-                                ),
-                        ),
+                        .child(rect().width(Size::px(round)).height(Size::px(round)).tw(
+                            &tokens,
+                            &[rounded(Radius::Pill), border(Line::Edge(Paint::Knob))],
+                        )),
                 )
             }
             _ => None,
@@ -501,7 +501,11 @@ impl Component for CropOverlay {
                     .a11y_role(AccessibilityRole::Group)
                     .a11y_alt(format!("{label}, {pixel_width} by {pixel_height} pixels"))
                     .maybe(self.autofocus, |element| element.a11y_auto_focus(true))
-                    .cursor(if dragging { CursorIcon::Grabbing } else { cursor_of(Grip::Move) })
+                    .cursor(if dragging {
+                        CursorIcon::Grabbing
+                    } else {
+                        cursor_of(Grip::Move)
+                    })
                     .on_pointer_enter(move |_| hovering.set_if_modified(true))
                     .on_pointer_leave(move |_| hovering.set_if_modified(false))
                     .on_key_down(on_key),
@@ -530,19 +534,14 @@ impl Component for CropOverlay {
                             .cursor(cursor_of(grip))
                             .a11y_alt(grip.name()),
                     )
-                    .child(
-                        rect()
-                            .width(Size::px(knob))
-                            .height(Size::px(knob))
-                            .tw(
-                                &tokens,
-                                &[
-                                    rounded(Radius::Pill),
-                                    bg(Paint::Knob),
-                                    shadow(Elevation::Knob),
-                                ],
-                            ),
-                    )
+                    .child(rect().width(Size::px(knob)).height(Size::px(knob)).tw(
+                        &tokens,
+                        &[
+                            rounded(Radius::Pill),
+                            bg(Paint::Knob),
+                            shadow(Elevation::Knob),
+                        ],
+                    ))
                     .into_element()
             });
 
@@ -688,12 +687,19 @@ impl Component for CropBar {
             }))
             .maybe_child((choices && aspect.can_swap()).then(|| {
                 icon_button(Icon::ObjectRotateRight, move |_| handle.swap_aspect())
-                    .tooltip("Turn the shape on its side")
+                    .tooltip(crate::tr!("ui-crop-turn.tooltip"))
             }))
             .child(
                 CAPTION
                     .in_ink(Ink::Muted)
-                    .label(&tokens, format!("{pixel_width} \u{d7} {pixel_height}"))
+                    .label(
+                        &tokens,
+                        crate::tr!(
+                            "ui-crop-size",
+                            width = crate::i18n::Arg::text(pixel_width),
+                            height = crate::i18n::Arg::text(pixel_height)
+                        ),
+                    )
                     .max_lines(1),
             )
             .maybe_child(self.on_cancel.is_some().then(|| {

@@ -513,8 +513,8 @@ impl IconButton {
         self
     }
 
-    pub fn tooltip(mut self, text: &str) -> Self {
-        self.tooltip = Some(text.to_string());
+    pub fn tooltip(mut self, text: impl AsRef<str>) -> Self {
+        self.tooltip = Some(text.as_ref().to_string());
         self
     }
 

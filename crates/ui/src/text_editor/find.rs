@@ -283,36 +283,28 @@ impl FindState {
             return error;
         }
         if *self.busy.read() {
-            return "Searching…".into();
+            return crate::tr!("ui-text-find-searching");
         }
         let matches = self.matches.read();
         let count = matches.ranges.len();
         if count == 0 {
-            return "No results".into();
+            return crate::tr!("ui-text-find-none");
         }
-        let total = if matches.truncated {
-            format!("{}+", group(MATCH_LIMIT))
+        let (total, more) = if matches.truncated {
+            (MATCH_LIMIT, 1)
         } else {
-            group(count)
+            (count, 0)
         };
         match *self.current.read() {
-            Some(index) => format!("{} of {total}", group(index + 1)),
-            None => format!("{total} results"),
+            Some(index) => crate::tr!(
+                "ui-text-find-position",
+                current = index + 1,
+                total = total,
+                more = more
+            ),
+            None => crate::tr!("ui-text-find-count", total = total, more = more),
         }
     }
-}
-
-/// `12345` as `12,345`.
-fn group(value: usize) -> String {
-    let digits = value.to_string();
-    let mut out = String::new();
-    for (index, ch) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
-            out.push(',');
-        }
-        out.push(ch);
-    }
-    out
 }
 
 /// The find bar for `handle`. See the [module](self).
@@ -389,9 +381,9 @@ impl Component for FindBar {
             let mut whole = find.whole_word;
             if crate::style::is_compact() {
                 menu_button(
-                    "Search options",
+                    crate::tr!("ui-text-find-options"),
                     vec![
-                        menu_item("Match case", move |_| case.set(!c))
+                        menu_item(crate::tr!("ui-text-find-match-case"), move |_| case.set(!c))
                             .checked(c)
                             .shortcut("Alt+C"),
                         menu_item("Whole words", move |_| whole.set(!word))
@@ -410,17 +402,17 @@ impl Component for FindBar {
                     .child(
                         icon_button(Icon::FindMatchCase, move |_| case.set(!c))
                             .active(c)
-                            .tooltip("Match case (Alt+C)"),
+                            .tooltip(crate::tr!("ui-text-find-match-case.tooltip")),
                     )
                     .child(
                         icon_button(Icon::FindWholeWord, move |_| whole.set(!word))
                             .active(word)
-                            .tooltip("Whole words (Alt+W)"),
+                            .tooltip(crate::tr!("ui-text-find-whole-words.tooltip")),
                     )
                     .child(
                         icon_button(Icon::FindRegex, move |_| regex.set(!r))
                             .active(r)
-                            .tooltip("Regular expression (Alt+R)"),
+                            .tooltip(crate::tr!("ui-text-find-regex.tooltip")),
                     )
                     .into()
             }
@@ -436,7 +428,11 @@ impl Component for FindBar {
         let field = search_field(find.query, |_: String| {})
             .flat()
             .fill_width()
-            .placeholder(if r { "Regular expression" } else { "Find" })
+            .placeholder(if r {
+                crate::tr!("ui-text-find-regex.placeholder")
+            } else {
+                crate::tr!("ui-text-find-query.placeholder")
+            })
             .autofocus()
             .on_escape(move |_| close_escape())
             .on_enter_modifiers(move |modifiers: Modifiers| enter_modifiers.set(modifiers))
@@ -463,9 +459,9 @@ impl Component for FindBar {
                 },
             )
             .tooltip(if replacing {
-                "Hide replace"
+                crate::tr!("ui-text-find-replace-hide.tooltip")
             } else {
-                "Show replace"
+                crate::tr!("ui-text-find-replace-show.tooltip")
             })
         });
 
@@ -505,12 +501,12 @@ impl Component for FindBar {
             )
             .child(
                 icon_button(Icon::PanUp, move |_| find.step(&previous_handle, false))
-                    .tooltip("Previous result (Shift+Enter)")
+                    .tooltip(crate::tr!("ui-text-find-previous.tooltip"))
                     .enabled(has_matches),
             )
             .child(
                 icon_button(Icon::PanDown, move |_| find.step(&next_handle, true))
-                    .tooltip("Next result (Enter)")
+                    .tooltip(crate::tr!("ui-text-find-next.tooltip"))
                     .enabled(has_matches),
             )
             .child(icon_button(Icon::WindowClose, move |_| close()).tooltip("Close (Escape)"));
@@ -526,7 +522,7 @@ impl Component for FindBar {
             })
             .flat()
             .fill_width()
-            .placeholder("Replace with");
+            .placeholder(crate::tr!("ui-text-find-replacement.placeholder"));
             rect()
                 .tw(
                     &tokens,
@@ -541,7 +537,7 @@ impl Component for FindBar {
                 .child(rect().tw(&tokens, &[w(Dim::Control)]))
                 .child(rect().tw(&tokens, &[w_flex()]).child(field))
                 .child(
-                    action_button("Replace", move |_| {
+                    action_button(crate::tr!("ui-text-find-replace"), move |_| {
                         find.replace_one(&one_handle);
                         if let Some(handler) = &on_replaced {
                             handler.call(1);
@@ -551,7 +547,7 @@ impl Component for FindBar {
                     .enabled(has_matches),
                 )
                 .child(
-                    action_button("Replace all", move |_| {
+                    action_button(crate::tr!("ui-text-find-replace-all"), move |_| {
                         let count = find.replace_all(&all_handle);
                         if let Some(handler) = &on_replaced_all {
                             handler.call(count);
@@ -673,10 +669,12 @@ impl Component for GoToLineBar {
         };
         let target = parse_line_target(&value.read(), current, lines);
         let hint = match (&target, value.read().trim().is_empty()) {
-            (_, true) => format!("Line {current} of {lines}"),
-            (Some((line, Some(col))), _) => format!("Line {line}, column {col}"),
-            (Some((line, None)), _) => format!("Line {line}"),
-            (None, false) => "Line number or line:column".into(),
+            (_, true) => crate::tr!("ui-text-goto-current", current = current, lines = lines),
+            (Some((line, Some(col))), _) => {
+                crate::tr!("ui-text-goto-line-column", line = *line, column = *col)
+            }
+            (Some((line, None)), _) => crate::tr!("ui-text-goto-line", line = *line),
+            (None, false) => crate::tr!("ui-text-goto-invalid"),
         };
         let open = self.open;
         let on_close = self.on_close.clone();
@@ -722,7 +720,7 @@ impl Component for GoToLineBar {
                     text_field(value, go)
                         .flat()
                         .fill_width()
-                        .placeholder("Go to line")
+                        .placeholder(crate::tr!("ui-text-goto-field.placeholder"))
                         .autofocus()
                         .on_escape(move |_| escape_close()),
                 ),

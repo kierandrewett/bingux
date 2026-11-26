@@ -259,17 +259,17 @@ impl Grip {
     }
 
     /// A word for a screen reader: "top left corner", "right edge".
-    pub fn name(self) -> &'static str {
+    pub fn name(self) -> String {
         match self {
-            Grip::Move => "Crop area",
-            Grip::North => "Top edge",
-            Grip::South => "Bottom edge",
-            Grip::East => "Right edge",
-            Grip::West => "Left edge",
-            Grip::NorthEast => "Top right corner",
-            Grip::NorthWest => "Top left corner",
-            Grip::SouthEast => "Bottom right corner",
-            Grip::SouthWest => "Bottom left corner",
+            Grip::Move => crate::tr!("ui-crop-grip-move"),
+            Grip::North => crate::tr!("ui-crop-grip-north"),
+            Grip::South => crate::tr!("ui-crop-grip-south"),
+            Grip::East => crate::tr!("ui-crop-grip-east"),
+            Grip::West => crate::tr!("ui-crop-grip-west"),
+            Grip::NorthEast => crate::tr!("ui-crop-grip-north-east"),
+            Grip::NorthWest => crate::tr!("ui-crop-grip-north-west"),
+            Grip::SouthEast => crate::tr!("ui-crop-grip-south-east"),
+            Grip::SouthWest => crate::tr!("ui-crop-grip-south-west"),
         }
     }
 }
@@ -314,8 +314,8 @@ pub fn drag(
     }
     let ratio = ratio.filter(|ratio| ratio.is_finite() && *ratio > 0.0);
     let (least_width, least_height) = least(bounds);
-    let corner = (grip.moves_left() || grip.moves_right())
-        && (grip.moves_top() || grip.moves_bottom());
+    let corner =
+        (grip.moves_left() || grip.moves_right()) && (grip.moves_top() || grip.moves_bottom());
 
     // The edges the grip moves, in content pixels, before any limit.
     let mut left = start.x;
@@ -346,19 +346,45 @@ pub fn drag(
         // The corner opposite the grip stays; the box grows from it in the
         // direction the grip points, as large as the pointer asked for and
         // as the content allows.
-        let anchor_x = if grip.moves_left() { start.right() } else { start.x };
-        let anchor_y = if grip.moves_top() { start.bottom() } else { start.y };
-        let room_x = if grip.moves_left() { anchor_x } else { bounds.0 - anchor_x };
-        let room_y = if grip.moves_top() { anchor_y } else { bounds.1 - anchor_y };
+        let anchor_x = if grip.moves_left() {
+            start.right()
+        } else {
+            start.x
+        };
+        let anchor_y = if grip.moves_top() {
+            start.bottom()
+        } else {
+            start.y
+        };
+        let room_x = if grip.moves_left() {
+            anchor_x
+        } else {
+            bounds.0 - anchor_x
+        };
+        let room_y = if grip.moves_top() {
+            anchor_y
+        } else {
+            bounds.1 - anchor_y
+        };
         let asked_width = free.width.max(free.height * ratio);
         // The most width the room in both directions allows.
         let most_width = room_x.min(room_y * ratio);
         let least_width_for_ratio = least_width.max(least_height * ratio);
-        let width = asked_width.min(most_width).max(least_width_for_ratio.min(most_width));
+        let width = asked_width
+            .min(most_width)
+            .max(least_width_for_ratio.min(most_width));
         let height = width / ratio;
         return CropRect {
-            x: if grip.moves_left() { anchor_x - width } else { anchor_x },
-            y: if grip.moves_top() { anchor_y - height } else { anchor_y },
+            x: if grip.moves_left() {
+                anchor_x - width
+            } else {
+                anchor_x
+            },
+            y: if grip.moves_top() {
+                anchor_y - height
+            } else {
+                anchor_y
+            },
             width,
             height,
         };
@@ -368,21 +394,53 @@ pub fn drag(
     // from the ratio, about the box's middle, kept inside the content.
     let (middle_x, middle_y) = start.middle();
     if grip.moves_left() || grip.moves_right() {
-        let room = if grip.moves_left() { start.right() } else { bounds.0 - start.x };
+        let room = if grip.moves_left() {
+            start.right()
+        } else {
+            bounds.0 - start.x
+        };
         let room = room.min(bounds.1 * ratio);
-        let width = free.width.min(room).max(least_width.max(least_height * ratio).min(room));
+        let width = free
+            .width
+            .min(room)
+            .max(least_width.max(least_height * ratio).min(room));
         let height = width / ratio;
-        let x = if grip.moves_left() { start.right() - width } else { start.x };
+        let x = if grip.moves_left() {
+            start.right() - width
+        } else {
+            start.x
+        };
         let y = (middle_y - height / 2.0).clamp(0.0, (bounds.1 - height).max(0.0));
-        CropRect { x, y, width, height }
+        CropRect {
+            x,
+            y,
+            width,
+            height,
+        }
     } else {
-        let room = if grip.moves_top() { start.bottom() } else { bounds.1 - start.y };
+        let room = if grip.moves_top() {
+            start.bottom()
+        } else {
+            bounds.1 - start.y
+        };
         let room = room.min(bounds.0 / ratio);
-        let height = free.height.min(room).max(least_height.max(least_width / ratio).min(room));
+        let height = free
+            .height
+            .min(room)
+            .max(least_height.max(least_width / ratio).min(room));
         let width = height * ratio;
-        let y = if grip.moves_top() { start.bottom() - height } else { start.y };
+        let y = if grip.moves_top() {
+            start.bottom() - height
+        } else {
+            start.y
+        };
         let x = (middle_x - width / 2.0).clamp(0.0, (bounds.0 - width).max(0.0));
-        CropRect { x, y, width, height }
+        CropRect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 }
 
@@ -430,7 +488,12 @@ mod tests {
     const BOUNDS: (f32, f32) = (400.0, 300.0);
 
     fn rect(x: f32, y: f32, width: f32, height: f32) -> CropRect {
-        CropRect { x, y, width, height }
+        CropRect {
+            x,
+            y,
+            width,
+            height,
+        }
     }
 
     fn inside(rect: CropRect, bounds: (f32, f32)) -> bool {
@@ -484,7 +547,10 @@ mod tests {
                 let dragged = drag(start, grip, (-1e4, -1e4), BOUNDS, ratio);
                 let shrunk = drag(start, grip, (1e4, 1e4), BOUNDS, ratio);
                 for rect in [dragged, shrunk] {
-                    assert!(rect.width >= MIN_SIDE - 1e-3 && rect.height >= MIN_SIDE - 1e-3, "{grip:?} {ratio:?} {rect:?}");
+                    assert!(
+                        rect.width >= MIN_SIDE - 1e-3 && rect.height >= MIN_SIDE - 1e-3,
+                        "{grip:?} {ratio:?} {rect:?}"
+                    );
                     assert!(inside(rect, BOUNDS), "{grip:?} {ratio:?} {rect:?}");
                 }
             }
@@ -494,10 +560,22 @@ mod tests {
     #[test]
     fn tiny_content_has_no_room_for_the_least_side() {
         let tiny = (8.0, 6.0);
-        let rect = drag(CropRect::full(tiny), Grip::SouthEast, (-100.0, -100.0), tiny, None);
+        let rect = drag(
+            CropRect::full(tiny),
+            Grip::SouthEast,
+            (-100.0, -100.0),
+            tiny,
+            None,
+        );
         assert!(rect.width > 0.0 && rect.height > 0.0);
         assert!(inside(rect, tiny));
-        let rect = drag(CropRect::full(tiny), Grip::East, (-100.0, 0.0), tiny, Some(1.0));
+        let rect = drag(
+            CropRect::full(tiny),
+            Grip::East,
+            (-100.0, 0.0),
+            tiny,
+            Some(1.0),
+        );
         assert!(inside(rect, tiny) && rect.width > 0.0);
     }
 
@@ -505,10 +583,18 @@ mod tests {
     fn a_corner_drag_keeps_the_ratio() {
         let start = rect(100.0, 100.0, 160.0, 90.0);
         let ratio = 16.0 / 9.0;
-        for grip in [Grip::NorthWest, Grip::NorthEast, Grip::SouthEast, Grip::SouthWest] {
+        for grip in [
+            Grip::NorthWest,
+            Grip::NorthEast,
+            Grip::SouthEast,
+            Grip::SouthWest,
+        ] {
             for delta in [(30.0, 5.0), (-20.0, -40.0), (5.0, 60.0), (-70.0, 3.0)] {
                 let dragged = drag(start, grip, delta, BOUNDS, Some(ratio));
-                assert!((ratio_of(dragged) - ratio).abs() < 1e-3, "{grip:?} {delta:?} {dragged:?}");
+                assert!(
+                    (ratio_of(dragged) - ratio).abs() < 1e-3,
+                    "{grip:?} {delta:?} {dragged:?}"
+                );
                 assert!(inside(dragged, BOUNDS), "{grip:?} {delta:?} {dragged:?}");
             }
         }
@@ -525,7 +611,10 @@ mod tests {
         let dragged = drag(start, Grip::East, (40.0, 0.0), BOUNDS, Some(1.0));
         assert_eq!((dragged.width, dragged.height), (120.0, 120.0));
         assert_eq!(dragged.x, 100.0);
-        assert!((dragged.middle().1 - 140.0).abs() < 1e-3, "grown about the middle");
+        assert!(
+            (dragged.middle().1 - 140.0).abs() < 1e-3,
+            "grown about the middle"
+        );
         let dragged = drag(start, Grip::North, (0.0, -30.0), BOUNDS, Some(1.0));
         assert_eq!((dragged.width, dragged.height), (110.0, 110.0));
         assert_eq!(dragged.bottom(), 180.0);
@@ -540,7 +629,13 @@ mod tests {
         let dragged = drag(start, Grip::East, (50.0, 0.0), BOUNDS, Some(1.0));
         assert!((ratio_of(dragged) - 1.0).abs() < 1e-3 && inside(dragged, BOUNDS));
         // A wide ratio on a short content: the height limits the width.
-        let dragged = drag(rect(0.0, 0.0, 100.0, 50.0), Grip::East, (900.0, 0.0), BOUNDS, Some(2.0));
+        let dragged = drag(
+            rect(0.0, 0.0, 100.0, 50.0),
+            Grip::East,
+            (900.0, 0.0),
+            BOUNDS,
+            Some(2.0),
+        );
         assert!((ratio_of(dragged) - 2.0).abs() < 1e-3 && inside(dragged, BOUNDS));
         assert!(dragged.height <= BOUNDS.1);
     }
@@ -574,7 +669,11 @@ mod tests {
         assert_eq!(Aspect::Ratio(4, 3).swapped(), Aspect::Ratio(3, 4));
         assert_eq!(Aspect::SQUARE.swapped(), Aspect::SQUARE);
         assert_eq!(Aspect::Free.swapped(), Aspect::Free);
-        assert!(Aspect::Ratio(16, 9).can_swap() && !Aspect::SQUARE.can_swap() && !Aspect::Free.can_swap());
+        assert!(
+            Aspect::Ratio(16, 9).can_swap()
+                && !Aspect::SQUARE.can_swap()
+                && !Aspect::Free.can_swap()
+        );
         assert_eq!(Aspect::Original.ratio((300.0, 200.0)), Some(1.5));
         assert_eq!(Aspect::Original.ratio((0.0, 0.0)), None);
         assert_eq!(Aspect::Ratio(0, 3).ratio(BOUNDS), None);
@@ -604,19 +703,35 @@ mod tests {
         let size = (400.0, 300.0);
         assert!(CropRect::full(size).is_full(size));
         assert!(!rect(0.0, 0.0, 399.0, 300.0).is_full(size));
-        assert_eq!(rect(100.0, 150.0, 200.0, 75.0).fractions(size), (0.25, 0.5, 0.5, 0.25));
-        assert_eq!(CropRect::full(size).fractions((0.0, 0.0)), (0.0, 0.0, 1.0, 1.0));
+        assert_eq!(
+            rect(100.0, 150.0, 200.0, 75.0).fractions(size),
+            (0.25, 0.5, 0.5, 0.25)
+        );
+        assert_eq!(
+            CropRect::full(size).fractions((0.0, 0.0)),
+            (0.0, 0.0, 1.0, 1.0)
+        );
     }
 
     #[test]
     fn nonsense_input_changes_nothing() {
         let start = rect(10.0, 10.0, 100.0, 100.0);
-        assert_eq!(drag(start, Grip::East, (f32::NAN, 0.0), BOUNDS, None), start);
-        assert_eq!(drag(start, Grip::Move, (0.0, f32::INFINITY), BOUNDS, None), start);
+        assert_eq!(
+            drag(start, Grip::East, (f32::NAN, 0.0), BOUNDS, None),
+            start
+        );
+        assert_eq!(
+            drag(start, Grip::Move, (0.0, f32::INFINITY), BOUNDS, None),
+            start
+        );
         assert_eq!(fit_ratio(start, f32::NAN, BOUNDS), start);
         assert_eq!(fit_ratio(start, 1.0, (0.0, 0.0)), start);
         let broken = rect(f32::NAN, 0.0, 10.0, 10.0);
-        assert!(drag(broken, Grip::Move, (1.0, 1.0), BOUNDS, None).x.is_nan());
+        assert!(
+            drag(broken, Grip::Move, (1.0, 1.0), BOUNDS, None)
+                .x
+                .is_nan()
+        );
         // A ratio of zero or NaN is no ratio.
         let dragged = drag(start, Grip::East, (10.0, 0.0), BOUNDS, Some(f32::NAN));
         assert_eq!(dragged.width, 110.0);

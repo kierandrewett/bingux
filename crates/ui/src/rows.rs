@@ -706,9 +706,9 @@ impl Component for ValueText {
                 TextAlign::End
             })
             .copy_label(if value.kind == ValueKind::Path {
-                "Copy path"
+                crate::tr!("ui-rows-copy-path")
             } else {
-                "Copy"
+                crate::tr!("ui-edit-copy")
             });
         let text = if value.breaks_anywhere() {
             text.breaks_anywhere()
@@ -2325,7 +2325,7 @@ impl Component for ChoiceList {
         let mut list = radio_rows(None::<String>, rows);
         if matching.is_empty() {
             list = list.row(crate::group::status(crate::group::Status::Empty(
-                "Nothing matches.".to_string(),
+                crate::tr!("ui-rows-no-match-empty"),
             )));
         }
         rect()

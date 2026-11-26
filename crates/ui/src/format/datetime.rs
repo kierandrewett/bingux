@@ -260,7 +260,7 @@ impl Date {
             self.time,
             self.hour_cycle,
         )
-        .unwrap_or_else(|| "Invalid date".to_string())
+        .unwrap_or_else(|| crate::tr!("ui-format-invalid-date"))
     }
 }
 
@@ -369,7 +369,7 @@ impl Time {
             } => (hour, minute, second, 0),
         };
         let Ok(time) = IcuTime::try_new(hour, minute, second, nanosecond) else {
-            return "Invalid time".to_string();
+            return crate::tr!("ui-format-invalid-time");
         };
         let key = format!(
             "time|{}|{:?}|{}",

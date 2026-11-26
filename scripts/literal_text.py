@@ -253,9 +253,92 @@ ALLOWED: list[tuple[str, str, str, str]] = [
     ),
     (
         "*",
-        r"^crates/ui/src/(?!files/properties|text_editor/commands\.rs)",
+        r"^crates/ui/src/about/details\.rs$",
         r".*",
-        "pending conversion by AppsFluent; removed by the commits that convert the rest of bingux-ui",
+        "the Copy details text of the About window is read by developers in bug reports, in English "
+        "(docs/bingux-ui.md, Localisation: Not translated)",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/about/view\.rs$",
+        r"^(?:Freya|Rust|GPL-3\.0-or-later)$",
+        "names of the libraries the app is built with and an SPDX license identifier: the same in every language",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/commands/shortcut\.rs$",
+        r".*",
+        "the key names a typed shortcut string is read from (Page Up, PgUp) and the developer-facing reasons "
+        "a malformed shortcut panics with; shortcut labels people read come from the ui-key-* messages",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/contrast(?:_matrix)?\.rs$",
+        r".*",
+        "the contrast audit of the design system: its labels and reasons are read by the people who design "
+        "the palette, like the inspector",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/controls/colour_picker/fields\.rs$",
+        r"^#rrggbb$",
+        "the hexadecimal colour pattern the field accepts: notation, the same in every language",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/controls/tooltip_check\.rs$",
+        r".*",
+        "findings of `scripts/tooltip-check.py`, read by the people who write the app, like the inspector",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/files/colour\.rs$",
+        r".*",
+        "the names of the colour icon families, shown on the taxonomy's Icons page and read by the designers "
+        "who choose them; no app window shows them",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/files/history_fuzz\.rs$",
+        r".*",
+        "assertion messages of a module that is only compiled for tests (`#[cfg(test)] mod history_fuzz;`)",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/platform/apps\.rs$",
+        r"^(?:Default Applications|Added Associations)$",
+        "section names of the mimeapps.list file format, not text",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/platform/inhibit\.rs$",
+        r".*",
+        "the message of a bus error returned to the calling code and logged; no window shows it",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/resilience/log\.rs$",
+        r".*",
+        "the error log dump that Copy details puts on the clipboard for a bug report: read by developers",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/(?:theme|typography)\.rs$",
+        r"^Adwaita (?:Sans|Mono)$",
+        "font family names",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/window/compositor/fake\.rs$",
+        r".*",
+        "the fake compositor of the tests: window titles of a fixture, never shown",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/format/(?:bytes|measure|number)\.rs$",
+        r"^(?:\{n\} byte|\{number\}%|\{decimal\}%)$",
+        "the formatting library's own fallbacks for a locale with no data (and the English-only `1 byte` word "
+        "form, used only when the language is English): the library cannot depend on a catalogue",
     ),
 ]
 

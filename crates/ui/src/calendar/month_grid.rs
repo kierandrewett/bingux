@@ -158,7 +158,7 @@ impl Component for MonthGrid {
                             handler.call(-1);
                         }
                     })
-                    .tooltip("Previous month"),
+                    .tooltip(crate::tr!("ui-calendar-previous-month")),
                 )
                 .child(
                     icon_button(Icon::GoNext, move |_| {
@@ -166,7 +166,7 @@ impl Component for MonthGrid {
                             handler.call(1);
                         }
                     })
-                    .tooltip("Next month"),
+                    .tooltip(crate::tr!("ui-calendar-next-month")),
                 )
         });
 

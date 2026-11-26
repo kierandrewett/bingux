@@ -24,6 +24,8 @@ use bingux_files::ops::{
     suggested_base,
 };
 
+use crate::i18n::Arg;
+
 /// What the dialog makes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
@@ -89,8 +91,8 @@ impl Subject {
     /// The title of the dialog: `Compress “name”` or `Compress 3 items`.
     pub fn title(&self) -> String {
         match self.names.as_slice() {
-            [only] => format!("Compress “{only}”"),
-            many => format!("Compress {} items", many.len()),
+            [only] => crate::tr!("ui-compress-title", count = 1, name = only.as_str()),
+            many => crate::tr!("ui-compress-title", count = many.len(), name = ""),
         }
     }
 
@@ -184,19 +186,41 @@ pub const MAX_DIMENSION: u32 = 20_000;
 /// The shortest.
 pub const MIN_DIMENSION: u32 = 16;
 
+/// Why a typed picture size cannot be used.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DimensionError {
+    /// Nothing was typed.
+    Empty,
+    /// Something other than digits was typed.
+    NotDigits,
+    /// A number outside [`MIN_DIMENSION`]..=[`MAX_DIMENSION`].
+    OutOfRange,
+}
+
+impl DimensionError {
+    /// The sentence for the field's inline error.
+    pub fn message(self) -> String {
+        match self {
+            DimensionError::Empty => crate::tr!("ui-compress-dimension-empty-error"),
+            DimensionError::NotDigits => crate::tr!("ui-compress-dimension-digits-error"),
+            DimensionError::OutOfRange => crate::tr!(
+                "ui-compress-dimension-range-error",
+                least = Arg::text(MIN_DIMENSION),
+                most = Arg::text(MAX_DIMENSION)
+            ),
+        }
+    }
+}
+
 /// Read a typed picture size.
-pub fn parse_dimension(text: &str) -> Result<u32, String> {
+pub fn parse_dimension(text: &str) -> Result<u32, DimensionError> {
     let text = text.trim();
     if text.is_empty() {
-        return Err("Enter a size in pixels.".into());
+        return Err(DimensionError::Empty);
     }
-    let number: u32 = text
-        .parse()
-        .map_err(|_| "Use digits only, such as 1600.".to_string())?;
+    let number: u32 = text.parse().map_err(|_| DimensionError::NotDigits)?;
     if !(MIN_DIMENSION..=MAX_DIMENSION).contains(&number) {
-        return Err(format!(
-            "Use a size from {MIN_DIMENSION} to {MAX_DIMENSION} pixels."
-        ));
+        return Err(DimensionError::OutOfRange);
     }
     Ok(number)
 }
@@ -248,9 +272,9 @@ fn check_archive(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Ch
     }
     if draft.locked && format.can_lock() {
         if typed.password.is_empty() {
-            found.password = Some("Enter a password, or turn the password off.".into());
+            found.password = Some(crate::tr!("ui-compress-password-empty-error"));
         } else if typed.confirm != typed.password {
-            found.confirm = Some("The passwords do not match.".into());
+            found.confirm = Some(crate::tr!("ui-compress-password-mismatch-error"));
         }
     }
     found.blocked = found
@@ -264,12 +288,12 @@ fn check_archive(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Ch
 
 fn check_reduce(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Check) {
     let Some(tools) = world.tools else {
-        found.blocked = Some("Looking for the tools that shrink media…".into());
+        found.blocked = Some(crate::tr!("ui-compress-tools-looking-status"));
         return;
     };
     let kinds = world.subject.kinds_present();
     if kinds.is_empty() {
-        found.blocked = Some("There is nothing here that can be made smaller.".into());
+        found.blocked = Some(crate::tr!("ui-compress-nothing-smaller-error"));
         return;
     }
     if let Some(reason) = kinds.iter().find_map(|kind| tools.unavailable(*kind)) {
@@ -278,9 +302,9 @@ fn check_reduce(draft: &Draft, typed: &Typed, world: &World<'_>, found: &mut Che
     }
     if kinds.contains(&MediaKind::Image) {
         if draft.custom_dimension
-            && let Err(message) = parse_dimension(&typed.dimension)
+            && let Err(error) = parse_dimension(&typed.dimension)
         {
-            found.dimension = Some(message);
+            found.dimension = Some(error.message());
         }
         if let Some(reason) = tools.image_format_unavailable(draft.reduce.image.format) {
             found.blocked = Some(reason);
@@ -345,24 +369,24 @@ pub fn reduce_options(draft: &Draft, typed: &Typed) -> ReduceOptions {
 /// The words for the picture size cap.
 pub fn dimension_label(cap: Option<u32>) -> String {
     match cap {
-        None => "Original size".to_string(),
-        Some(px) => format!("{px} px"),
+        None => crate::tr!("ui-compress-original-size"),
+        Some(px) => crate::tr!("ui-compress-px", px = Arg::text(px)),
     }
 }
 
 /// The words for a video height cap.
 pub fn height_label(cap: Option<u32>) -> String {
     match cap {
-        None => "Original size".to_string(),
-        Some(px) => format!("{px}p"),
+        None => crate::tr!("ui-compress-original-size"),
+        Some(px) => crate::tr!("ui-compress-height-p", px = Arg::text(px)),
     }
 }
 
 /// The words for a frame rate cap.
 pub fn rate_label(cap: Option<u32>) -> String {
     match cap {
-        None => "Original rate".to_string(),
-        Some(fps) => format!("{fps} fps"),
+        None => crate::tr!("ui-compress-original-rate"),
+        Some(fps) => crate::tr!("ui-compress-fps", fps = Arg::text(fps)),
     }
 }
 
@@ -417,8 +441,12 @@ pub fn audio_codecs_unavailable(tools: &Tools) -> Vec<(String, String)> {
 pub fn summary(original: u64, estimated: Option<u64>) -> String {
     use crate::files::display::size;
     match estimated {
-        Some(estimated) => format!("Original {}, estimated {}", size(original), size(estimated)),
-        None => format!("Original {}, estimating…", size(original)),
+        Some(estimated) => crate::tr!(
+            "ui-compress-summary",
+            original = size(original),
+            estimated = size(estimated)
+        ),
+        None => crate::tr!("ui-compress-summary-estimating", original = size(original)),
     }
 }
 
@@ -431,26 +459,21 @@ pub fn created_text(name: &str) -> String {
 pub fn reduced_text(reduced: usize, kept: usize, failed: usize, from: u64, to: u64) -> String {
     use crate::files::display::size;
     let mut parts = Vec::new();
-    if reduced == 1 && kept == 0 && failed == 0 {
+    if reduced > 0 {
         parts.push(crate::tr!(
-            "ui-reduce-one",
-            from = size(from).as_str(),
-            to = size(to).as_str()
-        ));
-    } else if reduced > 0 {
-        parts.push(crate::tr!(
-            "ui-reduce-many",
+            "ui-reduce-done",
             count = reduced,
-            from = size(from).as_str(),
-            to = size(to).as_str()
+            only = u8::from(kept == 0 && failed == 0),
+            from = size(from),
+            to = size(to)
         ));
     }
     if kept > 0 {
-        parts.push(if reduced == 0 && kept == 1 {
-            crate::tr!("ui-reduce-kept-one")
-        } else {
-            crate::tr!("ui-reduce-kept-many", count = kept)
-        });
+        parts.push(crate::tr!(
+            "ui-reduce-kept",
+            count = kept,
+            alone = u8::from(reduced == 0)
+        ));
     }
     if failed > 0 {
         parts.push(crate::tr!("ui-reduce-failed", count = failed));

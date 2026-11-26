@@ -271,7 +271,11 @@ fn next_row(rows: &[&PathBuf], removed: &[PathBuf]) -> Option<PathBuf> {
 
 /// Bin `paths`, then tell about the items the Trash refused.
 fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
-    if !begin(env, format!("Moving {} to Trash", what(&paths)), None) {
+    if !begin(
+        env,
+        crate::tr!("ui-files-bin-moving-busy", target = what(&paths)),
+        None,
+    ) {
         return;
     }
     let env = env.clone();
@@ -306,7 +310,7 @@ fn move_to_trash(env: &Env, paths: Vec<PathBuf>, then: Refusals) {
 /// The Trash could not take `paths` after all (the check is advice; the move
 /// is the truth). Nothing was moved.
 fn trash_failed(env: &Env, paths: Vec<PathBuf>, error: OpError) {
-    let it = if paths.len() == 1 { "it" } else { "them" };
+    let count = paths.len();
     match error {
         OpError::CannotTrash(refusal) => {
             let refusals = sort_refusals(
@@ -326,11 +330,13 @@ fn trash_failed(env: &Env, paths: Vec<PathBuf>, error: OpError) {
         OpError::Permission => ask_delete(
             env,
             paths,
-            Some(&format!(
-                "You do not have permission to move {it} to the Trash."
-            )),
+            Some(&crate::tr!("ui-files-bin-permission-error", count = count)),
         ),
-        other => notify(env.ui, error_text("move to the Trash", &other), true),
+        other => notify(
+            env.ui,
+            error_text(&crate::tr!("ui-files-transfer-what-trash"), &other),
+            true,
+        ),
     }
 }
 
@@ -429,7 +435,7 @@ fn delete(env: &Env, paths: Vec<PathBuf>) {
     let whole = what(&paths);
     run_permanent(
         env,
-        "Deleting",
+        crate::tr!("ui-files-transfer-verb-deleting"),
         whole.clone(),
         crate::tr!("ui-files-bin-deleting-busy", target = whole.clone()),
         crate::tr!("ui-files-bin-deleted", target = whole),
@@ -494,8 +500,8 @@ pub(super) fn confirm_empty_trash(env: &Env) {
 fn empty_trash(env: &Env) {
     run_permanent(
         env,
-        "Emptying",
-        "the Trash".to_owned(),
+        crate::tr!("ui-files-transfer-verb-emptying"),
+        crate::tr!("ui-files-bin-whole-trash"),
         crate::tr!("ui-files-bin-emptying-busy"),
         crate::tr!("ui-files-bin-emptied"),
         crate::tr!("ui-files-bin-empty-stopped"),
@@ -507,7 +513,7 @@ fn empty_trash(env: &Env) {
 /// from the answer to a question.
 fn run_permanent(
     env: &Env,
-    verb: &'static str,
+    verb: String,
     whole: String,
     busy: String,
     done_text: String,
@@ -684,7 +690,7 @@ fn run_restore(env: &Env, plan: RestorePlan, create_missing: bool) {
     let done = Arc::new(AtomicBool::new(false));
     spawn_in_window(follow(
         env.clone(),
-        "Restoring",
+        crate::tr!("ui-files-transfer-verb-restoring"),
         whole,
         progress.clone(),
         cancel.clone(),

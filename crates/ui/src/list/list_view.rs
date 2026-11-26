@@ -838,7 +838,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for ListView<T, K> {
         if count == 0 {
             return match &self.empty {
                 Some(empty) => empty.clone(),
-                None => status_page(Icon::ViewList, "Nothing to show").into(),
+                None => status_page(Icon::ViewList, crate::tr!("ui-list-empty")).into(),
             };
         }
 

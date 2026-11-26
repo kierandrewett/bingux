@@ -224,7 +224,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for TableHeader<T, K>
                 .width(Size::px(CHECK_CELL))
                 .tw(&tokens, &[flex_row(), center(), h_full()])
                 .a11y_role(AccessibilityRole::CheckBox)
-                .a11y_alt("Select all rows")
+                .a11y_alt(crate::tr!("ui-table-select-all.a11y"))
                 .on_press(move |event: Event<PressEventData>| {
                     event.stop_propagation();
                     let ctx = latest.get();

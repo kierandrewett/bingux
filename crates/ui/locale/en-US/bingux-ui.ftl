@@ -692,9 +692,11 @@ ui-files-chooser-forward = Forward
 ui-files-chooser-parent = Parent folder
 ui-files-chooser-home = Home
 ui-files-chooser-go-to-location = Go to location…
+    .keywords = path, address
 ui-files-chooser-search = Search
 ui-files-chooser-search-tooltip = Search (Ctrl+F)
 ui-files-chooser-hidden = Show hidden files
+    .keywords = dotfiles
 ui-files-chooser-show-preview = Show preview pane
 ui-files-chooser-preview-tooltip = Preview pane (Alt+P)
 ui-files-chooser-reload = Reload
@@ -1195,13 +1197,26 @@ ui-run-whole-items = { $count ->
 }
 
 # How a finished reduction reads in a toast. $from and $to are sizes ("4.2 MB").
-ui-reduce-one = Reduced from { $from } to { $to }
-ui-reduce-many = { $count ->
-    [one] Reduced 1 file from { $from } to { $to }
-   *[other] Reduced { $count } files from { $from } to { $to }
+# $count (Number) - how many files were reduced. $only is 1 when nothing else happened to the others (none kept, none failed).
+# $from (String), $to (String) - the total size before and after, such as "4.2 MB"
+ui-reduce-done = { $only ->
+    [1] { $count ->
+        [one] Reduced from { $from } to { $to }
+       *[other] Reduced { $count } files from { $from } to { $to }
+    }
+   *[other] { $count ->
+        [one] Reduced 1 file from { $from } to { $to }
+       *[other] Reduced { $count } files from { $from } to { $to }
+    }
 }
-ui-reduce-kept-one = Already small: kept original
-ui-reduce-kept-many = { $count } already small: kept
+# $count (Number) - how many files were already small. $alone is 1 when no file was reduced.
+ui-reduce-kept = { $alone ->
+    [1] { $count ->
+        [one] Already small: kept original
+       *[other] { $count } already small: kept
+    }
+   *[other] { $count } already small: kept
+}
 ui-reduce-failed = { $count ->
     [one] 1 could not be reduced
    *[other] { $count } could not be reduced
@@ -1817,3 +1832,402 @@ ui-text-cmd-lowercase = Lowercase
     .keywords = case
 ui-text-cmd-title-case = Title case
     .keywords = capitalise, case
+
+## Spoken sentences for lists and tables
+
+# $count (Number) - how many rows are selected; said when the selection changes
+ui-a11y-selected = { $count ->
+    [0] Nothing selected
+    [one] 1 selected
+   *[other] { $count } selected
+}
+# $column (String) - the column's title. $direction is "ascending" or "descending".
+ui-a11y-sorted = Sorted by { $column }, { $direction ->
+    [ascending] ascending
+   *[descending] descending
+}
+
+## Calendar widgets: the month header, the "more" chip and the time picker
+
+ui-calendar-previous-month = Previous month
+ui-calendar-next-month = Next month
+# $count (Number) - how many more events a day has than fit in its cell
+ui-calendar-more = +{ $count } more
+# $count (Number) - how many more events there are. $date (String) - the day, written out
+ui-calendar-more-a11y = { $count ->
+    [one] 1 more event on { $date }
+   *[other] { $count } more events on { $date }
+}
+# $minutes (Number) - a length under an hour
+ui-calendar-length-minutes = { $minutes } min
+# $hours (Number) - a length of an hour or more, 1.5 for an hour and a half
+ui-calendar-length-hours = { NUMBER($hours, maximumFractionDigits: 1) } h
+# A time of day with how long after the start it is. $time (String) - "10:30"; $length (String) - "30 min"
+ui-calendar-time-option = { $time }, { $length }
+ui-calendar-time = Time
+
+## The find card: which match of how many, and its buttons
+
+ui-findcard-none-short = None
+ui-findcard-none = Phrase not found
+# $current (Number) - the match shown. $total (Number) - how many matches
+ui-findcard-position-short = { $current }/{ $total }
+ui-findcard-position = { $current } of { $total }
+ui-findcard-previous =
+    .tooltip = Previous match
+ui-findcard-next =
+    .tooltip = Next match
+ui-findcard-close =
+    .tooltip = Close (Escape)
+
+## Other controls
+
+# The accessible name of the menu half of a split button when the app gives none.
+ui-split-menu-label = More options
+ui-omnibox-label = Location and search
+ui-property-reset =
+    .tooltip = Reset to the app’s value
+
+## The tab strip's own buttons
+
+ui-tab-muted =
+    .a11y = Muted
+ui-tab-playing =
+    .a11y = Playing sound
+# $title (String) - the tab's title
+ui-tab-mute =
+    .tooltip = Mute { $title }
+ui-tab-unmute =
+    .tooltip = Unmute { $title }
+ui-tab-close-named =
+    .tooltip = Close { $title }
+ui-tab-list =
+    .tooltip = Tab list
+ui-tab-new =
+    .tooltip = New tab
+
+## The crop box: what a screen reader says about each handle
+
+ui-crop-grip-move = Crop area
+ui-crop-grip-north = Top edge
+ui-crop-grip-south = Bottom edge
+ui-crop-grip-east = Right edge
+ui-crop-grip-west = Left edge
+ui-crop-grip-north-east = Top right corner
+ui-crop-grip-north-west = Top left corner
+ui-crop-grip-south-east = Bottom right corner
+ui-crop-grip-south-west = Bottom left corner
+ui-crop-turn =
+    .tooltip = Turn the shape on its side
+# $width (Number), $height (Number) - the size of the crop in pixels
+ui-crop-size = { $width } × { $height }
+
+## Moving to and deleting from the Trash
+
+# $target (String) - the item's name in quotes, or a count of items
+ui-files-bin-moving-busy = Moving { $target } to Trash
+# $count (Number) - how many items were selected
+ui-files-bin-permission-error = { $count ->
+    [one] You do not have permission to move it to the Trash.
+   *[other] You do not have permission to move them to the Trash.
+}
+ui-files-transfer-what-trash = move to the Trash
+ui-files-transfer-verb-deleting = Deleting
+ui-files-transfer-verb-emptying = Emptying
+ui-files-transfer-verb-restoring = Restoring
+ui-files-bin-whole-trash = the Trash
+
+## What kind of file it is
+
+ui-file-kind-folder = Folder
+ui-file-kind-image = Image
+ui-file-kind-audio = Audio
+ui-file-kind-video = Video
+ui-file-kind-text = Text
+ui-file-kind-code = Code
+ui-file-kind-config = Data
+ui-file-kind-markup = Markup
+ui-file-kind-pdf = PDF
+ui-file-kind-archive = Archive
+ui-file-kind-disk-image = Disk image
+ui-file-kind-spreadsheet = Spreadsheet
+ui-file-kind-presentation = Presentation
+ui-file-kind-document = Document
+ui-file-kind-page = Other document
+ui-file-kind-ebook = E-book
+ui-file-kind-font = Font
+ui-file-kind-executable = Program
+ui-file-kind-model-3d = 3D model
+ui-file-kind-database = Database
+ui-file-kind-certificate = Certificate
+ui-file-kind-torrent = Torrent
+ui-file-kind-unknown = Unknown
+
+## Tables: the batch bar, column menu, sorting and empty states
+
+ui-table-clear-selection =
+    .tooltip = Clear selection
+ui-table-batch =
+    .a11y = Actions for the selected rows
+# $count (Number) - how many rows are selected
+ui-table-selected = { $count } selected
+ui-table-reset-columns = Reset columns
+ui-table-retry = Try again
+ui-table-empty = Nothing to show
+ui-table-sort-ascending = Ascending
+ui-table-sort-descending = Descending
+ui-table-sort = Sort
+# $column (String) - the title of the column the table is sorted by
+ui-table-sort-by = Sort by { $column }
+ui-table-select-all =
+    .a11y = Select all rows
+
+## Tab commands: the File and Window menus and the shortcuts sheet
+
+ui-tab-cmd-new = New tab
+ui-tab-cmd-next = Next tab
+ui-tab-cmd-previous = Previous tab
+ui-tab-cmd-go-to = Go to a tab
+    .keys = Alt+1 to 9
+
+## Choice lists, menu type-ahead, navigation and lists
+
+ui-rows-copy-path = Copy path
+ui-rows-no-match-empty = Nothing matches.
+# $count (Number) - how many choices are not shown
+ui-rows-more-choices = { $count } more. Keep typing to narrow the list.
+# What a screen reader says when the typed letters change which menu rows match.
+# $count (Number) - how many rows match; $query (String) - the typed letters
+ui-menu-query-announcement = { $count ->
+    [0] No matches for { $query }
+    [one] 1 match for { $query }
+   *[other] { $count } matches for { $query }
+}
+# $count (Number) - how many rows match the typed letters
+ui-menu-query-count = { $count ->
+    [0] No matches
+    [one] 1 match
+   *[other] { $count } matches
+}
+ui-nav-not-found = Not found
+ui-nav-keep-editing = Keep editing
+ui-nav-page-not-found-title = Page not found
+ui-nav-go-up = Go up
+ui-nav-go-home = Go home
+ui-list-empty = Nothing to show
+ui-location-source-portal = From the location service
+ui-location-source-network = Approximate, from the network address
+ui-format-invalid-date = Invalid date
+ui-format-invalid-time = Invalid time
+
+## Previews: pictures, films and PDF search
+
+# $name (String) - the picture's file name
+ui-preview-picture-a11y = Picture: { $name }
+ui-preview-play =
+    .tooltip = Play (K)
+ui-preview-pause =
+    .tooltip = Pause (K)
+ui-preview-play-again =
+    .tooltip = Play again (K)
+ui-preview-subtitles-off = Off
+ui-preview-find-searching = Searching…
+ui-preview-find-none = No matches
+# $current (Number) - the match shown; $total (Number) - how many matches; $more is 1 while the search goes on
+ui-preview-find-position = { $current } of { $total }{ $more ->
+    [1] +
+   *[other] {""}
+}
+
+## Zoom view and toolbar
+
+ui-zoom-out =
+    .tooltip = Zoom out (-)
+ui-zoom-in =
+    .tooltip = Zoom in (+)
+ui-zoom-actual =
+    .tooltip = Actual size (1)
+ui-zoom-fit =
+    .tooltip = Fit to window (0)
+# The accessible name of a toolbar.
+ui-toolbar-label = Toolbar
+ui-toolbar-reset = Reset toolbar
+ui-toolbar-customise = Customise toolbar
+# The overflow button that holds the toolbar items that do not fit.
+ui-toolbar-more = More
+
+## Text editor: the find bar, Go to line and the status line
+
+ui-text-find-searching = Searching…
+ui-text-find-none = No results
+# $current (Number) - the match shown; $total (Number) - how many matches; $more is 1 when the count stopped at its limit
+ui-text-find-position = { $current } of { $total }{ $more ->
+    [1] +
+   *[other] {""}
+}
+# $total (Number) - how many matches; $more is 1 when the count stopped at its limit
+ui-text-find-count = { $more ->
+    [1] { $total }+ results
+   *[other] { $total ->
+        [one] 1 result
+       *[other] { $total } results
+    }
+}
+ui-text-find-options = Search options
+ui-text-find-match-case = Match case
+    .tooltip = Match case (Alt+C)
+ui-text-find-whole-words = Whole words
+    .tooltip = Whole words (Alt+W)
+ui-text-find-regex = Regular expression
+    .tooltip = Regular expression (Alt+R)
+    .placeholder = Regular expression
+ui-text-find-query =
+    .placeholder = Find
+ui-text-find-replace-show =
+    .tooltip = Show replace
+ui-text-find-replace-hide =
+    .tooltip = Hide replace
+ui-text-find-previous =
+    .tooltip = Previous result (Shift+Enter)
+ui-text-find-next =
+    .tooltip = Next result (Enter)
+ui-text-find-close =
+    .tooltip = Close (Escape)
+ui-text-find-replacement =
+    .placeholder = Replace with
+ui-text-find-replace = Replace
+ui-text-find-replace-all = Replace all
+# $current (Number) - the line the caret is on; $lines (Number) - how many lines the document has
+ui-text-goto-current = Line { $current } of { $lines }
+# $line (Number), $column (Number) - where the typed text would go
+ui-text-goto-line-column = Line { $line }, column { $column }
+ui-text-goto-line = Line { $line }
+ui-text-goto-invalid = Line number or line:column
+ui-text-goto-field =
+    .placeholder = Go to line
+# $count (Number) - how many carets there are
+ui-text-caret-selections = { $count ->
+    [one] 1 selection
+   *[other] { $count } selections
+}
+# $chars (Number) - how many characters are selected; $lines (Number) - how many lines they cover
+ui-text-caret-selected = { $lines ->
+    [one] { $chars ->
+        [one] 1 character selected
+       *[other] { $chars } characters selected
+    }
+   *[other] { $chars ->
+        [one] 1 character, { $lines } lines selected
+       *[other] { $chars } characters, { $lines } lines selected
+    }
+}
+# $line (Number), $column (Number) - where the caret is, counting from 1
+ui-text-caret-position = Line { $line }, Column { $column }
+
+## Files: the location field's chips, filters and search status
+
+ui-files-omni-scope-folder = This folder
+ui-files-omni-scope-home = Home
+ui-files-omni-scope-everywhere = Everywhere
+# Completes "Search in …".
+ui-files-omni-phrase-home = Home
+ui-files-omni-phrase-everywhere = everywhere
+ui-files-omni-kind-folders = Folders
+ui-files-omni-kind-images = Images
+ui-files-omni-kind-video = Video
+ui-files-omni-kind-audio = Audio
+ui-files-omni-kind-documents = Documents
+ui-files-omni-kind-archives = Archives
+ui-files-omni-kind-code = Code
+ui-files-omni-when-today = Today
+ui-files-omni-when-week = This week
+ui-files-omni-when-year = This year
+ui-files-omni-size-small = Under 1 MB
+ui-files-omni-size-large = Over 100 MB
+# The chip of an active filter. $kinds (String) - the types, joined with commas
+ui-files-omni-token-type = Type: { $kinds }
+# $extensions (String) - the extensions with their dots, joined with commas
+ui-files-omni-token-extension = Extension: { $extensions }
+# $size (String) - a size such as "10 MB"
+ui-files-omni-token-size-over = Size over { $size }
+ui-files-omni-token-size-at-least = Size at least { $size }
+ui-files-omni-token-size-under = Size under { $size }
+ui-files-omni-token-size-at-most = Size at most { $size }
+ui-files-omni-token-size-exactly = Size { $size }
+# $low (String), $high (String) - two sizes
+ui-files-omni-token-size-between = Size { $low } to { $high }
+ui-files-omni-token-modified-today = Modified today
+ui-files-omni-token-modified-yesterday = Modified yesterday
+# $days (Number) - how many days back
+ui-files-omni-token-modified-days = { $days ->
+    [one] Modified in the last day
+   *[other] Modified in the last { $days } days
+}
+ui-files-omni-token-modified-year = Modified this year
+# $moment (String) - a year, month or day as typed
+ui-files-omni-token-modified-on = Modified in { $moment }
+ui-files-omni-token-modified-since = Modified since { $moment }
+ui-files-omni-token-modified-before = Modified before { $moment }
+# $from (String), $to (String) - two days as typed
+ui-files-omni-token-modified-between = Modified { $from } to { $to }
+ui-files-omni-name-starts = starts with words
+ui-files-omni-name-exact = is exactly the words
+ui-files-omni-name-regex = regular expression
+# $mode (String) - how the name is matched; $globs (String) - the patterns, joined with commas
+ui-files-omni-token-name-mode-globs = Name { $mode }, { $globs }
+ui-files-omni-token-name-mode = Name { $mode }
+ui-files-omni-token-name-globs = Name { $globs }
+# $folder (String) - the folder the search is limited to
+ui-files-omni-token-within = In { $folder }
+ui-files-omni-token-hidden-include = Including hidden files
+ui-files-omni-token-hidden-only = Only hidden files
+ui-files-omni-token-hidden-exclude = Without hidden files
+ui-files-omni-token-case = Match case
+ui-files-omni-status-searching = Searching…
+# $found (Number) - how many results so far
+ui-files-omni-status-found-searching = { $found } found, searching…
+# $found (Number) - how many results. $limit is 1 when the search stopped at its limit.
+# $unreadable (Number) - how many folders could not be read
+ui-files-omni-status-found = { $found } found{ $limit ->
+    [1] {" · limit reached, narrow the search"}
+   *[other] { $unreadable ->
+        [0] {""}
+        [one] {" · 1 folder could not be read"}
+       *[other] {" · "}{ $unreadable } folders could not be read
+    }
+}
+
+## Files: the Compress dialog's rules and sentences
+
+# $count (Number) - how many items; $name (String) - the one item's name when there is one
+ui-compress-title = { $count ->
+    [one] Compress “{ $name }”
+   *[other] Compress { $count } items
+}
+ui-compress-dimension-empty-error = Enter a size in pixels.
+ui-compress-dimension-digits-error = Use digits only, such as 1600.
+# $least (String), $most (String) - the smallest and largest size, in pixels
+ui-compress-dimension-range-error = Use a size from { $least } to { $most } pixels.
+ui-compress-password-empty-error = Enter a password, or turn the password off.
+ui-compress-password-mismatch-error = The passwords do not match.
+ui-compress-tools-looking-status = Looking for the tools that shrink media…
+ui-compress-nothing-smaller-error = There is nothing here that can be made smaller.
+ui-compress-original-size = Original size
+ui-compress-original-rate = Original rate
+# $px (String) - a size in pixels, such as 1920
+ui-compress-px = { $px } px
+# $px (String) - a video height, such as 1080, written as 1080p
+ui-compress-height-p = { $px }p
+# $fps (String) - frames a second
+ui-compress-fps = { $fps } fps
+ui-compress-px-suffix = px
+# $original (String), $estimated (String) - sizes such as "842 MB"
+ui-compress-summary = Original { $original }, estimated { $estimated }
+ui-compress-summary-estimating = Original { $original }, estimating…
+# $count (Number) - how many files were selected
+ui-run-whole-files = { $count ->
+    [one] 1 file
+   *[other] { $count } files
+}
+# $label (String) - the drive's name; $sentence (String) - why it could not be opened
+ui-files-drive-error = { $label }: { $sentence }

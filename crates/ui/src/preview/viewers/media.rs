@@ -29,8 +29,8 @@ use bingux_preview_core::Content;
 use bingux_preview_core::host::player::Player;
 use bingux_preview_core::host::protocol::{ErrorCode, Message};
 use freya::engine::prelude::AlphaType;
-use freya_core::elements::image::ImageHandle;
 use freya::prelude::*;
+use freya_core::elements::image::ImageHandle;
 
 use super::super::chrome::PreviewNav;
 use super::super::host_link::{HostLink, LinkEvent};
@@ -42,8 +42,8 @@ use super::card::Card;
 use super::media_controls::{ControlAction, ControlState, MediaControls};
 use super::media_logic::{BarInputs, HIDE_AFTER_MS, MediaKey, bar_visible, next_subtitle, route};
 use crate::component::ComponentName;
-use crate::controls::progress::{SpinnerSize, spinner};
 use crate::controls::icon_button;
+use crate::controls::progress::{SpinnerSize, spinner};
 use crate::icons::Icon;
 use crate::motion::{MOVE_MS, use_tween};
 use crate::style::*;
@@ -61,23 +61,30 @@ const RESIZE_SLACK: u32 = 8;
 static PREFERENCE: Mutex<(u32, bool)> = Mutex::new((1000, false));
 
 fn remembered_volume() -> (u32, bool) {
-    *PREFERENCE.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    *PREFERENCE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn remember_volume(permille: u32, muted: bool) {
-    *PREFERENCE.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = (permille, muted);
+    *PREFERENCE
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = (permille, muted);
 }
 
 /// The frame size for a box of `logical` pixels at `scale`.
 pub(super) fn frame_size(logical: (f32, f32), scale: f64) -> (u32, u32) {
-    let side = |length: f32| ((f64::from(length) * scale).round() as u32).clamp(MIN_FRAME, MAX_FRAME);
+    let side =
+        |length: f32| ((f64::from(length) * scale).round() as u32).clamp(MIN_FRAME, MAX_FRAME);
     (side(logical.0), side(logical.1))
 }
 
 /// Whether the player should be asked for a different size, after the last
 /// one it was given.
 pub(super) fn resize_wanted(last: Option<(u32, u32)>, now: (u32, u32)) -> bool {
-    last.is_none_or(|last| last.0.abs_diff(now.0) >= RESIZE_SLACK || last.1.abs_diff(now.1) >= RESIZE_SLACK)
+    last.is_none_or(|last| {
+        last.0.abs_diff(now.0) >= RESIZE_SLACK || last.1.abs_diff(now.1) >= RESIZE_SLACK
+    })
 }
 
 /// Whether a failure is one a second try can fix.
@@ -163,13 +170,20 @@ impl Component for Playback {
                             }
                             LinkEvent::Frame => {
                                 if let Some(picture) = link.take_frame() {
-                                    if let Some(handle) = ImageHandle::from_rgba(picture.width, picture.height, picture.pixels, AlphaType::Opaque) {
+                                    if let Some(handle) = ImageHandle::from_rgba(
+                                        picture.width,
+                                        picture.height,
+                                        picture.pixels,
+                                        AlphaType::Opaque,
+                                    ) {
                                         frame.set(Some(handle));
                                     }
                                 }
                             }
                             LinkEvent::Page(_) => {}
-                            LinkEvent::Died(failure) => player.write().fail(failure.code, &failure.message),
+                            LinkEvent::Died(failure) => {
+                                player.write().fail(failure.code, &failure.message)
+                            }
                         }
                     }
                 })
@@ -182,7 +196,10 @@ impl Component for Playback {
 
         let act = {
             let link = link.clone();
-            move |change: &mut dyn FnMut(&mut Player) -> Vec<bingux_preview_core::host::protocol::Packet>| {
+            move |change: &mut dyn FnMut(
+                &mut Player,
+            )
+                -> Vec<bingux_preview_core::host::protocol::Packet>| {
                 let mut player = player;
                 let packets = change(&mut player.write());
                 link.send_all(packets);
@@ -216,7 +233,9 @@ impl Component for Playback {
                 match key {
                     MediaKey::TogglePlay => act(&mut |player| player.toggle()),
                     MediaKey::SeekBy(ms) => act(&mut |player| player.seek_by(ms, true)),
-                    MediaKey::SeekTo(fraction) => act(&mut |player| player.seek_fraction(fraction, true)),
+                    MediaKey::SeekTo(fraction) => {
+                        act(&mut |player| player.seek_fraction(fraction, true))
+                    }
                     MediaKey::Volume(steps) => {
                         act(&mut |player| player.step_volume(steps));
                         let now = player.peek();
@@ -247,7 +266,9 @@ impl Component for Playback {
                 let act = act.clone();
                 match action {
                     ControlAction::Toggle => run(MediaKey::TogglePlay),
-                    ControlAction::Seek { fraction, settled } => act(&mut |player| player.seek_fraction(fraction, settled)),
+                    ControlAction::Seek { fraction, settled } => {
+                        act(&mut |player| player.seek_fraction(fraction, settled))
+                    }
                     ControlAction::Volume(permille) => {
                         act(&mut |player| player.set_volume(permille));
                         let now = player.peek();
@@ -265,7 +286,9 @@ impl Component for Playback {
         let ready = now.is_ready();
         let inputs = BarInputs {
             // A song has no picture to clear for: its bar is its whole interface and stays.
-            playing: now.wants_play && !now.ended && now.kind != bingux_preview_core::host::protocol::OpenedKind::Audio,
+            playing: now.wants_play
+                && !now.ended
+                && now.kind != bingux_preview_core::host::protocol::OpenedKind::Audio,
             hovered: *hovering.read(),
             engaged: false,
             failed: failed.is_some(),
@@ -285,9 +308,17 @@ impl Component for Playback {
                     .position(Position::new_absolute().bottom(bar_margin.px()).left(0.0))
                     .width(Size::fill())
                     .opacity(fade)
-                    .tw(&tokens, &[flex_row(), justify(Align::Center), px(bar_margin)])
+                    .tw(
+                        &tokens,
+                        &[flex_row(), justify(Align::Center), px(bar_margin)],
+                    )
                     // ui-lint: allow(the bar is as wide as the measured viewport less its two margins)
-                    .child(MediaControls::new(controls_state, on_action.clone()).docked(docked).width(vw - 2.0 * bar_margin.px()).into_element()),
+                    .child(
+                        MediaControls::new(controls_state, on_action.clone())
+                            .docked(docked)
+                            .width(vw - 2.0 * bar_margin.px())
+                            .into_element(),
+                    ),
             )
         });
 
@@ -300,19 +331,32 @@ impl Component for Playback {
                 // The retry is a button of the card: the card is as tall as the stage, so a button under it was cut off.
                 rect()
                     .tw(&tokens, &[w_full(), h_full()])
-                    .child(Card::of(&self.resolved, &self.nav).on_backdrop().noted(failure.message.clone()).retrying(retry))
+                    .child(
+                        Card::of(&self.resolved, &self.nav)
+                            .on_backdrop()
+                            .noted(failure.message.clone())
+                            .retrying(retry),
+                    )
                     .into()
             }
-            (None, Some(handle)) if now.kind != bingux_preview_core::host::protocol::OpenedKind::Audio => image(handle.clone())
-                .width(Size::fill())
-                .height(Size::fill())
-                .aspect_ratio(AspectRatio::Min)
-                .image_cover(ImageCover::Center)
-                .sampling_mode(SamplingMode::Bilinear)
-                .into(),
+            (None, Some(handle))
+                if now.kind != bingux_preview_core::host::protocol::OpenedKind::Audio =>
+            {
+                image(handle.clone())
+                    .width(Size::fill())
+                    .height(Size::fill())
+                    .aspect_ratio(AspectRatio::Min)
+                    .image_cover(ImageCover::Center)
+                    .sampling_mode(SamplingMode::Bilinear)
+                    .into()
+            }
             (None, _) => card.into(),
         };
-        let waiting = failed.is_none() && (!ready || now.is_buffering() || (picture.is_none() && now.kind == bingux_preview_core::host::protocol::OpenedKind::Video));
+        let waiting = failed.is_none()
+            && (!ready
+                || now.is_buffering()
+                || (picture.is_none()
+                    && now.kind == bingux_preview_core::host::protocol::OpenedKind::Video));
         let paused_overlay = failed.is_none() && ready && !now.wants_play && !now.is_buffering();
         let cue = now.cue_now().map(str::to_owned);
 
@@ -363,7 +407,13 @@ impl Component for Playback {
                 } else if resize_wanted(sent_size.get(), size) {
                     sent_size.set(Some(size));
                     let request = player.write().request();
-                    link.send(bingux_preview_core::host::protocol::Packet { request, message: Message::SetSize { max_w: size.0, max_h: size.1 } });
+                    link.send(bingux_preview_core::host::protocol::Packet {
+                        request,
+                        message: Message::SetSize {
+                            max_w: size.0,
+                            max_h: size.1,
+                        },
+                    });
                 }
             }
         };
@@ -391,8 +441,22 @@ impl Component for Playback {
                     .tw(&tokens, &[flex_col(), center()])
                     .child(
                         rect()
-                            .tw(&tokens, &[rounded(Radius::Pill), bg(Paint::Floating), shadow(Elevation::Floating), p(S2)])
-                            .child(icon_button(Icon::MediaPlaybackStart, move |_| toggle.call(ControlAction::Toggle)).ink(Ink::OnFloating).tooltip("Play")),
+                            .tw(
+                                &tokens,
+                                &[
+                                    rounded(Radius::Pill),
+                                    bg(Paint::Floating),
+                                    shadow(Elevation::Floating),
+                                    p(S2),
+                                ],
+                            )
+                            .child(
+                                icon_button(Icon::MediaPlaybackStart, move |_| {
+                                    toggle.call(ControlAction::Toggle)
+                                })
+                                .ink(Ink::OnFloating)
+                                .tooltip(crate::tr!("ui-preview-play.tooltip")),
+                            ),
                     ),
             )
         });
@@ -400,13 +464,30 @@ impl Component for Playback {
             Element::from(
                 rect()
                     .layer(crate::layers::VIEWER_CONTROLS)
-                    .position(Position::new_absolute().bottom(if wanted { 64.0 } else { 24.0 }).left(0.0))
+                    .position(
+                        Position::new_absolute()
+                            .bottom(if wanted { 64.0 } else { 24.0 })
+                            .left(0.0),
+                    )
                     .width(Size::fill())
                     .tw(&tokens, &[flex_row(), justify(Align::Center), px(S6)])
                     .child(
                         rect()
-                            .tw(&tokens, &[rounded(Radius::Control), bg(Paint::Floating), px(S3), py(S1)])
-                            .child(CAPTION.in_ink(Ink::OnFloating).paragraph(&tokens, text).text_align(TextAlign::Center)),
+                            .tw(
+                                &tokens,
+                                &[
+                                    rounded(Radius::Control),
+                                    bg(Paint::Floating),
+                                    px(S3),
+                                    py(S1),
+                                ],
+                            )
+                            .child(
+                                CAPTION
+                                    .in_ink(Ink::OnFloating)
+                                    .paragraph(&tokens, text)
+                                    .text_align(TextAlign::Center),
+                            ),
                     ),
             )
         });
@@ -464,7 +545,10 @@ mod tests {
         assert_eq!(frame_size((800.0, 600.0), 2.0), (1600, 1200));
         assert_eq!(frame_size((800.0, 600.0), 1.25), (1000, 750));
         assert_eq!(frame_size((0.0, 3.0), 1.0), (MIN_FRAME, MIN_FRAME));
-        assert_eq!(frame_size((20_000.0, 20_000.0), 2.0), (MAX_FRAME, MAX_FRAME));
+        assert_eq!(
+            frame_size((20_000.0, 20_000.0), 2.0),
+            (MAX_FRAME, MAX_FRAME)
+        );
     }
 
     #[test]

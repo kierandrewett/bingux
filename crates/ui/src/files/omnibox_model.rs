@@ -62,15 +62,15 @@ pub(super) struct ScopeChoice {
 pub(super) fn scopes() -> Vec<ScopeChoice> {
     vec![
         ScopeChoice {
-            label: "This folder".into(),
+            label: crate::tr!("ui-files-omni-scope-folder"),
             scope: Scope::Subfolders,
         },
         ScopeChoice {
-            label: "Home".into(),
+            label: crate::tr!("ui-files-omni-scope-home"),
             scope: Scope::Home,
         },
         ScopeChoice {
-            label: "Everywhere".into(),
+            label: crate::tr!("ui-files-omni-scope-everywhere"),
             scope: Scope::Everywhere,
         },
     ]
@@ -124,8 +124,8 @@ pub(super) fn place_choices(places: &Places, home: &Path, current: &Scope) -> Ve
 pub(super) fn place_phrase(scope: &Scope, folder: &str, choices: &[ScopeChoice]) -> String {
     match scope {
         Scope::Subfolders => folder.to_string(),
-        Scope::Home => "Home".into(),
-        Scope::Everywhere => "everywhere".into(),
+        Scope::Home => crate::tr!("ui-files-omni-phrase-home"),
+        Scope::Everywhere => crate::tr!("ui-files-omni-phrase-everywhere"),
         Scope::Place(path) => choices
             .iter()
             .find(|choice| choice.scope == *scope)
@@ -155,15 +155,15 @@ pub(super) const KIND_CHIPS: [Kind; 5] = [
 ];
 
 /// The words of a file type.
-pub(super) fn kind_name(kind: Kind) -> &'static str {
+pub(super) fn kind_name(kind: Kind) -> String {
     match kind {
-        Kind::Folder => "Folders",
-        Kind::Image => "Images",
-        Kind::Video => "Video",
-        Kind::Audio => "Audio",
-        Kind::Document => "Documents",
-        Kind::Archive => "Archives",
-        Kind::Code => "Code",
+        Kind::Folder => crate::tr!("ui-files-omni-kind-folders"),
+        Kind::Image => crate::tr!("ui-files-omni-kind-images"),
+        Kind::Video => crate::tr!("ui-files-omni-kind-video"),
+        Kind::Audio => crate::tr!("ui-files-omni-kind-audio"),
+        Kind::Document => crate::tr!("ui-files-omni-kind-documents"),
+        Kind::Archive => crate::tr!("ui-files-omni-kind-archives"),
+        Kind::Code => crate::tr!("ui-files-omni-kind-code"),
     }
 }
 
@@ -180,7 +180,7 @@ pub(super) fn toggle_kind(filters: &mut Filters, kind: Kind) {
     }
 }
 
-/// The ages the chips offer.
+/// The ages the chips offer, each with the ID of the message that names it.
 pub(super) const WHEN_CHIPS: [(&str, Modified); 3] = [
     ("Today", Modified::Today),
     ("This week", Modified::Days(7)),
@@ -198,7 +198,7 @@ pub(super) fn toggle_modified(filters: &mut Filters, when: Modified) {
 
 const MB: u64 = 1_000_000;
 
-/// The sizes the chips offer.
+/// The sizes the chips offer, each with the ID of the message that names it.
 pub(super) const SIZE_CHIPS: [(&str, SizeCond); 2] = [
     ("Under 1 MB", SizeCond::Lt(MB)),
     ("Over 100 MB", SizeCond::Gt(100 * MB)),
@@ -239,18 +239,18 @@ pub(super) fn other_filters(filters: &Filters) -> Vec<(FilterKey, String)> {
 /// What a token of the active filters says.
 pub(super) fn token_label(key: FilterKey, filters: &Filters) -> String {
     match key {
-        FilterKey::Kind => format!(
-            "Type: {}",
-            filters
+        FilterKey::Kind => crate::tr!(
+            "ui-files-omni-token-type",
+            kinds = filters
                 .kinds
                 .iter()
                 .map(|kind| kind_name(*kind))
                 .collect::<Vec<_>>()
                 .join(", ")
         ),
-        FilterKey::Ext => format!(
-            "Extension: {}",
-            filters
+        FilterKey::Ext => crate::tr!(
+            "ui-files-omni-token-extension",
+            extensions = filters
                 .exts
                 .iter()
                 .map(|ext| format!(".{ext}"))
@@ -258,51 +258,81 @@ pub(super) fn token_label(key: FilterKey, filters: &Filters) -> String {
                 .join(", ")
         ),
         FilterKey::Size => match filters.size {
-            Some(SizeCond::Gt(n)) => format!("Size over {}", display::size(n)),
-            Some(SizeCond::Ge(n)) => format!("Size at least {}", display::size(n)),
-            Some(SizeCond::Lt(n)) => format!("Size under {}", display::size(n)),
-            Some(SizeCond::Le(n)) => format!("Size at most {}", display::size(n)),
-            Some(SizeCond::Eq(n)) => format!("Size {}", display::size(n)),
-            Some(SizeCond::Between(low, high)) => {
-                format!("Size {} to {}", display::size(low), display::size(high))
+            Some(SizeCond::Gt(n)) => {
+                crate::tr!("ui-files-omni-token-size-over", size = display::size(n))
             }
+            Some(SizeCond::Ge(n)) => {
+                crate::tr!("ui-files-omni-token-size-at-least", size = display::size(n))
+            }
+            Some(SizeCond::Lt(n)) => {
+                crate::tr!("ui-files-omni-token-size-under", size = display::size(n))
+            }
+            Some(SizeCond::Le(n)) => {
+                crate::tr!("ui-files-omni-token-size-at-most", size = display::size(n))
+            }
+            Some(SizeCond::Eq(n)) => {
+                crate::tr!("ui-files-omni-token-size-exactly", size = display::size(n))
+            }
+            Some(SizeCond::Between(low, high)) => crate::tr!(
+                "ui-files-omni-token-size-between",
+                low = display::size(low),
+                high = display::size(high)
+            ),
             None => String::new(),
         },
         FilterKey::Modified => match filters.modified {
-            Some(Modified::Today) => "Modified today".into(),
-            Some(Modified::Yesterday) => "Modified yesterday".into(),
-            Some(Modified::Days(7)) => "Modified in the last 7 days".into(),
-            Some(Modified::Days(30)) => "Modified in the last 30 days".into(),
-            Some(Modified::Days(n)) => format!("Modified in the last {n} days"),
-            Some(Modified::ThisYear) => "Modified this year".into(),
-            Some(Modified::On(moment)) => format!("Modified in {moment}"),
-            Some(Modified::Since(moment)) => format!("Modified since {moment}"),
-            Some(Modified::Before(moment)) => format!("Modified before {moment}"),
-            Some(Modified::Between(from, to)) => format!("Modified {from} to {to}"),
+            Some(Modified::Today) => crate::tr!("ui-files-omni-token-modified-today"),
+            Some(Modified::Yesterday) => crate::tr!("ui-files-omni-token-modified-yesterday"),
+            Some(Modified::Days(n)) => crate::tr!("ui-files-omni-token-modified-days", days = n),
+            Some(Modified::ThisYear) => crate::tr!("ui-files-omni-token-modified-year"),
+            Some(Modified::On(moment)) => crate::tr!(
+                "ui-files-omni-token-modified-on",
+                moment = moment.to_string()
+            ),
+            Some(Modified::Since(moment)) => crate::tr!(
+                "ui-files-omni-token-modified-since",
+                moment = moment.to_string()
+            ),
+            Some(Modified::Before(moment)) => crate::tr!(
+                "ui-files-omni-token-modified-before",
+                moment = moment.to_string()
+            ),
+            Some(Modified::Between(from, to)) => crate::tr!(
+                "ui-files-omni-token-modified-between",
+                from = from.to_string(),
+                to = to.to_string()
+            ),
             None => String::new(),
         },
         FilterKey::Name => {
             let mode = match filters.name_mode {
-                NameMode::Contains => "",
-                NameMode::Starts => "starts with words",
-                NameMode::Exact => "is exactly the words",
-                NameMode::Regex => "regular expression",
+                NameMode::Contains => String::new(),
+                NameMode::Starts => crate::tr!("ui-files-omni-name-starts"),
+                NameMode::Exact => crate::tr!("ui-files-omni-name-exact"),
+                NameMode::Regex => crate::tr!("ui-files-omni-name-regex"),
             };
             let globs = filters.globs.join(", ");
             match (mode.is_empty(), globs.is_empty()) {
-                (false, false) => format!("Name {mode}, {globs}"),
-                (false, true) => format!("Name {mode}"),
-                (true, _) => format!("Name {globs}"),
+                (false, false) => crate::tr!(
+                    "ui-files-omni-token-name-mode-globs",
+                    mode = mode,
+                    globs = globs
+                ),
+                (false, true) => crate::tr!("ui-files-omni-token-name-mode", mode = mode),
+                (true, _) => crate::tr!("ui-files-omni-token-name-globs", globs = globs),
             }
         }
-        FilterKey::Within => format!("In {}", filters.within.clone().unwrap_or_default()),
+        FilterKey::Within => crate::tr!(
+            "ui-files-omni-token-within",
+            folder = filters.within.clone().unwrap_or_default()
+        ),
         FilterKey::Hidden => match filters.hidden {
-            Hidden::Include => "Including hidden files".into(),
-            Hidden::Only => "Only hidden files".into(),
-            Hidden::Exclude => "Without hidden files".into(),
+            Hidden::Include => crate::tr!("ui-files-omni-token-hidden-include"),
+            Hidden::Only => crate::tr!("ui-files-omni-token-hidden-only"),
+            Hidden::Exclude => crate::tr!("ui-files-omni-token-hidden-exclude"),
             Hidden::Follow => String::new(),
         },
-        FilterKey::Case => "Match case".into(),
+        FilterKey::Case => crate::tr!("ui-files-omni-token-case"),
     }
 }
 
@@ -367,19 +397,6 @@ pub(super) fn places_matching(text: &str, places: &Places, recent: &[PathBuf]) -
 // What the search says of itself
 // ---------------------------------------------------------------------------
 
-/// `1204` as `1,204`.
-pub(super) fn count(number: usize) -> String {
-    let digits = number.to_string();
-    let mut text = String::with_capacity(digits.len() + digits.len() / 3);
-    for (at, digit) in digits.chars().enumerate() {
-        if at > 0 && (digits.len() - at) % 3 == 0 {
-            text.push(',');
-        }
-        text.push(digit);
-    }
-    text
-}
-
 /// How a search of folders is going, for the heading over its results.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(super) struct SearchStatus {
@@ -394,29 +411,19 @@ pub(super) struct SearchStatus {
 /// The muted line at the end of the results' heading: what is going on, or
 /// what happened.
 pub(super) fn status_text(status: &SearchStatus) -> String {
-    let found = count(status.found);
     if status.running {
         return if status.found == 0 {
-            "Searching…".into()
+            crate::tr!("ui-files-omni-status-searching")
         } else {
-            format!("{found} found, searching…")
+            crate::tr!("ui-files-omni-status-found-searching", found = status.found)
         };
     }
-    let mut text = format!("{found} found");
-    if status.truncated {
-        text.push_str(" · limit reached, narrow the search");
-    } else if status.unreadable > 0 {
-        let folders = if status.unreadable == 1 {
-            "folder"
-        } else {
-            "folders"
-        };
-        text.push_str(&format!(
-            " · {} {folders} could not be read",
-            count(status.unreadable)
-        ));
-    }
-    text
+    crate::tr!(
+        "ui-files-omni-status-found",
+        found = status.found,
+        limit = u8::from(status.truncated),
+        unreadable = status.unreadable
+    )
 }
 
 #[cfg(test)]
@@ -638,8 +645,12 @@ mod tests {
             status_text(&status),
             "1,204 found · limit reached, narrow the search"
         );
-        assert_eq!(count(0), "0");
-        assert_eq!(count(999), "999");
-        assert_eq!(count(10_000), "10,000");
+        assert_eq!(
+            status_text(&SearchStatus {
+                found: 10_000,
+                ..SearchStatus::default()
+            }),
+            "10,000 found"
+        );
     }
 }

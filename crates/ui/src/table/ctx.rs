@@ -552,7 +552,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Ctx<T, K> {
             .collect();
         items.push(menu_separator());
         let ctx = self.edit_handle();
-        items.push(menu_item("Reset columns", move |()| {
+        items.push(menu_item(crate::tr!("ui-table-reset-columns"), move |()| {
             ctx.edit(ColumnLayout::reset);
         }));
         items

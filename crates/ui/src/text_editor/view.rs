@@ -1585,7 +1585,7 @@ fn context_menu(handle: EditorHandle, read_only: bool, extra: Vec<MenuItem>) -> 
     let all = handle.clone();
     let mut items = vec![
         {
-            let item = menu_item("Cut", move |_| {
+            let item = menu_item(crate::tr!("ui-edit-cut"), move |_| {
                 if let Some(copied) = cut.update(|editor| editor.cut()) {
                     let _ = Clipboard::set(copied.text);
                 }
@@ -1598,7 +1598,7 @@ fn context_menu(handle: EditorHandle, read_only: bool, extra: Vec<MenuItem>) -> 
             }
         },
         {
-            let item = menu_item("Copy", move |_| {
+            let item = menu_item(crate::tr!("ui-edit-copy"), move |_| {
                 if let Some(copied) = copy.update(|editor| editor.copy()) {
                     let _ = Clipboard::set(copied.text);
                 }
@@ -1607,7 +1607,7 @@ fn context_menu(handle: EditorHandle, read_only: bool, extra: Vec<MenuItem>) -> 
             if has_selection { item } else { item.disabled() }
         },
         {
-            let item = menu_item("Paste", move |_| {
+            let item = menu_item(crate::tr!("ui-edit-paste"), move |_| {
                 if let Ok(text) = Clipboard::get() {
                     paste.update(|editor| editor.paste(&text));
                 }
@@ -1616,7 +1616,7 @@ fn context_menu(handle: EditorHandle, read_only: bool, extra: Vec<MenuItem>) -> 
             if read_only { item.disabled() } else { item }
         },
         menu_separator(),
-        menu_item("Select all", move |_| {
+        menu_item(crate::tr!("ui-edit-select-all"), move |_| {
             all.update(|editor| editor.select_all())
         })
         .shortcut("Ctrl+A"),
@@ -1684,7 +1684,7 @@ impl Component for Carets {
 pub fn caret_caption(editor: &Editor) -> String {
     let selection = editor.selection();
     if selection.is_multi() {
-        return format!("{} selections", selection.len());
+        return crate::tr!("ui-text-caret-selections", count = selection.len());
     }
     let range = selection.primary();
     if !range.is_empty() {
@@ -1697,20 +1697,15 @@ pub fn caret_caption(editor: &Editor) -> String {
             last -= 1;
         }
         let lines = last - first + 1;
-        let characters = if chars == 1 {
-            "1 character".to_string()
-        } else {
-            format!("{chars} characters")
-        };
-        return if lines > 1 {
-            format!("{characters}, {lines} lines selected")
-        } else {
-            format!("{characters} selected")
-        };
+        return crate::tr!("ui-text-caret-selected", chars = chars, lines = lines);
     }
     let (line, col) = editor.line_col(range.head);
     let layout = editor.layout_wrapped(line, None);
-    format!("Line {}, Column {}", line + 1, layout.col(col) + 1)
+    crate::tr!(
+        "ui-text-caret-position",
+        line = line + 1,
+        column = layout.col(col) + 1
+    )
 }
 
 /// A muted caption in the editor's face, for a status bar.

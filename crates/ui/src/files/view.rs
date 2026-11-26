@@ -840,7 +840,7 @@ impl Ctx {
         let paths: Vec<PathBuf> = selection.peek().paths().to_vec();
         let (label, icon) = match paths.as_slice() {
             [_] => (entry.name.clone(), Some(FileIcon::for_entry(entry))),
-            many => (format!("{} items", many.len()), None),
+            many => (crate::tr!("ui-run-whole-items", count = many.len()), None),
         };
         let area = self.row_area(row);
         let mut gestures = self.gestures;

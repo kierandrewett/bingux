@@ -168,10 +168,10 @@ impl TimePicker {
 
 /// "30 min", "1 h", "1.5 h".
 pub fn format_length(minutes: u32) -> String {
-    match minutes {
-        0..=59 => format!("{minutes} min"),
-        _ if minutes % 60 == 0 => format!("{} h", minutes / 60),
-        _ => format!("{:.1} h", minutes as f32 / 60.0),
+    if minutes < 60 {
+        crate::tr!("ui-calendar-length-minutes", minutes = minutes)
+    } else {
+        crate::tr!("ui-calendar-length-hours", hours = minutes as f64 / 60.0)
     }
 }
 
@@ -190,7 +190,11 @@ impl Component for TimePicker {
                 let label = format_clock(*minutes, twelve_hour);
                 let label = match from {
                     Some(start) if *minutes > start => {
-                        format!("{label}, {}", format_length(*minutes - start))
+                        crate::tr!(
+                            "ui-calendar-time-option",
+                            time = label.as_str(),
+                            length = format_length(*minutes - start).as_str()
+                        )
                     }
                     _ => label,
                 };
@@ -204,7 +208,7 @@ impl Component for TimePicker {
             }
         })
         .enabled(self.enabled)
-        .title("Time")
+        .title(crate::tr!("ui-calendar-time"))
     }
 }
 

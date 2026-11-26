@@ -662,7 +662,11 @@ impl Component for MoreChip {
         rect()
             .component("MoreChip")
             .a11y_role(AccessibilityRole::Button)
-            .a11y_alt(format!("{} more events on {}", self.count, date.long()))
+            .a11y_alt(crate::tr!(
+                "ui-calendar-more-a11y",
+                count = self.count,
+                date = date.long()
+            ))
             .position(Position::new_absolute().left(self.x).top(self.y))
             .width(Size::px(self.w))
             .tw(&tokens, &[h(Dim::CalendarChip)])
@@ -682,7 +686,7 @@ impl Component for MoreChip {
             .child(
                 CAPTION
                     .in_ink(Ink::Muted)
-                    .label(&tokens, format!("+{} more", self.count))
+                    .label(&tokens, crate::tr!("ui-calendar-more", count = self.count))
                     .max_lines(1),
             )
     }

@@ -552,8 +552,8 @@ impl Component for CompressDialog {
                             .clone()
                             .unwrap_or_else(|| subject.folder.clone());
                         let whole = match subject.names.as_slice() {
-                            [only] => format!("“{only}”"),
-                            many => format!("{} items", many.len()),
+                            [only] => crate::tr!("ui-run-whole-name", name = only.as_str()),
+                            many => crate::tr!("ui-run-whole-items", count = many.len()),
                         };
                         let _ = &existing;
                         Request::Pack {
@@ -573,13 +573,14 @@ impl Component for CompressDialog {
                         prefs.reduce = options.clone();
                         prefs.reduce.replace_original = false;
                         let whole = match media_files.as_slice() {
-                            [only] => format!(
-                                "“{}”",
-                                only.file_name()
+                            [only] => crate::tr!(
+                                "ui-run-whole-name",
+                                name = only
+                                    .file_name()
                                     .map(|n| n.to_string_lossy().into_owned())
                                     .unwrap_or_default()
                             ),
-                            many => format!("{} files", many.len()),
+                            many => crate::tr!("ui-run-whole-files", count = many.len()),
                         };
                         Request::Reduce {
                             job: ReduceJob {

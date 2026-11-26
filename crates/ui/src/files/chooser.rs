@@ -1319,7 +1319,9 @@ fn browser_commands(
         .shortcut("Ctrl+L")
         .group(CommandGroup::Go)
         .section("places")
-        .keywords(["path", "address"]),
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-files-chooser-go-to-location.keywords"
+        ))),
         Command::new(
             "files.search",
             crate::tr!("ui-files-chooser-search"),
@@ -1341,7 +1343,9 @@ fn browser_commands(
         .checked(hidden)
         .group(CommandGroup::View)
         .section("show")
-        .keywords(["dotfiles"]),
+        .keywords(crate::i18n::keywords(&crate::tr!(
+            "ui-files-chooser-hidden.keywords"
+        ))),
         Command::new(
             "files.preview-pane",
             crate::tr!("ui-files-chooser-show-preview"),

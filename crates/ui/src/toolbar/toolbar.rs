@@ -72,7 +72,7 @@ pub fn toolbar() -> Toolbar {
         header: false,
         window_controls: false,
         customizable: false,
-        label: "Toolbar".to_string(),
+        label: crate::tr!("ui-toolbar-label"),
     }
 }
 
@@ -269,7 +269,7 @@ impl Toolbar {
             })
             .collect();
         items.push(menu_separator());
-        items.push(menu_item("Reset toolbar", move |()| {
+        items.push(menu_item(crate::tr!("ui-toolbar-reset"), move |()| {
             handle.edit(|custom| custom.hidden.clear());
         }));
         items
@@ -466,12 +466,12 @@ impl Component for Toolbar {
             if self.customizable {
                 rows.push(menu_separator());
                 rows.push(submenu(
-                    "Customise toolbar",
+                    crate::tr!("ui-toolbar-customise"),
                     self.customise_items(handle, &hidden),
                 ));
             }
             Element::from(MenuStop {
-                label: "More".to_string(),
+                label: crate::tr!("ui-toolbar-more"),
                 icon: Icon::ViewMore,
                 items: rows,
                 enabled: true,

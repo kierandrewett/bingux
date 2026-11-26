@@ -310,7 +310,7 @@ impl Omnibox {
             items: Vec::new(),
             placeholder: String::new(),
             leading: Icon::Search,
-            label: "Location and search".into(),
+            label: crate::tr!("ui-omnibox-label"),
             danger: false,
             select_all: false,
             auto_highlight: false,

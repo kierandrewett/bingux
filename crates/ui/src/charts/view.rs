@@ -1844,7 +1844,9 @@ fn text_unit() -> f32 {
 
 /// A share of a whole, the same width of text for every row.
 fn share_text(share: f64) -> String {
-    format!("{share:.1}%")
+    crate::format::Percent::new(share / 100.0)
+        .fraction_digits(1, 1)
+        .format()
 }
 
 /// The centre text of a ring or donut hole: `value` over an optional

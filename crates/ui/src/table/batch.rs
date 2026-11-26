@@ -108,11 +108,11 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for BatchBar<T, K> {
             let latest = latest.clone();
             move |()| latest.get().clear_selection()
         })
-        .tooltip("Clear selection");
+        .tooltip(crate::tr!("ui-table-clear-selection.tooltip"));
         rect()
             .component("BatchBar")
             .a11y_role(AccessibilityRole::Toolbar)
-            .a11y_alt("Actions for the selected rows")
+            .a11y_alt(crate::tr!("ui-table-batch.a11y"))
             .tw(&tokens, &[w_full(), px(LIST_EDGE), py(S1)])
             .child(
                 rect()
@@ -134,7 +134,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for BatchBar<T, K> {
                     .child(
                         rect().tw(&tokens, &[w_flex()]).child(
                             EMPHASIS
-                                .label(&tokens, format!("{} selected", self.count))
+                                .label(&tokens, crate::tr!("ui-table-selected", count = self.count))
                                 .max_lines(1),
                         ),
                     )

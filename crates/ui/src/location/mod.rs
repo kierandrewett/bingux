@@ -59,10 +59,10 @@ impl Source {
     }
 
     /// Words for showing the person how their position was found.
-    pub fn describe(self) -> &'static str {
+    pub fn describe(self) -> String {
         match self {
-            Source::Portal => "From the location service",
-            Source::Network => "Approximate, from the network address",
+            Source::Portal => crate::tr!("ui-location-source-portal"),
+            Source::Network => crate::tr!("ui-location-source-network"),
         }
     }
 }

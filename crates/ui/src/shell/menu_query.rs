@@ -107,10 +107,7 @@ fn lower(c: char) -> char {
 /// How `label` matches `needle` (already lower case): the best way, and the
 /// first place in that way.
 fn find_hit(needle: &[char], label: &str) -> Option<Hit> {
-    let chars: Vec<(usize, char)> = label
-        .char_indices()
-        .map(|(at, c)| (at, lower(c)))
-        .collect();
+    let chars: Vec<(usize, char)> = label.char_indices().map(|(at, c)| (at, lower(c))).collect();
     if needle.is_empty() || needle.len() > chars.len() {
         return None;
     }
@@ -263,20 +260,16 @@ pub struct Pill {
 impl Pill {
     /// The text a screen reader announces when the pill changes.
     pub fn announcement(&self) -> String {
-        match self.count {
-            0 => format!("No matches for {}", self.query),
-            1 => format!("1 match for {}", self.query),
-            count => format!("{count} matches for {}", self.query),
-        }
+        crate::tr!(
+            "ui-menu-query-announcement",
+            count = self.count,
+            query = self.query.as_str()
+        )
     }
 
     /// The short count shown beside the query.
     pub fn count_text(&self) -> String {
-        match self.count {
-            0 => "No matches".to_owned(),
-            1 => "1 match".to_owned(),
-            count => format!("{count} matches"),
-        }
+        crate::tr!("ui-menu-query-count", count = self.count)
     }
 }
 
@@ -496,7 +489,10 @@ mod tests {
         let items = rows(&[".config", "reconfig"]);
         let matches = Matches::rank("config", &items);
         assert_eq!(matches.hit(0).map(|hit| hit.kind), Some(MatchKind::Word));
-        assert_eq!(matches.hit(1).map(|hit| hit.kind), Some(MatchKind::Substring));
+        assert_eq!(
+            matches.hit(1).map(|hit| hit.kind),
+            Some(MatchKind::Substring)
+        );
     }
 
     #[test]
@@ -530,7 +526,10 @@ mod tests {
         assert_eq!(ahead.mark(0), Mark::Hit(1..2));
         assert_eq!(ahead.mark(1), Mark::Hit(0..1));
         assert_eq!(ahead.mark(2), Mark::Dim);
-        assert_eq!(ahead.key(Key::Char('p'), &items, Some(1)), Reaction::Focus(1));
+        assert_eq!(
+            ahead.key(Key::Char('p'), &items, Some(1)),
+            Reaction::Focus(1)
+        );
         assert_eq!(ahead.mark(0), Mark::Hit(1..3));
         assert_eq!(ahead.mark(1), Mark::Hit(0..2));
     }
@@ -557,7 +556,10 @@ mod tests {
         assert_eq!(pill.count, 2);
         assert_eq!(pill.announcement(), "2 matches for op");
         type_all(&mut ahead, "en w", &items);
-        assert_eq!(ahead.pill().map(|pill| pill.announcement()), Some("1 match for open w".to_owned()));
+        assert_eq!(
+            ahead.pill().map(|pill| pill.announcement()),
+            Some("1 match for open w".to_owned())
+        );
     }
 
     #[test]
@@ -567,8 +569,14 @@ mod tests {
         assert_eq!(type_all(&mut ahead, "cop", &items), Reaction::Focus(1));
         assert_eq!(ahead.key(Key::Next, &items, Some(1)), Reaction::Focus(3));
         assert_eq!(ahead.key(Key::Next, &items, Some(3)), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Previous, &items, Some(1)), Reaction::Focus(3));
-        assert_eq!(ahead.key(Key::Previous, &items, Some(3)), Reaction::Focus(1));
+        assert_eq!(
+            ahead.key(Key::Previous, &items, Some(1)),
+            Reaction::Focus(3)
+        );
+        assert_eq!(
+            ahead.key(Key::Previous, &items, Some(3)),
+            Reaction::Focus(1)
+        );
     }
 
     #[test]
@@ -577,7 +585,10 @@ mod tests {
         let mut ahead = TypeAhead::default();
         type_all(&mut ahead, "copy", &items);
         assert_eq!(ahead.key(Key::Next, &items, Some(2)), Reaction::Focus(3));
-        assert_eq!(ahead.key(Key::Previous, &items, Some(2)), Reaction::Focus(1));
+        assert_eq!(
+            ahead.key(Key::Previous, &items, Some(2)),
+            Reaction::Focus(1)
+        );
         assert_eq!(ahead.key(Key::Next, &items, None), Reaction::Focus(1));
         assert_eq!(ahead.key(Key::Previous, &items, None), Reaction::Focus(3));
     }
@@ -589,7 +600,10 @@ mod tests {
         assert_eq!(ahead.key(Key::Next, &items, Some(0)), Reaction::Ignored);
         assert_eq!(ahead.key(Key::Previous, &items, Some(0)), Reaction::Ignored);
         assert_eq!(ahead.key(Key::Enter, &items, Some(0)), Reaction::Ignored);
-        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(
+            ahead.key(Key::Backspace, &items, Some(0)),
+            Reaction::Ignored
+        );
         assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Ignored);
         assert_eq!(ahead.key(Key::Clear, &items, Some(0)), Reaction::Ignored);
         assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Ignored);
@@ -609,12 +623,18 @@ mod tests {
         let items = rows(&["Copy", "Copy path"]);
         let mut ahead = TypeAhead::default();
         type_all(&mut ahead, "copy", &items);
-        assert_eq!(ahead.key(Key::Enter, &items, Some(1)), Reaction::Activate(1));
+        assert_eq!(
+            ahead.key(Key::Enter, &items, Some(1)),
+            Reaction::Activate(1)
+        );
         // A focus that is not a match gives way to the best match.
         let mixed = rows(&["Paste", "Copy"]);
         let mut other = TypeAhead::default();
         type_all(&mut other, "copy", &mixed);
-        assert_eq!(other.key(Key::Enter, &mixed, Some(0)), Reaction::Activate(1));
+        assert_eq!(
+            other.key(Key::Enter, &mixed, Some(0)),
+            Reaction::Activate(1)
+        );
     }
 
     #[test]
@@ -634,11 +654,20 @@ mod tests {
         let items = rows(&["Copy", "Cut", "Paste"]);
         let mut ahead = TypeAhead::default();
         assert_eq!(type_all(&mut ahead, "cu", &items), Reaction::Focus(1));
-        assert_eq!(ahead.key(Key::Backspace, &items, Some(1)), Reaction::Focus(0));
+        assert_eq!(
+            ahead.key(Key::Backspace, &items, Some(1)),
+            Reaction::Focus(0)
+        );
         assert_eq!(ahead.query(), "c");
-        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Handled);
+        assert_eq!(
+            ahead.key(Key::Backspace, &items, Some(0)),
+            Reaction::Handled
+        );
         assert!(!ahead.is_active());
-        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Ignored);
+        assert_eq!(
+            ahead.key(Key::Backspace, &items, Some(0)),
+            Reaction::Ignored
+        );
     }
 
     #[test]
@@ -646,7 +675,10 @@ mod tests {
         let items = rows(&["Écoute", "Café"]);
         let mut ahead = TypeAhead::default();
         type_all(&mut ahead, "café", &items);
-        assert_eq!(ahead.key(Key::Backspace, &items, Some(1)), Reaction::Focus(1));
+        assert_eq!(
+            ahead.key(Key::Backspace, &items, Some(1)),
+            Reaction::Focus(1)
+        );
         assert_eq!(ahead.query(), "caf");
     }
 
@@ -655,7 +687,10 @@ mod tests {
         let items = rows(&["Open with", "Open", "Paste"]);
         let mut ahead = TypeAhead::default();
         type_all(&mut ahead, "open wi", &items);
-        assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Focus(0));
+        assert_eq!(
+            ahead.key(Key::BackWord, &items, Some(0)),
+            Reaction::Focus(0)
+        );
         assert_eq!(ahead.query(), "open ");
         // Spaces at the end go with the word before them.
         assert_eq!(ahead.key(Key::BackWord, &items, Some(0)), Reaction::Handled);
@@ -689,10 +724,16 @@ mod tests {
     fn space_types_only_while_a_query_is_active() {
         let items = rows(&["Open with", "Open"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(ahead.key(Key::Char(' '), &items, Some(0)), Reaction::Ignored);
+        assert_eq!(
+            ahead.key(Key::Char(' '), &items, Some(0)),
+            Reaction::Ignored
+        );
         assert!(!ahead.is_active());
         type_all(&mut ahead, "open", &items);
-        assert_eq!(ahead.key(Key::Char(' '), &items, Some(1)), Reaction::Focus(0));
+        assert_eq!(
+            ahead.key(Key::Char(' '), &items, Some(1)),
+            Reaction::Focus(0)
+        );
         assert_eq!(ahead.query(), "open ");
     }
 
@@ -700,7 +741,10 @@ mod tests {
     fn control_characters_are_not_text() {
         let items = rows(&["Open"]);
         let mut ahead = TypeAhead::default();
-        assert_eq!(ahead.key(Key::Char('\u{8}'), &items, None), Reaction::Ignored);
+        assert_eq!(
+            ahead.key(Key::Char('\u{8}'), &items, None),
+            Reaction::Ignored
+        );
         assert!(!ahead.is_active());
     }
 
@@ -719,7 +763,10 @@ mod tests {
             assert_eq!(ahead.pill().map(|pill| pill.count), Some(1));
         }
         // Typing carries on from where it was.
-        assert_eq!(ahead.key(Key::Char('l'), &items, Some(0)), Reaction::Focus(0));
+        assert_eq!(
+            ahead.key(Key::Char('l'), &items, Some(0)),
+            Reaction::Focus(0)
+        );
         assert_eq!(ahead.query(), "engl");
     }
 
@@ -730,7 +777,10 @@ mod tests {
         type_all(&mut ahead, "cop", &items);
         assert_eq!(ahead.key(Key::Next, &items, Some(0)), Reaction::Focus(1));
         assert_eq!(ahead.query(), "cop");
-        assert_eq!(ahead.key(Key::Enter, &items, Some(1)), Reaction::Activate(1));
+        assert_eq!(
+            ahead.key(Key::Enter, &items, Some(1)),
+            Reaction::Activate(1)
+        );
         // Picking is the list's: it clears the query when it closes.
         assert!(ahead.is_active());
         assert!(ahead.clear());
@@ -744,7 +794,10 @@ mod tests {
         type_all(&mut ahead, "eng", &items);
         type_all(&mut ahead, "x", &items);
         assert_eq!(ahead.pill().map(|pill| pill.count), Some(0));
-        assert_eq!(ahead.key(Key::Backspace, &items, Some(0)), Reaction::Focus(0));
+        assert_eq!(
+            ahead.key(Key::Backspace, &items, Some(0)),
+            Reaction::Focus(0)
+        );
         assert_eq!(ahead.query(), "eng");
         assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Handled);
         assert_eq!(ahead.key(Key::Escape, &items, Some(0)), Reaction::Ignored);
@@ -752,7 +805,9 @@ mod tests {
 
     #[test]
     fn hundreds_of_rows_rank_at_once() {
-        let labels: Vec<String> = (0..2000).map(|index| format!("folder-{index:04}")).collect();
+        let labels: Vec<String> = (0..2000)
+            .map(|index| format!("folder-{index:04}"))
+            .collect();
         let items: Vec<Candidate> = labels
             .iter()
             .map(|label| Candidate {
@@ -763,6 +818,9 @@ mod tests {
         let mut ahead = TypeAhead::default();
         assert_eq!(type_all(&mut ahead, "r-19", &items), Reaction::Focus(1900));
         assert_eq!(ahead.matches().count(), 100);
-        assert_eq!(ahead.key(Key::Previous, &items, Some(1900)), Reaction::Focus(1999));
+        assert_eq!(
+            ahead.key(Key::Previous, &items, Some(1900)),
+            Reaction::Focus(1999)
+        );
     }
 }

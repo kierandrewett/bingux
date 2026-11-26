@@ -422,7 +422,7 @@ impl Router {
                         router.run(op.clone(), true);
                     }),
                 )
-                .cancel("Keep editing")
+                .cancel(crate::tr!("ui-nav-keep-editing"))
                 .default_action(CANCEL_ID),
         );
     }

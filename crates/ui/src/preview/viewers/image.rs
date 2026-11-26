@@ -57,9 +57,12 @@ pub(super) enum Route {
 }
 
 const RAW_EXTENSIONS: [&str; 22] = [
-    "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "orf", "rw2", "raf", "pef", "srw", "x3f", "3fr", "erf", "kdc", "mrw", "mef", "mos", "iiq",
+    "cr2", "cr3", "crw", "nef", "nrw", "arw", "srf", "sr2", "dng", "orf", "rw2", "raf", "pef",
+    "srw", "x3f", "3fr", "erf", "kdc", "mrw", "mef", "mos", "iiq",
 ];
-const HELPER_EXTENSIONS: [&str; 11] = ["tif", "tiff", "heic", "heif", "hif", "avif", "avifs", "hdr", "exr", "pic", "rgbe"];
+const HELPER_EXTENSIONS: [&str; 11] = [
+    "tif", "tiff", "heic", "heif", "hif", "avif", "avifs", "hdr", "exr", "pic", "rgbe",
+];
 
 /// Which decoder shows `resolved`, by its type and its name.
 pub(super) fn route_of(resolved: &Resolved) -> Route {
@@ -69,13 +72,37 @@ pub(super) fn route_of(resolved: &Resolved) -> Route {
         return Route::Helper { raw: true };
     }
     let mime = resolved.sniffed.mime.mime;
-    let heif = mime.starts_with("image/heif") || mime.starts_with("image/heic") || mime == "image/avif";
-    let other = matches!(mime, "image/tiff" | "image/x-exr" | "image/vnd.radiance" | "image/x-hdr");
+    let heif =
+        mime.starts_with("image/heif") || mime.starts_with("image/heic") || mime == "image/avif";
+    let other = matches!(
+        mime,
+        "image/tiff" | "image/x-exr" | "image/vnd.radiance" | "image/x-hdr"
+    );
     if heif || other || HELPER_EXTENSIONS.contains(&extension) {
         return Route::Helper { raw: false };
     }
     // A camera file the extension list does not know, named by the MIME database.
-    if mime.starts_with("image/x-") && ["canon", "nikon", "sony", "olympus", "panasonic", "fuji", "pentax", "samsung", "adobe-dng", "leica", "hasselblad", "kodak", "minolta", "sigma", "phaseone"].iter().any(|maker| mime.contains(maker)) {
+    if mime.starts_with("image/x-")
+        && [
+            "canon",
+            "nikon",
+            "sony",
+            "olympus",
+            "panasonic",
+            "fuji",
+            "pentax",
+            "samsung",
+            "adobe-dng",
+            "leica",
+            "hasselblad",
+            "kodak",
+            "minolta",
+            "sigma",
+            "phaseone",
+        ]
+        .iter()
+        .any(|maker| mime.contains(maker))
+    {
         return Route::Helper { raw: true };
     }
     Route::Own
@@ -95,13 +122,21 @@ fn shown_size(resolved: &Resolved) -> Option<(f32, f32)> {
 
 /// The mode a kind of picture was last wanted in, and what to tell the owner
 /// when the person chooses another.
-pub(super) fn memory_of(nav: &PreviewNav, resolved: &Resolved) -> (FitMode, Option<EventHandler<FitMode>>) {
+pub(super) fn memory_of(
+    nav: &PreviewNav,
+    resolved: &Resolved,
+) -> (FitMode, Option<EventHandler<FitMode>>) {
     let mime = resolved.sniffed.mime.mime.to_owned();
     match &nav.zoom_memory {
         Some(memory) => {
             let start = memory.recall(&mime).unwrap_or(FitMode::Fit);
             let memory = memory.clone();
-            (start, Some(EventHandler::new(move |mode: FitMode| memory.remember(&mime, mode))))
+            (
+                start,
+                Some(EventHandler::new(move |mode: FitMode| {
+                    memory.remember(&mime, mode)
+                })),
+            )
         }
         None => (FitMode::Fit, None),
     }
@@ -125,7 +160,8 @@ impl Component for ImageView {
         }
         let natural = shown_size(&resolved);
         let source = resolved.source.clone();
-        let is_gif = resolved.sniffed.mime.mime == "image/gif" && resolved.facts.size.is_some_and(|size| size <= GIF_LIMIT);
+        let is_gif = resolved.sniffed.mime.mime == "image/gif"
+            && resolved.facts.size.is_some_and(|size| size <= GIF_LIMIT);
         let pause = use_hook(GifPause::new);
         if let Some(playing) = nav.playing {
             pause.set(!*playing.read());
@@ -136,10 +172,15 @@ impl Component for ImageView {
         let (start, on_mode) = memory_of(&nav, &resolved);
 
         let keyboard = nav.keyboard;
-        let draw = move |width: f32, height: f32| picture(&source, is_gif, &pause, width, height, display, &sharpest);
+        let draw = move |width: f32, height: f32| {
+            picture(&source, is_gif, &pause, width, height, display, &sharpest)
+        };
         let mut view = ZoomView::new(natural, draw)
             .start(start)
-            .label(format!("Picture: {}", resolved.source.name()))
+            .label(crate::tr!(
+                "ui-preview-picture-a11y",
+                name = resolved.source.name()
+            ))
             .keys_when(move || keyboard.held());
         if let Some(handle) = nav.zoom {
             view = view.handle(handle);
@@ -153,10 +194,22 @@ impl Component for ImageView {
 
 /// The picture element at `width` by `height`: a quick small decode under the
 /// sharp one.
-fn picture(source: &PreviewSource, gif: bool, pause: &GifPause, width: f32, height: f32, display: f32, sharpest: &Cell<f32>) -> Element {
+fn picture(
+    source: &PreviewSource,
+    gif: bool,
+    pause: &GifPause,
+    width: f32,
+    height: f32,
+    display: f32,
+    sharpest: &Cell<f32>,
+) -> Element {
     let needed = (width.max(height) * display).max(1.0);
     sharpest.set(sharpest.get().max(needed));
-    let edge = BUCKETS.iter().copied().find(|bucket| *bucket >= sharpest.get()).unwrap_or(BUCKETS[3]);
+    let edge = BUCKETS
+        .iter()
+        .copied()
+        .find(|bucket| *bucket >= sharpest.get())
+        .unwrap_or(BUCKETS[3]);
     let Some(path) = source.as_path().map(ToOwned::to_owned) else {
         // Bytes in memory: the viewer's own cache key is the name.
         let PreviewSource::Bytes { name, data } = source else {
@@ -181,7 +234,10 @@ fn picture(source: &PreviewSource, gif: bool, pause: &GifPause, width: f32, heig
             .into();
     }
     if source.name().to_ascii_lowercase().ends_with(".svg") {
-        return SvgViewer::new(path).width(Size::px(width)).height(Size::px(height)).into();
+        return SvgViewer::new(path)
+            .width(Size::px(width))
+            .height(Size::px(height))
+            .into();
     }
     let layer = |edge: f32, fade: u64| {
         ImageViewer::new(path.clone())
@@ -202,7 +258,13 @@ fn picture(source: &PreviewSource, gif: bool, pause: &GifPause, width: f32, heig
         .width(Size::px(width))
         .height(Size::px(height))
         .child(layer(FIRST_PASS, 0).key("first-pass"))
-        .child(rect().position(Position::new_absolute().left(0.0).top(0.0)).width(Size::px(width)).height(Size::px(height)).child(sharp.key("sharp")))
+        .child(
+            rect()
+                .position(Position::new_absolute().left(0.0).top(0.0))
+                .width(Size::px(width))
+                .height(Size::px(height))
+                .child(sharp.key("sharp")),
+        )
         .into()
 }
 
@@ -213,9 +275,19 @@ mod tests {
     fn resolved(name: &str, mime: &'static str) -> Resolved {
         use bingux_preview_core::{Content, FileFacts, Sniffed, ViewerId};
         let source = PreviewSource::bytes(name, vec![0u8; 4]);
-        let mut sniffed = Sniffed { mime: bingux_files::mime::for_name(name), content: Content::Image };
+        let mut sniffed = Sniffed {
+            mime: bingux_files::mime::for_name(name),
+            content: Content::Image,
+        };
         sniffed.mime.mime = mime;
-        Resolved { facts: FileFacts::of(&source, &sniffed), source, sniffed, viewer: ViewerId::Image, loaded: Loaded::Image(None), notes: Vec::new() }
+        Resolved {
+            facts: FileFacts::of(&source, &sniffed),
+            source,
+            sniffed,
+            viewer: ViewerId::Image,
+            loaded: Loaded::Image(None),
+            notes: Vec::new(),
+        }
     }
 
     #[test]
@@ -223,8 +295,15 @@ mod tests {
         use bingux_preview_core::media::{Exif, ImageInfo};
         let mut photo = resolved("IMG_0009.jpg", "image/jpeg");
         // Stored 1200 by 1600, EXIF 6: the header says 1600 by 1200, which is what Skia draws.
-        let exif = Exif { orientation: Some(6), ..Exif::default() };
-        photo.loaded = Loaded::Image(Some(ImageInfo { width: 1600, height: 1200, exif }));
+        let exif = Exif {
+            orientation: Some(6),
+            ..Exif::default()
+        };
+        photo.loaded = Loaded::Image(Some(ImageInfo {
+            width: 1600,
+            height: 1200,
+            exif,
+        }));
         assert_eq!(shown_size(&photo), Some((1600.0, 1200.0)));
         assert_eq!(shown_size(&resolved("a.png", "image/png")), None);
     }
@@ -234,12 +313,34 @@ mod tests {
         assert_eq!(route_of(&resolved("a.png", "image/png")), Route::Own);
         assert_eq!(route_of(&resolved("a.jpg", "image/jpeg")), Route::Own);
         assert_eq!(route_of(&resolved("a.svg", "image/svg+xml")), Route::Own);
-        assert_eq!(route_of(&resolved("IMG.HEIC", "image/heic")), Route::Helper { raw: false });
-        assert_eq!(route_of(&resolved("a.avif", "image/avif")), Route::Helper { raw: false });
-        assert_eq!(route_of(&resolved("scan.TIF", "image/tiff")), Route::Helper { raw: false });
-        assert_eq!(route_of(&resolved("sky.exr", "image/x-exr")), Route::Helper { raw: false });
-        assert_eq!(route_of(&resolved("IMG_0001.CR2", "image/x-canon-cr2")), Route::Helper { raw: true });
-        assert_eq!(route_of(&resolved("DSC_0001.nef", "image/tiff")), Route::Helper { raw: true }, "the extension wins over a TIFF header");
-        assert_eq!(route_of(&resolved("x.raw", "image/x-panasonic-raw")), Route::Helper { raw: true });
+        assert_eq!(
+            route_of(&resolved("IMG.HEIC", "image/heic")),
+            Route::Helper { raw: false }
+        );
+        assert_eq!(
+            route_of(&resolved("a.avif", "image/avif")),
+            Route::Helper { raw: false }
+        );
+        assert_eq!(
+            route_of(&resolved("scan.TIF", "image/tiff")),
+            Route::Helper { raw: false }
+        );
+        assert_eq!(
+            route_of(&resolved("sky.exr", "image/x-exr")),
+            Route::Helper { raw: false }
+        );
+        assert_eq!(
+            route_of(&resolved("IMG_0001.CR2", "image/x-canon-cr2")),
+            Route::Helper { raw: true }
+        );
+        assert_eq!(
+            route_of(&resolved("DSC_0001.nef", "image/tiff")),
+            Route::Helper { raw: true },
+            "the extension wins over a TIFF header"
+        );
+        assert_eq!(
+            route_of(&resolved("x.raw", "image/x-panasonic-raw")),
+            Route::Helper { raw: true }
+        );
     }
 }

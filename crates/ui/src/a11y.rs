@@ -476,16 +476,13 @@ pub fn use_collection_announcements(selected: usize, sort: Option<(String, bool)
 
 /// "3 selected", whole and plural-aware.
 pub fn selected_sentence(count: usize) -> String {
-    match count {
-        0 => "Nothing selected".to_string(),
-        count => format!("{count} selected"),
-    }
+    crate::tr!("ui-a11y-selected", count = count)
 }
 
 /// "Sorted by Name, ascending".
 pub fn sorted_sentence(column: &str, ascending: bool) -> String {
     let direction = if ascending { "ascending" } else { "descending" };
-    format!("Sorted by {column}, {direction}")
+    crate::tr!("ui-a11y-sorted", column = column, direction = direction)
 }
 
 /// The window's announcer. With no window host above it returns one that

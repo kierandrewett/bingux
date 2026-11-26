@@ -253,17 +253,17 @@ impl RouteTable {
 
     /// Rewrites a location before it is resolved: where old addresses of the
     /// app now live. It runs on every deep link.
-    pub fn rewrite(mut self, rewrite: impl Fn(&Location) -> Location + Send + Sync + 'static) -> Self {
+    pub fn rewrite(
+        mut self,
+        rewrite: impl Fn(&Location) -> Location + Send + Sync + 'static,
+    ) -> Self {
         self.rewrite = Some(Arc::new(rewrite));
         self
     }
 
     /// The page shown for a location no route owns. The default offers Up and
     /// the app root.
-    pub fn not_found(
-        mut self,
-        page: impl Fn(&Params) -> Element + Send + Sync + 'static,
-    ) -> Self {
+    pub fn not_found(mut self, page: impl Fn(&Params) -> Element + Send + Sync + 'static) -> Self {
         self.not_found = Some(Arc::new(page));
         self
     }
@@ -335,8 +335,13 @@ impl RouteTable {
     }
 
     /// The route that lists the roots, at the app's own location.
-    pub fn index(self, title: &'static str, page: impl Fn(&Params) -> Element + Send + Sync + 'static) -> Self {
-        self.add("", RouteKind::Index, Title::Static(title)).page(page)
+    pub fn index(
+        self,
+        title: &'static str,
+        page: impl Fn(&Params) -> Element + Send + Sync + 'static,
+    ) -> Self {
+        self.add("", RouteKind::Index, Title::Static(title))
+            .page(page)
     }
 
     /// A sidebar destination at `pattern`.
@@ -407,7 +412,10 @@ impl RouteTable {
 
     /// Where Up goes from the last route, when that is not its path parent
     /// (a virtual parent). `None` falls back to the path.
-    pub fn virtual_parent(mut self, up: impl Fn(&Params) -> Option<Location> + Send + Sync + 'static) -> Self {
+    pub fn virtual_parent(
+        mut self,
+        up: impl Fn(&Params) -> Option<Location> + Send + Sync + 'static,
+    ) -> Self {
         self.last().up = Some(Arc::new(up));
         self
     }
@@ -562,7 +570,9 @@ impl RouteTable {
     /// The route that owns `location` and the values it bound, or `None`
     /// when no route does or the scheme is not this table's.
     pub fn resolve(&self, location: &Location) -> Option<Resolved> {
-        if location.scheme() != self.scheme && !self.extra.iter().any(|extra| extra == location.scheme()) {
+        if location.scheme() != self.scheme
+            && !self.extra.iter().any(|extra| extra == location.scheme())
+        {
             return None;
         }
         let mut best: Option<(Vec<u8>, usize, Bindings)> = None;
@@ -596,7 +606,7 @@ impl RouteTable {
     /// The title of `location`.
     pub fn title_of(&self, location: &Location) -> String {
         let Some(found) = self.resolve(location) else {
-            return "Not found".to_string();
+            return crate::tr!("ui-nav-not-found");
         };
         let route = &self.routes[found.route];
         match &route.title {
@@ -650,7 +660,9 @@ impl RouteTable {
         let mut current = location.clone();
         // The depth bound keeps a cyclic `up` override from looping forever.
         for _ in 0..64 {
-            let Some(parent) = self.up(&current) else { break };
+            let Some(parent) = self.up(&current) else {
+                break;
+            };
             if chain.iter().any(|seen| seen.same_path(&parent)) {
                 break;
             }
@@ -742,32 +754,58 @@ pub(crate) mod tests {
     pub(crate) fn settings() -> RouteTable {
         RouteTable::new("settings")
             .index("Settings", |_| rect().into())
-            .root("network").title("Network").icon(Icon::Network).group("Connections")
-            .root("sound").title("Sound").keywords("audio volume")
-            .root("display").title("Displays")
-            .route("network/wifi").title("Wi-Fi")
-            .route("network/wifi/network/:ssid").title_param("ssid")
-            .route("network/wifi/saved").title("Saved networks")
-            .route("network/wifi/saved/:ssid").title_param("ssid")
-            .route("network/proxy").title("Proxy")
-            .route("network/ethernet/:device/profile/:uuid").title_with(|p| format!("Profile {}", p.str("uuid")))
-            .route("network/ethernet/:device/profile").title("Profiles")
-            .route("network/ethernet/:device").title_param("device")
-            .route("sound/applications").title("Application volumes").ephemeral()
-            .route("display/:index:int").title_with(|p| format!("Display {}", p.int("index").unwrap_or(0) + 1))
-            .route("display/default").title("Default display")
-            .tab("sound/devices").title("Devices")
+            .root("network")
+            .title("Network")
+            .icon(Icon::Network)
+            .group("Connections")
+            .root("sound")
+            .title("Sound")
+            .keywords("audio volume")
+            .root("display")
+            .title("Displays")
+            .route("network/wifi")
+            .title("Wi-Fi")
+            .route("network/wifi/network/:ssid")
+            .title_param("ssid")
+            .route("network/wifi/saved")
+            .title("Saved networks")
+            .route("network/wifi/saved/:ssid")
+            .title_param("ssid")
+            .route("network/proxy")
+            .title("Proxy")
+            .route("network/ethernet/:device/profile/:uuid")
+            .title_with(|p| format!("Profile {}", p.str("uuid")))
+            .route("network/ethernet/:device/profile")
+            .title("Profiles")
+            .route("network/ethernet/:device")
+            .title_param("device")
+            .route("sound/applications")
+            .title("Application volumes")
+            .ephemeral()
+            .route("display/:index:int")
+            .title_with(|p| format!("Display {}", p.int("index").unwrap_or(0) + 1))
+            .route("display/default")
+            .title("Default display")
+            .tab("sound/devices")
+            .title("Devices")
             .query("view", "list")
     }
 
     #[test]
     fn a_location_resolves_to_its_route_and_params() {
         let table = settings();
-        let found = table.resolve(&loc("settings://network/wifi/network/Home%20Net")).unwrap();
-        assert_eq!(table.route_def(found.route).id(), "network/wifi/network/:ssid");
+        let found = table
+            .resolve(&loc("settings://network/wifi/network/Home%20Net"))
+            .unwrap();
+        assert_eq!(
+            table.route_def(found.route).id(),
+            "network/wifi/network/:ssid"
+        );
         assert_eq!(found.params.str("ssid"), "Home Net");
         let found = table
-            .resolve(&loc("settings://network/ethernet/enp42s0/profile/abc?x=1#f"))
+            .resolve(&loc(
+                "settings://network/ethernet/enp42s0/profile/abc?x=1#f",
+            ))
             .unwrap();
         assert_eq!(found.params.str("device"), "enp42s0");
         assert_eq!(found.params.str("uuid"), "abc");
@@ -786,27 +824,50 @@ pub(crate) mod tests {
         assert_eq!(numbered.params.int("index"), Some(2));
         assert!(table.resolve(&loc("settings://display/second")).is_none());
         // A profile list and a profile are different routes of different depth.
-        let list = table.resolve(&loc("settings://network/ethernet/e0/profile")).unwrap();
-        assert_eq!(table.route_def(list.route).id(), "network/ethernet/:device/profile");
+        let list = table
+            .resolve(&loc("settings://network/ethernet/e0/profile"))
+            .unwrap();
+        assert_eq!(
+            table.route_def(list.route).id(),
+            "network/ethernet/:device/profile"
+        );
     }
 
     #[test]
     fn titles_come_from_the_route() {
         let table = settings();
         assert_eq!(table.title_of(&loc("settings://")), "Settings");
-        assert_eq!(table.title_of(&loc("settings://network/wifi/network/Home")), "Home");
-        assert_eq!(table.title_of(&loc("settings://network/ethernet/e0/profile/u1")), "Profile u1");
+        assert_eq!(
+            table.title_of(&loc("settings://network/wifi/network/Home")),
+            "Home"
+        );
+        assert_eq!(
+            table.title_of(&loc("settings://network/ethernet/e0/profile/u1")),
+            "Profile u1"
+        );
         assert_eq!(table.title_of(&loc("settings://display/0")), "Display 1");
         assert_eq!(table.title_of(&loc("settings://nowhere")), "Not found");
-        assert_eq!(table.icon_of(&loc("settings://network")), Some(Icon::Network));
+        assert_eq!(
+            table.icon_of(&loc("settings://network")),
+            Some(Icon::Network)
+        );
     }
 
     #[test]
     fn up_is_the_nearest_ancestor_a_route_owns() {
         let table = settings();
-        assert_eq!(table.up(&loc("settings://network/wifi/network/Home")), Some(loc("settings://network/wifi")));
-        assert_eq!(table.up(&loc("settings://network/wifi")), Some(loc("settings://network")));
-        assert_eq!(table.up(&loc("settings://network")), Some(loc("settings://")));
+        assert_eq!(
+            table.up(&loc("settings://network/wifi/network/Home")),
+            Some(loc("settings://network/wifi"))
+        );
+        assert_eq!(
+            table.up(&loc("settings://network/wifi")),
+            Some(loc("settings://network"))
+        );
+        assert_eq!(
+            table.up(&loc("settings://network")),
+            Some(loc("settings://"))
+        );
         assert_eq!(table.up(&loc("settings://")), None);
         // `network/ethernet` has no route: the profile list's ancestor is the
         // device page, and the device page's is the root page.
@@ -814,9 +875,15 @@ pub(crate) mod tests {
             table.up(&loc("settings://network/ethernet/e0/profile")),
             Some(loc("settings://network/ethernet/e0"))
         );
-        assert_eq!(table.up(&loc("settings://network/ethernet/e0")), Some(loc("settings://network")));
+        assert_eq!(
+            table.up(&loc("settings://network/ethernet/e0")),
+            Some(loc("settings://network"))
+        );
         // A location nothing owns still goes up to something that exists.
-        assert_eq!(table.up(&loc("settings://nowhere/deep")), Some(loc("settings://")));
+        assert_eq!(
+            table.up(&loc("settings://nowhere/deep")),
+            Some(loc("settings://"))
+        );
     }
 
     #[test]
@@ -824,7 +891,12 @@ pub(crate) mod tests {
         let table = settings()
             .route("sound/profile/:name")
             .title_param("name")
-            .virtual_parent(|p| Location::parse(&format!("settings://sound/applications?from={}", p.str("name"))));
+            .virtual_parent(|p| {
+                Location::parse(&format!(
+                    "settings://sound/applications?from={}",
+                    p.str("name")
+                ))
+            });
         assert_eq!(
             table.up(&loc("settings://sound/profile/Music")),
             Some(loc("settings://sound/applications?from=Music"))
@@ -850,8 +922,10 @@ pub(crate) mod tests {
     #[test]
     fn a_cyclic_up_override_cannot_loop() {
         let table = RouteTable::new("a")
-            .route("x").virtual_parent(|_| Location::parse("a://y"))
-            .route("y").virtual_parent(|_| Location::parse("a://x"));
+            .route("x")
+            .virtual_parent(|_| Location::parse("a://y"))
+            .route("y")
+            .virtual_parent(|_| Location::parse("a://x"));
         let chain = table.chain(&loc("a://x"));
         assert!(chain.len() <= 2, "{chain:?}");
     }
@@ -860,10 +934,16 @@ pub(crate) mod tests {
     fn the_root_of_a_location_is_its_sidebar_page() {
         let table = settings();
         let network = table.resolve(&loc("settings://network")).unwrap().route;
-        assert_eq!(table.root_of(&loc("settings://network/wifi/saved/Home")), Some(network));
+        assert_eq!(
+            table.root_of(&loc("settings://network/wifi/saved/Home")),
+            Some(network)
+        );
         assert_eq!(table.root_of(&loc("settings://network")), Some(network));
         assert_eq!(table.root_of(&loc("settings://")), None);
-        let roots: Vec<_> = table.roots().map(|(_, route)| route.id().to_string()).collect();
+        let roots: Vec<_> = table
+            .roots()
+            .map(|(_, route)| route.id().to_string())
+            .collect();
         assert_eq!(roots, ["network", "sound", "display"]);
     }
 
@@ -872,48 +952,91 @@ pub(crate) mod tests {
         let table = settings();
         let t = |a: &str, b: &str| table.classify(&loc(a), &loc(b));
         // Deeper: push. Shallower: pop. Sibling: push.
-        assert_eq!(t("settings://network", "settings://network/wifi"), Transition::Push);
-        assert_eq!(t("settings://network/wifi", "settings://network"), Transition::Pop);
-        assert_eq!(t("settings://network/wifi", "settings://network/proxy"), Transition::Push);
+        assert_eq!(
+            t("settings://network", "settings://network/wifi"),
+            Transition::Push
+        );
+        assert_eq!(
+            t("settings://network/wifi", "settings://network"),
+            Transition::Pop
+        );
+        assert_eq!(
+            t("settings://network/wifi", "settings://network/proxy"),
+            Transition::Push
+        );
         // The list to a page pushes; a page to the list pops.
         assert_eq!(t("settings://", "settings://network"), Transition::Push);
         assert_eq!(t("settings://network", "settings://"), Transition::Pop);
         // Another root fades.
-        assert_eq!(t("settings://network", "settings://sound"), Transition::Fade);
-        assert_eq!(t("settings://network/wifi", "settings://sound/applications"), Transition::Fade);
+        assert_eq!(
+            t("settings://network", "settings://sound"),
+            Transition::Fade
+        );
+        assert_eq!(
+            t("settings://network/wifi", "settings://sound/applications"),
+            Transition::Fade
+        );
         // Query and fragment changes never slide.
-        assert_eq!(t("settings://network?a=1", "settings://network?a=2"), Transition::None);
-        assert_eq!(t("settings://network", "settings://network#x"), Transition::None);
+        assert_eq!(
+            t("settings://network?a=1", "settings://network?a=2"),
+            Transition::None
+        );
+        assert_eq!(
+            t("settings://network", "settings://network#x"),
+            Transition::None
+        );
     }
 
     #[test]
     fn a_linear_table_never_animates() {
         let table = settings().mode(Mode::Linear);
-        assert_eq!(table.classify(&loc("settings://network"), &loc("settings://network/wifi")), Transition::None);
+        assert_eq!(
+            table.classify(&loc("settings://network"), &loc("settings://network/wifi")),
+            Transition::None
+        );
     }
 
     #[test]
     fn a_route_can_choose_its_own_transition() {
-        let table = settings().route("network/sheet").transition(Transition::Fade);
-        assert_eq!(table.classify(&loc("settings://network"), &loc("settings://network/sheet")), Transition::Fade);
+        let table = settings()
+            .route("network/sheet")
+            .transition(Transition::Fade);
+        assert_eq!(
+            table.classify(&loc("settings://network"), &loc("settings://network/sheet")),
+            Transition::Fade
+        );
     }
 
     #[test]
     fn canonical_drops_declared_defaults_and_follows_aliases() {
-        let table = settings().alias_scheme("bingux-settings").rewrite(|location| {
-            if location.segments().first().map(String::as_str) == Some("wifi") {
-                let mut moved = Location::new(location.scheme()).join("network");
-                for segment in location.segments() {
-                    moved = moved.join(segment.clone());
+        let table = settings()
+            .alias_scheme("bingux-settings")
+            .rewrite(|location| {
+                if location.segments().first().map(String::as_str) == Some("wifi") {
+                    let mut moved = Location::new(location.scheme()).join("network");
+                    for segment in location.segments() {
+                        moved = moved.join(segment.clone());
+                    }
+                    return moved;
                 }
-                return moved;
-            }
-            location.clone()
-        });
-        assert_eq!(table.canonical(&loc("settings://sound/devices?view=list")), loc("settings://sound/devices"));
-        assert_eq!(table.canonical(&loc("settings://sound/devices?view=grid")), loc("settings://sound/devices?view=grid"));
-        assert_eq!(table.canonical(&loc("bingux-settings://network/proxy#m")), loc("settings://network/proxy#m"));
-        assert_eq!(table.canonical(&loc("settings://wifi/saved")), loc("settings://network/wifi/saved"));
+                location.clone()
+            });
+        assert_eq!(
+            table.canonical(&loc("settings://sound/devices?view=list")),
+            loc("settings://sound/devices")
+        );
+        assert_eq!(
+            table.canonical(&loc("settings://sound/devices?view=grid")),
+            loc("settings://sound/devices?view=grid")
+        );
+        assert_eq!(
+            table.canonical(&loc("bingux-settings://network/proxy#m")),
+            loc("settings://network/proxy#m")
+        );
+        assert_eq!(
+            table.canonical(&loc("settings://wifi/saved")),
+            loc("settings://network/wifi/saved")
+        );
         // Someone else's scheme is left alone.
         assert_eq!(table.canonical(&loc("other://x")), loc("other://x"));
     }
@@ -924,8 +1047,14 @@ pub(crate) mod tests {
             .rooted()
             .alias_scheme("bingux-files")
             .root("*path");
-        assert_eq!(table.canonical(&loc("bingux-files://home/me")), loc("file:///home/me"));
-        assert_eq!(table.canonical(&loc("file:///home/me")), loc("file:///home/me"));
+        assert_eq!(
+            table.canonical(&loc("bingux-files://home/me")),
+            loc("file:///home/me")
+        );
+        assert_eq!(
+            table.canonical(&loc("file:///home/me")),
+            loc("file:///home/me")
+        );
         assert_eq!(table.home().to_string(), "file:///");
         let found = table.resolve(&loc("file:///home/me/Documents")).unwrap();
         assert_eq!(found.params.str("path"), "home/me/Documents");

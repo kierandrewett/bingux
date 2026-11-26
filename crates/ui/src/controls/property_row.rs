@@ -128,7 +128,7 @@ impl Component for PropertyRowView {
                 Some(on_reset) => icon_button(Icon::Refresh, on_reset)
                     .size(Dim::Box7)
                     .radius(Radius::Mark)
-                    .tooltip("Reset to the app's value")
+                    .tooltip(crate::tr!("ui-property-reset.tooltip"))
                     .into_element(),
                 None => rect()
                     .tw(&tokens, &[w(Dim::Box7), h(Dim::Box7)])

@@ -181,10 +181,9 @@ impl View {
         display: f32,
     ) -> Option<String> {
         natural.map(|natural| {
-            format!(
-                "{}%",
-                (self.scale(natural, viewport) * display.max(0.25) * 100.0).round() as u32
-            )
+            let percent =
+                (self.scale(natural, viewport) * display.max(0.25) * 100.0).round() as u32;
+            crate::format::Percent::new(f64::from(percent) / 100.0).format()
         })
     }
 

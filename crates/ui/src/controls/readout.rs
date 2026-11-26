@@ -173,7 +173,7 @@ impl Component for Readout {
                     let copy = copy.clone();
                     overlays.show_menu(
                         (at.x as f32, at.y as f32),
-                        vec![menu_item("Copy", move |_| {
+                        vec![menu_item(crate::tr!("ui-edit-copy"), move |_| {
                             copy_text(overlays, copy.clone())
                         })],
                     );

@@ -37,9 +37,6 @@ use crate::style::*;
 use crate::surface::{is_activation_key, use_enabled, use_tokens};
 use crate::typography::{BODY, Ink};
 
-/// The chevron segment's accessible name when none is given.
-const DEFAULT_MENU_LABEL: &str = "More options";
-
 /// A primary action and a menu in one control. Build with
 /// [`SplitButton::new`] or [`split_button`].
 #[derive(PartialEq)]
@@ -66,7 +63,7 @@ impl SplitButton {
             icon,
             label: None,
             tooltip: None,
-            menu_label: DEFAULT_MENU_LABEL.to_string(),
+            menu_label: crate::tr!("ui-split-menu-label"),
             on_press: EventHandler::new(|_: ()| {}),
             items: Vec::new(),
             on_menu: None,

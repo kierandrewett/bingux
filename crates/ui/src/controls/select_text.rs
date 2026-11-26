@@ -44,7 +44,7 @@ pub fn select_text(text: impl Into<String>) -> SelectText {
         fill: true,
         tab_stop: false,
         breaks_anywhere: false,
-        copy_label: "Copy",
+        copy_label: crate::tr!("ui-edit-copy"),
         key: None,
     }
 }
@@ -57,7 +57,7 @@ pub struct SelectText {
     fill: bool,
     tab_stop: bool,
     breaks_anywhere: bool,
-    copy_label: &'static str,
+    copy_label: String,
     key: Option<String>,
 }
 
@@ -98,8 +98,8 @@ impl SelectText {
     }
 
     /// The label of the context-menu item that copies the text ("Copy path").
-    pub fn copy_label(mut self, label: &'static str) -> Self {
-        self.copy_label = label;
+    pub fn copy_label(mut self, label: impl Into<String>) -> Self {
+        self.copy_label = label.into();
         self
     }
 
@@ -163,7 +163,7 @@ impl Component for SelectTextView {
         };
 
         let copy = text.text.clone();
-        let label = text.copy_label;
+        let label = text.copy_label.clone();
         let items = move || {
             let copy = copy.clone();
             overlays

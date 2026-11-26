@@ -165,7 +165,7 @@ struct TrackBar {
     buffered: Option<f32>,
     enabled: bool,
     /// What a screen reader calls it.
-    name: &'static str,
+    name: String,
     /// The text of its value for a screen reader.
     value_text: String,
     /// The fraction the pointer chose, and whether the drag has ended.
@@ -207,7 +207,7 @@ impl Component for TrackBar {
         let element = rect()
             .component("TrackBar")
             .a11y_role(AccessibilityRole::Slider)
-            .a11y_alt(self.name.to_owned())
+            .a11y_alt(self.name.clone())
             .a11y_builder(move |builder| {
                 builder.set_numeric_value(value);
                 builder.set_min_numeric_value(0.0);
@@ -337,7 +337,10 @@ fn subtitle_items(
 ) -> Vec<MenuItem> {
     let off = {
         let on_action = on_action.clone();
-        menu_item("Off", move |_| on_action.call(ControlAction::Subtitle(-1))).checked(current < 0)
+        menu_item(crate::tr!("ui-preview-subtitles-off"), move |_| {
+            on_action.call(ControlAction::Subtitle(-1))
+        })
+        .checked(current < 0)
     };
     std::iter::once(off)
         .chain(tracks.iter().enumerate().map(|(index, name)| {
@@ -391,7 +394,7 @@ impl Component for MediaControls {
             let (icon, tip) = if state.ended {
                 (Icon::MediaPlaybackStart, "Play again (K)")
             } else if state.playing {
-                (Icon::Pause, "Pause (K)")
+                (Icon::Pause, crate::tr!("ui-preview-pause.tooltip"))
             } else {
                 (Icon::MediaPlaybackStart, "Play (K)")
             };
@@ -405,8 +408,12 @@ impl Component for MediaControls {
             fraction: state.progress,
             buffered: Some(state.buffered),
             enabled: state.seekable && state.duration_ns > 0,
-            name: "Seek",
-            value_text: format!("{position} of {duration}"),
+            name: crate::tr!("ui-media-seek"),
+            value_text: crate::tr!(
+                "ui-media-spoken-of",
+                current = position.as_str(),
+                total = duration.as_str()
+            ),
             on_change: {
                 let on_action = on_action.clone();
                 EventHandler::new(move |(fraction, settled): (f32, bool)| {
@@ -421,9 +428,9 @@ impl Component for MediaControls {
             })
             .ink(Ink::OnFloating)
             .tooltip(if state.muted {
-                "Unmute (M)"
+                crate::tr!("ui-media-unmute-tooltip")
             } else {
-                "Mute (M)"
+                crate::tr!("ui-media-mute-tooltip")
             })
             .enabled(state.has_audio)
         };
@@ -465,8 +472,8 @@ impl Component for MediaControls {
             },
             buffered: None,
             enabled: state.has_audio,
-            name: "Volume",
-            value_text: format!("{}%", state.volume / 10),
+            name: crate::tr!("ui-media-volume"),
+            value_text: crate::format::Percent::new(f64::from(state.volume) / 1000.0).format(),
             on_change: {
                 let on_action = on_action.clone();
                 EventHandler::new(move |(fraction, _): (f32, bool)| {

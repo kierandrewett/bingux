@@ -1989,7 +1989,7 @@ impl Component for TabStrip {
                             }
                         })
                         .size(Dim::TabButton)
-                        .tooltip("Tab list"),
+                        .tooltip(crate::tr!("ui-tab-list.tooltip")),
                     )
                     .into_element(),
             );
@@ -2002,7 +2002,7 @@ impl Component for TabStrip {
                     on_new.call(());
                 })
                 .size(Dim::TabButton)
-                .tooltip("New tab")
+                .tooltip(crate::tr!("ui-tab-new.tooltip"))
                 .into_element(),
             );
         }
@@ -2649,14 +2649,18 @@ impl Component for StatusMark {
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation());
         let Some(on_status) = self.on_status.clone() else {
             return slot
-                .a11y_alt(if self.muted { "Muted" } else { "Playing sound" })
+                .a11y_alt(if self.muted {
+                    crate::tr!("ui-tab-muted.a11y")
+                } else {
+                    crate::tr!("ui-tab-playing.a11y")
+                })
                 .child(icons::icon(icon, IconSize::Mark, Ink::Muted.color(&tokens)))
                 .into_element();
         };
         let name = if self.muted {
-            format!("Unmute {}", self.title)
+            crate::tr!("ui-tab-unmute.tooltip", title = self.title.as_str())
         } else {
-            format!("Mute {}", self.title)
+            crate::tr!("ui-tab-mute.tooltip", title = self.title.as_str())
         };
         slot.child(
             icon_button(icon, move |_| on_status.call(id))

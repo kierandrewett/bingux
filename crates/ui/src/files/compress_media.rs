@@ -163,7 +163,7 @@ fn images(m: &Media<'_>, tools: &Tools) -> Element {
         S0,
         rect().child(Element::from(
             form_field(crate::tr!("ui-compress-pixels"), m.fields.dimension)
-                .suffix("px")
+                .suffix(crate::tr!("ui-compress-px-suffix"))
                 .error(m.check.dimension.clone()),
         )),
     )
