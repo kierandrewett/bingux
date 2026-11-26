@@ -20,9 +20,12 @@ impl Component for ZoomChip {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
         let key = self.key;
-        action_button(format!("{}%", self.zoom.percent()), move |_: ()| {
-            ctx.with(|browser| browser.set_zoom(key, Zoom::DEFAULT));
-        })
+        action_button(
+            tr!("browser-zoom-chip", percent = self.zoom.percent()),
+            move |_: ()| {
+                ctx.with(|browser| browser.set_zoom(key, Zoom::DEFAULT));
+            },
+        )
         .flat()
         .compact()
     }
