@@ -192,7 +192,9 @@ are written by `bingux_ui::format` or by the message (never `format!("{} km", n)
 - `python3 scripts/ui-lint.py` (in `make check-static`, and the `ui-lint` check of `make rules-check`) fails on a
   string literal with a letter in it passed to a bingux-ui call that shows its argument (`.title("Songs")`,
   `action_button("Retry", ..)`, `.tooltip(format!(..))`, `.keywords([..])`, `.toast(..)`, `app_info!(description = ..)`),
-  on a plural chosen in Rust and on a number written with its unit by hand. The calls are read from the source of
+  on a plural chosen in Rust (`if n == 1`, or two messages `x-one` and `x-many` picked between), on a number written
+  with its unit by hand, and on a capitalised phrase of two words or more written anywhere in the source (a match arm
+  that returns `"Similar to the actual temperature."`). The calls are read from the source of
   bingux-ui (a public function with a string parameter called `title`, `label`, `text`, `tooltip`, ...), so a new
   text API is covered the day it is added. A literal that is right by design (a brand name, a key name, a test
   fixture) is an entry of `ALLOWED` in `scripts/literal_text.py` with its reason; never a blanket entry for

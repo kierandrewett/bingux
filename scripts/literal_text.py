@@ -133,7 +133,6 @@ NOT_TEXT_FNS = {
     "artwork",
     "json",
     "probe",
-    "key_hint",
     "shortcut",
     "cached",
     "forget",
@@ -170,14 +169,22 @@ WRAPPERS_HEAD = {
     "Box::new",
     "Message::literal",
     "vec!",
+    ".unwrap_or",
+    ".unwrap_or_else",
+    ".map_or",
+    ".map_or_else",
     "&",
+}
+# Text arguments the parameter names do not show: (function, owner) -> argument positions.
+EXTRA_TEXT_APIS: dict[tuple[str, str], set[int]] = {
+    ("new", "Series"): {0},  # the name of a chart series, read in the legend and by a screen reader
 }
 # Calls whose strings are never shown to people.
 NOT_TEXT_CALLS = re.compile(
     r"^(?:tr!|i18n_id!|bingux_ui::i18n_id!|prelude::i18n_id!|prelude::tr!|bingux_ui::tr!|eprintln!|println!|eprint!|print!|"
     r"panic!|assert\w*!|debug_assert\w*!|unreachable!|todo!|unimplemented!|include_str!|env!|option_env!|concat!|"
     r"matches!|write!|writeln!|tracing::\w+!|log::\w+!|warn!|info!|error!|debug!|trace!|bail!|"
-    r"Command::new|\.arg|\.args|\.env|\.expect|\.expect_err|\.unwrap_or_else|bingux_ui::catalogue!|catalogue!|"
+    r"Command::new|\.arg|\.args|\.env|\.expect|\.expect_err|bingux_ui::catalogue!|catalogue!|"
     r"\.shortcut|\.contains|\.starts_with|\.ends_with|\.strip_prefix|\.strip_suffix|\.get|\.join|\.set|\.insert|"
     r"\.component|\.route|\.glob|\.mime|\.query|\.section|\.key|\.str|\.id)$"
 )
@@ -208,7 +215,7 @@ ALLOWED: list[tuple[str, str, str, str]] = [
     (
         "*",
         r"^apps/calculator/src/pads\.rs$",
-        r"^(?:[ a-z]+|[A-Z]{2,5}|\dnd|[Rr]and|ans)$",
+        r"^(?:[ a-z]+|[A-Z]{1,5}|\dnd|[Rr]and|ans|Ro[LR])$",
         "calculator key faces and the operator text they insert: mathematical and programmer notation (XOR, RoL, "
         "mod, ln, Ans) is the same in every language the calculator is localised into",
     ),
@@ -218,6 +225,19 @@ ALLOWED: list[tuple[str, str, str, str]] = [
         r"^(?:Mg|Agj 0)$",
         "text metrics probes: drawn invisible to measure a line's height, never shown",
     ),
+    (
+        "hand-formatted",
+        r"^apps/media/src/strings\.rs$",
+        r"^\{text\}×$",
+        "playback speed in a menu (1×, 1.5×): a number and a sign, the same in every language",
+    ),
+    (
+        "*",
+        r"^crates/ui/src/web_view/",
+        r".*",
+        "the web view serves only the browser: its engine report and errors are converted with the browser "
+        "restructure (feat/apps), remove when done",
+    ),
     # Pending conversions: each entry is removed by the commit that converts its crate.
     (
         "*",
@@ -225,44 +245,26 @@ ALLOWED: list[tuple[str, str, str, str]] = [
         r".*",
         "pending conversion by AppsFluent; removed by the commit that converts Settings",
     ),
-    ("*", r"^apps/media/src/", r".*", "pending conversion by AppsFluent; removed by the commit that converts Media"),
-    (
-        "*",
-        r"^apps/weather/src/",
-        r".*",
-        "pending conversion by AppsFluent; removed by the commit that converts Weather",
-    ),
-    (
-        "*",
-        r"^apps/calendar/src/",
-        r".*",
-        "pending conversion by AppsFluent; removed by the commit that converts Calendar",
-    ),
-    (
-        "*",
-        r"^apps/text-editor/src/",
-        r".*",
-        "pending conversion by AppsFluent; removed by the commit that converts Text Editor",
-    ),
-    (
-        "*",
-        r"^apps/calculator/src/",
-        r".*",
-        "pending conversion by AppsFluent; removed by the commit that converts Calculator",
-    ),
     (
         "*",
         r"^apps/taxonomy/src/",
         r".*",
         "pending conversion by AppsFluent; removed by the commit that converts the taxonomy chrome",
     ),
-    ("*", r"^crates/ui/src/", r".*", "pending conversion by AppsFluent; removed by the commits that convert bingux-ui"),
+    (
+        "*",
+        r"^crates/ui/src/(?!files/properties|text_editor/commands\.rs)",
+        r".*",
+        "pending conversion by AppsFluent; removed by the commits that convert the rest of bingux-ui",
+    ),
 ]
 
 RULES = {
     "literal-text": "a string a person reads is written in the source; move it to the app's Fluent catalogue (tr!)",
     "plural-in-code": "a plural is chosen in Rust; write one message that selects on the count",
     "hand-formatted": "a number is written with its unit by hand; use bingux_ui::format or a message variable",
+    "plural-pair": "two messages (-one and -many) are picked between in Rust; write one message that selects on the count",
+    "sentence-literal": "a phrase a person reads is written in the source; move it to the app's Fluent catalogue (tr!)",
 }
 
 
@@ -604,6 +606,9 @@ def text_apis(root: Path = ROOT) -> dict[str, dict[str, set[int]]]:
     for (name, owner), variants in seen.items():
         if len(set(variants)) > 1:
             AMBIGUOUS.add((name, owner))
+    for pair, positions in EXTRA_TEXT_APIS.items():
+        apis[pair[0]][pair[1]] |= positions
+        TRUSTED.add(pair)
     return apis
 
 
@@ -689,10 +694,16 @@ PLURAL = re.compile(r"(?:==|!=)\s*1\s*\{\s*(?:&?format!\(\s*)?$|\.len\(\)\s*==\s
 HAND_FORMAT = re.compile(r"^\{[^}]*\}\s*[A-Za-zµ°][A-Za-z/µ°²³]{0,5}\.?$|^\{[^}]*\}\s*(?:%|°[CF]?|×)$")
 
 
-def findings_of(text: str, rel: str, apis: dict[str, dict[str, set[int]]]) -> list[tuple[str, int, str, str]]:
+def findings_of(
+    text: str, rel: str, apis: dict[str, dict[str, set[int]]], ids: set[str] | None = None
+) -> list[tuple[str, int, str, str]]:
     """(rule, line, literal, call) for each finding of one file."""
     found = []
     for literal in lex(text):
+        pair = plural_pair(literal, ids)
+        if pair:
+            found.append(("plural-pair", literal.line, literal.value, pair))
+            continue
         if not has_letter(literal.value):
             continue
         call = text_position(literal, apis)
@@ -710,12 +721,38 @@ def findings_of(text: str, rel: str, apis: dict[str, dict[str, set[int]]]) -> li
             and not frame_blocks_text(literal)
         ):
             found.append(("hand-formatted", literal.line, literal.value, "format!"))
+            continue
+        if reads_as_sentence(literal.value) and not frame_blocks_text(literal):
+            found.append(
+                ("sentence-literal", literal.line, literal.value, literal.frames[-1][1] if literal.frames else "-")
+            )
     return found
+
+
+SENTENCE = re.compile(r"^[A-Z\u00c0-\u00de].*[ ].*$", re.S)
+
+
+def reads_as_sentence(value: str) -> bool:
+    """A capitalised phrase of two words or more, wherever it is written: `Could not remove “{}”.`, `Original size`.
+    Such a string is shown to a person or is a fixture; either way it is not source."""
+    text = value.strip()
+    words = re.findall(r"[A-Za-z\u00c0-\u024f’']{2,}", text)
+    return (
+        bool(SENTENCE.match(text))
+        and len(words) >= 2
+        and not text.startswith("Usage:")
+        and not re.search(r"[=<>\\_$@#]", text)
+        and not re.fullmatch(r"[A-Z0-9 ./+\-]+", text)
+    )
 
 
 def frame_blocks_text(literal: Literal) -> bool:
     """A literal inside a log, a command or an id call is not shown."""
-    return any(NOT_TEXT_CALLS.match(name) for kind, name, _, _ in literal.frames if kind == "(")
+    return any(
+        NOT_TEXT_CALLS.match(name) or (name.endswith("::key_hint") and argi >= 2)
+        for kind, name, argi, _ in literal.frames
+        if kind == "("
+    )
 
 
 def text_before(text: str, literal: Literal) -> str | None:
@@ -752,13 +789,41 @@ def allowed(rule: str, rel: str, value: str) -> bool:
     )
 
 
+def catalogue_ids(root: Path = ROOT) -> set[str]:
+    """Every message ID of the en-US catalogues of the apps and of bingux-ui."""
+    ids: set[str] = set()
+    for path in list(root.glob("apps/*/locale/en-US/*.ftl")) + list(root.glob("crates/*/locale/en-US/*.ftl")):
+        for line in path.read_text(errors="replace").splitlines():
+            m = re.match(r"^([a-z][a-z0-9-]*)\s*=", line)
+            if m:
+                ids.add(m.group(1))
+    return ids
+
+
+PAIR = re.compile(r"^(.+)-(one|many)((?:\.[a-z-]+)?)$")
+MESSAGE_CALLS = re.compile(r"^(?:\w+::)*(?:tr|i18n_id)!$")
+
+
+def plural_pair(literal: Literal, ids: set[str] | None) -> str | None:
+    """The message ID when a message and its `-one`/`-many` twin both exist: Rust picks between them."""
+    if not ids or not literal.frames:
+        return None
+    kind, name, argi, _key = literal.frames[-1]
+    m = PAIR.match(literal.value)
+    if not (kind == "(" and MESSAGE_CALLS.match(name) and argi == 0 and m):
+        return None
+    twin = m.group(1) + ("-many" if m.group(2) == "one" else "-one")
+    return name if twin in ids else None
+
+
 def scan(root: Path = ROOT, files: list[Path] | None = None) -> list[tuple[str, str, int, str, str]]:
     """(rule, file, line, literal, call) for every finding not in ALLOWED."""
     apis = text_apis(root)
+    ids = catalogue_ids(root)
     found = []
     for path in files if files is not None else source_files(root):
         rel = str(path.relative_to(root))
-        for rule, line, value, call in findings_of(path.read_text(errors="replace"), rel, apis):
+        for rule, line, value, call in findings_of(path.read_text(errors="replace"), rel, apis, ids):
             if not allowed(rule, rel, value):
                 found.append((rule, rel, line, value, call))
     return found
@@ -807,6 +872,7 @@ PLANTED_BAD = {
     "a plural chosen in code": 'fn f(n: usize) -> String { if n == 1 { "1 file".to_string() } else { format!("{n} files") } }',
     "a unit written by hand": 'fn f(n: u32) -> String { format!("{} km", n) }',
     "a closure body that returns text": 'fn f() { Row.title((|| "Songs")()); }',
+    "a sentence returned from a match arm": 'fn f(n: u8) -> &\'static str { match n { 0 => "Similar to the actual temperature.", _ => "" } }',
 }
 PLANTED_GOOD = {
     "a message": 'fn f() { Row.title(tr!("songs-title")); }',
@@ -819,6 +885,8 @@ PLANTED_GOOD = {
     "a closure with parameters": 'fn f() { Row.title(tr!("a")).tooltip(items.iter().map(|a, b| a).count().to_string()); }',
     "a format! without text": 'fn f(n: u32) -> String { format!("{n}") }',
     "a key chord": 'fn f() { Row.shortcut("Ctrl+N"); }',
+    "an identifier with a dash": 'fn f() -> &\'static str { "files-new-folder" }',
+    "a name passed as a message variable": 'fn f() { tr!("files-moved", name = "Report final.pdf"); }',
 }
 
 
@@ -850,4 +918,31 @@ def self_test() -> list[str]:
         for entry in ALLOWED:
             if not entry[3].strip():
                 failures.append(f"an ALLOWED entry has no reason: {entry[:3]}")
+        ids = {"files-moved-one", "files-moved-many", "files-repeat-one", "files-title"}
+        pair = 'fn f(n: usize) -> String { if n == 1 { tr!("files-moved-one") } else { tr!("files-moved-many", count = n) } }'
+        if not any(hit[0] == "plural-pair" for hit in findings_of(pair, "apps/x/src/a.rs", apis, ids)):
+            failures.append("not reported: two messages picked between in Rust")
+        lone = 'fn f() -> String { tr!("files-repeat-one") }'
+        if any(hit[0] == "plural-pair" for hit in findings_of(lone, "apps/x/src/a.rs", apis, ids)):
+            failures.append("reported though the message has no twin: files-repeat-one")
     return failures
+
+
+def main(argv: list[str]) -> int:
+    """`literal_text.py [--pending] [PATH-REGEX]`: list the findings; --pending also lists the ones a
+    pending-conversion entry of ALLOWED holds back (what is left to convert)."""
+    if "--pending" in argv:
+        ALLOWED[:] = [entry for entry in ALLOWED if not entry[3].startswith("pending conversion")]
+    patterns = [arg for arg in argv if not arg.startswith("--")]
+    found = [item for item in scan() if not patterns or any(re.search(p, item[1]) for p in patterns)]
+    for rule, rel, line, value, call in found:
+        print(f"{rel}:{line}: [{rule}] {call} {value[:70]!r}")
+    counts = per_crate(found)
+    print(f"{len(found)} finding(s): " + ", ".join(f"{name} {count}" for name, count in sorted(counts.items())))
+    return 1 if found else 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(main(sys.argv[1:]))
