@@ -119,6 +119,25 @@ fn a_control_runs_and_the_menu_stays_open() {
 }
 
 #[test]
+fn a_value_button_is_named_for_its_press_and_the_mouse_runs_it() {
+    let mut shot = menu();
+    assert!(shot.click_name("Zoom in"));
+    shot.settle(Duration::from_millis(200));
+    assert!(shows(&mut shot, "110%"));
+    assert!(
+        !shot.click_name("110%"),
+        "the button reads its press, not the value it shows"
+    );
+    assert!(
+        shot.click_name("Reset zoom"),
+        "the level is named Reset zoom"
+    );
+    shot.settle(Duration::from_millis(200));
+    assert!(shows(&mut shot, "100%"), "the press on the level reset it");
+    assert!(shows(&mut shot, "New tab"), "and the menu stayed open");
+}
+
+#[test]
 fn a_control_that_closes_the_menu_closes_it_and_runs() {
     let mut shot = menu();
     assert!(shot.click_name("Full screen"));

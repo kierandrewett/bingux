@@ -4111,7 +4111,7 @@ current one selected. Banners and toasts are live: read when they appear, an
 error at once (`Alert`, assertive), anything else politely.
 
 **`Semantics`** says more on any element, or on a control that takes it
-(`Switch`, `TextField`, `Group`):
+(`Switch`, `TextField`, `Group`, `ActionButton`):
 
 ```rust
 rect().semantics(

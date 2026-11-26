@@ -62,7 +62,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Button",
         category: Category::Controls,
         page: "Buttons",
-        api: "action_button(text, on_press).suggested().destructive().flat().icon(Icon).loading(bool).enabled(bool).compact()",
+        api: "action_button(text, on_press).suggested().destructive().flat().icon(Icon).loading(bool).enabled(bool).compact().semantics(Semantics::new().label(name))",
         doc: "components",
         covers: &[
             "ActionButton",

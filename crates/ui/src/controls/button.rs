@@ -35,6 +35,7 @@ pub struct ActionButton {
     autofocus: bool,
     default_action: bool,
     radius: Option<Radius>,
+    semantics: Option<crate::a11y::Semantics>,
     on_press: EventHandler<()>,
 }
 
@@ -56,6 +57,7 @@ pub fn action_button(
         autofocus: false,
         default_action: false,
         radius: None,
+        semantics: None,
         on_press: on_press.into(),
     }
 }
@@ -135,6 +137,14 @@ impl ActionButton {
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    /// Says more than the words on the button, or something else: a button
+    /// that shows a value ("110%") is named for what a press does
+    /// (`Semantics::new().label("Reset zoom")`), as an `IconButton` is by its tooltip.
+    pub fn semantics(mut self, semantics: crate::a11y::Semantics) -> Self {
+        self.semantics = Some(semantics);
         self
     }
 }
@@ -233,6 +243,10 @@ impl Component for ActionButton {
             .a11y_focusable(enabled)
             .a11y_enabled(enabled)
             .a11y_role(AccessibilityRole::Button)
+            .maybe(self.semantics.is_some(), |element| {
+                let semantics = self.semantics.clone().unwrap_or_default();
+                element.a11y_builder(move |node| semantics.apply(node))
+            })
             .tw(&tokens, if self.compact { BUTTON_COMPACT } else { BUTTON })
             .maybe(fitted, |element| {
                 element.tw(&tokens, &[h(Dim::RowButton), rounded(Radius::Inner)])

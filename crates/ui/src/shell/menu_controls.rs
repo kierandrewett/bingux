@@ -14,6 +14,7 @@ use freya::prelude::*;
 
 use super::menu::{MenuItem, menu_item};
 use super::overlays::Overlays;
+use crate::a11y::Semantics;
 use crate::component::ComponentName;
 use crate::controls::button::{action_button, icon_button};
 use crate::controls::tooltip::hover_tip;
@@ -226,6 +227,7 @@ impl Component for ValueButton {
         })
         .flat()
         .compact()
+        .semantics(Semantics::new().label(self.label.clone()))
         .enabled(self.enabled);
         let button = if self.focused {
             button.default_action()
