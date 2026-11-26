@@ -113,17 +113,6 @@ impl Places {
         self.state.join("crashes")
     }
 
-    /// The engine's folders before profiles existed.
-    pub fn old_folders(&self) -> Folders {
-        Folders {
-            root: self.data.clone(),
-            engine: self.old_profile(),
-            cache: self.old_cache(),
-            crash: self.old_crashes(),
-            runtime: self.runtime.clone(),
-        }
-    }
-
     /// The folders of registered profile `id`.
     pub fn folders(&self, id: &Id) -> Folders {
         let root = self.profiles().join(id.as_str());

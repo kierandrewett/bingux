@@ -8,9 +8,9 @@
 
 use std::sync::Arc;
 
-use bingux_ui::web_view::BrowserBackend;
 use bingux_ui::prelude::*;
 use bingux_ui::shell::with_window;
+use bingux_ui::web_view::BrowserBackend;
 use freya::prelude::*;
 
 use crate::model::browser::{Browser, Notice, UiRequest};
@@ -142,9 +142,17 @@ impl Ctx {
                     );
                 }
                 UiRequest::Fullscreen(on) => with_window(move |window| {
-                    window.set_fullscreen(on.then_some(freya::winit::window::Fullscreen::Borderless(None)));
+                    window.set_fullscreen(
+                        on.then_some(freya::winit::window::Fullscreen::Borderless(None)),
+                    );
                 }),
-                UiRequest::NewPrivateWindow => crate::ui::private::open(),
+                UiRequest::NewPrivateWindow => crate::ui::private::open(
+                    self.browser
+                        .peek()
+                        .profile
+                        .as_ref()
+                        .map(|(id, _)| id.clone()),
+                ),
                 UiRequest::CloseWindow => self.window.close(),
             }
         }

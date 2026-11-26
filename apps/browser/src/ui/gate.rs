@@ -1,0 +1,84 @@
+//! The window a start shows instead of the browser when it cannot open a
+//! profile (another window has it, the list of profiles is damaged, the first
+//! start's move is waiting), or when it must ask which profile to open. Every
+//! way forward starts the browser again, so the browser itself only ever
+//! opens a profile it holds.
+
+use bingux_ui::prelude::*;
+use bingux_ui::task::spawn_blocking;
+use freya::prelude::*;
+
+use crate::profile::open::ProfileState;
+use crate::profile::places::Places;
+use crate::profile::registry::Profiles;
+
+/// What the window shows.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Gate {
+    Problem(ProfileState),
+    /// The profiles to choose from: id, name.
+    Choose(Vec<(String, String)>),
+}
+
+#[derive(PartialEq)]
+pub struct GateWindow {
+    pub gate: Gate,
+}
+
+/// Starts the browser again, in place of this process.
+fn again(profile: Option<String>) {
+    spawn(async move {
+        spawn_blocking(move || crate::relaunch(profile.as_deref())).await;
+    });
+}
+
+impl Component for GateWindow {
+    fn render(&self) -> impl IntoElement {
+        let tokens = provide_tokens();
+        let body: Element = match &self.gate {
+            Gate::Problem(state) => {
+                let mut page =
+                    status_page(Icon::DialogWarning, state.title()).description(state.text());
+                if state.can_try_again() {
+                    page = page.action("Try again", move |_: ()| again(None));
+                } else if matches!(state, ProfileState::RegistryDamaged { .. }) {
+                    page = page.action("Start over", move |_: ()| {
+                        spawn(async move {
+                            spawn_blocking(|| {
+                                // A list that cannot be read is kept beside the new one.
+                                let _ = Profiles::new(Places::from_environment()).start_over();
+                                crate::relaunch(None);
+                            })
+                            .await;
+                        });
+                    });
+                }
+                page.into_element()
+            }
+            Gate::Choose(profiles) => {
+                let mut group = Group::new("Profiles".to_string());
+                for (id, name) in profiles {
+                    let id = id.clone();
+                    group = group.row(
+                        row(name.clone())
+                            .leading(Icon::AvatarDefault)
+                            .navigates()
+                            .on_press(move |_: ()| again(Some(id.clone()))),
+                    );
+                }
+                status_page(Icon::AvatarDefault, "Which profile?")
+                    .description("Each profile keeps its own history, cookies and settings.")
+                    .child(clamp(Dim::PopupNarrow, group))
+                    .into_element()
+            }
+        };
+        let header = HeaderBar::new("Browser".to_string()).trailing(WindowControls);
+        rect()
+            .tw(
+                &tokens,
+                &[w_full(), h_full(), ink(Paint::Text), bg(Paint::Bg)],
+            )
+            .font_family(bingux_ui::theme::font_family())
+            .child(Screen::new(header).content(body))
+    }
+}

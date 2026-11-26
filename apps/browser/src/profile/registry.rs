@@ -442,6 +442,45 @@ impl Profiles {
         Ok(())
     }
 
+    /// After a registry that cannot be read: moves it aside (it is kept, as
+    /// `profiles.json.damaged-<time>`) and lists again the profile folders that
+    /// are there, as "Profile 1", "Profile 2" and so on, the first the default.
+    /// Nothing in a profile folder is touched. Returns where the old list went.
+    pub fn start_over(&self) -> Result<std::path::PathBuf, RegistryProblem> {
+        let path = self.places.registry();
+        let kept = crate::model::keeping::damaged_name(&path);
+        {
+            let _held = Held::wait(&self.places.registry_lock()).map_err(|error| io(&error))?;
+            match std::fs::rename(&path, &kept) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(io(&error)),
+            }
+        }
+        let mut found: Vec<Id> = std::fs::read_dir(self.places.profiles())
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+                    .filter_map(|entry| Id::parse(&entry.file_name().to_string_lossy()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        found.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+        self.change::<_, RegistryProblem>(|registry| {
+            let accents: Vec<&str> = bingux_ui::theme::accent_names().collect();
+            for (at, id) in found.into_iter().enumerate() {
+                let colour = accents[at % accents.len()];
+                registry
+                    .profiles
+                    .push(Entry::new(id, &format!("Profile {}", at + 1), colour));
+            }
+            registry.default = registry.profiles.first().map(|entry| entry.id.clone());
+            Ok(())
+        })?;
+        Ok(kept)
+    }
+
     /// Bytes the profile uses on disk: its folder and its cache.
     pub fn size(&self, id: &Id) -> u64 {
         let folders = self.places.folders(id);

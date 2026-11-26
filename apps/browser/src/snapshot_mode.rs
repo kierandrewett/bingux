@@ -438,6 +438,7 @@ fn app(rig: &Rig, scenario: &Scenario) -> impl Fn() -> Element + use<> {
             engine: engine.clone(),
             options,
             start: start.clone(),
+            profile: crate::ui::Handoff::none(),
         })
     }
 }
@@ -472,6 +473,7 @@ fn run_real(dir: &str, addresses: &[String]) {
                 engine: engine.clone(),
                 options: Options { private: true },
                 start: start.clone(),
+                profile: crate::ui::Handoff::none(),
             })
         };
         let mut shot = Snapshot::new(app, size);

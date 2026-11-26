@@ -14,15 +14,19 @@ mod prompts;
 use std::sync::Arc;
 
 use bingux_ui::web_view::requests::ContextTarget;
-use bingux_ui::web_view::{BackendError, BrowserBackend, Capabilities, FailureCause, PageEnvironment, RequestId, TabConfig, TabId};
+use bingux_ui::web_view::{
+    BackendError, BrowserBackend, Capabilities, FailureCause, PageEnvironment, RequestId,
+    TabConfig, TabId,
+};
 
-use super::address::ENGINES;
+use super::address::{ENGINES, SearchEngine};
 use super::downloads::Downloads;
 use super::history::History;
 use super::permissions::Permissions;
 use super::shortcuts::Command;
 use super::tab::{Tab, TabKind};
 use super::tabs::TabList;
+use crate::profile::settings::Settings;
 
 /// Where the engine is.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,6 +108,15 @@ pub struct ViewSize {
     pub scale: f32,
 }
 
+/// The profile a window opens in: who it is and what it starts with.
+#[derive(Debug, Default)]
+pub struct Profile {
+    /// The registry's id and name; `None` for a window without a registered profile.
+    pub id: Option<String>,
+    pub name: Option<String>,
+    pub settings: Settings,
+}
+
 pub struct Browser {
     backend: Arc<dyn BrowserBackend>,
     capabilities: Capabilities,
@@ -117,8 +130,11 @@ pub struct Browser {
     pub history: History,
     pub permissions: Permissions,
     pub engine: EngineStatus,
-    /// Which of `address::ENGINES` the address bar searches with.
-    pub search_engine: usize,
+    /// The settings of the window's profile.
+    pub settings: Settings,
+    /// The profile the window belongs to: its registry id and name, `None`
+    /// for a window opened without one.
+    pub profile: Option<(String, String)>,
     pub view: ViewSize,
     pub notices: Vec<Notice>,
     pub ui: Vec<UiRequest>,
@@ -133,8 +149,17 @@ pub struct Browser {
 }
 
 impl Browser {
-    /// A browser with no tab yet. `backend` is the engine.
+    /// A browser with no tab yet and no profile. `backend` is the engine.
     pub fn new(backend: Arc<dyn BrowserBackend>, options: Options) -> Self {
+        Self::with_profile(backend, options, Profile::default())
+    }
+
+    /// A browser with no tab yet, in `profile`.
+    pub fn with_profile(
+        backend: Arc<dyn BrowserBackend>,
+        options: Options,
+        profile: Profile,
+    ) -> Self {
         let capabilities = backend.capabilities();
         Self {
             backend,
@@ -147,7 +172,8 @@ impl Browser {
             history: History::new(),
             permissions: Permissions::new(),
             engine: EngineStatus::Starting,
-            search_engine: 0,
+            settings: profile.settings,
+            profile: profile.id.zip(profile.name),
             view: ViewSize {
                 width: 1024,
                 height: 640,
@@ -172,8 +198,16 @@ impl Browser {
         self.capabilities
     }
 
-    pub fn search(&self) -> &'static super::address::SearchEngine {
-        &ENGINES[self.search_engine.min(ENGINES.len() - 1)]
+    pub fn search(&self) -> &'static SearchEngine {
+        &ENGINES[self.settings.engine_index()]
+    }
+
+    /// The address bar searches with `ENGINES[at]` from now on.
+    pub fn set_search_engine(&mut self, at: usize) {
+        let Some(engine) = ENGINES.get(at) else {
+            return;
+        };
+        self.settings.search_engine = engine.id.to_string();
     }
 
     /// The engine session of tab `key`.
@@ -209,7 +243,11 @@ impl Browser {
     /// Tell the person something went wrong, unless the same was said last.
     pub(crate) fn fail(&mut self, error: &BackendError) {
         let text = error.to_string();
-        if self.notices.last().is_some_and(|last| last.error && last.text == text) {
+        if self
+            .notices
+            .last()
+            .is_some_and(|last| last.error && last.text == text)
+        {
             return;
         }
         self.notices.push(Notice {
@@ -220,7 +258,10 @@ impl Browser {
     }
 
     /// Run an engine call; what goes wrong becomes a notice.
-    pub(crate) fn engine_call(&mut self, call: impl FnOnce(&dyn BrowserBackend) -> bingux_ui::web_view::Done) {
+    pub(crate) fn engine_call(
+        &mut self,
+        call: impl FnOnce(&dyn BrowserBackend) -> bingux_ui::web_view::Done,
+    ) {
         if let Err(error) = call(self.backend.as_ref()) {
             // A tab that is already closed is not the person's business.
             if !matches!(error, BackendError::NoSuchTab(_)) {

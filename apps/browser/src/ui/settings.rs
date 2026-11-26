@@ -4,8 +4,11 @@
 //! and does not pretend to change them. They are set where the browser is
 //! started and take effect the next time it starts.
 
-use bingux_ui::web_view::{CheckStatus, EngineInfo, EngineState, ProcessSandbox, RemoteSettings, SecurityCheck, SecurityReport};
 use bingux_ui::prelude::*;
+use bingux_ui::web_view::{
+    CheckStatus, EngineInfo, EngineState, ProcessSandbox, RemoteSettings, SecurityCheck,
+    SecurityReport,
+};
 use freya::prelude::*;
 
 use crate::model::address::ENGINES;
@@ -15,9 +18,15 @@ use super::ctx::Ctx;
 /// What the host's choice of Remote Settings means for the person.
 pub fn remote_settings_text(mode: RemoteSettings, server: Option<&str>) -> String {
     match (mode, server) {
-        (RemoteSettings::Off, _) => "Off: revoked certificates are caught only when the issuer answers".to_string(),
-        (RemoteSettings::SecurityOnly, Some(server)) => format!("Security data only, from {server}"),
-        (RemoteSettings::SecurityOnly, None) => "Security data only, but no mirror is set".to_string(),
+        (RemoteSettings::Off, _) => {
+            "Off: revoked certificates are caught only when the issuer answers".to_string()
+        }
+        (RemoteSettings::SecurityOnly, Some(server)) => {
+            format!("Security data only, from {server}")
+        }
+        (RemoteSettings::SecurityOnly, None) => {
+            "Security data only, but no mirror is set".to_string()
+        }
         (RemoteSettings::MozillaDirect, _) => "Security data only, from Mozilla".to_string(),
     }
 }
@@ -71,7 +80,9 @@ fn process_group(processes: &[ProcessSandbox]) -> Group {
     let mut group = Group::new("Sandbox of each kind of process".to_string());
     for process in processes {
         let (icon, tone) = status_look(process.status);
-        let line = row(process.title()).subtitle(process.summary()).leading(icon);
+        let line = row(process.title())
+            .subtitle(process.summary())
+            .leading(icon);
         group = group.row(match tone {
             Some(tone) => line.leading_tone(tone),
             None => line,
@@ -86,7 +97,11 @@ fn checks_group(checks: &[SecurityCheck]) -> Group {
         let (icon, tone) = status_look(check.status);
         // A short value sits at the end of the row; one that would not fit is its text.
         let line = row(check.label.clone()).leading(icon);
-        let line = if check.value.chars().count() > 24 { line.subtitle(check.value.clone()) } else { line.value(check.value.clone()) };
+        let line = if check.value.chars().count() > 24 {
+            line.subtitle(check.value.clone())
+        } else {
+            line.value(check.value.clone())
+        };
         group = group.row(match tone {
             Some(tone) => line.leading_tone(tone),
             None => line,
@@ -110,10 +125,14 @@ fn security_groups(report: Option<&SecurityReport>) -> Vec<Group> {
     };
     let (icon, tone) = status_look(report.overall);
     let overall = row(overall_text(report.overall)).leading(icon);
-    let mut groups = vec![Group::new("Security report".to_string()).description(note).row(match tone {
-        Some(tone) => overall.leading_tone(tone),
-        None => overall,
-    })];
+    let mut groups = vec![
+        Group::new("Security report".to_string())
+            .description(note)
+            .row(match tone {
+                Some(tone) => overall.leading_tone(tone),
+                None => overall,
+            }),
+    ];
     if !report.processes.is_empty() {
         groups.push(process_group(&report.processes));
     }
@@ -136,7 +155,7 @@ impl Component for SettingsPage {
             let browser = ctx.browser.read();
             (
                 browser.backend().info(),
-                browser.search_engine,
+                browser.settings.engine_index(),
                 browser.permissions.origins().len(),
                 browser.history.len(),
             )
@@ -146,20 +165,27 @@ impl Component for SettingsPage {
             .enumerate()
             .map(|(at, engine)| (at.to_string(), engine.name.to_string()))
             .collect();
-        let search = Group::new("Address bar".to_string())
-            .row(
-                row("Search engine")
-                    .subtitle("Used for words typed in the address bar")
-                    .trailing(dropdown(engines, selected.to_string(), move |value: String| {
+        let search = Group::new("Address bar".to_string()).row(
+            row("Search engine")
+                .subtitle("Used for words typed in the address bar")
+                .trailing(dropdown(
+                    engines,
+                    selected.to_string(),
+                    move |value: String| {
                         if let Ok(at) = value.parse::<usize>() {
-                            ctx.with(|browser| browser.search_engine = at);
+                            ctx.with(|browser| browser.set_search_engine(at));
                         }
-                    })),
-            );
+                    },
+                )),
+        );
         let privacy = Group::new("Privacy".to_string())
             .row(
                 row("Browsing history")
-                    .subtitle(if visited == 1 { "1 page remembered while this window is open".to_string() } else { format!("{visited} pages remembered while this window is open") })
+                    .subtitle(if visited == 1 {
+                        "1 page remembered while this window is open".to_string()
+                    } else {
+                        format!("{visited} pages remembered while this window is open")
+                    })
                     .trailing(
                         action_button("Clear", move |_: ()| {
                             ctx.with(|browser| browser.history.clear());
@@ -171,7 +197,11 @@ impl Component for SettingsPage {
             )
             .row(
                 row("Site permissions")
-                    .subtitle(if remembered == 1 { "1 site has choices kept".to_string() } else { format!("{remembered} sites have choices kept") })
+                    .subtitle(if remembered == 1 {
+                        "1 site has choices kept".to_string()
+                    } else {
+                        format!("{remembered} sites have choices kept")
+                    })
                     .trailing(
                         action_button("Reset all", move |_: ()| {
                             ctx.with(|browser| browser.permissions.forget_all());
@@ -187,20 +217,31 @@ impl Component for SettingsPage {
             .description("Chosen by whoever starts the browser, and read once at start.")
             .row(property_row("Engine", engine_state_text(&info)))
             .row(row("User agent").subtitle(user_agent_text(&info)))
-            .row(row("Profile folder").path_value(settings.profile_dir.to_string_lossy().into_owned()))
+            .row(
+                row("Profile folder")
+                    .path_value(settings.profile_dir.to_string_lossy().into_owned()),
+            )
             .row(row("Cache folder").path_value(settings.cache_dir.to_string_lossy().into_owned()))
-            .row(row("Downloads folder").path_value(settings.download_dir.to_string_lossy().into_owned()))
+            .row(
+                row("Downloads folder")
+                    .path_value(settings.download_dir.to_string_lossy().into_owned()),
+            )
             .row(
                 row("Crash reports")
-                    .subtitle("Kept in this folder, on this computer. They are never sent anywhere.")
+                    .subtitle(
+                        "Kept in this folder, on this computer. They are never sent anywhere.",
+                    )
                     .path_value(settings.crash_dir.to_string_lossy().into_owned()),
             )
-            .row(
-                row("Remote Settings")
-                    .subtitle(remote_settings_text(settings.remote_settings, settings.remote_settings_server.as_deref())),
-            )
+            .row(row("Remote Settings").subtitle(remote_settings_text(
+                settings.remote_settings,
+                settings.remote_settings_server.as_deref(),
+            )))
             .row(row("WebRTC addresses").subtitle(settings.webrtc_ip_policy.clone()))
-            .row(property_row("Content processes", settings.content_process_limit.to_string()))
+            .row(property_row(
+                "Content processes",
+                settings.content_process_limit.to_string(),
+            ))
             .row(property_row("Languages", settings.locales.clone()));
         engine = engine.row(row("Required sandbox").subtitle(settings.sandbox_floor.clone()));
         let security = security_groups(info.security.as_ref());
@@ -209,10 +250,15 @@ impl Component for SettingsPage {
             .child(search)
             .child(privacy)
             .child(engine);
-        let content = security.into_iter().fold(content, |content, group| content.child(group));
+        let content = security
+            .into_iter()
+            .fold(content, |content, group| content.child(group));
         ScrollView::new().child(
             rect()
-                .tw(&tokens, &[w_full(), flex_col(), items(Align::Center), p(S4)])
+                .tw(
+                    &tokens,
+                    &[w_full(), flex_col(), items(Align::Center), p(S4)],
+                )
                 .child(clamp(Dim::Page, content)),
         )
     }
@@ -224,8 +270,14 @@ mod tests {
 
     #[test]
     fn a_failed_check_is_red_a_warning_is_amber_and_a_healthy_one_is_quiet() {
-        assert_eq!(status_look(CheckStatus::Fail), (Icon::DialogError, Some(Tone::Danger)));
-        assert_eq!(status_look(CheckStatus::Warn), (Icon::DialogWarning, Some(Tone::Warning)));
+        assert_eq!(
+            status_look(CheckStatus::Fail),
+            (Icon::DialogError, Some(Tone::Danger))
+        );
+        assert_eq!(
+            status_look(CheckStatus::Warn),
+            (Icon::DialogWarning, Some(Tone::Warning))
+        );
         assert_eq!(status_look(CheckStatus::Ok), (Icon::Check, None));
         assert_eq!(status_look(CheckStatus::Info), (Icon::Check, None));
         assert_eq!(overall_text(CheckStatus::Fail), "A check failed");
@@ -236,14 +288,24 @@ mod tests {
     fn a_report_the_engine_has_not_made_is_one_row_that_says_so() {
         assert_eq!(security_groups(None).len(), 1);
         let report = bingux_ui::web_view::test_double::healthy_report();
-        assert_eq!(security_groups(Some(&report)).len(), 3, "the result, the processes and the other checks");
+        assert_eq!(
+            security_groups(Some(&report)).len(),
+            3,
+            "the result, the processes and the other checks"
+        );
     }
 
     #[test]
     fn every_remote_settings_choice_says_what_it_means() {
-        assert!(remote_settings_text(RemoteSettings::Off, None).contains("only when the issuer answers"));
+        assert!(
+            remote_settings_text(RemoteSettings::Off, None)
+                .contains("only when the issuer answers")
+        );
         assert_eq!(
-            remote_settings_text(RemoteSettings::SecurityOnly, Some("https://rs.example.org/v1")),
+            remote_settings_text(
+                RemoteSettings::SecurityOnly,
+                Some("https://rs.example.org/v1")
+            ),
             "Security data only, from https://rs.example.org/v1"
         );
         assert!(remote_settings_text(RemoteSettings::SecurityOnly, None).contains("no mirror"));

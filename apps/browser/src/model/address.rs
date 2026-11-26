@@ -1,28 +1,35 @@
 //! What was typed in the address bar: an address to go to, or words to search
 //! for. Pure functions, so every rule has a test.
 
-/// A search engine: a name and the address a query is put into at `%s`.
+/// A search engine: a stable id (what the settings keep), a name and the
+/// address a query is put into at `%s`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SearchEngine {
+    pub id: &'static str,
     pub name: &'static str,
     pub template: &'static str,
 }
 
-/// The engines the settings page offers. The first is the default.
+/// The engines the settings page offers. The first is the default. An id never
+/// changes once released: a profile's settings name the engine by it.
 pub const ENGINES: [SearchEngine; 4] = [
     SearchEngine {
+        id: "duckduckgo",
         name: "DuckDuckGo",
         template: "https://duckduckgo.com/?q=%s",
     },
     SearchEngine {
+        id: "startpage",
         name: "Startpage",
         template: "https://www.startpage.com/do/search?q=%s",
     },
     SearchEngine {
+        id: "wikipedia",
         name: "Wikipedia",
         template: "https://en.wikipedia.org/w/index.php?search=%s",
     },
     SearchEngine {
+        id: "google",
         name: "Google",
         template: "https://www.google.com/search?q=%s",
     },
@@ -41,7 +48,9 @@ fn encode(query: &str) -> String {
     let mut out = String::with_capacity(query.len());
     for byte in query.trim().bytes() {
         match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => out.push(byte as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
             b' ' => out.push('+'),
             other => out.push_str(&format!("%{other:02X}")),
         }
@@ -65,8 +74,9 @@ fn scheme_of(text: &str) -> Option<&str> {
     let (scheme, _) = text.split_once(':')?;
     let mut chars = scheme.chars();
     let first = chars.next()?;
-    (first.is_ascii_alphabetic() && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
-        .then_some(scheme)
+    (first.is_ascii_alphabetic()
+        && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')))
+    .then_some(scheme)
 }
 
 /// `host`, `host:port` or `[v6]` followed by nothing or a path, query or
@@ -78,7 +88,9 @@ fn looks_like_host(text: &str) -> bool {
         return authority.contains(']');
     }
     let (host, port) = match authority.rsplit_once(':') {
-        Some((host, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => (host, true),
+        Some((host, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => {
+            (host, true)
+        }
         Some(_) => return false,
         None => (authority, false),
     };
@@ -105,7 +117,10 @@ fn looks_like_host(text: &str) -> bool {
     // A name needs a dot and a last label that is not a number: "3.14" is a
     // number, "notes.txt" is a file name that happens to be a host, and so is
     // a word with a port, which only a host has.
-    port || (labels.len() >= 2 && labels.last().is_some_and(|tld| tld.chars().any(char::is_alphabetic) && tld.chars().count() >= 2))
+    port || (labels.len() >= 2
+        && labels
+            .last()
+            .is_some_and(|tld| tld.chars().any(char::is_alphabetic) && tld.chars().count() >= 2))
 }
 
 /// The scheme a bare host gets: plain HTTP for a machine on this network
@@ -113,7 +128,10 @@ fn looks_like_host(text: &str) -> bool {
 fn default_scheme(text: &str) -> &'static str {
     let authority = text.split(['/', '?', '#']).next().unwrap_or("");
     let host = authority.rsplit('@').next().unwrap_or(authority);
-    let host = host.rsplit_once(':').filter(|(_, port)| port.bytes().all(|b| b.is_ascii_digit())).map_or(host, |(host, _)| host);
+    let host = host
+        .rsplit_once(':')
+        .filter(|(_, port)| port.bytes().all(|b| b.is_ascii_digit()))
+        .map_or(host, |(host, _)| host);
     let numeric = host.split('.').all(|label| label.parse::<u8>().is_ok()) && host.contains('.');
     if host.eq_ignore_ascii_case("localhost") || host.starts_with('[') || numeric {
         "http"
@@ -174,7 +192,9 @@ pub fn display(url: &str) -> String {
     if url.is_empty() || url == "about:blank" || url.starts_with("bingux:") {
         return String::new();
     }
-    let (scheme, rest) = url.split_once("://").map_or(("", url), |(scheme, rest)| (scheme, rest));
+    let (scheme, rest) = url
+        .split_once("://")
+        .map_or(("", url), |(scheme, rest)| (scheme, rest));
     let rest = match rest.strip_suffix('/') {
         Some(host) if !host.contains('/') => host,
         _ => rest,
@@ -194,7 +214,11 @@ pub fn host(url: &str) -> String {
     if let Some(inner) = authority.strip_prefix('[') {
         return inner.split(']').next().unwrap_or("").to_ascii_lowercase();
     }
-    authority.split(':').next().unwrap_or("").to_ascii_lowercase()
+    authority
+        .split(':')
+        .next()
+        .unwrap_or("")
+        .to_ascii_lowercase()
 }
 
 /// `scheme://host[:port]` of an address: what a permission belongs to.
@@ -204,7 +228,11 @@ pub fn origin(url: &str) -> String {
     };
     let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
     let authority = authority.rsplit('@').next().unwrap_or(authority);
-    format!("{}://{}", scheme.to_ascii_lowercase(), authority.to_ascii_lowercase())
+    format!(
+        "{}://{}",
+        scheme.to_ascii_lowercase(),
+        authority.to_ascii_lowercase()
+    )
 }
 
 /// Whether `url` is delivered over a plain connection: what the page info
@@ -221,7 +249,9 @@ pub fn initial(url: &str) -> Option<char> {
     }
     let host = host(url);
     let name = host.strip_prefix("www.").unwrap_or(&host);
-    name.chars().find(|c| c.is_alphanumeric()).map(|c| c.to_ascii_uppercase())
+    name.chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_ascii_uppercase())
 }
 
 #[cfg(test)]
@@ -245,7 +275,10 @@ mod tests {
     #[test]
     fn a_name_with_a_dot_is_an_address_over_https() {
         assert_eq!(address("example.com"), "https://example.com");
-        assert_eq!(address("docs.example.org/a/b?c=d#e"), "https://docs.example.org/a/b?c=d#e");
+        assert_eq!(
+            address("docs.example.org/a/b?c=d#e"),
+            "https://docs.example.org/a/b?c=d#e"
+        );
         assert_eq!(address("  example.com  "), "https://example.com");
         assert_eq!(address("bücher.example"), "https://bücher.example");
     }
@@ -269,7 +302,10 @@ mod tests {
         assert_eq!(address("http://example.com"), "http://example.com");
         assert_eq!(address("file:///etc/hostname"), "file:///etc/hostname");
         assert_eq!(address("about:blank"), "about:blank");
-        assert_eq!(address("view-source:https://example.com"), "view-source:https://example.com");
+        assert_eq!(
+            address("view-source:https://example.com"),
+            "view-source:https://example.com"
+        );
     }
 
     #[test]
@@ -316,7 +352,11 @@ mod tests {
     fn the_bar_shows_the_address_without_the_noise() {
         assert_eq!(display("https://example.com/"), "example.com");
         assert_eq!(display("https://example.com/a/"), "example.com/a/");
-        assert_eq!(display("http://example.com/"), "http://example.com", "plain http stays visible");
+        assert_eq!(
+            display("http://example.com/"),
+            "http://example.com",
+            "plain http stays visible"
+        );
         assert_eq!(display("about:blank"), "");
         assert_eq!(display(""), "");
         assert_eq!(display("bingux:newtab"), "");
@@ -324,9 +364,15 @@ mod tests {
 
     #[test]
     fn host_and_origin_are_read_from_an_address() {
-        assert_eq!(host("https://User:pw@Docs.Example.org:8443/x?y#z"), "docs.example.org");
+        assert_eq!(
+            host("https://User:pw@Docs.Example.org:8443/x?y#z"),
+            "docs.example.org"
+        );
         assert_eq!(host("http://[::1]:80/"), "::1");
-        assert_eq!(origin("HTTPS://Example.com:8443/a/b?c"), "https://example.com:8443");
+        assert_eq!(
+            origin("HTTPS://Example.com:8443/a/b?c"),
+            "https://example.com:8443"
+        );
         assert!(is_plain_http("HTTP://x"));
         assert!(!is_plain_http("https://x"));
         assert_eq!(initial("https://www.example.com"), Some('E'));

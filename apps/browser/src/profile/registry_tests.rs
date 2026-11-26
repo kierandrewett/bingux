@@ -317,3 +317,25 @@ fn ids_are_eight_base32_letters() {
     assert!(Id::parse("abcdefg").is_none());
     assert!(Id::parse("abcdefg1").is_none(), "1 is not base32");
 }
+
+#[test]
+fn start_over_keeps_the_damaged_list_and_finds_the_profile_folders_again() {
+    let rig = Rig::new();
+    let personal = rig.profiles.create("Personal", "blue").unwrap();
+    let work = rig.profiles.create("Work", "orange").unwrap();
+    fs::write(rig.places().registry(), b"{ damaged").unwrap();
+    let kept = rig.profiles.start_over().unwrap();
+    assert_eq!(fs::read(&kept).unwrap(), b"{ damaged");
+    let mut ids: Vec<Id> = rig
+        .profiles
+        .list()
+        .unwrap()
+        .into_iter()
+        .map(|entry| entry.id)
+        .collect();
+    ids.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    let mut expected = vec![personal.id, work.id];
+    expected.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    assert_eq!(ids, expected, "every profile folder is listed again");
+    assert_eq!(names(&rig.profiles), ["Profile 1", "Profile 2"]);
+}

@@ -86,7 +86,7 @@ fn words_are_searched_for_with_the_engine_the_person_chose() {
     assert!(double.calls().iter().any(
         |call| matches!(call, Call::Load(_, url) if url == "https://duckduckgo.com/?q=rust+lifetimes")
     ));
-    browser.search_engine = 2;
+    browser.set_search_engine(2);
     go(&mut browser, "rust");
     assert!(double.calls().iter().any(
         |call| matches!(call, Call::Load(_, url) if url == "https://en.wikipedia.org/w/index.php?search=rust")

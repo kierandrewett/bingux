@@ -10,8 +10,10 @@
 pub mod files;
 pub mod lock;
 pub mod migrate;
+pub mod open;
 pub mod places;
 pub mod registry;
+pub mod settings;
 
 #[cfg(test)]
 mod registry_tests;

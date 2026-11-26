@@ -8,7 +8,7 @@ use bingux_ui::web_view::PageEnvironment;
 use bingux_ui::web_view::queue::Signal;
 use freya::prelude::*;
 
-use crate::model::browser::{Browser, EngineStatus, Options};
+use crate::model::browser::{Browser, EngineStatus, Options, Profile};
 use crate::model::shortcuts::{Command, Platform, window_command};
 use crate::model::tabs::Place;
 
@@ -21,6 +21,32 @@ use super::prompts::{PermissionBanner, PromptHost};
 use super::strip::strip;
 use super::toolbar::{PhoneBottom, Toolbar};
 
+/// The profile a window opens in, handed from `main` to the window's first
+/// frame once (it holds what cannot be copied, such as the store's writer).
+#[derive(Clone)]
+pub struct Handoff(std::rc::Rc<std::cell::RefCell<Option<Profile>>>);
+
+impl Handoff {
+    pub fn new(profile: Profile) -> Self {
+        Self(std::rc::Rc::new(std::cell::RefCell::new(Some(profile))))
+    }
+
+    /// No profile: a test or a snapshot.
+    pub fn none() -> Self {
+        Self(std::rc::Rc::new(std::cell::RefCell::new(None)))
+    }
+
+    fn take(&self) -> Profile {
+        self.0.borrow_mut().take().unwrap_or_default()
+    }
+}
+
+impl PartialEq for Handoff {
+    fn eq(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// The window root.
 #[derive(PartialEq)]
 pub struct App {
@@ -28,6 +54,7 @@ pub struct App {
     pub options: Options,
     /// What the tabs open on at start, when nothing else was asked for.
     pub start: Vec<String>,
+    pub profile: Handoff,
 }
 
 impl Component for App {
@@ -40,6 +67,7 @@ impl Component for App {
                 engine: self.engine.clone(),
                 options: self.options,
                 start: self.start.clone(),
+                profile: self.profile.clone(),
             }))
     }
 }
@@ -49,6 +77,7 @@ struct Content {
     engine: Engine,
     options: Options,
     start: Vec<String>,
+    profile: Handoff,
 }
 
 /// The addresses a launch names: the `open` pairs of its location.
@@ -76,8 +105,9 @@ impl Component for Content {
         let browser = use_state({
             let engine = engine.clone();
             let environment = environment.clone();
+            let profile = self.profile.clone();
             move || {
-                let mut browser = Browser::new(engine.0.clone(), options);
+                let mut browser = Browser::with_profile(engine.0.clone(), options, profile.take());
                 browser.environment = environment;
                 browser
             }
