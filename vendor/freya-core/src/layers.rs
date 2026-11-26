@@ -1,14 +1,11 @@
-use std::ops::{
-    Deref,
-    DerefMut,
-};
+use std::ops::Deref;
 
-use rustc_hash::{
-    FxHashMap,
-    FxHashSet,
-};
+use rustc_hash::FxHashMap;
 
-use crate::node_id::NodeId;
+use crate::{
+    data::LayerState,
+    node_id::NodeId,
+};
 
 /// The painting layer of an element, controlling what it draws on top of.
 ///
@@ -38,39 +35,60 @@ impl From<i16> for Layer {
     }
 }
 
-#[derive(Default, Clone, Debug, PartialEq)]
-pub struct Layers(FxHashMap<i16, FxHashSet<NodeId>>);
+/// The nodes of each layer, in tree order (the order of a depth-first walk from the root).
+///
+/// Bingux patch: within one layer a node is painted after, and hit before, every node that comes
+/// before it in the tree, as in a document. Upstream keeps each layer in a hash set and paints
+/// it in the set's iteration order, so which of two overlapping nodes on one layer showed
+/// depended on their node ids (`bingux-ui`'s `paint_order_tests`).
+///
+/// The lists are derived from the tree. A change of the tree's shape or of a node's layer marks
+/// them stale ([`Layers::mark_stale`]), and [`Layers::rebuild`] walks the tree once when the
+/// mutations are applied, reusing each list's storage; a frame with no such change does nothing.
+#[derive(Default, Clone, Debug)]
+pub struct Layers {
+    layers: FxHashMap<i16, Vec<NodeId>>,
+    stale: bool,
+    /// The walk's stack, kept between rebuilds.
+    walk: Vec<NodeId>,
+}
 
 impl Layers {
-    /// Insert the given [NodeId] in the given layer. Will create an entry for the layer if missing.
-    pub fn insert_node_in_layer(&mut self, node_id: NodeId, layer_n: i16) {
-        let layer = self.0.entry(layer_n).or_default();
-        layer.insert(node_id);
+    /// The tree's shape or a node's layer changed: rebuild the lists before they are read.
+    pub fn mark_stale(&mut self) {
+        self.stale = true;
     }
 
-    /// Remove the [NodeId] from the given layer. Will remove the entry of the layer if it becomes empty.
-    pub fn remove_node_from_layer(&mut self, node_id: &NodeId, layer_n: i16) {
-        let layer = self.0.get_mut(&layer_n);
-        if let Some(layer) = layer {
-            layer.remove(node_id);
-
-            if layer.is_empty() {
-                self.0.remove(&layer_n);
+    /// Put every node of the tree in its layer's list, in tree order, when the lists are stale.
+    pub(crate) fn rebuild(
+        &mut self,
+        children: &FxHashMap<NodeId, Vec<NodeId>>,
+        layer_state: &FxHashMap<NodeId, LayerState>,
+    ) {
+        if !self.stale {
+            return;
+        }
+        self.stale = false;
+        for nodes in self.layers.values_mut() {
+            nodes.clear();
+        }
+        self.walk.push(NodeId::ROOT);
+        while let Some(node_id) = self.walk.pop() {
+            if let Some(state) = layer_state.get(&node_id) {
+                self.layers.entry(state.layer).or_default().push(node_id);
+            }
+            if let Some(children) = children.get(&node_id) {
+                self.walk.extend(children.iter().rev());
             }
         }
+        self.layers.retain(|_, nodes| !nodes.is_empty());
     }
 }
 
 impl Deref for Layers {
-    type Target = FxHashMap<i16, FxHashSet<NodeId>>;
+    type Target = FxHashMap<i16, Vec<NodeId>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for Layers {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &self.layers
     }
 }

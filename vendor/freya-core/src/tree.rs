@@ -337,7 +337,7 @@ impl Tree {
 
                     // Remove from the layers
                     let layer_state = self.layer_state.remove(&node_id).unwrap();
-                    layer_state.remove(node_id, &mut self.layers);
+                    layer_state.remove(&mut self.layers);
 
                     // Remove from the accessibility
                     let accessibility_state = self.accessibility_state.remove(&node_id).unwrap();
@@ -393,6 +393,7 @@ impl Tree {
 
                 self.insert_element(node_id, element, scale_factor);
                 dirty.push((node_id, DiffModifies::all()));
+                self.layers.mark_stale();
             }
 
             for (parent_node_id, movements) in mutations.moved {
@@ -409,6 +410,7 @@ impl Tree {
                 diff.insert(DiffModifies::ACCESSIBILITY);
                 diff.insert(DiffModifies::STYLE);
                 dirty.push((parent_node_id, diff));
+                self.layers.mark_stale();
             }
 
             for MutationModified {
@@ -588,25 +590,20 @@ impl Tree {
                                 LayerState::default()
                             });
                         if let Some([layer_state, parent_layer_state]) = entries {
-                            layer_state.update(
-                                parent_layer_state,
-                                *node_id,
-                                element,
-                                &mut self.layers,
-                            );
+                            layer_state.update(parent_layer_state, element, &mut self.layers);
                         }
                     } else {
                         assert_eq!(*node_id, NodeId::ROOT);
-                        self.layer_state.insert(
-                            NodeId::ROOT,
-                            LayerState::create_for_root(*node_id, &mut self.layers),
-                        );
+                        self.layer_state
+                            .insert(NodeId::ROOT, LayerState::create_for_root(&mut self.layers));
                     }
                     if let Some(children) = self.children.get(node_id) {
                         buffer.extend(children);
                     }
                 }
             }
+            // Paint and hit order within a layer is tree order (`Layers`).
+            self.layers.rebuild(&self.children, &self.layer_state);
         });
 
         hotpath::measure_block!("effect cascade", {

@@ -266,32 +266,22 @@ pub struct LayerState {
 }
 
 impl LayerState {
-    pub fn create_for_root(node_id: NodeId, layers: &mut Layers) -> Self {
-        let layer = 0;
-
-        layers.insert_node_in_layer(node_id, layer);
-
-        Self { layer }
+    pub fn create_for_root(layers: &mut Layers) -> Self {
+        layers.mark_stale();
+        Self { layer: 0 }
     }
 
-    pub fn remove(self, node_id: NodeId, layers: &mut Layers) {
-        layers.remove_node_from_layer(&node_id, self.layer);
+    pub fn remove(self, layers: &mut Layers) {
+        layers.mark_stale();
     }
 
     pub fn update(
         &mut self,
         parent_layer: &Self,
-        node_id: NodeId,
         element: &Rc<dyn ElementExt>,
         layers: &mut Layers,
     ) {
-        let relative_layer = element.layer();
-
-        // Old
-        layers.remove_node_from_layer(&node_id, self.layer);
-
-        // New
-        self.layer = match relative_layer {
+        let layer = match element.layer() {
             Layer::Relative(relative_layer) => parent_layer
                 .layer
                 .saturating_add(relative_layer)
@@ -301,7 +291,11 @@ impl LayerState {
                 (overlay_level.max(1) as i16).saturating_mul(i16::MAX / 16)
             }
         };
-        layers.insert_node_in_layer(node_id, self.layer);
+        // A new node is in no list yet: adding it marked the lists stale already.
+        if layer != self.layer {
+            self.layer = layer;
+            layers.mark_stale();
+        }
     }
 }
 

@@ -233,6 +233,17 @@ The changes are panic resilience (`freya-core`, `freya-winit`) and scroll feel f
   edge pixels, which half-covers the last row and column of a picture that is
   meant to land pixel for pixel. Bingux's frame view uses it
   (`style::painted_on_pixels`); every other callback is unchanged.
+- `freya-core/src/layers.rs`, `data.rs`, `tree.rs`: **nodes on one layer paint in tree order.**
+  A node's layer is its parent's plus one (plus its `Layer::Relative`), so siblings, and cousins
+  at one depth, share a layer. Upstream keeps a layer's nodes in a hash set and paints and hits
+  them in the set's iteration order (its docs, as of `91a4219a6b`, say "no guaranteed painting
+  order"), so of two overlapping nodes the one that showed depended on their node ids: the
+  browser's load bar track vanished under the page on a phone-sized window. `Layers` now keeps
+  each layer as a list in depth-first tree order: a later node paints over, and takes the
+  pointer before, an earlier one. Adding, removing or moving a node, or changing a node's layer,
+  marks the lists stale, and `apply_mutations` rebuilds them in one walk of the tree, reusing
+  their storage; a frame without such a change does no work for it. Held by `bingux-ui`'s
+  `paint_order_tests`.
 - `freya-winit/src/extensions.rs`, `window.rs`, `renderer.rs`:
   `WinitPlatformExt::set_ime_cursor_area(window, Option<Area>)`. Upstream puts
   the input method's popup at the whole focused node; a node that draws its own

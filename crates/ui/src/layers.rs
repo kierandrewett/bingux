@@ -3,8 +3,9 @@
 //! # Paint layers (inside a window)
 //!
 //! Freya paints a node at its parent's layer plus its own `Layer::Relative` plus its depth, so a
-//! deep node of a shallow page can outrank a shallow sibling. Every layer number the library uses
-//! is named here, in one order:
+//! deep node of a shallow page can outrank a shallow sibling. Nodes on one layer paint in tree
+//! order: a later sibling or cousin over an earlier one (the vendored freya-core,
+//! `paint_order_tests`). Every layer number the library uses is named here, in one order:
 //!
 //! content < docked panes < tab strip < slide header < back veil < header bar < slide sheet <
 //! slide controls < back shield < (overlay levels) menu < popup sheet < dialog < toast <
