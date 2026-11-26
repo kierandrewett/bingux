@@ -13,6 +13,7 @@ mod engine;
 mod locale;
 mod model;
 mod profile;
+mod site_info;
 #[cfg(feature = "snapshot")]
 mod snapshot_mode;
 mod target;

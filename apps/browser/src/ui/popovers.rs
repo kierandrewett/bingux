@@ -8,8 +8,8 @@ use freya::prelude::*;
 
 use crate::address::Address;
 use crate::model::downloads;
-use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
+use crate::site_info::{self, Tone};
 
 use super::ctx::Ctx;
 
@@ -69,7 +69,7 @@ fn page_info(ctx: Ctx) -> Element {
         let Some(tab) = browser.active() else {
             return rect().into_element();
         };
-        let summary = security::summarize(&tab.security, &tab.url);
+        let summary = site_info::summarize(&tab.security, &tab.url);
         let origin = Address::new(&tab.url).origin();
         (
             summary,

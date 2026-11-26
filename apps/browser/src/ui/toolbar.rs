@@ -7,8 +7,8 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::model::downloads::Downloads;
-use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
+use crate::site_info::{self, Tone};
 use crate::zoom::{Zoom, ZoomChip};
 
 use super::ctx::Ctx;
@@ -21,7 +21,7 @@ struct Reading {
     can_back: bool,
     can_forward: bool,
     loading: bool,
-    summary: security::Summary,
+    summary: site_info::Summary,
     zoom: Zoom,
     is_web: bool,
     tabs: usize,
@@ -36,16 +36,16 @@ fn reading(ctx: Ctx) -> Reading {
         can_forward: tab.is_some_and(|tab| tab.can_forward),
         loading: tab.is_some_and(|tab| tab.load.loading),
         summary: tab.map_or_else(
-            || security::summarize(&Default::default(), ""),
+            || site_info::summarize(&Default::default(), ""),
             |tab| match tab.kind {
-                TabKind::Settings => security::summarize(
+                TabKind::Settings => site_info::summarize(
                     &bingux_ui::web_view::Security {
                         state: bingux_ui::web_view::SecurityState::Internal,
                         ..Default::default()
                     },
                     "bingux:settings",
                 ),
-                TabKind::Web => security::summarize(&tab.security, &tab.url),
+                TabKind::Web => site_info::summarize(&tab.security, &tab.url),
             },
         ),
         zoom: tab.map_or(Zoom::DEFAULT, |tab| tab.zoom),
