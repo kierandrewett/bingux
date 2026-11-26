@@ -196,6 +196,25 @@ fn until(shot: &mut Snapshot, mut done: impl FnMut(&mut Snapshot) -> bool) -> bo
     shot.settle_until(Duration::from_secs(10), |shot| done(shot))
 }
 
+/// Settle until `ready` holds and the rows of the card have not changed for 20 polls. The results
+/// stream in and the rows move as they do, and the highlight that Enter takes (the first row)
+/// follows them in an effect, a poll after they are drawn: what is pressed is the first row
+/// when they have stopped.
+fn until_rows_rest(shot: &mut Snapshot, mut ready: impl FnMut(&mut Snapshot) -> bool) -> bool {
+    let mut last = Vec::new();
+    let mut same = 0;
+    until(shot, |shot| {
+        let now = rows(shot);
+        if now == last {
+            same += 1;
+        } else {
+            same = 0;
+            last = now;
+        }
+        same >= 20 && ready(shot)
+    })
+}
+
 fn card_open(shot: &mut Snapshot) -> bool {
     let tree = tree(shot);
     tree.nodes
@@ -360,8 +379,13 @@ fn enter_opens_the_first_row_and_a_result_reveals_in_its_folder() {
     let tree_ = Tree_::new("open");
     let mut shot = open(&tree_, true, false, SIZE);
     type_text(&mut shot, "annual");
-    assert!(until(&mut shot, |shot| rows(shot)
-        .contains(&"annual-report.pdf".to_string())));
+    // Enter takes the highlighted row, and the highlight follows the rows in an effect of its
+    // own, a poll after they are drawn: wait for the rows to rest, not for the first sight of one.
+    assert!(
+        until_rows_rest(&mut shot, |shot| rows(shot)
+            .contains(&"annual-report.pdf".to_string())),
+        "the result never came, or the rows never stopped changing"
+    );
     shot.key(Key::Named(NamedKey::Enter));
     // The file is opened from the pool, which takes as long as the machine makes it.
     assert!(
@@ -375,23 +399,8 @@ fn enter_opens_the_first_row_and_a_result_reveals_in_its_folder() {
     );
     let mut shot = open(&tree_, true, false, SIZE);
     type_text(&mut shot, "annual");
-    assert!(until(&mut shot, |shot| rows(shot)
-        .contains(&"annual-report.pdf".to_string())));
-    // The results stream in and the rows move as they do: the chip to press is the one of the row
-    // that is the first when they have stopped.
-    let mut last = Vec::new();
-    let mut same = 0;
     assert!(
-        until(&mut shot, |shot| {
-            let now = rows(shot);
-            if now == last {
-                same += 1;
-            } else {
-                same = 0;
-                last = now;
-            }
-            same >= 20 && shows(shot, "Show in folder")
-        }),
+        until_rows_rest(&mut shot, |shot| shows(shot, "Show in folder")),
         "the results never stopped changing, or the result has no Show in folder chip"
     );
     assert!(shot.click_text("Show in folder"));
