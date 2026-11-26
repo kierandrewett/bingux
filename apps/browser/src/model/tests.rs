@@ -18,9 +18,9 @@
 //!      but the window keeps reading "not available" from before it.
 
 use bingux_ui::web_view::input::{EditCommand, Mods, PageInput};
-use bingux_ui::web_view::requests::{ContextTarget, DownloadInfo, DownloadState, RequestKind};
+use bingux_ui::web_view::requests::{ContextTarget, RequestKind};
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
-use bingux_ui::web_view::{BrowserBackend, BrowserEvent, DownloadId, Response, TabEvent};
+use bingux_ui::web_view::{BrowserBackend, Response, TabEvent};
 
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options, UiRequest};
@@ -204,131 +204,6 @@ fn settings_is_one_tab_that_is_found_again_and_becomes_a_page_when_navigated_awa
             .iter()
             .any(|call| matches!(call, Call::CreateTab(_)))
     );
-}
-
-#[test]
-fn downloads_are_listed_with_a_notice_and_can_be_controlled() {
-    let (mut browser, double) = browser();
-    go(&mut browser, "files.example.net");
-    assert_eq!(browser.downloads.list().len(), 1);
-    let notices = browser.take_notices();
-    assert!(
-        notices
-            .iter()
-            .any(|notice| notice.text == "Downloading report-2026.pdf" && notice.action.is_some())
-    );
-    double.advance_downloads(10_000_000);
-    browser.poll();
-    let notices = browser.take_notices();
-    assert!(
-        notices
-            .iter()
-            .any(|notice| notice.text == "report-2026.pdf was downloaded")
-    );
-    assert_eq!(browser.downloads.active(), 0);
-}
-
-fn download(id: u64, private: bool) -> DownloadInfo {
-    DownloadInfo {
-        id: DownloadId(id),
-        url: format!("https://example.com/{id}"),
-        filename: format!("file-{id}.bin"),
-        path: None,
-        mime: "application/octet-stream".to_string(),
-        state: DownloadState::Running,
-        received: 0,
-        total: Some(100),
-        speed: 0,
-        container: 0,
-        private,
-    }
-}
-
-#[test]
-fn a_private_download_is_not_in_a_normal_windows_list() {
-    let (mut browser, _double) = browser();
-    browser.apply(BrowserEvent::Download(download(1, true)));
-    browser.apply(BrowserEvent::Download(download(2, false)));
-    let ids: Vec<DownloadId> = browser.downloads.list().iter().map(|d| d.id).collect();
-    assert_eq!(ids, [DownloadId(2)]);
-    assert!(
-        browser
-            .take_notices()
-            .iter()
-            .all(|notice| !notice.text.contains("file-1")),
-        "nor does it make a toast"
-    );
-    assert_eq!(browser.downloads.unseen(), 1);
-}
-
-#[test]
-fn a_private_download_is_in_a_private_windows_list_and_a_normal_one_is_unchanged() {
-    let double = TestDoubleBackend::new();
-    let mut browser = Browser::new(double, Options { private: true });
-    browser.apply(BrowserEvent::Download(download(1, true)));
-    browser.apply(BrowserEvent::Download(download(2, false)));
-    let list = browser.downloads.list();
-    assert_eq!(list.len(), 2);
-    assert!(list[1].private && !list[0].private, "each keeps its flag");
-    assert!(
-        browser
-            .take_notices()
-            .iter()
-            .any(|notice| notice.text == "Downloading file-1.bin")
-    );
-}
-
-#[test]
-fn a_normal_download_is_unchanged_in_a_normal_window() {
-    let (mut browser, _double) = browser();
-    browser.apply(BrowserEvent::Download(download(5, false)));
-    let list = browser.downloads.list();
-    assert_eq!(list.len(), 1);
-    assert_eq!(
-        (list[0].id, list[0].private, list[0].container),
-        (DownloadId(5), false, 0)
-    );
-}
-
-#[test]
-fn clearing_the_list_has_the_engine_forget_what_is_over_and_nothing_else() {
-    let (mut browser, double) = browser();
-    go(&mut browser, "files.example.net");
-    browser.apply(BrowserEvent::Download(download(8, false)));
-    double.advance_downloads(10_000_000);
-    browser.poll();
-    // The page's download is over; the two the test added still go.
-    let mut running = download(9, false);
-    running.total = None;
-    browser.apply(BrowserEvent::Download(running));
-    double.clear_calls();
-    let over: Vec<DownloadId> = browser
-        .downloads
-        .list()
-        .iter()
-        .filter(|d| !matches!(d.state, DownloadState::Running | DownloadState::Paused))
-        .map(|d| d.id)
-        .collect();
-    assert!(!over.is_empty());
-    browser.clear_finished_downloads();
-    let removed: Vec<DownloadId> = double
-        .calls()
-        .iter()
-        .filter_map(|call| match call {
-            Call::RemoveDownload(id) => Some(*id),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(removed.len(), over.len());
-    for id in &over {
-        assert!(removed.contains(id), "{id:?} is forgotten");
-    }
-    assert!(
-        !removed.contains(&DownloadId(8)) && !removed.contains(&DownloadId(9)),
-        "a running one is not"
-    );
-    let left: Vec<DownloadId> = browser.downloads.list().iter().map(|d| d.id).collect();
-    assert_eq!(left, [DownloadId(9), DownloadId(8)]);
 }
 
 #[test]

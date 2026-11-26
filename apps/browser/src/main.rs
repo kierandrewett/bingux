@@ -31,6 +31,7 @@ use std::os::unix::process::CommandExt;
 use bingux_ui::prelude::Application;
 
 use crate::browser::{Options, Profile};
+mod downloads;
 mod error_pages;
 mod first_run;
 mod history;

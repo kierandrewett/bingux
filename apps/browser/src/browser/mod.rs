@@ -23,8 +23,8 @@ use bingux_ui::web_view::requests::ContextTarget;
 use bingux_ui::web_view::{BrowserBackend, PageEnvironment, RequestId, TabConfig, TabId};
 
 use crate::address::SearchEngine;
+use crate::downloads::Downloads;
 use crate::engine::Engine;
-use crate::model::downloads::Downloads;
 use crate::permissions::Permissions;
 use crate::settings::Settings;
 use crate::store::Store;
