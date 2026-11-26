@@ -1,6 +1,6 @@
 //! The list under the address bar while it is being typed in.
 
-use bingux_ui::prelude::Icon;
+use bingux_ui::prelude::{Icon, tr};
 
 use super::{Address, SearchEngine, Typed};
 
@@ -70,13 +70,20 @@ impl Suggestion {
             Typed::Nothing => return Vec::new(),
             Typed::Address(url) => Suggestion {
                 source: Source::Typed,
-                title: format!("Go to {}", Address::new(&url).display()),
+                title: tr!(
+                    "browser-address-go-to",
+                    address = Address::new(&url).display()
+                ),
                 detail: url.clone(),
                 url,
             },
             Typed::Search(words) => Suggestion {
                 source: Source::Typed,
-                title: format!("Search {} for \u{201c}{words}\u{201d}", engine.name),
+                title: tr!(
+                    "browser-address-search-for",
+                    engine = engine.name,
+                    words = words.as_str()
+                ),
                 detail: String::new(),
                 url: engine.url_for(&words),
             },
@@ -144,6 +151,7 @@ mod tests {
 
     #[test]
     fn the_first_row_is_what_was_typed() {
+        crate::locale::register();
         let rows = Suggestion::list("example.com", &SearchEngine::ALL[0], &[], &[]);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].source, Source::Typed);
@@ -159,11 +167,13 @@ mod tests {
 
     #[test]
     fn nothing_typed_offers_nothing() {
+        crate::locale::register();
         assert!(Suggestion::list("  ", &SearchEngine::ALL[0], &[], &history()).is_empty());
     }
 
     #[test]
     fn open_tabs_come_before_history_and_are_not_repeated() {
+        crate::locale::register();
         let tabs = [OpenTab {
             key: 7,
             title: "Example Domain".to_string(),
@@ -180,6 +190,7 @@ mod tests {
 
     #[test]
     fn the_list_is_never_longer_than_the_limit() {
+        crate::locale::register();
         let history: Vec<Visited> = (0..30)
             .map(|index| visited(&format!("https://site{index}.example/"), "Site"))
             .collect();

@@ -185,9 +185,9 @@ impl Component for AddressBar {
         let mut field = text_field(address, submit)
             .fill_width()
             .placeholder(if is_compact() {
-                "Search or address"
+                tr!("browser-address-compact-placeholder")
             } else {
-                "Search or enter an address"
+                tr!("browser-address-placeholder")
             })
             .leading(Icon::Search)
             .a11y_id(id)

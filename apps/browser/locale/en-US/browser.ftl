@@ -75,3 +75,14 @@ browser-history-cleared-link-colours-kept = History cleared. Link colours on pag
 
 # The toolbar button that puts the page zoom back to 100 %. $percent is the zoom.
 browser-zoom-chip = { NUMBER($percent) }%
+
+## Address bar
+
+# Placeholder of the empty address field on a desktop.
+browser-address-placeholder = Search or enter an address
+# Placeholder of the empty address field on a phone, which has less room.
+browser-address-compact-placeholder = Search or address
+# First suggestion when what was typed is an address. $address is the address as the bar shows it.
+browser-address-go-to = Go to { $address }
+# First suggestion when what was typed is words. $engine is the name of the search engine, $words what was typed.
+browser-address-search-for = Search { $engine } for “{ $words }”
