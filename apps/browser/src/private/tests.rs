@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
-use crate::browser::{Browser, Options, Profile};
+use crate::browser::{Belonging, Browser, Options, Profile};
 use crate::profiles::Places;
 use crate::profiles::{Opened, Waiting};
 use crate::store::Files;
@@ -113,5 +113,38 @@ fn a_private_window_has_no_history_and_its_tabs_are_private() {
     private.poll();
     assert!(!private.has_history());
     assert_eq!(private.history_len(), 0);
-    assert!(private.tabs.active().unwrap().private);
+    assert!(private.options.private);
+}
+
+#[test]
+fn a_private_window_opens_the_next_private_window_from_the_same_profile() {
+    use crate::settings::Settings;
+
+    // A private window remembers the profile whose settings it started with,
+    // so the next one does not have to guess it (or read it from the
+    // environment of the process).
+    let private = Browser::with_profile(
+        TestDoubleBackend::new(),
+        Options { private: true },
+        Profile::private(Some("work".to_string()), Settings::default()),
+    );
+    assert_eq!(private.private_window_profile().as_deref(), Some("work"));
+
+    // A window of a registered profile hands on its own.
+    let own = Browser::with_profile(
+        TestDoubleBackend::new(),
+        Options::default(),
+        Profile {
+            belonging: Belonging::Registered {
+                id: "p1".to_string(),
+                name: "Personal".to_string(),
+            },
+            ..Profile::default()
+        },
+    );
+    assert_eq!(own.private_window_profile().as_deref(), Some("p1"));
+
+    // A window with no profile has none to hand on.
+    let bare = Browser::new(TestDoubleBackend::new(), Options::default());
+    assert_eq!(bare.private_window_profile(), None);
 }

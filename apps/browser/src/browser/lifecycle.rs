@@ -71,7 +71,6 @@ impl Browser {
         let mut tab = Tab::blank(key, TabKind::Web);
         tab.session = Some(new);
         tab.url = url.to_string();
-        tab.private = self.options.private;
         tab.opener = opener_key;
         tab.load.loading = !url.is_empty();
         let place = opener_key.map_or(Place::End, Place::After);

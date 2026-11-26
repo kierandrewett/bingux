@@ -40,7 +40,7 @@ impl Strip {
             .iter()
             .map(|tab| {
                 TabItem::new(tab.key, tab.display_title())
-                    .icon(tab.icon())
+                    .icon(tab.icon(browser.options.private))
                     .pinned(tab.pinned)
                     .status(Self::status_of(tab))
             })
@@ -64,10 +64,11 @@ impl Tab {
     /// The icon a tab has until the engine can hand over the page's own: the
     /// engine reports only the address of a page's icon (`VV_EVENT_FAVICON`), and
     /// the browser fetches nothing on its own.
-    pub fn icon(&self) -> Icon {
+    /// `private` is whether the window is a private one: every tab of it is.
+    pub fn icon(&self, private: bool) -> Icon {
         match self.kind {
             TabKind::Settings => Icon::EmblemSystem,
-            TabKind::Web if self.private => Icon::NetworkWirelessEncrypted,
+            TabKind::Web if private => Icon::NetworkWirelessEncrypted,
             TabKind::Web => Icon::WebBrowser,
         }
     }

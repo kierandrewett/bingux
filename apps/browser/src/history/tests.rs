@@ -23,7 +23,7 @@ use bingux_ui::search::{Cancel, SearchService};
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 use rusqlite::Connection;
 
-use crate::browser::{Browser, Options, Profile};
+use crate::browser::{Belonging, Browser, Options, Profile};
 use crate::history::{Change, Database, History, INDEX, Page};
 use crate::profiles::{Folders, Places};
 use crate::settings::Settings;
@@ -141,8 +141,7 @@ fn a_page_load_in_the_window_is_recorded_and_a_private_window_records_none() {
         TestDoubleBackend::new(),
         Options::default(),
         Profile {
-            id: None,
-            name: None,
+            belonging: Belonging::Unregistered,
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),
@@ -171,8 +170,7 @@ fn clear_history_empties_the_file_and_the_index_and_asks_the_engine_to_forget_vi
         double.clone(),
         Options::default(),
         Profile {
-            id: None,
-            name: None,
+            belonging: Belonging::Unregistered,
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),
@@ -269,8 +267,7 @@ fn a_damaged_file_is_left_as_it_is_until_start_over_moves_it_aside() {
         TestDoubleBackend::new(),
         Options::default(),
         Profile {
-            id: None,
-            name: None,
+            belonging: Belonging::Unregistered,
             settings: Settings::default(),
             settings_keeping: Keeping::Saved,
             store: Some(open(&root, &search)),

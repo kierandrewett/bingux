@@ -47,7 +47,7 @@ impl Component for TabsSheet {
                 .map(|tab| {
                     let key = tab.key;
                     let mut line = row(tab.display_title())
-                        .leading(tab.icon())
+                        .leading(tab.icon(browser.options.private))
                         .selected(key == active)
                         .on_press(move |_: ()| {
                             ctx.with(|browser| browser.select(key));

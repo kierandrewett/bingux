@@ -47,7 +47,6 @@ impl Browser {
         let key = self.tabs.next_key();
         let mut tab = Tab::blank(key, TabKind::Web);
         tab.url = url.to_string();
-        tab.private = self.options.private;
         tab.opener = opener;
         let opener_session = opener.and_then(|key| self.session_of(key));
         let config = self.config(url, opener_session, !select && !self.tabs.is_empty());
@@ -344,7 +343,6 @@ impl Browser {
                     if let Some(tab) = self.tabs.get_mut(key) {
                         tab.kind = TabKind::Web;
                         tab.session = Some(session);
-                        tab.private = self.options.private;
                         tab.url = url.to_string();
                         tab.load.loading = !url.is_empty();
                     }

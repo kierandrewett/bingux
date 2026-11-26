@@ -18,7 +18,7 @@ use std::path::Path;
 use bingux_ui::search::SearchService;
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
-use crate::browser::{Browser, Options, Profile};
+use crate::browser::{Belonging, Browser, Options, Profile};
 use crate::profiles::{Folders, Places};
 use crate::settings::Settings;
 use crate::store::Store;
@@ -40,8 +40,7 @@ fn window(root: &Path) -> Browser {
         TestDoubleBackend::new(),
         Options::default(),
         Profile {
-            id: None,
-            name: None,
+            belonging: Belonging::Unregistered,
             settings,
             settings_keeping: keeping,
             store: Some(store),

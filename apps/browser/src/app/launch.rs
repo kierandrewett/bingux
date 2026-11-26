@@ -6,7 +6,7 @@ use std::os::unix::process::CommandExt;
 use bingux_ui::prelude::{Application, Message, i18n_id, tr};
 
 use super::CommandLine;
-use crate::browser::{Options, Profile};
+use crate::browser::{Belonging, Options, Profile};
 use crate::engine::Engine;
 use crate::profiles::{Folders, Places};
 use crate::profiles::{Gate, GateWindow};
@@ -144,11 +144,13 @@ impl Launch {
                     ),
                 };
                 let profile = Profile {
-                    id: opened
-                        .entry
-                        .as_ref()
-                        .map(|entry| entry.id.as_str().to_string()),
-                    name: opened.entry.as_ref().map(|entry| entry.name.clone()),
+                    belonging: match &opened.entry {
+                        Some(entry) => Belonging::Registered {
+                            id: entry.id.as_str().to_string(),
+                            name: entry.name.clone(),
+                        },
+                        None => Belonging::Unregistered,
+                    },
                     settings: opened.settings,
                     settings_keeping,
                     store,

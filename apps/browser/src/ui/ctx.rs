@@ -111,11 +111,7 @@ impl Ctx {
                     );
                 }),
                 UiRequest::NewPrivateWindow => crate::private::PrivateWindow::open(
-                    self.browser
-                        .peek()
-                        .profile
-                        .as_ref()
-                        .map(|(id, _)| id.clone()),
+                    self.browser.peek().private_window_profile(),
                 ),
                 UiRequest::OpenProfile(id) => crate::profiles::ProfileWindow::open(id),
                 UiRequest::ConfirmClearHistory => crate::history::ClearDialog::open(self),

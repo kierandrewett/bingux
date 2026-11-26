@@ -66,13 +66,33 @@ pub struct ViewSize {
     pub scale: f32,
 }
 
+/// Which profile a window belongs to.
+///
+/// Why an enum: a window used to carry the registry id and the name as two
+/// `Option`s, and a private window had the id and no name. The pair was then
+/// read as "no profile", so the window could not say which profile it was
+/// started from; a new private window found it again only through the
+/// environment of the process.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Belonging {
+    /// No registered profile: a test, a snapshot, or a folder named by the
+    /// environment.
+    #[default]
+    Unregistered,
+    /// A window of the profile with registry id `id`, called `name`.
+    Registered { id: String, name: String },
+    /// A private window. It has no profile of its own and keeps nothing; `from`
+    /// is the profile whose settings it started with, and so the one a new
+    /// private window from this one starts from.
+    PrivateFrom(Option<String>),
+}
+
 /// The profile a window opens in: who it is, what it starts with, and the
 /// writer that keeps what changes.
 #[derive(Debug)]
 pub struct Profile {
-    /// The registry's id and name; `None` for a window without a registered profile.
-    pub id: Option<String>,
-    pub name: Option<String>,
+    /// Which profile this window belongs to.
+    pub belonging: Belonging,
     pub settings: Settings,
     /// Whether the settings are kept: how reading them at open went.
     pub settings_keeping: Keeping,
@@ -89,8 +109,7 @@ impl Default for Profile {
     /// No profile: a test or a snapshot. Nothing is kept.
     fn default() -> Self {
         Self {
-            id: None,
-            name: None,
+            belonging: Belonging::Unregistered,
             settings: Settings::default(),
             settings_keeping: Keeping::NotSaved(NotSaved::NoProfile),
             store: None,
@@ -104,8 +123,7 @@ impl Profile {
     /// and no store, so nothing it does is written.
     pub fn private(id: Option<String>, settings: Settings) -> Self {
         Self {
-            id,
-            name: None,
+            belonging: Belonging::PrivateFrom(id),
             settings,
             settings_keeping: Keeping::NotSaved(NotSaved::Private),
             store: None,
@@ -134,8 +152,12 @@ pub struct Browser {
     /// The writer of the profile, when this window keeps anything.
     pub(crate) store: Option<Store>,
     /// The profile the window belongs to: its registry id and name, `None`
-    /// for a window opened without one.
+    /// for a window opened without one and for a private window.
     pub profile: Option<(String, String)>,
+    /// For a private window: the profile whose settings it started with.
+    /// `None` outside a private window. Set with `profile` from one
+    /// [`Belonging`], so the two are never both set.
+    pub(crate) private_from: Option<String>,
     /// Every profile as (id, name), for the main menu's Profile row.
     pub profiles: Vec<(String, String)>,
     pub view: ViewSize,
@@ -178,7 +200,14 @@ impl Browser {
             settings: profile.settings,
             settings_keeping: Keeping::Loading,
             store: profile.store,
-            profile: profile.id.zip(profile.name),
+            profile: match &profile.belonging {
+                Belonging::Registered { id, name } => Some((id.clone(), name.clone())),
+                Belonging::Unregistered | Belonging::PrivateFrom(_) => None,
+            },
+            private_from: match &profile.belonging {
+                Belonging::PrivateFrom(from) => from.clone(),
+                Belonging::Unregistered | Belonging::Registered { .. } => None,
+            },
             profiles: profile.known,
             view: ViewSize {
                 width: 1024,
@@ -209,6 +238,15 @@ impl Browser {
         self.settings.search_engine = engine.id.to_string();
         if let Some(store) = &self.store {
             store.save_settings(&self.settings);
+        }
+    }
+
+    /// The registry id of the profile a new private window starts from: this
+    /// window's own, or for a private window the one it started from.
+    pub fn private_window_profile(&self) -> Option<String> {
+        match &self.profile {
+            Some((id, _)) => Some(id.clone()),
+            None => self.private_from.clone(),
         }
     }
 

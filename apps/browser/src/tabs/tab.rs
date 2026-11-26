@@ -55,7 +55,6 @@ pub struct Tab {
     pub zoom: Zoom,
     pub audio: Audio,
     pub pinned: bool,
-    pub private: bool,
     pub gone: Option<GoneReason>,
     /// The address of the link under the pointer.
     pub hover: Option<String>,
@@ -89,7 +88,6 @@ impl Tab {
             zoom: Zoom::default(),
             audio: Audio::default(),
             pinned: false,
-            private: false,
             gone: None,
             hover: None,
             fullscreen: false,
