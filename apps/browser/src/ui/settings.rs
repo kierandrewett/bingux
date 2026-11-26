@@ -13,15 +13,23 @@ use bingux_ui::web_view::{
 use freya::prelude::*;
 
 use crate::model::address::ENGINES;
-use crate::model::keeping::Keeping;
+use crate::model::keeping::{Keeping, Part};
 use crate::profile::history;
 
 use super::ctx::Ctx;
 
+/// The search engine row's second line: what it is for, or why a change
+/// is not kept.
+pub fn settings_text(keeping: &Keeping) -> String {
+    keeping
+        .text(Part::Settings)
+        .unwrap_or_else(|| "Used for words typed in the address bar".to_string())
+}
+
 /// The history row's second line: why history is not kept, or how many
 /// pages it holds.
 pub fn history_text(has_history: bool, keeping: &Keeping, pages: u64) -> String {
-    if let Some(why) = keeping.text("History") {
+    if let Some(why) = keeping.text(Part::History) {
         return why;
     }
     if !has_history {
@@ -169,12 +177,13 @@ impl Component for SettingsPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
-        let (info, selected, remembered, has_history, history_keeping, scope) = {
+        let (info, selected, remembered, settings_keeping, has_history, history_keeping, scope) = {
             let browser = ctx.browser.read();
             (
                 browser.backend().info(),
                 browser.settings.engine_index(),
                 browser.permissions.origins().len(),
+                browser.settings_keeping.clone(),
                 browser.has_history(),
                 browser.history_keeping.clone(),
                 browser.history_clear_scope(),
@@ -187,9 +196,9 @@ impl Component for SettingsPage {
             .enumerate()
             .map(|(at, engine)| (at.to_string(), engine.name.to_string()))
             .collect();
-        let search = Group::new("Address bar".to_string()).row(
+        let mut search = Group::new("Address bar".to_string()).row(
             row("Search engine")
-                .subtitle("Used for words typed in the address bar")
+                .subtitle(settings_text(&settings_keeping))
                 .trailing(dropdown(
                     engines,
                     selected.to_string(),
@@ -200,6 +209,18 @@ impl Component for SettingsPage {
                     },
                 )),
         );
+        if settings_keeping.can_start_over() {
+            search = search.row(
+                row("Settings file")
+                    .subtitle("Kept aside as it is, and a new one written")
+                    .trailing(
+                        action_button("Start over", move |_: ()| {
+                            ctx.with(|browser| browser.start_over_settings());
+                        })
+                        .compact(),
+                    ),
+            );
+        }
         let mut history_row =
             row("Browsing history").subtitle(history_text(has_history, &history_keeping, pages));
         history_row = if history_keeping.can_start_over() {
@@ -295,6 +316,62 @@ impl Component for SettingsPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_keeping_state_is_said_on_the_page() {
+        use crate::model::keeping::NotSaved;
+        let not = |why| Keeping::NotSaved(why);
+        assert_eq!(
+            settings_text(&Keeping::Saved),
+            "Used for words typed in the address bar"
+        );
+        assert_eq!(
+            history_text(true, &Keeping::Saved, 1),
+            "1 page kept in this profile"
+        );
+        assert_eq!(
+            history_text(true, &Keeping::Loading, 0),
+            "0 pages kept in this profile"
+        );
+        assert_eq!(
+            history_text(false, &not(NotSaved::Private), 0),
+            "Changes here last until this window closes"
+        );
+        assert_eq!(
+            settings_text(&not(NotSaved::Private)),
+            "Changes here last until this window closes"
+        );
+        let states = [
+            (NotSaved::NoProfile, "no profile"),
+            (NotSaved::DiskFull, "disk is full"),
+            (NotSaved::ReadOnly, "read-only"),
+            (NotSaved::Busy, "Another program"),
+            (
+                NotSaved::TooNew {
+                    found: 9,
+                    supported: 1,
+                },
+                "newer Browser",
+            ),
+            (
+                NotSaved::Damaged {
+                    detail: String::new(),
+                },
+                "Start over",
+            ),
+            (NotSaved::Failed("no luck".to_string()), "no luck"),
+        ];
+        for (why, words) in states {
+            assert!(
+                settings_text(&not(why.clone())).contains(words),
+                "settings: {why:?}"
+            );
+            assert!(
+                history_text(true, &not(why.clone()), 3).contains(words),
+                "history: {why:?}"
+            );
+        }
+    }
 
     #[test]
     fn a_failed_check_is_red_a_warning_is_amber_and_a_healthy_one_is_quiet() {

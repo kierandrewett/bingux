@@ -5,7 +5,7 @@
 //! searchable `history`; the window only sends it what was visited.
 
 use super::Browser;
-use crate::model::keeping::{ClearScope, Keeping, NotSaved};
+use crate::model::keeping::{ClearScope, Keeping, NotSaved, Part};
 use crate::profile::store::Event;
 
 impl Browser {
@@ -30,7 +30,7 @@ impl Browser {
             return;
         }
         if !by_design(&keeping)
-            && let Some(text) = keeping.text("Settings")
+            && let Some(text) = keeping.text(Part::Settings)
         {
             self.notify(text);
         }
@@ -43,7 +43,7 @@ impl Browser {
             return;
         }
         if !by_design(&keeping)
-            && let Some(text) = keeping.text("History")
+            && let Some(text) = keeping.text(Part::History)
         {
             self.notify(text);
         }

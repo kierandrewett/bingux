@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build (if needed) and start the Bingux browser against the Vivarium engine.
 #
-#   VIVARIUM_SDK_DIR=/path/to/sdk apps/browser/run.sh [--private] [ADDRESS]...
+#   VIVARIUM_SDK_DIR=/path/to/sdk apps/browser/run.sh [--private] [--profile NAME] [ADDRESS]...
 #
 # VIVARIUM_SDK_DIR is a Vivarium SDK folder: vivarium-engine, libvivarium.so (and
 # libvivarium.so.0 beside it), libxul.so and include/vivarium.h. Everything else

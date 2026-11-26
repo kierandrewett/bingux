@@ -106,7 +106,7 @@ $XDG_RUNTIME_DIR/bingux-browser/<id>/                 the engine's sockets
 | `created`      | Unix seconds, for the profile page and the order of the list                                                                                         |
 | `deleting`     | Set before a delete removes folders; a start finishes any profile marked so. Such a profile is never listed or opened                                |
 
-Operations (all in `B/model/profiles.rs`, all off the UI thread, each one read-change-replace under `profiles.lock`):
+Operations (all in `B/profile/registry.rs`, all off the UI thread, each one read-change-replace under `profiles.lock`):
 
 | Operation                | Rule                                                                                                                                |
 | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -131,7 +131,7 @@ write is a whole new file renamed over the old, so a reader sees the old file or
 { "version": 1, "search_engine": "duckduckgo" }
 ```
 
-- Today's only setting is the address bar's search engine (`B/ui/settings.rs`, an index into `address::ENGINES`).
+- Today's only setting is the address bar's search engine (`B/profile/settings.rs`; the page picks from `address::ENGINES`).
   It is stored by a **stable id** (`duckduckgo`, `startpage`, `wikipedia`, `google`), not the index: reordering the
   list must not change anyone's choice. An unknown id reads as the default and is kept as written until the person
   picks another, so a newer browser's engine is not lost.
@@ -163,13 +163,13 @@ CREATE INDEX visits_at ON visits(at);
 CREATE INDEX pages_last_visit ON pages(last_visit);
 ```
 
-- `pages` is what the address field's suggestions read (`B/model/history.rs`: url, title, count, last). `visits`
+- `pages` is what the `history` searchable holds (url, title, count, last visit; `B/profile/history.rs`). `visits`
   keeps each visit's time, which the Library needs (Library 01: visits per day, filter by date, clear a range).
 - Opened with `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`, `secure_delete=ON` (deleted history is
   overwritten, not left in free pages) and a busy timeout. The same pattern as `crates/data-usage/src/schema.rs`:
   steps in a list, each run once in one immediate transaction, never edited after release.
-- **What is recorded:** what `History::record` records today, the top-level loads of a non-private tab; `about:`,
-  `bingux:` and empty addresses are not. A title that arrives later updates the page.
+- **What is recorded:** the top-level loads of a non-private tab that finished without an error (`B/model/browser/events.rs`);
+  `about:`, `bingux:` and empty addresses are not (`history::is_recorded`). A title that arrives later updates the page.
 - **Cap:** the 50,000 most recently visited pages and their visits. A larger history is trimmed by the store's
   thread after start, oldest first. No age expiry: clearing a range is the person's tool (Library, slice 5).
 - **Later steps** (each its own schema version, each with its slice): bookmarks and folders, reading list, custom
@@ -224,9 +224,9 @@ with their slices, each as its own index.
 
 The service today (`UI/search.rs`, `crates/search`, `design/search.md`):
 
-- An app implements `Searchable` (`name`, `schema`, `documents()`), calls `search::register` once, and the process-wide
-  `SearchService` loads it on the worker pool. `search::index(name)` gives the `Index` for `upsert`, `delete` and
-  `clear` when the data changes.
+- An index is made with `SearchService::create_index(name, schema)` and changed with its `Index` (`upsert`, `delete`,
+  `clear`, `replace_all`). `search::register` wraps that for a `Searchable` whose `documents()` the service loads on a
+  worker; the history does not use it (see Loading below).
 - A component asks with `use_search_with(Search, active)`: off the UI thread, a newer query drops the older one, the
   previous hits stay while the next run is going.
 - Ranking is the engine's: words, typo, proximity, attribute (field weight, then position), exactness, then BM25F.
@@ -236,15 +236,15 @@ The service today (`UI/search.rs`, `crates/search`, `design/search.md`):
 
 The history searchable, built in step 6:
 
-| Part            | Shape                                                                                                                       |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Index name      | `history`. One per process, and a process has one profile                                                                   |
-| Document id     | The page's URL (unique in `pages`)                                                                                          |
-| Searched fields | `host` 10 (without `www.`), `title` 8, `path` 2 (the rest of the address)                                                   |
-| Other fields    | `uri` (the URL: what choosing the hit opens), `visit_count`, `last_visit` (unix ms), both sortable and filterable           |
-| Loading         | `documents()` reads `pages` on the worker through its own read-only connection (WAL lets it read beside the store's writer) |
-| Changes         | The store's thread upserts the one page after each recorded visit or title, and clears the index on Clear history           |
-| Exposure        | `external(false)`: Spotlight never sees history                                                                             |
+| Part            | Shape                                                                                                                                                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Index name      | `history`. One per process, and a process has one profile                                                                                                                                                               |
+| Document id     | The page's URL (unique in `pages`)                                                                                                                                                                                      |
+| Searched fields | `host` 10 (without `www.`), `title` 8, `path` 2 (the rest of the address)                                                                                                                                               |
+| Other fields    | `uri` (the URL: what choosing the hit opens), `visit_count`, `last_visit` (unix ms), both sortable and filterable                                                                                                       |
+| Loading         | The store creates the index with `create_index` when the profile opens (empty), and its thread fills it from `pages` with `replace_all` after it opens the file. One connection, one reader: no second read of the file |
+| Changes         | The store's thread upserts the one page as each visit or title arrives (before it is written), and clears the index on Clear history                                                                                    |
+| Exposure        | `external(false)`: Spotlight never sees history                                                                                                                                                                         |
 
 The address field's query:
 
@@ -261,11 +261,12 @@ Search::new(typed).index("history").limit(suggest::LIMIT).sort("_score:desc").so
 - **Limits:** the address field asks for `suggest::LIMIT` (7) hits; a Library page pages with `offset` up to the
   engine's `MAX_PAGE` (1000). The index holds at most the store's cap of 50,000 pages, well inside the engine's
   default `Limits`.
-- **One path:** `History::matching` and its scoring (`B/model/history.rs`, `parity.md` P9) are deleted. The pure
-  `suggest()` takes the history hits as rows instead of the `History` struct, so it stays tested without a window.
-- **A private or guest window registers no history index.** It records no visit (as today), so its address field
-  shows the typed row and open tabs only. A profile whose store cannot be kept (`NotSaved`) still registers the
-  index: the visits of this run are found, they are only not written.
+- **One path:** `History::matching` and the in-memory `History` (`B/model/history.rs`, `parity.md` P9) are deleted. The
+  pure `suggest()` takes the hits as `Visited` rows, so it stays tested without a window. The requests are
+  `history::suggestions`, `history::recent` (the new tab page) and `history::everything` (the settings page's count).
+- **A private or guest window has no history index.** It has no store, records no visit, and its address field shows
+  the typed row and open tabs only. A profile whose store cannot be kept (`NotSaved`) still has the index: the visits
+  of this run are found, they are only not written.
 
 ### Vivarium proposals (not built; nothing in `~/dev/vivarium` is changed)
 
@@ -349,8 +350,8 @@ an engine profile under `$XDG_RUNTIME_DIR` removed with the window, `config.rs` 
 - **It belongs to a profile for its settings only.** Opened from a window it gets that profile's id
   (`--profile ID`); from the command line, the default profile's. It reads that profile's `settings.json` and the
   registry with plain reads. It opens no SQLite file, takes no `flock`, creates no lock file and writes no setting.
-- **Its history:** it records none (as today: `Options::private` keeps visits out), and it registers no `history`
-  searchable.
+- **Its history:** it records none (as today: `Options::private` keeps visits out); it has no store, so there is no
+  `history` searchable in its process.
 - **A setting changed in a private window** applies to that window and is not saved; the model's settings state is
   `NotSaved(Private)` so the page can say "Changes here last until this window closes".
 - **A guest window** (Settings 10) is a private window that reads no profile at all: default settings, no registry
@@ -372,12 +373,12 @@ an engine profile under `$XDG_RUNTIME_DIR` removed with the window, `config.rs` 
   window"), with Close.
 - **The registry** is changed by any profile's process (rename Work from Personal's Settings). Every change is
   read-change-replace under `flock` on `profiles.lock`, held only for that operation.
-- **Inside a process** the store has one thread that owns the SQLite connection. The model sends it commands
-  (record a visit, set a title, clear, load) over a channel and takes its results through `Browser::poll`, the same
-  way engine events arrive (`B/model/browser/events.rs`). Nothing touches a file on the UI thread
-  (`CONTRIBUTING.md`, "Nothing may block the UI thread").
-- **Writes are batched:** the thread commits what has queued at most once a second, and on quit (bounded, as the
-  engine's own quit is). A crash loses at most the last second of history.
+- **Inside a process** the store (`B/profile/store.rs`) has one thread that owns the SQLite connection and writes
+  `settings.json`. The model sends it commands (record a visit, set a title, clear, save settings, start over) over a
+  channel and takes its `Keeping` events through `Browser::poll` (`B/model/browser/kept.rs`), the same way engine
+  events arrive. Nothing touches a file on the UI thread (`CONTRIBUTING.md`, "Nothing may block the UI thread").
+- **Writes are batched:** the thread commits what has queued at most once a second, on flush, and when the store is
+  dropped with the window. A crash loses at most the last second of history.
 - **Startup order:** in `main`, before the window: resolve the profile (registry read, migration rename, `flock`).
   Each is a handful of system calls. Opening the database, migrating its schema and loading history happen on the
   store's thread after the window shows; until history arrives, suggestions use the visits of this run.
@@ -393,7 +394,7 @@ Each failure is a value in the model, never a panic and never a silent loss. The
 - **One part of the store cannot be kept.** The window works; the settings page and a one-time toast say what is not
   kept.
 
-`ProfileState` (in `B/model/profiles.rs`):
+`ProfileState` (in `B/profile/open.rs`):
 
 | State                                 | When                                                          | What the window shows                                                                                                               | Actions           |
 | ------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
@@ -406,18 +407,20 @@ Each failure is a value in the model, never a panic and never a silent loss. The
 | `Unwritable { path, reason }`         | Folder cannot be created or locked: read-only mount, `EACCES` | "Browser cannot keep anything in <path>: <reason>"                                                                                  | Close             |
 | `UnknownProfile { asked }`            | `--profile` names no profile                                  | "There is no profile called <asked>"                                                                                                | Close             |
 
-`Keeping` (one for settings, one for history, in the `Browser` model):
+`Keeping` (one for settings, one for history, in the `Browser` model; `B/model/keeping.rs`):
 
-| State                                   | When                                                                                              | What the person sees (settings page row subtitle; one toast the first time)                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Saved`                                 | The last write succeeded                                                                          | Nothing                                                                                                                                         |
-| `Loading`                               | History not read yet                                                                              | Nothing: the page keeps its layout (loading contract)                                                                                           |
-| `NotSaved(Private)`                     | A private or guest window                                                                         | "Changes here last until this window closes"                                                                                                    |
-| `NotSaved(DiskFull)`                    | `ENOSPC` / `SQLITE_FULL` on a write                                                               | "The disk is full: history is not being saved". Kept in memory; the next write tries again; the state clears when a write succeeds              |
-| `NotSaved(ReadOnly)`                    | `EROFS`, `EACCES`, `SQLITE_READONLY`                                                              | "History cannot be saved: <folder> is read-only"                                                                                                |
-| `NotSaved(TooNew { found, supported })` | `user_version` or `version` above this build's                                                    | "This profile was used by a newer Browser. Update Browser to keep history". Read nothing, write nothing                                         |
-| `NotSaved(Damaged { kept_as })`         | `SQLITE_CORRUPT`, `SQLITE_NOTADB`, a failed `quick_check`, or `settings.json` that does not parse | "History could not be read". Action Start over: the damaged file is renamed `browser.sqlite.damaged-<time>` and a new one made. Never automatic |
-| `NotSaved(Failed(text))`                | Any other error                                                                                   | The error text                                                                                                                                  |
+| State                                   | When                                                                                              | What the person sees (settings page row subtitle; one toast the first time)                                                                                              |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Saved`                                 | The last write succeeded                                                                          | Nothing                                                                                                                                                                  |
+| `Loading`                               | History not read yet                                                                              | Nothing: the page keeps its layout (loading contract)                                                                                                                    |
+| `NotSaved(Private)`                     | A private or guest window                                                                         | "Changes here last until this window closes" (no toast: it is how the window was opened)                                                                                 |
+| `NotSaved(NoProfile)`                   | A window opened without a profile (a test, a snapshot)                                            | "This window has no profile: history is not kept" (no toast)                                                                                                             |
+| `NotSaved(DiskFull)`                    | `ENOSPC` / `SQLITE_FULL` on a write                                                               | "The disk is full: history is not being saved". Kept in memory; the next write tries again; the state clears when a write succeeds                                       |
+| `NotSaved(ReadOnly)`                    | `EROFS`, `EACCES`, `SQLITE_READONLY`, `SQLITE_CANTOPEN`                                           | "History cannot be saved: the profile folder is read-only". The next write tries again                                                                                   |
+| `NotSaved(Busy)`                        | `SQLITE_BUSY` / `SQLITE_LOCKED` after the busy timeout: another program holds the file            | "Another program is using the history file: trying again with the next change"                                                                                           |
+| `NotSaved(TooNew { found, supported })` | `user_version` or `version` above this build's                                                    | "This profile was used by a newer Browser. Update Browser to keep history". Read nothing, write nothing                                                                  |
+| `NotSaved(Damaged { detail })`          | `SQLITE_CORRUPT`, `SQLITE_NOTADB`, a failed `quick_check`, or `settings.json` that does not parse | "History could not be read". Action Start over: the damaged file (and its `-wal`, `-shm`) is renamed `browser.sqlite.damaged-<time>` and a new one made. Never automatic |
+| `NotSaved(Failed(text))`                | Any other error                                                                                   | The error text                                                                                                                                                           |
 
 Rules that hold in every row:
 

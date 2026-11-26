@@ -37,22 +37,51 @@ pub enum NotSaved {
     Failed(String),
 }
 
-impl Keeping {
-    pub fn is_saved(&self) -> bool {
-        matches!(self, Self::Saved | Self::Loading)
+/// The parts of a profile that are kept, each with its own [`Keeping`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Part {
+    Settings,
+    History,
+}
+
+impl Part {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Settings => "Settings",
+            Self::History => "History",
+        }
     }
 
-    /// One line for the settings page about `what` ("History", "Settings"),
-    /// or `None` when there is nothing to say.
-    pub fn text(&self, what: &str) -> Option<String> {
+    /// "is" or "are", as the name needs.
+    fn is(self) -> &'static str {
+        match self {
+            Self::Settings => "are",
+            Self::History => "is",
+        }
+    }
+
+    /// "it" or "them".
+    fn it(self) -> &'static str {
+        match self {
+            Self::Settings => "them",
+            Self::History => "it",
+        }
+    }
+}
+
+impl Keeping {
+    /// One line for the settings page about `part`, or `None` when there is
+    /// nothing to say.
+    pub fn text(&self, part: Part) -> Option<String> {
         let Self::NotSaved(why) = self else {
             return None;
         };
+        let (what, is, it) = (part.name(), part.is(), part.it());
         let lower = what.to_lowercase();
         Some(match why {
             NotSaved::Private => "Changes here last until this window closes".to_string(),
-            NotSaved::NoProfile => format!("This window has no profile: {lower} is not kept"),
-            NotSaved::DiskFull => format!("The disk is full: {lower} is not being saved"),
+            NotSaved::NoProfile => format!("This window has no profile: {lower} {is} not kept"),
+            NotSaved::DiskFull => format!("The disk is full: {lower} {is} not being saved"),
             NotSaved::ReadOnly => {
                 format!("{what} cannot be saved: the profile folder is read-only")
             }
@@ -63,9 +92,9 @@ impl Keeping {
                 format!("This profile was used by a newer Browser. Update Browser to keep {lower}")
             }
             NotSaved::Damaged { .. } => {
-                format!("{what} could not be read. Start over to keep it again")
+                format!("{what} could not be read. Start over to keep {it} again")
             }
-            NotSaved::Failed(text) => format!("{what} is not being saved: {text}"),
+            NotSaved::Failed(text) => format!("{what} {is} not being saved: {text}"),
         })
     }
 
@@ -109,13 +138,16 @@ mod tests {
 
     #[test]
     fn only_a_state_that_keeps_nothing_has_words() {
-        assert_eq!(Keeping::Saved.text("History"), None);
-        assert_eq!(Keeping::Loading.text("History"), None);
+        assert_eq!(Keeping::Saved.text(Part::History), None);
+        assert_eq!(Keeping::Loading.text(Part::History), None);
+        let full = Keeping::NotSaved(NotSaved::DiskFull);
         assert_eq!(
-            Keeping::NotSaved(NotSaved::DiskFull)
-                .text("History")
-                .as_deref(),
+            full.text(Part::History).as_deref(),
             Some("The disk is full: history is not being saved")
+        );
+        assert_eq!(
+            full.text(Part::Settings).as_deref(),
+            Some("The disk is full: settings are not being saved")
         );
         assert!(
             Keeping::NotSaved(NotSaved::Damaged {

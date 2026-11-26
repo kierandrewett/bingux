@@ -17,7 +17,7 @@ bingux_ui::web_view     WebView control + BrowserBackend (one trait)
 ## Run it
 
 ```sh
-VIVARIUM_SDK_DIR=/path/to/sdk apps/browser/run.sh [--private] [ADDRESS | WORDS | FILE]...
+VIVARIUM_SDK_DIR=/path/to/sdk apps/browser/run.sh [--private] [--profile NAME] [ADDRESS | WORDS | FILE]...
 ```
 
 `run.sh` checks the SDK folder (`vivarium-engine`, `libvivarium.so`, `libvivarium.so.0`), puts it on
@@ -38,16 +38,25 @@ profile is deleted when it closes. The engine's configuration is the host's: `BI
 (the mirror `security` reads from) and `VIVARIUM_SDK_DIR`. With no choice the security data (revocation)
 comes from Mozilla. The settings page shows what was chosen and does not change it.
 
-Where the engine keeps things (the XDG folders; a named profile, and a private window, keep every folder
-below their profile instead, so two profiles share nothing):
+Where things live (`docs/browser/profiles-and-store.md`, "Where things live"). Each profile is a folder with its
+own engine profile, store and engine process; `--profile NAME` picks one, and one process at a time holds a profile
+(`flock` on its `lock`). A named profile (`BINGUX_BROWSER_PROFILE`) keeps every folder below it, and a private
+window keeps its engine profile in the runtime folder and removes it when it closes:
 
-| What                        | Where                                    |
-| --------------------------- | ---------------------------------------- |
-| profile                     | `$XDG_DATA_HOME/bingux-browser/profile`  |
-| cache                       | `$XDG_CACHE_HOME/bingux-browser/engine`  |
-| crash dumps, never uploaded | `$XDG_STATE_HOME/bingux-browser/crashes` |
-| runtime sockets             | `$XDG_RUNTIME_DIR/bingux-browser`        |
-| downloads                   | `~/Downloads`                            |
+| What                               | Where                                                                                      |
+| ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| the list of profiles and its lock  | `$XDG_DATA_HOME/bingux-browser/profiles.json`, `profiles.lock`                             |
+| a profile: lock, settings, history | `$XDG_DATA_HOME/bingux-browser/profiles/<id>/` (`lock`, `settings.json`, `browser.sqlite`) |
+| its engine profile                 | `$XDG_DATA_HOME/bingux-browser/profiles/<id>/engine`                                       |
+| its engine cache                   | `$XDG_CACHE_HOME/bingux-browser/profiles/<id>`                                             |
+| its crash dumps, never uploaded    | `$XDG_STATE_HOME/bingux-browser/profiles/<id>/crashes`                                     |
+| its runtime sockets                | `$XDG_RUNTIME_DIR/bingux-browser/<id>`                                                     |
+| downloads                          | `~/Downloads`                                                                              |
+
+The first start moves an older browser's `$XDG_DATA_HOME/bingux-browser/profile` into a profile called Personal.
+Settings (the search engine) are written when they change; history is written at most a second after a visit, on
+the profile's store thread. The settings page says when either is not being kept and why. A private window reads
+its profile's settings and writes nothing.
 
 `file://` pages may read `Documents`, `Desktop`, `Pictures`, `Videos` and `Music` of the home folder (those that
 exist) and the folders `BINGUX_BROWSER_FILE_DIRS` names (a path list). A folder inside one of the engine's own
@@ -72,15 +81,16 @@ desktop size and at 390x800 over the test double. `--snapshot --list` names them
 
 ## The model
 
-| Part                  | What it holds                                                                                                                                                                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Tab`                 | url, title, load progress and error, security, history, zoom, audio, pinned, private, crash, the questions waiting (`Prompt`), find state, certificate error, opener                   |
-| `TabList`             | order (pinned first, as a block), the one on show, close rule (opener, else the neighbour that takes its place), reorder, pin                                                          |
-| `Browser`             | tabs, closed tabs, downloads, history, permissions, engine state, what only the window can do (`UiRequest`), toasts (`Notice`). It calls the backend itself; the UI calls its commands |
-| `address`             | `classify` (address, words, nothing; `javascript:` is words), `display`, `origin`, search engines                                                                                      |
-| `suggest`, `history`  | the rows under the address bar: typed text, open tabs, history                                                                                                                         |
-| `shortcuts`           | key and modifiers to `Command`, per platform (Ctrl on Linux and Windows, Command on macOS; Alt+1-9 on Linux)                                                                           |
-| `failure`, `security` | the words of error pages, certificate problems and the page info                                                                                                                       |
+| Part                  | What it holds                                                                                                                                                                                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Tab`                 | url, title, load progress and error, security, history, zoom, audio, pinned, private, crash, the questions waiting (`Prompt`), find state, certificate error, opener                                                                                                      |
+| `TabList`             | order (pinned first, as a block), the one on show, close rule (opener, else the neighbour that takes its place), reorder, pin                                                                                                                                             |
+| `Browser`             | tabs, closed tabs, downloads, permissions, engine state, the settings and whether they and the history are kept (`Keeping`), what only the window can do (`UiRequest`), toasts (`Notice`). It calls the backend and the profile's store itself; the UI calls its commands |
+| `address`             | `classify` (address, words, nothing; `javascript:` is words), `display`, `origin`, search engines                                                                                                                                                                         |
+| `suggest`             | the rows under the address bar: typed text, open tabs, then the hits of the `history` searchable                                                                                                                                                                          |
+| `profile`             | the registry, the profile lock, migration, and the store: `settings.json` and `browser.sqlite` on a thread of their own, and the bingux-ui searchable `history` (`profile/history.rs`)                                                                                    |
+| `shortcuts`           | key and modifiers to `Command`, per platform (Ctrl on Linux and Windows, Command on macOS; Alt+1-9 on Linux)                                                                                                                                                              |
+| `failure`, `security` | the words of error pages, certificate problems and the page info                                                                                                                                                                                                          |
 
 Every rule has a test (`cargo test`), the commands over `TestDoubleBackend`.
 
@@ -143,8 +153,12 @@ event. No thread of the browser waits on the engine.
   no call for that (the window's own fullscreen is the window's).
 - **A long address** is cut at the edge of the address field (bingux-ui's `TextField` clips; there is no
   ellipsis or fade), so on a phone `news.bingux.dev/popup` ends mid-letter.
-- **Not built:** persistent history, bookmarks, the engine's settings as editable controls, tear-off
-  tabs (a Bingux window has no window to drop into), right-to-left mirroring (see the request below).
+- **Clear history** clears the browser's history and its index, not the engine's Places, so visited-link colours
+  stay until Vivarium can forget visits (proposal V1 in `docs/browser/profiles-and-store.md`). The settings page and
+  the toast after Clear say so.
+- **Not built:** the profile picker and profile pages, bookmarks, the history manager (Library), the engine's
+  settings as editable controls, tear-off tabs (a Bingux window has no window to drop into), right-to-left mirroring
+  (see the request below).
 
 ## The engine's life
 
