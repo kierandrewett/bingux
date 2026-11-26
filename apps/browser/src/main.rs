@@ -32,6 +32,7 @@ use bingux_ui::prelude::Application;
 
 use crate::browser::{Options, Profile};
 mod error_pages;
+mod first_run;
 mod history;
 mod profiles;
 mod settings;

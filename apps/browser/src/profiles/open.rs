@@ -8,7 +8,7 @@
 
 use std::path::PathBuf;
 
-use crate::profile::migrate::{self, Migrated, MigrationError};
+use crate::first_run::{self, Migrated, MigrationError};
 use crate::profiles::lock::{LockError, ProfileLock};
 use crate::profiles::places::{Folders, Places};
 use crate::profiles::registry::{Entry, Id, Profiles, RegistryProblem, Startup};
@@ -192,7 +192,7 @@ pub fn open(places: &Places, asked: Option<&str>) -> Opened {
     let profiles = Profiles::new(places.clone());
     // A failure here is the registry's, and the start below reports it.
     let _ = profiles.finish_deletions();
-    let stale_cache = match migrate::first_run(&profiles) {
+    let stale_cache = match first_run::first_run(&profiles) {
         Ok(Migrated::Moved { stale_cache, .. }) => stale_cache,
         Ok(Migrated::Created(_) | Migrated::Nothing) => None,
         Err(MigrationError::Waiting { old }) => {
@@ -219,7 +219,8 @@ pub fn open(places: &Places, asked: Option<&str>) -> Opened {
         Ok(Startup::Ask(entries)) => Opened::Choose(entries),
         Ok(Startup::Unknown(asked)) => Opened::Problem(ProfileState::UnknownProfile { asked }),
         // Every profile was deleted by hand: start again with one.
-        Ok(Startup::Empty) => match profiles.create(migrate::FIRST_NAME, migrate::FIRST_COLOUR) {
+        Ok(Startup::Empty) => match profiles.create(first_run::FIRST_NAME, first_run::FIRST_COLOUR)
+        {
             Ok(entry) => {
                 let folders = places.folders(&entry.id);
                 let id = entry.id.clone();

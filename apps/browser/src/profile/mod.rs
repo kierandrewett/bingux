@@ -7,7 +7,5 @@
 //! opens the profile before the window exists, and the store has a thread of
 //! its own.
 
-pub mod migrate;
-
 #[cfg(test)]
 mod private_tests;
