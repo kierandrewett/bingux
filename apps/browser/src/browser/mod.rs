@@ -10,7 +10,10 @@ mod commands;
 mod events;
 mod kept;
 mod lifecycle;
+mod outbox;
 mod prompts;
+
+pub use outbox::{Notice, UiRequest};
 
 use std::sync::Arc;
 
@@ -24,7 +27,6 @@ use crate::model::address::{ENGINES, SearchEngine};
 use crate::model::downloads::Downloads;
 use crate::model::keeping::{Keeping, NotSaved};
 use crate::model::permissions::Permissions;
-use crate::model::shortcuts::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::TabList;
 use crate::profile::settings::Settings;
@@ -36,34 +38,6 @@ pub struct Options {
     /// Every tab is private: cookies and storage live in memory, and nothing
     /// is added to the history.
     pub private: bool,
-}
-
-/// A message for the person that is not part of a page: a toast.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Notice {
-    pub error: bool,
-    pub text: String,
-    /// A button on the toast: its label and what it runs.
-    pub action: Option<(String, Command)>,
-}
-
-/// Something only the window can do. The UI takes these after a command and
-/// does them.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum UiRequest {
-    /// Put the cursor in the address bar, with its text selected.
-    FocusAddress,
-    /// Open the find bar and focus its field.
-    OpenFind,
-    OpenDownloads,
-    OpenPageInfo,
-    OpenMainMenu,
-    /// Make the window fullscreen, or take it out of it.
-    Fullscreen(bool),
-    /// Start another browser window whose tabs are all private.
-    NewPrivateWindow,
-    /// Close the window: its last tab is gone.
-    CloseWindow,
 }
 
 /// A tab that was closed, for Reopen closed tab.
