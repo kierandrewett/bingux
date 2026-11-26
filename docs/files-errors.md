@@ -26,13 +26,16 @@ pub enum OpError {
     Invalid(NameError),
     CannotTrash(TrashRefusal),
 
-    /// A program or a feature this machine lacks: `Tool::Zip`, `Tool::SevenZip`,
-    /// `Tool::Ffmpeg`, `Tool::Named(String)` (a program name is not a sentence).
-    Missing(Tool),
-    /// This machine or drive cannot do it, and which of the known reasons.
-    Unsupported(Unsupported),
-    /// Anything else that went wrong, as a kind plus the facts it needs.
-    Failed(Failure),
+    /// A program the operation needs is not installed: its name (`zip`,
+    /// `7-Zip`, `ffmpeg`), which is not a sentence. Built.
+    Missing(String),
+    /// A call to the drive failed for a reason with a name: `IoKind::Full`,
+    /// `ReadOnly`, `QuotaFull`, `InUse`, `BetweenDrives`, ... Built.
+    Io(IoKind),
+    /// Still worded in English for the log, to be replaced by kinds as the
+    /// table below says: `Unsupported(String)` and `Other(String)`.
+    Unsupported(String),
+    Other(String),
 }
 ```
 
