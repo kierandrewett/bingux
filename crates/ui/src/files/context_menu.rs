@@ -13,7 +13,7 @@
 //! hints are what the eye reads here.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use bingux_files::places::{SpecialFolder, system_user_dirs};
 use bingux_files::{Entry, Sort, SortKey};
@@ -414,7 +414,7 @@ const MAX_TEMPLATES: usize = 30;
 /// The files of `dir` as templates, by name. Folders and hidden files are
 /// not templates.
 fn templates_in(dir: &Path) -> Vec<Template> {
-    let Ok(listing) = std::fs::read_dir(dir) else {
+    let Ok(listing) = crate::runtime::read_dir(dir) else {
         return Vec::new();
     };
     let mut found: Vec<Template> = listing
@@ -435,12 +435,36 @@ fn templates_in(dir: &Path) -> Vec<Template> {
 }
 
 /// The templates of this system: the files of the XDG Templates folder, when
-/// there is one.
+/// there is one. Reads the disk (the folder may be on a network share), so it
+/// runs on the pool; the menu reads [`cached_templates`].
 fn user_templates() -> Vec<Template> {
     let dirs = system_user_dirs();
     dirs.path(SpecialFolder::Templates)
         .map(templates_in)
         .unwrap_or_default()
+}
+
+/// What the last read of the Templates folder found.
+static TEMPLATES: Mutex<Vec<Template>> = Mutex::new(Vec::new());
+
+/// The templates the last read found: the menu of empty space is built on the
+/// UI thread, so it lists these and never waits for the folder. Empty until
+/// the first read lands, which [`refresh_templates`] starts with the window.
+fn cached_templates() -> Vec<Template> {
+    TEMPLATES
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
+}
+
+/// Read the Templates folder on the pool, for the next menu. The menu starts
+/// one each time it opens, so a template added meanwhile is there the next
+/// time.
+pub(super) fn refresh_templates() {
+    crate::task::spawn_detached("files-templates", || {
+        let found = user_templates();
+        *TEMPLATES.lock().unwrap_or_else(PoisonError::into_inner) = found;
+    });
 }
 
 /// The New file row: plain when there are no templates, otherwise a submenu
@@ -686,9 +710,10 @@ pub(super) fn menu_for_empty(env: &Env) -> Vec<MenuItem> {
                 Command::CompressSelection,
             )
         });
+    refresh_templates();
     realise(
         &target,
-        empty_plan(&facts, looks_of(env), &user_templates(), compress),
+        empty_plan(&facts, looks_of(env), &cached_templates(), compress),
     )
 }
 

@@ -170,6 +170,7 @@ pub(super) fn use_ui() -> Ui {
     // The first Open with menu should not wait for the disk.
     use_hook(open_with::warm);
     use_hook(super::compress::warm);
+    use_hook(super::context_menu::refresh_templates);
     Ui {
         rename: use_state(|| None),
         notice: use_state(|| None),
