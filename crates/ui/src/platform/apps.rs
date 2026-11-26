@@ -234,6 +234,7 @@ fn is_executable(path: &Path) -> bool {
 /// The desktop entry with this id (`org.example.App.desktop`). An id with a dash
 /// may also be a file in a subdirectory (`kde4-foo.desktop` is `kde4/foo.desktop`).
 pub fn find_entry(dirs: &Dirs, id: &str) -> Option<DesktopEntry> {
+    crate::runtime::assert_off_ui_thread("platform::apps::find_entry");
     for dir in dirs.application_dirs() {
         let mut candidates = vec![dir.join(id)];
         let stem = id.strip_suffix(".desktop").unwrap_or(id);
@@ -278,6 +279,7 @@ fn parse_associations(text: &str) -> HashMap<String, HashMap<String, Vec<String>
 /// or whose `TryExec` program is missing, is skipped. Then `mimeinfo.cache`,
 /// then any installed entry that lists the type. `None` when nothing does.
 pub fn default_for(dirs: &Dirs, mime: &str) -> Option<DesktopEntry> {
+    crate::runtime::assert_off_ui_thread("platform::apps::default_for");
     let usable = |id: &str, removed: &HashSet<String>| -> Option<DesktopEntry> {
         if removed.contains(id) {
             return None;
@@ -341,6 +343,7 @@ pub fn default_for(dirs: &Dirs, mime: &str) -> Option<DesktopEntry> {
 /// Every installed entry, the first of an id winning, sorted by id so the
 /// answer does not depend on directory order.
 pub fn scan(dirs: &Dirs) -> Vec<DesktopEntry> {
+    crate::runtime::assert_off_ui_thread("platform::apps::scan");
     let mut seen = HashSet::new();
     let mut found = Vec::new();
     for dir in dirs.application_dirs() {

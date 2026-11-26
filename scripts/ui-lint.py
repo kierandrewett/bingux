@@ -193,6 +193,14 @@ def strip_comments(text: str) -> str:
     return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), text)
 
 
+def column_builder(text: str, index: int) -> bool:
+    """Whether the call at `index` continues a `Column::..(..)` chain (a data table column)."""
+    start = text.rfind(";", 0, index) + 1
+    chain = text[start:index]
+    found = list(re.finditer(r"\bColumn::\w+\(", chain))
+    return bool(found) and "rect()" not in chain[found[-1].start() :]
+
+
 def check(path: Path) -> list[str]:
     text = strip_comments(path.read_text())
     problems = []
@@ -209,6 +217,10 @@ def check(path: Path) -> list[str]:
             continue
         # Component methods that share a name (a dialog's `.content(..)`).
         if match.group(1) == "content" and not args.startswith("Content::"):
+            continue
+        # A getter that shares a name: `locale.direction()`, `number.rounded()`. Freya's
+        # styling methods always take a value.
+        if match.group(1) and not args and (match.group(1) == "direction" or match.group(1).startswith("rounded")):
             continue
         report(
             match.start(),
@@ -235,6 +247,10 @@ def check(path: Path) -> list[str]:
     for match in SIZE_CALL.finditer(text):
         args = args_of(text, match.end() - 1)
         if args.strip().startswith(("Size::percent(", "Size::flex(")):
+            continue
+        # A data table column's starting width is a plain number of pixels the person then drags
+        # and the table remembers; it is not the size of a box.
+        if column_builder(text, match.start()):
             continue
         numbers = [m.group(1) for m in LITERAL.finditer(args) if m.group(1) not in ("0", "0.0")]
         if numbers or ".px()" in args:
@@ -318,6 +334,17 @@ RENDER_BLOCKING = re.compile(
     r"\b(?:system|runtime)::(?:run|run_with_stdin|gsettings_get|gsettings_set|which|read_to_string|read_file|"
     r"read_dir|metadata|load_persistent|load_saved)\(|\.recv\(\)|\.join\(\)|\.output\(\)|\.wait\(\)"
 )
+# `Command::new(` is two things in this repository: `std::process::Command`, which spawns a
+# process, and bingux-ui's palette `Command`, a menu or palette entry that touches nothing.
+# Only a file that names the process type (`use std::process::Command`, `process::{..Command..}`,
+# `std::process::Command::new`) can block with it.
+PROCESS_COMMAND = re.compile(r"\bprocess::(?:Command\b|\{[^}]*\bCommand\b)")
+
+
+def spawns_processes(text: str) -> bool:
+    return PROCESS_COMMAND.search(text) is not None
+
+
 BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/runtime.rs": "the guarded wrappers themselves",
     "crates/ui/src/resilience/relaunch.rs": "`exec` of a fresh copy after an unrecoverable failure: the process is being replaced",
@@ -326,6 +353,16 @@ BLOCKING_ALLOWED: dict[str, str] = {
     "crates/ui/src/theme.rs": "reads fonts and the font family before the window exists (Application::run), never in render",
     "crates/ui/src/typography.rs": "the monospace family is asked once, at start-up, before the window exists",
     "crates/ui/src/app.rs": "the single-instance socket and its listener thread",
+    "crates/ui/src/app/single_instance.rs": "hand_off and claim run in Application::run before the window exists and before mark_ui_thread; Owner::drop removes the socket when the event loop has ended; the listener has a thread of its own",
+    "crates/ui/src/i18n/localiser.rs": "the bundles are built by the first message lookup and again when the locale, the pseudo-locale or the set of catalogues changes: one read of each language's few .ftl files, never per frame",
+    "crates/ui/src/i18n/catalogue.rs": "lists the language folders for localiser::build, in the same two situations (first lookup, locale change), never per frame",
+    "crates/ui/src/i18n/check.rs": "the catalogue check: run by a test of the crate that owns the catalogue, never by an app",
+    "crates/ui/src/i18n/tests.rs": "test fixtures: catalogues written to a temporary folder before the localiser reads them, no window thread",
+    "crates/ui/src/platform/apps.rs": "desktop-entry scan and lookups assert off the UI thread (open.rs and the file actions' workers call them); spawn is fork and exec of a detached child from a press handler, reaped on a thread of its own",
+    "crates/ui/src/platform/open.rs": "open_uri and open_file assert off the UI thread; callers use open_uri_then and open_file_then; xdg_open only spawns a detached child",
+    "crates/ui/src/platform/appearance/watch.rs": "the gsettings monitor child, spawned and read on the watcher's own thread, which lives as long as the child",
+    "crates/ui/src/platform/testing.rs": "test fixture (cfg(test)): a private dbus-daemon started by a test, no window thread",
+    "crates/ui/src/source_scan.rs": "test-only (cfg(test)): walks the workspace sources for the source-scan tests, no window thread",
     "crates/ui/src/snapshot.rs": "the headless test runner, no window",
     "crates/ui/src/files/tab_tests.rs": "test fixtures: a few temporary folders written before the headless window mounts, no window thread",
     "crates/ui/src/files/place_tests.rs": "test fixtures: two temporary folders written before the headless window mounts, no window thread",
@@ -445,8 +482,11 @@ def check_blocking(path: Path) -> list[str]:
     def line_of(index: int) -> int:
         return text.count("\n", 0, index) + 1
 
+    process = spawns_processes(text)
     if rel not in BLOCKING_ALLOWED:
         for match in BLOCKING.finditer(text):
+            if match.group(0).startswith("Command::new") and not process:
+                continue
             problems.append(
                 f"{rel}:{line_of(match.start())}: {match.group(0).rstrip('(')} blocks; use the wrappers in "
                 "bingux_ui::runtime on a worker, or add the file to BLOCKING_ALLOWED in scripts/ui-lint.py with a reason"
@@ -455,6 +495,8 @@ def check_blocking(path: Path) -> list[str]:
         end = balanced_end(text, header.end() - 1)
         body = text[header.end() : end]
         for match in RENDER_BLOCKING.finditer(body):
+            if match.group(0).startswith("Command::new") and not process:
+                continue
             if in_closure(body[: match.start()]):
                 continue
             problems.append(
@@ -469,6 +511,8 @@ def check_blocking(path: Path) -> list[str]:
         body = args_of(text, open_paren)
         after = opener.end() - open_paren - 1
         for match in RENDER_BLOCKING.finditer(body, after):
+            if match.group(0).startswith("Command::new") and not process:
+                continue
             if in_closure(body[after : match.start()]):
                 continue
             problems.append(
@@ -574,6 +618,9 @@ RAW_PRESS_ALLOWED = {
     "crates/ui/src/charts/flame.rs": "chart hit areas",
     "crates/ui/src/charts/view.rs": "chart hit areas: a tap on a donut's ring or legend row selects its segment (a hover does for a mouse); the segments are not controls and have no keyboard action",
     "crates/ui/src/shell/popover.rs": "the suggestion row: a menu item's row, whose press must not reach the field or the shield under it",
+    "crates/ui/src/commands/palette.rs": "a row of the palette's listbox: the palette owns the arrow, Enter and hover model of its options, so a row is no Tab stop and no button of its own",
+    "crates/ui/src/list/list_view.rs": "a swiped-open row's action: a full-height block, an icon over its label, solid in the accent or danger fill, revealed only by a touch swipe; no library button is that shape",
+    "crates/ui/src/shell/screen.rs": "the header, content and sidebar regions: a press on empty space focuses the region's start (Region::press); the regions are not buttons",
 }
 
 
