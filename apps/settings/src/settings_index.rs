@@ -1067,7 +1067,7 @@ impl Searchable for SettingsIndex {
 
     fn schema(&self) -> Schema {
         Schema::new()
-            .title("Settings")
+            .title(&bingux_ui::tr!("settings-search-source-settings"))
             .searchable("title", 10.0)
             .searchable("keywords", 5.0)
             .searchable("breadcrumb", 3.0)
@@ -1113,7 +1113,7 @@ impl Searchable for ApplicationsIndex {
 
     fn schema(&self) -> Schema {
         Schema::new()
-            .title("Installed applications")
+            .title(&bingux_ui::tr!("settings-search-source-apps"))
             .searchable("title", 10.0)
             .searchable("keywords", 5.0)
             .searchable("breadcrumb", 3.0)
@@ -1505,7 +1505,11 @@ mod tests {
             "bingux-settings://background#accent-colour"
         );
         // The alternate spelling finds the American row through a synonym.
-        assert!(top(&index, "accent colour").iter().any(|h| h.0 == "Accent color"));
+        assert!(
+            top(&index, "accent colour")
+                .iter()
+                .any(|h| h.0 == "Accent color")
+        );
         // A synonym.
         assert!(
             top(&index, "monitor")

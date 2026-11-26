@@ -720,7 +720,10 @@ impl Component for DateTimePage {
         let auto_zone_on = model_data.auto_zone.unwrap_or(false);
         let zone = model_data.timezone.clone();
         let zone_row = row(tr!("datetime-time-zone"))
-            .subtitle(format!("UTC{}", model_data.utc_offset))
+            .subtitle(tr!(
+                "datetime-utc-offset",
+                offset = model_data.utc_offset.as_str()
+            ))
             .value(zone_label(&model_data.timezone))
             .navigates()
             .enabled(!auto_zone_on)
@@ -894,7 +897,7 @@ impl Component for TimeZonePage {
                 .value(if shown.is_empty() {
                     String::new()
                 } else {
-                    format!("UTC{shown}")
+                    tr!("datetime-utc-offset", offset = shown.as_str())
                 });
             let set = zone.clone();
             let copy = zone.clone();

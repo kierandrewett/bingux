@@ -1325,8 +1325,12 @@ fn apply_values(serial: u32, monitors: &[Monitor], method: &str) -> Vec<String> 
 /// The serial and the current layout, read fresh so a write never uses a
 /// stale serial.
 fn read_layout() -> Result<(u32, Vec<Monitor>), CommandError> {
-    mutter_call(true, "GetCurrentState", None, &[])
-        .and_then(|text| parse_mutter(&text).map_err(CommandError))
+    mutter_call(true, "GetCurrentState", None, &[]).and_then(|text| {
+        parse_mutter(&text).map_err(|reason| {
+            eprintln!("displays: GetCurrentState could not be read: {reason}");
+            CommandError(tr!("displays-read-error"))
+        })
+    })
 }
 
 /// Applies the draft for a trial. Nothing is saved until the user keeps it.

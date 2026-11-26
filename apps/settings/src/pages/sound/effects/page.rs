@@ -232,7 +232,7 @@ fn gain_row(fx: Fx, slot: &PluginSlot, control: &Control, title: &str) -> Elemen
         let db = (percent / 100.0 * 48.0 - 24.0 * 1.0).round() / 1.0;
         set_control(fx, &id, &symbol, Unit::Gain.stored(db).clamp(min, max));
     })
-    .value_text(format!("{} dB", (db * 10.0).round() / 10.0))
+    .value_text(tr!("sound-gain-db", db = (db * 10.0).round() / 10.0))
     .into()
 }
 

@@ -184,7 +184,7 @@ NOT_TEXT_CALLS = re.compile(
     r"^(?:tr!|i18n_id!|bingux_ui::i18n_id!|prelude::i18n_id!|prelude::tr!|bingux_ui::tr!|eprintln!|println!|eprint!|print!|"
     r"panic!|assert\w*!|debug_assert\w*!|unreachable!|todo!|unimplemented!|include_str!|env!|option_env!|concat!|"
     r"matches!|write!|writeln!|tracing::\w+!|log::\w+!|warn!|info!|error!|debug!|trace!|bail!|"
-    r"Command::new|\.arg|\.args|\.env|\.expect|\.expect_err|bingux_ui::catalogue!|catalogue!|"
+    r"\.arg|\.args|\.env|\.expect|\.expect_err|bingux_ui::catalogue!|catalogue!|"
     r"\.shortcut|\.contains|\.starts_with|\.ends_with|\.strip_prefix|\.strip_suffix|\.get|\.join|\.set|\.insert|"
     r"\.component|\.route|\.glob|\.mime|\.query|\.section|\.key|\.str|\.id)$"
 )
@@ -241,15 +241,94 @@ ALLOWED: list[tuple[str, str, str, str]] = [
     # Pending conversions: each entry is removed by the commit that converts its crate.
     (
         "*",
-        r"^apps/settings/src/",
-        r".*",
-        "pending conversion by AppsFluent; removed by the commit that converts Settings",
+        r"^apps/settings/src/apps\.rs$",
+        r"^(?:NoDisplay|Hidden)$",
+        "keys of the desktop entry file format",
     ),
     (
         "*",
-        r"^apps/taxonomy/src/",
+        r"^apps/settings/src/pages/about\.rs$",
+        r"^(?:To Be Filled By O\.E\.M\.|Default string|VGA compatible controller|Display controller)$",
+        "placeholder values firmware writes into DMI and the class names `lspci` prints: matched against, never shown",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/bluetooth\.rs$",
+        r"^(?:This computer|Battery Percentage|power|remove|disconnect|connect|--timeout|pair)$",
+        "`bluetoothctl` commands and the name of one field of its output, and the fake adapter of the snapshot build",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/datetime/backend\.rs$",
         r".*",
-        "pending conversion by AppsFluent; removed by the commit that converts the taxonomy chrome",
+        "errors of the fake clock of the snapshot and test build, never shown",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/displays\.rs$",
+        r"^(?:Test display .*|DisplayConfig reply has no .*)$",
+        "the name of a fake display of the snapshot build, and the reasons a Mutter reply could not be read, "
+        "which are logged and replaced by `displays-read-error` for the person",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/gnoblin\.rs$",
+        r".*",
+        "positions and reasons of the JSON reader's parse errors: `parse_error` logs them and shows "
+        "`settings-gnoblin-read-error`",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/keyboard\.rs$",
+        r"^(?:Close window|Full screen|Move window to the left|Open the launcher|Lock the screen|Show every window)$",
+        "the fake shortcut list of the snapshot build (`BINGUX_SETTINGS_FAKE_INPUT`)",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/network/",
+        r"^(?:Old flat|Wired connection 1|Office desk|Work WireGuard|Office OpenVPN|Cafe Guest|Automatic \(DHCP\))$",
+        "names of the fake connections of the snapshot build and of the tests",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/network/",
+        r"^(?:IPv4|IPv6|802\.1X|VPN|WireGuard|Enhanced Open|Cisco VPN \(vpnc\)|Fortinet SSL|Cisco AnyConnect|"
+        r"Juniper Network Connect|Palo Alto GlobalProtect|Pulse Connect Secure|Array Networks|VPN Connection|"
+        r"IPSec .*|Xauth .*)$",
+        "protocol, standard and product names, and the keys of a NetworkManager VPN profile: the same in every language",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/(?:network/|search\.rs$)",
+        r"^(?:internet|00:1A:2B:3C:4D:5E|http://wpad\.example\.com/proxy\.pac|/etc/ssl/certs/ca\.pem|/home/you/.*|"
+        r"vpn\.example\.com(?::\d+)?|ssh\.example\.com|gateway = vpn\.example\.com|ex|"
+        r"https://example\.com/\?q=\{query\})$",
+        "technical examples in an empty field (an address, a path, an access point name): the same in every language",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/network/",
+        r"^(?:Connection activation failed: .*|Call failed: )$",
+        "text of `nmcli` and `busctl` output that is matched or trimmed, and the same text in test fixtures",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/power\.rs$",
+        r"^Time to full$",
+        "a value of the fake battery of the snapshot build",
+    ),
+    (
+        "*",
+        r"^apps/settings/src/pages/sound\.rs$",
+        r"^(?:Network speaker|\{percent\}%)$",
+        "the name of a fake speaker of the snapshot build, and an argument of the `wpctl` command",
+    ),
+    (
+        "*",
+        r"^apps/taxonomy/src/registry\.rs$",
+        r".*",
+        "the names, pages and API summaries of the SDK's components that the taxonomy lists: developer reference "
+        "in English like the inspector, searched by Rust name; the taxonomy's own chrome is in its catalogue",
     ),
     (
         "*",
@@ -942,6 +1021,10 @@ pub struct Overlays;
 impl Overlays {
     pub fn toast(&self, message: impl Into<String>) {}
 }
+pub struct Command;
+impl Command {
+    pub fn new(id: &str, title: impl Into<String>, run: u8) -> Command { Command }
+}
 """
 
 PLANTED_BAD = {
@@ -956,6 +1039,8 @@ PLANTED_BAD = {
     "a unit written by hand": 'fn f(n: u32) -> String { format!("{} km", n) }',
     "a closure body that returns text": 'fn f() { Row.title((|| "Songs")()); }',
     "a sentence returned from a match arm": 'fn f(n: u8) -> &\'static str { match n { 0 => "Similar to the actual temperature.", _ => "" } }',
+    "the title of a command": 'fn f() { Command::new("tabs.new", "New tab", 1); }',
+    "the title of a command in a vec": 'fn f() { vec![Command::new("a.b", "Close tab", 1).shortcut("Ctrl+W")]; }',
 }
 PLANTED_GOOD = {
     "a message": 'fn f() { Row.title(tr!("songs-title")); }',
@@ -963,6 +1048,8 @@ PLANTED_GOOD = {
     "a message with a variable": 'fn f(n: u32) { Row.tooltip(tr!("files-open", count = n)); }',
     "a log": 'fn f() { eprintln!("could not open the file"); }',
     "a command": 'fn f() { Command::new("xdg-open").arg("--help"); }',
+    "a process command with an id-like first argument": 'fn f() { std::process::Command::new("xdg-open"); }',
+    "a command titled by a message": 'fn f() { Command::new("tabs.new", tr!("tab-new"), 1); }',
     "a comment": 'fn f() {\n    // Row.title("Songs");\n}',
     "a test module": '#[cfg(test)]\nmod t { fn f() { Row.title("Songs"); } }',
     "a closure with parameters": 'fn f() { Row.title(tr!("a")).tooltip(items.iter().map(|a, b| a).count().to_string()); }',

@@ -360,7 +360,7 @@ impl Component for WireguardForm {
                 Group::titled("VPN").row(
                     form_field(tr!("network-vpn-add-name"), name)
                         .hint(tr!("network-vpn-add-name-hint"))
-                        .placeholder("Work")
+                        .placeholder(&tr!("network-vpn-add-name-placeholder"))
                         .error(name_problem(&tunnel_name, &taken_names)),
                 ),
             )
@@ -530,7 +530,7 @@ impl Component for PluginAddForm {
                 Group::titled("VPN").row(
                     form_field(tr!("network-vpn-add-name"), name)
                         .hint(tr!("network-vpn-add-name-hint"))
-                        .placeholder("Work")
+                        .placeholder(&tr!("network-vpn-add-name-placeholder"))
                         .error(name_problem(&vpn_name, &taken_names)),
                 ),
             )

@@ -527,7 +527,11 @@ const SSH: &[Field] = &[
 /// What a plugin this app has no table for gets: a user name, kept where
 /// NetworkManager has a place for it. Everything else of such a profile is in
 /// its key and value list.
-const GENERIC: &[Field] = &[Field::new("User name", Store::UserName, Kind::Text)];
+const GENERIC: &[Field] = &[Field::new(
+    i18n_id!("network-vpn-field-user-name"),
+    Store::UserName,
+    Kind::Text,
+)];
 
 /// The friendly fields of a plugin, in the order they are shown.
 pub fn fields(short: &str) -> &'static [Field] {

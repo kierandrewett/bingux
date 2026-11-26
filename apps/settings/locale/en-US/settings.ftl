@@ -2925,3 +2925,18 @@ network-vpn-connect = Connect
 network-vpn-edit = Edit
 network-vpn-add-row = Add VPN…
 network-vpn-row-ip-address = IP address
+# $offset (String) - the offset from UTC, such as +01:00
+datetime-utc-offset = UTC{ $offset }
+# $k (Number) - a frequency in thousands of hertz, such as 1.5
+sound-eq-khz = { NUMBER($k, maximumFractionDigits: 1) }k
+# $db (String) - a gain with its sign, such as +2.5
+sound-eq-gain-db = { $db } dB
+# $db (Number) - a gain in decibels
+sound-gain-db = { NUMBER($db, maximumFractionDigits: 1) } dB
+# $text (String) - what was searched for
+settings-search-no-match-empty = No settings match “{ $text }”.
+# The names of the two sources Settings gives the search service.
+settings-search-source-settings = Settings
+settings-search-source-apps = Installed applications
+# The example shown in the empty name field of a new VPN.
+network-vpn-add-name-placeholder = Work

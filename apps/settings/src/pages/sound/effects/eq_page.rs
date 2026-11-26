@@ -31,12 +31,7 @@ pub(super) struct EqPage {
 /// A frequency in the room of a band's strip: 60, 250, 1k, 8k, 15k.
 fn short_hz(hz: f64) -> String {
     if hz >= 1000.0 {
-        let k = hz / 1000.0;
-        if (k - k.round()).abs() < 0.05 {
-            format!("{k:.0}k")
-        } else {
-            format!("{k:.1}k")
-        }
+        tr!("sound-eq-khz", k = hz / 1000.0)
     } else {
         format!("{hz:.0}")
     }
@@ -282,7 +277,13 @@ fn band_editor(
                     }
                 },
             )
-            .value_text(format!("{db:+.1} dB"))
+            .value_text(tr!(
+                "sound-eq-gain-db",
+                db = bingux_ui::format::Number::new(db)
+                    .fraction_digits(1, 1)
+                    .sign(bingux_ui::format::Sign::Always)
+                    .format()
+            ))
             .into(),
         );
     }

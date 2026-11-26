@@ -142,8 +142,9 @@ impl Component for SearchResults {
         // "No match" only once the search for this text has finished: an
         // empty list while it runs is not an answer.
         if state.hits.is_empty() && current && !state.loading {
-            body = body.child(status(Status::Empty(format!(
-                "No settings match \"{text}\"."
+            body = body.child(status(Status::Empty(tr!(
+                "settings-search-no-match-empty",
+                text = text.as_str()
             ))));
         }
         body
