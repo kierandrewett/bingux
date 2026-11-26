@@ -19,6 +19,9 @@ pub(crate) mod hide_clock;
 pub mod menu;
 #[cfg(all(test, feature = "testing"))]
 mod menu_cascade_tests;
+mod menu_controls;
+#[cfg(all(test, feature = "testing"))]
+mod menu_controls_tests;
 #[cfg(all(test, feature = "testing"))]
 mod menu_first_frame_tests;
 pub(crate) mod menu_nav;
@@ -32,9 +35,9 @@ pub mod overlays;
 #[cfg(all(test, feature = "testing"))]
 mod page_motion_tests;
 pub(crate) mod panel;
+pub mod popover;
 #[cfg(all(test, feature = "testing"))]
 mod rest_fill_tests;
-pub mod popover;
 pub mod screen;
 #[cfg(all(test, feature = "testing"))]
 mod scroll_slide_tests;
@@ -59,6 +62,7 @@ pub use menu::{
     MenuButton, MenuItem, app_menu_item, app_menu_items, menu_button, menu_item, menu_separator,
     submenu,
 };
+pub use menu_controls::{MenuControl, menu_control, menu_controls, menu_value_control};
 pub use navigation::{
     NavigationSplitView, PageAction, PageHead, Profile, use_page_busy, use_page_switcher,
 };

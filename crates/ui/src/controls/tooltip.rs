@@ -321,16 +321,31 @@ struct Tip {
     /// Content scrolled under the pointer: the tip is down, and comes back
     /// when the content is still, if the pointer is still on the element.
     suspended: State<bool>,
+    /// The control is a row or button of an open menu: that menu is the
+    /// reason it is there, not a reason to keep its tip down.
+    in_menu: bool,
 }
+
+/// Provided by an open menu to what it draws, so a tip of one of its rows or
+/// buttons (a disabled row's reason, the name of a zoom button) opens over it.
+#[derive(Clone, Copy)]
+pub(crate) struct InsideMenu;
 
 impl Tip {
     /// Whether a menu, a choice list or popover, or a dialog is up, which no tooltip opens
-    /// over. A choice or a popover is a window of its own where the system allows it, and a
-    /// bubble drawn in the control's window would show from under it.
+    /// over, unless the tip belongs to the menu. A choice or a popover is a window of its
+    /// own where the system allows it, and a bubble drawn in the control's window would show
+    /// from under it.
     fn blocked(self) -> bool {
-        self.overlays
-            .is_some_and(|overlays| overlays.menu_open() || overlays.dialog_open())
-            || crate::nav::try_router().is_some_and(|router| router.modal_open())
+        self.overlays.is_some_and(|overlays| {
+            (!self.in_menu && overlays.menu_open()) || overlays.dialog_open()
+        }) || crate::nav::try_router().is_some_and(|router| {
+            if self.in_menu {
+                router.modal_open_beyond_menus()
+            } else {
+                router.modal_open()
+            }
+        })
     }
 
     /// Whether the control that owns this tip is still mounted.
@@ -522,6 +537,7 @@ impl Component for HoverTip {
             measured,
             pending,
             suspended,
+            in_menu: try_consume_context::<InsideMenu>().is_some(),
         };
         // An unmounted control takes its tip down with it. This touches the
         // hub only: this component's own state may already be gone.

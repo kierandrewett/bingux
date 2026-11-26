@@ -51,6 +51,12 @@ pub(crate) trait Node: Sized {
     fn selectable(&self) -> bool;
     /// The rows of the row's submenu.
     fn children(&self) -> Option<&[Self]>;
+    /// How many controls the row holds, when it is a row of controls
+    /// ([`super::menu::menu_controls`]): Left and Right walk them, Enter runs
+    /// the one in focus. Zero for every other row.
+    fn controls(&self) -> usize {
+        0
+    }
 }
 
 /// What a row does when the pointer enters it.
@@ -119,6 +125,13 @@ pub(crate) enum Outcome {
     Leave,
     /// Close the menu and run the action of row `index` of panel `level`.
     Activate { level: usize, index: usize },
+    /// Run control `control` of the row of controls `index` of panel `level`.
+    /// The menu stays open unless the control closes it.
+    Control {
+        level: usize,
+        index: usize,
+        control: usize,
+    },
 }
 
 /// The safe triangle of an open row. A pointer that leaves the row toward its
@@ -191,6 +204,9 @@ pub(crate) struct NavState {
     pending: Option<Pending>,
     held: Option<Held>,
     ahead: TypeAhead,
+    /// The control of the highlighted row of controls that the keyboard is
+    /// on. `None` when the pointer chose the row, or the row has no controls.
+    control: Option<usize>,
 }
 
 /// The rows shown in panel `level`: the root rows, then each open submenu.
@@ -250,6 +266,7 @@ impl NavState {
         nav.sync();
         if keyboard {
             nav.highlight[0] = first_selectable(items);
+            nav.arrive(items, 0);
         }
         nav
     }
@@ -257,6 +274,22 @@ impl NavState {
     /// The open submenus: the row of each panel whose submenu is open.
     pub(crate) fn open(&self) -> &[usize] {
         &self.open
+    }
+
+    /// The control the keyboard is on in panel `level`, when that panel is the
+    /// one the keys act on and its highlighted row is a row of controls.
+    pub(crate) fn control(&self, level: usize) -> Option<usize> {
+        (level == self.active).then_some(self.control).flatten()
+    }
+
+    /// The highlight came to a row by a key: a row of controls starts on its
+    /// first control.
+    fn arrive<T: Node>(&mut self, items: &[T], level: usize) {
+        self.control = self
+            .highlighted(level)
+            .and_then(|index| items.get(index))
+            .filter(|item| item.controls() > 0)
+            .map(|_| 0);
     }
 
     /// The row of panel `level` whose submenu is open.
@@ -312,6 +345,7 @@ impl NavState {
         self.set_active(level);
         self.sync();
         self.highlight[level] = index;
+        self.control = None;
     }
 
     /// Opens the submenu of row `index` of panel `level`. `first` is the row
@@ -517,9 +551,26 @@ impl NavState {
                 Reaction::Handled => return Outcome::Handled,
                 Reaction::Focus(index) => {
                     self.set_highlight(level, Some(index));
+                    self.arrive(items, level);
                     return Outcome::Handled;
                 }
                 Reaction::Activate(index) => return self.activate(items, level, index),
+            }
+        }
+        // A row of controls is walked with Left and Right; Left from its first
+        // control is the key it always was.
+        if let (Some(index), NavKey::Left | NavKey::Right) = (focused, key) {
+            let count = items.get(index).map_or(0, Node::controls);
+            if count > 0 {
+                let at = self.control.unwrap_or(0);
+                if key == NavKey::Right || at > 0 {
+                    self.control = Some(if key == NavKey::Right {
+                        (at + 1).min(count - 1)
+                    } else {
+                        at - 1
+                    });
+                    return Outcome::Handled;
+                }
             }
         }
 
@@ -557,18 +608,21 @@ impl NavState {
                 let forward = key == NavKey::Down;
                 if let Some(next) = step_selectable(items, focused, forward) {
                     self.set_highlight(level, Some(next));
+                    self.arrive(items, level);
                 }
                 Outcome::Handled
             }
             NavKey::Home => {
                 if let Some(first) = first_selectable(items) {
                     self.set_highlight(level, Some(first));
+                    self.arrive(items, level);
                 }
                 Outcome::Handled
             }
             NavKey::End => {
                 if let Some(last) = last_selectable(items) {
                     self.set_highlight(level, Some(last));
+                    self.arrive(items, level);
                 }
                 Outcome::Handled
             }
@@ -596,6 +650,13 @@ impl NavState {
         if !item.selectable() {
             return Outcome::Handled;
         }
+        if item.controls() > 0 {
+            return Outcome::Control {
+                level,
+                index,
+                control: self.control.unwrap_or(0),
+            };
+        }
         match item.children() {
             Some(sub) => {
                 self.open_sub(level, index, first_selectable(sub));
@@ -615,6 +676,7 @@ mod tests {
         label: &'static str,
         enabled: bool,
         sub: Option<Vec<Row>>,
+        controls: usize,
     }
 
     impl Node for Row {
@@ -627,6 +689,9 @@ mod tests {
         fn children(&self) -> Option<&[Self]> {
             self.sub.as_deref()
         }
+        fn controls(&self) -> usize {
+            self.controls
+        }
     }
 
     fn row(label: &'static str) -> Row {
@@ -634,6 +699,7 @@ mod tests {
             label,
             enabled: true,
             sub: None,
+            controls: 0,
         }
     }
 
@@ -642,6 +708,7 @@ mod tests {
             label,
             enabled: true,
             sub: Some(rows),
+            controls: 0,
         }
     }
 
@@ -655,12 +722,16 @@ mod tests {
             row("New folder"),
             row("New file"),
             separator(),
-            sub("Sort by", vec![row("Name"), row("Size"), separator(), row("Modified")]),
+            sub(
+                "Sort by",
+                vec![row("Name"), row("Size"), separator(), row("Modified")],
+            ),
             sub("View as", vec![row("List"), row("Grid")]),
             Row {
                 label: "Paste",
                 enabled: false,
                 sub: None,
+                controls: 0,
             },
             row("Refresh"),
         ]
@@ -977,10 +1048,7 @@ mod tests {
         assert_eq!(nav.press(&rows, NavKey::Char('r')), Outcome::Handled);
         assert_eq!(nav.highlighted(0), Some(REFRESH));
         assert!(nav.ahead().is_active());
-        assert_eq!(
-            nav.ahead().mark(REFRESH),
-            menu_query::Mark::Hit(0..1)
-        );
+        assert_eq!(nav.ahead().mark(REFRESH), menu_query::Mark::Hit(0..1));
         assert_eq!(nav.ahead().mark(1), menu_query::Mark::Dim);
     }
 
@@ -1069,7 +1137,13 @@ mod tests {
     fn backspace_takes_a_character_and_ctrl_backspace_a_word() {
         let rows = menu();
         let mut nav = NavState::new(&rows, false);
-        for key in "new f".chars().map(|c| if c == ' ' { NavKey::Space } else { NavKey::Char(c) }) {
+        for key in "new f".chars().map(|c| {
+            if c == ' ' {
+                NavKey::Space
+            } else {
+                NavKey::Char(c)
+            }
+        }) {
             nav.press(&rows, key);
         }
         assert_eq!(nav.ahead().query(), "new f");
@@ -1125,5 +1199,90 @@ mod tests {
         assert_eq!(nav.highlighted(0), None, "Paste is disabled");
         assert_eq!(nav.ahead().matches().count(), 0);
         assert_eq!(nav.ahead().mark(PASTE), menu_query::Mark::Plain);
+    }
+
+    /// "New folder", then a row of three controls, then "Refresh".
+    fn zoom_menu() -> Vec<Row> {
+        vec![
+            row("New folder"),
+            Row {
+                controls: 3,
+                ..row("Zoom")
+            },
+            row("Refresh"),
+        ]
+    }
+
+    #[test]
+    fn a_key_that_reaches_a_row_of_controls_puts_the_keyboard_on_its_first() {
+        let rows = zoom_menu();
+        let mut nav = NavState::new(&rows, true);
+        assert_eq!(nav.control(0), None, "New folder has no controls");
+        nav.press(&rows, NavKey::Down);
+        assert_eq!(nav.highlighted(0), Some(1));
+        assert_eq!(nav.control(0), Some(0));
+        // Down again leaves the row, and the control with it.
+        nav.press(&rows, NavKey::Down);
+        assert_eq!(nav.control(0), None);
+    }
+
+    #[test]
+    fn left_and_right_walk_the_controls_and_stop_at_the_ends() {
+        let rows = zoom_menu();
+        let mut nav = NavState::new(&rows, true);
+        nav.press(&rows, NavKey::Down);
+        assert_eq!(nav.press(&rows, NavKey::Right), Outcome::Handled);
+        assert_eq!(nav.control(0), Some(1));
+        assert_eq!(nav.press(&rows, NavKey::Right), Outcome::Handled);
+        assert_eq!(nav.control(0), Some(2));
+        assert_eq!(
+            nav.press(&rows, NavKey::Right),
+            Outcome::Handled,
+            "the last control keeps the key"
+        );
+        assert_eq!(nav.control(0), Some(2));
+        nav.press(&rows, NavKey::Left);
+        nav.press(&rows, NavKey::Left);
+        assert_eq!(nav.control(0), Some(0));
+        assert_eq!(
+            nav.press(&rows, NavKey::Left),
+            Outcome::Ignored,
+            "Left from the first control is the key it is anywhere else"
+        );
+    }
+
+    #[test]
+    fn enter_and_space_run_the_control_in_focus_and_leave_the_menu_open() {
+        let rows = zoom_menu();
+        let mut nav = NavState::new(&rows, true);
+        nav.press(&rows, NavKey::Down);
+        nav.press(&rows, NavKey::Right);
+        assert_eq!(
+            nav.press(&rows, NavKey::Enter),
+            Outcome::Control {
+                level: 0,
+                index: 1,
+                control: 1
+            }
+        );
+        assert_eq!(
+            nav.press(&rows, NavKey::Space),
+            Outcome::Control {
+                level: 0,
+                index: 1,
+                control: 1
+            }
+        );
+        assert_eq!(nav.highlighted(0), Some(1), "the row stays highlighted");
+    }
+
+    #[test]
+    fn the_pointer_choosing_the_row_takes_the_keyboard_off_its_controls() {
+        let rows = zoom_menu();
+        let mut nav = NavState::new(&rows, true);
+        nav.press(&rows, NavKey::Down);
+        nav.enter(0, 2, RowKind::Plain, (0.0, 0.0), 0);
+        nav.enter(0, 1, RowKind::Plain, (0.0, 0.0), 0);
+        assert_eq!(nav.control(0), None);
     }
 }

@@ -148,12 +148,13 @@ pub mod prelude {
     pub use crate::selection::{Gesture, Selection, SelectionMode};
     pub use crate::shell::{
         BackButton, Banner, BannerKind, CANCEL_ID, ChromeItem, ContentItem, Dialog, DialogIcon,
-        ForwardButton, HeaderBar, MenuButton, MenuItem, NavigationSplitView, OverlayHost, Overlays,
-        PageAction, PageHead, Pane, Popover, Profile, ResponseKind, Screen, StatusPage,
-        SuggestionRow, Toast, ViewSwitcher, WindowControls, app_menu_item, app_menu_items, banner,
-        choice_sheet, dialog, framed_dialog, history_menu, menu_button, menu_item, menu_separator,
-        popover, status_page, submenu, suggestion_row, use_chrome_inset, use_overlays,
-        use_page_busy, use_page_switcher, view, view_switcher,
+        ForwardButton, HeaderBar, MenuButton, MenuControl, MenuItem, NavigationSplitView,
+        OverlayHost, Overlays, PageAction, PageHead, Pane, Popover, Profile, ResponseKind, Screen,
+        StatusPage, SuggestionRow, Toast, ViewSwitcher, WindowControls, app_menu_item,
+        app_menu_items, banner, choice_sheet, dialog, framed_dialog, history_menu, menu_button,
+        menu_control, menu_controls, menu_item, menu_separator, menu_value_control, popover,
+        status_page, submenu, suggestion_row, use_chrome_inset, use_overlays, use_page_busy,
+        use_page_switcher, view, view_switcher,
     };
     pub use crate::style::*;
     pub use crate::surface::use_tokens;

@@ -223,6 +223,17 @@ impl Router {
         !self.model.read().modals().is_empty()
     }
 
+    /// Whether a choice, dialog or sheet is open in this window: a floating
+    /// surface other than a menu. A tip that belongs to a menu asks this, since
+    /// the menu it sits in is open by definition. Subscribes the calling component.
+    pub fn modal_open_beyond_menus(&self) -> bool {
+        self.model
+            .read()
+            .modals()
+            .iter()
+            .any(|modal| modal.kind != ModalKind::Menu)
+    }
+
     /// Whether a menu, choice, dialog or sheet is open in this window, read
     /// without subscribing. For an event handler: a window shortcut checks it
     /// and leaves the key to the modal.

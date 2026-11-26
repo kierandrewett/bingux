@@ -1030,6 +1030,41 @@ pub const MENU: &[Spec] = &[
         menu_button("File", open_with_items()).into_element()
     })
     .script("click-text File; wait 300; click-text Open with; wait 500; save {out}"),
+    Spec::live(
+        "A row of controls (zoom), a detail after a label, a tooltip on a disabled row",
+        || {
+            let mut level = use_state(|| 100u32);
+            menu_button(
+                "Menu",
+                vec![
+                    menu_controls(
+                        "Zoom",
+                        vec![
+                            menu_control(Icon::ZoomOut, "Zoom out", move |_| {
+                                level.set(level().saturating_sub(10))
+                            }),
+                            menu_value_control(
+                                move || format!("{}%", level()),
+                                "Reset zoom",
+                                move |_| level.set(100),
+                            ),
+                            menu_control(Icon::ZoomIn, "Zoom in", move |_| level.set(level() + 10)),
+                            menu_control(Icon::ViewFullscreen, "Full screen", |_| {})
+                                .divided()
+                                .closes_menu(),
+                        ],
+                    ),
+                    menu_separator(),
+                    submenu("Profile", vec![menu_item("Work", |_| {})]).detail("Personal"),
+                    menu_item("Passwords", |_| {})
+                        .disabled()
+                        .tooltip("Passwords are not built yet"),
+                ],
+            )
+            .into_element()
+        },
+    )
+    .script("click-text Menu; wait 300; click-name Zoom in; wait 300; save {out}"),
     Spec::live("A dropdown of applications: icons in the list and the value", || {
         app_dropdown(sample_apps(), "org.gnome.TextEditor", |_| {}).into_element()
     })

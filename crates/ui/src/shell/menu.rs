@@ -33,13 +33,16 @@ use crate::component::ComponentName;
 use crate::controls::direction::{Direction, use_direction};
 use crate::controls::path_label::path_label;
 use crate::controls::press::{is_touch, use_press};
+use crate::controls::tooltip::hover_tip_sized;
 use crate::focus::step_focus;
 use crate::icons::{self, Icon};
 use crate::motion::Focusable;
 use crate::style::*;
 use crate::surface::{is_activation_key, use_tokens};
+use crate::theme::Tokens;
 use crate::typography::{BODY, CAPTION, Ink};
 
+use super::menu_controls::{ControlButtons, MenuControl};
 use super::menu_nav::{NavKey, NavState, Node, Outcome, RowKind, first_selectable, panel_items};
 use super::menu_query::Mark;
 use super::overlays::{Overlays, use_overlays};
@@ -64,6 +67,12 @@ pub struct MenuItem {
     pub(crate) on_middle: Option<EventHandler<()>>,
     /// The label is a name: cut in the middle when it does not fit.
     pub(crate) name: bool,
+    /// A muted word after the label: the value of what the row opens.
+    pub(crate) detail: Option<String>,
+    /// A bubble over the row, for what the label alone does not say.
+    pub(crate) tooltip: Option<String>,
+    /// The buttons of a row of controls ([`super::menu_controls::menu_controls`]).
+    pub(crate) controls: Vec<MenuControl>,
 }
 
 impl MenuItem {
@@ -119,6 +128,22 @@ impl MenuItem {
         self.name = true;
         self
     }
+
+    /// Shows `detail` in muted text at the trailing edge, before the arrow of
+    /// a submenu: the current value of what the row opens ("Profile  Personal").
+    /// A menu with any detail is `Dim::MenuWide`, as one with a shortcut is.
+    pub fn detail(mut self, detail: impl Into<String>) -> Self {
+        self.detail = Some(detail.into());
+        self
+    }
+
+    /// Shows `tooltip` in a bubble when the pointer rests on the row, a
+    /// disabled one too: it is where a row says why it is disabled. The row's
+    /// label stays its accessible name.
+    pub fn tooltip(mut self, tooltip: impl Into<String>) -> Self {
+        self.tooltip = Some(tooltip.into());
+        self
+    }
 }
 
 /// An action for a menu. `on_press` runs after the menu closes.
@@ -136,6 +161,9 @@ pub fn menu_item(label: impl Into<String>, on_press: impl FnMut(()) + 'static) -
         on_press: EventHandler::new(on_press),
         on_middle: None,
         name: false,
+        detail: None,
+        tooltip: None,
+        controls: Vec::new(),
     }
 }
 
@@ -217,6 +245,10 @@ impl Node for MenuItem {
     fn children(&self) -> Option<&[Self]> {
         self.submenu.as_deref()
     }
+
+    fn controls(&self) -> usize {
+        self.controls.len()
+    }
 }
 
 /// The state of an open menu, and the control that opened it.
@@ -273,7 +305,10 @@ fn menu_height(items: &[MenuItem]) -> f32 {
 
 /// The width of a panel of `items`: wide when any item shows a shortcut.
 fn panel_width(items: &[MenuItem]) -> f32 {
-    if items.iter().any(|item| item.shortcut.is_some()) {
+    if items
+        .iter()
+        .any(|item| item.shortcut.is_some() || item.detail.is_some() || !item.controls.is_empty())
+    {
         Dim::MenuWide.px()
     } else {
         Dim::Menu.px()
@@ -292,7 +327,10 @@ fn layout(
 ) -> Vec<(PanelTrigger, PanelRect)> {
     let width = panel_width(root);
     let height = menu_height(root);
-    let mut panels = vec![(trigger, menu_rect(trigger, (width, height), window, direction))];
+    let mut panels = vec![(
+        trigger,
+        menu_rect(trigger, (width, height), window, direction),
+    )];
     for (level, &index) in open.iter().enumerate() {
         let parent = panels[level].1;
         let items = panel_items(root, open, level);
@@ -372,7 +410,9 @@ fn schedule(overlays: Overlays) {
 
 /// A pointer entered row `index` of panel `level`.
 fn pointer_enter(overlays: Overlays, level: usize, index: usize, kind: RowKind, point: (f32, f32)) {
-    update_nav(overlays, |nav| nav.enter(level, index, kind, point, now_ms()));
+    update_nav(overlays, |nav| {
+        nav.enter(level, index, kind, point, now_ms())
+    });
     schedule(overlays);
 }
 
@@ -385,7 +425,9 @@ fn pointer_leave(
     point: (f32, f32),
     sub: Option<PanelRect>,
 ) {
-    update_nav(overlays, |nav| nav.leave(level, index, point, sub, now_ms()));
+    update_nav(overlays, |nav| {
+        nav.leave(level, index, point, sub, now_ms())
+    });
     schedule(overlays);
 }
 
@@ -412,7 +454,12 @@ fn escape_menu(overlays: Overlays, root: &[MenuItem]) {
 }
 
 /// A key was pressed while the menu was open. Keys act on the active panel.
-fn handle_key(overlays: Overlays, root: &[MenuItem], event: Event<KeyboardEventData>, direction: Direction) {
+fn handle_key(
+    overlays: Overlays,
+    root: &[MenuItem],
+    event: Event<KeyboardEventData>,
+    direction: Direction,
+) {
     // A key press is keyboard navigation, so the owner's focus ring shows
     // once the menu hands focus back.
     Platform::get()
@@ -455,6 +502,26 @@ fn handle_key(overlays: Overlays, root: &[MenuItem], event: Event<KeyboardEventD
             overlays.dismiss_menu_by_key();
             item.on_press.call(());
         }
+        Outcome::Control {
+            level,
+            index,
+            control,
+        } => {
+            event.stop_propagation();
+            let Some(control) = panel_items(root, &open, level)
+                .get(index)
+                .and_then(|item| item.controls.get(control))
+            else {
+                return;
+            };
+            if !control.is_enabled() {
+                return;
+            }
+            if control.closes() {
+                overlays.dismiss_menu_by_key();
+            }
+            control.run();
+        }
     }
 }
 
@@ -470,6 +537,8 @@ impl Component for MenuLayer {
     fn render(&self) -> impl IntoElement {
         let overlays = self.overlays;
         let a11y_id = overlays.menu_panel;
+        // The rows and buttons of this menu may show a tip over it.
+        use_provide_context(|| crate::controls::tooltip::InsideMenu);
         // A closing menu has already handed focus back to its owner, so it
         // must not take it again when it renders its exit.
         let closing = self.closing;
@@ -501,9 +570,10 @@ impl Component for MenuLayer {
         // focused panel names the highlighted row as its active descendant
         // (WAI-ARIA menu), so a screen reader reads each row the arrows reach.
         let row_ids = use_hook(|| {
-            std::rc::Rc::new(std::cell::RefCell::new(
-                std::collections::HashMap::<(usize, usize), AccessibilityId>::new(),
-            ))
+            std::rc::Rc::new(std::cell::RefCell::new(std::collections::HashMap::<
+                (usize, usize),
+                AccessibilityId,
+            >::new()))
         });
         let row_id = {
             let row_ids = row_ids.clone();
@@ -543,6 +613,9 @@ impl Component for MenuLayer {
                         } else {
                             Mark::Plain
                         },
+                        control: nav
+                            .control(level)
+                            .filter(|_| nav.highlighted(level) == Some(index)),
                     })
                 })
                 .collect()
@@ -614,6 +687,8 @@ struct MenuRow {
     sub: Option<PanelRect>,
     /// How the row shows while a typed query is active.
     mark: Mark,
+    /// The control of a row of controls that the keyboard is on.
+    control: Option<usize>,
 }
 
 impl Component for MenuRow {
@@ -626,6 +701,9 @@ impl Component for MenuRow {
                 .tw(&tokens, &[w_full(), h(Dim::MenuSeparator), center()])
                 .child(rect().tw(&tokens, &[w_full(), h(Dim::Hairline), bg(Paint::Separator)]))
                 .into_element();
+        }
+        if !self.item.controls.is_empty() {
+            return self.controls_row(&tokens);
         }
         let enabled = self.item.enabled;
         let has_sub = self.item.submenu.is_some();
@@ -673,7 +751,9 @@ impl Component for MenuRow {
                 .tw(&tokens, &[center()])
                 .maybe_child(match app {
                     Some(name) => Some(app_icon(name, IconSize::AppSmall).into_element()),
-                    None => glyph.map(|icon| icons::icon(icon, IconSize::Control, text_color).into_element()),
+                    None => glyph.map(|icon| {
+                        icons::icon(icon, IconSize::Control, text_color).into_element()
+                    }),
                 })
         });
         // A submenu's arrow, or the tick of an item that also has an icon (the tab
@@ -685,19 +765,24 @@ impl Component for MenuRow {
         } else {
             None
         };
-        let shortcut = self.item.shortcut.clone().map(|text| {
-            CAPTION
-                .label(&tokens, text)
-                .max_lines(1)
-        });
+        let shortcut = self
+            .item
+            .shortcut
+            .clone()
+            .map(|text| CAPTION.label(&tokens, text).max_lines(1));
         // A name that is too long is cut in the middle, keeping its end, with the
         // whole name as the tooltip, as file names are; a row a typed query has
         // marked keeps its marks, so it is cut at the end.
         let direction = use_direction();
         let label: Element = match (&self.mark, self.item.name) {
-            (Mark::Hit(_), _) | (_, false) => marked_label(&tokens, ink, &self.item.label, &self.mark),
+            (Mark::Hit(_), _) | (_, false) => {
+                marked_label(&tokens, ink, &self.item.label, &self.mark)
+            }
             (_, true) => {
-                let name = path_label(self.item.label.clone()).name().style(BODY).ink(ink);
+                let name = path_label(self.item.label.clone())
+                    .name()
+                    .style(BODY)
+                    .ink(ink);
                 rect()
                     .width(Size::flex(1.0))
                     .child(if direction.is_rtl() { name.end() } else { name })
@@ -709,9 +794,15 @@ impl Component for MenuRow {
         let mut parts: Vec<Element> = Vec::with_capacity(4);
         parts.extend(leading.map(Element::from));
         parts.push(label);
+        parts.extend(
+            self.item
+                .detail
+                .clone()
+                .map(|text| Element::from(CAPTION.label(&tokens, text).max_lines(1))),
+        );
         parts.extend(shortcut.map(Element::from));
         parts.extend(trailing);
-        rect()
+        let row = rect()
             .component("MenuRow")
             .a11y_id(self.id)
             .a11y_role(AccessibilityRole::MenuItem)
@@ -800,7 +891,45 @@ impl Component for MenuRow {
                 overlays.close_menu();
                 on_press.call(());
             })
-            .children(parts)
+            .children(parts);
+        match self.item.tooltip.clone() {
+            Some(tip) => hover_tip_sized(row, tip, Size::fill(), Size::px(Dim::MenuItem.px())),
+            None => row.into_element(),
+        }
+    }
+}
+
+impl MenuRow {
+    /// A row of controls: the label, then the buttons. It highlights and opens
+    /// nothing of its own; each button does its own.
+    fn controls_row(&self, tokens: &Tokens) -> Element {
+        let overlays = self.overlays;
+        let (level, index) = (self.level, self.index);
+        let sub = self.sub;
+        let name = self.item.label.clone();
+        rect()
+            .component("MenuRow")
+            .a11y_id(self.id)
+            .a11y_role(AccessibilityRole::Group)
+            .a11y_builder(move |node| node.set_label(name))
+            .tw(tokens, MENU_ITEM)
+            .on_pointer_enter(move |event: Event<PointerEventData>| {
+                pointer_enter(overlays, level, index, RowKind::Plain, global_point(&event));
+            })
+            .on_pointer_leave(move |event: Event<PointerEventData>| {
+                pointer_leave(overlays, level, index, global_point(&event), sub);
+            })
+            .child(marked_label(
+                tokens,
+                Ink::Text,
+                &self.item.label,
+                &Mark::Plain,
+            ))
+            .child(ControlButtons {
+                controls: self.item.controls.clone(),
+                overlays,
+                focused: self.control,
+            })
             .into_element()
     }
 }
@@ -886,7 +1015,11 @@ impl Component for MenuButton {
             Paint::Control
         };
         rect()
-            .component(if self.icon.is_some() { "IconMenuButton" } else { "MenuButton" })
+            .component(if self.icon.is_some() {
+                "IconMenuButton"
+            } else {
+                "MenuButton"
+            })
             .a11y_id(a11y_id)
             .a11y_focusable(true)
             .a11y_role(AccessibilityRole::Button)
@@ -991,7 +1124,8 @@ impl Component for MenuButton {
                 self.icon.is_none().then(|| {
                     icons::icon(Icon::PanDown, IconSize::Mark, Paint::Muted.color(&tokens))
                 }),
-            ).focusable(focus())
+            )
+            .focusable(focus())
             .into_element()
     }
 }

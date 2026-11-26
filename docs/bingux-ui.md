@@ -658,6 +658,29 @@ speed (`release_slope`, at most 3 times the average) and stops dead, so it
 never stands still where the finger let go; a finger at rest starts it from
 rest.
 
+### Rows of controls, details and tips in a menu
+
+Three additions to `MenuItem` for what a plain row cannot say. All are general: the browser's main menu uses them,
+and a file view's zoom, an editor's font size and a player's volume are the same shape.
+
+- **`menu_controls(label, vec![..])`** is a row of small buttons after its label, for a value the person steps: the
+  browser's `Zoom  −  100%  +  ⛶`. `menu_control(icon, name, f)` is an icon button, `menu_value_control(|| text, name,
+f)` shows the value (read each time the row draws, so it follows the presses while the menu stays open). A control
+  takes `.enabled(bool)`, `.closes_menu()` (the menu closes before it runs, as for a row; without it the menu stays
+  open, so zoom steps repeat) and `.divided()` (a hairline before it). Every control has a name: it is its tooltip and
+  its accessible name. The pointer presses a control like any button. The keyboard highlights the row like any row;
+  **Left and Right walk the controls, Enter and Space run the one in focus**, and Left from the first control is the
+  key it is anywhere else (it closes a submenu). The row itself does nothing when pressed.
+- **`MenuItem::detail(text)`** is a muted word at the trailing edge, before a submenu's arrow: the current value of
+  what the row opens (`Profile  Personal`). A menu with any detail is `Dim::MenuWide`.
+- **`MenuItem::tooltip(text)`** is a bubble when the pointer rests on the row, a disabled row included: it is where a
+  row says why it is disabled. A touch shows no tooltip, so a phone's sheet puts the reason under the row's name
+  instead. Tips that belong to an open menu (these, and a control's name) open over it: the menu is why they are
+  there, so only a dialog, choice or sheet keeps them down (`Router::modal_open_beyond_menus`).
+
+`shell/menu_controls_tests.rs` holds the pointer, the keyboard, a control that closes the menu, the detail and the tip;
+`shell/menu_nav.rs` holds the key rules.
+
 ### The history menu
 
 `BackButton` and `ForwardButton` open a menu of the places they would reach,
