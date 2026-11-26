@@ -91,7 +91,8 @@ impl Component for EntryView {
                             // The anchor is a path: copy it so it can be pasted
                             // into an editor, a terminal or a review.
                             if freya::clipboard::Clipboard::set(copy_doc.clone()).is_ok() {
-                                overlays.toast(format!("Copied {copy_doc}"));
+                                overlays
+                                    .toast(tr!("taxonomy-copied-toast", doc = copy_doc.as_str()));
                             }
                         })
                         .flat()
@@ -100,9 +101,12 @@ impl Component for EntryView {
                     )
                     .child(
                         rect().tw(&tokens, &[covers_width]).child(Element::from(
-                            bingux_ui::controls::select_text(format!("Covers {covers}"))
-                                .style(CAPTION.in_ink(Ink::Muted))
-                                .breaks_anywhere(),
+                            bingux_ui::controls::select_text(tr!(
+                                "taxonomy-covers",
+                                covers = covers.as_str()
+                            ))
+                            .style(CAPTION.in_ink(Ink::Muted))
+                            .breaks_anywhere(),
                         )),
                     ),
             );

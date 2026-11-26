@@ -66,3 +66,38 @@ taxonomy-l10n-attribute = A tooltip attribute
 taxonomy-l10n-save = Save
     .tooltip = Save the document
 taxonomy-l10n-note-description = The switch changes every window at once. Pages keep their place, and only the text changes.
+
+### The chrome of the taxonomy window: the display switcher, the search results and the toasts.
+
+taxonomy-description = Every Bingux UI component, icon and token, running
+taxonomy-search-results-title = Results
+taxonomy-search-empty-title = Nothing matches
+taxonomy-search-empty-description = Try a Rust name such as Switch or Icon
+# $doc (String) - the path of the documentation anchor that was copied
+taxonomy-copied-toast = Copied { $doc }
+# $covers (String) - the names of the items the entry covers, joined with commas
+taxonomy-covers = Covers { $covers }
+taxonomy-switcher-title = Display
+taxonomy-switcher-tooltip = Theme, accent, density, scale and contrast
+taxonomy-choice-theme = Theme
+taxonomy-choice-accent = Accent
+taxonomy-choice-density = Density
+taxonomy-choice-scale = Scale
+taxonomy-choice-text-size = Text size
+taxonomy-choice-strings = Strings
+taxonomy-choice-contrast = Contrast
+# $name (String) - the theme's name, such as Dark
+taxonomy-choice-theme-option = Theme: { $name }
+taxonomy-choice-accent-system = Accent: system
+# $name (String) - the accent's name, such as blue
+taxonomy-choice-accent-option = Accent: { $name }
+# $name (String) - the density's name, such as Compact
+taxonomy-choice-density-option = Density: { $name }
+# $scale (Number) - a window scale in percent
+taxonomy-choice-scale-option = Scale: { $scale }%
+# $scale (Number) - a text scale in percent
+taxonomy-choice-text-option = Text: { $scale }%
+taxonomy-choice-strings-plain = Strings: plain
+taxonomy-choice-strings-pseudo = Strings: pseudo
+taxonomy-choice-contrast-standard = Contrast: standard
+taxonomy-choice-contrast-high = Contrast: high

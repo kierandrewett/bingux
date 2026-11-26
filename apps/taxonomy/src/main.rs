@@ -48,7 +48,7 @@ fn main() {
         .title(Message::new(i18n_id!("taxonomy-title")))
         .borderless()
         .about(bingux_ui::app_info!(
-            description = "Every Bingux UI component, icon and token, running",
+            description = bingux_ui::tr!("taxonomy-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(usage())

@@ -163,10 +163,12 @@ impl Component for SearchResults {
         let router = use_router();
         let text = self.query.read().to_lowercase();
         let hits = matching(&text);
-        let mut group = Group::new("Results".to_string());
+        let mut group = Group::new(tr!("taxonomy-search-results-title"));
         if hits.is_empty() {
-            group = group
-                .row(row("Nothing matches").subtitle("Try a Rust name such as Switch or Icon"));
+            group = group.row(
+                row(tr!("taxonomy-search-empty-title"))
+                    .subtitle(tr!("taxonomy-search-empty-description")),
+            );
         }
         for page in hits {
             let mut query = self.query;

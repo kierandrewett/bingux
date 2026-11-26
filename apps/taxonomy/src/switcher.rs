@@ -33,9 +33,11 @@ impl Component for Switcher {
         // The dropdowns' labels grow with the text size, and the room they need with them.
         if is_compact() || width < DENSE_FROM * bingux_ui::access::text_scale().max(1.0) {
             icon_button(Icon::Appearance, move |_| {
-                window.open(popup("Display", SwitcherSheet).width(Dim::PopupNarrow));
+                window.open(
+                    popup(tr!("taxonomy-switcher-title"), SwitcherSheet).width(Dim::PopupNarrow),
+                );
             })
-            .tooltip("Theme, accent, density, scale and contrast")
+            .tooltip(tr!("taxonomy-switcher-tooltip"))
             .into_element()
         } else {
             hstack(S2).child(Choices { dense: true }).into_element()
@@ -66,7 +68,12 @@ impl Component for Choices {
         let theme = dropdown(
             ThemeMode::ALL
                 .iter()
-                .map(|mode| (mode.key().to_string(), format!("Theme: {}", mode.label())))
+                .map(|mode| {
+                    (
+                        mode.key().to_string(),
+                        tr!("taxonomy-choice-theme-option", name = mode.label()),
+                    )
+                })
                 .collect(),
             now.theme.key(),
             move |key: String| {
@@ -75,21 +82,31 @@ impl Component for Choices {
                 }
             },
         )
-        .title("Theme");
+        .title(tr!("taxonomy-choice-theme"));
         let accent = dropdown(
-            std::iter::once(("system".to_string(), "Accent: system".to_string()))
-                .chain(accent_names().map(|name| (name.to_string(), format!("Accent: {name}"))))
+            std::iter::once(("system".to_string(), tr!("taxonomy-choice-accent-system")))
+                .chain(accent_names().map(|name| {
+                    (
+                        name.to_string(),
+                        tr!("taxonomy-choice-accent-option", name = name),
+                    )
+                }))
                 .collect(),
             now.accent.unwrap_or("system"),
             move |key: String| {
                 env.write().accent = accent_names().find(|name| *name == key);
             },
         )
-        .title("Accent");
+        .title(tr!("taxonomy-choice-accent"));
         let density = dropdown(
             DensityMode::ALL
                 .iter()
-                .map(|mode| (mode.key().to_string(), format!("Density: {}", mode.label())))
+                .map(|mode| {
+                    (
+                        mode.key().to_string(),
+                        tr!("taxonomy-choice-density-option", name = mode.label()),
+                    )
+                })
                 .collect(),
             now.density.key(),
             move |key: String| {
@@ -99,11 +116,16 @@ impl Component for Choices {
                 }
             },
         )
-        .title("Density");
+        .title(tr!("taxonomy-choice-density"));
         let scale = dropdown(
             SCALES
                 .iter()
-                .map(|scale| (scale.to_string(), format!("Scale: {scale}%")))
+                .map(|scale| {
+                    (
+                        scale.to_string(),
+                        tr!("taxonomy-choice-scale-option", scale = *scale),
+                    )
+                })
                 .collect(),
             now.scale.to_string(),
             move |key: String| {
@@ -113,11 +135,16 @@ impl Component for Choices {
                 }
             },
         )
-        .title("Scale");
+        .title(tr!("taxonomy-choice-scale"));
         let text = dropdown(
             TEXT_SCALES
                 .iter()
-                .map(|scale| (scale.to_string(), format!("Text: {scale}%")))
+                .map(|scale| {
+                    (
+                        scale.to_string(),
+                        tr!("taxonomy-choice-text-option", scale = *scale),
+                    )
+                })
                 .collect(),
             now.text_scale.to_string(),
             move |key: String| {
@@ -127,11 +154,14 @@ impl Component for Choices {
                 }
             },
         )
-        .title("Text size");
+        .title(tr!("taxonomy-choice-text-size"));
         let strings = dropdown(
             vec![
-                ("as-written".to_string(), "Strings: plain".to_string()),
-                ("pseudo".to_string(), "Strings: pseudo".to_string()),
+                (
+                    "as-written".to_string(),
+                    tr!("taxonomy-choice-strings-plain"),
+                ),
+                ("pseudo".to_string(), tr!("taxonomy-choice-strings-pseudo")),
             ],
             if now.pseudo { "pseudo" } else { "as-written" },
             move |key: String| {
@@ -139,19 +169,26 @@ impl Component for Choices {
                 apply_window(*env.peek());
             },
         )
-        .title("Strings");
+        .title(tr!("taxonomy-choice-strings"));
         let contrast = dropdown(
             vec![
-                ("standard".to_string(), "Contrast: standard".to_string()),
-                ("high".to_string(), "Contrast: high".to_string()),
+                (
+                    "standard".to_string(),
+                    tr!("taxonomy-choice-contrast-standard"),
+                ),
+                ("high".to_string(), tr!("taxonomy-choice-contrast-high")),
             ],
-            if now.high_contrast { "high" } else { "standard" },
+            if now.high_contrast {
+                "high"
+            } else {
+                "standard"
+            },
             move |key: String| {
                 env.write().high_contrast = key == "high";
                 apply_window(*env.peek());
             },
         )
-        .title("Contrast");
+        .title(tr!("taxonomy-choice-contrast"));
         if self.dense {
             hstack(S2)
                 .child(theme.dense())
@@ -164,13 +201,13 @@ impl Component for Choices {
                 .into_element()
         } else {
             Group::new(None::<String>)
-                .row(form_row("Theme", theme))
-                .row(form_row("Accent", accent))
-                .row(form_row("Density", density))
-                .row(form_row("Scale", scale))
-                .row(form_row("Text size", text))
-                .row(form_row("Contrast", contrast))
-                .row(form_row("Strings", strings))
+                .row(form_row(tr!("taxonomy-choice-theme"), theme))
+                .row(form_row(tr!("taxonomy-choice-accent"), accent))
+                .row(form_row(tr!("taxonomy-choice-density"), density))
+                .row(form_row(tr!("taxonomy-choice-scale"), scale))
+                .row(form_row(tr!("taxonomy-choice-text-size"), text))
+                .row(form_row(tr!("taxonomy-choice-contrast"), contrast))
+                .row(form_row(tr!("taxonomy-choice-strings"), strings))
                 .into_element()
         }
     }
