@@ -47,25 +47,25 @@ impl EngineRows {
     pub fn remote_settings_text(mode: RemoteSettings, server: Option<&str>) -> String {
         match (mode, server) {
             (RemoteSettings::Off, _) => {
-                "Off: revoked certificates are caught only when the issuer answers".to_string()
+                tr!("browser-settings-remote-off")
             }
             (RemoteSettings::SecurityOnly, Some(server)) => {
-                format!("Security data only, from {server}")
+                tr!("browser-settings-remote-mirror", server = server)
             }
             (RemoteSettings::SecurityOnly, None) => {
-                "Security data only, but no mirror is set".to_string()
+                tr!("browser-settings-remote-no-mirror")
             }
-            (RemoteSettings::MozillaDirect, _) => "Security data only, from Mozilla".to_string(),
+            (RemoteSettings::MozillaDirect, _) => tr!("browser-settings-remote-mozilla"),
         }
     }
 
     pub fn engine_state_text(info: &EngineInfo) -> String {
         match info.state {
-            EngineState::Starting => "Starting".to_string(),
-            EngineState::Failed => "Stopped".to_string(),
+            EngineState::Starting => tr!("browser-settings-engine-starting"),
+            EngineState::Failed => tr!("browser-settings-engine-stopped"),
             EngineState::Ready => {
                 if info.version.is_empty() {
-                    "Running".to_string()
+                    tr!("browser-settings-engine-running")
                 } else {
                     info.version.clone()
                 }
@@ -77,7 +77,7 @@ impl EngineRows {
     /// it has not given one yet.
     pub fn user_agent_text(info: &EngineInfo) -> String {
         if info.user_agent.is_empty() {
-            "Not reported yet".to_string()
+            tr!("browser-settings-not-reported")
         } else {
             info.user_agent.clone()
         }
@@ -95,17 +95,17 @@ impl EngineRows {
     }
 
     /// The sentence for the worst status in the report.
-    fn overall_text(status: CheckStatus) -> &'static str {
+    fn overall_text(status: CheckStatus) -> String {
         match status {
-            CheckStatus::Fail => "A check failed",
-            CheckStatus::Warn => "Some checks warn",
-            CheckStatus::Unknown => "Some checks could not be made",
-            CheckStatus::Ok | CheckStatus::Info => "Every check passes",
+            CheckStatus::Fail => tr!("browser-settings-check-failed"),
+            CheckStatus::Warn => tr!("browser-settings-check-warn"),
+            CheckStatus::Unknown => tr!("browser-settings-check-unknown"),
+            CheckStatus::Ok | CheckStatus::Info => tr!("browser-settings-check-ok"),
         }
     }
 
     fn process_group(processes: &[ProcessSandbox]) -> Group {
-        let mut group = Group::new("Sandbox of each kind of process".to_string());
+        let mut group = Group::new(tr!("browser-settings-sandbox-title"));
         for process in processes {
             let (icon, tone) = Self::status_look(process.status);
             let line = row(process.title())
@@ -120,7 +120,7 @@ impl EngineRows {
     }
 
     fn checks_group(checks: &[SecurityCheck]) -> Group {
-        let mut group = Group::new("Other checks".to_string());
+        let mut group = Group::new(tr!("browser-settings-checks-title"));
         for check in checks {
             let (icon, tone) = Self::status_look(check.status);
             // A short value sits at the end of the row; one that would not fit is its text.
@@ -143,18 +143,22 @@ impl EngineRows {
     /// (`NOT_READY`) the page says so and shows no report at all, never an empty
     /// one that reads as healthy.
     pub fn security_groups(report: Option<&SecurityReport>) -> Vec<Group> {
-        let note = "The engine's own check of how it is set up. It finds mistakes in that; it cannot vouch for itself if something has broken into it.";
+        let note = tr!("browser-settings-security-description");
         let Some(report) = report else {
-            return vec![Group::new("Security report".to_string()).description(note).row(
-                row("Not reported yet")
-                    .subtitle("The engine has not finished checking itself. Open this page again in a moment.")
-                    .leading(Icon::About),
-            )];
+            return vec![
+                Group::new(tr!("browser-settings-security-title"))
+                    .description(note)
+                    .row(
+                        row(tr!("browser-settings-not-reported"))
+                            .subtitle(tr!("browser-settings-not-checked-description"))
+                            .leading(Icon::About),
+                    ),
+            ];
         };
         let (icon, tone) = Self::status_look(report.overall);
         let overall = row(Self::overall_text(report.overall)).leading(icon);
         let mut groups = vec![
-            Group::new("Security report".to_string())
+            Group::new(tr!("browser-settings-security-title"))
                 .description(note)
                 .row(match tone {
                     Some(tone) => overall.leading_tone(tone),
@@ -199,8 +203,8 @@ impl Component for SettingsPage {
             .enumerate()
             .map(|(at, engine)| (at.to_string(), engine.name.to_string()))
             .collect();
-        let mut search = Group::new("Address bar".to_string()).row(
-            row("Search engine")
+        let mut search = Group::new(tr!("browser-settings-address-title")).row(
+            row(tr!("browser-settings-search-label"))
                 .subtitle(settings_keeping.settings_line())
                 .trailing(dropdown(
                     engines,
@@ -224,8 +228,8 @@ impl Component for SettingsPage {
                     ),
             );
         }
-        let mut history_row =
-            row("Browsing history").subtitle(history_keeping.history_line(has_history, pages));
+        let mut history_row = row(tr!("browser-settings-history-label"))
+            .subtitle(history_keeping.history_line(has_history, pages));
         history_row = if history_keeping.can_start_over() {
             history_row.trailing(
                 action_button(tr!("browser-start-over"), move |_: ()| {
@@ -235,29 +239,26 @@ impl Component for SettingsPage {
             )
         } else {
             history_row.trailing(
-                action_button("Clear", move |_: ()| {
+                action_button(tr!("browser-settings-clear-button"), move |_: ()| {
                     ctx.with(|browser| browser.clear_history());
                 })
                 .enabled(has_history && pages > 0)
                 .compact(),
             )
         };
-        let mut privacy = Group::new("Privacy".to_string()).row(history_row);
+        let mut privacy = Group::new(tr!("browser-settings-privacy-title")).row(history_row);
         if let Some(kept) = scope.text() {
             privacy = privacy.description(kept);
         }
         let privacy = privacy
             .row(
-                row("Site permissions")
-                    .subtitle(if remembered == 1 {
-                        "1 site has choices kept".to_string()
-                    } else {
-                        format!("{remembered} sites have choices kept")
-                    })
+                row(tr!("browser-settings-permissions-label"))
+                    .subtitle(tr!("browser-settings-permissions-kept", count = remembered))
                     .trailing(
-                        action_button("Reset all", move |_: ()| {
+                        action_button(tr!("browser-settings-reset-all-button"), move |_: ()| {
                             ctx.with(|browser| browser.permissions.forget_all());
-                            ctx.overlays.toast("Site permissions reset");
+                            ctx.overlays
+                                .toast(tr!("browser-settings-permissions-reset-notification"));
                         })
                         .enabled(remembered > 0)
                         .compact(),
@@ -265,42 +266,57 @@ impl Component for SettingsPage {
             )
             .footer(tr!("browser-permissions-footer"));
         let settings = &info.settings;
-        let mut engine = Group::new("Engine".to_string())
-            .description("Chosen by whoever starts the browser, and read once at start.")
-            .row(property_row("Engine", EngineRows::engine_state_text(&info)))
-            .row(row("User agent").subtitle(EngineRows::user_agent_text(&info)))
+        let mut engine = Group::new(tr!("browser-settings-engine-title"))
+            .description(tr!("browser-settings-engine-description"))
+            .row(property_row(
+                tr!("browser-settings-engine-title"),
+                EngineRows::engine_state_text(&info),
+            ))
             .row(
-                row("Profile folder")
+                row(tr!("browser-settings-user-agent-label"))
+                    .subtitle(EngineRows::user_agent_text(&info)),
+            )
+            .row(
+                row(tr!("browser-settings-profile-folder-label"))
                     .path_value(settings.profile_dir.to_string_lossy().into_owned()),
             )
-            .row(row("Cache folder").path_value(settings.cache_dir.to_string_lossy().into_owned()))
             .row(
-                row("Downloads folder")
+                row(tr!("browser-settings-cache-folder-label"))
+                    .path_value(settings.cache_dir.to_string_lossy().into_owned()),
+            )
+            .row(
+                row(tr!("browser-settings-downloads-folder-label"))
                     .path_value(settings.download_dir.to_string_lossy().into_owned()),
             )
             .row(
-                row("Crash reports")
-                    .subtitle(
-                        "Kept in this folder, on this computer. They are never sent anywhere.",
-                    )
+                row(tr!("browser-settings-crash-label"))
+                    .subtitle(tr!("browser-settings-crash-description"))
                     .path_value(settings.crash_dir.to_string_lossy().into_owned()),
             )
-            .row(
-                row("Remote Settings").subtitle(EngineRows::remote_settings_text(
+            .row(row(tr!("browser-settings-remote-label")).subtitle(
+                EngineRows::remote_settings_text(
                     settings.remote_settings,
                     settings.remote_settings_server.as_deref(),
-                )),
+                ),
+            ))
+            .row(
+                row(tr!("browser-settings-webrtc-label"))
+                    .subtitle(settings.webrtc_ip_policy.clone()),
             )
-            .row(row("WebRTC addresses").subtitle(settings.webrtc_ip_policy.clone()))
             .row(property_row(
-                "Content processes",
+                tr!("browser-settings-processes-label"),
                 settings.content_process_limit.to_string(),
             ))
-            .row(property_row("Languages", settings.locales.clone()));
-        engine = engine.row(row("Required sandbox").subtitle(settings.sandbox_floor.clone()));
+            .row(property_row(
+                tr!("browser-settings-languages-label"),
+                settings.locales.clone(),
+            ));
+        engine = engine.row(
+            row(tr!("browser-settings-sandbox-label")).subtitle(settings.sandbox_floor.clone()),
+        );
         let security = EngineRows::security_groups(info.security.as_ref());
         let content = page_column()
-            .child(heading("Settings"))
+            .child(heading(tr!("browser-settings-title")))
             .child(search)
             .child(privacy)
             .child(engine);
@@ -399,11 +415,11 @@ mod tests {
         );
         assert_eq!(
             EngineRows::overall_text(CheckStatus::Fail),
-            "A check failed"
+            tr!("browser-settings-check-failed")
         );
         assert_eq!(
             EngineRows::overall_text(CheckStatus::Info),
-            "Every check passes"
+            tr!("browser-settings-check-ok")
         );
     }
 

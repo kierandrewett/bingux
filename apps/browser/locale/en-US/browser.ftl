@@ -404,3 +404,52 @@ browser-downloads-started-notification = Downloading { $name }
 browser-downloads-finished-notification = { $name } was downloaded
 # Button of those toasts: opens the list of downloads.
 browser-downloads-show-button = Show
+
+## Settings page
+## Rows the page adds to the profile store's own messages above.
+
+browser-settings-remote-off = Off: revoked certificates are caught only when the issuer answers
+browser-settings-remote-no-mirror = Security data only, but no mirror is set
+browser-settings-remote-mozilla = Security data only, from Mozilla
+browser-settings-engine-starting = Starting
+browser-settings-engine-stopped = Stopped
+browser-settings-engine-running = Running
+browser-settings-not-reported = Not reported yet
+browser-settings-check-failed = A check failed
+browser-settings-check-warn = Some checks warn
+browser-settings-check-unknown = Some checks could not be made
+browser-settings-check-ok = Every check passes
+browser-settings-sandbox-title = Sandbox of each kind of process
+browser-settings-checks-title = Other checks
+browser-settings-security-title = Security report
+browser-settings-security-description = The engine's own check of how it is set up. It finds mistakes in that; it cannot vouch for itself if something has broken into it.
+browser-settings-not-checked-description = The engine has not finished checking itself. Open this page again in a moment.
+browser-settings-address-title = Address bar
+browser-settings-search-label = Search engine
+browser-settings-history-label = Browsing history
+browser-settings-clear-button = Clear
+browser-settings-privacy-title = Privacy
+browser-settings-permissions-label = Site permissions
+browser-settings-reset-all-button = Reset all
+browser-settings-permissions-reset-notification = Site permissions reset
+browser-settings-engine-title = Engine
+browser-settings-engine-description = Chosen by whoever starts the browser, and read once at start.
+browser-settings-user-agent-label = User agent
+browser-settings-profile-folder-label = Profile folder
+browser-settings-cache-folder-label = Cache folder
+browser-settings-downloads-folder-label = Downloads folder
+browser-settings-crash-label = Crash reports
+browser-settings-crash-description = Kept in this folder, on this computer. They are never sent anywhere.
+browser-settings-remote-label = Remote Settings
+browser-settings-webrtc-label = WebRTC addresses
+browser-settings-processes-label = Content processes
+browser-settings-languages-label = Languages
+browser-settings-sandbox-label = Required sandbox
+browser-settings-title = Settings
+# $server is the mirror the browser was started with.
+browser-settings-remote-mirror = Security data only, from { $server }
+# How many sites have remembered permission choices.
+browser-settings-permissions-kept = { $count ->
+        [one] { $count } site has choices kept
+       *[other] { $count } sites have choices kept
+    }
