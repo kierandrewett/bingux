@@ -150,9 +150,12 @@ pub fn header_bar(
         // menu in the title's place, then New event and the menu. Today and
         // search are in the menu and on their keys.
         let _ = (today, search_id);
+        // The calendars are the sidebar of a wide window, at the start, so their
+        // button is the start toggle and the header puts it there; here it opens
+        // the same list in a popup.
         bar = bar
-            .leading(
-                icon_button(Icon::SidebarShow, move |_| {
+            .pane_toggle(
+                pane_toggle(PanelSide::Start, move |_| {
                     window.open(
                         popup(tr!("calendar-calendars"), Sidebar { model }).width(Dim::PopupNarrow),
                     );
