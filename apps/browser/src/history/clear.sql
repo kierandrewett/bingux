@@ -1,0 +1,2 @@
+DELETE FROM visits;
+DELETE FROM pages;

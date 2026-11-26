@@ -6,13 +6,13 @@ use bingux_ui::component::ComponentName;
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
-use crate::new_tab::NewTabPage;
-use crate::settings::SettingsPage;
 use crate::tabs::Page;
 
 use super::ctx::Ctx;
 use super::web::{Surface, TabPage};
+use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
+use crate::new_tab::NewTabPage;
+use crate::settings::SettingsPage;
 
 /// The layers the load bar rises above the page: freya paints the nodes of one layer in
 /// the order of their ids, and a layer is a node's depth, so a bar only one layer up shares
@@ -93,7 +93,9 @@ impl Component for PageArea {
                 url,
             }
             .into(),
-            Shown::Waiting => status_page(Icon::WebBrowser, "Starting the engine").into_element(),
+            Shown::Waiting => {
+                status_page(Icon::WebBrowser, tr!("browser-engine-starting")).into_element()
+            }
         };
         let status = hover.map(|address| {
             rect()

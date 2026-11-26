@@ -514,3 +514,14 @@ browser-engine-signal-detail = Ended by signal { $signal }
 browser-engine-exit-detail = Exit status { $code }
 browser-engine-restart-button = Start again
 browser-engine-close-button = Close window
+
+## The window title and the page that waits for the engine
+
+# The title of a private window with no page title yet.
+browser-window-title-private = Private browsing – Browser
+# The title of a window: the page's title, then the app's name. $title is the page's.
+browser-window-title-page = { $title } – Browser
+# The title of a private window: the page's title, then the kind of window. $title is the page's.
+browser-window-title-private-page = { $title } – Private browsing
+# What the page area says while the engine is starting.
+browser-engine-starting = Starting the engine

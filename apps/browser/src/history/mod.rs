@@ -292,7 +292,7 @@ pub fn write(connection: &mut Connection, changes: &[Change]) -> rusqlite::Resul
 }
 
 /// The statements that empty the history.
-const CLEAR_ALL: &str = "DELETE FROM visits; DELETE FROM pages;";
+const CLEAR_ALL: &str = include_str!("clear.sql");
 
 /// Removes every page and visit. `secure_delete` overwrites the rows, and the
 /// write-ahead log, which still holds them, is emptied.

@@ -15,16 +15,16 @@ use crate::downloads::CardState;
 use crate::engine::{self, Engine, EngineFailedPage};
 use crate::find::{BarState, FindBar};
 use crate::menus::ContextMenuHost;
-use crate::prompts::{DialogFields, PromptHost};
 use crate::site_info::PopoverState;
 use crate::tabs::Place;
-use crate::tabs::Strip;
 
 use super::ctx::{Chrome, Ctx};
 use super::page::PageArea;
 use super::popovers::Popovers;
 use super::toolbar::{PhoneBottom, Toolbar};
 use crate::permissions::PermissionBanner;
+use crate::prompts::{DialogFields, PromptHost};
+use crate::tabs::Strip;
 
 /// The profile a window opens in, handed from `main` to the window's first
 /// frame once (it holds what cannot be copied, such as the store's writer).
@@ -217,10 +217,12 @@ impl Component for Content {
             &(title.clone(), private),
             move |(title, private): &(String, bool)| {
                 let name = match (title.is_empty(), private) {
-                    (true, true) => "Private browsing \u{2013} Browser".to_string(),
-                    (true, false) => "Browser".to_string(),
-                    (false, true) => format!("{title} \u{2013} Private browsing"),
-                    (false, false) => format!("{title} \u{2013} Browser"),
+                    (true, true) => tr!("browser-window-title-private"),
+                    (true, false) => tr!("browser-title"),
+                    (false, true) => {
+                        tr!("browser-window-title-private-page", title = title.as_str())
+                    }
+                    (false, false) => tr!("browser-window-title-page", title = title.as_str()),
                 };
                 with_window(move |window| window.set_title(&name));
             },
