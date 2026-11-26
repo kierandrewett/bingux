@@ -8,7 +8,7 @@ use freya::prelude::*;
 
 use crate::model::downloads::Downloads;
 use crate::model::tab::TabKind;
-use crate::site_info::{self, Tone};
+use crate::site_info::ConnectionButton;
 use crate::zoom::{Zoom, ZoomChip};
 
 use super::ctx::Ctx;
@@ -21,7 +21,6 @@ struct Reading {
     can_back: bool,
     can_forward: bool,
     loading: bool,
-    summary: site_info::Summary,
     zoom: Zoom,
     is_web: bool,
     tabs: usize,
@@ -35,31 +34,9 @@ fn reading(ctx: Ctx) -> Reading {
         can_back: tab.is_some_and(|tab| tab.can_back),
         can_forward: tab.is_some_and(|tab| tab.can_forward),
         loading: tab.is_some_and(|tab| tab.load.loading),
-        summary: tab.map_or_else(
-            || site_info::summarize(&Default::default(), ""),
-            |tab| match tab.kind {
-                TabKind::Settings => site_info::summarize(
-                    &bingux_ui::web_view::Security {
-                        state: bingux_ui::web_view::SecurityState::Internal,
-                        ..Default::default()
-                    },
-                    "bingux:settings",
-                ),
-                TabKind::Web => site_info::summarize(&tab.security, &tab.url),
-            },
-        ),
         zoom: tab.map_or(Zoom::DEFAULT, |tab| tab.zoom),
         is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web),
         tabs: browser.tabs.len(),
-    }
-}
-
-fn tone_ink(tone: Tone) -> Option<Ink> {
-    match tone {
-        Tone::Neutral => None,
-        Tone::Good => None,
-        Tone::Warning => Some(Ink::Warning),
-        Tone::Danger => Some(Ink::Danger),
     }
 }
 
@@ -99,21 +76,6 @@ fn reload_button(ctx: Ctx, read: &Reading) -> Element {
         .enabled(read.is_web)
         .into()
     }
-}
-
-/// The connection of the page: its icon opens the page info.
-fn connection_button(ctx: Ctx, read: &Reading) -> Element {
-    let mut anchor = ctx.chrome.info_anchor;
-    let mut open = ctx.chrome.info_open;
-    let mut button =
-        icon_button(read.summary.icon, move |_: ()| open.set(true)).tooltip(&read.summary.headline);
-    if let Some(ink) = tone_ink(read.summary.tone) {
-        button = button.ink(ink);
-    }
-    rect()
-        .on_sized(move |event: Event<SizedEventData>| anchor.set_if_modified(event.area))
-        .child(button)
-        .into_element()
 }
 
 /// The downloads button; busy while something downloads.
@@ -190,7 +152,7 @@ impl Component for Toolbar {
             // history is in the bar below.
             return bar
                 .a11y_alt("Address")
-                .child(connection_button(ctx, &read))
+                .child(ConnectionButton::element(ctx))
                 .child(AddressBar { ctx })
                 .child(tabs_button(ctx, read.tabs))
                 .child(menu_control(ctx))
@@ -200,7 +162,7 @@ impl Component for Toolbar {
             .a11y_alt("Navigation")
             .children(history_buttons(ctx, &read))
             .child(reload_button(ctx, &read))
-            .child(connection_button(ctx, &read))
+            .child(ConnectionButton::element(ctx))
             .child(AddressBar { ctx })
             .maybe_child((!read.zoom.is_default()).then_some(ZoomChip {
                 ctx,

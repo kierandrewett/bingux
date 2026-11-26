@@ -4,6 +4,14 @@
 use bingux_ui::icons::Icon;
 use bingux_ui::web_view::{Security, SecurityState};
 
+mod button;
+mod popover;
+
+pub use button::ConnectionButton;
+pub use popover::{PopoverState, SiteInfoPopover};
+
+use crate::model::tab::{Tab, TabKind};
+
 /// How much the person should worry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tone {
@@ -24,41 +32,42 @@ pub struct Summary {
     pub detail: String,
 }
 
-/// Describes `security` for the page at `url`.
-pub fn summarize(security: &Security, url: &str) -> Summary {
-    let blank = url.is_empty() || url == "about:blank";
-    // A file is local whatever the engine calls its connection.
-    let state = if url.starts_with("file://") {
-        SecurityState::Local
-    } else {
-        security.state
-    };
-    match state {
-        _ if blank => Summary {
+impl Summary {
+    /// Describes `security` for the page at `url`.
+    pub fn of(security: &Security, url: &str) -> Self {
+        let blank = url.is_empty() || url == "about:blank";
+        // A file is local whatever the engine calls its connection.
+        let state = if url.starts_with("file://") {
+            SecurityState::Local
+        } else {
+            security.state
+        };
+        match state {
+        _ if blank => Self {
             icon: Icon::WebBrowser,
             tone: Tone::Neutral,
             headline: "No page".to_string(),
             detail: "There is nothing to describe yet.".to_string(),
         },
-        SecurityState::Internal => Summary {
+        SecurityState::Internal => Self {
             icon: Icon::WebBrowser,
             tone: Tone::Neutral,
             headline: "A page of this browser".to_string(),
             detail: "This page is part of the browser and sends nothing to the network.".to_string(),
         },
-        SecurityState::Local => Summary {
+        SecurityState::Local => Self {
             icon: Icon::Computer,
             tone: Tone::Neutral,
             headline: "A file on this computer".to_string(),
             detail: "The page was read from your disk, not from the network.".to_string(),
         },
-        SecurityState::Secure if security.mixed_passive => Summary {
+        SecurityState::Secure if security.mixed_passive => Self {
             icon: Icon::DialogWarning,
             tone: Tone::Warning,
             headline: "Connection is secure, but some content is not".to_string(),
             detail: "Images or media on this page were loaded without encryption. Someone on the network could see or replace them.".to_string(),
         },
-        SecurityState::Secure => Summary {
+        SecurityState::Secure => Self {
             icon: Icon::NetworkWirelessEncrypted,
             tone: Tone::Good,
             headline: "Connection is secure".to_string(),
@@ -69,7 +78,7 @@ pub fn summarize(security: &Security, url: &str) -> Summary {
             }
             .to_string(),
         },
-        SecurityState::Broken => Summary {
+        SecurityState::Broken => Self {
             icon: Icon::DialogWarning,
             tone: Tone::Danger,
             headline: "Connection is not secure".to_string(),
@@ -80,18 +89,36 @@ pub fn summarize(security: &Security, url: &str) -> Summary {
             }
             .to_string(),
         },
-        SecurityState::Insecure if url.starts_with("https://") => Summary {
+        SecurityState::Insecure if url.starts_with("https://") => Self {
             icon: Icon::WebBrowser,
             tone: Tone::Neutral,
             headline: "Connecting".to_string(),
             detail: "The connection is being made; nothing is known about it yet.".to_string(),
         },
-        SecurityState::Insecure => Summary {
+        SecurityState::Insecure => Self {
             icon: Icon::DialogWarning,
             tone: Tone::Warning,
             headline: "Connection is not secure".to_string(),
             detail: "Anyone on the network could read this page and what you send to it. Do not enter passwords or card numbers here.".to_string(),
         },
+    }
+    }
+
+    /// Describes the connection of `tab`, or of no tab.
+    pub fn of_tab(tab: Option<&Tab>) -> Self {
+        match tab {
+            None => Self::of(&Security::default(), ""),
+            Some(tab) => match tab.kind {
+                TabKind::Settings => Self::of(
+                    &Security {
+                        state: SecurityState::Internal,
+                        ..Security::default()
+                    },
+                    "bingux:settings",
+                ),
+                TabKind::Web => Self::of(&tab.security, &tab.url),
+            },
+        }
     }
 }
 

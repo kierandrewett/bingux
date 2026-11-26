@@ -6,31 +6,10 @@ use bingux_ui::web_view::DownloadId;
 use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 use freya::prelude::*;
 
-use crate::address::Address;
 use crate::model::downloads;
-use crate::model::tab::TabKind;
-use crate::site_info::{self, Tone};
+use crate::site_info::SiteInfoPopover;
 
 use super::ctx::Ctx;
-
-/// The width of both: wide enough for a sentence, and a phone's own column.
-fn width(ctx: Ctx) -> f32 {
-    if is_compact() {
-        // The phone's whole column, less the margin a floating card keeps.
-        (ctx.window.size().0 - 2.0 * S2.px()).max(Dim::MenuWide.px())
-    } else {
-        Dim::Dialog.px()
-    }
-}
-
-fn tone_of(tone: Tone) -> Option<bingux_ui::style::Tone> {
-    match tone {
-        Tone::Neutral => None,
-        Tone::Good => None,
-        Tone::Warning => Some(bingux_ui::style::Tone::Warning),
-        Tone::Danger => Some(bingux_ui::style::Tone::Danger),
-    }
-}
 
 /// Both popovers, open or not.
 #[derive(PartialEq)]
@@ -42,86 +21,18 @@ impl Component for Popovers {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
         let chrome = ctx.chrome;
-        let mut info_open = chrome.info_open;
         let mut downloads_open = chrome.downloads_open;
-        let info_anchor = chrome.info_anchor.read().clone();
         let downloads_anchor = chrome.downloads_anchor.read().clone();
         rect()
             .width(Size::px(0.0))
             .height(Size::px(0.0))
-            .child(
-                popover(info_open(), &info_anchor, page_info(ctx))
-                    .width_px(width(ctx))
-                    .on_dismiss(move |_: ()| info_open.set(false)),
-            )
+            .child(SiteInfoPopover::element(ctx))
             .child(
                 popover(downloads_open(), &downloads_anchor, download_list(ctx))
-                    .width_px(width(ctx))
+                    .width_px(ctx.popover_width())
                     .on_dismiss(move |_: ()| downloads_open.set(false)),
             )
     }
-}
-
-/// The connection of the page, and what the site may do.
-fn page_info(ctx: Ctx) -> Element {
-    let (summary, origin, remembered, key, internal) = {
-        let browser = ctx.browser.read();
-        let Some(tab) = browser.active() else {
-            return rect().into_element();
-        };
-        let summary = site_info::summarize(&tab.security, &tab.url);
-        let origin = Address::new(&tab.url).origin();
-        (
-            summary,
-            origin.clone(),
-            browser.permissions.for_origin(&origin),
-            tab.key,
-            tab.kind == TabKind::Settings || tab.is_blank(),
-        )
-    };
-    let mut status_row = row(summary.headline.clone())
-        .subtitle(summary.detail.clone())
-        .leading(summary.icon);
-    if let Some(tone) = tone_of(summary.tone) {
-        status_row = status_row.leading_tone(tone);
-    }
-    let mut column = rect()
-        .tw_layout(&[flex_col(), w_full(), gap(S3)])
-        .child(Group::new(None::<String>).row(status_row));
-    if !internal && origin.contains("://") {
-        let site = Group::new("Site".to_string())
-            .row(property_row("Site", Address::new(&origin).host()))
-            .row(property_row("Address", {
-                let browser = ctx.browser.read();
-                browser
-                    .tabs
-                    .get(key)
-                    .map(|tab| Address::new(&tab.url).display())
-                    .unwrap_or_default()
-            }));
-        column = column.child(site);
-    }
-    if !remembered.is_empty() {
-        let mut group = Group::new("Permissions".to_string())
-            .footer("Choices you made for this site. Reset one to be asked again.");
-        for (name, allowed) in remembered {
-            let site = origin.clone();
-            let forget = name.clone();
-            group = group.row(
-                row(name)
-                    .value(if allowed { "Allowed" } else { "Blocked" })
-                    .trailing(
-                        action_button("Reset", move |_: ()| {
-                            ctx.with(|browser| browser.permissions.forget(&site, &forget));
-                        })
-                        .compact()
-                        .flat(),
-                    ),
-            );
-        }
-        column = column.child(group);
-    }
-    column.into_element()
 }
 
 /// One download's controls: pause or resume, and cancel; Retry for one that
