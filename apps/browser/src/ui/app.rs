@@ -12,7 +12,7 @@ use crate::address::FieldState;
 use crate::browser::{Browser, Options, Profile};
 use crate::commands::{Command, Platform};
 use crate::downloads::CardState;
-use crate::engine::{self, Engine};
+use crate::engine::{self, Engine, EngineFailedPage};
 use crate::find::{BarState, FindBar};
 use crate::menus::ContextMenuHost;
 use crate::prompts::{DialogFields, PromptHost};
@@ -232,7 +232,14 @@ impl Component for Content {
         });
 
         if let Some((message, code, cause, restartable)) = failed {
-            return crate::engine::engine_failed(ctx, cause, &message, code, restartable);
+            return EngineFailedPage {
+                ctx,
+                cause,
+                message,
+                code,
+                restartable,
+            }
+            .into_element();
         }
         if empty_window {
             // The last tab went: the window is closing.

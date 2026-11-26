@@ -11,7 +11,7 @@ use bingux_ui::web_view::{BrowserBackend, Capabilities, Done};
 
 use crate::browser::Outbox;
 
-pub use failed_page::engine_failed;
+pub use failed_page::EngineFailedPage;
 pub use status::Status;
 
 /// The engine. Comparable by identity (the backend) so it can be a prop.

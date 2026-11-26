@@ -7,45 +7,24 @@ use freya::prelude::*;
 use super::failure;
 use crate::ui::Ctx;
 
-/// The engine itself is gone: nothing in the window can work. When a new one
-/// may be started the tabs are kept, and "Start again" opens them where they
-/// were; a window that cannot go on offers only to close.
-pub fn engine_failed(
-    ctx: Ctx,
-    cause: FailureCause,
-    message: &str,
-    code: u32,
-    restartable: bool,
-) -> Element {
-    EngineFailed {
-        ctx,
-        cause,
-        message: message.to_string(),
-        code,
-        restartable,
-    }
-    .into()
-}
-
 /// The page of a window whose engine is gone. It is a component of its own so
 /// that it paints the window's background (nothing else is on screen) with the
 /// tokens of the window.
 #[derive(PartialEq)]
-struct EngineFailed {
-    ctx: Ctx,
-    cause: FailureCause,
-    message: String,
-    code: u32,
-    restartable: bool,
+pub struct EngineFailedPage {
+    pub ctx: Ctx,
+    pub cause: FailureCause,
+    pub message: String,
+    pub code: u32,
+    pub restartable: bool,
 }
 
-impl Component for EngineFailed {
+impl Component for EngineFailedPage {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let ctx = self.ctx;
         let window = ctx.window;
-        let page =
-            failure::for_engine_failure(self.cause, &self.message, self.code, self.restartable);
+        let page = failure::EnginePage::of(self.cause, &self.message, self.code, self.restartable);
         let mut view = status_page(page.icon, page.title).description(page.text);
         // A status page holds one element under its action: the way out, when
         // there is a way on, and how the engine ended, when it ran.
