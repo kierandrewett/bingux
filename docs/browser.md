@@ -7,7 +7,9 @@ around IE's WebBrowser control. Any Bingux app can embed the same control (Mail'
 embeddable Gecko, see the Vivarium repository) into the control's frame view.
 
 ```
-bingux-browser          model/ (state and rules, no window)   ui/ (pages built from bingux-ui)
+bingux-browser          one folder per feature (tabs, address, downloads, find, ...: state, behaviour, components,
+                        tests, words) over app/ (launch), ui/ (the window's layout) and engine/ (the only code that
+                        speaks to the backend); `docs/browser/structure.md`
       |
 bingux_ui::web_view     WebView control + BrowserBackend (one trait)
                           ->  engine (feature web-view-vivarium or web-view-dynamic-load, over `vivarium` 0.1)
