@@ -55,7 +55,7 @@ fn the_first_tab_is_blank_and_the_engine_is_ready_after_its_event() {
     let (browser, _) = browser();
     assert_eq!(browser.tabs.len(), 1);
     assert_eq!(browser.active().map(|tab| tab.page()), Some(Page::NewTab));
-    assert_eq!(browser.engine, crate::browser::EngineStatus::Ready);
+    assert_eq!(browser.engine, crate::engine::Status::Ready);
 }
 
 #[test]

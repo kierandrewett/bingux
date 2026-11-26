@@ -16,10 +16,10 @@ use std::sync::Arc;
 
 use bingux_ui::web_view::requests::ContextTarget;
 use bingux_ui::web_view::{
-    BackendError, BrowserBackend, Capabilities, FailureCause, PageEnvironment, RequestId,
-    TabConfig, TabId,
+    BackendError, BrowserBackend, Capabilities, PageEnvironment, RequestId, TabConfig, TabId,
 };
 
+use crate::engine;
 use crate::model::address::{ENGINES, SearchEngine};
 use crate::model::downloads::Downloads;
 use crate::model::keeping::{Keeping, NotSaved};
@@ -29,23 +29,6 @@ use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::TabList;
 use crate::profile::settings::Settings;
 use crate::profile::store::Store;
-
-/// Where the engine is.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum EngineStatus {
-    Starting,
-    Ready,
-    /// The engine is gone, and every session with it. The tabs stay (without a
-    /// session) until a restart opens them again, or the window is closed.
-    Failed {
-        message: String,
-        /// The engine's exit code, or 128 plus the signal; 0 when it never started.
-        code: u32,
-        cause: FailureCause,
-        /// A new engine on the same profile may be started (`Browser::restart_engine`).
-        restartable: bool,
-    },
-}
 
 /// How a window is set up.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -165,7 +148,7 @@ pub struct Browser {
     /// Whether the history is kept.
     pub history_keeping: Keeping,
     pub permissions: Permissions,
-    pub engine: EngineStatus,
+    pub engine: engine::Status,
     /// The settings of the window's profile.
     pub settings: Settings,
     /// Whether a change of the settings is kept.
@@ -215,7 +198,7 @@ impl Browser {
                 profile.settings_keeping.clone()
             },
             permissions: Permissions::new(),
-            engine: EngineStatus::Starting,
+            engine: engine::Status::Starting,
             settings: profile.settings,
             settings_keeping: Keeping::Loading,
             store: profile.store,

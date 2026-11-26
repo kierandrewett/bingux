@@ -3,7 +3,8 @@
 
 use bingux_ui::web_view::{Disposition, FailureCause, NewWindow, RequestId, TabId};
 
-use super::{Browser, EngineStatus, Notice};
+use super::{Browser, Notice};
+use crate::engine;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
 
@@ -31,7 +32,7 @@ impl Browser {
             tab.cert = None;
         }
         self.menu = None;
-        self.engine = EngineStatus::Failed {
+        self.engine = engine::Status::Failed {
             message,
             code,
             cause,
@@ -42,7 +43,7 @@ impl Browser {
     /// The engine is up (again): it takes the window's look, and what the
     /// controls may offer is what it says it can do.
     pub(super) fn engine_ready(&mut self) {
-        self.engine = EngineStatus::Ready;
+        self.engine = engine::Status::Ready;
         self.capabilities = self.backend().capabilities();
         let environment = self.environment.clone();
         self.engine_call(|backend| backend.set_environment(&environment));
@@ -52,7 +53,7 @@ impl Browser {
     /// one blank tab. While the engine is not there the window opens on its
     /// page, with no tab; the first restart opens them.
     pub fn open_first(&mut self, first: &[String]) {
-        if matches!(self.engine, EngineStatus::Failed { .. }) {
+        if matches!(self.engine, engine::Status::Failed { .. }) {
             self.start = Some(first.to_vec());
             return;
         }
@@ -72,7 +73,7 @@ impl Browser {
     /// still does not start the window keeps saying why (the backend says it
     /// again, with the new words).
     pub fn restart_engine(&mut self) {
-        let EngineStatus::Failed {
+        let engine::Status::Failed {
             restartable: true, ..
         } = self.engine
         else {
@@ -82,7 +83,7 @@ impl Browser {
             self.fail(&error);
             return;
         }
-        self.engine = EngineStatus::Starting;
+        self.engine = engine::Status::Starting;
         self.capabilities = self.backend().capabilities();
         let active = self.tabs.active_key();
         for (key, old) in std::mem::take(&mut self.lost) {

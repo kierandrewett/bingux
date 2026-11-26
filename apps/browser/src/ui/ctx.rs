@@ -6,26 +6,13 @@
 //! [`Ctx::with`], which changes the browser and then does what only the window
 //! can do (focus the address bar, go fullscreen, show a toast).
 
-use std::sync::Arc;
-
 use bingux_ui::prelude::*;
 use bingux_ui::shell::with_window;
-use bingux_ui::web_view::BrowserBackend;
 use freya::prelude::*;
 
 use crate::browser::{Browser, Notice, UiRequest};
 use crate::model::shortcuts::Command;
 use crate::model::shortcuts::Platform;
-
-/// The engine, comparable by identity so it can be a prop.
-#[derive(Clone)]
-pub struct Engine(pub Arc<dyn BrowserBackend>);
-
-impl PartialEq for Engine {
-    fn eq(&self, other: &Self) -> bool {
-        Arc::ptr_eq(&self.0, &other.0)
-    }
-}
 
 /// The states of the chrome that are not the browser's: they belong to the
 /// window, not to a tab.

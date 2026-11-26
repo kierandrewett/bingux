@@ -23,10 +23,11 @@ use bingux_ui::web_view::{BrowserEvent, Capabilities, FailureCause, TabEvent, Ta
 use freya::prelude::*;
 
 use crate::browser::Options;
+use crate::engine::Engine;
 use crate::model::shortcuts::Command;
 use crate::model::tab::Tab;
 use crate::target::SCHEME;
-use crate::ui::{App, Ctx, Engine};
+use crate::ui::{App, Ctx};
 
 thread_local! {
     /// The window's handles, published by the window when it mounts, so a

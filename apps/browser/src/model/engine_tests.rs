@@ -13,7 +13,8 @@ use bingux_ui::web_view::{
 
 use super::shortcuts::Command;
 use super::tabs::Place;
-use crate::browser::{Browser, EngineStatus, Options};
+use crate::browser::{Browser, Options};
+use crate::engine;
 
 fn browser() -> (Browser, Arc<TestDoubleBackend>) {
     let double = TestDoubleBackend::new();
@@ -33,7 +34,7 @@ fn go(browser: &mut Browser, url: &str) -> u64 {
 
 fn failed(browser: &Browser) -> Option<(FailureCause, bool, u32)> {
     match &browser.engine {
-        EngineStatus::Failed {
+        engine::Status::Failed {
             cause,
             restartable,
             code,
@@ -54,7 +55,7 @@ fn an_engine_failure_is_a_state_with_its_cause_and_not_a_panic() {
     );
     browser.poll();
     assert_eq!(failed(&browser), Some((FailureCause::Crashed, true, 137)));
-    let EngineStatus::Failed { message, .. } = &browser.engine else {
+    let engine::Status::Failed { message, .. } = &browser.engine else {
         panic!("failed")
     };
     assert_eq!(message, "the engine process was killed");
@@ -109,7 +110,7 @@ fn a_restart_opens_every_tab_again_where_it_was_and_the_engine_is_ready_again() 
     double.clear_calls();
 
     browser.restart_engine();
-    assert_eq!(browser.engine, EngineStatus::Starting);
+    assert_eq!(browser.engine, engine::Status::Starting);
     let calls = double.calls();
     assert!(matches!(calls[0], Call::Restart), "the engine first");
     let restored: Vec<_> = calls
@@ -139,7 +140,7 @@ fn a_restart_opens_every_tab_again_where_it_was_and_the_engine_is_ready_again() 
     );
 
     browser.poll();
-    assert_eq!(browser.engine, EngineStatus::Ready);
+    assert_eq!(browser.engine, engine::Status::Ready);
     for (key, was) in before {
         let tab = browser.tabs.get(key).unwrap();
         assert!(
@@ -199,7 +200,7 @@ fn an_engine_that_does_not_start_is_a_window_that_says_why_and_tries_again_when_
     double.fix_start();
     browser.restart_engine();
     browser.poll();
-    assert_eq!(browser.engine, EngineStatus::Ready);
+    assert_eq!(browser.engine, engine::Status::Ready);
     assert_eq!(
         browser.tabs.len(),
         1,
@@ -395,7 +396,7 @@ fn the_controls_follow_the_engine_after_a_restart() {
         double.capabilities(),
         "read again from the new engine"
     );
-    assert_eq!(browser.engine, EngineStatus::Ready);
+    assert_eq!(browser.engine, engine::Status::Ready);
 }
 
 #[test]
@@ -410,7 +411,7 @@ fn the_latest_words_of_a_failure_are_the_ones_the_window_keeps() {
         restartable: true,
     }));
     browser.poll();
-    let EngineStatus::Failed {
+    let engine::Status::Failed {
         message,
         code,
         cause,

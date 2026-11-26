@@ -7,6 +7,7 @@
 //! nothing. Each profile is a process of its own (`docs/browser/profiles-and-store.md`).
 
 mod browser;
+mod engine;
 mod locale;
 mod model;
 mod profile;
@@ -21,9 +22,10 @@ use std::os::unix::process::CommandExt;
 use bingux_ui::prelude::Application;
 
 use crate::browser::{Options, Profile};
+use crate::engine::Engine;
 use crate::profile::open::{Opened, open, open_private};
 use crate::profile::places::{Folders, Places};
-use crate::ui::{App, Engine, Gate, GateWindow, Handoff};
+use crate::ui::{App, Gate, GateWindow, Handoff};
 
 const USAGE: &str = "Usage: bingux-browser [--private] [--profile NAME] [ADDRESS | WORDS | FILE]...\n\
 \n\

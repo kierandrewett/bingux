@@ -18,7 +18,7 @@ mod toolbar;
 mod web;
 
 pub use app::{App, Handoff};
-pub use ctx::{Ctx, Engine};
+pub use ctx::Ctx;
 pub use gate::{Gate, GateWindow};
 #[cfg(feature = "snapshot")]
 pub use phone::open_tabs;

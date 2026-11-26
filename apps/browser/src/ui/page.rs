@@ -29,7 +29,7 @@ enum Shown {
 #[derive(PartialEq)]
 pub struct PageArea {
     pub ctx: Ctx,
-    pub engine: super::ctx::Engine,
+    pub engine: crate::engine::Engine,
 }
 
 impl Component for PageArea {

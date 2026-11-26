@@ -14,7 +14,9 @@ use freya::prelude::*;
 
 use crate::model::shortcuts::{Command, page_command};
 
-use super::ctx::{Ctx, Engine};
+use crate::engine::Engine;
+
+use super::ctx::Ctx;
 
 /// A surface, comparable by identity so it can be a prop.
 #[derive(Clone)]

@@ -8,11 +8,12 @@ use bingux_ui::web_view::PageEnvironment;
 use bingux_ui::web_view::queue::Signal;
 use freya::prelude::*;
 
-use crate::browser::{Browser, EngineStatus, Options, Profile};
+use crate::browser::{Browser, Options, Profile};
+use crate::engine::{self, Engine};
 use crate::model::shortcuts::{Command, Platform, window_command};
 use crate::model::tabs::Place;
 
-use super::ctx::{Chrome, Ctx, Engine};
+use super::ctx::{Chrome, Ctx};
 use super::find::FindBar;
 use super::page::PageArea;
 use super::pages;
@@ -201,7 +202,7 @@ impl Component for Content {
                 title,
                 browser.fullscreen,
                 match &browser.engine {
-                    EngineStatus::Failed {
+                    engine::Status::Failed {
                         message,
                         code,
                         cause,
