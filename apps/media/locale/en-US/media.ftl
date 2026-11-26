@@ -48,22 +48,46 @@ media-up-next = Up next
 # Section headings in the sidebar and the library.
 media-songs-heading = Songs
 media-albums-heading = Albums
+media-artists-heading = Artists
 media-videos-heading = Videos
 media-column-title = Title
 media-column-artist = Artist
 media-column-album = Album
 media-column-time = Time
 
+## The window, the file chooser, the library pages and the screen lock
+
+# The app's name, in the window title and the About window.
+media-title = Media
+media-description = Play music and films
+media-opening = Opening
+media-filter-music-videos = Music and videos
+media-filter-all-files = All files
+# Why Media asks the system not to dim or lock the screen, shown in the system's own list.
+media-inhibit-reason = Playing a video
+media-album-missing = This album is not in the library
+media-artist-missing = This artist is not in the library
+# The picture of an album. $title (Text) - the album's name
+media-album-cover =
+    .a11y = { $title }, cover
+
 ## Menus and commands
 
 media-menu-open = Open file…
+    .keywords = play, file
 media-menu-add-folder = Add folder…
+    .keywords = library, music
 media-menu-scan = Update library
+    .keywords = scan, refresh, rescan
 media-menu-settings = Settings
+    .keywords = preferences, Last.fm, folders
 media-menu-mini = Mini player
+    .keywords = picture in picture, small
 media-menu-player = Show player
+    .keywords = now playing
 media-menu-full-screen = Full screen
 media-menu-up-next = Go to up next
+    .keywords = queue
 # The group the playback commands sit under in the command palette.
 media-controls-group = Controls
 media-command-play = Play
@@ -71,11 +95,17 @@ media-command-pause = Pause
 media-command-next = Next
 media-command-previous = Previous
 media-command-louder = Increase volume
+    .keywords = louder, volume up
 media-command-quieter = Decrease volume
+    .keywords = quieter, volume down
 media-command-mute = Mute
+    .keywords = silence, sound
 media-command-shuffle = Shuffle
+    .keywords = random
 media-command-repeat = Repeat
+    .keywords = loop
 media-command-repeat-one = Repeat one
+    .keywords = loop
 
 ## Keyboard hints in the player
 

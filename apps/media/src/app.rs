@@ -78,11 +78,11 @@ pub fn open_files(window: Window) {
             .title(text::menu_open())
             .multiple(true)
             .filter(
-                Filter::new("Music and videos")
+                Filter::new(tr!("media-filter-music-videos"))
                     .mime("audio/*")
                     .mime("video/*"),
             )
-            .filter(Filter::new("All files")),
+            .filter(Filter::new(tr!("media-filter-all-files"))),
         |chosen| {
             if let Some(chosen) = chosen {
                 play_paths(chosen.paths.clone());
@@ -126,19 +126,21 @@ fn window_commands(
             .shortcut("Ctrl+O")
             .icon(Icon::DocumentOpen)
             .group(CommandGroup::File)
-            .keywords(["play", "file"]),
+            .keywords(bingux_ui::i18n::keywords(&tr!("media-menu-open.keywords"))),
         Command::new("file.add-folder", text::menu_add_folder(), move |_| {
             add_folder(window)
         })
         .icon(Icon::FolderMusic)
         .group(CommandGroup::File)
-        .keywords(["library", "music"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-menu-add-folder.keywords"
+        ))),
         Command::new("file.update-library", text::menu_scan(), |_| {
             engine().scan()
         })
         .icon(Icon::Refresh)
         .group(CommandGroup::File)
-        .keywords(["scan", "refresh", "rescan"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!("media-menu-scan.keywords"))),
         Command::new(
             "controls.play-pause",
             if playing {
@@ -180,14 +182,18 @@ fn window_commands(
         .icon(Icon::Sound)
         .group(controls)
         .section("volume")
-        .keywords(["louder", "volume up"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-command-louder.keywords"
+        ))),
         Command::new("controls.quieter", text::command_quieter(), |_| {
             change_volume(-5.0)
         })
         .shortcut("Ctrl+Down")
         .group(controls)
         .section("volume")
-        .keywords(["quieter", "volume down"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-command-quieter.keywords"
+        ))),
         Command::new("controls.mute", text::command_mute(), move |_| {
             run_volume(VolumeChange::Mute(!muted))
         })
@@ -195,7 +201,9 @@ fn window_commands(
         .checked(muted)
         .group(controls)
         .section("volume")
-        .keywords(["silence", "sound"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-command-mute.keywords"
+        ))),
         Command::new("controls.shuffle", text::command_shuffle(), move |_| {
             engine().player.set_shuffle(!shuffle)
         })
@@ -203,7 +211,9 @@ fn window_commands(
         .icon(Icon::MediaPlaylistShuffle)
         .group(controls)
         .section("order")
-        .keywords(["random"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-command-shuffle.keywords"
+        ))),
         Command::new("controls.repeat", text::command_repeat(), move |_| {
             engine().player.set_repeat(if repeat == Repeat::All {
                 Repeat::Off
@@ -215,7 +225,9 @@ fn window_commands(
         .icon(Icon::MediaPlaylistRepeat)
         .group(controls)
         .section("order")
-        .keywords(["loop"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-command-repeat.keywords"
+        ))),
         Command::new(
             "controls.repeat-one",
             text::command_repeat_one(),
@@ -230,7 +242,9 @@ fn window_commands(
         .checked(repeat == Repeat::One)
         .group(controls)
         .section("order")
-        .keywords(["loop"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-command-repeat-one.keywords"
+        ))),
         Command::new("view.player", text::menu_player(), move |_| {
             if *ui.stage.peek() {
                 close_stage(ui)
@@ -242,7 +256,9 @@ fn window_commands(
         .checked(stage_open)
         .enabled(has_item)
         .group(CommandGroup::View)
-        .keywords(["now playing"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-menu-player.keywords"
+        ))),
         Command::new("view.mini-player", text::menu_mini(), move |_| {
             toggle_mini(ui)
         })
@@ -250,7 +266,7 @@ fn window_commands(
         .checked(mini)
         .icon(Icon::ViewPip)
         .group(CommandGroup::View)
-        .keywords(["picture in picture", "small"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!("media-menu-mini.keywords"))),
         Command::new("view.full-screen", text::menu_full_screen(), move |_| {
             if !*ui.stage.peek() {
                 open_stage(ui);
@@ -268,13 +284,17 @@ fn window_commands(
         .shortcut("Ctrl+U")
         .icon(Icon::ViewListOrdered)
         .group(CommandGroup::Go)
-        .keywords(["queue"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-menu-up-next.keywords"
+        ))),
         Command::new("app.settings", text::menu_settings(), move |_| {
             crate::settings_page::open(window, overlays)
         })
         .shortcut("Ctrl+,")
         .icon(Icon::PreferencesSystem)
-        .keywords(["preferences", "last.fm", "folders"]),
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "media-menu-settings.keywords"
+        ))),
         Command::key_hint("player.play", text::hint_play(), "Space or K"),
         Command::key_hint("player.seek", text::hint_seek(), "Left and Right"),
         Command::key_hint(

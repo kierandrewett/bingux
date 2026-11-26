@@ -327,8 +327,7 @@ impl Component for AlbumPage {
             .into_iter()
             .find(|album| album.key == self.key)
         else {
-            return status_page(Icon::MediaOptical, "This album is not in the library")
-                .into_element();
+            return status_page(Icon::MediaOptical, tr!("media-album-missing")).into_element();
         };
         let tracks = Arc::new(album.tracks.clone());
         // An album by one artist does not say so on every row; a
@@ -363,7 +362,7 @@ impl Component for AlbumPage {
             .child(
                 artwork(album.artwork.clone(), album.title.clone())
                     .side(side)
-                    .label(format!("{}, cover", album.title)),
+                    .label(tr!("media-album-cover.a11y", title = album.title.clone())),
             )
             .child(
                 rect()
@@ -462,8 +461,7 @@ impl Component for ArtistPage {
             .into_iter()
             .find(|artist| artist.name == self.name)
         else {
-            return status_page(Icon::AvatarDefault, "This artist is not in the library")
-                .into_element();
+            return status_page(Icon::AvatarDefault, tr!("media-artist-missing")).into_element();
         };
         let songs: Vec<Item> = artist
             .albums

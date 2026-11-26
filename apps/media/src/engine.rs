@@ -192,9 +192,13 @@ fn keep_awake() -> impl Fn(bingux_media::Change) + Send + Sync + 'static {
             let mut hold: Option<Inhibitor> = None;
             for want in receive {
                 if want && hold.is_none() {
-                    hold = inhibit("Media", "Playing a video", What::IDLE)
-                        .map_err(|error| eprintln!("[media] the screen may sleep: {error}"))
-                        .ok();
+                    hold = inhibit(
+                        &bingux_ui::i18n::text("media-title"),
+                        &bingux_ui::i18n::text("media-inhibit-reason"),
+                        What::IDLE,
+                    )
+                    .map_err(|error| eprintln!("[media] the screen may sleep: {error}"))
+                    .ok();
                 } else if !want {
                     hold = None;
                 }

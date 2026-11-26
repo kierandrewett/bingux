@@ -88,26 +88,31 @@ fn already_running() -> bool {
 
 /// The navigation tree.
 pub fn routes() -> RouteTable {
+    // The table keeps its index title for the life of the process; the window shows the app's
+    // title from the catalogue, which follows the language.
+    static INDEX_TITLE: std::sync::LazyLock<String> =
+        std::sync::LazyLock::new(|| bingux_ui::tr!("media-title"));
+    let title = INDEX_TITLE.as_str();
     RouteTable::new(SCHEME)
-        .index("Media", |_| pages::index())
+        .index(title, |_| pages::index())
         .root("songs")
-        .title("Songs")
+        .title_with(|_| bingux_ui::tr!("media-songs-heading"))
         .icon(Icon::AudioXGeneric)
         .page(|_| pages::songs())
         .root("albums")
-        .title("Albums")
+        .title_with(|_| bingux_ui::tr!("media-albums-heading"))
         .icon(Icon::MediaOptical)
         .page(|_| pages::albums())
         .root("artists")
-        .title("Artists")
+        .title_with(|_| bingux_ui::tr!("media-artists-heading"))
         .icon(Icon::AvatarDefault)
         .page(|_| pages::artists())
         .root("videos")
-        .title("Videos")
+        .title_with(|_| bingux_ui::tr!("media-videos-heading"))
         .icon(Icon::VideoGeneric)
         .page(|_| pages::videos())
         .root("queue")
-        .title("Up next")
+        .title_with(|_| bingux_ui::tr!("media-up-next"))
         .icon(Icon::ViewListOrdered)
         .page(|_| pages::queue())
         .route("albums/:key")
@@ -117,7 +122,7 @@ pub fn routes() -> RouteTable {
         .title_param("name")
         .page(|params| pages::artist(params.str("name").to_owned()))
         .route("open")
-        .title("Opening")
+        .title_with(|_| bingux_ui::tr!("media-opening"))
         .query("path", "")
         .ephemeral()
         .page(|params| pages::open(params.query("path").unwrap_or_default().to_owned()))
@@ -148,13 +153,15 @@ fn main() {
     }
     Application::new("bingux-media")
         .routes(routes())
-        .title("Media")
+        .title(bingux_ui::i18n::Message::new(bingux_ui::i18n_id!(
+            "media-title"
+        )))
         .size(1100.0, 760.0)
         .min_size(360.0, 360.0)
         .borderless()
         .normalise(normalise)
         .about(bingux_ui::app_info!(
-            description = "Play music and films",
+            description = bingux_ui::tr!("media-description"),
             licence_text = include_str!("../../../COPYING"),
         ))
         .usage(USAGE)
