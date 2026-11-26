@@ -3,7 +3,7 @@
 //! so, and every previewer stays inside its chrome budget.
 //!
 //! The viewers that read a PDF or a song need `bingux-preview-host` (see
-//! `render_tests`); a text file and a picture do not.
+//! `test_host`); a text file and a picture do not.
 
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};
@@ -17,7 +17,7 @@ use freya::prelude::*;
 use freya_core::elements::image::Image;
 use torin::prelude::Area;
 
-use super::{Mode, PreviewHost, PreviewNav, allow_helpers, host_available};
+use super::{Mode, PreviewHost, PreviewNav};
 use crate::snapshot::Snapshot;
 use crate::style::*;
 
@@ -42,27 +42,54 @@ fn fixture(name: &str, bytes: &[u8]) -> PathBuf {
 }
 
 fn long_text() -> PathBuf {
-    fixture("long.txt", (1..=400).map(|n| format!("line number {n}\n")).collect::<String>().as_bytes())
+    fixture(
+        "long.txt",
+        (1..=400)
+            .map(|n| format!("line number {n}\n"))
+            .collect::<String>()
+            .as_bytes(),
+    )
 }
 
 fn picture() -> PathBuf {
     let mut surface = raster_n32_premul((64, 48)).expect("a surface");
     surface.canvas().clear(Color::from_rgb(40, 110, 200));
     #[allow(deprecated)]
-    let png = surface.image_snapshot().encode_to_data(EncodedImageFormat::PNG).expect("a PNG");
+    let png = surface
+        .image_snapshot()
+        .encode_to_data(EncodedImageFormat::PNG)
+        .expect("a PNG");
     fixture("blue.png", png.as_bytes())
 }
 
 fn letter_pdf() -> PathBuf {
-    fixture("report.pdf", &bingux_preview_core::testing::three_page_pdf())
+    fixture(
+        "report.pdf",
+        &bingux_preview_core::testing::three_page_pdf(),
+    )
 }
 
 fn wide_pdf() -> PathBuf {
-    fixture("wide.pdf", &bingux_preview_core::testing::pdf_sized((1190, 500), &[&[("Wide page one", 72, 400)], &[("Wide page two", 72, 400)]]))
+    fixture(
+        "wide.pdf",
+        &bingux_preview_core::testing::pdf_sized(
+            (1190, 500),
+            &[&[("Wide page one", 72, 400)], &[("Wide page two", 72, 400)]],
+        ),
+    )
 }
 
 fn tall_pdf() -> PathBuf {
-    fixture("tall.pdf", &bingux_preview_core::testing::pdf_sized((400, 1600), &[&[("Tall page one", 72, 1500)], &[("Tall page two", 72, 1500)]]))
+    fixture(
+        "tall.pdf",
+        &bingux_preview_core::testing::pdf_sized(
+            (400, 1600),
+            &[
+                &[("Tall page one", 72, 1500)],
+                &[("Tall page two", 72, 1500)],
+            ],
+        ),
+    )
 }
 
 fn song() -> PathBuf {
@@ -81,8 +108,7 @@ fn blob() -> PathBuf {
 }
 
 fn require_host() {
-    assert!(host_available(), "build services/preview-host first: the helper is not beside {:?}", std::env::current_exe());
-    allow_helpers(32);
+    super::test_host::require();
 }
 
 // ---------------------------------------------------------------------------
@@ -155,13 +181,36 @@ impl Component for Stage {
         rect()
             .expanded()
             .tw(&tokens, &[bg(Paint::Bg)])
-            .child(crate::shell::OverlayHost::new(PreviewHost::new(Some(self.source.clone()), self.mode, nav)))
+            .child(crate::shell::OverlayHost::new(PreviewHost::new(
+                Some(self.source.clone()),
+                self.mode,
+                nav,
+            )))
     }
 }
 
-fn stage(path: &Path, mode: Mode, size: (f32, f32), log: &Log, keys: Option<bool>, grid: bool) -> Snapshot {
+fn stage(
+    path: &Path,
+    mode: Mode,
+    size: (f32, f32),
+    log: &Log,
+    keys: Option<bool>,
+    grid: bool,
+) -> Snapshot {
     let (source, log) = (PreviewSource::path(path.to_owned()), log.clone());
-    Snapshot::new(move || Stage { source: source.clone(), mode, log: log.clone(), grid, keys }.into_element(), size)
+    Snapshot::new(
+        move || {
+            Stage {
+                source: source.clone(),
+                mode,
+                log: log.clone(),
+                grid,
+                keys,
+            }
+            .into_element()
+        },
+        size,
+    )
 }
 
 fn with_host(path: &Path, mode: Mode, size: (f32, f32), log: &Log, keys: Option<bool>) -> Snapshot {
@@ -174,28 +223,41 @@ fn with_host(path: &Path, mode: Mode, size: (f32, f32), log: &Log, keys: Option<
 // ---------------------------------------------------------------------------
 
 fn labels(shot: &mut Snapshot) -> Vec<String> {
-    shot.runner().find_many(|_, element| match Label::try_downcast(element) {
-        Some(label) => Some(label.text.to_string()),
-        None => Paragraph::try_downcast(element).map(|paragraph| paragraph.spans.iter().map(|span| span.text.to_string()).collect()),
-    })
+    shot.runner()
+        .find_many(|_, element| match Label::try_downcast(element) {
+            Some(label) => Some(label.text.to_string()),
+            None => Paragraph::try_downcast(element).map(|paragraph| {
+                paragraph
+                    .spans
+                    .iter()
+                    .map(|span| span.text.to_string())
+                    .collect()
+            }),
+        })
 }
 
 /// Where the label whose whole text is `text` sits.
 fn area_of(shot: &mut Snapshot, text: &str) -> Option<Area> {
-    shot.runner().find_many(|node, element| {
-        let plain: String = match Label::try_downcast(element) {
-            Some(label) => label.text.to_string(),
-            None => Paragraph::try_downcast(element)?.spans.iter().map(|span| span.text.to_string()).collect(),
-        };
-        (plain == text).then(|| node.layout().area)
-    })
-    .first()
-    .copied()
+    shot.runner()
+        .find_many(|node, element| {
+            let plain: String = match Label::try_downcast(element) {
+                Some(label) => label.text.to_string(),
+                None => Paragraph::try_downcast(element)?
+                    .spans
+                    .iter()
+                    .map(|span| span.text.to_string())
+                    .collect(),
+            };
+            (plain == text).then(|| node.layout().area)
+        })
+        .first()
+        .copied()
 }
 
 /// Every picture drawn: where, and how many pixels it has.
 fn pictures(shot: &mut Snapshot) -> Vec<Area> {
-    shot.runner().find_many(|node, element| Image::try_downcast(element).map(|_| node.layout().area))
+    shot.runner()
+        .find_many(|node, element| Image::try_downcast(element).map(|_| node.layout().area))
 }
 
 fn until(shot: &mut Snapshot, what: &str, done: impl Fn(&mut Snapshot) -> bool) {
@@ -206,12 +268,20 @@ fn until(shot: &mut Snapshot, what: &str, done: impl Fn(&mut Snapshot) -> bool) 
             return;
         }
     }
-    panic!("{what}: never happened; labels {:?}, pictures {:?}", labels(shot), pictures(shot));
+    panic!(
+        "{what}: never happened; labels {:?}, pictures {:?}",
+        labels(shot),
+        pictures(shot)
+    );
 }
 
 /// The zoom menu's label: "Fit page", "Fit width" or "125%".
 fn zoom_label(shot: &mut Snapshot) -> Option<String> {
-    labels(shot).into_iter().find(|text| text == "Fit page" || text == "Fit width" || (text.ends_with('%') && text[..text.len() - 1].chars().all(|c| c.is_ascii_digit())))
+    labels(shot).into_iter().find(|text| {
+        text == "Fit page"
+            || text == "Fit width"
+            || (text.ends_with('%') && text[..text.len() - 1].chars().all(|c| c.is_ascii_digit()))
+    })
 }
 
 fn percent(label: &str) -> u32 {
@@ -220,7 +290,9 @@ fn percent(label: &str) -> u32 {
 
 /// The page field: the first label that is a bare number.
 fn page_number(shot: &mut Snapshot) -> Option<String> {
-    labels(shot).into_iter().find(|text| !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()))
+    labels(shot)
+        .into_iter()
+        .find(|text| !text.is_empty() && text.chars().all(|c| c.is_ascii_digit()))
 }
 
 fn key(shot: &mut Snapshot, named: NamedKey) {
@@ -229,7 +301,13 @@ fn key(shot: &mut Snapshot, named: NamedKey) {
 }
 
 fn arrows(shot: &mut Snapshot) {
-    for named in [NamedKey::ArrowDown, NamedKey::ArrowDown, NamedKey::ArrowUp, NamedKey::ArrowRight, NamedKey::ArrowLeft] {
+    for named in [
+        NamedKey::ArrowDown,
+        NamedKey::ArrowDown,
+        NamedKey::ArrowUp,
+        NamedKey::ArrowRight,
+        NamedKey::ArrowLeft,
+    ] {
         key(shot, named);
     }
 }
@@ -238,7 +316,9 @@ const ARROWS_AS_STEPS: [&str; 5] = ["Next", "Next", "Previous", "Next", "Previou
 
 /// The first page (or frame) drawn, once there is one: a picture bigger than any icon.
 fn first_picture(shot: &mut Snapshot) -> Option<Area> {
-    pictures(shot).into_iter().find(|area| area.width() >= 100.0 && area.height() >= 100.0)
+    pictures(shot)
+        .into_iter()
+        .find(|area| area.width() >= 100.0 && area.height() >= 100.0)
 }
 
 // ---------------------------------------------------------------------------
@@ -249,10 +329,16 @@ fn first_picture(shot: &mut Snapshot) -> Option<Area> {
 fn the_arrows_step_the_file_and_never_scroll_a_text() {
     let log = Log::default();
     let mut shot = stage(&long_text(), Mode::Popup, POPUP, &log, None, false);
-    until(&mut shot, "the first lines", |shot| area_of(shot, "line number 1").is_some());
+    until(&mut shot, "the first lines", |shot| {
+        area_of(shot, "line number 1").is_some()
+    });
     let before = area_of(&mut shot, "line number 1").expect("the first line");
     arrows(&mut shot);
-    assert_eq!(log.take(), ARROWS_AS_STEPS, "the four arrows are Previous and Next in a list");
+    assert_eq!(
+        log.take(),
+        ARROWS_AS_STEPS,
+        "the four arrows are Previous and Next in a list"
+    );
     shot.settle(Duration::from_millis(300));
     let after = area_of(&mut shot, "line number 1").expect("the first line is still on show");
     assert_eq!(before.min_y(), after.min_y(), "the text did not move");
@@ -262,7 +348,9 @@ fn the_arrows_step_the_file_and_never_scroll_a_text() {
 fn in_a_grid_up_and_down_step_a_line() {
     let log = Log::default();
     let mut shot = stage(&long_text(), Mode::Popup, POPUP, &log, None, true);
-    until(&mut shot, "the first lines", |shot| area_of(shot, "line number 1").is_some());
+    until(&mut shot, "the first lines", |shot| {
+        area_of(shot, "line number 1").is_some()
+    });
     arrows(&mut shot);
     assert_eq!(log.take(), ["Down", "Down", "Up", "Next", "Previous"]);
 }
@@ -282,20 +370,30 @@ fn the_arrows_step_the_file_over_a_picture_and_a_folder_and_a_card() {
 fn the_arrows_step_the_file_over_a_document_and_never_scroll_it() {
     let log = Log::default();
     let mut shot = with_host(&letter_pdf(), Mode::Popup, POPUP, &log, None);
-    until(&mut shot, "the first page", |shot| first_picture(shot).is_some());
+    until(&mut shot, "the first page", |shot| {
+        first_picture(shot).is_some()
+    });
     shot.settle(Duration::from_millis(400));
     let before = first_picture(&mut shot).expect("a page");
     arrows(&mut shot);
     assert_eq!(log.take(), ARROWS_AS_STEPS);
     shot.settle(Duration::from_millis(400));
-    assert_eq!(first_picture(&mut shot).expect("a page").min_y(), before.min_y(), "the page did not move");
+    assert_eq!(
+        first_picture(&mut shot).expect("a page").min_y(),
+        before.min_y(),
+        "the page did not move"
+    );
     assert_eq!(page_number(&mut shot).as_deref(), Some("1"));
 
     // Page Down is how a document scrolls.
     key(&mut shot, NamedKey::PageDown);
     shot.settle(Duration::from_millis(500));
     let scrolled = first_picture(&mut shot).map(|area| area.min_y());
-    assert!(scrolled.is_none_or(|y| y < before.min_y()), "Page Down scrolled the document: {scrolled:?} against {}", before.min_y());
+    assert!(
+        scrolled.is_none_or(|y| y < before.min_y()),
+        "Page Down scrolled the document: {scrolled:?} against {}",
+        before.min_y()
+    );
     assert!(log.take().is_empty(), "Page Down is not a step");
 }
 
@@ -303,11 +401,17 @@ fn the_arrows_step_the_file_over_a_document_and_never_scroll_it() {
 fn the_arrows_step_the_file_over_a_song_and_do_not_seek_it() {
     let log = Log::default();
     let mut shot = with_host(&song(), Mode::Pane, PANE, &log, Some(true));
-    until(&mut shot, "the bar", |shot| labels(shot).iter().any(|text| text == "0:00"));
+    until(&mut shot, "the bar", |shot| {
+        labels(shot).iter().any(|text| text == "0:00")
+    });
     arrows(&mut shot);
     assert_eq!(log.take(), ARROWS_AS_STEPS);
     shot.settle(Duration::from_millis(700));
-    assert!(labels(&mut shot).iter().any(|text| text == "0:00"), "a pane does not play, and an arrow does not seek: {:?}", labels(&mut shot));
+    assert!(
+        labels(&mut shot).iter().any(|text| text == "0:00"),
+        "a pane does not play, and an arrow does not seek: {:?}",
+        labels(&mut shot)
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -318,17 +422,24 @@ fn the_arrows_step_the_file_over_a_song_and_do_not_seek_it() {
 fn a_pane_that_was_not_clicked_leaves_every_key_to_the_list() {
     let log = Log::default();
     let mut shot = stage(&long_text(), Mode::Pane, PANE, &log, Some(false), false);
-    until(&mut shot, "the first lines", |shot| area_of(shot, "line number 1").is_some());
+    until(&mut shot, "the first lines", |shot| {
+        area_of(shot, "line number 1").is_some()
+    });
     arrows(&mut shot);
     key(&mut shot, NamedKey::Escape);
-    assert!(log.take().is_empty(), "the list has the keyboard: it steps the file itself");
+    assert!(
+        log.take().is_empty(),
+        "the list has the keyboard: it steps the file itself"
+    );
 }
 
 #[test]
 fn a_pane_that_was_clicked_steps_the_file_and_never_scrolls_its_text() {
     let log = Log::default();
     let mut shot = stage(&long_text(), Mode::Pane, PANE, &log, Some(true), false);
-    until(&mut shot, "the first lines", |shot| area_of(shot, "line number 1").is_some());
+    until(&mut shot, "the first lines", |shot| {
+        area_of(shot, "line number 1").is_some()
+    });
     let before = area_of(&mut shot, "line number 1").expect("the first line");
     // The person clicked into the text: the scroll view under it has the focus.
     shot.click(PANE.0 / 2.0, 300.0);
@@ -337,16 +448,26 @@ fn a_pane_that_was_clicked_steps_the_file_and_never_scrolls_its_text() {
     arrows(&mut shot);
     assert_eq!(log.take(), ARROWS_AS_STEPS);
     let after = area_of(&mut shot, "line number 1").expect("the first line is still on show");
-    assert_eq!(before.min_y(), after.min_y(), "the arrows did not scroll the text");
+    assert_eq!(
+        before.min_y(),
+        after.min_y(),
+        "the arrows did not scroll the text"
+    );
 }
 
 #[test]
 fn escape_gives_a_pane_that_has_the_keyboard_back_to_the_list() {
     let log = Log::default();
     let mut shot = stage(&long_text(), Mode::Pane, PANE, &log, Some(true), false);
-    until(&mut shot, "the first lines", |shot| area_of(shot, "line number 1").is_some());
+    until(&mut shot, "the first lines", |shot| {
+        area_of(shot, "line number 1").is_some()
+    });
     key(&mut shot, NamedKey::Escape);
-    assert_eq!(log.take(), ["release"], "Escape hands the keyboard back; it does not close the pane");
+    assert_eq!(
+        log.take(),
+        ["release"],
+        "Escape hands the keyboard back; it does not close the pane"
+    );
 }
 
 #[test]
@@ -367,7 +488,9 @@ fn space_and_escape_close_a_popup_over_every_viewer() {
 fn space_closes_a_film_or_song_popup_too() {
     let log = Log::default();
     let mut shot = with_host(&song(), Mode::Popup, POPUP, &log, None);
-    until(&mut shot, "the bar", |shot| labels(shot).iter().any(|text| text.contains(':')));
+    until(&mut shot, "the bar", |shot| {
+        labels(shot).iter().any(|text| text.contains(':'))
+    });
     shot.key(Key::Character(" ".into()));
     shot.settle(Duration::from_millis(100));
     assert_eq!(log.take(), ["close"]);
@@ -381,26 +504,53 @@ fn space_closes_a_film_or_song_popup_too() {
 /// middle of it.
 fn assert_whole_and_centred(shot: &mut Snapshot, what: &str, size: (f32, f32)) {
     let page = first_picture(shot).unwrap_or_else(|| panic!("{what}: no page is drawn"));
-    let bar = area_of(shot, "of 3").or_else(|| area_of(shot, "of 2")).expect("the page count");
-    assert!(page.min_y() >= bar.max_y(), "{what}: the page starts under the toolbar: page {page:?}, bar {bar:?}");
-    assert!(page.max_y() <= size.1 + 0.5, "{what}: the whole page is inside the window: {page:?}");
-    assert!(page.min_x() >= 0.0 && page.max_x() <= size.0 + 0.5, "{what}: the page is not wider than the window: {page:?}");
+    let bar = area_of(shot, "of 3")
+        .or_else(|| area_of(shot, "of 2"))
+        .expect("the page count");
+    assert!(
+        page.min_y() >= bar.max_y(),
+        "{what}: the page starts under the toolbar: page {page:?}, bar {bar:?}"
+    );
+    assert!(
+        page.max_y() <= size.1 + 0.5,
+        "{what}: the whole page is inside the window: {page:?}"
+    );
+    assert!(
+        page.min_x() >= 0.0 && page.max_x() <= size.0 + 0.5,
+        "{what}: the page is not wider than the window: {page:?}"
+    );
     let (left, right) = (page.min_x(), size.0 - page.max_x());
-    assert!((left - right).abs() <= 2.0, "{what}: the page is centred across the window: {left} left, {right} right");
+    assert!(
+        (left - right).abs() <= 2.0,
+        "{what}: the page is centred across the window: {left} left, {right} right"
+    );
     // Large: the page uses most of the room it has.
     let room = (size.1 - bar.max_y()).min(size.0);
-    assert!(page.height() >= room * 0.6 || page.width() >= size.0 * 0.6, "{what}: the page is large: {page:?}");
+    assert!(
+        page.height() >= room * 0.6 || page.width() >= size.0 * 0.6,
+        "{what}: the page is large: {page:?}"
+    );
 }
 
 #[test]
 fn a_document_opens_on_the_whole_first_page_in_a_popup_and_a_pane() {
-    for (what, path) in [("letter", letter_pdf()), ("wide", wide_pdf()), ("tall", tall_pdf())] {
+    for (what, path) in [
+        ("letter", letter_pdf()),
+        ("wide", wide_pdf()),
+        ("tall", tall_pdf()),
+    ] {
         for (mode, size) in [(Mode::Popup, POPUP), (Mode::Pane, PANE)] {
             let log = Log::default();
             let mut shot = with_host(&path, mode, size, &log, None);
-            until(&mut shot, "the first page", |shot| first_picture(shot).is_some());
+            until(&mut shot, "the first page", |shot| {
+                first_picture(shot).is_some()
+            });
             shot.settle(Duration::from_millis(500));
-            assert_eq!(zoom_label(&mut shot).as_deref(), Some("Fit page"), "{what} {mode:?}: opens fitted to the page");
+            assert_eq!(
+                zoom_label(&mut shot).as_deref(),
+                Some("Fit page"),
+                "{what} {mode:?}: opens fitted to the page"
+            );
             let page = first_picture(&mut shot).expect("page");
             assert!(page.min_y() > 0.0, "{what} {mode:?}: {page:?}");
             assert_whole_and_centred(&mut shot, &format!("{what} {mode:?}"), size);
@@ -412,7 +562,9 @@ fn a_document_opens_on_the_whole_first_page_in_a_popup_and_a_pane() {
 fn the_zoom_steps_and_the_label_says_where_it_is() {
     let log = Log::default();
     let mut shot = with_host(&letter_pdf(), Mode::Popup, POPUP, &log, None);
-    until(&mut shot, "the first page", |shot| first_picture(shot).is_some());
+    until(&mut shot, "the first page", |shot| {
+        first_picture(shot).is_some()
+    });
     shot.settle(Duration::from_millis(500));
     assert_eq!(zoom_label(&mut shot).as_deref(), Some("Fit page"));
 
@@ -420,16 +572,28 @@ fn the_zoom_steps_and_the_label_says_where_it_is() {
     for _ in 0..3 {
         shot.key(Key::Character("+".into()));
         shot.settle(Duration::from_millis(500));
-        seen.push(percent(&zoom_label(&mut shot).expect("a zoom label after +")));
+        seen.push(percent(
+            &zoom_label(&mut shot).expect("a zoom label after +"),
+        ));
     }
-    assert!(seen.windows(2).all(|pair| pair[1] > pair[0]), "each + goes up: {seen:?}");
+    assert!(
+        seen.windows(2).all(|pair| pair[1] > pair[0]),
+        "each + goes up: {seen:?}"
+    );
     for step in &seen {
-        assert!([10, 25, 50, 75, 100, 125, 150, 200, 300, 400, 500, 600, 800].contains(step), "{step} is one of the steps");
+        assert!(
+            [10, 25, 50, 75, 100, 125, 150, 200, 300, 400, 500, 600, 800].contains(step),
+            "{step} is one of the steps"
+        );
     }
 
     shot.key(Key::Character("-".into()));
     shot.settle(Duration::from_millis(500));
-    assert_eq!(percent(&zoom_label(&mut shot).unwrap()), seen[1], "- goes back one step");
+    assert_eq!(
+        percent(&zoom_label(&mut shot).unwrap()),
+        seen[1],
+        "- goes back one step"
+    );
     shot.key(Key::Character("1".into()));
     shot.settle(Duration::from_millis(500));
     assert_eq!(zoom_label(&mut shot).as_deref(), Some("100%"));
@@ -439,16 +603,25 @@ fn the_zoom_steps_and_the_label_says_where_it_is() {
     shot.key(Key::Character("9".into()));
     shot.settle(Duration::from_millis(500));
     assert_eq!(zoom_label(&mut shot).as_deref(), Some("Fit page"));
-    assert!(log.take().is_empty(), "the zoom keys are not steps or closes");
+    assert!(
+        log.take().is_empty(),
+        "the zoom keys are not steps or closes"
+    );
 }
 
 #[test]
 fn the_zoom_buttons_and_the_zoom_menu_work_and_stay_in_one_place() {
     let log = Log::default();
     let mut shot = with_host(&letter_pdf(), Mode::Popup, POPUP, &log, None);
-    until(&mut shot, "the first page", |shot| first_picture(shot).is_some());
+    until(&mut shot, "the first page", |shot| {
+        first_picture(shot).is_some()
+    });
     shot.settle(Duration::from_millis(500));
-    let out = shot.runner().find_many(|node, element| Label::try_downcast(element).filter(|label| label.text == "Fit page").map(|_| node.layout().area));
+    let out = shot.runner().find_many(|node, element| {
+        Label::try_downcast(element)
+            .filter(|label| label.text == "Fit page")
+            .map(|_| node.layout().area)
+    });
     let menu_before = out.first().copied().expect("the menu label");
 
     // The menu: Fit page, then 150 %, from its rows.
@@ -458,7 +631,10 @@ fn the_zoom_buttons_and_the_zoom_menu_work_and_stay_in_one_place() {
     shot.settle(Duration::from_millis(500));
     assert_eq!(zoom_label(&mut shot).as_deref(), Some("150%"));
     let menu_after = area_of(&mut shot, "150%").expect("the label");
-    assert!((menu_after.center().x - menu_before.center().x).abs() <= 1.0, "the label keeps its slot as the text changes: {menu_before:?} {menu_after:?}");
+    assert!(
+        (menu_after.center().x - menu_before.center().x).abs() <= 1.0,
+        "the label keeps its slot as the text changes: {menu_before:?} {menu_after:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -468,9 +644,22 @@ fn the_zoom_buttons_and_the_zoom_menu_work_and_stay_in_one_place() {
 /// The controls of a frame, by component: buttons, menus, sliders, fields,
 /// switches.
 fn controls(shot: &mut Snapshot) -> Vec<String> {
-    const CONTROLS: [&str; 8] = ["IconButton", "IconMenuButton", "MenuButton", "ActionButton", "RowButton", "TrackBar", "TextField", "Checkbox"];
+    const CONTROLS: [&str; 8] = [
+        "IconButton",
+        "IconMenuButton",
+        "MenuButton",
+        "ActionButton",
+        "RowButton",
+        "TrackBar",
+        "TextField",
+        "Checkbox",
+    ];
     let tree = crate::inspector::snapshot::Snapshot::capture_headless(shot.runner(), 1.0);
-    tree.nodes.iter().filter_map(|node| node.a11y.component.clone()).filter(|name| CONTROLS.contains(&name.as_str())).collect()
+    tree.nodes
+        .iter()
+        .filter_map(|node| node.a11y.component.clone())
+        .filter(|name| CONTROLS.contains(&name.as_str()))
+        .collect()
 }
 
 /// The title line holds at most this many buttons: Open, Info, the mode
@@ -495,15 +684,31 @@ fn a_previewer_stays_inside_its_chrome_budget() {
         let mut shot = stage(&path, Mode::Popup, POPUP, &log, None, false);
         shot.settle(wait);
         let found = controls(&mut shot);
-        assert!(found.len() <= HEADER + content, "{what}: {} controls at rest, budget {}: {found:?}", found.len(), HEADER + content);
+        assert!(
+            found.len() <= HEADER + content,
+            "{what}: {} controls at rest, budget {}: {found:?}",
+            found.len(),
+            HEADER + content
+        );
     }
-    for (what, path, content, ready) in [("document", letter_pdf(), 5usize, "of 3"), ("song", song(), 6, "0:00")] {
+    for (what, path, content, ready) in [
+        ("document", letter_pdf(), 5usize, "of 3"),
+        ("song", song(), 6, "0:00"),
+    ] {
         let log = Log::default();
         let mut shot = with_host(&path, Mode::Popup, POPUP, &log, None);
-        until(&mut shot, "the viewer's own bar", |shot| area_of(shot, ready).is_some() || labels(shot).iter().any(|text| text.starts_with("0:0")));
+        until(&mut shot, "the viewer's own bar", |shot| {
+            area_of(shot, ready).is_some()
+                || labels(shot).iter().any(|text| text.starts_with("0:0"))
+        });
         shot.settle(Duration::from_millis(600));
         let found = controls(&mut shot);
-        assert!(found.len() <= HEADER + content, "{what}: {} controls at rest, budget {}: {found:?}", found.len(), HEADER + content);
+        assert!(
+            found.len() <= HEADER + content,
+            "{what}: {} controls at rest, budget {}: {found:?}",
+            found.len(),
+            HEADER + content
+        );
     }
 }
 
@@ -511,8 +716,24 @@ fn a_previewer_stays_inside_its_chrome_budget() {
 fn there_is_no_footer_and_no_second_title() {
     let log = Log::default();
     let mut shot = stage(&long_text(), Mode::Popup, POPUP, &log, None, false);
-    until(&mut shot, "the first lines", |shot| area_of(shot, "line number 1").is_some());
-    let names = labels(&mut shot).into_iter().filter(|text| text == "long.txt").count();
-    assert_eq!(names, 1, "the file's name is on the screen once: {:?}", labels(&mut shot));
-    assert!(labels(&mut shot).iter().all(|text| !text.contains("Modified") && !text.contains("Plain text")), "no footer facts and no language bar: {:?}", labels(&mut shot));
+    until(&mut shot, "the first lines", |shot| {
+        area_of(shot, "line number 1").is_some()
+    });
+    let names = labels(&mut shot)
+        .into_iter()
+        .filter(|text| text == "long.txt")
+        .count();
+    assert_eq!(
+        names,
+        1,
+        "the file's name is on the screen once: {:?}",
+        labels(&mut shot)
+    );
+    assert!(
+        labels(&mut shot)
+            .iter()
+            .all(|text| !text.contains("Modified") && !text.contains("Plain text")),
+        "no footer facts and no language bar: {:?}",
+        labels(&mut shot)
+    );
 }

@@ -48,6 +48,8 @@
 //! | K, J, L, M, Shift with an arrow | films and songs: play and pause, seek, mute |
 //! | W | text: wrap lines |
 
+#[cfg(all(test, feature = "testing"))]
+mod behaviour_tests;
 mod chrome;
 mod dock;
 mod host;
@@ -58,11 +60,11 @@ mod mode;
 mod pane_state;
 mod popup;
 #[cfg(all(test, feature = "testing"))]
-mod behaviour_tests;
-#[cfg(all(test, feature = "testing"))]
 mod render_tests;
 mod step;
 mod subject;
+#[cfg(all(test, feature = "testing"))]
+pub(crate) mod test_host;
 mod viewers;
 
 pub use bingux_preview_core::{PreviewSource, ViewerId};
@@ -74,4 +76,7 @@ pub use mode::Mode;
 pub use pane_state::{DEFAULT_WIDTH, MIN_WIDTH, MIN_WINDOW};
 pub use popup::{card_size, open, show};
 pub use step::{Step, neighbour};
-pub use viewers::{ControlAction, ControlState, DocumentAction, DocumentControls, DocumentState, MediaControls, ZoomChoice};
+pub use viewers::{
+    ControlAction, ControlState, DocumentAction, DocumentControls, DocumentState, MediaControls,
+    ZoomChoice,
+};

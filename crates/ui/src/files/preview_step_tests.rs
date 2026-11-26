@@ -7,7 +7,7 @@
 //! Down; each press must move the selection one file, never skip one (the
 //! list and the pane both stepping) and never stand still (neither does).
 //!
-//! The document rows need `bingux-preview-host` (see `preview::render_tests`).
+//! The document rows need `bingux-preview-host` (see `preview::test_host`).
 
 use std::cell::Cell;
 use std::path::PathBuf;
@@ -20,7 +20,7 @@ use freya::engine::prelude::{EncodedImageFormat, raster_n32_premul};
 use freya::prelude::*;
 
 use super::view::FileView;
-use crate::preview::{allow_helpers, host_available};
+use crate::preview::test_host;
 use crate::shell::OverlayHost;
 use crate::snapshot::Snapshot;
 use crate::theme::provide_tokens;
@@ -31,13 +31,17 @@ const SIZE: (f32, f32) = (1200.0, 700.0);
 const NAMES: [&str; 6] = ["a.txt", "b.png", "c.pdf", "d.txt", "e.png", "f.pdf"];
 
 static DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
-    let dir = std::env::temp_dir().join(format!("bingux-files-preview-steps-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("bingux-files-preview-steps-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("a fixture directory");
     for name in NAMES {
         let bytes = match name.rsplit('.').next() {
             Some("png") => picture(),
             Some("pdf") => bingux_preview_core::testing::three_page_pdf(),
-            _ => (1..=200).map(|n| format!("{name} line {n}\n")).collect::<String>().into_bytes(),
+            _ => (1..=200)
+                .map(|n| format!("{name} line {n}\n"))
+                .collect::<String>()
+                .into_bytes(),
         };
         std::fs::write(dir.join(name), bytes).expect("write a fixture");
     }
@@ -48,7 +52,10 @@ fn picture() -> Vec<u8> {
     let mut surface = raster_n32_premul((64, 48)).expect("a surface");
     surface.canvas().clear(Color::from_rgb(40, 110, 200));
     #[allow(deprecated)]
-    let png = surface.image_snapshot().encode_to_data(EncodedImageFormat::PNG).expect("a PNG");
+    let png = surface
+        .image_snapshot()
+        .encode_to_data(EncodedImageFormat::PNG)
+        .expect("a PNG");
     png.as_bytes().to_vec()
 }
 
@@ -82,10 +89,19 @@ impl Component for Scene {
         let (listing, order) = use_hook(|| {
             let mut listing = Listing::new(DIRECTORY.clone());
             for name in NAMES {
-                listing.entries.push(Entry::named(DIRECTORY.join(name), name.to_owned(), Kind::File, false, false));
+                listing.entries.push(Entry::named(
+                    DIRECTORY.join(name),
+                    name.to_owned(),
+                    Kind::File,
+                    false,
+                    false,
+                ));
             }
             listing.complete = true;
-            (Arc::new(listing), Arc::new((0..NAMES.len()).collect::<Vec<usize>>()))
+            (
+                Arc::new(listing),
+                Arc::new((0..NAMES.len()).collect::<Vec<usize>>()),
+            )
         });
         OverlayHost::new(
             FileView::new(listing, order, selection)
@@ -106,12 +122,21 @@ struct Stage {
 }
 
 fn stage(pane: bool) -> Stage {
-    assert!(host_available(), "build services/preview-host first: the helper is not beside {:?}", std::env::current_exe());
-    allow_helpers(32);
+    test_host::require();
     let probe = Probe::default();
     let owner = NEXT_OWNER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let scene = probe.clone();
-    let mut shot = Snapshot::new(move || Scene { pane, owner, probe: scene.clone() }.into_element(), SIZE);
+    let mut shot = Snapshot::new(
+        move || {
+            Scene {
+                pane,
+                owner,
+                probe: scene.clone(),
+            }
+            .into_element()
+        },
+        SIZE,
+    );
     shot.settle(Duration::from_millis(900));
     Stage { shot, probe }
 }
@@ -120,16 +145,28 @@ impl Stage {
     /// The name of the file the selection's cursor is on.
     fn cursor(&mut self) -> Option<String> {
         let state = self.probe.0.get().expect("the scene rendered");
-        self.shot
-            .runner()
-            .run_in(|| state.peek().cursor().and_then(|path| path.file_name()).map(|name| name.to_string_lossy().into_owned()))
+        self.shot.runner().run_in(|| {
+            state
+                .peek()
+                .cursor()
+                .and_then(|path| path.file_name())
+                .map(|name| name.to_string_lossy().into_owned())
+        })
     }
 
     fn labels(&mut self) -> Vec<String> {
-        self.shot.runner().find_many(|_, element| match Label::try_downcast(element) {
-            Some(label) => Some(label.text.to_string()),
-            None => Paragraph::try_downcast(element).map(|paragraph| paragraph.spans.iter().map(|span| span.text.to_string()).collect()),
-        })
+        self.shot
+            .runner()
+            .find_many(|_, element| match Label::try_downcast(element) {
+                Some(label) => Some(label.text.to_string()),
+                None => Paragraph::try_downcast(element).map(|paragraph| {
+                    paragraph
+                        .spans
+                        .iter()
+                        .map(|span| span.text.to_string())
+                        .collect()
+                }),
+            })
     }
 
     /// The list row of `name`: the centre of the label the list drew. The
@@ -138,20 +175,30 @@ impl Stage {
         let mut hits: Vec<(f32, f32)> = self.shot.runner().find_many(|node, element| {
             let text = match Label::try_downcast(element) {
                 Some(label) => label.text.to_string(),
-                None => Paragraph::try_downcast(element)?.spans.iter().map(|span| span.text.to_string()).collect(),
+                None => Paragraph::try_downcast(element)?
+                    .spans
+                    .iter()
+                    .map(|span| span.text.to_string())
+                    .collect(),
             };
             let centre = node.layout().area.center();
             (text == name).then_some((centre.x, centre.y))
         });
         hits.sort_by(|a, b| a.0.total_cmp(&b.0));
-        *hits.first().unwrap_or_else(|| panic!("no row {name:?}: {:?}", self.labels()))
+        *hits
+            .first()
+            .unwrap_or_else(|| panic!("no row {name:?}: {:?}", self.labels()))
     }
 
     fn click_row(&mut self, name: &str) {
         let (x, y) = self.row(name);
         self.shot.click(x, y);
         self.shot.settle(Duration::from_millis(250));
-        assert_eq!(self.cursor().as_deref(), Some(name), "a click on a row selects it");
+        assert_eq!(
+            self.cursor().as_deref(),
+            Some(name),
+            "a click on a row selects it"
+        );
     }
 
     fn press(&mut self, named: NamedKey) {
@@ -164,33 +211,65 @@ impl Stage {
         let deadline = std::time::Instant::now() + Duration::from_secs(20);
         loop {
             self.shot.settle(Duration::from_millis(150));
-            let titles = self.labels().iter().filter(|text| text.as_str() == name).count();
+            let titles = self
+                .labels()
+                .iter()
+                .filter(|text| text.as_str() == name)
+                .count();
             // The list has the name once; the preview's title is a second one.
             if titles >= 2 {
                 return;
             }
-            assert!(std::time::Instant::now() < deadline, "the preview never showed {name}: {:?}", self.labels());
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the preview never showed {name}: {:?}",
+                self.labels()
+            );
         }
     }
 
     /// Down five times and Up five times: each press moves one file and the
     /// preview follows. The last Up at the top stays put.
     fn walk(&mut self, from: usize, what: &str) {
-        assert_eq!(self.cursor().as_deref(), Some(NAMES[from]), "{what}: starting point");
+        assert_eq!(
+            self.cursor().as_deref(),
+            Some(NAMES[from]),
+            "{what}: starting point"
+        );
         for at in from + 1..NAMES.len() {
             self.press(NamedKey::ArrowDown);
-            assert_eq!(self.cursor().as_deref(), Some(NAMES[at]), "{what}: Down from {} must land on {}", NAMES[at - 1], NAMES[at]);
+            assert_eq!(
+                self.cursor().as_deref(),
+                Some(NAMES[at]),
+                "{what}: Down from {} must land on {}",
+                NAMES[at - 1],
+                NAMES[at]
+            );
             self.shows(NAMES[at]);
         }
         self.press(NamedKey::ArrowDown);
-        assert_eq!(self.cursor().as_deref(), Some(NAMES[NAMES.len() - 1]), "{what}: Down stays on the last file");
+        assert_eq!(
+            self.cursor().as_deref(),
+            Some(NAMES[NAMES.len() - 1]),
+            "{what}: Down stays on the last file"
+        );
         for at in (0..NAMES.len() - 1).rev() {
             self.press(NamedKey::ArrowUp);
-            assert_eq!(self.cursor().as_deref(), Some(NAMES[at]), "{what}: Up from {} must land on {}", NAMES[at + 1], NAMES[at]);
+            assert_eq!(
+                self.cursor().as_deref(),
+                Some(NAMES[at]),
+                "{what}: Up from {} must land on {}",
+                NAMES[at + 1],
+                NAMES[at]
+            );
             self.shows(NAMES[at]);
         }
         self.press(NamedKey::ArrowUp);
-        assert_eq!(self.cursor().as_deref(), Some(NAMES[0]), "{what}: Up stays on the first file");
+        assert_eq!(
+            self.cursor().as_deref(),
+            Some(NAMES[0]),
+            "{what}: Up stays on the first file"
+        );
     }
 }
 
@@ -210,7 +289,11 @@ fn in_the_docked_pane_each_press_steps_one_file_after_a_click_in_the_pane() {
     // Into the pane's body: the person clicked the preview.
     stage.shot.click(SIZE.0 - 140.0, 380.0);
     stage.shot.settle(Duration::from_millis(250));
-    assert_eq!(stage.cursor().as_deref(), Some(NAMES[0]), "a click in the pane does not move the selection");
+    assert_eq!(
+        stage.cursor().as_deref(),
+        Some(NAMES[0]),
+        "a click in the pane does not move the selection"
+    );
     stage.walk(0, "after a pane click");
 }
 
@@ -226,10 +309,18 @@ fn in_the_docked_pane_the_keys_come_back_to_the_list_and_still_step_one_file() {
     assert_eq!(stage.cursor().as_deref(), Some(NAMES[3]));
     stage.press(NamedKey::Escape);
     stage.press(NamedKey::ArrowDown);
-    assert_eq!(stage.cursor().as_deref(), Some(NAMES[4]), "after Escape the list steps, once");
+    assert_eq!(
+        stage.cursor().as_deref(),
+        Some(NAMES[4]),
+        "after Escape the list steps, once"
+    );
     stage.click_row(NAMES[1]);
     stage.press(NamedKey::ArrowDown);
-    assert_eq!(stage.cursor().as_deref(), Some(NAMES[2]), "after a click in the list the list steps, once");
+    assert_eq!(
+        stage.cursor().as_deref(),
+        Some(NAMES[2]),
+        "after a click in the list the list steps, once"
+    );
     stage.press(NamedKey::ArrowUp);
     assert_eq!(stage.cursor().as_deref(), Some(NAMES[1]));
 }
@@ -265,7 +356,11 @@ fn quick_look_hands_the_keyboard_back_to_the_list_when_it_closes() {
     stage.press(NamedKey::Escape);
     stage.shot.settle(Duration::from_millis(500));
     stage.press(NamedKey::ArrowDown);
-    assert_eq!(stage.cursor().as_deref(), Some(NAMES[3]), "the list steps once after Quick Look closed");
+    assert_eq!(
+        stage.cursor().as_deref(),
+        Some(NAMES[3]),
+        "the list steps once after Quick Look closed"
+    );
 }
 
 impl Stage {
