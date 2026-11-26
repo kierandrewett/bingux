@@ -30,6 +30,7 @@ mod state;
 use std::sync::Arc;
 use std::task::Waker;
 
+use vivarium::clear_data::{ClearData, ClearKinds};
 use vivarium::contextual_identities::{ContextualIdentity, ContextualIdentityConfig};
 use vivarium::downloads::{DownloadAction, DownloadId as EngineDownloadId};
 use vivarium::engine::{Engine, EngineState as State};
@@ -37,6 +38,7 @@ use vivarium::environment::ColorScheme;
 use vivarium::error::{Error, Result, Status};
 use vivarium::navigation::{CachePolicy, NewWindowReply};
 use vivarium::operation::OpOptions;
+use vivarium::print::{PrintFlags, PrintOptions};
 use vivarium::security::CheckStatus as Check;
 use vivarium::session::{Session, SessionConfig};
 
@@ -56,6 +58,11 @@ use crate::web_view::input::PageInput;
 use crate::web_view::report::{CheckStatus, ReportEntry, SecurityReport};
 use crate::web_view::requests::Response;
 use crate::web_view::surface::PageSurface;
+
+/// The tags of operations that are not a search (a search carries its tab's
+/// number, which is below 2^32): the high bits name the kind.
+pub(super) const PRINT_TAG: u64 = 1 << 40;
+pub(super) const CLEAR_HISTORY_TAG: u64 = 1 << 41;
 
 /// The engine, behind [`BrowserBackend`].
 pub struct GeckoBackend {
@@ -519,6 +526,48 @@ impl BrowserBackend for GeckoBackend {
 
     fn find_stop(&self, tab: TabId) -> Done {
         self.call(tab, "find in page", |session| session.find_stop(false))
+    }
+
+    /// The PDF comes back as an operation result carrying a tag that names
+    /// this print (`events::on_operation_result` writes it).
+    fn print_pdf(&self, tab: TabId, file_name: &str) -> Done {
+        let session = self.session(tab)?;
+        let tag = {
+            let mut state = lock(&self.shared.state);
+            state.next_print += 1;
+            let tag = PRINT_TAG | state.next_print;
+            state.prints.insert(tag, (tab, file_name.to_string()));
+            tag
+        };
+        let options = PrintOptions {
+            flags: PrintFlags::BACKGROUNDS,
+            ..PrintOptions::default()
+        };
+        session
+            .print_pdf(&options, OpOptions::tagged(tag))
+            .map(|_| ())
+            .map_err(|error| {
+                lock(&self.shared.state).prints.remove(&tag);
+                failed(&error, tab, "printing")
+            })
+    }
+
+    /// Every visit of every site and window (Places, which colours
+    /// `:visited`); the result settles as an operation.
+    fn clear_history(&self) -> Done {
+        let runtime = self.runtime()?;
+        runtime
+            .engine
+            .clear_data(
+                &ClearData::everything(ClearKinds::HISTORY),
+                OpOptions::tagged(CLEAR_HISTORY_TAG),
+            )
+            .map(|_| ())
+            .map_err(|error| match error.status() {
+                Some(Status::EngineFailed) => BackendError::EngineGone,
+                Some(Status::Unsupported) => BackendError::Unsupported("clearing history"),
+                _ => BackendError::Engine(error.to_string()),
+            })
     }
 
     fn pause_download(&self, download: DownloadId) -> Done {

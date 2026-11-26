@@ -78,6 +78,11 @@ pub struct Capabilities {
     pub touch: bool,
     /// Input method composition with a preedit string.
     pub composition: bool,
+    /// Printing the page to a PDF file.
+    pub print: bool,
+    /// Forgetting the engine's own record of visited pages, which colours
+    /// visited links.
+    pub clear_history: bool,
     /// `<select>` lists and `<input type=file>`.
     pub form_pickers: bool,
     /// Mute, pin and the like need no engine; this is only for the icons of
@@ -100,6 +105,8 @@ impl Capabilities {
             audio: true,
             touch: true,
             composition: true,
+            print: true,
+            clear_history: true,
             form_pickers: true,
             favicons: true,
         }
@@ -326,6 +333,20 @@ pub trait BrowserBackend: Send + Sync + 'static {
     /// left it (`VV_EVENT_FULLSCREEN`, then `vv_session_fullscreen_result`).
     fn set_fullscreen(&self, _tab: TabId, _on: bool) -> Done {
         Err(BackendError::Unsupported("fullscreen answers"))
+    }
+
+    /// Prints the tab's page to a PDF in the downloads folder, named after
+    /// `file_name` (never overwriting a file). Returns once the engine has the
+    /// job; `TabEvent::Printed` says where the file is, or why there is none.
+    fn print_pdf(&self, _tab: TabId, _file_name: &str) -> Done {
+        Err(BackendError::Unsupported("printing"))
+    }
+
+    /// Forgets every visit the engine kept, in every window, so links that
+    /// were visited stop looking visited in the pages that are open.
+    /// `EngineEvent::HistoryCleared` says when it is done.
+    fn clear_history(&self) -> Done {
+        Err(BackendError::Unsupported("clearing the engine's history"))
     }
 
     /// The answer to a `BrowserEvent::Request`.

@@ -207,12 +207,11 @@ Kieran's test: a primitive goes upstream to Vivarium only when many kinds of emb
 already says. Places stays inside the engine for link colours. The cost is a second copy of the visit list inside
 the engine, and it has one consequence the browser must be honest about:
 
-- **Clear history clears the browser's store, not the engine's Places.** Until Vivarium has the clear-data call
-  below, visited-link colours (and `engine/places.sqlite`) keep what the person cleared.
+- **Clear history clears the browser's store and the engine's Places.** The backend calls `Engine::clear_data` with
+  `ClearKinds::HISTORY` (V1 landed in Vivarium), so visited-link colours reset in open pages.
 - **That is model state, not copy.** `Browser::history_clear_scope()` says what Clear history reaches: the browser's
-  history always, the engine's link colours only when the backend can clear visits. The settings row's subtitle and
-  the toast after Clear are built from it ("Link colours on pages are kept until the engine can clear them"), so they
-  change by themselves when V1 lands.
+  history always, the engine's visits when the backend can clear them. Only a backend that cannot gets words about
+  it on the settings row and in the toast.
 - `parity.md` W15 is closed by this slice; this gap is recorded there as a Vivarium dependency.
 
 ### History as a searchable
@@ -478,7 +477,7 @@ One commit per step, each with its red and green runs in the body.
    engine kept. Damaged, too new and disk full (a real `ENOSPC` from `/dev/full`) each give their `Keeping` state; a
    later good write clears it.
 6. **History persisted and searchable.** Visits and late titles survive a new store; Clear history empties the file and
-   the index, and its scope says the engine's link colours stay; the cap trims. The `history` searchable loads what
+   the index and asks the engine to forget its visits; the cap trims. The `history` searchable loads what
    the file holds and ranks a host prefix first. Damaged (garbage bytes), too new (`user_version` 99), full
    (`max_page_count`, a real `SQLITE_FULL`) and locked each give their state. Start over keeps the damaged file.
 7. **Private window writes nothing.** The tree walk of "Isolation".

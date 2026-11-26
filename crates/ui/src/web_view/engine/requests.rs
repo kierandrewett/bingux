@@ -304,6 +304,55 @@ pub(super) fn download_target(folder: &Path, suggested: &str) -> PathBuf {
     folder.join(name)
 }
 
+/// What an operation that failed says: the engine's message, else its status.
+pub(super) fn failure_text(failure: &OpFailure) -> String {
+    if failure.message.is_empty() {
+        format!("{:?}", failure.status)
+    } else {
+        failure.message.clone()
+    }
+}
+
+/// Writes `bytes` into `folder` as `name`, or `name (2)` and so on when the
+/// name is taken: nothing already there is replaced. Returns the path.
+pub(super) fn save_unique(folder: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
+    use std::io::Write;
+    let first = download_target(folder, name);
+    let stem = first
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("download")
+        .to_string();
+    let extension = first
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| format!(".{extension}"))
+        .unwrap_or_default();
+    std::fs::create_dir_all(folder).map_err(|error| error.to_string())?;
+    for n in 1..1000u32 {
+        let path = if n == 1 {
+            first.clone()
+        } else {
+            folder.join(format!("{stem} ({n}){extension}"))
+        };
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                return file
+                    .write_all(bytes)
+                    .map(|()| path)
+                    .map_err(|error| error.to_string());
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(error) => return Err(error.to_string()),
+        }
+    }
+    Err(format!("no free name for {name}"))
+}
+
 /// A question the engine waits on, by kind: the responder that answers it,
 /// and what the answer needs to know of the question.
 pub(super) enum Open {

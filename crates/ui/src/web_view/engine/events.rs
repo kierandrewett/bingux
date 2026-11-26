@@ -24,7 +24,7 @@ use vivarium::navigation::{
     FindProgress, FindResult, Load, LoadState, Location, NavigationDelegate, NewWindowReply,
     NewWindowRequest, ProgressDelegate, SessionHistory,
 };
-use vivarium::operation::{OpKind, OpResult, Operation};
+use vivarium::operation::{Blob, OpKind, OpResult, Operation};
 use vivarium::permissions::{PermissionDelegate, PermissionReply, PermissionRequest};
 use vivarium::prompts::{
     AuthReply, AuthRequest, ContextMenuReply, ContextMenuRequest, DialogKind as EngineDialog,
@@ -38,6 +38,7 @@ use vivarium::session::{
     SessionDelegate, SessionId, SessionReady,
 };
 
+use super::CLEAR_HISTORY_TAG;
 use super::requests::{self, Open};
 use super::state::{Asked, Shared, lock, tab_of};
 use super::{convert, frames};
@@ -111,6 +112,18 @@ pub(super) fn failed_event(failure: &EngineFailure) -> EngineEvent {
 }
 
 impl Host<'_> {
+    /// A print came back: the PDF goes into the downloads folder.
+    fn print_settled(&self, tag: u64, result: OpResult) {
+        let Some((tab, file_name)) = lock(&self.shared.state).prints.remove(&tag) else {
+            return;
+        };
+        let written = Operation::<Blob>::finish_detached(result)
+            .map_err(|failure| requests::failure_text(&failure))
+            .and_then(|blob| requests::save_unique(self.downloads, &file_name, &blob.data));
+        self.shared
+            .push(BrowserEvent::tab(tab, TabEvent::Printed(written)));
+    }
+
     fn tab(&self, session: SessionId, event: TabEvent) {
         self.shared.push(BrowserEvent::tab(tab_of(session), event));
     }
@@ -159,8 +172,18 @@ impl EngineDelegate for Host<'_> {
     /// the live counts cannot say (a page with no match).
     fn on_operation_result(&mut self, result: OpResult) {
         let (kind, tag) = (result.op_kind, result.user_tag);
-        if kind != OpKind::Find {
-            return;
+        match kind {
+            OpKind::PrintPdf => return self.print_settled(tag, result),
+            OpKind::ClearData if tag == CLEAR_HISTORY_TAG => {
+                let outcome = Operation::<()>::finish_detached(result);
+                self.shared
+                    .push(BrowserEvent::Engine(EngineEvent::HistoryCleared(
+                        outcome.map_err(|failure| requests::failure_text(&failure)),
+                    )));
+                return;
+            }
+            OpKind::Find => {}
+            _ => return,
         }
         let outcome = Operation::<FindResult>::finish_detached(result);
         if let Some((tab, event)) = requests::find_settled(kind, tag, outcome) {

@@ -36,6 +36,16 @@ impl Browser {
             // The settings page reads the report again when it is drawn; that
             // it is drawn again is all this has to cause.
             BrowserEvent::Engine(EngineEvent::SecurityChanged) => {}
+            // The visits are gone from the pages that are open; only a
+            // failure is news.
+            BrowserEvent::Engine(EngineEvent::HistoryCleared(Ok(()))) => {}
+            BrowserEvent::Engine(EngineEvent::HistoryCleared(Err(reason))) => {
+                self.out.notice(Notice {
+                    error: true,
+                    text: tr!("browser-history-engine-clear-failed", reason = reason),
+                    action: None,
+                });
+            }
             BrowserEvent::Tab { tab, event } => self.apply_tab(tab, event),
             BrowserEvent::Request { tab, request } => self.apply_request(tab, request),
             BrowserEvent::RequestClosed { tab, request } => self.request_closed(tab, request),
@@ -185,6 +195,21 @@ impl Browser {
                     tab.history_index = index;
                     tab.history = entries;
                 }
+            }
+            TabEvent::Printed(saved) => {
+                let notice = match saved {
+                    Ok(path) => Notice {
+                        error: false,
+                        text: tr!("browser-print-saved", path = path.display().to_string()),
+                        action: None,
+                    },
+                    Err(reason) => Notice {
+                        error: true,
+                        text: tr!("browser-print-failed", reason = reason),
+                        action: None,
+                    },
+                };
+                self.out.notice(notice);
             }
             TabEvent::Fullscreen(entering) => {
                 if let Some(tab) = self.tabs.get_mut(key) {

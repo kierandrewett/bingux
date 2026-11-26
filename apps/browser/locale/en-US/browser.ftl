@@ -64,6 +64,8 @@ browser-history-pages =
 browser-history-not-kept = Not kept in this window
 # Under the privacy group: what Clear history does not reach.
 browser-history-link-colours-kept = Link colours on pages are kept until the engine can clear them
+# Toast when the engine could not forget visited links after Clear history. $reason is its message.
+browser-history-engine-clear-failed = The engine could not forget visited links: { $reason }
 browser-permissions-footer = Site permissions are kept only while the window is open.
 
 ## Toasts
@@ -89,8 +91,15 @@ browser-address-search-for = Search { $engine } for “{ $words }”
 
 ## Commands
 
-# Toast shown when Print is chosen: the engine cannot print yet.
+# Toast shown when Print is chosen and the engine has no print call.
 browser-commands-print-unavailable = Printing is not available in this engine yet.
+
+# Toast after Print: the page was saved as a PDF. $path is where.
+browser-print-saved = Saved the page as a PDF: { $path }
+# Toast when printing fails. $reason is the engine's message.
+browser-print-failed = Could not print the page: { $reason }
+# Toast when Print is chosen on a page that is not a web page (a blank tab, Settings).
+browser-print-no-page = There is no web page to print here.
 
 ## Site information
 ## The card under the connection button.
@@ -284,7 +293,7 @@ browser-command-fullscreen-title = Fullscreen
 browser-command-downloads-title = Downloads
 browser-command-settings-title = Settings
 browser-command-view-source-title = View page source
-browser-command-print-title = Print…
+browser-command-print-title = Save page as PDF
 browser-command-go-to-tab-title = Go to a tab
 # The keys that go to tab 1 to 8, and the last tab. The modifier is Alt on Linux, Ctrl elsewhere.
 browser-command-go-to-tab-keys = Alt+1 to 9

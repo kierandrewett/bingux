@@ -155,9 +155,9 @@ event. No thread of the browser waits on the engine.
   no call for that (the window's own fullscreen is the window's).
 - **A long address** is cut at the edge of the address field (bingux-ui's `TextField` clips; there is no
   ellipsis or fade), so on a phone `news.bingux.dev/popup` ends mid-letter.
-- **Clear history** clears the browser's history and its index, not the engine's Places, so visited-link colours
-  stay until Vivarium can forget visits (proposal V1 in `docs/browser/profiles-and-store.md`). The settings page and
-  the toast after Clear say so.
+- **Clear history** clears the browser's history and its index and asks the engine to forget its visits
+  (`Engine::clear_data`, `VV_CLEAR_HISTORY`), so visited links in open pages stop looking visited. An engine without
+  the call is said so on the settings page and in the toast.
 - **Not built:** the profile picker and profile pages, bookmarks, the history manager (Library), the engine's
   settings as editable controls, tear-off tabs (a Bingux window has no window to drop into), right-to-left mirroring
   (see the request below).

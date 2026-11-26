@@ -5,7 +5,8 @@
 //!   1. visits, or a title that arrives after the load, lost at the next start;
 //!   2. Clear history that leaves the pages in the file (free pages, the
 //!      write-ahead log) or in the index;
-//!   3. Clear history that claims to reach the engine's link colours;
+//!   3. Clear history that claims to reach the engine's link colours when the
+//!      engine cannot, or leaves visited links coloured when it can;
 //!   4. a history that grows without bound;
 //!   5. the address field's ranking putting a title match above a host that
 //!      begins with what was typed;
@@ -162,11 +163,12 @@ fn a_page_load_in_the_window_is_recorded_and_a_private_window_records_none() {
 }
 
 #[test]
-fn clear_history_empties_the_file_and_the_index_and_says_what_it_does_not_reach() {
+fn clear_history_empties_the_file_and_the_index_and_asks_the_engine_to_forget_visits() {
     let root = Files::temp();
     let search = SearchService::new();
+    let double = TestDoubleBackend::new();
     let mut browser = Browser::with_profile(
-        TestDoubleBackend::new(),
+        double.clone(),
         Options::default(),
         Profile {
             id: None,
@@ -180,6 +182,7 @@ fn clear_history_empties_the_file_and_the_index_and_says_what_it_does_not_reach(
     browser.poll();
     browser.flush_store();
     browser.take_notices();
+    double.clear_calls();
     let path = folders(&root).store();
     let wal = PathBuf::from(format!("{}-wal", path.display()));
     let before = [bytes_of(&path), bytes_of(&wal)].concat();
@@ -194,12 +197,44 @@ fn clear_history_empties_the_file_and_the_index_and_says_what_it_does_not_reach(
         "no trace in the file or its log"
     );
     let told = browser.take_notices();
-    assert!(told[0].text.starts_with("History cleared"));
+    assert_eq!(told[0].text, "History cleared");
     assert!(
-        told[0].text.contains("Link colours"),
-        "the engine's Places is not reached"
+        double
+            .calls()
+            .contains(&bingux_ui::web_view::test_double::Call::ClearHistory),
+        "the engine forgets its visits, so visited links stop looking visited"
     );
-    assert!(!browser.history_clear_scope().link_colours);
+    assert!(browser.history_clear_scope().link_colours);
+    drop(browser);
+    Files::remove_tree(&root).unwrap();
+}
+
+#[test]
+fn an_engine_that_cannot_clear_visits_is_said_so_and_not_asked() {
+    crate::locale::register();
+    let double = TestDoubleBackend::with_capabilities(bingux_ui::web_view::Capabilities {
+        clear_history: false,
+        ..bingux_ui::web_view::Capabilities::all()
+    });
+    let root = Files::temp();
+    let search = SearchService::new();
+    let mut browser = Browser::with_profile(
+        double.clone(),
+        Options::default(),
+        Profile {
+            id: None,
+            name: None,
+            settings: Settings::default(),
+            settings_keeping: Keeping::Saved,
+            store: Some(open(&root, &search)),
+        },
+    );
+    browser.poll();
+    double.clear_calls();
+    browser.clear_history();
+    let told = browser.take_notices();
+    assert!(told[0].text.contains("Link colours"), "{}", told[0].text);
+    assert!(double.calls().is_empty());
     drop(browser);
     Files::remove_tree(&root).unwrap();
 }

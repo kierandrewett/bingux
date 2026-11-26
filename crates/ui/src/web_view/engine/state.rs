@@ -53,6 +53,10 @@ pub(super) struct State {
     /// The other open requests, by the id the browser knows them by.
     pub requests: HashMap<RequestId, Asked>,
     pub next_request: u32,
+    /// Prints the engine has not finished, by the tag they carry: the tab and
+    /// the name the file is to have.
+    pub prints: HashMap<u64, (TabId, String)>,
+    pub next_print: u64,
     /// Contextual identities made for containers, by (container, private):
     /// kept so a container's tabs share one and it lives as long as the
     /// engine.

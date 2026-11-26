@@ -61,13 +61,13 @@ impl Browser {
         self.store.as_ref().map_or(0, |store| store.history_len())
     }
 
-    /// What Clear history reaches. The engine has no call that forgets the
-    /// visits it keeps for link colours (Places) yet: that is Vivarium
-    /// proposal V1 (`docs/browser/profiles-and-store.md`).
+    /// What Clear history reaches: the browser's own history, and the
+    /// engine's visits (Places, which colours visited links) when the engine
+    /// can forget them (`Engine::clear_data`).
     pub fn history_clear_scope(&self) -> ClearScope {
         ClearScope {
             history: self.has_history(),
-            link_colours: false,
+            link_colours: self.engine.capabilities().clear_history,
         }
     }
 
@@ -78,6 +78,10 @@ impl Browser {
             return;
         };
         store.clear_history();
+        if self.engine.capabilities().clear_history {
+            self.engine
+                .call(&mut self.out, |backend| backend.clear_history());
+        }
         let text = self.history_clear_scope().cleared_text();
         self.out.notify(text);
     }

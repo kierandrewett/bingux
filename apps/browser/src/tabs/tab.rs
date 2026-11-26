@@ -108,6 +108,30 @@ impl Tab {
         }
     }
 
+    /// The file name of this page printed: its title, else its address, with
+    /// what a file name cannot hold replaced, and `.pdf`.
+    pub fn print_file_name(&self) -> String {
+        let source = if self.title.trim().is_empty() {
+            &self.url
+        } else {
+            &self.title
+        };
+        let name: String = source
+            .trim()
+            .chars()
+            .map(|c| {
+                if c.is_control() || "/\\:*?\"<>|".contains(c) {
+                    '_'
+                } else {
+                    c
+                }
+            })
+            .take(80)
+            .collect();
+        let name = name.trim_matches(|c: char| c == '.' || c.is_whitespace());
+        format!("{}.pdf", if name.is_empty() { "page" } else { name })
+    }
+
     /// No address: the new tab page.
     pub fn is_blank(&self) -> bool {
         self.kind == TabKind::Web
@@ -170,6 +194,19 @@ mod tests {
         assert_eq!(tab.display_title(), "Example Domain");
         assert_eq!(web("").display_title(), "New tab");
         assert_eq!(Tab::blank(2, TabKind::Settings).display_title(), "Settings");
+    }
+
+    #[test]
+    fn a_printed_page_is_named_after_its_title_and_never_escapes_the_folder() {
+        let mut tab = web("https://example.com/a");
+        assert_eq!(tab.print_file_name(), "https___example.com_a.pdf");
+        tab.title = "Example Domain".to_string();
+        assert_eq!(tab.print_file_name(), "Example Domain.pdf");
+        tab.title = "../../etc/passwd".to_string();
+        assert_eq!(tab.print_file_name(), "_.._etc_passwd.pdf");
+        tab.title = "  ..  ".to_string();
+        tab.url.clear();
+        assert_eq!(tab.print_file_name(), "page.pdf");
     }
 
     #[test]

@@ -69,12 +69,39 @@ impl Browser {
                     self.open_tab(&format!("view-source:{url}"), Place::AfterActive, true);
                 }
             }
-            Command::Print => self.out.notice(Notice {
+            Command::Print => self.print(key),
+            Command::Edit(edit) => self.send_edit(key, edit),
+        }
+    }
+}
+
+impl Browser {
+    /// Print the page of tab `key` to a PDF. The engine has no printer or
+    /// print preview to offer; what it has is the PDF, written to the
+    /// downloads folder, and the toast says where.
+    fn print(&mut self, key: u64) {
+        let page = self
+            .tabs
+            .get(key)
+            .filter(|tab| tab.kind == TabKind::Web && !tab.is_blank())
+            .map(|tab| tab.print_file_name());
+        let (Some(name), Some(session)) = (page, self.session_of(key)) else {
+            self.out.notice(Notice {
+                error: true,
+                text: tr!("browser-print-no-page"),
+                action: None,
+            });
+            return;
+        };
+        if !self.engine.capabilities().print {
+            self.out.notice(Notice {
                 error: true,
                 text: tr!("browser-commands-print-unavailable"),
                 action: None,
-            }),
-            Command::Edit(edit) => self.send_edit(key, edit),
+            });
+            return;
         }
+        self.engine
+            .call(&mut self.out, |backend| backend.print_pdf(session, &name));
     }
 }

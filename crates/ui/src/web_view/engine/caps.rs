@@ -98,6 +98,9 @@ pub(super) fn capabilities(accepted: &[RequestKind], download_control: bool) -> 
         touch: false,
         // The crate has no composition call.
         composition: false,
+        // `Session::print_pdf` and `Engine::clear_data`: calls the crate wraps.
+        print: true,
+        clear_history: true,
         form_pickers: asks(RequestKind::Select) && asks(RequestKind::FilePicker),
         // `ContentDelegate::on_favicon`: an event, nothing to announce.
         favicons: true,

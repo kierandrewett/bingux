@@ -742,3 +742,23 @@ fn a_tag_that_is_no_tab_is_no_search() {
         "a tag this backend did not make"
     );
 }
+
+// Failures a saved print guards against:
+//   1. a second print of the same page replacing the first file;
+//   2. a page title with a path in it writing outside the folder;
+//   3. a folder that does not exist yet losing the print.
+#[test]
+fn a_print_never_replaces_a_file_and_stays_in_its_folder() {
+    let root = std::env::temp_dir().join(format!("web-view-print-{}", std::process::id()));
+    let folder = root.join("Downloads");
+    let _ = std::fs::remove_dir_all(&root);
+    let first = save_unique(&folder, "Page.pdf", b"one").expect("first");
+    let second = save_unique(&folder, "Page.pdf", b"two").expect("second");
+    let escaped = save_unique(&folder, "../../Evil.pdf", b"three").expect("escaped");
+    assert_eq!(first, folder.join("Page.pdf"));
+    assert_eq!(second, folder.join("Page (2).pdf"));
+    assert_eq!(escaped, folder.join("Evil.pdf"));
+    assert_eq!(std::fs::read(&first).expect("read"), b"one");
+    assert_eq!(std::fs::read(&second).expect("read"), b"two");
+    let _ = std::fs::remove_dir_all(&root);
+}

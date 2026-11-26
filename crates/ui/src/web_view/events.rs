@@ -1,6 +1,8 @@
 //! What the engine tells the host. One enum, so the browser has one place that
 //! turns the engine's news into state.
 
+use std::path::PathBuf;
+
 use crate::web_view::ids::{RequestId, TabId};
 use crate::web_view::page::{Audio, GoneReason, HistoryEntry, LoadError, Security};
 use crate::web_view::requests::{DownloadInfo, Request};
@@ -11,7 +13,9 @@ pub enum TabEvent {
     /// The session exists and accepts commands.
     Ready,
     /// The session is gone. `error` is why, when it was not asked for.
-    Closed { error: Option<String> },
+    Closed {
+        error: Option<String>,
+    },
     /// The top document's address changed.
     Location {
         url: String,
@@ -35,6 +39,9 @@ pub enum TabEvent {
         entries: Vec<HistoryEntry>,
     },
     Fullscreen(bool),
+    /// `BrowserBackend::print_pdf` finished: the file it wrote, or why it
+    /// wrote none.
+    Printed(Result<PathBuf, String>),
     /// The content process of the tab went away. A new load recovers it.
     ProcessGone(GoneReason),
     /// `window.open` or `target=_blank`. `new` is the session the engine made
@@ -57,7 +64,10 @@ pub enum TabEvent {
     Audio(Audio),
     /// A search of the page found `total` matches; `current` (1-based, 0 for
     /// none) is the one on show.
-    FindResult { current: u32, total: u32 },
+    FindResult {
+        current: u32,
+        total: u32,
+    },
 }
 
 /// How a new window asks to be shown and what the engine knows about who
@@ -134,19 +144,31 @@ pub enum EngineEvent {
     /// The engine's account of its security changed. Read it again with
     /// `BrowserBackend::info`.
     SecurityChanged,
+    /// `BrowserBackend::clear_history` finished: the engine forgot the visits
+    /// (and so the colours of visited links), or says why it did not.
+    HistoryCleared(Result<(), String>),
 }
 
 /// One thing that happened, in the order the engine produced it.
 #[derive(Clone, Debug, PartialEq)]
 pub enum BrowserEvent {
     Engine(EngineEvent),
-    Tab { tab: TabId, event: TabEvent },
+    Tab {
+        tab: TabId,
+        event: TabEvent,
+    },
     /// The engine asks a question and waits for the answer.
-    Request { tab: TabId, request: Request },
+    Request {
+        tab: TabId,
+        request: Request,
+    },
     /// The engine ended a question itself (the deadline passed, the page
     /// went on, the tab closed): there is nothing left to answer, and what it
     /// did instead is the safe default.
-    RequestClosed { tab: TabId, request: RequestId },
+    RequestClosed {
+        tab: TabId,
+        request: RequestId,
+    },
     /// A download started or changed.
     Download(DownloadInfo),
 }

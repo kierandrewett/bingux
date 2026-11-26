@@ -255,3 +255,40 @@ fn escape_is_the_browsers_for_f11_and_the_pages_for_page_fullscreen() {
         "the engine ended it and the window follows"
     );
 }
+
+// Failures Print guards against:
+//   1. a blank tab or Settings page "printed", writing an empty PDF;
+//   2. the engine called with no tab, or on a hidden one;
+//   3. a print the engine cannot do (no capability) saying nothing.
+#[test]
+fn print_asks_the_engine_for_a_pdf_named_after_the_page() {
+    use bingux_ui::web_view::test_double::Call;
+    let (mut browser, double) = browser();
+    browser.run(Command::Print);
+    assert!(
+        !double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::PrintPdf(..))),
+        "a blank tab has nothing to print"
+    );
+    crate::browser::testing::go(&mut browser, "https://example.com/");
+    double.clear_calls();
+    browser.run(Command::Print);
+    assert!(
+        double
+            .calls()
+            .iter()
+            .any(|call| matches!(call, Call::PrintPdf(_, name) if name.ends_with(".pdf"))),
+        "{:?}",
+        double.calls()
+    );
+    browser.poll();
+    let notices = browser.out.take_notices();
+    assert!(
+        notices
+            .iter()
+            .any(|notice| !notice.error && notice.text.contains("Saved the page as a PDF")),
+        "{notices:?}"
+    );
+}

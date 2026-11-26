@@ -65,6 +65,9 @@ pub enum Call {
     Find(TabId, FindQuery),
     FindStop(TabId),
     SetMuted(TabId, bool),
+    /// A page printed to a PDF with this file name.
+    PrintPdf(TabId, String),
+    ClearHistory,
     Respond(TabId, RequestId, Response),
     CancelDownload(DownloadId),
     PauseDownload(DownloadId),
@@ -953,6 +956,33 @@ impl BrowserBackend for TestDoubleBackend {
                 state.find = None;
             }
         })
+    }
+
+    fn print_pdf(&self, tab: TabId, file_name: &str) -> Done {
+        if !lock(&self.capabilities).print {
+            return Err(BackendError::Unsupported("printing"));
+        }
+        self.with_tab(tab, Call::PrintPdf(tab, file_name.to_string()), |_, tab| {
+            // The double has no PDF: it says the file is where a download would be.
+            self.queue.push(BrowserEvent::tab(
+                tab,
+                TabEvent::Printed(Ok(PathBuf::from("/home/user/Downloads").join(file_name))),
+            ));
+        })
+    }
+
+    fn clear_history(&self) -> Done {
+        if !lock(&self.capabilities).clear_history {
+            return Err(BackendError::Unsupported("clearing the engine's history"));
+        }
+        let mut inner = lock(&self.inner);
+        inner.calls.push(Call::ClearHistory);
+        if inner.failed {
+            return Err(BackendError::EngineGone);
+        }
+        self.queue
+            .push(BrowserEvent::Engine(EngineEvent::HistoryCleared(Ok(()))));
+        Ok(())
     }
 
     fn set_muted(&self, tab: TabId, muted: bool) -> Done {
