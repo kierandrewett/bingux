@@ -2209,7 +2209,11 @@ fn a_dragged_tab_follows_the_pointer_while_the_others_slide_aside() {
     );
     // Past the middle of the next tab: it slides into the place the held tab left.
     shot.move_to((from.0 + step * 0.75, y));
-    shot.settle(Duration::from_millis(400));
+    // The slide takes what the machine makes it: an animation moves by the ticks it gets, and a
+    // loaded one gets few in 400 ms. Wait for the neighbour to arrive; the asserts say where it is.
+    shot.settle_until(Duration::from_secs(60), |shot| {
+        near(named(shot, "Tab")[0].min_x(), a.min_x())
+    });
     let now = named(&mut shot, "Tab");
     assert!(
         near(now[1].min_x(), a.min_x() + step * 0.75),

@@ -191,9 +191,11 @@ fn shows(shot: &mut Snapshot, text: &str) -> bool {
     texts(shot).iter().any(|shown| shown == text)
 }
 
-/// Settle until `done` holds, up to ten seconds: a search runs on a thread of its own.
+/// Settle until `done` holds, up to a minute: a search runs on a thread of its own, and on a
+/// machine with four times the work it has cores, ten seconds were not always enough for a filter
+/// to start the search again. It returns the moment `done` holds; the cap only bounds a failure.
 fn until(shot: &mut Snapshot, mut done: impl FnMut(&mut Snapshot) -> bool) -> bool {
-    shot.settle_until(Duration::from_secs(10), |shot| done(shot))
+    shot.settle_until(Duration::from_secs(60), |shot| done(shot))
 }
 
 /// Settle until `ready` holds and the rows of the card have not changed for 20 polls. The results
