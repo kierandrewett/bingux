@@ -401,7 +401,7 @@ impl Component for Content {
         let prefs = use_state(move || start.unwrap_or_else(prefs_now));
         let events = use_state(Vec::<DocumentEvent>::new);
         let documents = use_documents(
-            DocumentsConfig::new("bingux-text-editor", "Text Editor")
+            DocumentsConfig::new("bingux-text-editor", tr!("text-editor-title"))
                 .mime("text/plain")
                 .filter(Filter::new(tr!("text-editor-filter-text")).mime("text/*"))
                 // The window needs a tab before the start has finished: it
@@ -1034,7 +1034,9 @@ fn window_commands(
         Command::new("file.reload", tr!("text-editor-cmd-reload"), move |_| {
             document.reload()
         })
-        .keywords(["revert", "reload"])
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "text-editor-cmd-reload.keywords"
+        )))
         .enabled(ready && shown.has_path)
         .group(CommandGroup::File)
         .section("save"),
@@ -1052,7 +1054,9 @@ fn window_commands(
             find.open_from(&replace_handle, true);
         })
         .shortcut("Ctrl+H")
-        .keywords(["substitute"])
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "text-editor-cmd-replace.keywords"
+        )))
         .enabled(ready)
         .group(CommandGroup::Edit)
         .section("find"),
@@ -1087,7 +1091,9 @@ fn window_commands(
             go_to_open.set(true);
         })
         .shortcut("Ctrl+I")
-        .keywords(["jump", "line number"])
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "text-editor-cmd-go-line.keywords"
+        )))
         .enabled(ready)
         .group(CommandGroup::Go)
         .section("lines"),
@@ -1107,7 +1113,9 @@ fn window_commands(
             |prefs| prefs.wrap = !prefs.wrap,
         )
         .shortcut("Alt+Z")
-        .keywords(["word wrap"])
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "text-editor-cmd-wrap.keywords"
+        )))
         .section("show"),
         toggle(
             "view.whitespace",
@@ -1116,7 +1124,9 @@ fn window_commands(
             CommandGroup::View,
             |prefs| prefs.show_whitespace = !prefs.show_whitespace,
         )
-        .keywords(["invisibles", "whitespace"])
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "text-editor-cmd-whitespace.keywords"
+        )))
         .section("show"),
         toggle(
             "view.highlight-line",
@@ -1163,7 +1173,9 @@ fn window_commands(
             tr!("text-editor-cmd-statistics"),
             move |_| actions.show_statistics(document),
         )
-        .keywords(["word count", "characters", "reading time"])
+        .keywords(bingux_ui::i18n::keywords(&tr!(
+            "text-editor-cmd-statistics.keywords"
+        )))
         .enabled(ready)
         .group(bingux_ui::text_editor::TEXT_GROUP)
         .section("info"),
@@ -1385,9 +1397,10 @@ fn indent_items(handle: EditorHandle, indent: Indent, tab_width: usize) -> Vec<M
     for width in [2usize, 4, 8] {
         let handle = handle.clone();
         widths.push(
-            menu_item(format!("{width} columns"), move |_| {
-                handle.update(|editor| editor.settings.tab_width = width)
-            })
+            menu_item(
+                tr!("text-editor-tab-width-columns", width = width),
+                move |_| handle.update(|editor| editor.settings.tab_width = width),
+            )
             .checked(tab_width == width),
         );
     }

@@ -73,20 +73,26 @@ text-editor-cmd-save = Save
 text-editor-cmd-save-as = Save as…
 text-editor-cmd-save-all = Save all
 text-editor-cmd-reload = Read again from disk
+    .keywords = revert, reload
 text-editor-cmd-find = Find…
 text-editor-cmd-replace = Find and replace…
+    .keywords = substitute
 text-editor-cmd-find-next = Find next
 text-editor-cmd-find-previous = Find previous
 text-editor-cmd-go-line = Go to line…
+    .keywords = jump, line number
 text-editor-cmd-line-numbers = Line numbers
 text-editor-cmd-wrap = Wrap lines
+    .keywords = word wrap
 text-editor-cmd-whitespace = Show spaces and tabs
+    .keywords = invisibles, whitespace
 text-editor-cmd-highlight-line = Highlight current line
 text-editor-cmd-markdown-preview = Markdown preview
 text-editor-cmd-zoom-in = Zoom in
 text-editor-cmd-zoom-out = Zoom out
 text-editor-cmd-actual-size = Actual size
 text-editor-cmd-statistics = Statistics
+    .keywords = word count, characters, reading time
 text-editor-cmd-auto-close = Close brackets and quotes
 text-editor-cmd-trim-on-save = Trim spaces on save
 text-editor-cmd-final-newline = Add final new line
@@ -107,6 +113,11 @@ text-editor-show-preview = Show preview
 text-editor-document-menu = Document
 text-editor-other-languages = Other languages
 text-editor-tab-width = Tab width
+# A tab width choice. $width (Number) - the columns a tab spans
+text-editor-tab-width-columns = { $width ->
+    [one] { $width } column
+   *[other] { $width } columns
+}
 text-editor-detect-indent = Detect indentation
 text-editor-encode-as = Encode as
 text-editor-read-again-as = Read again as
