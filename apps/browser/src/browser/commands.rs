@@ -7,7 +7,7 @@ use bingux_ui::web_view::requests::DownloadState;
 use bingux_ui::web_view::{DownloadId, FindQuery, TabId};
 
 use super::{Browser, ClosedTab, Notice, UiRequest, ViewSize};
-use crate::model::address::{self, Typed};
+use crate::address::{self, Typed};
 use crate::model::shortcuts::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;

@@ -5,14 +5,12 @@
 //! Everything here is plain data and functions, tested without a UI, over the
 //! in-memory test double where the engine is needed.
 
-pub mod address;
 pub mod downloads;
 pub mod failure;
 pub mod keeping;
 pub mod permissions;
 pub mod security;
 pub mod shortcuts;
-pub mod suggest;
 pub mod tab;
 pub mod tabs;
 

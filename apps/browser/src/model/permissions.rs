@@ -26,7 +26,7 @@ pub fn label(kind: &PermissionKind) -> String {
 
 /// The sentence of a prompt: `example.com wants to know your location and use your camera`.
 pub fn prompt_text(origin: &str, kinds: &[PermissionKind]) -> String {
-    let host = super::address::host(origin);
+    let host = crate::address::host(origin);
     let host = if host.is_empty() {
         origin.to_string()
     } else {

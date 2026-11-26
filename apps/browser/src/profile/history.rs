@@ -18,9 +18,9 @@ use bingux_ui::search::{Document, Hit, Schema, Search};
 use rusqlite::{Connection, ErrorCode, OpenFlags, TransactionBehavior, params};
 
 use super::files::Problem;
-use crate::model::address;
+use crate::address;
+use crate::address::suggest::{self, Visited};
 use crate::model::keeping::NotSaved;
-use crate::model::suggest::{self, Visited};
 
 /// The name of the searchable: one per process, and a process has one profile.
 pub const INDEX: &str = "history";

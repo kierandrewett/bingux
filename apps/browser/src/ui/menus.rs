@@ -4,8 +4,8 @@ use bingux_ui::prelude::*;
 use bingux_ui::web_view::input::EditCommand;
 use bingux_ui::web_view::requests::ContextTarget;
 
+use crate::address;
 use crate::browser::PendingMenu;
-use crate::model::address;
 use crate::model::shortcuts::{self, Command};
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;

@@ -6,6 +6,7 @@
 //! opens it in a new tab. `--private` starts a window of its own whose tabs keep
 //! nothing. Each profile is a process of its own (`docs/browser/profiles-and-store.md`).
 
+mod address;
 mod browser;
 mod engine;
 mod locale;

@@ -8,7 +8,7 @@ use bingux_ui::web_view::requests::{
 };
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
-use super::address;
+use crate::address;
 use crate::zoom::Zoom;
 
 /// What a tab holds.

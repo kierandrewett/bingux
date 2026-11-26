@@ -4,7 +4,7 @@
 use bingux_ui::prelude::*;
 use freya::prelude::*;
 
-use crate::model::address;
+use crate::address;
 
 use super::ctx::Ctx;
 use super::strip::icon_of;

@@ -15,11 +15,11 @@ use bingux_ui::prelude::*;
 use bingux_ui::search;
 use freya::prelude::*;
 
-use crate::model::suggest::{self, OpenTab, Source, Suggestion, Visited};
+use crate::address::suggest::{self, OpenTab, Source, Suggestion, Visited};
 use crate::model::tabs::Place;
 use crate::profile::history;
 
-use super::ctx::Ctx;
+use crate::ui::Ctx;
 
 /// The address bar.
 #[derive(PartialEq)]

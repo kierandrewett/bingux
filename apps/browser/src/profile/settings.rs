@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use super::files::{self, Problem};
-use crate::model::address;
+use crate::address;
 
 /// The settings format this build reads and writes.
 pub const VERSION: u32 = 1;

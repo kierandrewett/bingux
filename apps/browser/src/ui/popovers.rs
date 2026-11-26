@@ -6,7 +6,7 @@ use bingux_ui::web_view::DownloadId;
 use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 use freya::prelude::*;
 
-use crate::model::address;
+use crate::address;
 use crate::model::downloads;
 use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;

@@ -113,7 +113,7 @@ fn field(state: State<String>) -> Element {
 }
 
 fn show_dialog(ctx: Ctx, key: u64, request: &DialogRequest) {
-    let host = crate::model::address::host(&request.origin);
+    let host = crate::address::host(&request.origin);
     let title = match &request.kind {
         DialogKind::BeforeUnload => "Leave this page?".to_string(),
         _ if host.is_empty() => "This page says".to_string(),

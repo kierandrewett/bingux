@@ -11,9 +11,9 @@ use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
 use crate::zoom::{Zoom, ZoomChip};
 
-use super::address::AddressBar;
 use super::ctx::Ctx;
 use super::menus::main_menu;
+use crate::address::AddressBar;
 
 /// What the toolbar reads of the tab on show.
 struct Reading {

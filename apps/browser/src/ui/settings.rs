@@ -12,7 +12,7 @@ use bingux_ui::web_view::{
 };
 use freya::prelude::*;
 
-use crate::model::address::ENGINES;
+use crate::address::ENGINES;
 use crate::model::keeping::{Keeping, Part};
 use crate::profile::history;
 

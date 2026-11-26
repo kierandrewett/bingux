@@ -1,6 +1,6 @@
 //! The list under the address bar while it is being typed in.
 
-use super::address::{self, SearchEngine, Typed};
+use crate::address::{self, SearchEngine, Typed};
 
 /// Where a suggestion came from.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,7 +112,7 @@ pub fn suggest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::address::ENGINES;
+    use crate::address::ENGINES;
 
     fn visited(url: &str, title: &str) -> Visited {
         Visited {

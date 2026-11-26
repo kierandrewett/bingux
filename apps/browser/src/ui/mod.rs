@@ -1,6 +1,5 @@
 //! The browser's window, built from bingux-ui and nothing else.
 
-mod address;
 mod app;
 mod ctx;
 mod find;

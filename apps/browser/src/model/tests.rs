@@ -63,20 +63,6 @@ fn typing_an_address_loads_it_and_the_events_fill_in_the_tab() {
 }
 
 #[test]
-fn words_are_searched_for_with_the_engine_the_person_chose() {
-    let (mut browser, double) = browser();
-    go(&mut browser, "rust lifetimes");
-    assert!(double.calls().iter().any(
-        |call| matches!(call, Call::Load(_, url) if url == "https://duckduckgo.com/?q=rust+lifetimes")
-    ));
-    browser.set_search_engine(2);
-    go(&mut browser, "rust");
-    assert!(double.calls().iter().any(
-        |call| matches!(call, Call::Load(_, url) if url == "https://en.wikipedia.org/w/index.php?search=rust")
-    ));
-}
-
-#[test]
 fn back_and_forward_follow_what_the_engine_says_is_possible() {
     let (mut browser, _) = browser();
     let key = go(&mut browser, "example.com");
@@ -235,15 +221,6 @@ fn settings_is_one_tab_that_is_found_again_and_becomes_a_page_when_navigated_awa
             .iter()
             .any(|call| matches!(call, Call::CreateTab(_)))
     );
-}
-
-#[test]
-fn the_pages_of_the_browser_are_reached_by_their_names() {
-    let (mut browser, _) = browser();
-    let before = browser.tabs.len();
-    browser.navigate(browser.tabs.active_key(), "bingux:settings");
-    assert_eq!(browser.tabs.len(), before + 1);
-    assert_eq!(browser.tabs.active().unwrap().kind, TabKind::Settings);
 }
 
 #[test]

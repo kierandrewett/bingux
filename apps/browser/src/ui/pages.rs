@@ -9,7 +9,7 @@ use bingux_ui::web_view::requests::CertError;
 use bingux_ui::web_view::{FailureCause, GoneReason, LoadError};
 use freya::prelude::*;
 
-use crate::model::address;
+use crate::address;
 use crate::model::failure::{self, CERT_RISK};
 use crate::profile::history;
 

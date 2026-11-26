@@ -22,8 +22,8 @@ use std::sync::Arc;
 use bingux_ui::web_view::requests::ContextTarget;
 use bingux_ui::web_view::{BrowserBackend, PageEnvironment, RequestId, TabConfig, TabId};
 
+use crate::address::{ENGINES, SearchEngine};
 use crate::engine::Engine;
-use crate::model::address::{ENGINES, SearchEngine};
 use crate::model::downloads::Downloads;
 use crate::model::keeping::{Keeping, NotSaved};
 use crate::model::permissions::Permissions;
