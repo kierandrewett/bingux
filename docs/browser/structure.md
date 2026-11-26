@@ -455,17 +455,22 @@ A feature with no strings has no kind c. A commit never mixes kinds.
 
 ### Order
 
-Leaves first, so each move only updates imports of what is already moved. `Browser` stays in `model/browser/`
-until its features have gone; then it moves last.
+Leaves first, so each move only updates imports of what is already moved.
 
+0. Infrastructure first, because every feature method takes an `&Engine` and an `&mut Outbox`:
+   `browser/` (the aggregate moves out of `model/`), `engine/` (the handle and its status),
+   `browser/outbox.rs` (`Notice`, `UiRequest`, then `Outbox`), `browser/testing.rs` (the test fixtures).
+   Each is a move commit, then one commit that gives the type its behaviour.
 1. `zoom`, `address`, `commands`, `site_info`, `permissions`
 2. `downloads`, `find`, `prompts`, `error_pages`
 3. `store`, `history`, `settings`, `profiles`, `first_run`, `private`
 4. `navigation`, `page`, `new_tab`, `menus`, `tabs`
-5. `engine` (the handle, events, lifecycle, the failure page, start)
-6. `browser` (aggregate, outbox, flows, testing) and the context split of `Chrome`
-7. `app` (content, layout, context, launch, target, toolbar) and `snapshot/`
-8. The structure test (below), docs, the lint entry
+5. `engine` (events, lifecycle, the failure page, start) and `browser` (flows)
+6. `app` (content, layout, context, launch, target, toolbar) and `snapshot/`
+7. The structure test (below), docs, the lint entry
+
+The first draft of this plan put `engine` and `browser` last. They could not be: a feature that talks to the
+engine needs the handle to exist. Only their events, lifecycle and flows come last.
 
 ### Gates
 
@@ -492,8 +497,8 @@ $B --snapshot /var/tmp/BrowserStructure-shots/after         # after the commit
 cmp -s base/NAME-SIZE.png after/NAME-SIZE.png               # for every pair
 ```
 
-- A baseline is taken before the first move, then twice, to find any scenario that is not stable. Those are
-  named in the first commit message and compared by pixels, not bytes.
+- The harness freezes the animation clock and the caret, so three runs of all 72 images are byte-identical
+  (`test(browser): the snapshots hold still`). Every commit is compared byte for byte; there is no mask.
 - A pair that differs is decoded and the differing pixels counted, with their bounding box. A difference in kind
   a or b is a bug in the commit. In kind c it is a message whose en-US text is not what the literal was.
 - If another agent commits to `apps/browser` or `crates/ui` meanwhile, the baseline is taken again from a
