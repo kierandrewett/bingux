@@ -4,16 +4,15 @@
 
 use freya::prelude::*;
 
-use crate::component::ComponentName;
 use super::file_icon::{FileIcon, file_icon_view};
+use crate::component::ComponentName;
 use crate::controls::{SpinnerSize, spinner};
 use crate::icons::{self, Icon};
-use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
-use crate::style::*;
-use crate::surface::use_tokens;
 use crate::search_highlight;
 use crate::shell::menu_query::Mark;
 use crate::shell::type_ahead::dimmed;
+use crate::style::*;
+use crate::surface::use_tokens;
 use crate::typography::{BODY, EMPHASIS, Ink};
 
 /// A piece of a row's text.
@@ -152,9 +151,7 @@ impl Component for ListRow {
                 on_press.call(());
             })
             .child(match &self.icon {
-                Lead::File(icon) => {
-                    file_icon_view(&tokens, icon, IconSize::Control, self.current)
-                }
+                Lead::File(icon) => file_icon_view(&tokens, icon, IconSize::Control, self.current),
                 Lead::Action(icon) => {
                     icons::icon(*icon, IconSize::Control, Paint::Muted.color(&tokens)).into()
                 }
@@ -247,20 +244,4 @@ pub(super) fn scroll_offset(index: usize, count: usize, current: i32, centre: bo
 /// The height of `count` rows, for a panel's content size.
 pub(super) fn rows_height(count: usize) -> f32 {
     count as f32 * Dim::MenuItem.px()
-}
-
-/// A list under a field, with no shield: the keyboard and the pointer stay
-/// with the field. It is as wide as `field` and scrolls past the menu height.
-pub(super) fn popover(
-    open: bool,
-    field: &Area,
-    rows: Vec<Element>,
-    scroll: ScrollController,
-) -> Panel {
-    let anchor = PanelRect::from_area(field);
-    let height = rows_height(rows.len());
-    Panel::new(PanelKind::Menu, open, PanelTrigger::Control(anchor), rows)
-        .size(anchor.width, height)
-        .scroll(scroll)
-        .nested(0)
 }
