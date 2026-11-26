@@ -376,14 +376,16 @@ pub const TOOLBAR: &[Spec] = &[
                     ])
                     .linked(),
                 )
-                .group(toolbar_group(vec![
-                    toolbar_item("sidebar", "Sidebar", Icon::SidebarShow, move |()| {
+                .group(toolbar_group(vec![pane_toggle_item(
+                    "sidebar",
+                    "Sidebar",
+                    PanelSide::Start,
+                    sidebar(),
+                    move |()| {
                         let mut sidebar = sidebar;
                         sidebar.set(!sidebar());
-                    })
-                    .toggled(sidebar())
-                    .leading(),
-                ]))
+                    },
+                )]))
                 .group(toolbar_group(vec![
                     toolbar_item("new", "New folder", Icon::ListAdd, |()| {})
                         .shortcut("Ctrl+Shift+N"),
