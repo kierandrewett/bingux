@@ -11,20 +11,15 @@ use crate::ui::Ctx;
 /// How many visited pages the new tab page lists.
 const RECENT: usize = 5;
 
-/// The page of a tab that has no address.
-pub fn new_tab(ctx: Ctx, key: u64) -> Element {
-    NewTab { ctx, key }.into()
-}
-
-/// The new tab page. A component of its own: the pages visited last are the
+/// The page of a tab that has no address. A component of its own: the pages visited last are the
 /// `history` searchable's, asked off the UI thread.
 #[derive(PartialEq)]
-struct NewTab {
-    ctx: Ctx,
-    key: u64,
+pub struct NewTabPage {
+    pub ctx: Ctx,
+    pub key: u64,
 }
 
-impl Component for NewTab {
+impl Component for NewTabPage {
     fn render(&self) -> impl IntoElement {
         let (ctx, key) = (self.ctx, self.key);
         let (private, has_history) = {
