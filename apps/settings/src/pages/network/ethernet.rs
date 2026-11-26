@@ -226,15 +226,8 @@ pub fn ethernet_rows(ctx: NetCtx, ov: &Overview) -> Vec<Element> {
             })
             .collect();
         shown.push(Element::from(
-            expander_row(
-                if spare.len() == 1 {
-                    tr!("network-ethernet-other-one")
-                } else {
-                    tr!("network-ethernet-other-many", count = spare.len())
-                },
-                children,
-            )
-            .subtitle(tr!("network-link-cable-unplugged")),
+            expander_row(tr!("network-ethernet-other", count = spare.len()), children)
+                .subtitle(tr!("network-link-cable-unplugged")),
         ));
     }
     shown

@@ -1022,7 +1022,8 @@ impl Component for KeyboardPage {
             .navigates()
             .on_press(move |_| router.open(routes::shortcuts()));
         if let Some(count) = shortcut_count {
-            shortcuts_row = shortcuts_row.value(format!("{count} shortcuts"));
+            shortcuts_row =
+                shortcuts_row.value(tr!("settings-keyboard-shortcut-count", count = count));
         }
         let shortcuts = Group::titled(&tr!("settings-keyboard-shortcuts-group")).row(shortcuts_row);
 

@@ -187,6 +187,6 @@ mod tests {
             today: Some((1_200_000_000, 80_000_000)),
             level: None,
         };
-        assert_eq!(value(Some(&some)), "↓ 1.2 GB · ↑ 80 MB today");
+        assert_eq!(value(Some(&some)), "↓ 1.2\u{a0}GB · ↑ 80\u{a0}MB today");
     }
 }

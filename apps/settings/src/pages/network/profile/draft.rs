@@ -288,7 +288,10 @@ impl Component for EntryRow {
             .placeholder(self.look.placeholder)
             .validate(self.look.check)
             .wide()
-            .trailing(icon_button(Icon::ListRemove, move |_| list.remove(id)).tooltip("Remove"));
+            .trailing(
+                icon_button(Icon::ListRemove, move |_| list.remove(id))
+                    .tooltip(bingux_ui::tr!("network-profile-list-remove")),
+            );
         if self.look.monospace {
             field = field.monospace();
         }

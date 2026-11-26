@@ -396,7 +396,10 @@ impl Component for SchemeCard {
             .child(caption.label(&tokens, self.title.clone()));
         focus_stop(
             card,
-            format!("{} color scheme", self.title),
+            tr!(
+                "settings-appearance-scheme-a11y",
+                scheme = self.title.as_str()
+            ),
             AccessibilityRole::Button,
             true,
             Radius::Card,

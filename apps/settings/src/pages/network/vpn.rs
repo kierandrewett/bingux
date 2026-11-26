@@ -223,16 +223,23 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
         })
         .icon(Icon::WindowClose)
     } else {
-        menu_item("Connect", move |_| set_link(ctx, toggle_name.clone(), true))
-            .icon(Icon::NetworkVpn)
+        menu_item(tr!("network-vpn-connect"), move |_| {
+            set_link(ctx, toggle_name.clone(), true)
+        })
+        .icon(Icon::NetworkVpn)
     };
     vec![
         toggle,
-        menu_item("Edit", move |_| ctx.router.open(edit.clone())).icon(Icon::Pencil),
+        menu_item(tr!("network-vpn-edit"), move |_| {
+            ctx.router.open(edit.clone())
+        })
+        .icon(Icon::Pencil),
         menu_separator(),
-        menu_item("Delete", move |_| confirm_delete(ctx, delete.clone()))
-            .icon(Icon::UserTrash)
-            .destructive(),
+        menu_item(tr!("network-vpn-delete"), move |_| {
+            confirm_delete(ctx, delete.clone())
+        })
+        .icon(Icon::UserTrash)
+        .destructive(),
     ]
 }
 
@@ -420,18 +427,24 @@ impl Component for VpnPage {
         let mut actions = Vec::new();
         let toggle = name.clone();
         if link.on() {
-            actions.push(strip_action(Icon::WindowClose, "Disconnect", move |_| {
-                set_link(ctx, toggle.clone(), false)
-            }));
+            actions.push(strip_action(
+                Icon::WindowClose,
+                tr!("network-vpn-disconnect"),
+                move |_| set_link(ctx, toggle.clone(), false),
+            ));
         } else {
-            actions.push(strip_action(Icon::NetworkVpn, "Connect", move |_| {
-                set_link(ctx, toggle.clone(), true)
-            }));
+            actions.push(strip_action(
+                Icon::NetworkVpn,
+                tr!("network-vpn-connect"),
+                move |_| set_link(ctx, toggle.clone(), true),
+            ));
         }
         let delete = name.clone();
-        actions.push(strip_action(Icon::UserTrash, "Delete", move |_| {
-            confirm_delete(ctx, delete.clone())
-        }));
+        actions.push(strip_action(
+            Icon::UserTrash,
+            tr!("network-vpn-delete"),
+            move |_| confirm_delete(ctx, delete.clone()),
+        ));
 
         // The everyday facts: where it connects to, the tunnel's address and this VPN's data
         // usage. A failed attempt says why in the line under the name.
@@ -462,7 +475,8 @@ impl Component for VpnPage {
         if let Link::Connected(address) = &link
             && !address.is_empty()
         {
-            info = info.row(row("IP address").technical_value(address.clone()));
+            info =
+                info.row(row(tr!("network-vpn-row-ip-address")).technical_value(address.clone()));
         }
         let owner = Owner::Vpn { name: name.clone() };
         info = info.row(usage::connection_usage_row(

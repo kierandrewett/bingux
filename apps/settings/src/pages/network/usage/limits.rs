@@ -238,7 +238,10 @@ impl Component for LimitsGroup {
 
         let mut group = Group::titled(&tr!("data-usage-limit")).row(
             row(&tr!("data-usage-cycle-day"))
-                .subtitle(format!("This cycle: {}", self.cycle))
+                .subtitle(tr!(
+                    "data-usage-cycle-subtitle",
+                    cycle = self.cycle.as_str()
+                ))
                 .trailing(stepper(i64::from(current.billing_day), on_day).range(1, 31)),
         );
         group = group.row(switch_row(&tr!("data-usage-monthly-limit"), on, on_toggle));
