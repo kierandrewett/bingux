@@ -183,7 +183,7 @@ image-generic | Image viewer (Applications), wallpapers | picture | Image fill
 video-generic | Video (Applications) | video camera | VideoCamera fill
 applications-multimedia | Music (Applications) | music note | MusicNotesSimple fill
 accessories-calculator | Calculation (search) | calculator | Calculator fill
-addon | Add-on sources (search) | plug-in | Plugs fill
+addon | Add-on sources (search), browser extensions | jigsaw piece | custom: one jigsaw piece, knobs top and right on narrow necks, same-size sockets left and bottom
 application-x-executable | Generic application tile | box | custom: a mitred hexagon, the left face solid, the top and right faces open
 user-home | Home (file chooser) | house | House fill
 folder-documents | Documents folder (file chooser list, sidebar, address bar) | folder with a page of text | custom: Folder fill with a page of text lines cut out
