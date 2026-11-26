@@ -34,7 +34,7 @@ use super::places_model::{
 };
 use crate::component::ComponentName;
 use crate::controls::{
-    StopRing, focus_stop_press, focus_stop_pressed, icon_button, path_label, text_field, usage_bar,
+    StopRing, focus_stop_press, focus_stop_pressed, path_label, text_field, usage_bar,
 };
 use crate::dnd::{
     DragAction, DragInfo, DropTarget, Dropped, Format, SPRING_DELAY, use_drop_target,
@@ -42,7 +42,7 @@ use crate::dnd::{
 use crate::focus::{focus_node, step_focus};
 use crate::icons::{self, Icon};
 use crate::shell::panel::{Panel, PanelKind, PanelRect, PanelTrigger};
-use crate::shell::{MenuItem, Overlays, ResponseKind, dialog};
+use crate::shell::{MenuItem, Overlays, PanelSide, ResponseKind, dialog, pane_toggle};
 use crate::style::*;
 use crate::surface::use_tokens;
 use crate::task::spawn_blocking;
@@ -219,7 +219,9 @@ impl PlacesMenu {
 
     /// Draw the button as a header's icon button (the sidebar mark) instead
     /// of a field with the place's name: for a header whose address bar
-    /// already names the place, such as the Files window on a phone.
+    /// already names the place, such as the Files window on a phone. The
+    /// button is the toggle of the places sidebar, so it belongs at the start
+    /// of the header, and it is what the Files window puts there.
     pub fn icon_only(mut self, icon_only: bool) -> Self {
         self.icon_only = icon_only;
         self
@@ -295,9 +297,13 @@ impl Component for PlacesMenu {
             rect()
                 .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
                 .child(
-                    icon_button(Icon::SidebarShow, move |_: ()| open.set(!open()))
+                    // The places are a sidebar at the start of the window on a desktop,
+                    // so this is the start-side toggle, in the start slot of the header
+                    // (`browser_header` gives it to `HeaderBar::pane_control`).
+                    pane_toggle(PanelSide::Start, move |_: ()| open.set(!open()))
                         .active(open())
-                        .tooltip(&crate::tr!("ui-files-places-title")),
+                        .tooltip(&crate::tr!("ui-files-places-title"))
+                        .into_button(),
                 )
         } else {
             focus_stop_press(

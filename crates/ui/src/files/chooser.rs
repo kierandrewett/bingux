@@ -50,8 +50,8 @@ use crate::layout::divider;
 use crate::motion::{Dwell, use_dwell};
 use crate::nav::{HistoryItem, NavModel, Outcome};
 use crate::shell::{
-    CANCEL_ID, HeaderBar, MenuItem, Overlays, ResponseKind, Screen, WindowControls, dialog,
-    history_menu_with, menu_button, menu_item, menu_separator, use_overlays,
+    CANCEL_ID, HeaderBar, MenuItem, Overlays, PanelSide, ResponseKind, Screen, WindowControls,
+    dialog, history_menu_with, menu_button, menu_item, menu_separator, pane_toggle, use_overlays,
 };
 use crate::style::*;
 use crate::surface::use_tokens;
@@ -1783,8 +1783,10 @@ fn toolbar_parts(
     };
 
     // The docked preview pane: it shows the selected file beside the list and
-    // follows the selection. A phone has no room for it.
-    let pane = icon_button(Icon::SidebarShow, move |_: ()| {
+    // follows the selection. A phone has no room for it. The pane is a column at
+    // the end of the file area, so its toggle is the end-side one: it draws a
+    // panel at the end edge and `dialog_toolbar` puts it at the end of the row.
+    let pane = pane_toggle(PanelSide::End, move |_: ()| {
         let shown = *preview_pane.peek();
         preview_pane.set(!shown);
     })
@@ -1848,7 +1850,7 @@ fn toolbar_parts(
         search: search_button.into(),
         empty_trash: empty_trash.map(Into::into),
         create: create.into(),
-        pane: pane.into(),
+        pane: pane.into_button().into(),
         view: view.into(),
         places: places_menu.into(),
         filter,
@@ -1919,8 +1921,9 @@ fn dialog_toolbar(tokens: &crate::theme::Tokens, compact: bool, parts: ToolbarPa
         .child(parts.search)
         .maybe_child(parts.empty_trash)
         .child(parts.create)
-        .child(parts.pane)
         .child(parts.view)
+        // The toggle of the pane at the end is the last control of the row, as in a header bar.
+        .child(parts.pane)
         .into()
 }
 
@@ -1966,7 +1969,8 @@ fn browser_header(
         }
         let header = HeaderBar::new(String::new())
             .title_start(true)
-            .leading(parts.places)
+            // The places button is the sidebar's toggle: the start slot.
+            .pane_control(PanelSide::Start, parts.places)
             .title_slot(address)
             .trailing(parts.search)
             .trailing(
@@ -2179,3 +2183,6 @@ fn choice_control(tokens: &crate::theme::Tokens, session: &Session, choice: &Cho
         )
         .into()
 }
+
+#[cfg(all(test, feature = "testing"))]
+mod pane_tests;
