@@ -363,3 +363,44 @@ browser-nav-back-tooltip = Back
 browser-nav-forward-tooltip = Forward
 browser-nav-stop-tooltip = Stop loading
 browser-nav-reload-tooltip = Reload
+
+## Downloads
+## The button, the list and the toasts. Sizes and times are written by bingux_ui::format.
+
+# How far a download is. $done and $total are sizes.
+browser-downloads-progress = { $done } of { $total }
+# How fast a download goes. $size is the size per second.
+browser-downloads-speed = { $size }/s
+# $time is how long the download still needs.
+browser-downloads-time-left = { $time } left
+# The line under a running download: its parts (how far, how fast, how long) in the number given by $count.
+browser-downloads-line = { $count ->
+        [1] { $first }
+        [2] { $first } · { $second }
+       *[3] { $first } · { $second } · { $third }
+    }
+# $done is how far the paused download got.
+browser-downloads-paused = Paused · { $done }
+browser-downloads-failed = Failed
+browser-downloads-cancelled = Cancelled
+browser-downloads-pause-tooltip = Pause
+browser-downloads-cancel-tooltip = Cancel download
+browser-downloads-resume-tooltip = Resume
+browser-downloads-retry-tooltip = Retry
+browser-downloads-none-title = No downloads
+browser-downloads-none-description = Files you save appear here.
+browser-downloads-title = Downloads
+browser-downloads-clear-button = Clear finished
+# Tooltip of the toolbar button. $count is how many downloads run.
+browser-downloads-button-tooltip = { $count ->
+        [0] Downloads
+        [one] Downloads: { $count } running
+       *[other] Downloads: { $count } running
+    }
+browser-downloads-unavailable-tooltip = Downloads are not available in this engine yet
+# Toast when a download starts. $name is the file.
+browser-downloads-started-notification = Downloading { $name }
+# Toast when a download ends. $name is the file.
+browser-downloads-finished-notification = { $name } was downloaded
+# Button of those toasts: opens the list of downloads.
+browser-downloads-show-button = Show

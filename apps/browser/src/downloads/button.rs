@@ -18,11 +18,10 @@ impl DownloadsButton {
         // An engine that does not save downloads has nothing to list: the button
         // stays, so the toolbar keeps its shape, and says why it does nothing.
         let can = ctx.browser.read().engine.capabilities().downloads;
-        let tip = match active {
-            _ if !can => "Downloads are not available in this engine yet".to_string(),
-            0 => "Downloads".to_string(),
-            1 => "Downloads: 1 running".to_string(),
-            count => format!("Downloads: {count} running"),
+        let tip = if can {
+            tr!("browser-downloads-button-tooltip", count = active)
+        } else {
+            tr!("browser-downloads-unavailable-tooltip")
         };
         rect()
             .on_sized(move |event: Event<SizedEventData>| anchor.set_if_modified(event.area))

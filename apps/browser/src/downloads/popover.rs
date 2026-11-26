@@ -42,13 +42,13 @@ impl DownloadsPopover {
                             icon_button(Icon::Pause, move |_: ()| {
                                 let _ = pause.pause_download(id);
                             })
-                            .tooltip("Pause"),
+                            .tooltip(&tr!("browser-downloads-pause-tooltip")),
                         )
                         .child(
                             icon_button(Icon::WindowClose, move |_: ()| {
                                 let _ = backend.cancel_download(id);
                             })
-                            .tooltip("Cancel download"),
+                            .tooltip(&tr!("browser-downloads-cancel-tooltip")),
                         )
                         .into_element(),
                 )
@@ -61,13 +61,13 @@ impl DownloadsPopover {
                         icon_button(Icon::MediaPlaybackStart, move |_: ()| {
                             let _ = resume.resume_download(id);
                         })
-                        .tooltip("Resume")
+                        .tooltip(&tr!("browser-downloads-resume-tooltip"))
                     })
                     .child(
                         icon_button(Icon::WindowClose, move |_: ()| {
                             let _ = backend.cancel_download(id);
                         })
-                        .tooltip("Cancel download"),
+                        .tooltip(&tr!("browser-downloads-cancel-tooltip")),
                     )
                     .into_element(),
             ),
@@ -78,7 +78,7 @@ impl DownloadsPopover {
                         icon_button(Icon::Refresh, move |_: ()| {
                             let _ = backend.resume_download(id);
                         })
-                        .tooltip("Retry"),
+                        .tooltip(&tr!("browser-downloads-retry-tooltip")),
                     )
                     .into_element(),
             ),
@@ -94,14 +94,14 @@ impl DownloadsPopover {
                 .tw_layout(&[flex_col(), w_full()])
                 .child(
                     Group::new(None::<String>).row(
-                        row("No downloads")
-                            .subtitle("Files you save appear here.")
+                        row(tr!("browser-downloads-none-title"))
+                            .subtitle(tr!("browser-downloads-none-description"))
                             .leading(Icon::FolderDownload),
                     ),
                 )
                 .into_element();
         }
-        let mut group = Group::new("Downloads".to_string());
+        let mut group = Group::new(tr!("browser-downloads-title"));
         for download in &list {
             let mut line = row(download.filename.clone())
                 .subtitle(Transfer(download).status_line())
@@ -140,7 +140,7 @@ impl DownloadsPopover {
             .child(group);
         if finished {
             column = column.child(
-                action_button("Clear finished", move |_: ()| {
+                action_button(tr!("browser-downloads-clear-button"), move |_: ()| {
                     ctx.browser.clone().write().clear_finished_downloads();
                 })
                 .flat()

@@ -57,14 +57,20 @@ impl Browser {
                 if started {
                     self.out.notice(Notice {
                         error: false,
-                        text: format!("Downloading {name}"),
-                        action: Some(("Show".to_string(), Command::Downloads)),
+                        text: tr!(
+                            "browser-downloads-started-notification",
+                            name = name.as_str()
+                        ),
+                        action: Some((tr!("browser-downloads-show-button"), Command::Downloads)),
                     });
                 } else if finished {
                     self.out.notice(Notice {
                         error: false,
-                        text: format!("{name} was downloaded"),
-                        action: Some(("Show".to_string(), Command::Downloads)),
+                        text: tr!(
+                            "browser-downloads-finished-notification",
+                            name = name.as_str()
+                        ),
+                        action: Some((tr!("browser-downloads-show-button"), Command::Downloads)),
                     });
                 }
             }

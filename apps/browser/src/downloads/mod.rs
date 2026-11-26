@@ -1,42 +1,30 @@
 //! The list of downloads, and how a size and a speed read.
 
+use bingux_ui::format::{Bytes, Measure, TimeUnit};
+use bingux_ui::prelude::tr;
 use bingux_ui::web_view::requests::{DownloadInfo, DownloadState};
 
 /// One download of the engine, read for the list: how far it is, and what its line says.
 pub struct Transfer<'a>(pub &'a DownloadInfo);
 
 impl Transfer<'_> {
-    /// `bytes` as people read it: `1.2 MB`. Powers of 1000, as a file manager
-    /// shows them.
+    /// `bytes` as people read it, in the language shown: `1.2 MB`.
     fn size(bytes: u64) -> String {
-        const UNITS: [&str; 5] = ["B", "kB", "MB", "GB", "TB"];
-        if bytes < 1000 {
-            return format!("{bytes} B");
-        }
-        let mut value = bytes as f64;
-        let mut unit = 0;
-        while value >= 1000.0 && unit + 1 < UNITS.len() {
-            value /= 1000.0;
-            unit += 1;
-        }
-        if value >= 100.0 {
-            format!("{value:.0} {}", UNITS[unit])
-        } else {
-            format!("{value:.1} {}", UNITS[unit])
-        }
+        Bytes::new(bytes).to_string()
     }
 
-    /// The time left for `remaining` bytes at `speed`: `12 s`, `3 min`, `2 h`.
+    /// The time left for `remaining` bytes at `speed`, in the language shown.
     fn time_left(remaining: u64, speed: u64) -> Option<String> {
         if speed == 0 {
             return None;
         }
         let seconds = remaining.div_ceil(speed);
-        Some(match seconds {
-            0..=59 => format!("{seconds} s"),
-            60..=3599 => format!("{} min", seconds.div_ceil(60)),
-            _ => format!("{} h", seconds.div_ceil(3600)),
-        })
+        let (value, unit) = match seconds {
+            0..=59 => (seconds, TimeUnit::Second),
+            60..=3599 => (seconds.div_ceil(60), TimeUnit::Minute),
+            _ => (seconds.div_ceil(3600), TimeUnit::Hour),
+        };
+        Some(Measure::new(value, unit).format())
     }
 
     /// How far a download is, 0 to 1, or `None` when the total is not known.
@@ -49,42 +37,44 @@ impl Transfer<'_> {
     /// The line under a download's name.
     pub fn status_line(&self) -> String {
         let download = self.0;
+        // How far it is: `1.2 MB of 4.0 MB`, or only what came when the total is not known.
+        let done = || match download.total {
+            Some(total) => tr!(
+                "browser-downloads-progress",
+                done = Self::size(download.received),
+                total = Self::size(total)
+            ),
+            None => Self::size(download.received),
+        };
         match download.state {
             DownloadState::Running => {
-                let done = match download.total {
-                    Some(total) => {
-                        format!("{} of {}", Self::size(download.received), Self::size(total))
-                    }
-                    None => Self::size(download.received),
-                };
-                let rate =
-                    (download.speed > 0).then(|| format!("{}/s", Self::size(download.speed)));
+                let rate = (download.speed > 0)
+                    .then(|| tr!("browser-downloads-speed", size = Self::size(download.speed)));
                 let left = download
                     .total
                     .and_then(|total| {
                         Self::time_left(total.saturating_sub(download.received), download.speed)
                     })
-                    .map(|left| format!("{left} left"));
+                    .map(|left| tr!("browser-downloads-time-left", time = left));
                 // Each part is one unbreakable word run: a line may wrap between
                 // them, never inside "1.1 MB/s".
-                [Some(done), rate, left]
+                let parts: Vec<String> = [Some(done()), rate, left]
                     .into_iter()
                     .flatten()
                     .map(|part| part.replace(' ', "\u{a0}"))
-                    .collect::<Vec<_>>()
-                    .join(" \u{b7} ")
+                    .collect();
+                tr!(
+                    "browser-downloads-line",
+                    count = parts.len(),
+                    first = parts[0].as_str(),
+                    second = parts.get(1).map_or("", String::as_str),
+                    third = parts.get(2).map_or("", String::as_str)
+                )
             }
-            DownloadState::Paused => match download.total {
-                Some(total) => format!(
-                    "Paused \u{b7} {} of {}",
-                    Self::size(download.received),
-                    Self::size(total)
-                ),
-                None => format!("Paused \u{b7} {}", Self::size(download.received)),
-            },
+            DownloadState::Paused => tr!("browser-downloads-paused", done = done()),
             DownloadState::Finished => Self::size(download.received),
-            DownloadState::Failed => "Failed".to_string(),
-            DownloadState::Cancelled => "Cancelled".to_string(),
+            DownloadState::Failed => tr!("browser-downloads-failed"),
+            DownloadState::Cancelled => tr!("browser-downloads-cancelled"),
         }
     }
 }
