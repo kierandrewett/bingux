@@ -169,15 +169,15 @@ impl Component for Week {
                         rect()
                             .tw(&tokens, &[w_flex()])
                             .min_width(Size::px(0.0))
+                            // ui-lint: allow(the bar stays clear of the high-temperature label: its width plus the gap, two tokens summed)
                             .padding((0.0, Dim::Box9.px() + gap_token.px(), 0.0, 0.0))
                             .child(bar),
                     )
                     .child(
                         rect()
                             .position(Position::new_absolute().top(0.0).right(0.0))
-                            .width(Size::px(Dim::Box9.px()))
                             .height(Size::fill())
-                            .tw(&tokens, &[flex_row(), items(Align::Center)])
+                            .tw(&tokens, &[w(Dim::Box9), flex_row(), items(Align::Center)])
                             .child(
                                 typography::BODY
                                     .label(&tokens, format::temperature(&units, day.high))

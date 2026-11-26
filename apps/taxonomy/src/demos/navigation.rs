@@ -232,6 +232,7 @@ fn screen_specimen(footer: bool, immersive: bool) -> Element {
     }
     rect()
         .width(Size::fill())
+        // ui-lint: allow(the specimen's stage: a fixed frame the screen under test fills)
         .height(Size::px(320.0))
         .child(screen)
         .into()
@@ -260,6 +261,7 @@ pub const CAROUSEL: &[Spec] = &[Spec::live("Pages and their dots", || {
     let names = vec!["Sheffield".into(), "Leeds".into(), "York".into()];
     rect()
         .width(Size::fill())
+        // ui-lint: allow(the specimen's stage: a fixed frame the carousel under test fills)
         .height(Size::px(260.0))
         .child(
             Screen::new(HeaderBar::new("Places"))
