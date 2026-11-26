@@ -154,7 +154,15 @@ impl Component for FindCard {
         let current = text.read().clone();
         let not_found = !current.is_empty() && matches!(self.result, Some((_, 0)));
 
-        let mut field = text_field(text, {
+        let mut field = search_field(text, move |changed: String| {
+            if let Some(change) = &change {
+                change.call(changed);
+            }
+        })
+        .flat()
+        .fill_width()
+        .placeholder(&self.placeholder)
+        .on_submit({
             let enter_with_shift = enter_with_shift.clone();
             let step = step.clone();
             move |_: String| {
@@ -162,15 +170,6 @@ impl Component for FindCard {
                 if let Some(step) = &step {
                     step.call(!backwards);
                 }
-            }
-        })
-        .flat()
-        .fill_width()
-        .leading(Icon::Search)
-        .placeholder(&self.placeholder)
-        .on_change(move |changed: String| {
-            if let Some(change) = &change {
-                change.call(changed);
             }
         })
         .on_escape({

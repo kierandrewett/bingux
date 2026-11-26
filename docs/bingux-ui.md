@@ -3660,7 +3660,10 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   accessibility role is `SearchInput`. Escape clears the text, reports the empty
   text through `on_change` and keeps focus; with the field empty it leaves the
   field, and with `on_escape` set it is the owner's (a find bar closes with
-  it). `on_submit` runs on Enter. The placeholder is `Search` unless
+  it). `on_submit` runs on Enter. A find bar (the find card is one) adds
+  `autofocus()` with `select_all_on_open()`, so that opened again it starts on
+  the last search and the next key replaces it, and `danger_outline(true)`
+  while the text matches nothing. The placeholder is `Search` unless
   `placeholder(text)` says what is searched (`Search pictures`). `well()` is the
   elevated fill for a page or sidebar, `fill_width()` fills the container,
   `enabled(false)` greys it out and takes it out of focus order. A field under

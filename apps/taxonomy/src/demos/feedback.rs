@@ -172,10 +172,9 @@ impl Component for AttachedDemo {
             .tw_layout(&[w_full()])
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
             .child(
-                text_field(text, |_| {})
+                search_field(text, |_: String| {})
                     .fill_width()
-                    .placeholder("Type to see suggestions")
-                    .leading(Icon::Search),
+                    .placeholder("Type to see suggestions"),
             )
             .child(
                 popover(

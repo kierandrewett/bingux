@@ -185,7 +185,7 @@ pub static ENTRIES: &[Entry] = &[
         name: "Search field",
         category: Category::Controls,
         page: "Text input",
-        api: "search_field(State<String>, on_change).placeholder(text).fill_width().well().dense().flat().enabled(bool).autofocus().a11y_id(id).on_submit(handler).on_escape(handler).on_enter_modifiers(handler)",
+        api: "search_field(State<String>, on_change).placeholder(text).fill_width().well().dense().flat().enabled(bool).autofocus().select_all_on_open().danger_outline(bool).a11y_id(id).on_submit(handler).on_escape(handler).on_enter_modifiers(handler)",
         doc: "components",
         covers: &["SearchField", "search_field"],
         body: Body::States(inputs::SEARCH_FIELD),

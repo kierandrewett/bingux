@@ -40,6 +40,8 @@ pub struct SearchField {
     flat: bool,
     enabled: bool,
     autofocus: bool,
+    danger: bool,
+    select_all: bool,
     a11y_id: Option<AccessibilityId>,
     on_submit: Option<EventHandler<String>>,
     on_escape: Option<EventHandler<()>>,
@@ -64,6 +66,8 @@ pub fn search_field(
         flat: false,
         enabled: true,
         autofocus: false,
+        danger: false,
+        select_all: false,
         a11y_id: None,
         on_submit: None,
         on_escape: None,
@@ -120,6 +124,22 @@ impl SearchField {
     /// Take keyboard focus when the field first appears.
     pub fn autofocus(mut self) -> Self {
         self.autofocus = true;
+        self
+    }
+
+    /// Select the whole text when the field first appears, so typing replaces
+    /// it: a find bar opened again starts on the last search. Pair it with
+    /// [`autofocus`](Self::autofocus).
+    pub fn select_all_on_open(mut self) -> Self {
+        self.select_all = true;
+        self
+    }
+
+    /// Outline the field in the danger colour, for a find bar whose text
+    /// matches nothing. The result is the owner's to say in words, beside the
+    /// field.
+    pub fn danger_outline(mut self, outlined: bool) -> Self {
+        self.danger = outlined;
         self
     }
 
@@ -194,6 +214,12 @@ impl SearchField {
         }
         if self.autofocus {
             field = field.autofocus();
+        }
+        if self.select_all {
+            field = field.select_all_on_open();
+        }
+        if self.danger {
+            field = field.danger_outline(true);
         }
         if let Some(id) = self.a11y_id {
             field = field.a11y_id(id);
