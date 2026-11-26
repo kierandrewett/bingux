@@ -7,8 +7,8 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::model::downloads::Downloads;
-use crate::model::tab::TabKind;
 use crate::site_info::ConnectionButton;
+use crate::tabs::TabKind;
 use crate::zoom::{Zoom, ZoomChip};
 
 use super::ctx::Ctx;
@@ -211,7 +211,7 @@ impl Component for PhoneBottom {
 /// The tab count of a phone, as a button that opens the list of tabs.
 fn tabs_button(ctx: Ctx, count: usize) -> Element {
     // The number of tabs is the whole label, as on every phone browser.
-    action_button(count.to_string(), move |_: ()| super::phone::open_tabs(ctx))
+    action_button(count.to_string(), move |_: ()| crate::tabs::open_tabs(ctx))
         .flat()
         .compact()
         .into()

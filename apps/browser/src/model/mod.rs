@@ -7,8 +7,6 @@
 
 pub mod downloads;
 pub mod failure;
-pub mod tab;
-pub mod tabs;
 
 #[cfg(test)]
 mod engine_tests;

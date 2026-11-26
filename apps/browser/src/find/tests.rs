@@ -7,7 +7,7 @@ use super::*;
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options, UiRequest};
 use crate::commands::Command;
-use crate::model::tabs::Place;
+use crate::tabs::Place;
 
 #[test]
 fn find_is_not_found_only_after_a_search_with_no_matches() {

@@ -6,8 +6,8 @@ use freya::prelude::*;
 
 use crate::address::Address;
 
-use super::ctx::Ctx;
-use super::strip::icon_of;
+use crate::tabs::icon_of;
+use crate::ui::Ctx;
 
 /// Open the list of tabs.
 pub fn open_tabs(ctx: Ctx) {

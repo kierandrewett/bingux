@@ -25,7 +25,7 @@ use freya::prelude::*;
 use crate::browser::Options;
 use crate::commands::Command;
 use crate::engine::Engine;
-use crate::model::tab::Tab;
+use crate::tabs::Tab;
 use crate::target::SCHEME;
 use crate::ui::{App, Ctx};
 
@@ -300,7 +300,7 @@ fn tab_list(shot: &mut Snapshot, _: &Rig) {
     // button, so the sheet is opened by the same call the button makes.
     if !shot.click_text("3") {
         let at = ctx();
-        shot.runner().run_in(|| crate::ui::open_tabs(at));
+        shot.runner().run_in(|| crate::tabs::open_tabs(at));
     }
     wait(shot, 1500);
 }

@@ -6,7 +6,7 @@ use freya::prelude::*;
 
 use super::{Summary, Tone};
 use crate::address::Address;
-use crate::model::tab::TabKind;
+use crate::tabs::TabKind;
 use crate::ui::Ctx;
 
 /// The states of the page info that belong to the window, not to a tab.

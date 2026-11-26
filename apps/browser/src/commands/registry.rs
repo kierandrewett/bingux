@@ -7,7 +7,7 @@ use bingux_ui::commands::Command as Listed;
 use bingux_ui::prelude::*;
 
 use super::Command;
-use crate::model::tab::TabKind;
+use crate::tabs::TabKind;
 use crate::ui::Ctx;
 
 /// What the window tells bingux-ui about its commands.

@@ -7,9 +7,9 @@ use bingux_ui::prelude::*;
 use freya::prelude::*;
 
 use crate::error_pages::{CertErrorPage, CrashedPage, LoadFailedPage};
-use crate::model::tab::Page;
 use crate::new_tab::NewTabPage;
 use crate::settings::SettingsPage;
+use crate::tabs::Page;
 
 use super::ctx::Ctx;
 use super::web::{Surface, TabPage};

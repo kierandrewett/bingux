@@ -8,8 +8,8 @@ use bingux_ui::web_view::{DownloadId, TabId};
 
 use super::{Browser, ClosedTab, UiRequest, ViewSize};
 use crate::address::{Internal, Typed};
-use crate::model::tab::{Tab, TabKind};
-use crate::model::tabs::Place;
+use crate::tabs::Place;
+use crate::tabs::{Tab, TabKind};
 use crate::zoom::Zoom;
 
 /// How many closed tabs Reopen closed tab remembers.

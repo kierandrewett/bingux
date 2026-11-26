@@ -22,11 +22,11 @@ use bingux_ui::web_view::requests::{ContextTarget, DownloadInfo, DownloadState, 
 use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
 use bingux_ui::web_view::{BrowserBackend, BrowserEvent, DownloadId, Response, TabEvent};
 
-use super::tab::{Page, TabKind};
-use super::tabs::Place;
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options, UiRequest};
 use crate::commands::Command;
+use crate::tabs::Place;
+use crate::tabs::{Page, TabKind};
 
 #[test]
 fn the_first_tab_is_blank_and_the_engine_is_ready_after_its_event() {

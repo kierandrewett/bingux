@@ -8,7 +8,7 @@
 
 use bingux_ui::web_view::TabId;
 
-use super::tab::Tab;
+use crate::tabs::Tab;
 
 /// Where a new tab goes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -214,7 +214,7 @@ impl TabList {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::tab::TabKind;
+    use crate::tabs::TabKind;
 
     fn list(count: usize) -> TabList {
         let mut list = TabList::new();

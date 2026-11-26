@@ -6,7 +6,7 @@ use bingux_ui::web_view::{GoneReason, LoadError, Response};
 
 use super::*;
 use crate::browser::testing::{browser, go};
-use crate::model::tab::Page;
+use crate::tabs::Page;
 
 fn error(name: &str) -> LoadError {
     LoadError {

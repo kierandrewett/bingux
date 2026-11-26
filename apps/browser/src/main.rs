@@ -37,6 +37,7 @@ mod menus;
 mod private;
 mod profiles;
 mod settings;
+mod tabs;
 use crate::engine::Engine;
 use crate::profiles::open::{Opened, open, open_private};
 use crate::profiles::places::{Folders, Places};

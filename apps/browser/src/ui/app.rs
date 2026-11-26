@@ -14,15 +14,15 @@ use crate::commands::{Command, Platform};
 use crate::engine::{self, Engine};
 use crate::find::{BarState, FindBar};
 use crate::menus::ContextMenuHost;
-use crate::model::tabs::Place;
 use crate::prompts::{DialogFields, PromptHost};
 use crate::site_info::PopoverState;
+use crate::tabs::Place;
+use crate::tabs::strip;
 
 use super::ctx::{Chrome, Ctx};
 use super::page::PageArea;
 use super::pages;
 use super::popovers::Popovers;
-use super::strip::strip;
 use super::toolbar::{PhoneBottom, Toolbar};
 use crate::permissions::PermissionBanner;
 

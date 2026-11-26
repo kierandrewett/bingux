@@ -5,8 +5,8 @@ use bingux_ui::web_view::{Disposition, FailureCause, NewWindow, RequestId, TabId
 
 use super::{Browser, Notice};
 use crate::engine;
-use crate::model::tab::{Tab, TabKind};
-use crate::model::tabs::Place;
+use crate::tabs::Place;
+use crate::tabs::{Tab, TabKind};
 
 impl Browser {
     /// The engine is gone: every session with it. The tabs stay as they were,

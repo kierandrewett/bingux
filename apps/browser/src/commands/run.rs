@@ -4,8 +4,8 @@ use bingux_ui::prelude::tr;
 
 use super::Command;
 use crate::browser::{Browser, Notice, UiRequest};
-use crate::model::tab::TabKind;
-use crate::model::tabs::Place;
+use crate::tabs::Place;
+use crate::tabs::TabKind;
 use crate::zoom::Zoom;
 
 impl Browser {

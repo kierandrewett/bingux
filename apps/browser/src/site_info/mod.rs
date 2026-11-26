@@ -11,7 +11,7 @@ mod popover;
 pub use button::ConnectionButton;
 pub use popover::{PopoverState, SiteInfoPopover};
 
-use crate::model::tab::{Tab, TabKind};
+use crate::tabs::{Tab, TabKind};
 
 /// How much the person should worry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -17,7 +17,7 @@ use freya::prelude::*;
 
 use super::{OpenTab, Source, Suggestion, Visited};
 use crate::history;
-use crate::model::tabs::Place;
+use crate::tabs::Place;
 
 use crate::ui::Ctx;
 

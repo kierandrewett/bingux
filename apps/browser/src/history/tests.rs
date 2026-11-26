@@ -24,12 +24,12 @@ use rusqlite::Connection;
 
 use crate::browser::{Browser, Options, Profile};
 use crate::history::{self, Change, INDEX};
-use crate::model::tabs::Place;
 use crate::profiles::places::{Folders, Places};
 use crate::settings::Settings;
 use crate::store::files::{remove_tree, tests::temp};
 use crate::store::keeping::{Keeping, NotSaved};
 use crate::store::{Event, Store};
+use crate::tabs::Place;
 
 fn folders(root: &Path) -> Folders {
     Places::named_folders(root)

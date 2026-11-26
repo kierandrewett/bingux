@@ -4,10 +4,10 @@
 use bingux_ui::prelude::*;
 
 use crate::commands::Command;
-use crate::model::tab::{Tab, TabKind};
+use crate::tabs::{Tab, TabKind};
 
-use super::ctx::Ctx;
 use crate::menus::TabMenu;
+use crate::ui::Ctx;
 
 /// What a tab shows of what it is doing: a crash first, then a question
 /// waiting for the person, then loading, then sound.

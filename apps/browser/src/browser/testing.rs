@@ -5,7 +5,7 @@ use std::sync::Arc;
 use bingux_ui::web_view::test_double::TestDoubleBackend;
 
 use super::{Browser, Options};
-use crate::model::tabs::Place;
+use crate::tabs::Place;
 
 /// A browser over the test double, with one blank tab open and the engine ready.
 pub(crate) fn browser() -> (Browser, Arc<TestDoubleBackend>) {

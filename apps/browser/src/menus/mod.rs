@@ -11,8 +11,8 @@ use bingux_ui::web_view::requests::ContextTarget;
 use crate::address::Address;
 use crate::browser::PendingMenu;
 use crate::commands::Command;
-use crate::model::tab::{Tab, TabKind};
-use crate::model::tabs::Place;
+use crate::tabs::Place;
+use crate::tabs::{Tab, TabKind};
 
 use crate::ui::Ctx;
 

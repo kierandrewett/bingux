@@ -4,7 +4,7 @@ use bingux_ui::web_view::test_double::Call;
 
 use super::*;
 use crate::browser::testing::{browser, go};
-use crate::model::tab::TabKind;
+use crate::tabs::TabKind;
 
 fn address(text: &str) -> String {
     match Typed::of(text) {

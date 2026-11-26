@@ -8,11 +8,11 @@ use bingux_ui::web_view::{
     BrowserBackend, BrowserEvent, Capabilities, Disposition, EngineEvent, FailureCause, NewWindow,
 };
 
-use super::tabs::Place;
 use crate::browser::testing::{browser, go};
 use crate::browser::{Browser, Options};
 use crate::commands::Command;
 use crate::engine;
+use crate::tabs::Place;
 
 fn failed(browser: &Browser) -> Option<(FailureCause, bool, u32)> {
     match &browser.engine.status {
