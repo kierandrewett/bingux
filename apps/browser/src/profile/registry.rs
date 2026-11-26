@@ -98,6 +98,20 @@ pub struct Registry {
     rest: Map<String, Value>,
 }
 
+impl Entry {
+    /// A new profile called `name`, made now.
+    pub fn new(id: Id, name: &str, colour: &str) -> Self {
+        Self {
+            id,
+            name: name.to_string(),
+            colour: colour.to_string(),
+            created: now(),
+            deleting: false,
+            rest: Map::new(),
+        }
+    }
+}
+
 impl Registry {
     fn empty() -> Self {
         Self {
@@ -265,10 +279,10 @@ impl Profiles {
     /// Reads the registry (an empty one when there is none), lets `change`
     /// change it and writes it back, all under the registry's lock. Nothing
     /// is written when `change` refuses.
-    pub(super) fn change<T>(
+    pub(super) fn change<T, E: From<RegistryProblem>>(
         &self,
-        change: impl FnOnce(&mut Registry) -> Result<T, ChangeError>,
-    ) -> Result<T, ChangeError> {
+        change: impl FnOnce(&mut Registry) -> Result<T, E>,
+    ) -> Result<T, E> {
         files::private_dir(&self.places.data).map_err(|error| io(&error))?;
         let _held = Held::wait(&self.places.registry_lock()).map_err(|error| io(&error))?;
         let mut registry = self.read()?.unwrap_or_else(Registry::empty);
@@ -296,14 +310,7 @@ impl Profiles {
             let folders = self.places.folders(&id);
             files::private_dir(&self.places.profiles()).map_err(|error| io(&error))?;
             files::private_dir(&folders.engine).map_err(|error| io(&error))?;
-            let entry = Entry {
-                id: id.clone(),
-                name,
-                colour: colour.to_string(),
-                created: now(),
-                deleting: false,
-                rest: Map::new(),
-            };
+            let entry = Entry::new(id.clone(), &name, colour);
             registry.profiles.push(entry.clone());
             if registry
                 .default
@@ -427,13 +434,9 @@ impl Profiles {
             }
             drop(held);
             let id = entry.id.clone();
-            self.change(|registry| {
+            self.change::<_, RegistryProblem>(|registry| {
                 registry.profiles.retain(|entry| entry.id != id);
                 Ok(())
-            })
-            .map_err(|error| match error {
-                ChangeError::Registry(problem) => problem,
-                other => RegistryProblem::Damaged(format!("{other:?}")),
             })?;
         }
         Ok(())

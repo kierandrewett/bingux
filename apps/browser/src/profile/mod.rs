@@ -9,6 +9,7 @@
 
 pub mod files;
 pub mod lock;
+pub mod migrate;
 pub mod places;
 pub mod registry;
 
