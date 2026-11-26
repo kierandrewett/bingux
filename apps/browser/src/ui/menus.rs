@@ -9,7 +9,7 @@ use crate::model::address;
 use crate::model::shortcuts::{self, Command};
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
-use crate::zoom;
+use crate::zoom::Zoom;
 
 use super::ctx::Ctx;
 
@@ -29,7 +29,7 @@ pub fn main_menu(ctx: Ctx) -> Vec<MenuItem> {
         let browser = ctx.browser.read();
         let tab = browser.active();
         (
-            zoom::percent(tab.map_or(1.0, |tab| tab.zoom)),
+            tab.map_or(Zoom::DEFAULT, |tab| tab.zoom).percent(),
             browser.engine.capabilities().find,
             browser.engine.capabilities().downloads,
             !browser.closed.is_empty(),

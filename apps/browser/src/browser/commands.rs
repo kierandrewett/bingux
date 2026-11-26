@@ -11,7 +11,7 @@ use crate::model::address::{self, Typed};
 use crate::model::shortcuts::Command;
 use crate::model::tab::{Tab, TabKind};
 use crate::model::tabs::Place;
-use crate::zoom;
+use crate::zoom::Zoom;
 
 /// How many closed tabs Reopen closed tab remembers.
 const CLOSED_LIMIT: usize = 25;
@@ -440,14 +440,9 @@ impl Browser {
     }
 
     /// Set the zoom of tab `key`, kept to what the engine allows.
-    pub fn set_zoom(&mut self, key: u64, value: f64) {
-        let value = value.clamp(0.3, 5.0);
-        let Some(session) = self.session_of(key) else {
-            return;
-        };
-        self.engine_call(|backend| backend.set_zoom(session, value));
+    pub fn set_zoom(&mut self, key: u64, to: Zoom) {
         if let Some(tab) = self.tabs.get_mut(key) {
-            tab.zoom = value;
+            tab.zoom.set(tab.session, to, &self.engine, &mut self.out);
         }
     }
 
@@ -602,9 +597,9 @@ impl Browser {
             Command::ReloadBypassCache => self.reload(key, true),
             Command::Back => self.back(key),
             Command::Forward => self.forward(key),
-            Command::ZoomIn => self.zoom_by(key, zoom::zoom_in),
-            Command::ZoomOut => self.zoom_by(key, zoom::zoom_out),
-            Command::ZoomReset => self.set_zoom(key, zoom::DEFAULT),
+            Command::ZoomIn => self.zoom_by(key, Zoom::stepped_in),
+            Command::ZoomOut => self.zoom_by(key, Zoom::stepped_out),
+            Command::ZoomReset => self.set_zoom(key, Zoom::DEFAULT),
             Command::Fullscreen => {
                 let on = !self.fullscreen;
                 self.out.request(UiRequest::Fullscreen(on));
@@ -656,7 +651,7 @@ impl Browser {
         self.tabs.move_to(key, to);
     }
 
-    fn zoom_by(&mut self, key: u64, step: fn(f64) -> f64) {
+    fn zoom_by(&mut self, key: u64, step: fn(Zoom) -> Zoom) {
         let Some(current) = self.tabs.get(key).map(|tab| tab.zoom) else {
             return;
         };

@@ -9,6 +9,7 @@ use bingux_ui::web_view::requests::{
 use bingux_ui::web_view::{Audio, GoneReason, HistoryEntry, LoadState, RequestId, Security, TabId};
 
 use super::address;
+use crate::zoom::Zoom;
 
 /// What a tab holds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -91,7 +92,7 @@ pub struct Tab {
     pub can_forward: bool,
     pub history: Vec<HistoryEntry>,
     pub history_index: usize,
-    pub zoom: f64,
+    pub zoom: Zoom,
     pub audio: Audio,
     pub pinned: bool,
     pub private: bool,
@@ -123,7 +124,7 @@ impl Tab {
             can_forward: false,
             history: Vec::new(),
             history_index: 0,
-            zoom: 1.0,
+            zoom: Zoom::default(),
             audio: Audio::default(),
             pinned: false,
             private: false,

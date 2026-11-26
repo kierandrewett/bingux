@@ -9,7 +9,7 @@ use freya::prelude::*;
 use crate::model::downloads::Downloads;
 use crate::model::security::{self, Tone};
 use crate::model::tab::TabKind;
-use crate::zoom;
+use crate::zoom::Zoom;
 
 use super::address::AddressBar;
 use super::ctx::Ctx;
@@ -22,7 +22,7 @@ struct Reading {
     can_forward: bool,
     loading: bool,
     summary: security::Summary,
-    zoom: f64,
+    zoom: Zoom,
     is_web: bool,
     tabs: usize,
 }
@@ -48,7 +48,7 @@ fn reading(ctx: Ctx) -> Reading {
                 TabKind::Web => security::summarize(&tab.security, &tab.url),
             },
         ),
-        zoom: tab.map_or(1.0, |tab| tab.zoom),
+        zoom: tab.map_or(Zoom::DEFAULT, |tab| tab.zoom),
         is_web: tab.is_some_and(|tab| tab.kind == TabKind::Web),
         tabs: browser.tabs.len(),
     }
@@ -118,13 +118,13 @@ fn connection_button(ctx: Ctx, read: &Reading) -> Element {
 
 /// The zoom, as a button that puts it back to 100 %, while it is not 100 %.
 fn zoom_chip(ctx: Ctx, read: &Reading) -> Option<Element> {
-    if zoom::is_default(read.zoom) {
+    if read.zoom.is_default() {
         return None;
     }
     let key = read.key;
     Some(
-        action_button(format!("{}%", zoom::percent(read.zoom)), move |_: ()| {
-            ctx.with(|browser| browser.set_zoom(key, zoom::DEFAULT));
+        action_button(format!("{}%", read.zoom.percent()), move |_: ()| {
+            ctx.with(|browser| browser.set_zoom(key, Zoom::DEFAULT));
         })
         .flat()
         .compact()

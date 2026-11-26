@@ -6,6 +6,7 @@ use bingux_ui::web_view::{BrowserEvent, EngineEvent, Response, TabEvent, TabId};
 use super::{Browser, Notice, PendingMenu, UiRequest};
 use crate::model::shortcuts::Command;
 use crate::model::tab::Prompt;
+use crate::zoom::Zoom;
 
 impl Browser {
     /// Take in what the engine and the profile's store have said since the
@@ -201,7 +202,7 @@ impl Browser {
             TabEvent::CloseRequested => self.close_tab(key),
             TabEvent::Zoom(zoom) => {
                 if let Some(tab) = self.tabs.get_mut(key) {
-                    tab.zoom = zoom;
+                    tab.zoom = Zoom::reported(zoom);
                 }
             }
             TabEvent::HoverLink(url) => {
