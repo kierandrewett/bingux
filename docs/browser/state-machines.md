@@ -75,7 +75,7 @@ fields can disagree but I found no path.
 | F5  | Who the window is (profile, private) | `browser/mod.rs:72-82,129-132`, `tabs/tab.rs:57`                       | Real bug | 5               |
 | F6  | Find in page                         | `find/mod.rs:17-25`                                                    | Real bug | 6               |
 | F7  | Download news                        | `downloads/mod.rs:84-88`, `engine/events.rs:42-72`                     | Real bug | 7               |
-| F8  | Finger to mouse translation          | `W/touch.rs:24-39`                                                     | Real bug | 8               |
+| F8  | Finger to mouse translation          | none: `touch.rs` is deleted                                            | Removed  | 8               |
 | F9  | Address field and its popovers       | `address/field.rs:26-38`, `downloads/state.rs`, `site_info/popover.rs` | Latent   | 9               |
 | F10 | History file in the store thread     | `store/mod.rs:84-100`                                                  | Latent   | 10              |
 | F11 | Engine backend lifecycle             | `W/engine/state.rs:41-57`, `W/engine/runtime.rs:40-51`                 | Latent   | 11              |
@@ -725,68 +725,11 @@ loses the `unseen` assertions.
 
 ## F8. Finger to mouse translation
 
-### Where
-
-`W/touch.rs:24-39`: `finger: Option<Finger>`, `Finger.scrolling: bool`, `spoiled: bool`. The module's own
-comment says "as a state machine of its own". It is one, and implicit.
-
-### The real states
-
-| State     | In words                                                                        |
-| --------- | ------------------------------------------------------------------------------- |
-| Idle      | No finger.                                                                      |
-| Pressing  | A finger is down and still. A lift is a click.                                  |
-| Scrolling | The finger moved past the slop. Moves scroll. A lift does nothing.              |
-| Held      | The finger rested for `LONG_PRESS` and the menu was asked. A lift does nothing. |
-| Spoiled   | A second finger came down. Nothing the first does counts, until it lifts.       |
-
-### Invalid combinations the fields allow
-
-- `scrolling` has two meanings. `held` sets it to mean "the press is spent" (`:67`). `touch` sets it to mean
-  "this is a scroll" (`:104`). After a long press, the next move of one pixel scrolls the page, because
-  `!finger.scrolling && travelled < TAP_SLOP` is false (`:101`). Reachable.
-- `spoiled` true with `finger` `None`. Not reached: every path that clears one clears the other, except an `Up`
-  for the second finger, which leaves both set until the first lifts (`:124`). Safe, but only by reading three
-  arms.
-
-### User-visible bug
-
-A held finger opens the page menu. A tremor of the finger then scrolls the page under the open menu.
-
-### Proposed explicit form
-
-```rust
-enum Touch {
-    Idle,
-    Pressing { id: u64, start: (f64, f64), since: Instant },
-    Scrolling { id: u64, last: (f64, f64) },
-    Held { id: u64 },
-    /// A second finger came down. `first` is the one that decides when it ends.
-    Spoiled { first: u64 },
-}
-```
-
-`TouchScroller::touch` and `held` become `match (self.state, event.kind)`. `Held` ignores moves under the slop.
-
-### Dependency
-
-`TouchScroller` runs only when `Capabilities::touch` is false (`W/view.rs:201-234`), and the real engine backend says
-`touch: false` (`W/engine/caps.rs:97`) with the comment "the engine announces no touch input". That comment is out of
-date. Vivarium has touch points, pan and pinch (`vivarium_input.h:137`, `vv_session_send_touch`, engine test
-`t_input_touch.c`), and its `docs/rust.md` says touch, gestures and IME are no longer engine gaps. DOM touch events
-are not built yet (`vivarium_input.h:137`).
-
-So F8 has two parts. The enum fixes the tremor bug in the scroller as it is today. Proposal, not yet verified: send
-fingers to the engine (`engine/convert.rs` already converts them) and let its scroll code pan, as Firefox does. That
-needs proof on the real engine that a tap clicks, a drag pans and a long press opens the context menu. Until then
-`Capabilities::touch` stays as the switch between the two paths, and the tests cover both. Do not delete it on the
-claim that the engine has no touch.
-
-### Red test first
-
-| Test                                          | Where              | Red because                                     |
-| --------------------------------------------- | ------------------ | ----------------------------------------------- |
-| `a_held_finger_that_trembles_does_not_scroll` | `W/touch.rs` tests | `held()` then a 1 px move returns a wheel event |
+Removed. The web view sends fingers to the engine as they are (`W/view.rs`, `on_touch`), and the engine taps,
+scrolls, flings, pinches and opens the context menu of a held finger, as Firefox does on a touch screen. Vivarium's
+`t_input_touch.c` proves each of these on the real engine, the tap and the held finger in cases 12 and 13.
+`touch.rs`, its `TouchScroller` with the five implicit states, and `Capabilities::touch`, which chose between the two
+paths, are gone. The tremor bug went with them: a held finger no longer has a browser-side scroll to start.
 
 ## F9. Address field, and the toolbar's cards
 

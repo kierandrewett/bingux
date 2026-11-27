@@ -93,9 +93,6 @@ pub(super) fn capabilities(accepted: &[RequestKind], download_control: bool) -> 
         hover_links: true,
         // ABI 2.0 has no audio state event and no mute call.
         audio: false,
-        // The engine announces no touch input (`docs/rust.md`, "Known engine
-        // gaps"): fingers become a click, a scroll and a held press.
-        touch: false,
         // The crate has no composition call.
         composition: false,
         form_pickers: asks(RequestKind::Select) && asks(RequestKind::FilePicker),
@@ -146,7 +143,7 @@ mod tests {
                 && all.form_pickers
         );
         assert!(
-            !all.audio && !all.touch && !all.composition,
+            !all.audio && !all.composition,
             "no call for them, whatever the engine takes"
         );
         let half = capabilities(&[RequestKind::JsDialog, RequestKind::Select], false);

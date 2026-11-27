@@ -94,7 +94,6 @@ file:web_view/requests.rs # the questions a page asks and their answers: data, d
 file:web_view/queue.rs # the event queue between the engine thread and the UI thread: plumbing
 file:web_view/report.rs # the engine's security report: data, drawn by the browser's settings page
 file:web_view/environment.rs # the host's appearance as pages see it: data sent to the engine
-file:web_view/touch.rs # fingers as clicks and scrolls for an engine without touch: input plumbing
 file:web_view/test_double/sites.rs # the test double's table of invented sites: test tooling
 file:web_view/engine/mod.rs # the real engine backend over the vivarium crate: no pixels of its own
 file:web_view/engine/config.rs # the engine's start configuration: system backend

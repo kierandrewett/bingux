@@ -20,7 +20,6 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::time::Instant;
 
 use freya::prelude::*;
 
@@ -31,9 +30,8 @@ use crate::frame_view::{
 use crate::prelude::*;
 use crate::web_view::backend::BrowserBackend;
 use crate::web_view::ids::TabId;
-use crate::web_view::input::{FocusAction, Mods, PageInput, TouchKind};
+use crate::web_view::input::{FocusAction, Mods, PageInput};
 use crate::web_view::surface::PageSurface;
-use crate::web_view::touch::{LONG_PRESS, TouchScroller};
 
 /// The page of one engine session, as a control. Build it with [`web_view`].
 pub struct WebView {
@@ -108,7 +106,6 @@ impl Component for WebView {
         // The keys the host took when they went down: their release is not the
         // page's either.
         let taken = use_hook(|| Rc::new(RefCell::new(HashSet::<String>::new())));
-        let fingers = use_hook(|| Rc::new(RefCell::new(TouchScroller::new())));
         let send = {
             let backend = backend.clone();
             move |input: PageInput| {
@@ -198,40 +195,12 @@ impl Component for WebView {
                     send(PageInput::Focus(if focused { FocusAction::Activate } else { FocusAction::Deactivate }));
                 }
             });
-        if capabilities.touch {
-            // Fingers as they are: the engine does the tapping and the scrolling.
-            view = view.on_touch({
-                let send = send.clone();
-                move |input: TouchInput| send(PageInput::from_touch(&input))
-            });
-        } else {
-            // Fingers as a mouse would be: a tap clicks, a drag scrolls, a held
-            // finger asks for the page's menu.
-            view = view.on_touch({
-                let send = send.clone();
-                let fingers = fingers.clone();
-                move |input: TouchInput| {
-                    let PageInput::Touch(event) = PageInput::from_touch(&input) else {
-                        return;
-                    };
-                    let now = Instant::now();
-                    for out in fingers.borrow_mut().touch(event, now) {
-                        send(out);
-                    }
-                    if event.kind == TouchKind::Down {
-                        // The held press is asked about once the time has passed.
-                        let fingers = fingers.clone();
-                        let send = send.clone();
-                        spawn(async move {
-                            timer(LONG_PRESS).await;
-                            if let Some(out) = fingers.borrow_mut().held(Instant::now()) {
-                                send(out);
-                            }
-                        });
-                    }
-                }
-            });
-        }
+        // Fingers as they are: the engine taps, scrolls, flings, pinches and
+        // opens the menu of a held finger, as Firefox does on a touch screen.
+        view = view.on_touch({
+            let send = send.clone();
+            move |input: TouchInput| send(PageInput::from_touch(&input))
+        });
         // The page fills the area; its box does not depend on the frame.
         rect().tw_layout(&[w_full(), h_flex()]).child(view)
     }

@@ -146,8 +146,9 @@ event. No thread of the browser waits on the engine.
   accepts, never from a list in the browser; a kind it refuses as unsupported keeps its control disabled or
   answered with a notice (the "capabilities" snapshot shows the main menu that way). Several things stay off
   whatever the engine accepts, because the safe `vivarium` crate has no call for them: find in page, audio
-  state and muting, composition (input methods commit text), pausing and cancelling downloads, the
-  permission store, and touch input (fingers become a click, a scroll and a held press, `touch.rs`). A file
+  state and muting, composition (input methods commit text), pausing and cancelling downloads, and the
+  permission store. Fingers go to the engine as they are: it taps, scrolls, flings, pinches and opens the
+  context menu of a held finger, as Firefox does on a touch screen. A file
   picker opens files only: the engine asks for no folder and no place to save. Right click opens the
   browser's own page menu (Back, Forward, Reload, Select all, source) while the engine does not ask for its
   context menu. Favicons arrive as addresses only, so tabs show a glyph. Print saves the page as a PDF in the downloads folder (no print dialog or printers). F12 or Ctrl+Shift+I toggles the developer tools: the engine's toolbox docks under the page in the same tab, with a draggable splitter (`apps/browser/src/devtools`). There is no "focus

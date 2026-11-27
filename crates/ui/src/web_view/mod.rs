@@ -13,7 +13,6 @@
 //! | [`environment`] | [`PageEnvironment`]: the host's appearance (scheme, accent, motion, text scale, locales) as pages see it, built from bingux-ui tokens |
 //! | [`events`], [`page`], [`requests`] | what the engine says: load, location, security, history, process loss, new windows, and the questions it asks (permission, dialog, auth, certificate error, context menu) |
 //! | [`input`] | what the host says to the page: pointer, wheel, key, text, touch, edit commands, focus. DOM names, so converting a [frame view input](crate::frame_view) loses nothing |
-//! | [`touch`] | a finger as a click, a scroll and a held press, for an engine without touch input |
 //! | [`surface`] | [`PageSurface`], the frame view's [`FrameSource`](crate::frame_view::FrameSource) for one session: newest frame wins, damage folded, pointer shape, caret |
 //! | [`queue`] | the event queue between the engine's thread and the UI thread, and the wake-up |
 //! | [`report`] | [`SecurityReport`]: the engine's own account of its sandbox and invariants, grouped per kind of process |
@@ -55,7 +54,6 @@ pub mod report;
 pub mod requests;
 pub mod surface;
 pub mod toolbox;
-pub mod touch;
 pub mod view;
 
 #[cfg(any(feature = "web-view-vivarium", feature = "web-view-dynamic-load"))]

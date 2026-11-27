@@ -74,9 +74,6 @@ pub struct Capabilities {
     pub hover_links: bool,
     /// Whether a page is making sound, and muting it.
     pub audio: bool,
-    /// Fingers as touch events (else the browser turns them into a click, a
-    /// scroll and a held press).
-    pub touch: bool,
     /// Input method composition with a preedit string.
     pub composition: bool,
     /// `<select>` lists and `<input type=file>`.
@@ -99,7 +96,6 @@ impl Capabilities {
             download_control: true,
             hover_links: true,
             audio: true,
-            touch: true,
             composition: true,
             form_pickers: true,
             favicons: true,
