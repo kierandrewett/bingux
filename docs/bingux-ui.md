@@ -3771,9 +3771,21 @@ custom icons). Icons are the fork's drawings, not redrawn: `scripts/icons/build.
 takes the fork's outline, puts it on the 16 px grid (one uniform scale at most, and a
 shift of at most half a pixel that leaves the fewest soft edges, see
 [Fitting](#fitting-the-pixel-rules)) and writes one SVG per
-icon, tinted with the text colour at draw time. The Rust names (`Icon::NetworkWired`)
-and the SVG file names (`network-wired-symbolic.svg`) follow Adwaita's symbolic
-vocabulary, which the QML shell also uses.
+icon, tinted with the text colour at draw time.
+
+**Names say what an icon draws.** An icon is named after its drawing, not after one
+use of it: `calendar`, `shield`, `padlock-cross`, `battery-50-bolt`. A name is
+`object[-variant][-modifier]`: the object drawn, what tells siblings apart (a level,
+a count, a direction, a letter) and a shape drawn on it or cut out of it (`-slash`,
+`-cross`, `-check`, `-plus`, `-bolt`); a glyph inside a container names the container
+first (`circle-info`, `folder-plus`). The SVG file is `NAME-symbolic.svg`, the Rust
+variant the name in CamelCase (`Icon::Battery50Bolt`), and the QML shell asks for
+`NAME-symbolic`. `scripts/icons/aliases.tsv` lists, for each icon, the freedesktop
+names it stands for (its old Adwaita name, the names gnome-settings-daemon and BlueZ
+send): `build.py` turns it into the shell's `BinguxIconAliases.js` and Rust's
+`Icon::from_freedesktop`, which read what other programs send. Bingux code asks for
+the shape name; `ui-lint` reports an alias in the shell. `scripts/icons/rename.py`
+renames the tree by the table when an icon arrives under another name.
 
 **Colour icons are a separate set.** The file and folder icons of the Files app
 (34: the 22 file families, ten folders, the Trash empty and full) are lit,
