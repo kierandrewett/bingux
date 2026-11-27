@@ -278,11 +278,8 @@ def absolute_problems(measures: dict[str, dict], labels) -> list[str]:
                         f"[IC-05] {name}: a dot {w:.2f} x {h:.2f} grid units fills {fill:.2f} of its box; "
                         f"a dot is a circle ({ROUND_FILL[0]} to {ROUND_FILL[1]}, near square)"
                     )
-        if (
-            short.startswith("network-wireless")
-            and short in ("network-wireless",)
-            or short.startswith("network-wireless-signal-")
-        ):
+        # The Wi-Fi fan and its levels (wifi-0, wifi-1, wifi-2); not wifi-cross or wifi-slash.
+        if short in ("wifi", "wifi-0", "wifi-1", "wifi-2"):
             if record["runs"] > 3:
                 problems.append(
                     f"[IC-03] {name}: {record['runs']} marks along its middle; a Wi-Fi icon has two arcs and a dot at most"

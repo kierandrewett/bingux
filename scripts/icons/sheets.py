@@ -38,14 +38,30 @@ def copy_untinted(source: Path, dest: Path) -> None:
     dest.write_text(re.sub(r'\sfill="#[0-9a-fA-F]{3,8}"', "", source.read_text()))
 
 
+def adwaita_names() -> dict[str, list[str]]:
+    """Each shape name and the names it answers to (aliases.tsv), the old Adwaita names first: the Adwaita
+    file an icon stands in for is the first of them that the theme has."""
+    names: dict[str, list[str]] = {}
+    for line in (HERE / "aliases.tsv").read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            new, *olds = line.split("\t")
+            names[new] = [*olds, new]
+    return names
+
+
 def flatten_reference(adwaita: Path, icons: Path, dest: Path, extra: list[str]) -> None:
+    """Copy the Adwaita file each icon stands in for into `dest`, under the icon's own (shape) name."""
     index: dict[str, Path] = {}
     for path in adwaita.rglob("*-symbolic.svg"):
         index.setdefault(path.name, path)
+    candidates = adwaita_names()
     wanted = {path.name for path in icons.glob("*.svg")} | {f"{name}-symbolic.svg" for name in extra}
     for name in sorted(wanted):
-        if name in index:
-            copy_untinted(index[name], dest / name)
+        short = name.removesuffix("-symbolic.svg")
+        for other in candidates.get(short, [short]):
+            if f"{other}-symbolic.svg" in index:
+                copy_untinted(index[f"{other}-symbolic.svg"], dest / name)
+                break
     for line in (HERE / "topbar.txt").read_text().splitlines():
         parts = line.split("#")[0].split()
         if len(parts) == 2 and parts[1] in index:
