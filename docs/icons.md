@@ -303,8 +303,8 @@ The Adwaita names the shell used to take from the Adwaita theme, and what replac
 1. `mirror=left|right`: keep that half, replace the other with its mirror (the fork's `User` fill is lopsided: its
    right shoulder reaches about 0.8 px further from the middle than the left, so the avatar uses `mirror=left`, and is
    never moved sideways, so it stays symmetric about x = 8);
-2. `scale`: one factor on both axes about the middle of the box. Only Bluetooth uses it (1.1): the other glyphs keep
-   the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
+2. `scale`: one factor on both axes about the middle of the box. Bluetooth (1.1) and the phone (`DeviceMobileCamera`
+   bold, 0.966) use it: the other glyphs keep the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
 3. `dx`, `dy` (rare) and the automatic shift: of the translations of at most half a pixel (in quarter pixels) that keep
    the ink in the box, the one that leaves the fewest soft edge pixels at 16 px (ties: the smallest move).
    `align=none` turns the automatic shift off.
@@ -411,4 +411,5 @@ Drawings that predate these rules and move to them when they are next redrawn:
 
 - `network-cross` and `wifi-cross`: their badges are centred at (12.5, 12.5) and (12.75, 12.75) with knock-outs of
   r 4.6 and r 3.6 and a 3 to 4 px cross, not the badge above.
-- `phone`, `square-pencil`, `floppy-disk`: being redrawn on `feat/icon-redraws` to these rules.
+- `phone`: a fork glyph (`DeviceMobileCamera` bold, scaled 0.966), so its soft sides are the allowed fork-glyph
+  exception. `square-pencil`, `floppy-disk` and `pencil` are redrawn to these rules.
