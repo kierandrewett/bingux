@@ -43,10 +43,11 @@ product and how to build it.
 
 ## Design system and session manager
 
-| Page                         | Topic                                           |
-| ---------------------------- | ----------------------------------------------- |
-| [bingux-ui.md](bingux-ui.md) | The design system: components, tokens and rules |
-| [bsm/](bsm/architecture.md)  | The Bingux Session Manager                      |
+| Page                         | Topic                                                           |
+| ---------------------------- | --------------------------------------------------------------- |
+| [bingux-ui.md](bingux-ui.md) | The design system: components, tokens and rules                 |
+| [icons.md](icons.md)         | The icon set: grid, keylines, weights, modifiers, names, checks |
+| [bsm/](bsm/architecture.md)  | The Bingux Session Manager                                      |
 
 ## Building and releasing
 

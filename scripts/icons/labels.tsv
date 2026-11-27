@@ -2,7 +2,7 @@
 # Read by build.py (checks), map-fork.py (writes the <fork/> sources) and review.py (sheets). Names are Adwaita file names without -symbolic.svg.
 # The glyph column is `custom: ..` or `ForkName weight [scale=.. dx=.. dy=.. mirror=.. align=..]`. The weight is `bold` (1.5 px outline) or `fill`,
 # the look of the icons as released in 5d49113; `regular` (1 px) is not used. `scale` is one factor on both axes (only Bluetooth uses it) and
-# `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/bingux-ui.md).
+# `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/icons.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
 #policy action: checkbox-checked crop document-edit document-open-recent document-save edit-copy edit-delete edit-find-match-case edit-find-regex edit-find-whole-word find-location format-code format-quote format-text-bold format-text-italic format-text-plaintext format-text-strikethrough insert-link location-arrow media-playlist-repeat media-playlist-repeat-song media-playlist-shuffle object-rotate-left object-rotate-right pencil send-to sidebar-show system-switch-user view-filter view-fullscreen view-grid view-list view-list-ordered view-pin view-pip view-refresh view-restore zoom-fit-best zoom-in zoom-out tab-new tab-group split-view reader translate find-in-page bookmark-add download download-done sync

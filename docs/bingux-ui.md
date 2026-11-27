@@ -3759,21 +3759,23 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   over 120 ms. Motion is off under reduced motion (`tokens.motion(ms)`
   returns 0).
 - Icons are the Bingux set under `crates/ui/icons/`; see
-  [Icons](#icons) for how to use one and how to add another.
+  [Icons](#icons) for how to use one and [icons.md](icons.md) for how one is
+  drawn and added.
 - A dropdown draws a symbolic icon before each option with `.icons(Vec<Icon>)`,
   in the same order as the options. Sound uses it for each device's kind.
 
 ## Icons
 
-The icon set is the chat app's icon fork (`@chat/icons`, a rounded fork of
-Phosphor: continuous "squircle" corners, its fill and weight choices and its own
-custom icons). Icons are the fork's drawings, not redrawn: `scripts/icons/build.py`
-takes the fork's outline, puts it on the 16 px grid (one uniform scale at most, and a
-shift of at most half a pixel that leaves the fewest soft edges, see
-[Fitting](#fitting-the-pixel-rules)) and writes one SVG per
-icon, tinted with the text colour at draw time. The Rust names (`Icon::NetworkWired`)
-and the SVG file names (`network-wired-symbolic.svg`) follow Adwaita's symbolic
-vocabulary, which the QML shell also uses.
+This section is how an application uses an icon. How an icon is drawn, named,
+checked and added (the 16 px grid, keylines, weights, corners, modifiers, names,
+the fill and outline policy, the pixel rules) is written once, in
+[icons.md](icons.md); nothing here repeats it. The set is the chat app's icon
+fork (`@chat/icons`, a rounded fork of Phosphor) put on the 16 px grid by
+`scripts/icons/build.py`, plus icons drawn by hand to the same rules; each is one
+SVG tinted with the text colour at draw time. The Rust names
+(`Icon::NetworkWired`) and the SVG file names (`network-wired-symbolic.svg`)
+follow Adwaita's symbolic vocabulary, which the QML shell also uses, until the
+shape-name rename lands ([icons.md, Names](icons.md#names)).
 
 **Colour icons are a separate set.** The file and folder icons of the Files app
 (34: the 22 file families, ten folders, the Trash empty and full) are lit,
@@ -3801,7 +3803,7 @@ icon(Icon::Search, IconSize::Control, Paint::Muted.color(&tokens))
 | `Hero`     | 48 px             | The icon of an empty or status page        |
 
 The icons are designed on 16 px and are crispest there; 18 and 20 px are scaled
-copies and are checked against a looser bound (below).
+copies ([icons.md, The grid](icons.md#the-grid)).
 
 ### Every fork icon is an `Icon` (`chat-icons` feature)
 
@@ -3817,196 +3819,17 @@ so it can look softer than a named icon. `scripts/icons/review.py catalogue` ren
 the whole fork, fitted, to PNG pages; `review.py candidates House:fill Mountains:regular`
 shows chosen glyphs side by side; to adopt one, give it a row in `labels.tsv`.
 
-### Fill and outline: the policy
+### Icons that show a state
 
-Each icon in `scripts/icons/labels.tsv` has a category (`#policy <category>: ...`
-lines) and the category decides its fork weight; `build.py --check` fails an icon
-whose weight does not match. The look is the one released in commit `5d49113`: outlines
-are the fork's `bold` weight (strokes 1.5 px at 16 px, exactly as the fork draws them) and
-objects are `fill`. The fork's `regular` weight (1 px wire) is not used by a named icon:
-at 16 px it reads thin, small and rounder than the neighbouring fills, because the
-corner radius of the fork's drawing is large next to a 1 px line. A named icon is never
-thickened or thinned to a whole pixel (an offset with round joins also rounds the
-corners): a 1.5 px stroke has one half-covered pixel row per edge, which is
-how it looks, and is accepted.
+A level or state (battery, Wi-Fi signal, volume) is one icon per state with the
+same footprint, so the glyph does not jump when the state changes. Pick a battery
+icon with `Icon::battery_level(percent)` (Rust, nearest ten) or
+`SystemIndicators.batteryIconName()` (the shell, the same rounding); the parts
+that are off are drawn dimmed in the icon itself, so tint it with one colour.
 
-| Category    | Weight           | What belongs there                                                                                                                                                                                                                                                               |
-| ----------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `object`    | `fill`           | Things: devices (laptop, printer, webcam, headphones), places (folders, home, trash), tools, lock, bell, sun/moon                                                                                                                                                                |
-| `status`    | `fill`           | Badges whose meaning is the mass: error, info, warning, help, secure/insecure, VPN, play, pause, eject, starred                                                                                                                                                                  |
-| `detail`    | `bold` or `fill` | Things recognised by their inner structure: globe (`bold`), envelope, calendar with dates, text and document files, eye (`fill`), touchpad (`bold`); the phone and the tablet are drawn                                                                                          |
-| `section`   | `bold` or `fill` | The settings sidebar: Network, Bluetooth, Search, Power and Applications (`DotsNine`: nine round dots) are outlines; Displays, Sound, Appearance, Accessibility, Date and time, Users, Mouse and About are fills; the Keyboard and the Desktop (a monitor with a dock) are drawn |
-| `action`    | `bold` or `fill` | Verbs: share, refresh, search, zoom, rotate (`bold`); delete, filter, sidebar toggle (`fill`); copy, edit, full screen, list and grid views are drawn                                                                                                                            |
-| `indicator` | `bold` or `fill` | Levels and states: wired network (`fill`); volume (`fill`); battery, Bluetooth and the hotspot are drawn by hand (`custom`)                                                                                                                                                      |
-| `control`   | `bold`           | Tick, plus, minus, close, menu, more, drag handle, window controls, outline star; the chevrons, power and window-new are drawn                                                                                                                                                   |
-| `drawn`     | strokes          | Drawn by hand: the Wi-Fi family (two 2 px arcs and a dot, symmetric about x = 8), the symbolic-link badge, never a fork glyph                                                                                                                                                    |
-
-Default applications: Web, Mail, Calendar, Text and Documents are fills, like Files,
-Photos, Music and Video; Text and Documents have their own icons (`default-app-text`,
-`default-app-documents`) so changing them never changes `document-edit` or
-`document-open`. `document-edit` is only for editing a document (a text editor, a
-note); every other edit (a path, a connection, an access point, a rule) is `pencil`.
-
-The controls family is drawn by hand where a fork glyph cannot be placed on whole
-pixels or is the wrong picture: the chevrons (`go-next`, `go-previous`, `pan-*`) are
-1.5 px polylines with a mitred point and a sharp inner angle; `view-list` and
-`view-grid` sit on whole pixels (2 px bars and dots on rows 2-4, 7-9, 12-14; four 5 px
-squares); `edit-copy` draws both sheets with one radius; `view-fullscreen` and
-`view-restore` are four corner brackets, out and in, as lucide's maximize and
-minimize; `preferences-system` and `emblem-system` are one cog (a ring, eight tapered
-teeth, a round hole); `display-brightness` is a true circle with eight rays;
-`system-shutdown` is a true circle (r 5, centre (8, 9)) open at the top, with the bar
-above it; `power-profile-balanced` keeps its needle inside the dial.
-
-### Fitting: the pixel rules
-
-`build.py` places a fork glyph with three per-icon attributes, which `map-fork.py` writes
-into the source from `labels.tsv` (`Bluetooth bold scale=1.1`):
-
-1. `mirror=left|right`: keep that half, replace the other with its mirror (the fork's
-   `User` fill is lopsided: its right shoulder reaches about 0.8 px further from the middle than the left, so the
-   avatar uses `mirror=left`, and is never moved sideways, so it stays symmetric about x = 8);
-2. `scale`: one factor on both axes about the middle of the box. Only Bluetooth uses it
-   (1.1): the other glyphs keep the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
-3. `dx`, `dy` (rare) and the automatic shift: of the translations of at most half a pixel
-   (in quarter pixels) that keep the ink in the box, the one that leaves the fewest soft
-   edge pixels at 16 px (ties: the smallest move). `align=none` turns the automatic
-   shift off.
-
-A glyph is only ever moved and scaled uniformly. Nothing warps one axis, thickens a stroke,
-snaps an edge or flattens a curve, so circles stay circles (the Applications dots, the
-battery cells' ends, Bluetooth's loops) and the fork's corners are the fork's own: when
-an edge cannot meet a pixel line it renders soft. `build.py` raises an error for a
-non-uniform scale (`affine`). When there is no `mirror`, the SVG is the fork's own path data
-under `translate(..) scale(..)`, byte for byte.
-
-Rules, checked on the rasterised icon
-(`scripts/icons/raster.py`: exact-area coverage, no hinting; the ink box is read from a
-64 px raster):
-
-| Rule                                         | Limit                                                                                          | Applies to                                                                                                                                                                                                                                              |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ink long side                                | 10 to 16 px                                                                                    | every icon not in `#mark`: the fork's own sizes (nine dots 10.5 px, battery 16 px); catches a glyph that is lost or leaves the box                                                                                                                      |
-| Ink long side, `mark`                        | 8 to 13 px                                                                                     | `#mark`: chevrons, tick, plus, minus, close, more, window controls                                                                                                                                                                                      |
-| Ink in the box                               | no ink outside the 16 x 16 box                                                                 | every icon (checked when it is compiled)                                                                                                                                                                                                                |
-| Centre of the ink from the centre of the box | at most 1.5 px each axis                                                                       | every icon: the fork centres glyphs by their mass (a lock's shackle, a play triangle, headphones), which puts the ink box up to 1.4 px off                                                                                                              |
-| Soft edge pixels at 16 px                    | at most 1.35 x the fewest any placement gives, plus 6                                          | every icon: pixels with 15 to 85 % coverage in a straight run of 3 or more on a horizontal or vertical edge. A bold stroke always leaves such a row, so the limit is relative to the icon's own best translation (quarter pixels, at most half a pixel) |
-| Soft edge pixels at 14, 18, 20 px            | at most 100, 120, 140                                                                          | every icon: scaled copies cannot be crisp, the bound catches regressions                                                                                                                                                                                |
-| Symmetry                                     | centre within 0.05 px; mirrored coverage differs by at most 0.15 at any pixel, 0.03 on average | `#symmetric`: the avatar and the Wi-Fi family. The other glyphs are symmetric in the fork but may be shifted half a pixel for crispness                                                                                                                 |
-| Counters                                     | a fork glyph keeps every hole and cut-out                                                      | every fork icon (`#exempt counters:` to waive)                                                                                                                                                                                                          |
-| Sidebar set                                  | ink covers 10 to 55 % of the box                                                               | the icons of `groups.txt` `[sidebar]`: fills 40 to 50 %, outlines 10 to 40 %                                                                                                                                                                            |
-| Policy                                       | weight matches the category                                                                    | every icon                                                                                                                                                                                                                                              |
-
-`#exempt size|centre|soft: ...` lines waive a rule where the footprint is the point:
-the volume and Wi-Fi level icons must keep the footprint of the full icon, so a bare
-dot or a bare cone is not centred or sized by itself.
-
-### Checks
-
-```sh
-scripts/icons/map-fork.py --check   # sources match labels.tsv
-scripts/icons/build.py --check      # sources valid, output current, every rule above;
-                                    # prints the icons with the most soft edge pixels
-scripts/icons/build.py --measure    # every icon: class, ink size, centre, soft pixels
-scripts/icons/build.py --lint --src DIR   # the rules on a draft directory (a probe icon)
-scripts/icons/build.py --suggest [icon ...]  # the scale that brings a glyph into the size rule
-make icons-check                    # the first two, the colour icons and golden.py
-scripts/icons/golden.py             # every icon at 16-32 px, 1x and 2x, against golden.json (see "Visual integrity checks")
-scripts/icons/golden.py --update    # approve a change you have looked at (--sheet FILE draws the set)
-```
-
-A failing check names the icon, the number and the fix: `probe-small: ink is 4.00 x
-4.00 px (icon): the long side must be 10 to 16 px; change scale`, `probe-soft: 48
-soft edge pixels at 16 px, 20 at its best placement (allowed 33)`, `avatar-default: not
-left-right symmetric`.
-After editing `scale`, `dx` or `dy` in `labels.tsv`, run `map-fork.py`, `build.py` and
-`build.py --check`; never edit `crates/ui/icons/*.svg` (they are written).
-
-Icons that show a state (Wi-Fi signal, battery level, volume) are one drawing per
-state with the same footprint, so the glyph does not jump when the state changes:
-the battery levels share one body (the same rectangle), as do the four volume icons.
-
-**Dimmed ink.** A level icon keeps the parts that are "off" in view instead of dropping them: a Wi-Fi
-arc without signal, the empty end of a battery. A source marks such a shape `data-dim="yes"`; `build.py`
-writes it as a second path with `fill-opacity="0.4"` (`DIM_ALPHA`, one value for every icon), never
-overlapping the solid path. The icon is still tinted with one colour at draw time (Freya's `SvgViewer`
-sets `fill` on the root, which a path's own `fill-opacity` keeps; the QML shell's `MultiEffect`
-colorization keeps the alpha too). The pixel rules and `golden.py` judge the whole silhouette, dim part
-included. A cut removes ink from both layers: the charging bolt on a battery is cut out of the filled and the dim part alike. `review.py` draws both layers.
-
-Battery: `battery-level-N` (0 to 100 in tens) is a rounded body filled from the left to N % with the
-rest and the nub dimmed; `-charging` is the same with the bolt, so it shows the level and the charge;
-`-100-charged` is full with a tick; `battery-missing` is a solid body with an exclamation mark. Pick
-one with `Icon::battery_level(percent)` (Rust, nearest ten) or `SystemIndicators.batteryIconName()`
-(the shell, the same rounding). Wi-Fi has two arcs at most (IC-03), so `signal-good` and
-`signal-excellent` are one drawing; none, weak and ok light none, the dot and the dot and inner arc.
-
-### Choose the icon for where it is used
-
-Pick the conventional metaphor for the label the user reads next to the icon, not
-the glyph whose name matches. A sidebar "Network" page needs a network glyph, not a
-node diagram; "Share" is a box with an up arrow, not a paper plane.
-`scripts/icons/labels.tsv` records, for every icon, where it appears, the metaphor
-people expect there, the fork glyph or drawing, and its category. Mappings that were
-weak, and what was decided:
-
-| Icon                                                                 | Was                                                | Problem                                                               | Now                                                                                                  |
-| -------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `input-touchpad`                                                     | `HandPointing` regular                             | 1 px wire, thinner than its neighbours                                | `HandTap` bold, as in `5d49113`                                                                      |
-| `network-vpn`                                                        | `Shield` fill                                      | a plain shield                                                        | `ShieldCheckered` fill: the chequer of Material's VPN icon                                           |
-| `preferences-desktop-wallpaper` (now `preferences-desktop`)          | `ImageSquare` bold                                 | a picture is the wallpaper, not the Desktop page                      | drawn: a monitor on a stand with a dock pill inside                                                  |
-| `view-app-grid`                                                      | solid nine-dot square                              | a solid blob                                                          | `DotsNine` bold (nine round dots, no mass)                                                           |
-| `input-tablet`, `phone`                                              | `DeviceTablet`, `DeviceMobile` fill                | two plain rounded rectangles, neither read as a tablet or a phone     | drawn: a landscape 14 x 10 body and a tall 6 x 14 body, each with a screen and a home button cut out |
-| `web-browser`, `mail-unread`, `x-office-calendar`                    | `Globe`, `EnvelopeSimple`, `CalendarBlank` fill    | the globe's filled disc hid its meridians; the calendar had no dates  | `Globe` bold, `EnvelopeSimple` fill, `CalendarDots` fill                                             |
-| Default applications: Text                                           | `document-edit` (`NotePencil` fill)                | an editor, not a text file                                            | `default-app-text`: `FileText` fill                                                                  |
-| Default applications: Documents                                      | `document-open` (`FolderOpen`)                     | a folder, not a document                                              | `default-app-documents`: `FileDoc` fill                                                              |
-| `help-about`                                                         | `Info` regular                                     | 1 px wire in a set of fills and bold outlines                         | `Info` fill, as in `5d49113`                                                                         |
-| `audio-volume-low`                                                   | `SpeakerNone`                                      | a bare cone can read as mute                                          | kept: 0, 1, 2 waves are monotone and mute has the X                                                  |
-| `battery-level-*`                                                    | five fork glyphs for eleven levels, outlined cells | a line per cell, not filled; the level read badly                     | drawn: a body filled to the level, the rest dimmed                                                   |
-| `battery-level-*-charging`                                           | `BatteryCharging`                                  | the bolt is small at 16 px, level is lost                             | drawn: the same level fill with the bolt turned inside out on it                                     |
-| `window-restore`                                                     | `CopySimple`                                       | close to `edit-copy`                                                  | kept: two squares are the convention                                                                 |
-| `find-location`                                                      | `CursorClick`                                      | no "inspect" glyph                                                    | kept for the inspector toolbar                                                                       |
-| `network-wired`                                                      | `Network` bold                                     | the squares were outlines                                             | `Network` fill                                                                                       |
-| `go-up`                                                              | a folder with an arrow out of it                   | a second, heavier "up" beside the chevrons                            | removed: the parent-folder button is `pan-up`                                                        |
-| `security-high`, `security-low`, `system-lock-screen`                | shields and a padlock                              | three more padlock-like icons                                         | removed: the shell uses the padlock (`network-wireless-encrypted`)                                   |
-| `preferences-desktop-keyboard-shortcuts`                             | `Keyboard` bold                                    | the same drawing as `input-keyboard`                                  | removed: the shortcuts row uses `Icon::Keyboard`                                                     |
-| `x-office-document`, `x-office-spreadsheet`, `x-office-presentation` | a page marked DOC, XLS, PPT                        | a file extension is not a picture, and DOC is `default-app-documents` | removed: documents are `text-x-generic`, spreadsheets `table`, presentations `presentation`          |
-| `audio-card`                                                         | `Waveform` bold                                    | the Sound page's fallback device is not a sound card                  | the Sound page uses `Icon::Sound`; the file stays for the shell's Bluetooth devices (BlueZ names it) |
-| `document-edit`                                                      | `NotePencil` fill                                  | used for every edit, and a pencil that looked odd                     | drawn pencil; `pencil` is the general edit icon                                                      |
-
-### Add or change an icon
-
-1. Find the fork glyph: `review.py catalogue` (all of them), or
-   `~/dev/chat/packages/icons/src/generated/<Name>.ts`.
-2. Add a row to `scripts/icons/labels.tsv` (`file | where it appears | metaphor |
-<ForkName> <weight>`) and name it in one `#policy` line, plus `#symmetric` or
-   `#mark` where they apply. For an icon the fork does not have, mark the row `custom`
-   and draw `src/<file>-symbolic.svg` by hand from plain SVG shapes on the 16 grid (see
-   the header of `scripts/icons/build.py`: `stroke` 1 or 2, `fill`, `data-op="cut"`,
-   `rx` for a continuous corner, and `<fork/>` pieces), category `drawn` or the
-   category of the fork piece.
-3. `scripts/icons/import-chat.py` vendors the whole fork (it only needs to run when the
-   chat package changes).
-4. `scripts/icons/build.py --suggest <file>` prints the `scale` that brings the glyph
-   into the size rule (nothing prints when 1 fits; there is nothing else to fit).
-   `scripts/icons/map-fork.py` writes the source, `scripts/icons/build.py`
-   compiles it into `crates/ui/icons/` and the shell's copy,
-   `scripts/icons/build.py --check` judges it.
-5. Add the variant to `Icon`, to `Icon::ALL` and to `Icon::bytes()` in
-   `crates/ui/src/icons.rs`.
-6. Look at it. `scripts/icons/review.py sheets --out /tmp/icons` writes one labelled PNG
-   per group (Icon variant, file, category, glyph and fit, where it is used, metaphor;
-   16 px dark and light, 18 px, 48 px) and `icons.txt`, the same table as plain text.
-   `review.py compare BEFORE_DIR AFTER_DIR --group sidebar` shows a set before and
-   after. `scripts/icons/sheets.py --out /tmp/icons` renders the same at 12 to 48 px
-   with Freya's own rasteriser, plus a top-bar mock.
-   The taxonomy's Icons / Icon set page is one grid of every file in `icons/`, sorted by
-   file name: the glyph (16 to 48 px, 24 by default) with its name under it, a name
-   filter, the name in a tooltip, a press copies it. It carries no per-icon detail; that
-   is `review.py`'s job.
-
-The fork's geometry is MIT-licensed Phosphor work; `crates/ui/icons/COPYING`
-carries the licence and attribution.
+The taxonomy's Icons / Icon set page is one grid of every file in `icons/`, sorted
+by file name: the glyph (16 to 48 px, 24 by default) with its name under it, a
+name filter, the name in a tooltip, a press copies it.
 
 ### In the QML shell
 

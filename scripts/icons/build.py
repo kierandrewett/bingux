@@ -46,7 +46,7 @@ Source rules, checked on every source:
 - ink stays inside the 16 x 16 box.
 
 Pixel rules, checked on the rasterised output by --check and --lint (see "pixel rules" below
-and docs/bingux-ui.md): ink size, ink near the centre, partly covered pixels on straight
+and docs/icons.md): ink size, ink near the centre, partly covered pixels on straight
 edges (against the icon's own best placement), left-right symmetry of the icons labels.tsv
 lists, no hole closed by mirroring, and the fill/outline weight of each icon's category.
 
@@ -915,7 +915,7 @@ SOFT_SHIFTS = (-0.5, -0.25, 0.0, 0.25, 0.5)
 # At 14, 18 and 20 px the icons are scaled copies and can only be as crisp as that grid
 # allows, so they are held to a bound that still catches a regression.
 SOFT_LIMIT = {14: 100, 18: 120, 20: 140}
-# What each category of icon is drawn with (labels.tsv #policy lines; docs/bingux-ui.md). The
+# What each category of icon is drawn with (labels.tsv #policy lines; docs/icons.md). The
 # 1 px `regular` weight is not used for a named icon: it draws a thin wire that reads rounder
 # and weaker than its neighbours at 16 px.
 OUTLINE = ("bold",)

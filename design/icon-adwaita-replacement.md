@@ -5,6 +5,9 @@ Each now has a Bingux source in `scripts/icons/src` (generated into `shell/bingu
 listed in `shell/bingux/BinguxIconIndex.js`), or its callers were moved to a Bingux icon that
 already existed. `scripts/ui-lint.py` fails on any name the shell asks for that is neither.
 
+This file is the record of that move, not a rule book: how an icon is drawn, named and chosen is
+[docs/icons.md](../docs/icons.md), and where this table and that doc differ, the doc holds.
+
 | Adwaita name              | Now                                                                                                                   | Callers (shell)                                                             |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `go-down`                 | callers use `pan-down` (the Adwaita name was only a fallback)                                                         | `NotificationStack.qml`                                                     |
