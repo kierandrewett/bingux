@@ -474,9 +474,16 @@ struct Fit {
     rail: f32,
     /// The width of the region the tabs show in.
     region: f32,
-    /// Whether the tabs do not fit at their narrowest: they scroll, and the
-    /// scroll arrows are drawn.
+    /// Whether the tabs do not fit at their narrowest: they scroll (by the
+    /// wheel, a finger, the keys and, while there is room for them, the arrows).
     overflow: bool,
+    /// Whether the two scroll arrows are drawn. A scrolling strip has them only
+    /// while at least one narrowest tab shows between them: in less room they
+    /// are not worth their place, and the buttons that matter take it.
+    arrows: bool,
+    /// Whether the New tab button is drawn: the host offers it and it fits
+    /// beside the tab list button.
+    new_tab: bool,
 }
 
 impl Fit {
@@ -492,6 +499,8 @@ impl Fit {
             rail: region + geometry.cluster(usize::from(add) + 1),
             region,
             overflow: false,
+            arrows: false,
+            new_tab: add,
         }
     }
 }
@@ -518,12 +527,33 @@ fn fit(
         // Past the narrowest width: the strip is as wide as its container. The left
         // arrow stands before the region, and the right arrow joins New tab and
         // the tab list in the cluster after it.
+        let between = available - geometry.arrow_lead() - geometry.cluster(usize::from(add) + 2);
+        if between >= geometry.min {
+            return Fit {
+                tab: geometry.min,
+                rail: available,
+                region: between,
+                overflow: true,
+                arrows: true,
+                new_tab: add,
+            };
+        }
+        // Not even one favicon fits between the arrows (a window at its least width, or
+        // a long block of pinned tabs, which take their room before this strip is
+        // given what is left): the arrows go first, then New tab, so that what is
+        // drawn never passes the container. The tab list stays, since it is the way to
+        // every tab, and what is left of the room is the region the wheel, a finger and
+        // the keys still scroll. Below the room that one button needs
+        // ([`Geometry::cluster`] of 1) nothing more can be dropped: that is the pinned
+        // block alone being wider than the container, which this strip cannot change.
+        let new_tab = add && available >= geometry.cluster(2);
         return Fit {
             tab: geometry.min,
             rail: available.max(0.0),
-            region: (available - geometry.arrow_lead() - geometry.cluster(usize::from(add) + 2))
-                .max(0.0),
+            region: (available - geometry.cluster(usize::from(new_tab) + 1)).max(0.0),
             overflow: true,
+            arrows: false,
+            new_tab,
         };
     }
     let count = effective.max(1.0);
@@ -536,6 +566,8 @@ fn fit(
         rail: region + geometry.cluster(usize::from(add) + 1),
         region,
         overflow: false,
+        arrows: false,
+        new_tab: add,
     }
 }
 
@@ -2015,7 +2047,7 @@ impl Component for TabStrip {
             .pointer_only()
             .into_element()
         };
-        let scroll_start = fit.overflow.then(|| {
+        let scroll_start = fit.arrows.then(|| {
             rect()
                 .component("TabScrollStart")
                 .width(Size::px(geometry.arrow_lead()))
@@ -2025,10 +2057,10 @@ impl Component for TabStrip {
                 .into_element()
         });
         let mut buttons: Vec<Element> = Vec::with_capacity(3);
-        if fit.overflow {
+        if fit.arrows {
             buttons.push(arrow(Arrow::Forwards));
         }
-        if let Some(on_new) = self.on_new.clone() {
+        if let Some(on_new) = self.on_new.clone().filter(|_| fit.new_tab) {
             let rapid = rapid.clone();
             buttons.push(
                 icon_button(Icon::ListAdd, move |_: ()| {
@@ -2793,11 +2825,18 @@ mod tests {
 
     #[test]
     fn the_strip_never_passes_its_container_at_any_width() {
+        // A region of no width is a real state, not an impossible input: the pinned
+        // block is taken off `available` before the others are fitted (`pinned_width`
+        // in `render`), so a window of 800 px with 20 pinned tabs leaves this strip a
+        // few dozen pixels. So every width down to what the tab list button alone
+        // needs is checked, and the arrows and New tab give way to keep the strip inside.
+        let mut arrowless = 0;
         for class in CLASSES {
             let geometry = Geometry::in_class(class);
+            let floor = geometry.cluster(1).ceil() as u32;
             for add in [false, true] {
                 for count in 1..=14 {
-                    for available in (100..=900).step_by(7) {
+                    for available in (floor..=900).step_by(3) {
                         let available = available as f32;
                         let fit = fit(geometry, available, count, count as f32, add, geometry.max);
                         assert!(
@@ -2805,24 +2844,34 @@ mod tests {
                             "{class:?} add {add}: {count} tabs in {available}px make a strip {} wide",
                             fit.rail
                         );
-                        let lead = if fit.overflow {
+                        let lead = if fit.arrows {
                             geometry.arrow_lead()
                         } else {
                             0.0
                         };
-                        let end = lead
-                            + fit.region
-                            + geometry.cluster(usize::from(add) + 1 + usize::from(fit.overflow));
-                        // Narrower than its arrows and buttons the strip cannot hold them all.
+                        let buttons = 1 + usize::from(fit.new_tab) + usize::from(fit.arrows);
+                        let end = lead + fit.region + geometry.cluster(buttons);
                         assert!(
-                            fit.region == 0.0 || end <= fit.rail + 0.01,
-                            "{class:?}: the region and the buttons ({end}) outrun the strip ({})",
+                            end <= fit.rail + 0.01,
+                            "{class:?} add {add}: {count} tabs in {available}px: the arrows, region and buttons ({end}) outrun the strip ({})",
                             fit.rail
                         );
+                        assert!(
+                            !fit.arrows || fit.region >= geometry.min,
+                            "{class:?}: arrows only where a tab shows between them"
+                        );
+                        assert!(
+                            add || !fit.new_tab,
+                            "{class:?}: New tab is never drawn when the host has none"
+                        );
+                        if fit.overflow && !fit.arrows {
+                            arrowless += 1;
+                        }
                     }
                 }
             }
         }
+        assert!(arrowless > 0, "the narrow case was reached");
     }
 
     #[test]

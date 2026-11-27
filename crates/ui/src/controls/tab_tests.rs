@@ -339,12 +339,18 @@ fn check(window: f32, case: Case) {
     };
     let overflowing = g.content(case.count as f32, g.min)
         > container_width - g.cluster(usize::from(case.add) + 1) + 0.01;
-    let wanted = usize::from(case.add) + 1 + usize::from(overflowing);
+    // With one narrowest tab to show between them the strip has its arrows; in less room the
+    // arrows go, and then New tab if it does not fit beside the tab list, so that nothing
+    // drawn passes the container (`fit`).
+    let arrows = overflowing
+        && container_width - g.arrow_lead() - g.cluster(usize::from(case.add) + 2) >= g.min;
+    let new_tab = case.add && (!overflowing || arrows || container_width >= g.cluster(2));
+    let wanted = 1 + usize::from(new_tab) + usize::from(arrows);
     let cluster = named(&mut shot, "TabEnd");
     assert_eq!(cluster.len(), 1, "{what}: one cluster of buttons");
     // Where the tabs end and the cluster begins, along the reading direction: a
     // scrolling strip has its left arrow before them.
-    let lead = if overflowing { g.arrow_lead() } else { 0.0 };
+    let lead = if arrows { g.arrow_lead() } else { 0.0 };
     let (region_start, region_end) = match cluster.first() {
         Some(cluster) if case.rtl => (strip.max_x() - lead, cluster.max_x()),
         Some(cluster) => (strip.min_x() + lead, cluster.min_x()),
@@ -436,7 +442,7 @@ fn check(window: f32, case: Case) {
             "{what}: an overflowing strip fills its container"
         );
         assert!(
-            wanted >= 1 + usize::from(case.add),
+            wanted >= 1,
             "{what}: the tab list button is drawn when tabs overflow"
         );
         // The selected tab is scrolled into the region, when the region can hold a tab at all.
@@ -545,6 +551,40 @@ fn the_tabs_stand_the_same_distance_from_the_bars_top_and_bottom_at_compact_dens
             }
         }
     }
+}
+
+#[test]
+fn a_long_block_of_pinned_tabs_leaves_the_strip_no_room_for_arrows_and_what_is_drawn_stays_inside()
+{
+    // Twelve pinned tabs take 456 px of 560 (the block is taken off the room before the others are
+    // fitted), which leaves 104 px: the tab list and New tab, and no room for a tab between two
+    // arrows. The strip used to draw the arrows anyway, past its container.
+    let case = Case {
+        pinned: 12,
+        ..Case::new(14, 560.0)
+    };
+    let mut shot = start(REGULAR, case);
+    let (container, strip, cluster) = (
+        one(&mut shot, "Container"),
+        one(&mut shot, "TabStrip"),
+        one(&mut shot, "TabEnd"),
+    );
+    assert!(
+        contains(&container, &strip, 0.5),
+        "the strip {strip:?} is inside its container {container:?}"
+    );
+    assert!(
+        contains(&strip, &cluster, 0.5),
+        "the buttons {cluster:?} are inside the strip {strip:?}"
+    );
+    assert!(
+        named(&mut shot, "TabScrollStart").is_empty(),
+        "no arrows where no tab shows between them"
+    );
+    assert!(
+        near(cluster.width(), geometry_for(REGULAR).cluster(2)),
+        "New tab and the tab list are what is left: {cluster:?}"
+    );
 }
 
 #[test]
