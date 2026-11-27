@@ -16,7 +16,7 @@ already existed. `scripts/ui-lint.py` fails on any name the shell asks for that 
 | `action-unavailable`      | new Bingux source (`Prohibit` bold)                                                                                   | `OsdCard.qml`                                                               |
 | `dialog-question`         | callers use `help-browser` (circled `?`, already Bingux)                                                              | `SearchResult.qml` and `searchd`'s quick chat result (chat results)         |
 | `document-open-recent`    | new Bingux source (`ClockCounterClockwise` bold)                                                                      | `EmojiPicker.qml`                                                           |
-| `document-save`           | new Bingux source (drawn: an arrow down into a tray, as Adwaita's own)                                                | `RecordingIndicator.qml`, `NotificationStack.qml` (save action)             |
+| `document-save`           | new Bingux source (drawn: a solid floppy with the shutter slot and hub cut out)                                       | `RecordingIndicator.qml`, `NotificationStack.qml` (save action)             |
 | `document-save-as`        | callers use `document-save`                                                                                           | `NotificationStack.qml`                                                     |
 
 Also changed in this family, so the shell does not name them any more:

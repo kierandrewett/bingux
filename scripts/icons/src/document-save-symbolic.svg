@@ -1,5 +1,5 @@
 <svg viewBox="0 0 16 16" fill="none">
-  <polyline points="2.75,7.5 2.75,13.25 13.25,13.25 13.25,7.5" stroke="black" stroke-width="1.5" data-round="2"/>
-  <line x1="8" y1="1.75" x2="8" y2="9.5" stroke="black" stroke-width="1.5"/>
-  <polyline points="4.75,6.5 8,9.75 11.25,6.5" stroke="black" stroke-width="1.5"/>
+  <polygon points="2,2 11,2 14,5 14,14 2,14" fill="black" data-round="2"/>
+  <rect x="4" y="4" width="6" height="2" rx="0.5" fill="black" data-op="cut"/>
+  <circle cx="8" cy="10.5" r="2" fill="black" data-op="cut"/>
 </svg>
