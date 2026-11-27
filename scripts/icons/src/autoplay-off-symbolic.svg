@@ -1,0 +1,5 @@
+<svg viewBox="0 0 16 16">
+  <fork name="Play" weight="fill"/>
+  <polygon points="0.9,3.6 3.6,0.9 15.1,12.4 12.4,15.1" fill="black" data-op="cut"/>
+  <line x1="2.5" y1="2.5" x2="13.5" y2="13.5" stroke="black" stroke-width="1.5"/>
+</svg>

@@ -1,0 +1,7 @@
+<svg viewBox="0 0 16 16">
+  <circle cx="4.25" cy="9.5" r="2.75" stroke="black" stroke-width="1.5"/>
+  <circle cx="11.75" cy="9.5" r="2.75" stroke="black" stroke-width="1.5"/>
+  <path d="M7 8.75Q8 7.75 9 8.75" stroke="black" stroke-width="1.5"/>
+  <path d="M1.75 9.25V6.25Q1.75 4.25 3.5 3.75" stroke="black" stroke-width="1.5"/>
+  <path d="M14.25 9.25V6.25Q14.25 4.25 12.5 3.75" stroke="black" stroke-width="1.5"/>
+</svg>

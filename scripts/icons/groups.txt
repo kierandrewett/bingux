@@ -59,3 +59,8 @@ audio-input-microphone audio-input-microphone-muted network-transmit-receive net
 [notes-slash-menu]
 format-text-plaintext view-list view-list-ordered checkbox-checked format-text-bold format-text-italic
 format-text-strikethrough format-code format-quote insert-link
+
+[browser]
+go-up tab-new tab-group split-view window-private reader translate find-in-page
+reading-list bookmark-add download download-done sync lock-open lock-broken shield-check cookie
+location-pin autoplay-off flexible-space space separator tab-crashed hourglass

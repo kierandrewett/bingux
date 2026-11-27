@@ -1,0 +1,5 @@
+<svg viewBox="0 0 16 16">
+  <fork name="BookmarkSimple" weight="fill"/>
+  <line x1="8" y1="4.5" x2="8" y2="8.5" stroke="black" stroke-width="1.5" data-op="cut"/>
+  <line x1="6" y1="6.5" x2="10" y2="6.5" stroke="black" stroke-width="1.5" data-op="cut"/>
+</svg>
