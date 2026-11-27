@@ -144,7 +144,7 @@ user-trash | Forget, Trash | trash can | Trash fill
 view-filter | Filter | funnel | Funnel fill
 find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
 location-arrow | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
-document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil (as `pencil`) across the opening, cut free by 1.5 px
+document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right (centreline r 2) and `pencil`'s drawing, 3 px wide (the most solid an outline icon holds), across the opening, cut free by 1.5 px
 pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: a pointed tip running into the body, and the eraser cut off by a 1.5 px seam
 document-open | Open | open folder | FolderOpen fill
 send-to | Share | square with arrow up | Export bold
