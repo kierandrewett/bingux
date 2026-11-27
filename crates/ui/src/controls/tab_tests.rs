@@ -3428,14 +3428,15 @@ fn one_tab_is_hovered_at_a_time_and_it_follows_the_tabs_under_a_resting_pointer(
     let mut shot = crowded();
     let strip_area = one(&mut shot, "TabStrip");
     let at = (strip_area.min_x() + 100.0, strip_area.min_y() + 20.0);
-    // The tabs that are fully lit now, left to right.
+    // The tabs that are fully lit now, left to right, read from one rendered frame.
     let lit_tabs = |shot: &mut Snapshot| -> Vec<Area> {
+        let frame = Frame::of(shot);
         named(shot, "Tab")
             .into_iter()
             .filter(|tab| tab.max_x() > strip_area.min_x() && tab.min_x() < strip_area.max_x())
             .filter(|tab| {
                 same(
-                    Frame::of(shot).pixel(
+                    frame.pixel(
                         (tab.min_x() + 20.0).max(strip_area.min_x() + 1.0),
                         tab.min_y() + 5.0,
                     ),
@@ -3454,7 +3455,11 @@ fn one_tab_is_hovered_at_a_time_and_it_follows_the_tabs_under_a_resting_pointer(
     let first = named(&mut shot, "Tab")[0].min_x();
     wheel(&mut shot, at, 0.0, -64.0, WheelSource::Line);
     // The tabs glide, and the lit one is the one the pointer is over when they have: the
-    // state that is waited for is the moved strip with one lit tab, under the pointer.
+    // state that is waited for is the moved strip with one lit tab, under the pointer. The
+    // glide and the fade are let run in counted frames first: each check below renders a whole
+    // frame to read its pixels, and on a loaded machine (16 busy loops beside the suite) the
+    // 30 s of `WAIT` ran out at a few seconds a check while the fill was still fading in.
+    rest(&mut shot);
     let mut moved = false;
     let mut lit: Vec<Area> = Vec::new();
     assert!(
