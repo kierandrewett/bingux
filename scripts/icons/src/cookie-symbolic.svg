@@ -1,0 +1,8 @@
+<svg viewBox="0 0 16 16">
+  <circle cx="8" cy="8" r="6.5" fill="black"/>
+  <circle cx="13.75" cy="2.75" r="3" fill="black" data-op="cut"/>
+  <circle cx="5.5" cy="6.25" r="1" fill="black" data-op="cut"/>
+  <circle cx="9.75" cy="10.5" r="1" fill="black" data-op="cut"/>
+  <circle cx="5.75" cy="10.75" r="1" fill="black" data-op="cut"/>
+  <circle cx="9" cy="6.75" r=".75" fill="black" data-op="cut"/>
+</svg>

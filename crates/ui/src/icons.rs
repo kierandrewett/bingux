@@ -265,6 +265,54 @@ pub enum Icon {
     ViewPip,
     /// The volume near its top: a speaker with two waves (the Sound page's glyph).
     AudioVolumeHigh,
+    /// Up one level: an arrow pointing up (Files, the Browser header).
+    GoUp,
+    /// New tab: a rounded square with a plus (Browser).
+    TabNew,
+    /// Tab groups: a solid tab with one behind it (Browser).
+    TabGroup,
+    /// Split view: a rounded square cut in two (Browser).
+    SplitView,
+    /// A private window: a domino mask (Browser).
+    WindowPrivate,
+    /// Reader view: an open book (Browser).
+    Reader,
+    /// Translate: the characters 文A (Browser).
+    Translate,
+    /// Find in page: a page with a magnifier over its corner (Browser).
+    FindInPage,
+    /// Reading list: glasses (Browser).
+    ReadingList,
+    /// Bookmark this page: a bookmark with a plus (Browser).
+    BookmarkAdd,
+    /// Downloads: an arrow onto a line (Browser).
+    Download,
+    /// A finished download: a tick onto the same line (Browser).
+    DownloadDone,
+    /// Sync: two arrows chasing round (Browser).
+    Sync,
+    /// Not secure: the padlock with its shackle open (Browser).
+    LockOpen,
+    /// Certificate not valid: the padlock with a cross (Browser).
+    LockBroken,
+    /// Trackers blocked: a shield with a tick (Browser).
+    ShieldCheck,
+    /// Cookies and site data (Browser).
+    Cookie,
+    /// Location permission: a map pin (Browser).
+    LocationPin,
+    /// Autoplay blocked: play with a slash (Browser).
+    AutoplayOff,
+    /// Flexible space in a customisable toolbar (Browser).
+    FlexibleSpace,
+    /// Space in a customisable toolbar (Browser).
+    Space,
+    /// Separator in a customisable toolbar (Browser).
+    Separator,
+    /// This tab crashed: a sad face on a tile (Browser).
+    TabCrashed,
+    /// Not responding: an hourglass (Browser).
+    Hourglass,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
     #[cfg(feature = "chat-icons")]
     Chat(crate::chat_icons::ChatIcon, crate::chat_icons::ChatWeight),
@@ -272,7 +320,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 192] = [
+    pub const ALL: [Icon; 216] = [
         Self::GoPrevious,
         Self::GoNext,
         Self::SidebarShow,
@@ -465,6 +513,30 @@ impl Icon {
         Self::MediaPlaylistRepeatSong,
         Self::ViewPip,
         Self::AudioVolumeHigh,
+        Self::GoUp,
+        Self::TabNew,
+        Self::TabGroup,
+        Self::SplitView,
+        Self::WindowPrivate,
+        Self::Reader,
+        Self::Translate,
+        Self::FindInPage,
+        Self::ReadingList,
+        Self::BookmarkAdd,
+        Self::Download,
+        Self::DownloadDone,
+        Self::Sync,
+        Self::LockOpen,
+        Self::LockBroken,
+        Self::ShieldCheck,
+        Self::Cookie,
+        Self::LocationPin,
+        Self::AutoplayOff,
+        Self::FlexibleSpace,
+        Self::Space,
+        Self::Separator,
+        Self::TabCrashed,
+        Self::Hourglass,
     ];
 
     /// The embedded SVG source for this icon.
@@ -721,6 +793,30 @@ impl Icon {
             }
             Self::ViewPip => include_bytes!("../icons/view-pip-symbolic.svg"),
             Self::AudioVolumeHigh => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
+            Self::GoUp => include_bytes!("../icons/go-up-symbolic.svg"),
+            Self::TabNew => include_bytes!("../icons/tab-new-symbolic.svg"),
+            Self::TabGroup => include_bytes!("../icons/tab-group-symbolic.svg"),
+            Self::SplitView => include_bytes!("../icons/split-view-symbolic.svg"),
+            Self::WindowPrivate => include_bytes!("../icons/window-private-symbolic.svg"),
+            Self::Reader => include_bytes!("../icons/reader-symbolic.svg"),
+            Self::Translate => include_bytes!("../icons/translate-symbolic.svg"),
+            Self::FindInPage => include_bytes!("../icons/find-in-page-symbolic.svg"),
+            Self::ReadingList => include_bytes!("../icons/reading-list-symbolic.svg"),
+            Self::BookmarkAdd => include_bytes!("../icons/bookmark-add-symbolic.svg"),
+            Self::Download => include_bytes!("../icons/download-symbolic.svg"),
+            Self::DownloadDone => include_bytes!("../icons/download-done-symbolic.svg"),
+            Self::Sync => include_bytes!("../icons/sync-symbolic.svg"),
+            Self::LockOpen => include_bytes!("../icons/lock-open-symbolic.svg"),
+            Self::LockBroken => include_bytes!("../icons/lock-broken-symbolic.svg"),
+            Self::ShieldCheck => include_bytes!("../icons/shield-check-symbolic.svg"),
+            Self::Cookie => include_bytes!("../icons/cookie-symbolic.svg"),
+            Self::LocationPin => include_bytes!("../icons/location-pin-symbolic.svg"),
+            Self::AutoplayOff => include_bytes!("../icons/autoplay-off-symbolic.svg"),
+            Self::FlexibleSpace => include_bytes!("../icons/flexible-space-symbolic.svg"),
+            Self::Space => include_bytes!("../icons/space-symbolic.svg"),
+            Self::Separator => include_bytes!("../icons/separator-symbolic.svg"),
+            Self::TabCrashed => include_bytes!("../icons/tab-crashed-symbolic.svg"),
+            Self::Hourglass => include_bytes!("../icons/hourglass-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
             Self::Chat(icon, weight) => icon

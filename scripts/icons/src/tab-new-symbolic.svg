@@ -1,0 +1,5 @@
+<svg viewBox="0 0 16 16">
+  <rect x="2.75" y="2.75" width="10.5" height="10.5" rx="2" stroke="black" stroke-width="1.5"/>
+  <line x1="8" y1="5.5" x2="8" y2="10.5" stroke="black" stroke-width="1.5"/>
+  <line x1="5.5" y1="8" x2="10.5" y2="8" stroke="black" stroke-width="1.5"/>
+</svg>
