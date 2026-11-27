@@ -1,8 +1,6 @@
 <svg viewBox="0 0 16 16" fill="none">
-  <polyline points="13.25,5.25 13.25,1.75 2.75,1.75 2.75,14.25 7.75,14.25" stroke="black" stroke-width="1.5" data-round="2"/>
-  <line x1="5.75" y1="5.25" x2="10.25" y2="5.25" stroke="black" stroke-width="1.5"/>
-  <line x1="5.75" y1="8.25" x2="8.25" y2="8.25" stroke="black" stroke-width="1.5"/>
-  <line x1="12" y1="8.25" x2="12" y2="14.25" stroke="black" stroke-width="2" stroke-linecap="butt"/>
-  <line x1="10.75" y1="8.25" x2="13.25" y2="8.25" stroke="black" stroke-width="1.5"/>
-  <line x1="10.75" y1="14.25" x2="13.25" y2="14.25" stroke="black" stroke-width="1.5"/>
+  <polyline points="9.5,2.75 2.75,2.75 2.75,13.25 13.25,13.25 13.25,7.5" stroke="black" stroke-width="1.5" data-round="2.5"/>
+  <polygon points="5.750,10.250 6.811,6.502 12.185,1.128 14.872,3.815 9.498,9.189" fill="black" stroke="black" stroke-width="3" data-round="1" data-op="cut"/>
+  <polygon points="5.750,10.250 6.811,6.502 9.674,3.639 12.361,6.326 9.498,9.189" fill="black" data-round="0.4"/>
+  <polygon points="10.735,2.578 12.185,1.128 14.872,3.815 13.422,5.265" fill="black" data-round="1.0"/>
 </svg>
