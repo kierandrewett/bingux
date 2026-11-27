@@ -61,7 +61,7 @@ src/
   browser/              the aggregate: Browser, Outbox, flows across features
   engine/               the adapter boundary: the only code that speaks to BrowserBackend
 
-  tabs/                 the tab list, closed tabs, the strip, pop-ups, the tab menu, the phone sheet
+  tabs/                 the tab list, closed tabs, the strip, pop-ups, the tab menu, the phone sheet, the Close duplicate tabs question
   address/              what was typed, search engines, suggestions, the address field
   navigation/           a tab's location and history; Back, Forward, Reload, Stop
   page/                 the content area: the web view, link status, load bar, size, fullscreen

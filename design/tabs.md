@@ -239,9 +239,11 @@ tab's.
   the first tab), Close tabs to the right, Duplicate tab, Reopen closed tab, Move
   left, Move right. A closed group is remembered rightmost first, so Reopen
   brings it back left to right at its places. The tab list (the last button of
-  the strip, always there) is a popover: _Search all tabs_, _Close duplicate
-  tabs_ when there are duplicates, the pinned tabs under a _Pinned_ label, then
-  the others, each row with its icon, its title, a speaker while it plays sound
+  the strip, always there) is a popover at most three quarters of the window
+  tall: _Search all tabs_, _Close duplicate tabs_ when there are duplicates and
+  the pinned tabs under a _Pinned_ label stay in place (the pinned block only
+  while it is no more than half of the card), and the other tabs scroll under
+  them, each row with its icon, its title, a speaker while it plays sound
   or is muted and a close button under the pointer (none on a pinned tab); the
   selected one is ticked and scrolled to the middle when the list opens.
 - **Right to left.** `controls::direction`: the strip, a tab's pieces, the tab
