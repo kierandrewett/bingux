@@ -2658,6 +2658,60 @@ fn an_overflowing_strip_has_dimmed_scroll_arrows_with_new_tab_after_the_right_on
 }
 
 #[test]
+fn the_list_button_keeps_its_hover_fill_and_says_it_is_expanded_while_its_list_is_open() {
+    let mut shot = start(REGULAR, Case::new(4, 700.0));
+    let (list, _) = button_named(&mut shot, "Search and manage tabs").expect("the list button");
+    let strip = one(&mut shot, "TabStrip");
+    // The fill beside the glyph, and the button's expanded state.
+    let fill = |shot: &mut Snapshot| {
+        Frame::of(shot).pixel(list.min_x() + 4.0, list.min_y() + list.height() / 2.0)
+    };
+    let expanded = |shot: &mut Snapshot| {
+        shot.runner()
+            .find_many(|_, element| {
+                let data = element.accessibility();
+                (data.builder.class_name() == Some("IconButton")
+                    && data.builder.label() == Some("Search and manage tabs"))
+                .then(|| data.builder.is_expanded())
+            })
+            .into_iter()
+            .next()
+            .flatten()
+    };
+    // Away from the button: a pointer below the strip, on nothing the list covers.
+    let away = (strip.min_x() + 4.0, strip.max_y() + 200.0);
+    let at_rest = fill(&mut shot);
+    let (x, y) = centre(&list);
+    shot.hover(x, y);
+    rest(&mut shot);
+    let hovered = fill(&mut shot);
+    assert!(!same(at_rest, hovered, 2.0), "the button has a hover fill");
+    assert_eq!(expanded(&mut shot), Some(false), "the list is closed");
+
+    shot.click(x, y);
+    rest(&mut shot);
+    shot.hover(away.0, away.1);
+    rest(&mut shot);
+    assert!(
+        same(fill(&mut shot), hovered, 2.0),
+        "while the list is open the button keeps the hover fill, as a menu button does: {:?} {hovered:?}",
+        fill(&mut shot)
+    );
+    assert_eq!(expanded(&mut shot), Some(true), "the list is open");
+
+    // Closed with the pointer, so no focus ring is drawn over the fill.
+    shot.click(x, y);
+    rest(&mut shot);
+    shot.hover(away.0, away.1);
+    rest(&mut shot);
+    assert!(
+        same(fill(&mut shot), at_rest, 2.0),
+        "closed, the button is at rest again"
+    );
+    assert_eq!(expanded(&mut shot), Some(false), "the list is closed again");
+}
+
+#[test]
 fn the_arrows_scroll_the_tabs_a_step_at_a_time_and_dim_at_the_ends() {
     let mut shot = start(REGULAR, Case::new(30, 600.0));
     let first = |shot: &mut Snapshot| named(shot, "Tab")[0].min_x();

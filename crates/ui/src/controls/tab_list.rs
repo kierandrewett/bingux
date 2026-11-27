@@ -28,7 +28,7 @@ use freya::prelude::*;
 use super::button::icon_button;
 use super::press::use_press;
 use super::tabs::{TabItem, TabStatus};
-use crate::a11y::SemanticsExt;
+use crate::a11y::{Semantics, SemanticsExt};
 use crate::component::ComponentName;
 use crate::icons::{self, Icon};
 use crate::shell::panel::{PANEL_EDGE, PANEL_GAP, Panel, PanelKind, PanelRect, PanelTrigger};
@@ -440,7 +440,11 @@ impl Component for TabListButton {
                 })
                 .a11y_id(button_id)
                 .size(self.size)
-                .tooltip(crate::tr!("ui-tab-list.tooltip")),
+                .tooltip(crate::tr!("ui-tab-list.tooltip"))
+                // While the list is open the button keeps its hover fill and says it
+                // is expanded, as a menu button does.
+                .open(open())
+                .semantics(Semantics::new().expanded(open())),
             )
             .child(Element::from(panel))
     }

@@ -468,6 +468,8 @@ pub struct IconButton {
     danger: bool,
     filled: bool,
     active: bool,
+    /// The popup the button opens is open, see [`IconButton::open`].
+    open: bool,
     enabled: bool,
     busy: bool,
     working: bool,
@@ -502,6 +504,7 @@ pub fn icon_button(icon: Icon, on_press: impl Into<EventHandler<()>>) -> IconBut
         danger: false,
         filled: false,
         active: false,
+        open: false,
         enabled: true,
         busy: false,
         working: false,
@@ -577,6 +580,15 @@ impl IconButton {
     /// for the one button of a set that is on or playing. No ring.
     pub fn active(mut self, active: bool) -> Self {
         self.active = active;
+        self
+    }
+
+    /// The popup or list the button opens is open: the button keeps its
+    /// hover fill until it closes, as a [`crate::shell::menu::MenuButton`]
+    /// does, so it shows what the open panel belongs to. Say so to assistive
+    /// technology as well, with [`crate::a11y::Semantics::expanded`].
+    pub fn open(mut self, open: bool) -> Self {
+        self.open = open;
         self
     }
 
@@ -761,12 +773,12 @@ impl Component for IconButton {
         let state = match self.layers {
             Some((hover, pressed)) => fill(if pressing() {
                 pressed
-            } else if hovering() {
+            } else if hovering() || self.open {
                 hover
             } else {
                 Paint::Transparent.color(&tokens)
             }),
-            None => surface(base, hovering(), pressing(), false),
+            None => surface(base, hovering() || self.open, pressing(), false),
         };
         let button = rect()
             .component("IconButton")
