@@ -30,6 +30,7 @@ eye eye-slash star-filled star cross minus square squares-overlap-left
 lines-three dots-three arrow-cw window-sidebar window squares-overlap trash
 trash funnel cursor-click arrowhead square-pencil pencil folder-open square-arrow-up list-bullets squares-four
 pause stop gear folder folder-arrow-down bookmark
+cursor square-dashed monitor camera video-camera sliders
 
 [status]
 circle-cross circle-info triangle-exclamation circle-question key coffee-cup

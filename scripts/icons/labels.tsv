@@ -5,7 +5,7 @@
 # `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/icons.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
-#policy action: square-check crop square-pencil clock-ccw floppy-disk squares-overlap letters-aa asterisk brackets-square cursor-click brackets-angle quotes letter-b letter-i letter-t letter-s-strike link arrowhead repeat repeat-1 shuffle arrow-ccw pencil square-arrow-up window-sidebar person-arrows funnel corners-out squares-four list-bullets list-numbers pushpin window-inset arrow-cw corners-in frame-corners magnifier-plus magnifier-minus square-plus tabs window-split book-open translate file-magnifier bookmark-plus arrow-down-line check-line arrows-cw
+#policy action: square-check crop square-pencil clock-ccw floppy-disk squares-overlap letters-aa asterisk brackets-square cursor-click brackets-angle quotes letter-b letter-i letter-t letter-s-strike link arrowhead repeat repeat-1 shuffle arrow-ccw pencil square-arrow-up window-sidebar person-arrows funnel corners-out squares-four list-bullets list-numbers pushpin window-inset arrow-cw corners-in frame-corners magnifier-plus magnifier-minus square-plus tabs window-split book-open translate file-magnifier bookmark-plus arrow-down-line check-line arrows-cw cursor square-dashed
 #policy control: chevron-right chevron-left plus dots-six minus star check lines-three chevron-down chevron-up bracket-arrow-right arrows-left-right power dots-three cross square square-arrow-up-right squares-overlap-left arrow-up arrow-left-right-bars bracket-bottom line-vertical
 #policy detail: folder-dashed notepad circle-slash file-doc window tablet hand-tap envelope subtitles phone sliders prompt eye-slash eye globe calendar glasses
 #policy drawn: wifi-cross wifi wifi-slash wifi-0 wifi-2 wifi-1 circle-arrow-up-right
@@ -132,6 +132,8 @@ squares-overlap | Copy | two sheets | custom: two 1.5 px rounded squares of one 
 trash | Forget, Trash; Delete | trash can | Trash fill
 funnel | Filter | funnel | Funnel fill
 cursor-click | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
+cursor | Mouse cursor included or hidden (screen capture toolbar) | pointer arrow | Cursor bold
+square-dashed | Capture a region (screen capture) | dashed selection square | Selection bold
 arrowhead | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
 square-pencil | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right (centreline r 2) and `pencil`'s drawing, 3 px wide (the most solid an outline icon holds), across the opening, cut free by 1.5 px
 pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: a pointed tip running into the body, and the eraser cut off by a 1.5 px seam

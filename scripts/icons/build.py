@@ -1375,7 +1375,7 @@ def rust_aliases() -> str:
 def generated_shell_names() -> set[str]:
     """File names (`x.svg`) a previous run generated, from the names in BinguxIconIndex.js.
 
-    shell/bingux/icons also holds hand-made icons (capture-*, control-centre, ...). Only
+    shell/bingux/icons can also hold files no source writes (the DuckDuckGo logo). Only
     files named in the index are ours to rewrite or remove; nothing else is ever touched.
     """
     if not SHELL_INDEX.exists():

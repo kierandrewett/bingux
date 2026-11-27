@@ -66,7 +66,7 @@ Item {
                         SymbolicIcon {
                             anchors.centerIn: parent
                             implicitSize: 20
-                            source: Qt.resolvedUrl("icons/capture-back.svg")
+                            source: BinguxIcons.source("chevron-left-symbolic")
                         }
                     }
                 }

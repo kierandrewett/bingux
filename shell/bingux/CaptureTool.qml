@@ -1142,7 +1142,7 @@ Scope {
                         opacity: toolbar.opacity
                         width: 32
                         height: 32
-                        iconSource: Qt.resolvedUrl("icons/capture-close.svg")
+                        iconSource: BinguxIcons.source("cross-symbolic")
                         description: "Cancel (Esc)"
                         background: Rectangle {
                             id: closeSurface
@@ -1200,7 +1200,7 @@ Scope {
                                         SymbolicIcon {
                                             Layout.alignment: Qt.AlignHCenter
                                             implicitSize: 24
-                                            source: Qt.resolvedUrl("icons/capture-" + (targetButton.modelData === "region" ? "selection" : targetButton.modelData) + ".svg")
+                                            source: BinguxIcons.source(targetButton.modelData === "region" ? "square-dashed-symbolic" : targetButton.modelData === "screen" ? "monitor-symbolic" : "squares-overlap-symbolic")
                                             color: targetButton.enabled ? Theme.text : Theme.muted
                                         }
                                         Text {
@@ -1256,7 +1256,7 @@ Scope {
                                                 SymbolicIcon {
                                                     anchors.centerIn: parent
                                                     implicitSize: 16
-                                                    source: Qt.resolvedUrl("icons/capture-" + (modeButton.modelData === "screenshot" ? "camera" : "video") + ".svg")
+                                                    source: BinguxIcons.source(modeButton.modelData === "screenshot" ? "camera-symbolic" : "video-camera-symbolic")
                                                     color: modeButton.checked ? Theme.background : Theme.text
                                                 }
                                             }
@@ -1303,14 +1303,14 @@ Scope {
                                 spacing: 4
                                 CaptureButton {
                                     objectName: "captureCursorToggle"
-                                    iconSource: Qt.resolvedUrl("icons/capture-cursor.svg")
+                                    iconSource: BinguxIcons.source("cursor-symbolic")
                                     chosen: preferences.cursor
                                     description: preferences.cursor ? "Mouse cursor included" : "Mouse cursor hidden"
                                     onClicked: preferences.cursor = !preferences.cursor
                                 }
                                 CaptureButton {
                                     objectName: "captureSettingsToggle"
-                                    iconSource: Qt.resolvedUrl("icons/capture-settings.svg")
+                                    iconSource: BinguxIcons.source("sliders-symbolic")
                                     description: "Capture settings"
                                     chosen: root.optionsOpen
                                     onClicked: root.optionsOpen = !root.optionsOpen

@@ -7,6 +7,7 @@
 # ui-lint rejects them in Bingux code.
 # BlueZ camera-video is the video camera, not the webcam: BlueZ gives it to camcorders and video cameras, and
 # Adwaita's camera-video is a camcorder; camera-web is the webcam's own name.
+# capture-* and control-centre are the names of the shell's hand-made 24 px drawings, merged into these icons.
 airplane	airplane-mode
 arrow-ccw	object-rotate-left
 arrow-cw	view-refresh	object-rotate-right	system-reboot
@@ -56,11 +57,11 @@ brackets-angle	format-code
 brackets-square	edit-find-whole-word
 calculator	accessories-calculator
 calendar	x-office-calendar
-camera	camera-photo
+camera	camera-photo	capture-camera
 check	object-select
 check-line	download-done
 chevron-down	pan-down
-chevron-left	go-previous
+chevron-left	go-previous	capture-back
 chevron-right	go-next	pan-end
 chevron-up	pan-up
 circle-arrow-up-right	emblem-symbolic-link
@@ -77,9 +78,10 @@ cookie	cookie
 corners-in	view-restore
 corners-out	view-fullscreen
 crop	crop
-cross	window-close
+cross	window-close	capture-close
 cube	application-x-executable
 cursor-click	find-location
+cursor	capture-cursor
 devices	network-workgroup
 disc	media-optical
 dots-nine	view-app-grid
@@ -147,7 +149,7 @@ mask	window-private
 microphone	audio-input-microphone	microphone-sensitivity-high	microphone-sensitivity-low	microphone-sensitivity-medium
 microphone-slash	audio-input-microphone-muted	microphone-disabled	microphone-sensitivity-muted
 minus	list-remove	window-minimize
-monitor	video-display
+monitor	video-display	capture-screen
 monitor-arrow-up	screen-shared
 monitor-dock	preferences-desktop
 moon	weather-clear-night
@@ -190,7 +192,7 @@ shield-keyhole	chrome-bitwarden
 shuffle	media-playlist-shuffle
 skip-back	media-skip-backward
 skip-forward	media-skip-forward
-sliders	preferences-other
+sliders	preferences-other	capture-settings	control-centre
 speaker	audio-volume-low
 speaker-box	audio-speakers
 speaker-cross	audio-volume-muted
@@ -200,12 +202,13 @@ square	window-maximize
 square-arrow-up	send-to
 square-arrow-up-right	window-new
 square-check	checkbox-checked
+square-dashed	capture-selection
 square-face-sad	tab-crashed
 square-letters-aa	font-x-generic
 square-pencil	document-edit
 square-plus	tab-new
 squares-four	view-grid
-squares-overlap	edit-copy
+squares-overlap	edit-copy	capture-window
 squares-overlap-left	window-restore
 star	non-starred
 star-filled	starred
@@ -220,7 +223,7 @@ trash	user-trash	edit-delete
 triangle-exclamation	dialog-warning
 ublock-origin	chrome-ublock-origin
 usb	media-removable
-video-camera	video-generic	camera-video
+video-camera	video-generic	camera-video	capture-video
 waveform	audio-card
 webcam	camera-web
 wifi	network-wireless	network-wireless-signal-excellent	network-wireless-signal-good

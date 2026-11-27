@@ -63,6 +63,8 @@ pub enum Icon {
     Phone,
     Pause,
     CursorClick,
+    /// A plain pointer arrow: the mouse cursor itself.
+    Cursor,
     Wifi0,
     Wifi1,
     Wifi2,
@@ -218,6 +220,8 @@ pub enum Icon {
     ListNumbers,
     /// A ticked box.
     SquareCheck,
+    /// A square drawn in dashes: a selected area.
+    SquareDashed,
     /// A paragraph of plain text.
     LetterT,
     /// Bold text.
@@ -305,7 +309,7 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 202] = [
+    pub const ALL: [Icon; 204] = [
         Self::ChevronLeft,
         Self::ChevronRight,
         Self::WindowSidebar,
@@ -352,6 +356,7 @@ impl Icon {
         Self::Phone,
         Self::Pause,
         Self::CursorClick,
+        Self::Cursor,
         Self::Wifi0,
         Self::Wifi1,
         Self::Wifi2,
@@ -468,6 +473,7 @@ impl Icon {
         Self::Camera,
         Self::ListNumbers,
         Self::SquareCheck,
+        Self::SquareDashed,
         Self::LetterT,
         Self::LetterB,
         Self::LetterI,
@@ -566,6 +572,7 @@ impl Icon {
             Self::Pause => include_bytes!("../icons/pause-symbolic.svg"),
             // The element picker, as GTK's own inspector uses.
             Self::CursorClick => include_bytes!("../icons/cursor-click-symbolic.svg"),
+            Self::Cursor => include_bytes!("../icons/cursor-symbolic.svg"),
             Self::Wifi0 => {
                 include_bytes!("../icons/wifi-0-symbolic.svg")
             }
@@ -724,6 +731,7 @@ impl Icon {
             Self::Camera => include_bytes!("../icons/camera-symbolic.svg"),
             Self::ListNumbers => include_bytes!("../icons/list-numbers-symbolic.svg"),
             Self::SquareCheck => include_bytes!("../icons/square-check-symbolic.svg"),
+            Self::SquareDashed => include_bytes!("../icons/square-dashed-symbolic.svg"),
             Self::LetterT => {
                 include_bytes!("../icons/letter-t-symbolic.svg")
             }

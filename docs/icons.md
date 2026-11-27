@@ -62,8 +62,8 @@ hand in the dialect (`custom` rows). Both follow the rules below.
 2.25 px). A 24 px drawing is made only when an icon is shown at 24 px in a lasting place and the scaled copy fails the
 24 px soft-edge bound. It is then drawn on a 24 grid with these rules × 1.5, rounded to even whole pixels so shapes
 centre on the grid: padding 2 (live area 20 × 20), square 18 × 18, circle Ø 20, portrait 14 × 20, landscape 20 × 14,
-stroke 2 px, body radius 3. The shell's hand-made 24 px strokes (`capture-*`, `control-centre`) are not variants: they
-are second drawings of set icons and merge into them (the naming table, see [Names](#names)).
+stroke 2 px, body radius 3. The shell's old hand-made 24 px strokes (`capture-*`, `control-centre`) were second
+drawings of set icons and are merged into them; their names are aliases in `scripts/icons/aliases.tsv`.
 
 ## Keylines
 

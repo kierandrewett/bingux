@@ -41,11 +41,11 @@ impl Icon {
             "brackets-square" | "edit-find-whole-word" => Self::BracketsSquare,
             "calculator" | "accessories-calculator" => Self::Calculator,
             "calendar" | "x-office-calendar" => Self::Calendar,
-            "camera" | "camera-photo" => Self::Camera,
+            "camera" | "camera-photo" | "capture-camera" => Self::Camera,
             "check" | "object-select" => Self::Check,
             "check-line" | "download-done" => Self::CheckLine,
             "chevron-down" | "pan-down" => Self::ChevronDown,
-            "chevron-left" | "go-previous" => Self::ChevronLeft,
+            "chevron-left" | "go-previous" | "capture-back" => Self::ChevronLeft,
             "chevron-right" | "go-next" | "pan-end" => Self::ChevronRight,
             "chevron-up" | "pan-up" => Self::ChevronUp,
             "circle-arrow-up-right" | "emblem-symbolic-link" => Self::CircleArrowUpRight,
@@ -59,9 +59,10 @@ impl Icon {
             "corners-in" | "view-restore" => Self::CornersIn,
             "corners-out" | "view-fullscreen" => Self::CornersOut,
             "crop" => Self::Crop,
-            "cross" | "window-close" => Self::Cross,
+            "cross" | "window-close" | "capture-close" => Self::Cross,
             "cube" | "application-x-executable" => Self::Cube,
             "cursor-click" | "find-location" => Self::CursorClick,
+            "cursor" | "capture-cursor" => Self::Cursor,
             "devices" | "network-workgroup" => Self::Devices,
             "disc" | "media-optical" => Self::Disc,
             "dots-nine" | "view-app-grid" => Self::DotsNine,
@@ -138,7 +139,7 @@ impl Icon {
             | "microphone-disabled"
             | "microphone-sensitivity-muted" => Self::MicrophoneSlash,
             "minus" | "list-remove" | "window-minimize" => Self::Minus,
-            "monitor" | "video-display" => Self::Monitor,
+            "monitor" | "video-display" | "capture-screen" => Self::Monitor,
             "monitor-arrow-up" | "screen-shared" => Self::MonitorArrowUp,
             "monitor-dock" | "preferences-desktop" => Self::MonitorDock,
             "moon" | "weather-clear-night" => Self::Moon,
@@ -177,7 +178,9 @@ impl Icon {
             "shuffle" | "media-playlist-shuffle" => Self::Shuffle,
             "skip-back" | "media-skip-backward" => Self::SkipBack,
             "skip-forward" | "media-skip-forward" => Self::SkipForward,
-            "sliders" | "preferences-other" => Self::Sliders,
+            "sliders" | "preferences-other" | "capture-settings" | "control-centre" => {
+                Self::Sliders
+            }
             "speaker" | "audio-volume-low" => Self::Speaker,
             "speaker-box" | "audio-speakers" => Self::SpeakerBox,
             "speaker-cross" | "audio-volume-muted" => Self::SpeakerCross,
@@ -189,12 +192,13 @@ impl Icon {
             "square-arrow-up" | "send-to" => Self::SquareArrowUp,
             "square-arrow-up-right" | "window-new" => Self::SquareArrowUpRight,
             "square-check" | "checkbox-checked" => Self::SquareCheck,
+            "square-dashed" | "capture-selection" => Self::SquareDashed,
             "square-face-sad" | "tab-crashed" => Self::SquareFaceSad,
             "square-letters-aa" | "font-x-generic" => Self::SquareLettersAa,
             "square-pencil" | "document-edit" => Self::SquarePencil,
             "square-plus" | "tab-new" => Self::SquarePlus,
             "squares-four" | "view-grid" => Self::SquaresFour,
-            "squares-overlap" | "edit-copy" => Self::SquaresOverlap,
+            "squares-overlap" | "edit-copy" | "capture-window" => Self::SquaresOverlap,
             "squares-overlap-left" | "window-restore" => Self::SquaresOverlapLeft,
             "star" | "non-starred" => Self::Star,
             "star-filled" | "starred" => Self::StarFilled,
@@ -208,7 +212,9 @@ impl Icon {
             "trash" | "user-trash" | "edit-delete" => Self::Trash,
             "triangle-exclamation" | "dialog-warning" => Self::TriangleExclamation,
             "usb" | "media-removable" => Self::Usb,
-            "video-camera" | "video-generic" | "camera-video" => Self::VideoCamera,
+            "video-camera" | "video-generic" | "camera-video" | "capture-video" => {
+                Self::VideoCamera
+            }
             "webcam" | "camera-web" => Self::Webcam,
             "wifi"
             | "network-wireless"
