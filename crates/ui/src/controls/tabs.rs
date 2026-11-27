@@ -1404,31 +1404,14 @@ impl Component for TabStrip {
         // drawn again on every frame of the growth.
         let _ = growing.get().value();
         {
-            let memory = memory.clone();
             use_side_effect_with_deps(&epoch, move |&epoch: &u64| {
                 if epoch == 0 {
                     return;
                 }
                 let mut clock = clock;
                 let mut seen = seen;
-                let mut tick = tick;
                 clock.start();
                 seen.set(epoch);
-                let memory = memory.clone();
-                spawn(async move {
-                    timer(Duration::from_millis(motion + 40)).await;
-                    let mut memory = memory.borrow_mut();
-                    if memory.epoch != epoch {
-                        return;
-                    }
-                    memory.entries.retain(|entry| entry.life != Life::Leaving);
-                    for entry in &mut memory.entries {
-                        entry.life = Life::Live;
-                    }
-                    drop(memory);
-                    let next = tick.peek().wrapping_add(1);
-                    tick.set(next);
-                });
             });
         }
         let progress = if seen() == epoch {
@@ -1436,6 +1419,35 @@ impl Component for TabStrip {
         } else {
             0.0
         };
+        // The entries settle when the motion of their epoch has ended: the
+        // leaving tabs go and the arriving ones are live. The end of the motion
+        // decides, not a timer: every frame moves the motion by at most one
+        // capped tick (freya-animation's MAX_TICK), so on a starved machine the
+        // motion takes longer than its time on the wall clock, and a timer of
+        // that time took a leaving tab away while it still had width, which
+        // made the tabs after it jump. A finished clock stands at exactly 1:
+        // it stops only when its value is its destination.
+        let settled = seen() == epoch && !clock.is_running()() && progress >= 1.0;
+        {
+            let memory = memory.clone();
+            use_side_effect_with_deps(&(epoch, settled), move |&(epoch, settled): &(u64, bool)| {
+                if epoch == 0 || !settled {
+                    return;
+                }
+                let mut tick = tick;
+                let mut memory = memory.borrow_mut();
+                if memory.epoch != epoch {
+                    return;
+                }
+                memory.entries.retain(|entry| entry.life != Life::Leaving);
+                for entry in &mut memory.entries {
+                    entry.life = Life::Live;
+                }
+                drop(memory);
+                let next = tick.peek().wrapping_add(1);
+                tick.set(next);
+            });
+        }
 
         let add = self.on_new.is_some();
         // The pinned block's width, each tab followed by the gap: the others

@@ -1476,8 +1476,15 @@ fn selected(shot: &mut Snapshot) -> String {
         .unwrap_or_default()
 }
 
+/// Lets every motion and timer of the strip end: 15 [`frame`]s, 600 ms of wall time and 510 ms of
+/// motion at the normal speed. A wait of wall time alone is not enough on a loaded machine: every
+/// frame moves a motion by at most the capped tick, so 500 ms of a machine that draws a frame in
+/// 150 ms moves a motion by about 100 ms, short of the 160 ms of a tab's. Counted frames give the
+/// motion its time on any machine, and each takes at least its wall time, so every timer ends too.
 fn rest(shot: &mut Snapshot) {
-    shot.settle(Duration::from_millis(500));
+    for _ in 0..15 {
+        frame(shot);
+    }
 }
 
 /// What one step of the animation clock moves every animation by, in milliseconds: the animation
@@ -1487,6 +1494,11 @@ const SPEED: f32 = 0.4853;
 /// animation moves, not the load of the machine (a frame that took 50 ms moves it as far as one
 /// that took 40).
 const WALL: Duration = Duration::from_millis(40);
+
+/// A slow animation clock: one [`frame`] is 3 ms of motion, so the 160 ms motion of a tab takes
+/// about 50 frames, 2 s of wall time. A starved machine runs the motion like this: every frame
+/// moves it by at most the capped tick, so the motion takes longer than its time on the wall clock.
+const SLOW: f32 = 0.1;
 
 /// One frame of 16 ms of motion whatever the load of the machine, once the animation clock is at
 /// [`SPEED`]: a test that limits the size of a step needs the step not to be the load's.
@@ -2223,6 +2235,36 @@ fn closing_a_tab_with_its_button_shrinks_it_away_and_the_others_widen() {
     assert!(
         widest_gap < 60.0,
         "the strip closed ranks in steps, not in one jump ({widest_gap})"
+    );
+}
+
+#[test]
+fn a_closing_tab_shrinks_all_the_way_away_when_the_motion_runs_slower_than_the_wall_clock() {
+    let mut shot = live(600.0);
+    let close = close_buttons(&mut shot)[0];
+    shot.runner().animation_clock().set_speed(SLOW);
+    shot.click(
+        close.min_x() + close.width() / 2.0,
+        close.min_y() + close.height() / 2.0,
+    );
+    let mut widest_gap = 0.0_f32;
+    let mut last_end: Option<f32> = None;
+    for _ in 0..80 {
+        frame(&mut shot);
+        let end = named(&mut shot, "Tab").last().unwrap().max_x();
+        if let Some(last) = last_end {
+            widest_gap = widest_gap.max((end - last).abs());
+        }
+        last_end = Some(end);
+    }
+    rest(&mut shot);
+    assert_eq!(names(&mut shot), ["Documents", "Downloads"]);
+    // The steepest frame of the quadratic ease-out moves the tabs by 2 * 3 / 160 of a tab's
+    // width, about 8 px: a tab that goes before its motion ends makes the rest jump by what is
+    // left of its width.
+    assert!(
+        widest_gap < 20.0,
+        "the closing tab went before its motion ended: the strip jumped {widest_gap} px"
     );
 }
 
