@@ -23,7 +23,7 @@ use bingux_ui::web_view::test_double::{Call, TestDoubleBackend};
 use bingux_ui::web_view::{Response, TabEvent};
 
 use crate::browser::testing::{browser, go};
-use crate::browser::{Browser, Options, UiRequest};
+use crate::browser::{Browser, DuplicatesAsk, Options, UiRequest};
 use crate::commands::Command;
 use crate::tabs::Place;
 use crate::tabs::{Page, TabKind};
@@ -323,25 +323,102 @@ fn search_all_tabs_asks_the_window_to_search_the_open_tabs() {
     assert_eq!(browser.take_ui(), [UiRequest::SearchTabs]);
 }
 
-#[test]
-fn closing_duplicate_tabs_leaves_one_tab_for_each_address() {
+/// A window with tabs `first`, `news`, then `extra` more of `example.com` after the
+/// first one, which is the tab on show.
+fn with_duplicates(extra: usize) -> (Browser, u64, u64, Vec<u64>) {
     let (mut browser, _) = browser();
     let first = browser.tabs.active_key();
     browser.navigate(first, "example.com");
     let news = browser
         .open_tab("news.bingux.dev", Place::End, false)
         .unwrap();
-    let again = browser.open_tab("example.com", Place::End, false).unwrap();
-    let third = browser.open_tab("example.com", Place::End, false).unwrap();
+    let copies: Vec<u64> = (0..extra)
+        .map(|_| browser.open_tab("example.com", Place::End, false).unwrap())
+        .collect();
     browser.poll();
-    assert_eq!(browser.tabs.duplicates(), [again, third]);
+    (browser, first, news, copies)
+}
+
+fn keys(browser: &Browser) -> Vec<u64> {
+    browser.tabs.all().iter().map(|tab| tab.key).collect()
+}
+
+#[test]
+fn the_first_close_duplicate_tabs_of_a_profile_explains_itself_and_closes_nothing_until_agreed() {
+    let (mut browser, first, news, copies) = with_duplicates(2);
+    assert_eq!(browser.tabs.duplicates(), copies);
+    assert!(!browser.settings.have_shown_close_all_duplicate_tabs_warning);
     browser.close_duplicate_tabs();
-    let keys: Vec<u64> = browser.tabs.all().iter().map(|tab| tab.key).collect();
-    assert_eq!(keys, [first, news], "the first tab of each address stays");
     assert_eq!(
-        browser.tabs.active_key(),
-        first,
-        "and the tab on show is not changed"
+        browser.take_ui(),
+        [UiRequest::ConfirmCloseDuplicates {
+            keys: copies.clone(),
+            ask: DuplicatesAsk::FirstTime,
+        }],
+        "Firefox asks the first time, whatever the number of tabs"
     );
+    assert_eq!(keys(&browser), [vec![first, news], copies.clone()].concat());
+    assert!(
+        browser.settings.have_shown_close_all_duplicate_tabs_warning,
+        "the profile remembers it asked before the answer is known, as Firefox sets the pref first"
+    );
+    assert!(browser.take_notices().is_empty());
+    // Close tabs: they go, the tab on show stays, and the hint says how many.
+    browser.close_tabs_as_duplicates(copies);
+    assert_eq!(
+        keys(&browser),
+        [first, news],
+        "the first tab of each address stays"
+    );
+    assert_eq!(browser.tabs.active_key(), first);
     assert!(browser.tabs.duplicates().is_empty());
+    let notices = browser.take_notices();
+    assert_eq!(notices.len(), 1);
+    assert_eq!(notices[0].text, "Closed 2 tabs");
+}
+
+#[test]
+fn a_cancelled_first_close_duplicate_tabs_is_not_asked_again() {
+    let (mut browser, first, news, copies) = with_duplicates(2);
+    browser.close_duplicate_tabs();
+    browser.take_ui();
+    // The person said Cancel: nothing closed, and the next time closes at once.
+    assert_eq!(keys(&browser), [vec![first, news], copies].concat());
+    browser.close_duplicate_tabs();
+    assert!(browser.take_ui().is_empty());
+    assert_eq!(keys(&browser), [first, news]);
+    assert_eq!(browser.take_notices()[0].text, "Closed 2 tabs");
+}
+
+#[test]
+fn one_duplicate_closes_without_asking_after_the_first_time_and_the_hint_is_singular() {
+    let (mut browser, first, news, copies) = with_duplicates(1);
+    browser.settings.have_shown_close_all_duplicate_tabs_warning = true;
+    browser.close_duplicate_tabs();
+    assert!(browser.take_ui().is_empty());
+    assert_eq!(keys(&browser), [first, news]);
+    assert_eq!(copies.len(), 1);
+    assert_eq!(browser.take_notices()[0].text, "Closed 1 tab");
+}
+
+#[test]
+fn more_duplicates_than_reopen_closed_tab_keeps_are_asked_about_by_their_number() {
+    let (mut browser, _, _, copies) = with_duplicates(26);
+    browser.settings.have_shown_close_all_duplicate_tabs_warning = true;
+    browser.close_duplicate_tabs();
+    assert_eq!(
+        browser.take_ui(),
+        [UiRequest::ConfirmCloseDuplicates {
+            keys: copies,
+            ask: DuplicatesAsk::Many(26),
+        }]
+    );
+    assert_eq!(keys(&browser).len(), 28, "nothing closed before the answer");
+    // Exactly as many as the undo list holds close without asking.
+    let (mut browser, first, news, _) = with_duplicates(25);
+    browser.settings.have_shown_close_all_duplicate_tabs_warning = true;
+    browser.close_duplicate_tabs();
+    assert!(browser.take_ui().is_empty());
+    assert_eq!(keys(&browser), [first, news]);
+    assert_eq!(browser.take_notices()[0].text, "Closed 25 tabs");
 }

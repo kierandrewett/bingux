@@ -382,6 +382,22 @@ browser-clear-history-description = { $count ->
        *[other] This forgets the { $count } pages this profile has visited, and stops the address bar suggesting them. Downloads and site permissions stay.
     }
 
+## Close duplicate tabs
+## The questions before duplicate tabs are closed. Firefox 160 asks the first one the first time
+## a profile closes duplicates and the second when more tabs would go than Reopen closed tab keeps.
+
+# Firefox 160, tabbrowser.ftl: tabbrowser-confirm-close-all-duplicate-tabs-title.
+browser-close-duplicates-title = Close duplicate tabs?
+# Firefox 160 breaks this line after "active", and so does the dialog.
+browser-close-duplicates-text =
+    We’ll close duplicate tabs in this window. The last active
+    tab will stay open.
+# Firefox 160, tabbrowser.ftl: tabbrowser-confirm-close-all-duplicate-tabs-button-closetabs and
+# tabbrowser-confirm-close-tabs-button, the same words.
+browser-close-tabs-button = Close tabs
+# $count is how many tabs would close. Firefox 160, tabbrowser.ftl: tabbrowser-confirm-close-tabs-title.
+browser-close-tabs-title = Close { $count } tabs?
+
 ## Tabs
 ## What a tab is called, the list a phone shows, and what is said when a tab or a pop-up goes.
 
@@ -396,11 +412,12 @@ browser-tabs-sheet-title = Tabs
 browser-tabs-close-tooltip = Close tab
 # Toast shown by Reopen closed tab when nothing was closed.
 browser-tabs-none-to-reopen-notification = There is no closed tab to reopen.
-# Said after Close duplicate tabs. $count is how many tabs were closed.
-browser-tabs-duplicates-closed-notification =
+# The confirmation hint after Close duplicate tabs. $count is how many tabs were closed.
+# Firefox 160, confirmationHints.ftl: confirmation-hint-duplicate-tabs-closed.
+browser-confirmation-hint-duplicate-tabs-closed =
     { $count ->
-        [one] Closed { $count } duplicate tab
-       *[other] Closed { $count } duplicate tabs
+        [one] Closed { $count } tab
+       *[other] Closed { $count } tabs
     }
 # Toast when the engine ends a tab itself. $error is the engine's own words.
 browser-tabs-closed-by-engine-notification = A tab was closed by the engine: { $error }

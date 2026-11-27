@@ -13,6 +13,18 @@ pub struct Notice {
     pub action: Option<(String, Command)>,
 }
 
+/// Why Close duplicate tabs asks before it closes anything: the two questions
+/// of Firefox's `warnAboutClosingTabs` that apply to it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DuplicatesAsk {
+    /// The first time, in a profile: what the command does and that the tab seen
+    /// last stays, whatever the number of tabs.
+    FirstTime,
+    /// Afterwards, only when more tabs than Reopen closed tab can bring back
+    /// (`browser.sessionstore.max_tabs_undo`) would go: how many.
+    Many(usize),
+}
+
 /// Something only the window can do. The UI takes these after a command and
 /// does them.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -34,6 +46,12 @@ pub enum UiRequest {
     OpenProfile(String),
     /// Ask whether to forget the history.
     ConfirmClearHistory,
+    /// Ask before closing `keys` as duplicates ([`DuplicatesAsk`]); what the person
+    /// answers is [`Browser::close_tabs_as_duplicates`].
+    ConfirmCloseDuplicates {
+        keys: Vec<u64>,
+        ask: DuplicatesAsk,
+    },
     /// Close the window: its last tab is gone.
     CloseWindow,
 }

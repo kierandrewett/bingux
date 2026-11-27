@@ -3,7 +3,8 @@
 //! nothing (a database open would).
 //!
 //! Version 1 holds what the settings page has today: the address bar's search
-//! engine, by its stable id. Fields this build does not know (a newer
+//! engine, by its stable id, and whether Close duplicate tabs has explained
+//! itself yet. Fields this build does not know (a newer
 //! browser's) are kept on write; a file from a newer version is never written.
 
 mod page;
@@ -31,6 +32,11 @@ pub struct Settings {
     /// The id of the address bar's search engine (`SearchEngine::ALL`). An id
     /// this build does not know is kept, and the default engine is used.
     pub search_engine: String,
+    /// Whether Close duplicate tabs has told this profile what it does before its
+    /// first use: Firefox's `browser.tabs.haveShownCloseAllDuplicateTabsWarning`,
+    /// which `warnAboutClosingTabs` sets before it asks and never clears.
+    #[serde(default)]
+    pub have_shown_close_all_duplicate_tabs_warning: bool,
     #[serde(flatten)]
     rest: Map<String, Value>,
 }
@@ -40,6 +46,7 @@ impl Default for Settings {
         Self {
             version: VERSION,
             search_engine: SearchEngine::ALL[0].id.to_string(),
+            have_shown_close_all_duplicate_tabs_warning: false,
             rest: Map::new(),
         }
     }
@@ -159,5 +166,17 @@ mod tests {
             })
         );
         Files::remove_tree(&dir).unwrap();
+    }
+
+    #[test]
+    fn whether_close_duplicate_tabs_has_explained_itself_is_kept_and_is_no_in_an_older_file() {
+        let old = Settings::parse(br#"{"version":1,"search_engine":"duckduckgo"}"#).unwrap();
+        assert!(!old.have_shown_close_all_duplicate_tabs_warning);
+        let shown = Settings {
+            have_shown_close_all_duplicate_tabs_warning: true,
+            ..old
+        };
+        let back = Settings::parse(&shown.encode()).unwrap();
+        assert!(back.have_shown_close_all_duplicate_tabs_warning);
     }
 }

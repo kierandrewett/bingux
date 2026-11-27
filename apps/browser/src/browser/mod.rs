@@ -16,7 +16,7 @@ pub(crate) mod testing;
 #[cfg(test)]
 mod tests;
 
-pub use outbox::{Notice, Outbox, UiRequest};
+pub use outbox::{DuplicatesAsk, Notice, Outbox, UiRequest};
 
 use bingux_ui::web_view::requests::ContextTarget;
 use bingux_ui::web_view::{PageEnvironment, RequestId, TabConfig, TabId};

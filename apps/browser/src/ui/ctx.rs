@@ -116,6 +116,9 @@ impl Ctx {
                 ),
                 UiRequest::OpenProfile(id) => crate::profiles::ProfileWindow::open(id),
                 UiRequest::ConfirmClearHistory => crate::history::ClearDialog::open(self),
+                UiRequest::ConfirmCloseDuplicates { keys, ask } => {
+                    crate::tabs::CloseDuplicatesDialog::open(self, keys, ask)
+                }
                 UiRequest::CloseWindow => self.window.close(),
             }
         }

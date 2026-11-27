@@ -7,7 +7,7 @@ use bingux_ui::web_view::input::{EditCommand, PageInput};
 use bingux_ui::web_view::requests::DownloadState;
 use bingux_ui::web_view::{DownloadId, TabId};
 
-use super::{Browser, ClosedTab, UiRequest, ViewSize};
+use super::{Browser, ClosedTab, DuplicatesAsk, UiRequest, ViewSize};
 use crate::address::{Internal, Typed};
 use crate::tabs::Place;
 use crate::tabs::{Tab, TabKind};
@@ -273,19 +273,53 @@ impl Browser {
         }
     }
 
-    /// Close the tabs that only repeat a page another tab has ([`crate::tabs::TabList::duplicates`]).
+    /// Close the tabs that only repeat a page another tab has
+    /// ([`crate::tabs::TabList::duplicates`]), as Firefox's `removeAllDuplicateTabs`
+    /// does: nothing when there are none, the question of `warnAboutClosingTabs`
+    /// first when it applies ([`Browser::duplicates_ask`]), then the tabs close and the
+    /// confirmation hint says how many.
     pub fn close_duplicate_tabs(&mut self) {
-        let duplicates = self.tabs.duplicates();
-        if duplicates.is_empty() {
+        let keys = self.tabs.duplicates();
+        if keys.is_empty() {
             return;
         }
-        let count = duplicates.len();
-        for key in duplicates {
+        match self.duplicates_ask(keys.len()) {
+            None => self.close_tabs_as_duplicates(keys),
+            Some(ask) => self
+                .out
+                .request(UiRequest::ConfirmCloseDuplicates { keys, ask }),
+        }
+    }
+
+    /// What, if anything, to ask before `count` duplicate tabs close: the order of
+    /// Firefox's `warnAboutClosingTabs` for `ALL_DUPLICATES`. The first time in a
+    /// profile it asks whatever the count, and has the profile remember that it
+    /// did before it asks, so Cancel does not bring it back. Then
+    /// `browser.tabs.warnOnCloseOtherTabs` (on, and with no setting here to turn it
+    /// off) asks only when more tabs would go than Reopen closed tab keeps
+    /// (`browser.sessionstore.max_tabs_undo`, [`CLOSED_LIMIT`]); Firefox's own check
+    /// that one tab is never asked about is that limit's lower bound.
+    fn duplicates_ask(&mut self, count: usize) -> Option<DuplicatesAsk> {
+        if !self.settings.have_shown_close_all_duplicate_tabs_warning {
+            self.settings.have_shown_close_all_duplicate_tabs_warning = true;
+            if let Some(store) = &self.store {
+                store.save_settings(&self.settings);
+            }
+            return Some(DuplicatesAsk::FirstTime);
+        }
+        (count > CLOSED_LIMIT).then_some(DuplicatesAsk::Many(count))
+    }
+
+    /// Close `keys`, which Close duplicate tabs chose (and the person agreed to
+    /// close, if it asked), and say how many went: Firefox's confirmation hint
+    /// (`confirmation-hint-duplicate-tabs-closed`). The window has no anchored hint, so it is a toast.
+    pub fn close_tabs_as_duplicates(&mut self, keys: Vec<u64>) {
+        let count = keys.len();
+        for key in keys {
             self.close_tab(key);
         }
-        // Firefox's confirmation hint (`confirmation-hint-duplicate-tabs-closed`), as a toast.
         self.out.notify(tr!(
-            "browser-tabs-duplicates-closed-notification",
+            "browser-confirmation-hint-duplicate-tabs-closed",
             count = count
         ));
     }
