@@ -142,8 +142,13 @@ impl Snapshot {
     /// step moves a motion by 34 ms in it: 500 ms of wall time alone was about
     /// 100 ms of motion there, and a test that let a 160 ms motion end with a
     /// 500 ms settle saw it half way. Each step sleeps 16 ms before its tick,
-    /// so it moves every motion by at least 16 ms, and the steps add up to at
-    /// least `duration` of motion whatever the load.
+    /// so at the animation clock's normal speed it moves every motion by at
+    /// least 16 ms. Under any load the steps give close to `duration` of
+    /// motion, but up to about three steps short of it: the count is rounded
+    /// down, the tick of the last step is only taken by the next poll, and an
+    /// animation that starts during the settle counts its first tick as
+    /// nothing. A slowed clock (`animation_clock().set_speed`) scales the
+    /// motion too.
     pub fn settle(&mut self, duration: Duration) -> &mut Self {
         let steps = (duration.as_millis() / FRAME.as_millis()).max(1);
         let start = Instant::now();
