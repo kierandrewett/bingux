@@ -276,3 +276,34 @@ fn dragging_a_row_starts_where_it_is_drawn_and_an_interruption_carries_on_from_t
     );
     assert_still(&watch(&mut shot, 4), home, "after the interruption");
 }
+
+#[test]
+fn a_row_goes_home_at_the_speed_of_the_animation_clock() {
+    let mut shot = start();
+    let grip = named(&mut shot, "Reorder Equalizer").expect("a grip");
+    shot.press(grip);
+    for step in 1..=12 {
+        shot.move_to((grip.0, grip.1 + 70.0 * step as f32 / 12.0));
+        frames(&mut shot, 1);
+    }
+    // A tenth of the speed: a 40 ms frame is 3.4 ms of motion. The spring of a drag ran on the
+    // wall clock and ignored this, so on a loaded machine a frame of 50 ms moved the row as far
+    // as 50 ms of motion while every other motion moved 34 ms at most.
+    shot.runner().animation_clock().set_speed(0.1);
+    let mut back = vec![label(&mut shot, "Equalizer").expect("the held row").min_y()];
+    shot.key(Key::Named(NamedKey::Escape));
+    for _ in 0..30 {
+        frames(&mut shot, 1);
+        back.push(label(&mut shot, "Equalizer").expect("the row").min_y());
+    }
+    // A 3.4 ms step of this spring moves the row by a few px at most; a 40 ms step, the wall time
+    // of a frame, by about 30.
+    assert!(
+        back.windows(2).all(|pair| (pair[1] - pair[0]).abs() < 10.0),
+        "the row goes home in steps of the animation clock: {back:?}"
+    );
+    assert!(
+        back.first() != back.last(),
+        "the row is on its way home: {back:?}"
+    );
+}

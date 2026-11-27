@@ -26,9 +26,12 @@ use freya::prelude::*;
 /// A point in window coordinates, in logical pixels.
 pub type Point = (f32, f32);
 
-/// The longest a frame is taken to last. A frame that took longer (a stalled
-/// window, a debugger) advances an animation by this much and no more.
-const LONGEST_FRAME: f32 = 0.05;
+/// The longest a frame is taken to last: 34 ms, the cap freya-animation
+/// puts on a tick (its `MAX_TICK`). A frame that took longer (a loaded
+/// machine, a stalled window, a debugger) advances an animation by this much
+/// and no more, so a drag's settle and every other motion of the app move
+/// alike when frames come late.
+const LONGEST_FRAME: Duration = Duration::from_millis(34);
 /// Frames are asked for this often. Freya has no per-frame callback for a
 /// component, so this is a timer a little under a 60 Hz frame.
 pub const FRAME: Duration = Duration::from_millis(16);
@@ -182,30 +185,38 @@ impl PointerDrag {
 #[derive(Clone)]
 pub struct Frames {
     running: Rc<Cell<bool>>,
+    /// The app's animation clock: its speed scales every frame, as it does
+    /// every `use_animation`, so a slowed clock slows a drag's settle too.
+    clock: AnimationClock,
 }
 
 /// The frame clock of the calling component. Call it during render.
 pub fn use_frames() -> Frames {
     let running = use_hook(|| Rc::new(Cell::new(false)));
-    Frames { running }
+    let clock = use_hook(AnimationClock::get);
+    Frames { running, clock }
 }
 
 impl Frames {
-    /// Call `tick` with the seconds the last frame took, about every
-    /// [`FRAME`], until it returns false. Does nothing when the clock is
-    /// already running: the running `tick` stays, so call it with the same
-    /// work each time. The loop stops with the component.
+    /// Call `tick` with the seconds of motion the last frame stands for,
+    /// about every [`FRAME`], until it returns false: the time the frame took,
+    /// at most [`LONGEST_FRAME`], at the speed of the animation clock. Does
+    /// nothing when the clock is already running: the running `tick` stays,
+    /// so call it with the same work each time. The loop stops with the
+    /// component.
     pub fn run(&self, mut tick: impl FnMut(f32) -> bool + 'static) {
         if self.running.replace(true) {
             return;
         }
         let running = self.running.clone();
+        let clock = self.clock.clone();
         spawn(async move {
             let mut last = Instant::now();
             loop {
                 timer(FRAME).await;
                 let now = Instant::now();
-                let seconds = now.duration_since(last).as_secs_f32().min(LONGEST_FRAME);
+                let took = now.duration_since(last).min(LONGEST_FRAME);
+                let seconds = clock.correct_elapsed_duration(took).as_secs_f32();
                 last = now;
                 if !tick(seconds) {
                     break;
