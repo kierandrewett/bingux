@@ -45,7 +45,7 @@ impl DownloadsPopover {
                             .tooltip(&tr!("browser-downloads-pause-tooltip")),
                         )
                         .child(
-                            icon_button(Icon::WindowClose, move |_: ()| {
+                            icon_button(Icon::Cross, move |_: ()| {
                                 let _ = backend.cancel_download(id);
                             })
                             .tooltip(&tr!("browser-downloads-cancel-tooltip")),
@@ -58,13 +58,13 @@ impl DownloadsPopover {
                     .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
                     .child({
                         let resume = backend.clone();
-                        icon_button(Icon::MediaPlaybackStart, move |_: ()| {
+                        icon_button(Icon::Play, move |_: ()| {
                             let _ = resume.resume_download(id);
                         })
                         .tooltip(&tr!("browser-downloads-resume-tooltip"))
                     })
                     .child(
-                        icon_button(Icon::WindowClose, move |_: ()| {
+                        icon_button(Icon::Cross, move |_: ()| {
                             let _ = backend.cancel_download(id);
                         })
                         .tooltip(&tr!("browser-downloads-cancel-tooltip")),
@@ -75,7 +75,7 @@ impl DownloadsPopover {
                 rect()
                     .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
                     .child(
-                        icon_button(Icon::Refresh, move |_: ()| {
+                        icon_button(Icon::ArrowCw, move |_: ()| {
                             let _ = backend.resume_download(id);
                         })
                         .tooltip(&tr!("browser-downloads-retry-tooltip")),
@@ -96,7 +96,7 @@ impl DownloadsPopover {
                     Group::new(None::<String>).row(
                         row(tr!("browser-downloads-none-title"))
                             .subtitle(tr!("browser-downloads-none-description"))
-                            .leading(Icon::FolderDownload),
+                            .leading(Icon::FolderArrowDown),
                     ),
                 )
                 .into_element();
@@ -105,7 +105,7 @@ impl DownloadsPopover {
         for download in &list {
             let mut line = row(download.filename.clone())
                 .subtitle(Transfer(download).status_line())
-                .leading(Icon::FolderDownload);
+                .leading(Icon::FolderArrowDown);
             if download.state == DownloadState::Failed {
                 line = line.leading_tone(bingux_ui::style::Tone::Danger);
             }

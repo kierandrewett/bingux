@@ -190,12 +190,12 @@ AbstractButton {
                     }
                 }
                 color: root.navigation ? Theme.muted : Theme.accent
-                source: BinguxIcons.source(root.navigation ? "go-next-symbolic" : "object-select-symbolic")
+                source: BinguxIcons.source(root.navigation ? "chevron-right-symbolic" : "check-symbolic")
             }
             IconButton {
                 objectName: root.objectName + "Navigation"
                 visible: root.navigation && !root.rowInteractive
-                iconName: "go-next-symbolic"
+                iconName: "chevron-right-symbolic"
                 label: root.title + " settings"
                 tooltipEnabled: root.barLayout
                 onClicked: root.navigationRequested(this)

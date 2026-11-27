@@ -163,23 +163,23 @@ impl FileKind {
     pub fn glyph(self) -> Icon {
         match self {
             FileKind::Folder => Icon::Folder,
-            FileKind::Image => Icon::ImageGeneric,
-            FileKind::Audio => Icon::AudioXGeneric,
-            FileKind::Video => Icon::VideoGeneric,
-            FileKind::Text | FileKind::Markup | FileKind::Config => Icon::TextXGeneric,
-            FileKind::Code => Icon::TextXScript,
-            FileKind::Pdf => Icon::ApplicationPdf,
-            FileKind::Archive | FileKind::DiskImage => Icon::PackageXGeneric,
+            FileKind::Image => Icon::Image,
+            FileKind::Audio => Icon::FileAudio,
+            FileKind::Video => Icon::VideoCamera,
+            FileKind::Text | FileKind::Markup | FileKind::Config => Icon::FileText,
+            FileKind::Code => Icon::FileCode,
+            FileKind::Pdf => Icon::FilePdf,
+            FileKind::Archive | FileKind::DiskImage => Icon::Package,
             FileKind::Spreadsheet => Icon::Table,
-            FileKind::Presentation => Icon::Presentation,
-            FileKind::Document | FileKind::Page | FileKind::Ebook => Icon::TextXGeneric,
-            FileKind::Font => Icon::FontXGeneric,
-            FileKind::Executable => Icon::Application,
+            FileKind::Presentation => Icon::Easel,
+            FileKind::Document | FileKind::Page | FileKind::Ebook => Icon::FileText,
+            FileKind::Font => Icon::SquareLettersAa,
+            FileKind::Executable => Icon::Cube,
             FileKind::Model3d
             | FileKind::Database
             | FileKind::Certificate
             | FileKind::Torrent
-            | FileKind::Unknown => Icon::ApplicationXGeneric,
+            | FileKind::Unknown => Icon::File,
         }
     }
 
@@ -406,7 +406,7 @@ pub enum Emblem {
 impl Emblem {
     fn glyph(self) -> Icon {
         match self {
-            Emblem::Link => Icon::EmblemSymbolicLink,
+            Emblem::Link => Icon::CircleArrowUpRight,
         }
     }
 }
@@ -482,17 +482,17 @@ impl FileIcon {
     /// The icon of the folder `special` names.
     pub fn for_special(special: SpecialFolder) -> FileIcon {
         let (glyph, colour) = match special {
-            SpecialFolder::Home => (Icon::UserHome, Some(ColourIcon::FolderHome)),
-            SpecialFolder::Desktop => (Icon::FolderDesktop, Some(ColourIcon::FolderDesktop)),
-            SpecialFolder::Documents => (Icon::FolderDocuments, Some(ColourIcon::FolderDocuments)),
-            SpecialFolder::Downloads => (Icon::FolderDownload, Some(ColourIcon::FolderDownloads)),
-            SpecialFolder::Music => (Icon::FolderMusic, Some(ColourIcon::FolderMusic)),
-            SpecialFolder::Pictures => (Icon::FolderPictures, Some(ColourIcon::FolderPictures)),
-            SpecialFolder::Videos => (Icon::FolderVideos, Some(ColourIcon::FolderVideos)),
-            SpecialFolder::Templates => (Icon::FolderTemplates, Some(ColourIcon::FolderTemplates)),
-            SpecialFolder::PublicShare => (Icon::FolderPublicshare, Some(ColourIcon::FolderPublic)),
-            SpecialFolder::Trash => (Icon::UserTrash, Some(ColourIcon::TrashEmpty)),
-            SpecialFolder::Root => (Icon::DriveHarddisk, None),
+            SpecialFolder::Home => (Icon::House, Some(ColourIcon::FolderHome)),
+            SpecialFolder::Desktop => (Icon::FolderMonitor, Some(ColourIcon::FolderDesktop)),
+            SpecialFolder::Documents => (Icon::FolderFileText, Some(ColourIcon::FolderDocuments)),
+            SpecialFolder::Downloads => (Icon::FolderArrowDown, Some(ColourIcon::FolderDownloads)),
+            SpecialFolder::Music => (Icon::FolderMusicNote, Some(ColourIcon::FolderMusic)),
+            SpecialFolder::Pictures => (Icon::FolderImage, Some(ColourIcon::FolderPictures)),
+            SpecialFolder::Videos => (Icon::FolderPlay, Some(ColourIcon::FolderVideos)),
+            SpecialFolder::Templates => (Icon::FolderFile, Some(ColourIcon::FolderTemplates)),
+            SpecialFolder::PublicShare => (Icon::FolderPerson, Some(ColourIcon::FolderPublic)),
+            SpecialFolder::Trash => (Icon::Trash, Some(ColourIcon::TrashEmpty)),
+            SpecialFolder::Root => (Icon::HardDrive, None),
         };
         FileIcon {
             colour,
@@ -600,10 +600,10 @@ impl FileIcon {
     /// The icon of a drive of `kind`.
     pub fn for_mount(kind: MountKind) -> FileIcon {
         let glyph = match kind {
-            MountKind::Local | MountKind::Other => Icon::DriveHarddisk,
-            MountKind::Removable => Icon::MediaRemovable,
-            MountKind::Network => Icon::NetworkServer,
-            MountKind::Optical => Icon::MediaOptical,
+            MountKind::Local | MountKind::Other => Icon::HardDrive,
+            MountKind::Removable => Icon::Usb,
+            MountKind::Network => Icon::Server,
+            MountKind::Optical => Icon::Disc,
         };
         FileIcon::plain(glyph, FileKind::Folder)
     }
@@ -919,15 +919,15 @@ mod tests {
         assert_eq!(folder.glyph, Icon::Folder);
         assert_eq!(
             FileIcon::for_entry(&entry("/x/a.pdf", Kind::File)).glyph,
-            Icon::ApplicationPdf
+            Icon::FilePdf
         );
         assert_eq!(
             FileIcon::for_entry(&entry("/x/a.weird", Kind::File)).glyph,
-            Icon::ApplicationXGeneric
+            Icon::File
         );
         assert_eq!(
             FileIcon::for_entry(&entry("/x/socket", Kind::Other)).glyph,
-            Icon::ApplicationXGeneric
+            Icon::File
         );
     }
 
@@ -995,7 +995,7 @@ mod tests {
         };
         assert_eq!(
             FileIcon::for_place(&place(PlaceKind::Trash, None)).glyph,
-            Icon::UserTrash
+            Icon::Trash
         );
         assert_eq!(
             FileIcon::for_place(&place(PlaceKind::Recent, None)).glyph,
@@ -1003,24 +1003,15 @@ mod tests {
         );
         assert_eq!(
             FileIcon::for_place(&place(PlaceKind::Home, None)).glyph,
-            Icon::UserHome
+            Icon::House
         );
         assert_eq!(
             FileIcon::for_place(&place(PlaceKind::Computer, None)).glyph,
-            Icon::DriveHarddisk
+            Icon::HardDrive
         );
-        assert_eq!(
-            FileIcon::for_mount(MountKind::Network).glyph,
-            Icon::NetworkServer
-        );
-        assert_eq!(
-            FileIcon::for_mount(MountKind::Removable).glyph,
-            Icon::MediaRemovable
-        );
-        assert_eq!(
-            FileIcon::for_mount(MountKind::Optical).glyph,
-            Icon::MediaOptical
-        );
+        assert_eq!(FileIcon::for_mount(MountKind::Network).glyph, Icon::Server);
+        assert_eq!(FileIcon::for_mount(MountKind::Removable).glyph, Icon::Usb);
+        assert_eq!(FileIcon::for_mount(MountKind::Optical).glyph, Icon::Disc);
     }
 
     /// The path decisions, against a fake `user-dirs.dirs`, without the
@@ -1046,13 +1037,13 @@ mod tests {
             Some(special) => FileIcon::for_special(special).glyph,
             None => Icon::Folder,
         };
-        assert_eq!(glyph(&home.join("Downloads")), Icon::FolderDownload);
-        assert_eq!(glyph(&home.join("Downloads/")), Icon::FolderDownload);
+        assert_eq!(glyph(&home.join("Downloads")), Icon::FolderArrowDown);
+        assert_eq!(glyph(&home.join("Downloads/")), Icon::FolderArrowDown);
         assert_eq!(glyph(&share), Icon::Folder);
-        assert_eq!(glyph(&home.join("Documents")), Icon::FolderDocuments);
-        assert_eq!(glyph(&home.join("Clips")), Icon::FolderVideos);
-        assert_eq!(glyph(&home.join("Videos")), Icon::FolderVideos);
-        assert_eq!(glyph(&home), Icon::UserHome);
+        assert_eq!(glyph(&home.join("Documents")), Icon::FolderFileText);
+        assert_eq!(glyph(&home.join("Clips")), Icon::FolderPlay);
+        assert_eq!(glyph(&home.join("Videos")), Icon::FolderPlay);
+        assert_eq!(glyph(&home), Icon::House);
         // Bookmarks that are not special folders are plain.
         assert_eq!(glyph(&home.join("Notes")), Icon::Folder);
         assert_eq!(glyph(&home.join("dev")), Icon::Folder);
@@ -1060,7 +1051,7 @@ mod tests {
         assert_eq!(glyph(&home.join("downloads")), Icon::Folder);
         // A file with a folder's name is a file: only a directory is asked.
         let file = FileIcon::for_path(&home.join("Notes.txt"), Kind::File);
-        assert_eq!(file.glyph, Icon::TextXGeneric);
+        assert_eq!(file.glyph, Icon::FileText);
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -1069,11 +1060,11 @@ mod tests {
         let mut file = entry("/home/a/Downloads", Kind::File);
         file.special = Some(SpecialFolder::Downloads);
         let icon = FileIcon::for_entry(&file);
-        assert_ne!(icon.glyph, Icon::FolderDownload);
+        assert_ne!(icon.glyph, Icon::FolderArrowDown);
         assert_eq!(icon.kind, FileKind::Unknown);
         // A link not looked at yet with a folder's name already shows the folder.
         file.pending_link = true;
-        assert_eq!(FileIcon::for_entry(&file).glyph, Icon::FolderDownload);
+        assert_eq!(FileIcon::for_entry(&file).glyph, Icon::FolderArrowDown);
     }
 
     #[test]

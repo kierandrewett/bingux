@@ -26,12 +26,12 @@ ShellRoot {
                 width: 300; height: 560; radius: 16; color: Theme.popupSurface
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 8; spacing: 4
-                    StateMessage { compact: true; iconName: "network-offline-symbolic"; title: "No active network connection" }
+                    StateMessage { compact: true; iconName: "wifi-cross-symbolic"; title: "No active network connection" }
                     StateMessage { compact: true; loading: true; title: "Looking for networks…" }
                     StateMessage { compact: true; tone: "danger"; title: "Could not load connections"; detail: "Open Network settings to manage them."; actionText: "Try again" }
                     StateMessage { compact: true; tone: "warning"; title: "Some search sources are unavailable" }
                     StateMessage { compact: true; tone: "success"; title: "Restarted foo.service" }
-                    StateMessage { fill: true; iconName: "checkbox-checked-symbolic"; title: "No tasks"; detail: "Add one above to start your list." }
+                    StateMessage { fill: true; iconName: "square-check-symbolic"; title: "No tasks"; detail: "Add one above to start your list." }
                 }
             }
             Rectangle {
@@ -55,8 +55,8 @@ ShellRoot {
                         ActionButton { text: "Force Quit"; tone: "danger" }
                     }
                     SessionSlider { Layout.fillWidth: true; value: 0.4; fillColor: Theme.accent; caption: "New size"; valueText: "40 GiB" }
-                    ControlRow { Layout.fillWidth: true; title: "Shut Down"; iconName: "system-shutdown-symbolic"; destructive: true }
-                    ControlRow { Layout.fillWidth: true; title: "Cancel"; iconName: "window-close-symbolic" }
+                    ControlRow { Layout.fillWidth: true; title: "Shut Down"; iconName: "power-symbolic"; destructive: true }
+                    ControlRow { Layout.fillWidth: true; title: "Cancel"; iconName: "cross-symbolic" }
                 }
             }
             Rectangle {
@@ -65,7 +65,7 @@ ShellRoot {
                     anchors.fill: parent; anchors.margins: 12; spacing: 4
                     SessionRow { Layout.fillWidth: true; text: "Rest" }
                     SessionRow { Layout.fillWidth: true; text: "Selected"; selected: true; ticked: true }
-                    SessionRow { Layout.fillWidth: true; text: "Restart"; iconName: "system-reboot-symbolic"; destructive: true }
+                    SessionRow { Layout.fillWidth: true; text: "Restart"; iconName: "arrow-cw-symbolic"; destructive: true }
                     SessionRow { id: focused; Layout.fillWidth: true; text: "Focused"; Component.onCompleted: forceActiveFocus(Qt.TabFocusReason) }
                 }
             }
@@ -81,8 +81,8 @@ ShellRoot {
                 width: 380; height: 330; radius: 16; color: Theme.popupSurface
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 10; spacing: 8
-                    OsdCard { request: ({ icon: "audio-volume-high-symbolic", label: "Headphones", level: 0.65, maxLevel: 1 }); opacity: 1 }
-                    OsdCard { request: ({ icon: "action-unavailable-symbolic", label: "Brightness", level: -1, maxLevel: -1 }); opacity: 1 }
+                    OsdCard { request: ({ icon: "speaker-wave-2-symbolic", label: "Headphones", level: 0.65, maxLevel: 1 }); opacity: 1 }
+                    OsdCard { request: ({ icon: "circle-slash-symbolic", label: "Brightness", level: -1, maxLevel: -1 }); opacity: 1 }
                     CalendarPeriodPicker { Layout.fillWidth: true; Layout.preferredHeight: 110; level: 2; year: 2024; selectedDate: new Date(2024, 5, 1) }
                 }
             }

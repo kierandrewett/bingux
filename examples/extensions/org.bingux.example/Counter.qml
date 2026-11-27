@@ -11,7 +11,7 @@ Item {
     Component.onCompleted: {
         button = context.createButton(root, {
             label: "Counter",
-            iconName: "list-add-symbolic",
+            iconName: "plus-symbolic",
             width: Qt.binding(() => root.width),
             height: Qt.binding(() => root.height)
         });

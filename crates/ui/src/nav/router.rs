@@ -672,7 +672,7 @@ impl Component for NotFound {
         let target = table.up(&self.location);
         let home = table.home();
         let page = status_page(
-            Icon::DialogWarning,
+            Icon::TriangleExclamation,
             crate::tr!("ui-nav-page-not-found-title"),
         )
         .description(self.location.to_string());

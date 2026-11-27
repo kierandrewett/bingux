@@ -596,7 +596,7 @@ impl Component for Body {
         let header = HeaderBar::new(crate::tr!("ui-files-props-header"))
             .draggable(false)
             .trailing(
-                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                icon_button(Icon::Cross, move |_| overlays.dismiss_dialog())
                     .tooltip(&crate::tr!("ui-files-props-close")),
             );
         let bar = segmented(

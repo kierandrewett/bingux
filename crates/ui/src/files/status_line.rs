@@ -175,7 +175,7 @@ impl Component for StatusBar {
                     .child(progress_bar(busy.fraction.map(f64::from))),
             )
             .maybe_child(cancel.map(|cancel| {
-                icon_button(Icon::WindowClose, move |_| cancel.cancel())
+                icon_button(Icon::Cross, move |_| cancel.cancel())
                     .size(Dim::DenseControl)
                     .tooltip(&tr!("ui-files-cancel"))
             }))
@@ -328,7 +328,7 @@ impl Component for StatusLine {
                         .child(progress_bar(busy.fraction.map(f64::from))),
                 )
                 .maybe_child(cancel.map(|cancel| {
-                    icon_button(Icon::WindowClose, move |_| cancel.cancel())
+                    icon_button(Icon::Cross, move |_| cancel.cancel())
                         .size(Dim::InlineButton)
                         .tooltip(&tr!("ui-files-cancel"))
                 }))

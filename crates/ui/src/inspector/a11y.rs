@@ -91,14 +91,14 @@ impl Component for A11yPane {
         };
         let summary = rect()
             .tw(&tokens, &[w_full(), flex_row(), grow_children(), gap(S3)])
-            .child(tile(errors, "Errors", Icon::DialogError, Tone::Danger))
+            .child(tile(errors, "Errors", Icon::CircleCross, Tone::Danger))
             .child(tile(
                 warnings,
                 "Warnings",
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 Tone::Warning,
             ))
-            .child(tile(notes, "Notes", Icon::DialogInformation, Tone::Accent));
+            .child(tile(notes, "Notes", Icon::CircleInfo, Tone::Accent));
 
         let filter = segmented(
             vec![
@@ -216,7 +216,11 @@ fn issue_group(
         .map(|issue| issue_row(tokens, issue, nav))
         .collect();
     let chevron = icons::icon(
-        if open { Icon::PanDown } else { Icon::PanEnd },
+        if open {
+            Icon::ChevronDown
+        } else {
+            Icon::ChevronRight
+        },
         IconSize::Mark,
         Paint::Muted.color(tokens),
     );
@@ -310,9 +314,9 @@ fn contrast_chips(tokens: &Tokens, measured: ContrastDetail) -> Element {
 
 fn severity_icon(severity: Severity) -> Icon {
     match severity {
-        Severity::Error => Icon::DialogError,
-        Severity::Warning => Icon::DialogWarning,
-        Severity::Info => Icon::DialogInformation,
+        Severity::Error => Icon::CircleCross,
+        Severity::Warning => Icon::TriangleExclamation,
+        Severity::Info => Icon::CircleInfo,
     }
 }
 
@@ -326,13 +330,13 @@ fn severity_tone(severity: Severity) -> Tone {
 
 fn kind_icon(kind: IssueKind) -> Icon {
     match kind {
-        IssueKind::Naming => Icon::Accessibility,
+        IssueKind::Naming => Icon::PersonCircle,
         IssueKind::Focus => Icon::Keyboard,
         IssueKind::TargetSize => Icon::Mouse,
-        IssueKind::Contrast => Icon::Appearance,
-        IssueKind::Geometry => Icon::Display,
-        IssueKind::LayoutShift => Icon::Desktop,
-        IssueKind::Motion => Icon::Refresh,
+        IssueKind::Contrast => Icon::Palette,
+        IssueKind::Geometry => Icon::Monitor,
+        IssueKind::LayoutShift => Icon::MonitorDock,
+        IssueKind::Motion => Icon::ArrowCw,
         IssueKind::Performance => Icon::Clock,
     }
 }

@@ -97,7 +97,7 @@ impl Component for EntryView {
                         })
                         .flat()
                         .compact()
-                        .icon(Icon::EditCopy),
+                        .icon(Icon::SquaresOverlap),
                     )
                     .child(
                         rect().tw(&tokens, &[covers_width]).child(Element::from(

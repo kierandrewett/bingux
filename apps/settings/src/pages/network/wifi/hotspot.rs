@@ -269,11 +269,13 @@ impl Component for HotspotPage {
                 device: device.clone(),
             }));
             blocks.push(Element::from(action_strip(vec![
-                strip_action(Icon::SendTo, &tr!("network-hotspot-share"), move |_| {
-                    share::open(window, share_target.clone())
-                }),
                 strip_action(
-                    Icon::NetworkWirelessDisabled,
+                    Icon::SquareArrowUp,
+                    &tr!("network-hotspot-share"),
+                    move |_| share::open(window, share_target.clone()),
+                ),
+                strip_action(
+                    Icon::WifiSlash,
                     &tr!("network-hotspot-turn-off"),
                     move |_| {
                         let uuid = stop_uuid.clone();

@@ -998,7 +998,7 @@ Flickable {
                             SymbolicIcon {
                                 anchors.centerIn: parent
                                 implicitSize: 16
-                                source: BinguxIcons.source("window-close-symbolic", "edit-clear-symbolic")
+                                source: BinguxIcons.source("cross-symbolic", "circle-cross-symbolic")
                             }
 
                             MouseArea {
@@ -1163,7 +1163,7 @@ Flickable {
                                 anchors.rightMargin: 10
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 12
-                                source: BinguxIcons.source("pan-down-symbolic")
+                                source: BinguxIcons.source("chevron-down-symbolic")
                                 color: groupLabel.color
                                 rotation: notificationCard.groupExpanded ? 180 : 0
                                 Behavior on rotation {
@@ -1198,9 +1198,9 @@ Flickable {
                                 text: modelData.text
                                 horizontalPadding: Theme.gap
                                 iconName: ({
-                                        copy: "edit-copy-symbolic",
-                                        save: "document-save-symbolic",
-                                        discard: "user-trash-symbolic"
+                                        copy: "squares-overlap-symbolic",
+                                        save: "floppy-disk-symbolic",
+                                        discard: "trash-symbolic"
                                     })[modelData.action.identifier] || ""
                                 visible: !modelData.defaultAction
                                 onClicked: modelData.action.invoke()

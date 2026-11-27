@@ -98,7 +98,7 @@ impl Component for Sidebar {
                             .child(section_label(tr!("calendar-calendars"))),
                     )
                     .child(
-                        icon_button(Icon::ListAdd, move |_| {
+                        icon_button(Icon::Plus, move |_| {
                             calendars::add(model, overlays, &tokens);
                         })
                         .tooltip(&tr!("calendar-add-calendar")),
@@ -113,7 +113,7 @@ impl Component for Sidebar {
                 action_button(tr!("calendar-import-events-button"), move |_| {
                     calendars::import(model, window, overlays)
                 })
-                .icon(Icon::DocumentOpen)
+                .icon(Icon::FolderOpen)
                 .flat(),
             )
     }

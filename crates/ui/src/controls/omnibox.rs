@@ -309,7 +309,7 @@ impl Omnibox {
             initial: draft.text(),
             items: Vec::new(),
             placeholder: String::new(),
-            leading: Icon::Search,
+            leading: Icon::Magnifier,
             label: crate::tr!("ui-omnibox-label"),
             danger: false,
             select_all: false,
@@ -1031,7 +1031,7 @@ impl Component for NoticeView {
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .maybe_child((self.kind == OmniNotice::Danger).then(|| {
                 icons::icon(
-                    Icon::DialogWarning,
+                    Icon::TriangleExclamation,
                     IconSize::Control,
                     Ink::Danger.color(&tokens),
                 )
@@ -1157,7 +1157,7 @@ impl Component for OmniChip {
             )
             .maybe_child(
                 self.removable
-                    .then(|| icons::icon(Icon::WindowClose, IconSize::Text, ink.color(&tokens))),
+                    .then(|| icons::icon(Icon::Cross, IconSize::Text, ink.color(&tokens))),
             )
     }
 }

@@ -66,7 +66,7 @@ Rectangle {
                 objectName: root.wide ? "" : "kioskBack"
                 visible: root.backVisible
                 flat: true
-                iconName: "go-previous-symbolic"
+                iconName: "chevron-left-symbolic"
                 Accessible.name: "Back"
                 onClicked: root.backRequested()
             }
@@ -140,7 +140,7 @@ Rectangle {
             objectName: root.wide ? "kioskBack" : ""
             visible: root.backVisible
             flat: true
-            iconName: "go-previous-symbolic"
+            iconName: "chevron-left-symbolic"
             Accessible.name: "Back"
             implicitHeight: Math.round(40 * root.uiScale)
             implicitWidth: Math.round(40 * root.uiScale)

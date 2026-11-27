@@ -48,8 +48,8 @@ impl Component for Scene {
                 }
             })
             .child(
-                icon_button(Icon::Refresh, |_| {})
-                    .morph(Icon::MediaPlaybackStop, on())
+                icon_button(Icon::ArrowCw, |_| {})
+                    .morph(Icon::Stop, on())
                     .tooltip(if on() { "Stop (Esc)" } else { "Refresh (F5)" }),
             )
     }

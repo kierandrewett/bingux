@@ -309,12 +309,10 @@ fn profile_meaning(name: &str) -> String {
     }
 }
 
+/// The glyph for a power-profiles-daemon profile: its icon name is
+/// `power-profile-<profile>` (scripts/icons/aliases.tsv), balanced when unknown.
 fn profile_icon(name: &str) -> Icon {
-    match name {
-        "power-saver" => Icon::PowerProfilePowerSaver,
-        "performance" => Icon::PowerProfilePerformance,
-        _ => Icon::PowerProfileBalanced,
-    }
+    Icon::from_freedesktop(&format!("power-profile-{name}")).unwrap_or(Icon::Gauge)
 }
 
 fn gsettings_u32(schema: &str, key: &str) -> Result<u32, CommandError> {
@@ -650,7 +648,7 @@ fn battery_group(battery: &Battery) -> Group {
         None => group
             .row(
                 row(tr!("power-battery-charge"))
-                    .leading(Icon::BatteryLevel0)
+                    .leading(Icon::Battery0)
                     .value(battery.percentage.clone()),
             )
             .row(row(tr!("power-battery-state")).value(battery.state.clone())),
@@ -662,7 +660,7 @@ fn battery_group(battery: &Battery) -> Group {
     match &battery.health {
         Some(health) => group.row(
             row(tr!("power-battery-health"))
-                .leading(Icon::BatteryLevel100)
+                .leading(Icon::Battery100)
                 .value(health.clone()),
         ),
         None => group,

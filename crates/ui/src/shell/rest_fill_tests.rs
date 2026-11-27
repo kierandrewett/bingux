@@ -37,9 +37,9 @@ impl Component for Header {
         let tokens = provide_tokens();
         rect().tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)]).child(OverlayHost::new(
             HeaderBar::new("Window")
-                .leading(icon_button(Icon::ListAdd, |_| {}).tooltip("New tab"))
-                .trailing(menu_button("Main menu", vec![menu_item("About", |_| {})]).icon(Icon::OpenMenu))
-                .trailing(icon_button(Icon::Refresh, |_| {}).tooltip("Reload")),
+                .leading(icon_button(Icon::Plus, |_| {}).tooltip("New tab"))
+                .trailing(menu_button("Main menu", vec![menu_item("About", |_| {})]).icon(Icon::LinesThree))
+                .trailing(icon_button(Icon::ArrowCw, |_| {}).tooltip("Reload")),
         ))
     }
 }
@@ -58,7 +58,7 @@ impl Component for FilesWindow {
                 .tw(&tokens, &[w_full(), h_full(), flex_col()])
                 .child(
                     HeaderBar::new("Files")
-                        .trailing(menu_button("Main menu", vec![menu_item("About", |_| {})]).icon(Icon::OpenMenu)),
+                        .trailing(menu_button("Main menu", vec![menu_item("About", |_| {})]).icon(Icon::LinesThree)),
                 )
                 .child(rect().tw(&tokens, &[w_full(), h_flex(), flex_col()]).child(browse(Browse::new(memory)))),
         ))

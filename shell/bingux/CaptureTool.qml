@@ -1369,7 +1369,7 @@ Scope {
             SymbolicIcon {
                 visible: button.iconName !== "" || button.iconSource.toString() !== ""
                 implicitSize: button.compact ? 14 : 18
-                source: button.iconSource.toString() !== "" ? button.iconSource : BinguxIcons.source(button.iconName, "application-x-executable-symbolic")
+                source: button.iconSource.toString() !== "" ? button.iconSource : BinguxIcons.source(button.iconName, "cube-symbolic")
                 color: button.primary ? "#17212c" : button.enabled ? Theme.text : Theme.muted
             }
             Text {

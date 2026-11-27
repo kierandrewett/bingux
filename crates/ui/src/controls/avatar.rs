@@ -77,7 +77,7 @@ impl Component for Avatar {
                 )
             }
             None => frame.child(icons::icon(
-                Icon::AvatarDefault,
+                Icon::Person,
                 glyph_size(self.size),
                 Paint::Muted.color(&tokens),
             )),

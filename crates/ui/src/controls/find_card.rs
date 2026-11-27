@@ -220,17 +220,17 @@ impl Component for FindCard {
                 )
             }))
             .child(
-                icon_button(Icon::PanUp, stepper(false))
+                icon_button(Icon::ChevronUp, stepper(false))
                     .tooltip(crate::tr!("ui-findcard-previous.tooltip"))
                     .enabled(!current.is_empty()),
             )
             .child(
-                icon_button(Icon::PanDown, stepper(true))
+                icon_button(Icon::ChevronDown, stepper(true))
                     .tooltip(crate::tr!("ui-findcard-next.tooltip"))
                     .enabled(!current.is_empty()),
             )
             .child(
-                icon_button(Icon::WindowClose, move |_: ()| {
+                icon_button(Icon::Cross, move |_: ()| {
                     if let Some(close) = &close {
                         close.call(());
                     }

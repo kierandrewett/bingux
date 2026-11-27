@@ -391,12 +391,12 @@ impl Component for Shell {
         })
         .busy(busy && !showing_list)
         .trailing(
-            icon_button(Icon::ListAdd, move |_| search::open(overlays, hub))
+            icon_button(Icon::Plus, move |_| search::open(overlays, hub))
                 .tooltip(&tr!("weather-tooltip-add-location")),
         );
         if !showing_list {
             header = header.trailing(
-                icon_button(Icon::Refresh, move |_| hub.refresh_all())
+                icon_button(Icon::ArrowCw, move |_| hub.refresh_all())
                     .tooltip(&tr!("weather-tooltip-refresh"))
                     .busy(busy),
             );
@@ -405,7 +405,7 @@ impl Component for Shell {
         if compact && !showing_list {
             let mut list = hub.list;
             header = header.leading(
-                icon_button(Icon::GoPrevious, move |_| list.set(true))
+                icon_button(Icon::ChevronLeft, move |_| list.set(true))
                     .tooltip(&tr!("weather-places")),
             );
         }
@@ -460,7 +460,7 @@ impl Component for Shell {
         let page: Element = match &now_showing {
             Current::Nothing if ask_network => {
                 let stack = if compact { flex_col() } else { flex_row() };
-                status_page(Icon::LocationArrow, tr!("weather-ask-location-title"))
+                status_page(Icon::Arrowhead, tr!("weather-ask-location-title"))
                     .description(tr!("weather-ask-location-description"))
                     .child(
                         rect()
@@ -479,7 +479,7 @@ impl Component for Shell {
                     )
                     .into()
             }
-            Current::Nothing => status_page(Icon::LocationArrow, tr!("weather-add-city"))
+            Current::Nothing => status_page(Icon::Arrowhead, tr!("weather-add-city"))
                 .description(tr!("weather-location-unavailable"))
                 .action(tr!("weather-add-location"), move |_| {
                     search::open(overlays, hub)

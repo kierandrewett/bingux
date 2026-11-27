@@ -45,31 +45,31 @@ impl Summary {
         };
         match state {
             _ if blank => Self {
-                icon: Icon::WebBrowser,
+                icon: Icon::Globe,
                 tone: Tone::Neutral,
                 headline: tr!("browser-site-info-blank-title"),
                 detail: tr!("browser-site-info-blank-description"),
             },
             SecurityState::Internal => Self {
-                icon: Icon::WebBrowser,
+                icon: Icon::Globe,
                 tone: Tone::Neutral,
                 headline: tr!("browser-site-info-internal-title"),
                 detail: tr!("browser-site-info-internal-description"),
             },
             SecurityState::Local => Self {
-                icon: Icon::Computer,
+                icon: Icon::Laptop,
                 tone: Tone::Neutral,
                 headline: tr!("browser-site-info-local-title"),
                 detail: tr!("browser-site-info-local-description"),
             },
             SecurityState::Secure if security.mixed_passive => Self {
-                icon: Icon::DialogWarning,
+                icon: Icon::TriangleExclamation,
                 tone: Tone::Warning,
                 headline: tr!("browser-site-info-mixed-title"),
                 detail: tr!("browser-site-info-mixed-description"),
             },
             SecurityState::Secure => Self {
-                icon: Icon::NetworkWirelessEncrypted,
+                icon: Icon::Padlock,
                 tone: Tone::Good,
                 headline: tr!("browser-site-info-secure-title"),
                 detail: if security.extended_validation {
@@ -79,7 +79,7 @@ impl Summary {
                 },
             },
             SecurityState::Broken => Self {
-                icon: Icon::DialogWarning,
+                icon: Icon::TriangleExclamation,
                 tone: Tone::Danger,
                 headline: tr!("browser-site-info-insecure-title"),
                 detail: if security.mixed_active {
@@ -89,13 +89,13 @@ impl Summary {
                 },
             },
             SecurityState::Insecure if url.starts_with("https://") => Self {
-                icon: Icon::WebBrowser,
+                icon: Icon::Globe,
                 tone: Tone::Neutral,
                 headline: tr!("browser-site-info-connecting-title"),
                 detail: tr!("browser-site-info-connecting-description"),
             },
             SecurityState::Insecure => Self {
-                icon: Icon::DialogWarning,
+                icon: Icon::TriangleExclamation,
                 tone: Tone::Warning,
                 headline: tr!("browser-site-info-insecure-title"),
                 detail: tr!("browser-site-info-insecure-description"),

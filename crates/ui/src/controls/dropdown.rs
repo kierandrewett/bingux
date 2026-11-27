@@ -574,7 +574,7 @@ impl Component for Dropdown {
                 rect()
                     .tw(&tokens, &[flex_row(), center()])
                     .child(icons::icon(
-                        Icon::PanDown,
+                        Icon::ChevronDown,
                         IconSize::Mark,
                         Paint::Muted.color(&tokens),
                     )),

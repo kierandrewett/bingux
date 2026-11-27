@@ -103,7 +103,7 @@ impl Component for Display {
 
         let copy_calc = calc.clone();
         let copy_text = shown.copy.clone();
-        let copy = icon_button(Icon::EditCopy, move |_: ()| {
+        let copy = icon_button(Icon::SquaresOverlap, move |_: ()| {
             copy_calc.copy_text(copy_text.clone(), overlays)
         })
         .size(Dim::InlineButton)

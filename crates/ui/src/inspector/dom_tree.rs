@@ -165,7 +165,7 @@ impl Component for DomTree {
         // slot; an empty slot keeps the body's scopes in place while it is shut.
         root = root.child(find_bar.unwrap_or_else(|| rect().into()));
         let mut wrappers = self.wrappers;
-        let toggle = icon_button(Icon::Filter, move |_| wrappers.set(!show_wrappers))
+        let toggle = icon_button(Icon::Funnel, move |_| wrappers.set(!show_wrappers))
             .size(Dim::Box7)
             .radius(Radius::Mark)
             .tooltip("Show wrappers")
@@ -550,7 +550,7 @@ fn find_bar(
         )
         .child(CAPTION.in_ink(Ink::Muted).label(tokens, summary))
         .child(
-            icon_button(Icon::GoPrevious, move |_| {
+            icon_button(Icon::ChevronLeft, move |_| {
                 step_match(hit, selected, &prev_matches, hit_index, -1);
             })
             .size(Dim::IconControl)
@@ -558,7 +558,7 @@ fn find_bar(
             .enabled(count > 0),
         )
         .child(
-            icon_button(Icon::GoNext, move |_| {
+            icon_button(Icon::ChevronRight, move |_| {
                 step_match(hit, selected, &next_matches, hit_index, 1);
             })
             .size(Dim::IconControl)
@@ -566,7 +566,7 @@ fn find_bar(
             .enabled(count > 0),
         )
         .child(
-            icon_button(Icon::WindowClose, move |_| {
+            icon_button(Icon::Cross, move |_| {
                 close_open.set(false);
                 close_query.set(String::new());
                 close_hit.set(0);

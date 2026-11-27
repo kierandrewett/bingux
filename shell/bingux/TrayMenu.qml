@@ -260,7 +260,7 @@ ShellPopup {
                 SymbolicIcon {
                     visible: root.compactRows && entryButton.data.checkState === Qt.Checked
                     implicitSize: 14
-                    source: BinguxIcons.source("object-select-symbolic")
+                    source: BinguxIcons.source("check-symbolic")
                     color: Theme.accent
                 }
                 Text {

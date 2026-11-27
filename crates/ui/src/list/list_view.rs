@@ -838,7 +838,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for ListView<T, K> {
         if count == 0 {
             return match &self.empty {
                 Some(empty) => empty.clone(),
-                None => status_page(Icon::ViewList, crate::tr!("ui-list-empty")).into(),
+                None => status_page(Icon::ListBullets, crate::tr!("ui-list-empty")).into(),
             };
         }
 
@@ -1059,7 +1059,7 @@ fn row_content(
     }
     if chevron || spec.chevron {
         line = line.child(icons::icon(
-            Icon::PanEnd,
+            Icon::ChevronRight,
             IconSize::Mark,
             Ink::Muted.color(tokens),
         ));

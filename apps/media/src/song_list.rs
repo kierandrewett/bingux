@@ -95,7 +95,7 @@ fn title_cell(track: &Track, lead: Lead, current: State<Option<PathBuf>>) -> Ele
         Lead::Number if playing => rect()
             .tw(&tokens, &[w(Dim::Box7), flex_row(), justify(Align::End)])
             .child(icons::icon(
-                Icon::Sound,
+                Icon::SpeakerWave2,
                 IconSize::Mark,
                 Ink::Accent.color(&tokens),
             ))

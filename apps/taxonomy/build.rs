@@ -30,7 +30,7 @@ fn main() {
         println!("cargo:rerun-if-changed={}", path.display());
     }
 
-    // `Self::GoPrevious => include_bytes!("../icons/go-previous-symbolic.svg")`,
+    // `Self::GoPrevious => include_bytes!("../icons/chevron-left-symbolic.svg")`,
     // possibly with the call wrapped in braces over several lines.
     let source = fs::read_to_string(&icons_rs).expect("read icons.rs");
     let mut variant_of: HashMap<String, String> = HashMap::new();

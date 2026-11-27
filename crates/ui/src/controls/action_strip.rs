@@ -23,7 +23,7 @@ pub struct StripAction {
     enabled: bool,
 }
 
-/// An action with an icon and a label, such as `strip_action(Icon::Delete, "Forget", ...)`.
+/// An action with an icon and a label, such as `strip_action(Icon::Trash, "Forget", ...)`.
 pub fn strip_action(
     icon: Icon,
     label: impl Into<String>,

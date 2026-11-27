@@ -453,7 +453,7 @@ impl Component for TextView {
                     .shortcut("0"),
                 ],
             );
-            let copy = icon_button(Icon::EditCopy, move |_| {
+            let copy = icon_button(Icon::SquaresOverlap, move |_| {
                 crate::clipboard::Clipboard::general().write_text(whole.clone());
                 if let Some(overlays) = overlays {
                     overlays.toast(crate::tr!("ui-preview-text-copied"));

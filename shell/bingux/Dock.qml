@@ -1990,7 +1990,7 @@ PanelWindow {
             fill: true
             compact: true
             visible: DesktopEditing.active && root.appGroups.length === 0 && (root.preferences.layout?.dock.length || 0) === 0
-            iconName: "list-add-symbolic"
+            iconName: "plus-symbolic"
             title: "Drop apps here"
         }
         visible: DesktopEditing.active || root.appGroups.length > 0 || (root.preferences.layout?.dock.length || 0) > 0
@@ -2311,7 +2311,7 @@ PanelWindow {
                                 anchors.left: dockIcon.left
                                 anchors.bottom: dockIcon.bottom
                                 shown: !!root.launchFailures[dockButton.currentGroup.id]
-                                iconName: "dialog-warning-symbolic"
+                                iconName: "triangle-exclamation-symbolic"
                                 color: Theme.danger
                                 foreground: "#161616"
                             }
@@ -2323,7 +2323,7 @@ PanelWindow {
                                 anchors.top: dockIcon.top
                                 anchors.margins: -Theme.spaceSmall
                                 shown: root.draggedId === dockButton.currentGroup.id && root.dropPinned && !root.isPinned(dockButton.currentGroup)
-                                iconName: "view-pin-symbolic"
+                                iconName: "pushpin-symbolic"
                                 color: dockIcon.accentColor
                                 foreground: dockIcon.accentForeground
                             }

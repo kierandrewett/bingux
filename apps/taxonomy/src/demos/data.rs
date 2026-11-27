@@ -378,7 +378,7 @@ fn tree_nodes() -> Vec<TreeNode> {
     vec![
         TreeNode::new(1, "Window")
             .detail("1100 x 820")
-            .icon(Icon::Computer)
+            .icon(Icon::Laptop)
             .badge("root", Paint::Accent)
             .children(vec![
                 TreeNode::new(2, "Column").children(vec![
@@ -451,15 +451,15 @@ pub const METER: &[Spec] = &[
     }),
     Spec::forced("Stat tiles", || {
         hstack(S3)
-            .child(stat_tile("42", "Devices").icon(Icon::Computer))
+            .child(stat_tile("42", "Devices").icon(Icon::Laptop))
             .child(
                 stat_tile("3", "Warnings")
-                    .icon(Icon::DialogWarning)
+                    .icon(Icon::TriangleExclamation)
                     .tone(Tone::Warning),
             )
             .child(
                 stat_tile("1", "Error")
-                    .icon(Icon::DialogError)
+                    .icon(Icon::CircleCross)
                     .tone(Tone::Danger),
             )
             .into_element()
@@ -496,7 +496,7 @@ pub const ROW_ACTION: &[Spec] = &[
     Spec::live("Row action", || {
         rows(vec![
             row("Saved network")
-                .trailing(row_action(Icon::Delete, "Forget", |_| {}))
+                .trailing(row_action(Icon::Trash, "Forget", |_| {}))
                 .into_element(),
         ])
     }),

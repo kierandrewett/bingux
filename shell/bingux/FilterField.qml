@@ -25,7 +25,7 @@ TextField {
         x: 10
         anchors.verticalCenter: parent.verticalCenter
         implicitSize: 14
-        source: BinguxIcons.source("system-search-symbolic")
+        source: BinguxIcons.source("magnifier-symbolic")
         color: Theme.muted
     }
     IconButton {
@@ -34,7 +34,7 @@ TextField {
         implicitWidth: 28
         implicitHeight: 28
         visible: root.text.length > 0
-        iconName: "edit-clear-symbolic"
+        iconName: "circle-cross-symbolic"
         label: "Clear search"
         onClicked: root.clearFilter()
     }

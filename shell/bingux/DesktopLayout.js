@@ -9,53 +9,53 @@
 // that the default layout places beside shared ones, shown disabled.
 const sessionContexts = ["desktop", "locked", "greeter", "kiosk"];
 const widgets = [
-    { id: "search", label: "Search", icon: "system-search-symbolic", contexts: ["desktop"] },
-    { id: "workspaces", label: "Workspaces", icon: "view-grid-symbolic", contexts: ["desktop"] },
+    { id: "search", label: "Search", icon: "magnifier-symbolic", contexts: ["desktop"] },
+    { id: "workspaces", label: "Workspaces", icon: "squares-four-symbolic", contexts: ["desktop"] },
     {
         id: "clock",
         label: "Date and time",
-        icon: "x-office-calendar-symbolic",
+        icon: "calendar-symbolic",
         contexts: ["desktop", "locked", "greeter", "kiosk"],
     },
     {
         id: "controls",
         label: "Control centre",
-        icon: "preferences-system-symbolic",
+        icon: "gear-symbolic",
         contexts: ["desktop", "locked", "greeter", "kiosk"],
     },
     {
         id: "notifications",
         label: "Notifications",
-        icon: "preferences-system-notifications-symbolic",
+        icon: "bell-symbolic",
         contexts: ["desktop", "locked"],
     },
     {
         id: "metrics",
         label: "System monitors",
-        icon: "computer-symbolic",
+        icon: "laptop-symbolic",
         contexts: ["desktop", "locked", "greeter", "kiosk"],
     },
     {
         id: "keyboard",
         label: "Keyboard layout",
-        icon: "input-keyboard-symbolic",
+        icon: "keyboard-symbolic",
         contexts: ["desktop", "locked", "greeter", "kiosk"],
     },
-    { id: "tray", label: "System tray", icon: "view-more-symbolic", contexts: ["desktop"] },
-    { id: "overflow", label: "More status controls", icon: "view-more-symbolic", contexts: ["desktop"] },
+    { id: "tray", label: "System tray", icon: "dots-three-symbolic", contexts: ["desktop"] },
+    { id: "overflow", label: "More status controls", icon: "dots-three-symbolic", contexts: ["desktop"] },
     {
         id: "privacy",
         label: "Privacy",
-        icon: "audio-input-microphone-symbolic",
+        icon: "microphone-symbolic",
         contexts: ["desktop", "locked"],
     },
-    { id: "capture", label: "Recording", icon: "media-record-symbolic", contexts: ["desktop"] },
-    { id: "terminal", label: "Terminal", icon: "utilities-terminal-symbolic", panel: true, contexts: ["desktop"] },
-    { id: "notes", label: "Notes", icon: "accessories-text-editor-symbolic", panel: true, contexts: ["desktop"] },
-    { id: "monitor", label: "System", icon: "computer-symbolic", panel: true, contexts: ["desktop"] },
-    { id: "calendar", label: "Calendar", icon: "x-office-calendar-symbolic", panel: true, contexts: ["desktop"] },
-    { id: "media", label: "Media", icon: "applications-multimedia-symbolic", panel: true, contexts: ["desktop"] },
-    { id: "tasks", label: "Tasks", icon: "view-list-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "capture", label: "Recording", icon: "record-symbolic", contexts: ["desktop"] },
+    { id: "terminal", label: "Terminal", icon: "prompt-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "notes", label: "Notes", icon: "notepad-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "monitor", label: "System", icon: "laptop-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "calendar", label: "Calendar", icon: "calendar-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "media", label: "Media", icon: "music-notes-symbolic", panel: true, contexts: ["desktop"] },
+    { id: "tasks", label: "Tasks", icon: "list-bullets-symbolic", panel: true, contexts: ["desktop"] },
 ];
 // True when widget `id` may be shown in session context `mode`. Spacing and
 // decoration items follow the bar they sit in; control-centre tiles,
@@ -80,8 +80,8 @@ function freshInstanceId(layout, kind) {
     return "";
 }
 const decorationWidgets = [
-    { id: "label", label: "Label", icon: "font-x-generic-symbolic", decoration: true },
-    { id: "icon", label: "Icon", icon: "starred-symbolic", decoration: true },
+    { id: "label", label: "Label", icon: "square-letters-aa-symbolic", decoration: true },
+    { id: "icon", label: "Icon", icon: "star-filled-symbolic", decoration: true },
 ];
 function isDecoration(id) {
     return /^(label|icon)(:[1-9][0-9]{0,3})?$/.test(id);
@@ -90,13 +90,13 @@ function isTemplate(id) {
     return ["spacer", "spring", "label", "icon"].includes(id);
 }
 const controlWidgets = [
-    { id: "control-network", label: "Wi-Fi", icon: "network-wireless-symbolic" },
-    { id: "control-bluetooth", label: "Bluetooth", icon: "bluetooth-active-symbolic" },
-    { id: "control-vpn", label: "VPN", icon: "network-vpn-symbolic" },
-    { id: "control-dnd", label: "Do Not Disturb", icon: "notifications-disabled-symbolic" },
-    { id: "control-nightLight", label: "Night Light", icon: "night-light-symbolic" },
-    { id: "control-power", label: "Power mode", icon: "power-profile-balanced-symbolic" },
-    { id: "control-awake", label: "Keep Awake", icon: "display-brightness-symbolic" },
+    { id: "control-network", label: "Wi-Fi", icon: "wifi-symbolic" },
+    { id: "control-bluetooth", label: "Bluetooth", icon: "bluetooth-symbolic" },
+    { id: "control-vpn", label: "VPN", icon: "shield-symbolic" },
+    { id: "control-dnd", label: "Do Not Disturb", icon: "bell-slash-symbolic" },
+    { id: "control-nightLight", label: "Night Light", icon: "moon-stars-symbolic" },
+    { id: "control-power", label: "Power mode", icon: "gauge-symbolic" },
+    { id: "control-awake", label: "Keep Awake", icon: "sun-symbolic" },
 ];
 function controlOrder() {
     return controlWidgets.map((item) => item.id.slice(8));

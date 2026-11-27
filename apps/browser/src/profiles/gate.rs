@@ -40,7 +40,7 @@ impl Component for GateWindow {
         let body: Element = match &self.gate {
             Gate::Problem(state) => {
                 let mut page =
-                    status_page(Icon::DialogWarning, state.title()).description(state.text());
+                    status_page(Icon::TriangleExclamation, state.title()).description(state.text());
                 if state.can_try_again() {
                     page = page.action(tr!("browser-profile-try-again-button"), move |_: ()| {
                         Self::again(None)
@@ -65,12 +65,12 @@ impl Component for GateWindow {
                     let id = id.clone();
                     group = group.row(
                         row(name.clone())
-                            .leading(Icon::AvatarDefault)
+                            .leading(Icon::Person)
                             .navigates()
                             .on_press(move |_: ()| Self::again(Some(id.clone()))),
                     );
                 }
-                status_page(Icon::AvatarDefault, tr!("browser-profile-which-title"))
+                status_page(Icon::Person, tr!("browser-profile-which-title"))
                     .description(tr!("browser-profile-which-description"))
                     .child(clamp(Dim::PopupNarrow, group))
                     .into_element()

@@ -143,7 +143,7 @@ ShellRoot {
             } else if (test.phase === 1) {
                 test.check(recording.visible && recording.label === "1:23  Stop", "Own recording displays elapsed time and Stop");
                 test.check(recording.filled && recording.activityColor.toString() === "#c01c28", "Recording uses GNOME red");
-                test.check(recording.trailingIcon === "media-playback-stop-symbolic" && recording.interactive, "Recording has an active stop control");
+                test.check(recording.trailingIcon === "stop-symbolic" && recording.interactive, "Recording has an active stop control");
                 test.check(recording.height === 32 && indicators.height === 32, "Full-height bar targets");
                 test.check(indicators.visible && indicators.implicitWidth > 100 && indicators.sharingVisible, "Sharing, camera, microphone and location render together");
                 const microphone = findChild(indicators, "microphoneIndicator");
@@ -159,7 +159,7 @@ ShellRoot {
                 test.check(recording.activityColor.toString() === Theme.savingIndicator.toString() && recording.activityColor.toString() !== Theme.recordingIndicator.toString(), "Saving is neutral, not the recording colour");
             } else if (test.phase === 2) {
                 fixtureCapture.state = "countdown";
-                test.check(recording.label === "Starting in 3" && recording.iconName === "media-record-symbolic", "The countdown says what is counting, with an icon");
+                test.check(recording.label === "Starting in 3" && recording.iconName === "record-symbolic", "The countdown says what is counting, with an icon");
                 fixtureCapture.state = "idle";
                 fixturePrivacy.recording = true;
             } else if (test.phase === 3) {

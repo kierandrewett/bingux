@@ -45,10 +45,10 @@ pub(super) fn kind_name(kind: Kind) -> String {
 
 pub(super) fn kind_icon(kind: Kind) -> Icon {
     match kind {
-        Kind::Wifi => Icon::NetworkWirelessSignalExcellent,
-        Kind::Ethernet => Icon::NetworkWired,
-        Kind::Mobile => Icon::Network,
-        Kind::Vpn => Icon::NetworkVpn,
+        Kind::Wifi => Icon::Wifi,
+        Kind::Ethernet => Icon::Network,
+        Kind::Mobile => Icon::Wifi,
+        Kind::Vpn => Icon::Shield,
     }
 }
 
@@ -66,7 +66,10 @@ fn chart_title(period: Period) -> String {
 /// What the notes at the top say, if the recorder or the limit needs it.
 /// Warnings share one card; an error stands alone in its own colour.
 fn notices(snapshot: &Snapshot, scope: &UsageScope) -> Vec<Element> {
-    let warning = |row: Row| row.leading(Icon::DialogWarning).leading_tone(Tone::Warning);
+    let warning = |row: Row| {
+        row.leading(Icon::TriangleExclamation)
+            .leading_tone(Tone::Warning)
+    };
     let mut warnings: Vec<Element> = Vec::new();
     let mut notices = Vec::new();
     if !snapshot.live {

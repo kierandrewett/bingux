@@ -378,7 +378,7 @@ ShellPopup {
                     objectName: "openCalendarButton"
                     visible: root.popupWidth >= 240
                     Layout.fillWidth: false
-                    iconName: "x-office-calendar-symbolic"
+                    iconName: "calendar-symbolic"
                     label: "Open Calendar"
                     onClicked: {
                         if (!root.inlineMode)
@@ -462,13 +462,13 @@ ShellPopup {
                         }
                         IconButton {
                             objectName: "previousMonth"
-                            iconName: "go-previous-symbolic"
+                            iconName: "chevron-left-symbolic"
                             label: root.viewLevel === 0 ? "Previous month" : root.viewLevel === 1 ? "Previous year" : root.viewLevel === 2 ? "Previous decade" : "Previous century"
                             onClicked: root.shiftPeriod(-1)
                         }
                         IconButton {
                             objectName: "nextMonth"
-                            iconName: "go-next-symbolic"
+                            iconName: "chevron-right-symbolic"
                             label: root.viewLevel === 0 ? "Next month" : root.viewLevel === 1 ? "Next year" : root.viewLevel === 2 ? "Next decade" : "Next century"
                             onClicked: root.shiftPeriod(1)
                         }
@@ -739,7 +739,7 @@ ShellPopup {
                     opacity: root.agendaProgress
                     loading: eventSource.loading
                     tone: !eventSource.loading && eventSource.error ? "danger" : "neutral"
-                    iconName: eventSource.error ? "" : "x-office-calendar-symbolic"
+                    iconName: eventSource.error ? "" : "calendar-symbolic"
                     title: eventSource.loading ? "Loading events…" : eventSource.error ? "Could not load events" : eventSource.available ? "No events" : "No calendar connected"
                     detail: eventSource.loading ? "" : eventSource.error ? "Open Calendar to check your accounts." : eventSource.available ? "Nothing is scheduled for this day." : "Add an account or a calendar in your calendar app."
                     actionText: root.inlineMode && !eventSource.loading && (eventSource.error || !eventSource.available) ? "Open Calendar" : ""

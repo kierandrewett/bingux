@@ -64,7 +64,7 @@ impl Component for LayoutPane {
         let all_folded = rules.iter().all(|rule| folded.read().contains(rule));
 
         let summary = stat_tile(self.findings.len().to_string(), "Layout problems")
-            .icon(Icon::DialogWarning)
+            .icon(Icon::TriangleExclamation)
             .tone(Tone::Warning);
         let fold_all = {
             let rules = rules.clone();
@@ -153,12 +153,16 @@ fn rule_group(
         .map(|finding| finding_row(tokens, finding, nav))
         .collect();
     let chevron = icons::icon(
-        if open { Icon::PanDown } else { Icon::PanEnd },
+        if open {
+            Icon::ChevronDown
+        } else {
+            Icon::ChevronRight
+        },
         IconSize::Mark,
         Paint::Muted.color(tokens),
     );
     let header = row(rule.label())
-        .leading(Icon::DialogWarning)
+        .leading(Icon::TriangleExclamation)
         .leading_tone(Tone::Warning)
         .badge(findings.len().to_string())
         .subtitle(rule.why())
@@ -199,7 +203,7 @@ fn finding_row(tokens: &Tokens, finding: &Finding, nav: Nav) -> Element {
         format!("{} in {}", finding.target, finding.path)
     };
     let item = row(finding.what.clone())
-        .leading(Icon::DialogWarning)
+        .leading(Icon::TriangleExclamation)
         .leading_tone(Tone::Warning)
         .subtitle(format!("{place}\n{}", finding.rule.fix()))
         .navigates()

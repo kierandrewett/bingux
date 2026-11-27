@@ -145,7 +145,7 @@ pub(crate) fn bar(
             .tw(tokens, &[flex_row(), center(), px(S2), h(Dim::Control)])
             .on_press(move |_| on_more.call(()))
             .child(icons::icon(
-                Icon::GoNext,
+                Icon::ChevronRight,
                 IconSize::Control,
                 Paint::Muted.color(tokens),
             ))

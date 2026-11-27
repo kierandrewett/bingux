@@ -33,11 +33,11 @@ pub enum ArtworkKind {
 impl ArtworkKind {
     fn glyph(self) -> Icon {
         match self {
-            ArtworkKind::Album => Icon::MediaOptical,
-            ArtworkKind::Song => Icon::AudioXGeneric,
-            ArtworkKind::Artist => Icon::AvatarDefault,
-            ArtworkKind::Video => Icon::VideoGeneric,
-            ArtworkKind::Playlist => Icon::ViewListOrdered,
+            ArtworkKind::Album => Icon::Disc,
+            ArtworkKind::Song => Icon::FileAudio,
+            ArtworkKind::Artist => Icon::Person,
+            ArtworkKind::Video => Icon::VideoCamera,
+            ArtworkKind::Playlist => Icon::ListNumbers,
         }
     }
 }

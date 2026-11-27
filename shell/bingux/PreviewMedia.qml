@@ -144,7 +144,7 @@ Item {
                 anchors.centerIn: parent
                 visible: root.details !== null && root.details.kind === "audio"
                 implicitSize: 64
-                source: BinguxIcons.source("audio-x-generic-symbolic")
+                source: BinguxIcons.source("file-audio-symbolic")
                 color: Theme.muted
             }
             TapHandler {
@@ -280,7 +280,7 @@ Item {
                 id: muteButton
                 visible: !root.animation
                 text: sound.muted ? "Unmute" : "Mute"
-                iconName: sound.muted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic"
+                iconName: sound.muted ? "speaker-cross-symbolic" : "speaker-wave-2-symbolic"
                 onClicked: {
                     sound.muted = !sound.muted;
                     root.wakeControls();

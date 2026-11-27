@@ -126,7 +126,7 @@ ShellRoot {
                         showText: true,
                         showIcon: true,
                         label: "A very long monitor label that must fit its container",
-                        icon: "computer-symbolic"
+                        icon: "laptop-symbolic"
                     };
                     const label = findChild(monitor, "widgetFaceLabel");
                     tryVerify(() => label.truncated, 1000, "Long presentation overrides use an ellipsis");

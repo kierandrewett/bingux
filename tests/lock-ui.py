@@ -137,7 +137,7 @@ def main():
                         "type": "osd",
                         "monitorIndex": 0,
                         "outputNames": ["HEADLESS-1"],
-                        "icon": "audio-volume-high-symbolic",
+                        "icon": "speaker-wave-2-symbolic",
                         "label": "Speakers",
                         "level": 0.55,
                         "maxLevel": 1.0,

@@ -153,7 +153,7 @@ impl Component for MonthGrid {
                         .child(EMPHASIS.label(&tokens, first.month_year()).max_lines(1)),
                 )
                 .child(
-                    icon_button(Icon::GoPrevious, move |_| {
+                    icon_button(Icon::ChevronLeft, move |_| {
                         if let Some(handler) = &back {
                             handler.call(-1);
                         }
@@ -161,7 +161,7 @@ impl Component for MonthGrid {
                     .tooltip(crate::tr!("ui-calendar-previous-month")),
                 )
                 .child(
-                    icon_button(Icon::GoNext, move |_| {
+                    icon_button(Icon::ChevronRight, move |_| {
                         if let Some(handler) = &forward {
                             handler.call(1);
                         }

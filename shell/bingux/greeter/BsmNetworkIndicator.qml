@@ -14,7 +14,7 @@ SessionGlass {
     // Only the output that takes input watches the network; the others run no process.
     property bool active: true
     property string state: ""
-    readonly property string iconName: state === "wired" ? "network-wired-symbolic" : state === "wifi" ? "network-wireless-symbolic" : "network-offline-symbolic"
+    readonly property string iconName: state === "wired" ? "network-symbolic" : state === "wifi" ? "wifi-symbolic" : "wifi-cross-symbolic"
     readonly property string description: state === "wired" ? "Network: wired, connected" : state === "wifi" ? "Network: Wi-Fi, connected" : "Network: not connected"
 
     implicitWidth: 32

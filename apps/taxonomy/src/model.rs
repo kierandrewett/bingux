@@ -65,14 +65,14 @@ impl Category {
     /// The sidebar glyph of every page in the section.
     pub fn icon(self) -> Icon {
         match self {
-            Category::Foundations => Icon::Appearance,
-            Category::Icons => Icon::Applications,
-            Category::Controls => Icon::PreferencesSystem,
-            Category::Containers => Icon::Display,
-            Category::Navigation => Icon::SidebarShow,
-            Category::Data => Icon::Computer,
+            Category::Foundations => Icon::Palette,
+            Category::Icons => Icon::DotsNine,
+            Category::Controls => Icon::Gear,
+            Category::Containers => Icon::Monitor,
+            Category::Navigation => Icon::WindowSidebar,
+            Category::Data => Icon::Laptop,
             Category::Files => Icon::Folder,
-            Category::Inspector => Icon::EmblemSystem,
+            Category::Inspector => Icon::Gear,
         }
     }
 }

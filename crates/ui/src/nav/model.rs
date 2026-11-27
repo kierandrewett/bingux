@@ -1249,7 +1249,7 @@ mod tests {
         let titles: Vec<_> = menu.iter().map(|item| item.title.as_str()).collect();
         assert_eq!(titles, ["Wi-Fi", "Network", "Settings"]);
         assert_eq!(menu.iter().map(|item| item.steps).collect::<Vec<_>>(), [1, 2, 3]);
-        assert_eq!(menu[1].icon, Some(Icon::Network));
+        assert_eq!(menu[1].icon, Some(Icon::Wifi));
         assert_eq!(model.title(model.current()), "Home (5 GHz)");
         // Choosing the second row is one pop of two entries.
         let change = changed(model.pop_to(menu[1].entry));

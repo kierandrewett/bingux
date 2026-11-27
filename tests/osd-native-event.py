@@ -103,7 +103,7 @@ def main():
                     "time": 123456,
                     "monitor_id": monitor_id,
                     "output_names": output_names,
-                    "icon": "dialog-information-symbolic",
+                    "icon": "dialog-information-symbolic",  # gsd's own name. rename.py: keep
                     "label": "Touchpad disabled",
                 }
                 while not stop.is_set():

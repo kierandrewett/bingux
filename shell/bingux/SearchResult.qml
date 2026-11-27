@@ -56,8 +56,8 @@ Item {
         if (themed)
             return themed;
         if (result.kind === "file")
-            return BinguxIcons.source(icon === "application-pdf" ? "application-pdf-symbolic" : "text-x-generic-symbolic");
-        return BinguxIcons.source(defaultIcon().replace(/-symbolic$/, "") + "-symbolic", "system-search-symbolic");
+            return BinguxIcons.source(icon === "application-pdf" ? "file-pdf-symbolic" : "file-text-symbolic");
+        return BinguxIcons.source(defaultIcon().replace(/-symbolic$/, "") + "-symbolic", "magnifier-symbolic");
     }
     readonly property string providerLabel: {
         const labels = {
@@ -253,14 +253,14 @@ Item {
         if (result.kind === "file")
             return "text-x-generic";
         if (result.kind === "calculation")
-            return "accessories-calculator";
+            return "calculator";
         if (result.kind === "weather")
-            return "weather-clear";
+            return "sun";
         if (result.kind === "chat")
-            return "help-browser-symbolic";
+            return "circle-question-symbolic";
         if (result.kind === "action")
-            return "system-run-symbolic";
-        return "system-search-symbolic";
+            return "circle-play-symbolic";
+        return "magnifier-symbolic";
     }
 
     Rectangle {
@@ -424,7 +424,7 @@ Item {
                 x: -24
             }
             implicitSize: 16
-            source: BinguxIcons.source("go-next-symbolic")
+            source: BinguxIcons.source("chevron-right-symbolic")
             color: Theme.muted
         }
 

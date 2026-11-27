@@ -479,7 +479,7 @@ mod tests {
         let out = sections(&places, &[], &[], &[], true);
         let trash = out[0].items.last().unwrap();
         assert_eq!(trash.label, "Trash");
-        assert_eq!(trash.icon.glyph, crate::icons::Icon::UserTrash);
+        assert_eq!(trash.icon.glyph, crate::icons::Icon::Trash);
         assert_eq!(
             trash.path(),
             Some(Path::new("/home/a/.local/share/Trash/files"))

@@ -399,7 +399,7 @@ impl Component for SplitButton {
                         ),
                 )
                 .child(icons::icon(
-                    Icon::PanDown,
+                    Icon::ChevronDown,
                     IconSize::Mark,
                     Paint::Text.color(&tokens),
                 ))
@@ -541,7 +541,7 @@ mod tests {
                     .expanded()
                     .tw(&tokens, &[p(S4)])
                     .child(crate::shell::OverlayHost::new(
-                        split_button(Icon::ViewList)
+                        split_button(Icon::ListBullets)
                             .tooltip("Switch view")
                             .menu(vec![crate::shell::menu_item("List", |_| {})]),
                     ))

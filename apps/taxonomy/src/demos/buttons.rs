@@ -62,7 +62,7 @@ pub const BUTTON: &[Spec] = &[
             with("Default", action_button("Action", |_| {}).compact()),
             with(
                 "Icon button",
-                icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"),
+                icon_button(Icon::ArrowCw, |_| {}).tooltip("Refresh"),
             ),
             with(
                 "Segmented",
@@ -85,30 +85,30 @@ pub const BUTTON: &[Spec] = &[
 
 pub const ICON_BUTTON: &[Spec] = &[
     Spec::live("Rest, hover, pressed", || {
-        icon_button(Icon::Refresh, |_| {})
+        icon_button(Icon::ArrowCw, |_| {})
             .tooltip("Refresh")
             .into_element()
     }),
     Spec::live("Danger", || {
-        icon_button(Icon::Delete, |_| {})
+        icon_button(Icon::Trash, |_| {})
             .tooltip("Delete")
             .danger()
             .into_element()
     }),
     Spec::live("Filled", || {
-        icon_button(Icon::ListAdd, |_| {})
+        icon_button(Icon::Plus, |_| {})
             .tooltip("Add")
             .filled()
             .into_element()
     }),
     Spec::forced("Active", || {
-        icon_button(Icon::Filter, |_| {})
+        icon_button(Icon::Funnel, |_| {})
             .tooltip("Filter")
             .active(true)
             .into_element()
     }),
     Spec::forced("Busy", || {
-        icon_button(Icon::Refresh, |_| {})
+        icon_button(Icon::ArrowCw, |_| {})
             .tooltip("Refreshing")
             .busy(true)
             .into_element()
@@ -117,8 +117,8 @@ pub const ICON_BUTTON: &[Spec] = &[
     // turns in, and back. The name follows the state, not the motion.
     Spec::live("Morph: Reload and Stop", || {
         let mut stopping = use_state(|| false);
-        icon_button(Icon::Refresh, move |_| stopping.set(!stopping()))
-            .morph(Icon::MediaPlaybackStop, stopping())
+        icon_button(Icon::ArrowCw, move |_| stopping.set(!stopping()))
+            .morph(Icon::Stop, stopping())
             .tooltip(if stopping() {
                 "Stop (Esc)"
             } else {
@@ -127,19 +127,19 @@ pub const ICON_BUTTON: &[Spec] = &[
             .into_element()
     }),
     Spec::forced("Morph, stopped", || {
-        icon_button(Icon::Refresh, |_| {})
-            .morph(Icon::MediaPlaybackStop, true)
+        icon_button(Icon::ArrowCw, |_| {})
+            .morph(Icon::Stop, true)
             .tooltip("Stop (Esc)")
             .into_element()
     }),
     Spec::forced("Working", || {
-        icon_button(Icon::FolderDownload, |_| {})
+        icon_button(Icon::FolderArrowDown, |_| {})
             .tooltip("Downloads: 1 running")
             .working(true)
             .into_element()
     }),
     Spec::forced("Disabled", || {
-        icon_button(Icon::OpenMenu, |_| {})
+        icon_button(Icon::LinesThree, |_| {})
             .enabled(false)
             .into_element()
     }),
@@ -157,9 +157,9 @@ pub const SPLIT_BUTTON: &[Spec] = &[
     Spec::live("Press the icon to switch, the chevron to pick", || {
         let mut view = use_state(|| "list");
         split_button(if view() == "list" {
-            Icon::ViewList
+            Icon::ListBullets
         } else {
-            Icon::ViewGrid
+            Icon::SquaresFour
         })
         .tooltip("Switch view")
         .menu_label("View options")
@@ -179,7 +179,7 @@ pub const SPLIT_BUTTON: &[Spec] = &[
             .into_element()
     }),
     Spec::forced("Disabled", || {
-        split_button(Icon::ViewList)
+        split_button(Icon::ListBullets)
             .tooltip("Switch view")
             .menu(vec![menu_item("List", |_| {})])
             .enabled(false)
@@ -189,9 +189,9 @@ pub const SPLIT_BUTTON: &[Spec] = &[
 
 pub const ACTION_STRIP: &[Spec] = &[Spec::live("Three actions, one disabled", || {
     action_strip(vec![
-        strip_action(Icon::Delete, "Forget", |_| {}).destructive(),
-        strip_action(Icon::WindowClose, "Disconnect", |_| {}),
-        strip_action(Icon::EmblemSystem, "Settings", |_| {}).enabled(false),
+        strip_action(Icon::Trash, "Forget", |_| {}).destructive(),
+        strip_action(Icon::Cross, "Disconnect", |_| {}),
+        strip_action(Icon::Gear, "Settings", |_| {}).enabled(false),
     ])
     .into_element()
 })];
@@ -391,7 +391,7 @@ pub const KEYPAD: &[Spec] = &[
             let mut edits = edits;
             edits.set(Some(FieldEdit::Backspace));
         })
-        .icon(Icon::EditClear)
+        .icon(Icon::CircleCross)
         .name("Delete the last digit")
         .tooltip("Delete (Backspace)")
         .tone(KeyTone::Plain);

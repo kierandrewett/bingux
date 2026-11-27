@@ -115,7 +115,7 @@ ColumnLayout {
             anchors.right: parent.right
             anchors.rightMargin: 4
             anchors.verticalCenter: parent.verticalCenter
-            iconName: "go-next-symbolic"
+            iconName: "chevron-right-symbolic"
             label: "Add task"
             enabled: input.text.trim().length > 0
             opacity: enabled ? 1 : 0
@@ -205,7 +205,7 @@ ColumnLayout {
                 anchors.right: parent.right
                 anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
-                iconName: "window-close-symbolic"
+                iconName: "cross-symbolic"
                 label: "Delete task"
                 enabled: rowHover.hovered || check.activeFocus || activeFocus
                 opacity: enabled ? 1 : 0
@@ -227,7 +227,7 @@ ColumnLayout {
         objectName: "sidebarTasksEmpty"
         visible: root.tasks.length === 0
         fill: true
-        iconName: "checkbox-checked-symbolic"
+        iconName: "square-check-symbolic"
         title: "No tasks"
         detail: "Add one above to start your list."
     }

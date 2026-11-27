@@ -579,7 +579,7 @@ impl Component for PopupFrame {
         let cancel = flags.contains(PopupFlags::CANCEL).then(|| {
             if sheet {
                 Element::from(
-                    icon_button(Icon::WindowClose, move |_: ()| window.close())
+                    icon_button(Icon::Cross, move |_: ()| window.close())
                         .tooltip(&crate::tr!("ui-dialog-close")),
                 )
             } else {

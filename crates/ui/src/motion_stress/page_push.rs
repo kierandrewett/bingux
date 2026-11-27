@@ -56,7 +56,7 @@ fn table() -> Arc<RouteTable> {
             .index("Motion", |_| rect().into())
             .root("network")
             .title("Network")
-            .icon(Icon::Network)
+            .icon(Icon::Wifi)
             .group("Connections")
             .page(|_| {
                 Marked {
@@ -67,7 +67,7 @@ fn table() -> Arc<RouteTable> {
             })
             .root("sound")
             .title("Sound")
-            .icon(Icon::Sound)
+            .icon(Icon::SpeakerWave2)
             .group("Hardware")
             .page(|_| {
                 Marked {

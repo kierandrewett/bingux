@@ -58,9 +58,9 @@ test("presentation preserves native defaults and supports container inheritance 
     assert.equal(face.label, "Time");
     assert.equal(face.showIcon, false);
     assert.equal(face.showText, true);
-    desktop.widgetOptions.clock = { display: "icons", icon: "starred-symbolic" };
+    desktop.widgetOptions.clock = { display: "icons", icon: "star-filled-symbolic" };
     face = layout.presentation(desktop, "clock", "dock", "12:30", "clock", false, true);
-    assert.equal(face.icon, "starred-symbolic");
+    assert.equal(face.icon, "star-filled-symbolic");
     assert.equal(face.showIcon, true);
     assert.equal(face.showText, false);
     desktop.widgetOptions.clock.display = "native";

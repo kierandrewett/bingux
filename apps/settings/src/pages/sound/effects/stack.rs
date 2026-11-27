@@ -33,12 +33,12 @@ pub(super) struct StackView {
 
 fn icon_of(kind: &str) -> Icon {
     match effects::find(kind).map(|effect| effect.category) {
-        Some(Category::Equalizer) => Icon::PreferencesOther,
-        Some(Category::Dynamics) => Icon::AudioVolumeMedium,
-        Some(Category::Space) => Icon::Speakers,
+        Some(Category::Equalizer) => Icon::Sliders,
+        Some(Category::Dynamics) => Icon::SpeakerWave1,
+        Some(Category::Space) => Icon::SpeakerBox,
         Some(Category::Enhance | Category::Stereo) => Icon::Headphones,
-        Some(Category::Pitch) => Icon::AudioInputMicrophone,
-        _ => Icon::Sound,
+        Some(Category::Pitch) => Icon::Microphone,
+        _ => Icon::SpeakerWave2,
     }
 }
 
@@ -76,7 +76,7 @@ impl Component for StackView {
                             });
                         }))
                         .child(
-                            icon_button(Icon::Delete, move |_| remove(fx, &delete_id))
+                            icon_button(Icon::Trash, move |_| remove(fx, &delete_id))
                                 .tooltip(&tr!("sound-effects-remove"))
                                 .danger(),
                         );
@@ -164,7 +164,7 @@ impl Component for StackView {
                     .child(caption(header))
                     .child(
                         action_button(&tr!("sound-effects-add-button"), move |_| picker::open(fx))
-                            .icon(Icon::ListAdd)
+                            .icon(Icon::Plus)
                             .compact(),
                     ),
             )

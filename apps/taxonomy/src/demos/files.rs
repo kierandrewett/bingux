@@ -46,11 +46,11 @@ const SAMPLES: &[(&str, &[u8])] = &[
     ),
     (
         "Documents/Photos/network.svg",
-        include_bytes!("../../../../crates/ui/icons/network-wireless-symbolic.svg"),
+        include_bytes!("../../../../crates/ui/icons/wifi-symbolic.svg"),
     ),
     (
         "Documents/Photos/sound.svg",
-        include_bytes!("../../../../crates/ui/icons/audio-volume-high-symbolic.svg"),
+        include_bytes!("../../../../crates/ui/icons/speaker-wave-2-symbolic.svg"),
     ),
     (
         "Documents/Photos/folder.svg",

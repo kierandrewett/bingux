@@ -793,19 +793,19 @@ fn warm_chrome(tokens: &Tokens, sidebar: &[Icon]) {
         icons::warm(icon, IconSize::Row, text);
         icons::warm(icon, IconSize::Row, muted);
     }
-    icons::warm(Icon::Search, IconSize::Row, muted);
+    icons::warm(Icon::Magnifier, IconSize::Row, muted);
     for icon in [
-        Icon::WindowMinimize,
-        Icon::WindowMaximize,
-        Icon::WindowRestore,
-        Icon::WindowClose,
-        Icon::GoPrevious,
-        Icon::GoNext,
+        Icon::Minus,
+        Icon::Square,
+        Icon::SquaresOverlapLeft,
+        Icon::Cross,
+        Icon::ChevronLeft,
+        Icon::ChevronRight,
     ] {
         icons::warm(icon, IconSize::Control, text);
     }
     icons::warm(
-        Icon::WindowClose,
+        Icon::Cross,
         IconSize::Control,
         Paint::OnDanger.color(tokens),
     );

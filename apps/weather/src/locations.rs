@@ -164,7 +164,7 @@ impl Component for PlaceRow {
             line = line.navigates();
         }
         if self.here {
-            line = line.leading(Icon::LocationArrow);
+            line = line.leading(Icon::Arrowhead);
         } else {
             line = line.context_menu(vec![menu_item(tr!("weather-remove"), {
                 let key = key.clone();
@@ -219,7 +219,7 @@ impl Component for Locations {
                 column = column.child(
                     Group::new(None::<String>).row(
                         row(tr!("weather-my-location"))
-                            .leading(Icon::LocationArrow)
+                            .leading(Icon::Arrowhead)
                             .subtitle(tr!("weather-locating")),
                     ),
                 );
@@ -228,7 +228,7 @@ impl Component for Locations {
                 column = column.child(
                     Group::new(None::<String>).row(
                         row(tr!("weather-my-location"))
-                            .leading(Icon::LocationArrow)
+                            .leading(Icon::Arrowhead)
                             .subtitle(why(code))
                             .badge(tr!("weather-try-again"))
                             .on_press(move |_| hub.locate_again()),
@@ -275,7 +275,7 @@ impl Component for Locations {
         column = column.child(
             Group::new(None::<String>).row(
                 row(tr!("weather-add-location"))
-                    .leading(Icon::ListAdd)
+                    .leading(Icon::Plus)
                     .on_press(move |_| add.call(())),
             ),
         );

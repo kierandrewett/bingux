@@ -230,7 +230,7 @@ pub fn list_rows(list: ListState, look: ListLook) -> Vec<Element> {
         .collect();
     rows.push(Element::from(
         row(look.add)
-            .leading(Icon::ListAdd)
+            .leading(Icon::Plus)
             .on_press(move |_| list.add()),
     ));
     rows
@@ -289,7 +289,7 @@ impl Component for EntryRow {
             .validate(self.look.check)
             .wide()
             .trailing(
-                icon_button(Icon::ListRemove, move |_| list.remove(id))
+                icon_button(Icon::Minus, move |_| list.remove(id))
                     .tooltip(bingux_ui::tr!("network-profile-list-remove")),
             );
         if self.look.monospace {

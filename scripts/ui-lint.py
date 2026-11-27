@@ -687,8 +687,10 @@ def loop_problems() -> list[str]:
 # ---------------------------------------------------------------------------------------------
 # The shell's icon names. The shell draws only Bingux icons: shell/bingux/icons, listed in
 # BinguxIconIndex.js (written by scripts/icons/build.py). Every name its QML, JavaScript and
-# Python asks for, and every name the daemons send it, is a file of that set, or is mapped to one
-# by BinguxIconAliases.js (the names other programs send). Nothing is left for the Adwaita theme.
+# Python asks for, and every name the daemons send it, is the shape name of a file of that set
+# (scripts/icons/aliases.tsv). An old or outside name (BinguxIconAliases.js, written from
+# aliases.tsv) is only for what other programs send: Bingux code asking for one is reported.
+# Nothing is left for the Adwaita theme.
 
 SHELL_DIR = "shell/bingux"
 SHELL_ICON_FILES = ("BinguxIconIndex.js", "BinguxIconAliases.js")
@@ -699,17 +701,27 @@ SOURCE_TOKEN = re.compile(r"\"(?:\\.|[^\"\\\n])*\"|'(?:\\.|[^'\\\n])*'|`(?:\\.|[
 
 # Names the shell makes from pieces, which no literal shows: the file, the text that builds
 # them (the check fails when it moves, so the list cannot go stale) and the names it makes.
-_POWER_PROFILES = [f"power-profile-{profile}-symbolic" for profile in ("power-saver", "balanced", "performance")]
+_POWER_PROFILES = [f"{shape}-symbolic" for shape in ("leaf", "gauge", "bolt")]
+_BATTERY_LEVELS = [f"battery-{level}{bolt}-symbolic" for level in range(0, 101, 10) for bolt in ("", "-bolt")]
 SHELL_ICONS_DYNAMIC = (
     (
         "ControlCentreDetails.qml",
-        '"network-wireless-signal-" + (',
-        [f"network-wireless-signal-{level}-symbolic" for level in ("excellent", "good", "ok", "weak")],
+        '(modelData.signal > 50 ? "wifi" : modelData.signal > 25 ? "wifi-2" : "wifi-1") + "-symbolic"',
+        ["wifi-symbolic", "wifi-2-symbolic", "wifi-1-symbolic"],
     ),
-    ("ControlCentreExtras.qml", '"power-profile-" + modelData + "-symbolic"', _POWER_PROFILES),
-    ("SystemIndicators.qml", '"power-profile-" + profile + "-symbolic"', _POWER_PROFILES),
-    ("SearchResult.qml", 'return "weather-clear";', ["weather-clear-symbolic"]),
-    ("SearchResult.qml", 'return "accessories-calculator";', ["accessories-calculator-symbolic"]),
+    (
+        "ControlCentreExtras.qml",
+        '}[modelData] || "gauge") + "-symbolic"',
+        _POWER_PROFILES,
+    ),
+    (
+        "SystemIndicators.qml",
+        '}[profile] || "gauge") + "-symbolic"',
+        _POWER_PROFILES,
+    ),
+    ("SystemIndicators.qml", '"battery-" + level + (', _BATTERY_LEVELS),
+    ("SearchResult.qml", 'return "sun";', ["sun-symbolic"]),
+    ("SearchResult.qml", 'return "calculator";', ["calculator-symbolic"]),
 )
 
 
@@ -739,11 +751,16 @@ def shell_icon_problems(root: Path = ROOT, dynamic=SHELL_ICONS_DYNAMIC) -> list[
         if target not in names:
             found.append(f"{SHELL_DIR}/BinguxIconAliases.js maps {name} to {target}, which is not a Bingux icon")
 
-    def check_name(where: str, name: str) -> None:
+    def check_name(where: str, name: str, outside: bool = False) -> None:
         if (aliases.get(name) or name) not in names:
             found.append(
                 f"{where}: asks for the icon {name}, which the Bingux icon set does not have; "
                 "draw it (scripts/icons/labels.tsv) or use one it has"
+            )
+        elif name in aliases and not outside:
+            found.append(
+                f"{where}: asks for the icon {name}, an old or outside name; ask for its shape name "
+                f"{aliases[name]} (scripts/icons/aliases.tsv)"
             )
 
     files = [
@@ -782,12 +799,12 @@ def shell_icon_problems(root: Path = ROOT, dynamic=SHELL_ICONS_DYNAMIC) -> list[
             )
         else:
             for device in re.findall(r'"([^"]+)"', body.group(1)):
-                check_name(f"{SHELL_DIR}/ControlCentreModel.js (bluetoothIcon)", device + "-symbolic")
+                check_name(f"{SHELL_DIR}/ControlCentreModel.js (bluetoothIcon)", device + "-symbolic", outside=True)
     return found
 
 
 def shell_icon_self_test() -> list[str]:
-    """The check on a small tree: a name the set lacks must fail, a name it has or maps must pass."""
+    """The check on a small tree: a name the set lacks, or an alias, must fail; a shape name must pass."""
     import tempfile
 
     failures = []
@@ -795,20 +812,22 @@ def shell_icon_self_test() -> list[str]:
         root = Path(directory)
         shell = root / SHELL_DIR
         (shell / "icons").mkdir(parents=True)
-        (shell / "icons" / "go-next-symbolic.svg").write_text("<svg/>")
-        (shell / "BinguxIconIndex.js").write_text('var names = {\n    "go-next-symbolic": true,\n};\n')
+        (shell / "icons" / "chevron-right-symbolic.svg").write_text("<svg/>")
+        (shell / "BinguxIconIndex.js").write_text('var names = {\n    "chevron-right-symbolic": true,\n};\n')
         (shell / "BinguxIconAliases.js").write_text(
-            'var names = {\n    "go-forward-symbolic": "go-next-symbolic",\n};\n'
+            'var names = {\n    "go-forward-symbolic": "chevron-right-symbolic",\n};\n'
         )
         (shell / "Row.qml").write_text(
-            'Item {\n    // "commented-symbolic" is prose\n    source: BinguxIcons.source("go-next-symbolic")\n'
-            '    other: BinguxIcons.source("go-forward-symbolic")\n}\n'
+            'Item {\n    // "commented-symbolic" is prose\n    source: BinguxIcons.source("chevron-right-symbolic")\n}\n'
         )
         if shell_icon_problems(root, dynamic=()):
             failures.append(
-                "a tree whose names the set has or maps was reported: "
+                "a tree that asks for shape names only was reported: "
                 + "; ".join(shell_icon_problems(root, dynamic=()))
             )
+        (shell / "Row.qml").write_text('Item { source: BinguxIcons.source("go-forward-symbolic") }\n')
+        if not any("go-forward-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
+            failures.append("a QML file that asks for the alias go-forward-symbolic was not reported")
         (shell / "Row.qml").write_text('Item { source: BinguxIcons.source("bogus-icon-symbolic") }\n')
         if not any("bogus-icon-symbolic" in problem for problem in shell_icon_problems(root, dynamic=())):
             failures.append("a QML file that asks for bogus-icon-symbolic was not reported")
@@ -832,7 +851,7 @@ def main() -> int:
             print(f"ui-lint --self-test: {failure}")
         if not failures:
             print(
-                "ui-lint --self-test: the shell icon check fails on a name the Bingux set lacks; "
+                "ui-lint --self-test: the shell icon check fails on a name the Bingux set lacks or an alias; "
                 "the literal text check fails on every planted literal, plural and hand-written unit"
             )
         return 1 if failures else 0
@@ -876,7 +895,7 @@ def main() -> int:
         return 1
     print(
         "ui-lint: every box is styled with tokens, every window starts through Application::run, "
-        "every app says who it is and the shell asks for no icon the Bingux set lacks."
+        "every app says who it is and the shell asks for every icon by a shape name the Bingux set has."
     )
     return 0
 

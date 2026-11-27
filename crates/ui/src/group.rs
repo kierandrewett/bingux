@@ -578,17 +578,17 @@ impl Component for StatusBlock {
             Status::Empty(text) => (
                 text.clone(),
                 Ink::Muted,
-                Some((Icon::DialogInformation, Ink::Muted)),
+                Some((Icon::CircleInfo, Ink::Muted)),
             ),
             Status::Error(text) => (
                 text.clone(),
                 Ink::Danger,
-                Some((Icon::DialogError, Ink::Danger)),
+                Some((Icon::CircleCross, Ink::Danger)),
             ),
             Status::Info(text) => (
                 text.clone(),
                 Ink::Text,
-                Some((Icon::DialogInformation, Ink::Accent)),
+                Some((Icon::CircleInfo, Ink::Accent)),
             ),
         };
         // Only an error is tinted; it is a danger layer over the card.

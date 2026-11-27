@@ -548,7 +548,7 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
     if index > 0 {
         let model = data.clone();
         actions = actions.child(
-            icon_button(Icon::PanUp, move |_| {
+            icon_button(Icon::ChevronUp, move |_| {
                 apply(ctx, &model, |store| move_rule(store, index, Step::Up));
             })
             .tooltip(&tr!("settings-privacy-move-up")),
@@ -557,7 +557,7 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
     if index < last {
         let model = data.clone();
         actions = actions.child(
-            icon_button(Icon::PanDown, move |_| {
+            icon_button(Icon::ChevronDown, move |_| {
                 apply(ctx, &model, |store| move_rule(store, index, Step::Down));
             })
             .tooltip(&tr!("settings-privacy-move-down")),
@@ -573,7 +573,7 @@ fn rule_row(data: &Model, index: usize, ctx: Ctx) -> Row {
     );
     let model = data.clone();
     actions = actions.child(
-        icon_button(Icon::Delete, move |_| confirm_delete(ctx, &model, index))
+        icon_button(Icon::Trash, move |_| confirm_delete(ctx, &model, index))
             .tooltip(&tr!("settings-privacy-delete-rule")),
     );
     row(rule.name.clone())

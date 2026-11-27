@@ -1976,7 +1976,7 @@ impl Component for TabStrip {
                         button_area.set_if_modified(event.area);
                     })
                     .child(
-                        icon_button(Icon::PanDown, move |_| {
+                        icon_button(Icon::ChevronDown, move |_| {
                             if let Some(overlays) = overlays {
                                 overlays.show_menu_from(
                                     None,
@@ -1997,7 +1997,7 @@ impl Component for TabStrip {
         if let Some(on_new) = self.on_new.clone() {
             let rapid = rapid.clone();
             buttons.push(
-                icon_button(Icon::ListAdd, move |_: ()| {
+                icon_button(Icon::Plus, move |_: ()| {
                     rapid.borrow_mut().reset();
                     on_new.call(());
                 })
@@ -2325,7 +2325,7 @@ impl Component for Tab {
             Some(TabStatus::Loading) => Some(spinner(SpinnerSize::Small).into()),
             Some(TabStatus::Failed) => Some(
                 icons::icon(
-                    Icon::DialogError,
+                    Icon::CircleCross,
                     IconSize::Control,
                     Ink::Danger.color(&tokens),
                 )
@@ -2608,7 +2608,7 @@ impl Component for CloseTab {
         // button is for the pointer and for touch.
         slot.maybe(self.alpha < 1.0, |slot| slot.opacity(self.alpha))
             .child(
-                icon_button(Icon::WindowClose, move |_| on_close.call(id))
+                icon_button(Icon::Cross, move |_| on_close.call(id))
                     .size(size)
                     .glyph(glyph)
                     .radius(Radius::Pill)
@@ -2641,9 +2641,9 @@ impl Component for StatusMark {
         let tokens = use_tokens();
         let id = self.id;
         let icon = if self.muted {
-            Icon::AudioVolumeMuted
+            Icon::SpeakerCross
         } else {
-            Icon::AudioVolumeMedium
+            Icon::SpeakerWave1
         };
         // A press on the speaker is the speaker's: it must not select the tab or
         // begin dragging it.

@@ -107,7 +107,7 @@ AbstractButton {
             anchors.rightMargin: 10
             anchors.verticalCenter: parent.verticalCenter
             implicitSize: 12
-            source: BinguxIcons.source("object-select-symbolic")
+            source: BinguxIcons.source("check-symbolic")
             color: "#ffffff"
         }
     }

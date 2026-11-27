@@ -86,7 +86,7 @@ fn one(nodes: &[Node], role: Role) -> &Node {
 fn a_button_is_named_by_its_text_and_says_it_once() {
     let nodes = nodes(|| {
         action_button("Save Changes", |_| {})
-            .icon(Icon::Search)
+            .icon(Icon::Magnifier)
             .into()
     });
     let button = one(&nodes, Role::Button);

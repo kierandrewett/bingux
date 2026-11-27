@@ -875,13 +875,13 @@ mod tests {
     fn maps_osd_monitor_id_to_current_index_and_drops_unresolved_requests() {
         let monitors = parse_monitor_snapshot(&json!({"monitors":[{"id":"DP-1", "index":2}]}));
         let request = osd_request_from_event(
-            &json!({"monitor_id":"DP-1", "output_names":["DP-1"], "icon":"audio-volume-high-symbolic", "label":"Volume"}),
+            &json!({"monitor_id":"DP-1", "output_names":["DP-1"], "icon":"speaker-wave-2-symbolic", "label":"Volume"}),
             &monitors,
         )
         .unwrap();
         assert_eq!(
             bingux_statusd::osd_json(&request).unwrap(),
-            "{\"protocolVersion\":2,\"type\":\"osd\",\"monitorIndex\":2,\"outputNames\":[\"DP-1\"],\"icon\":\"audio-volume-high-symbolic\",\"label\":\"Volume\",\"level\":-1.0,\"maxLevel\":-1.0}\n"
+            "{\"protocolVersion\":2,\"type\":\"osd\",\"monitorIndex\":2,\"outputNames\":[\"DP-1\"],\"icon\":\"speaker-wave-2-symbolic\",\"label\":\"Volume\",\"level\":-1.0,\"maxLevel\":-1.0}\n"
         );
         assert!(osd_request_from_event(&json!({"monitor_id":"HDMI-1"}), &monitors).is_none());
     }

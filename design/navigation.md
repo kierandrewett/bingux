@@ -87,7 +87,7 @@ canonicalise, percent coding) are 200 lines with round-trip tests.
 ```rust
 RouteTable::new("bingux-settings")
     .index("Settings", |_| sidebar_list())                       // scheme://  (compact: the list)
-    .root("network").title("Network").icon(Icon::Network)        // sidebar page
+    .root("network").title("Network").icon(Icon::Wifi)        // sidebar page
         .group("Network & devices").keywords("wifi ethernet vpn").page(|_| network::page())
     .route("network/wifi").title("Wi-Fi").page(|_| wifi())
     .route("network/wifi/network/:ssid").title_param("ssid").page(|p| wifi_network(p.str("ssid")))

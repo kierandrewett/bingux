@@ -129,8 +129,9 @@ pub fn header_bar(
     let title = title_of(&model);
 
     let previous =
-        icon_button(Icon::GoPrevious, move |_| model.step(-1)).tooltip(&tr!("calendar-previous"));
-    let next = icon_button(Icon::GoNext, move |_| model.step(1)).tooltip(&tr!("calendar-next"));
+        icon_button(Icon::ChevronLeft, move |_| model.step(-1)).tooltip(&tr!("calendar-previous"));
+    let next =
+        icon_button(Icon::ChevronRight, move |_| model.step(1)).tooltip(&tr!("calendar-next"));
     let today = action_button(tr!("calendar-today"), move |_| model.today());
     let views = view_switcher(
         VIEWS
@@ -152,7 +153,7 @@ pub fn header_bar(
         let _ = (today, search_id);
         bar = bar
             .leading(
-                icon_button(Icon::SidebarShow, move |_| {
+                icon_button(Icon::WindowSidebar, move |_| {
                     window.open(
                         popup(tr!("calendar-calendars"), Sidebar { model }).width(Dim::PopupNarrow),
                     );
@@ -170,7 +171,7 @@ pub fn header_bar(
         );
     }
     bar.trailing(
-        icon_button(Icon::ListAdd, move |_| {
+        icon_button(Icon::Plus, move |_| {
             editor::new_event(model, window, overlays)
         })
         .tooltip(&tr!("calendar-new-event"))
@@ -181,7 +182,7 @@ pub fn header_bar(
             tr!("calendar-main-menu"),
             main_menu(model, window, overlays, tokens),
         )
-        .icon(Icon::OpenMenu),
+        .icon(Icon::LinesThree),
     )
     .trailing(WindowControls)
 }

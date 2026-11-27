@@ -148,7 +148,7 @@ has mode `0700`, and the socket has mode `0600`.
     "type": "osd",
     "monitorIndex": 0,
     "outputNames": ["DP-1"],
-    "icon": "audio-volume-high-symbolic",
+    "icon": "speaker-wave-2-symbolic",
     "label": "Volume",
     "level": 0.75,
     "maxLevel": 1

@@ -18,7 +18,7 @@ Item {
     property real wheelStep: 0.05
     signal devicesRequested(var trigger)
     readonly property bool available: node !== null && node.ready && node.audio !== null
-    readonly property string muteIconName: available && node.audio.muted ? (label === "Microphone" ? "audio-input-microphone-muted-symbolic" : "audio-volume-muted-symbolic") : iconName
+    readonly property string muteIconName: available && node.audio.muted ? (label === "Microphone" ? "microphone-slash-symbolic" : "speaker-cross-symbolic") : iconName
     Layout.fillWidth: true
     implicitWidth: audioRow.implicitWidth
     implicitHeight: audioRow.implicitHeight
@@ -128,7 +128,7 @@ Item {
             implicitHeight: level.barLayout ? Theme.barHeight : 32
             visible: level.navigation
             tooltipEnabled: level.barLayout
-            iconName: "go-next-symbolic"
+            iconName: "chevron-right-symbolic"
             label: level.label === "Microphone" ? "Input devices" : "Output devices"
             onClicked: level.devicesRequested(this)
         }

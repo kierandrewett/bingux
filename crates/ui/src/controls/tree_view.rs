@@ -741,7 +741,7 @@ impl Component for TreeRow {
             },
             tokens.motion(MOVE_MS),
         );
-        let chevron = (self.row.branch != Branch::Leaf).then_some(Icon::PanEnd);
+        let chevron = (self.row.branch != Branch::Leaf).then_some(Icon::ChevronRight);
         let mut toggle_slot = rect().component("TreeChevron").tw(
             &tokens,
             &[

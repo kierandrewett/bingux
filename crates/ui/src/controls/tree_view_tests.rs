@@ -52,7 +52,7 @@ fn five_levels() -> Vec<TreeNode> {
     vec![
         TreeNode::new(1, "Window")
             .detail("1100 x 820")
-            .icon(Icon::Computer)
+            .icon(Icon::Laptop)
             .badge("root", Paint::Accent)
             .children(vec![
                 TreeNode::new(2, "Column").children(vec![

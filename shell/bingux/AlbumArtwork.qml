@@ -53,7 +53,7 @@ Item {
     SymbolicIcon {
         anchors.centerIn: parent
         visible: root.status !== Image.Ready && !fade.running
-        source: BinguxIcons.source("audio-x-generic-symbolic")
+        source: BinguxIcons.source("file-audio-symbolic")
     }
     ParallelAnimation {
         id: fade

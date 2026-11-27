@@ -41,7 +41,7 @@ fn function(calc: &Calc, label: &str, name: &'static str, text: &'static str) ->
 fn delete_key(calc: &Calc) -> KeypadKey {
     let calc = calc.clone();
     keypad_key(tr!("calculator-key-delete"), move |_: ()| calc.backspace())
-        .icon(Icon::EditClear)
+        .icon(Icon::CircleCross)
         .name(tr!("calculator-key-delete.a11y"))
         .tooltip(tr!("calculator-key-delete.tooltip"))
         .tone(KeyTone::Plain)

@@ -76,19 +76,19 @@ ScrollView {
                         Layout.alignment: Qt.AlignHCenter
                         spacing: 2
                         IconButton {
-                            iconName: MediaMatch.prefersSeeking(entry.player) ? "media-seek-backward-symbolic" : "media-skip-backward-symbolic"
+                            iconName: MediaMatch.prefersSeeking(entry.player) ? "rewind-symbolic" : "skip-back-symbolic"
                             label: MediaMatch.prefersSeeking(entry.player) ? "Back 10 seconds" : "Previous track"
                             enabled: MediaMatch.canStep(entry.player, -1)
                             onClicked: MediaMatch.step(entry.player, -1)
                         }
                         IconButton {
-                            iconName: entry.player && entry.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
+                            iconName: entry.player && entry.player.isPlaying ? "pause-symbolic" : "play-symbolic"
                             label: "Play or pause"
                             enabled: !!entry.player && entry.player.canControl && (entry.player.isPlaying ? entry.player.canPause : entry.player.canPlay)
                             onClicked: entry.player.isPlaying ? entry.player.pause() : entry.player.play()
                         }
                         IconButton {
-                            iconName: MediaMatch.prefersSeeking(entry.player) ? "media-seek-forward-symbolic" : "media-skip-forward-symbolic"
+                            iconName: MediaMatch.prefersSeeking(entry.player) ? "fast-forward-symbolic" : "skip-forward-symbolic"
                             label: MediaMatch.prefersSeeking(entry.player) ? "Forward 10 seconds" : "Next track"
                             enabled: MediaMatch.canStep(entry.player, 1)
                             onClicked: MediaMatch.step(entry.player, 1)
@@ -102,7 +102,7 @@ ScrollView {
             visible: root.players.length === 0
             fill: true
             Layout.preferredHeight: Math.max(implicitHeight, root.availableHeight)
-            iconName: "applications-multimedia-symbolic"
+            iconName: "music-notes-symbolic"
             title: "Nothing is playing"
             detail: "Play music or a video in an app to control it here."
         }

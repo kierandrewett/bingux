@@ -76,7 +76,7 @@ impl Component for SettingsBody {
                 .subtitle(shown)
                 .leading(Icon::Folder)
                 .trailing(
-                    icon_button(Icon::ListRemove, move |_| {
+                    icon_button(Icon::Minus, move |_| {
                         let removed = removed.clone();
                         change(Box::new(move |settings| {
                             if bingux_media::library::default_folders().contains(&removed) {
@@ -92,13 +92,11 @@ impl Component for SettingsBody {
                 ),
             );
         }
-        library = library.row(
-            row(text::menu_add_folder())
-                .leading(Icon::ListAdd)
-                .on_press(move |_| {
-                    add_folder(window);
-                }),
-        );
+        library = library.row(row(text::menu_add_folder()).leading(Icon::Plus).on_press(
+            move |_| {
+                add_folder(window);
+            },
+        ));
 
         let levelling_options = vec![
             ("off".to_owned(), text::levelling_off()),

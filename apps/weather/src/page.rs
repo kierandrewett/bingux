@@ -82,12 +82,10 @@ impl Component for Page {
             }
             Load::Failed(failure) => {
                 let page = match failure {
-                    Failure::Offline => {
-                        status_page(Icon::NetworkOffline, tr!("weather-no-connection"))
-                            .description(tr!("weather-offline-description"))
-                    }
+                    Failure::Offline => status_page(Icon::WifiCross, tr!("weather-no-connection"))
+                        .description(tr!("weather-offline-description")),
                     Failure::Service => {
-                        status_page(Icon::NetworkError, tr!("weather-service-title"))
+                        status_page(Icon::NetworkCross, tr!("weather-service-title"))
                             .description(tr!("weather-service-description"))
                     }
                 };

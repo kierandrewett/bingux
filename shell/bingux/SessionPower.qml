@@ -22,30 +22,30 @@ ColumnLayout {
     readonly property var switchUserAction: ({
             id: "switch-user",
             title: "Switch User",
-            icon: "system-switch-user-symbolic"
+            icon: "person-arrows-symbolic"
         })
     readonly property var baseActions: [
         {
             id: "suspend",
             title: "Suspend",
-            icon: "weather-clear-night-symbolic"
+            icon: "moon-symbolic"
         },
         {
             id: "logout",
             title: "Log Out",
-            icon: "system-log-out-symbolic",
+            icon: "bracket-arrow-right-symbolic",
             destructive: true
         },
         {
             id: "reboot",
             title: "Restart",
-            icon: "system-reboot-symbolic",
+            icon: "arrow-cw-symbolic",
             destructive: true
         },
         {
             id: "poweroff",
             title: "Shut Down",
-            icon: "system-shutdown-symbolic",
+            icon: "power-symbolic",
             destructive: true
         }
     ]
@@ -252,7 +252,7 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.pending !== ""
         title: "Cancel"
-        iconName: "window-close-symbolic"
+        iconName: "cross-symbolic"
         onClicked: root.cancel()
     }
     StateMessage {

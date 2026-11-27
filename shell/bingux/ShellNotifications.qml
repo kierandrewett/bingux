@@ -7,7 +7,7 @@ QtObject {
         const payload = Object.assign({
             title: title,
             body: body,
-            icon: "dialog-error-symbolic"
+            icon: "circle-cross-symbolic"
         }, options || {});
         Quickshell.execDetached([Python.python, Python.helper("shell_notify.py"), JSON.stringify(payload)]);
     }

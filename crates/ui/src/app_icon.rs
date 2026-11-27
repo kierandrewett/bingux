@@ -473,7 +473,7 @@ impl Component for AppIcon {
                     ],
                 )
                 .child(icons::icon(
-                    Icon::Application,
+                    Icon::Cube,
                     if self.size == IconSize::AppLarge {
                         IconSize::Hero
                     } else {

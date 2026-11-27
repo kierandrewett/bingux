@@ -225,7 +225,7 @@ fn list(
         .children(items.iter().enumerate().map(|(index, item)| {
             let marker: Element = match (item.task, start) {
                 (Some(true), _) => icons::icon(
-                    Icon::CheckboxChecked,
+                    Icon::SquareCheck,
                     IconSize::Control,
                     Paint::Accent.color(tokens),
                 )

@@ -24,26 +24,22 @@ use preview::desktop_preview;
 
 /// Control Centre tiles: the camelCase key in `dump`, its label and its icon.
 const TILES: [(&str, fn() -> String, Icon); 5] = [
-    ("vpn", || tr!("settings-desktop-tile-vpn"), Icon::NetworkVpn),
-    (
-        "dnd",
-        || tr!("settings-desktop-tile-dnd"),
-        Icon::NotificationsDisabled,
-    ),
+    ("vpn", || tr!("settings-desktop-tile-vpn"), Icon::Shield),
+    ("dnd", || tr!("settings-desktop-tile-dnd"), Icon::BellSlash),
     (
         "nightLight",
         || tr!("settings-desktop-tile-night-light"),
-        Icon::NightLight,
+        Icon::MoonStars,
     ),
     (
         "power",
         || tr!("settings-desktop-tile-power-mode"),
-        Icon::PowerProfileBalanced,
+        Icon::Gauge,
     ),
     (
         "awake",
         || tr!("settings-desktop-tile-keep-awake"),
-        Icon::ChangesPrevent,
+        Icon::CoffeeCup,
     ),
 ];
 /// What the shell shows when `controlCentre` is absent (`ControlCentreServices.qml`).
@@ -316,7 +312,7 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
                 public_ip,
                 move |on: bool| write(ctx, Change::Set("privacy.public_ip_lookup", on.to_string())),
             )
-            .leading(Icon::ViewConceal),
+            .leading(Icon::EyeSlash),
         )
         .row(
             switch_row(
@@ -330,7 +326,7 @@ fn privacy_group(ctx: Ctx, public_ip: bool, personal_images: bool, gnome: Option
                 },
             )
             .subtitle(&tr!("settings-desktop-picture-and-wallpaper"))
-            .leading(Icon::AvatarDefault),
+            .leading(Icon::Person),
         );
     if let Some(gnome) = gnome {
         let days = gnome.recent_max_age;

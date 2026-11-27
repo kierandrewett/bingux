@@ -72,21 +72,21 @@ impl Component for PhoneMenu {
             self.tile(
                 window,
                 tr!("browser-command-forward-title"),
-                Icon::GoNext,
+                Icon::ChevronRight,
                 read.can_forward,
                 |ctx| ctx.run(Command::Forward),
             ),
             self.tile(
                 window,
                 tr!("browser-main-menu-share-copy-link"),
-                Icon::InsertLink,
+                Icon::Link,
                 read.is_web,
                 move |ctx| MainMenu::copy_link(ctx, &url),
             ),
             self.tile(
                 window,
                 tr!("browser-phone-menu-find"),
-                Icon::Search,
+                Icon::Magnifier,
                 true,
                 |ctx| ctx.run(Command::Find),
             ),
@@ -101,7 +101,7 @@ impl Component for PhoneMenu {
             );
         let downloads = {
             let line = row(tr!("browser-command-downloads-title"))
-                .leading(Icon::FolderDownload)
+                .leading(Icon::FolderArrowDown)
                 .on_press(move |_: ()| {
                     window.close();
                     ctx.run(Command::Downloads);
@@ -119,7 +119,7 @@ impl Component for PhoneMenu {
         let rows = vec![
             downloads.into(),
             row(tr!("browser-command-settings-title"))
-                .leading(Icon::PreferencesSystem)
+                .leading(Icon::Gear)
                 .navigates()
                 .on_press(move |_: ()| {
                     window.close();

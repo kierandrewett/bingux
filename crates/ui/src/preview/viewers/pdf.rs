@@ -192,23 +192,25 @@ impl Component for DocumentControls {
         };
         let zoom_out = {
             let on_action = on_action.clone();
-            icon_button(Icon::ZoomOut, move |_| {
+            icon_button(Icon::MagnifierMinus, move |_| {
                 on_action.call(DocumentAction::ZoomOut)
             })
             .tooltip(&crate::tr!("ui-preview-zoom-out-tooltip"))
         };
         let zoom_in = {
             let on_action = on_action.clone();
-            icon_button(Icon::ZoomIn, move |_| {
+            icon_button(Icon::MagnifierPlus, move |_| {
                 on_action.call(DocumentAction::ZoomIn)
             })
             .tooltip(&crate::tr!("ui-preview-zoom-in-tooltip"))
         };
         let find = {
             let on_action = on_action.clone();
-            icon_button(Icon::Search, move |_| on_action.call(DocumentAction::Find))
-                .active(state.find)
-                .tooltip(&crate::tr!("ui-preview-find-tooltip"))
+            icon_button(Icon::Magnifier, move |_| {
+                on_action.call(DocumentAction::Find)
+            })
+            .active(state.find)
+            .tooltip(&crate::tr!("ui-preview-find-tooltip"))
         };
         let of_pages = CAPTION
             .in_ink(Ink::Muted)
@@ -1052,19 +1054,19 @@ impl Component for Reading {
                     })
                 }
             });
-            let prev = icon_button(Icon::GoPrevious, {
+            let prev = icon_button(Icon::ChevronLeft, {
                 let step_hit = step_hit.clone();
                 move |_| step_hit(-1)
             })
             .tooltip(&crate::tr!("ui-preview-previous-match-tooltip"))
             .enabled(!state.hits.is_empty());
-            let next = icon_button(Icon::GoNext, {
+            let next = icon_button(Icon::ChevronRight, {
                 let step_hit = step_hit.clone();
                 move |_| step_hit(1)
             })
             .tooltip(&crate::tr!("ui-preview-next-match-tooltip"))
             .enabled(!state.hits.is_empty());
-            let close = icon_button(Icon::WindowClose, move |_| {
+            let close = icon_button(Icon::Cross, move |_| {
                 let mut find = find;
                 find.write().open = false;
             })

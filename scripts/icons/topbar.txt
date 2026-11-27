@@ -1,13 +1,13 @@
 # One pair per line: our icon file, then the Adwaita file it replaces in the top bar.
 # `sheets.py` draws both on 28 px bars (ours above) at 16 px, white on black and dark on light.
-view-app-grid-symbolic.svg
-network-wired-symbolic.svg
-network-wireless-signal-excellent-symbolic.svg
-preferences-system-notifications-symbolic.svg
-notifications-disabled-symbolic.svg
-audio-volume-high-symbolic.svg
-audio-volume-muted-symbolic.svg
-bluetooth-active-symbolic.svg
-battery-level-100-symbolic.svg
-battery-level-50-charging-symbolic.svg
-system-shutdown-symbolic.svg
+dots-nine-symbolic.svg view-app-grid-symbolic.svg
+network-symbolic.svg network-wired-symbolic.svg
+wifi-symbolic.svg network-wireless-signal-excellent-symbolic.svg
+bell-symbolic.svg preferences-system-notifications-symbolic.svg
+bell-slash-symbolic.svg notifications-disabled-symbolic.svg
+speaker-wave-2-symbolic.svg audio-volume-high-symbolic.svg
+speaker-cross-symbolic.svg audio-volume-muted-symbolic.svg
+bluetooth-symbolic.svg bluetooth-active-symbolic.svg
+battery-100-symbolic.svg battery-level-100-symbolic.svg
+battery-50-bolt-symbolic.svg battery-level-50-charging-symbolic.svg
+power-symbolic.svg system-shutdown-symbolic.svg

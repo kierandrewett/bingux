@@ -63,7 +63,7 @@ pub const TEXT_FIELD: &[Spec] = &[
     Spec::forced("Leading icon, clearable", || {
         let value = use_state(|| "wifi".to_string());
         text_field(value, |_| {})
-            .leading(Icon::Network)
+            .leading(Icon::Wifi)
             .clearable()
             .fill_width()
             .into_element()
@@ -240,7 +240,7 @@ pub const FORM_FIELD: &[Spec] = &[
                     .monospace()
                     .wide()
                     .validate(validate::ipv4_cidr)
-                    .trailing(icon_button(Icon::ListRemove, |_| {}).tooltip("Remove")),
+                    .trailing(icon_button(Icon::Minus, |_| {}).tooltip("Remove")),
             )
             .into_element()
     }),
@@ -394,7 +394,7 @@ pub const DROPDOWN: &[Spec] = &[
                 "b",
                 |_| {},
             )
-            .icons(vec![Icon::Network, Icon::Bluetooth, Icon::Sound]),
+            .icons(vec![Icon::Wifi, Icon::Bluetooth, Icon::SpeakerWave2]),
         )
     }),
     Spec::forced("Long option", || {
@@ -680,8 +680,8 @@ pub const TABS: &[Spec] = &[
             tab_strip(
                 vec![
                     TabItem::new(1, "Home").icon(Icon::Folder),
-                    TabItem::new(2, "Computer").icon(Icon::Computer),
-                    TabItem::new(3, "Documents").icon(Icon::DocumentOpen),
+                    TabItem::new(2, "Computer").icon(Icon::Laptop),
+                    TabItem::new(3, "Documents").icon(Icon::FolderOpen),
                 ],
                 2,
             )
@@ -697,21 +697,21 @@ pub const TABS: &[Spec] = &[
                         .icon(Icon::Folder)
                         .pinned(true)
                         .status(TabStatus::Attention),
-                    TabItem::new(2, "Calendar").icon(Icon::Computer).pinned(true),
+                    TabItem::new(2, "Calendar").icon(Icon::Laptop).pinned(true),
                     TabItem::new(3, "Opening a page")
-                        .icon(Icon::DocumentOpen)
+                        .icon(Icon::FolderOpen)
                         .status(TabStatus::Loading),
                     TabItem::new(4, "Playing")
-                        .icon(Icon::DocumentOpen)
+                        .icon(Icon::FolderOpen)
                         .status(TabStatus::Audio),
                     TabItem::new(5, "Muted")
-                        .icon(Icon::DocumentOpen)
+                        .icon(Icon::FolderOpen)
                         .status(TabStatus::Muted),
                     TabItem::new(6, "Crashed")
-                        .icon(Icon::DocumentOpen)
+                        .icon(Icon::FolderOpen)
                         .status(TabStatus::Failed),
                     TabItem::new(7, "Needs you")
-                        .icon(Icon::DocumentOpen)
+                        .icon(Icon::FolderOpen)
                         .status(TabStatus::Attention),
                 ],
                 3,
@@ -762,7 +762,7 @@ pub const TABS: &[Spec] = &[
                     tab_strip(
                         vec![
                             TabItem::new(1, "Home").icon(Icon::Folder),
-                            TabItem::new(2, "Documents").icon(Icon::DocumentOpen),
+                            TabItem::new(2, "Documents").icon(Icon::FolderOpen),
                             TabItem::new(3, "Downloads").icon(Icon::Folder),
                         ],
                         2,

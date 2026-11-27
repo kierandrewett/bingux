@@ -54,7 +54,7 @@ impl Component for TabsSheet {
                             window.close();
                         })
                         .trailing(
-                            icon_button(Icon::WindowClose, move |_: ()| {
+                            icon_button(Icon::Cross, move |_: ()| {
                                 ctx.with(|browser| browser.close_tab(key))
                             })
                             .tooltip(&tr!("browser-tabs-close-tooltip")),

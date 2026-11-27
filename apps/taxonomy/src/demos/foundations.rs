@@ -515,7 +515,7 @@ pub const DENSITY: &[Spec] = &[
         ] {
             line = line.child(
                 vstack(S1)
-                    .child(icon(Icon::Network, size, Paint::Text.color(&tokens)))
+                    .child(icon(Icon::Wifi, size, Paint::Text.color(&tokens)))
                     .child(caption(format!("{name} {}", size.px()))),
             );
         }
@@ -685,8 +685,8 @@ pub const MOTION: &[Spec] = &[
             strip = strip.child(
                 vstack(S1)
                     .child(bingux_ui::motion::icon_morph(
-                        Icon::Refresh,
-                        Icon::MediaPlaybackStop,
+                        Icon::ArrowCw,
+                        Icon::Stop,
                         IconSize::Row,
                         Ink::Text.color(&tokens),
                         progress,

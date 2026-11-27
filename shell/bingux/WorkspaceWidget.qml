@@ -37,7 +37,7 @@ Item {
     readonly property var workspaces: preview ? sampleWorkspaces : WorkspaceState.workspaces
     readonly property var activeWorkspace: workspaces.find(workspace => workspace.active) || null
     readonly property string buttonLabel: activeWorkspace ? activeWorkspace.number + " · " + activeWorkspace.name : preview ? "1 · Code" : WorkspaceState.errorMessage ? "Workspaces unavailable" : WorkspaceState.connectionState === "connecting" || WorkspaceState.requestState === "workspace.list" ? "Loading workspaces…" : WorkspaceState.connectionState === "ready" ? "No workspaces" : "Workspaces unavailable"
-    readonly property var presentation: Object.assign(DesktopLayout.presentation(DesktopEditing.desktop, widgetId, DesktopLayout.placement(DesktopEditing.desktop, widgetId) || "top-right", buttonLabel, "view-grid-symbolic", true, true), {
+    readonly property var presentation: Object.assign(DesktopLayout.presentation(DesktopEditing.desktop, widgetId, DesktopLayout.placement(DesktopEditing.desktop, widgetId) || "top-right", buttonLabel, "squares-four-symbolic", true, true), {
         custom: true
     })
     implicitWidth: button.implicitWidth
@@ -48,7 +48,7 @@ Item {
     IconButton {
         id: button
         anchors.fill: parent
-        iconName: "view-grid-symbolic"
+        iconName: "squares-four-symbolic"
         label: root.buttonLabel
         tooltipText: root.activeWorkspace ? "Workspace " + root.activeWorkspace.number + ": " + root.activeWorkspace.name : root.buttonLabel
         barStyle: root.barStyle
@@ -87,7 +87,7 @@ Item {
                     ActionButton {
                         required property var modelData
                         text: modelData.number + "  " + modelData.name
-                        iconName: "view-grid-symbolic"
+                        iconName: "squares-four-symbolic"
                         flat: !modelData.active
                         alignLeft: true
                         Layout.fillWidth: true

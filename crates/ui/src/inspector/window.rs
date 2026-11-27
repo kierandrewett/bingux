@@ -235,7 +235,7 @@ fn elements(
     narrow: bool,
 ) -> Element {
     let Some(snap) = snap else {
-        return status_page(Icon::Inspect, "Waiting for an application window")
+        return status_page(Icon::CursorClick, "Waiting for an application window")
             .description(
                 "The tree appears as soon as the application has drawn. \
                  Open the inspector from an application with Ctrl+Alt+Shift+I.",
@@ -259,7 +259,7 @@ fn elements(
             window,
         }
         .into(),
-        _ => status_page(Icon::Inspect, "Select an element")
+        _ => status_page(Icon::CursorClick, "Select an element")
             .description(
                 "Pick a row in the tree, or press the inspect button and click the application.",
             )

@@ -80,7 +80,7 @@ impl Component for Probe {
             .on_global_pointer_up(move |_| pressing.set_if_modified(false))
             .child(label().text(self.name.to_string()))
             .maybe_child(self.chevron.map(|size| {
-                let glyph = icons::icon(Icon::PanDown, size, Paint::Muted.color(&tokens));
+                let glyph = icons::icon(Icon::ChevronDown, size, Paint::Muted.color(&tokens));
                 // Under the label, absolute, or after it in the row.
                 if self.under {
                     rect().position(Position::new_absolute().left(4.0).top(10.0)).child(glyph).into_element()
@@ -384,7 +384,7 @@ impl Component for Shared {
                 // layer is invisible.
                 .tw(&tokens, &[flex_col(), gap(S5), p(S5), bg(Paint::Bg)])
                 .child(action_button("Apply", |_| {}))
-                .child(icon_button(Icon::Search, |_| {}).tooltip("Search"))
+                .child(icon_button(Icon::Magnifier, |_| {}).tooltip("Search"))
                 .child(switch(on(), move |value| on.set(value)))
                 // Its hit area must not hide the pointer from it: hover and press still show.
                 .child(crate::shell::WindowControls)

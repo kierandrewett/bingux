@@ -194,7 +194,7 @@ impl SearchField {
             }
         })
         .search()
-        .leading(Icon::Search)
+        .leading(Icon::Magnifier)
         .clearable()
         .placeholder(self.placeholder.clone())
         .width(self.width)
@@ -779,7 +779,7 @@ mod tests {
                 }
                 // A text field given the search glyph, or the sidebar's old
                 // glyph column, is a search field built by hand.
-                if (code.contains(".leading(") && code.contains("Icon::Search"))
+                if (code.contains(".leading(") && code.contains("Icon::Magnifier"))
                     || code.contains("leading_column(")
                 {
                     found.push(format!("{}:{}: {code}", path.display(), number + 1));

@@ -32,7 +32,7 @@ ShellRoot {
                         rowInteractive: false
                         toggleVisible: true
                         title: "Do Not Disturb"
-                        iconName: "notifications-disabled-symbolic"
+                        iconName: "bell-slash-symbolic"
                     }
                     ControlRow {
                         tileLayout: true
@@ -41,7 +41,7 @@ ShellRoot {
                         toggleVisible: true
                         selected: true
                         title: "Night Light"
-                        iconName: "night-light-symbolic"
+                        iconName: "moon-stars-symbolic"
                     }
                 }
                 Text {

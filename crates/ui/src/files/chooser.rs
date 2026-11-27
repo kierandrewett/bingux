@@ -1275,7 +1275,7 @@ fn browser_commands(
         )
         .shortcut(back_key)
         .enabled(can_back)
-        .icon(Icon::GoPrevious)
+        .icon(Icon::ChevronLeft)
         .group(CommandGroup::Go)
         .section("history"),
         Command::new(
@@ -1285,7 +1285,7 @@ fn browser_commands(
         )
         .shortcut(forward_key)
         .enabled(can_forward)
-        .icon(Icon::GoNext)
+        .icon(Icon::ChevronRight)
         .group(CommandGroup::Go)
         .section("history"),
         Command::new(
@@ -1295,7 +1295,7 @@ fn browser_commands(
         )
         .shortcut("Alt+Up")
         .enabled(has_parent)
-        .icon(Icon::PanUp)
+        .icon(Icon::ChevronUp)
         .group(CommandGroup::Go)
         .section("places"),
         Command::new(
@@ -1304,7 +1304,7 @@ fn browser_commands(
             move |_| nav.go(Where::Folder(home.clone())),
         )
         .shortcut("Alt+Home")
-        .icon(Icon::UserHome)
+        .icon(Icon::House)
         .group(CommandGroup::Go)
         .section("places"),
         Command::new(
@@ -1328,7 +1328,7 @@ fn browser_commands(
             move |_| search.start_search(""),
         )
         .shortcut("Ctrl+F")
-        .icon(Icon::Search)
+        .icon(Icon::Magnifier)
         .group(CommandGroup::Edit)
         .section("find"),
         Command::new(
@@ -1367,7 +1367,7 @@ fn browser_commands(
         .shortcut("F5")
         .shortcut("Ctrl+R")
         .enabled(in_folder)
-        .icon(Icon::Refresh)
+        .icon(Icon::ArrowCw)
         .group(CommandGroup::View)
         .section("reload"),
     ]
@@ -1675,18 +1675,18 @@ fn toolbar_parts(
     .title(matches!(session.host, Host::Browser(_)) && is_compact());
 
     // A right click or a hold lists the places the button would take.
-    let back = icon_button(Icon::GoPrevious, move |_: ()| nav.back())
+    let back = icon_button(Icon::ChevronLeft, move |_: ()| nav.back())
         .size(Dim::Control)
         .tooltip(&crate::tr!("ui-files-chooser-back"))
         .enabled(can_go_back)
         .context_menu(back_items);
-    let forward = icon_button(Icon::GoNext, move |_: ()| nav.forward())
+    let forward = icon_button(Icon::ChevronRight, move |_: ()| nav.forward())
         .size(Dim::Control)
         .tooltip(&crate::tr!("ui-files-chooser-forward"))
         .enabled(can_go_forward)
         .context_menu(forward_items);
     let has_parent = super::history::parent(&current).is_some();
-    let parent = icon_button(Icon::PanUp, move |_: ()| nav.up())
+    let parent = icon_button(Icon::ChevronUp, move |_: ()| nav.up())
         .size(Dim::Control)
         .tooltip(&crate::tr!("ui-files-chooser-parent"))
         .enabled(has_parent);
@@ -1706,7 +1706,7 @@ fn toolbar_parts(
     } else {
         crate::tr!("ui-files-chooser-new-folder")
     };
-    let create = icon_button(Icon::FolderNew, move |_: ()| {
+    let create = icon_button(Icon::FolderPlus, move |_: ()| {
         let next = *new_folder.peek() + 1;
         new_folder.set(next);
     })
@@ -1717,7 +1717,7 @@ fn toolbar_parts(
         .then(|| try_consume_root_context::<super::actions::EmptyTrashRequest>())
         .flatten()
         .map(|request| {
-            icon_button(Icon::UserTrash, move |_: ()| {
+            icon_button(Icon::Trash, move |_: ()| {
                 super::actions::request_empty_trash(request)
             })
             .size(Dim::Control)
@@ -1744,7 +1744,7 @@ fn toolbar_parts(
                 reload.run()
             })
             .shortcut("F5")
-            .icon(Icon::Refresh),
+            .icon(Icon::ArrowCw),
         );
     }
     let view_tip = if use_grid {
@@ -1753,9 +1753,9 @@ fn toolbar_parts(
         crate::tr!("ui-files-chooser-show-grid")
     };
     let view = SplitButton::new(if use_grid {
-        Icon::ViewList
+        Icon::ListBullets
     } else {
-        Icon::ViewGrid
+        Icon::SquaresFour
     })
     .tooltip(&view_tip)
     .menu_label(&crate::tr!("ui-files-chooser-view-options"))
@@ -1777,14 +1777,14 @@ fn toolbar_parts(
     // person who does not know Ctrl+F finds it.
     let search_button = {
         let session = session.clone();
-        icon_button(Icon::Search, move |_: ()| session.start_search(""))
+        icon_button(Icon::Magnifier, move |_: ()| session.start_search(""))
             .size(Dim::Control)
             .tooltip(&crate::tr!("ui-files-chooser-search-tooltip"))
     };
 
     // The docked preview pane: it shows the selected file beside the list and
     // follows the selection. A phone has no room for it.
-    let pane = icon_button(Icon::SidebarShow, move |_: ()| {
+    let pane = icon_button(Icon::WindowSidebar, move |_: ()| {
         let shown = *preview_pane.peek();
         preview_pane.set(!shown);
     })
@@ -1802,7 +1802,7 @@ fn toolbar_parts(
                 new_folder.set(next);
             })
             .shortcut("Ctrl+Shift+N")
-            .icon(Icon::FolderNew),
+            .icon(Icon::FolderPlus),
         );
     }
     view_items_for_menu.push(
@@ -1826,9 +1826,9 @@ fn toolbar_parts(
             },
         )
         .icon(if use_grid {
-            Icon::ViewList
+            Icon::ListBullets
         } else {
-            Icon::ViewGrid
+            Icon::SquaresFour
         }),
     );
     view_items_for_menu.push(menu_separator());
@@ -1970,7 +1970,7 @@ fn browser_header(
             .title_slot(address)
             .trailing(parts.search)
             .trailing(
-                menu_button(crate::tr!("ui-files-chooser-main-menu"), items).icon(Icon::OpenMenu),
+                menu_button(crate::tr!("ui-files-chooser-main-menu"), items).icon(Icon::LinesThree),
             );
         return if controls {
             header.trailing(WindowControls)
@@ -1997,7 +1997,7 @@ fn browser_header(
     if !menu.is_empty() {
         header = header.trailing(gap_between()).trailing(
             menu_button(crate::tr!("ui-files-chooser-main-menu"), menu.to_vec())
-                .icon(Icon::OpenMenu),
+                .icon(Icon::LinesThree),
         );
     }
     if controls {

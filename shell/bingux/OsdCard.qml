@@ -27,30 +27,42 @@ Rectangle {
     // Retain the content until the close fade has finished.
     property var presentedRequest: null
     readonly property bool hasLevel: presentedRequest !== null && presentedRequest.maxLevel >= 0 && presentedRequest.level >= 0
-    readonly property bool unavailable: presentedRequest !== null && presentedRequest.icon === "action-unavailable-symbolic"
+    readonly property bool unavailable: presentedRequest !== null && shapeOf(presentedRequest) === "circle-slash"
     readonly property real maximum: presentedRequest && presentedRequest.maxLevel > 0 ? presentedRequest.maxLevel : 1
     readonly property real levelFraction: hasLevel ? Math.min(1, presentedRequest.level / maximum) : 0
     readonly property string percentLabel: hasLevel ? Math.round(Math.max(0, presentedRequest.level) * 100) + "%" : ""
 
+    // The shape name of the request's icon: statusd sends shape names, other programs (gnome-settings-daemon's
+    // on-screen display) send freedesktop names, which BinguxIcons maps to the shape names.
+    function shapeOf(request) {
+        return BinguxIcons.canonical(request.icon).replace(/-symbolic$/, "");
+    }
+
+    function mutedShape(shape) {
+        return shape === "speaker-cross" || shape === "microphone-slash";
+    }
+
     function labelFor(request) {
+        const shape = shapeOf(request);
         // An action the hardware cannot do says which one, in words.
-        if (request.icon === "action-unavailable-symbolic")
+        if (shape === "circle-slash")
             return request.label ? request.label + " unavailable" : "Action unavailable";
-        if (request.icon.startsWith("microphone-") || request.icon.startsWith("audio-input-"))
+        if (shape.startsWith("microphone"))
             return "Microphone";
-        if (request.icon.startsWith("audio-"))
+        if (shape.startsWith("speaker"))
             return "Volume";
-        if (request.icon.startsWith("display-brightness"))
+        if (shape === "sun")
             return "Brightness";
-        if (request.icon.startsWith("keyboard-brightness"))
+        if (shape === "keyboard")
             return "Keyboard brightness";
         return request.label || "System control";
     }
 
     function detailFor(request) {
-        if (request.icon === "action-unavailable-symbolic")
+        const shape = shapeOf(request);
+        if (shape === "circle-slash")
             return "";
-        if (request.icon.includes("muted"))
+        if (mutedShape(shape))
             return "Muted";
         return request.label !== labelFor(request) ? request.label : "";
     }
@@ -122,8 +134,8 @@ Rectangle {
                 SymbolicIcon {
                     anchors.centerIn: parent
                     implicitSize: Theme.osdIconSize
-                    color: card.unavailable || card.presentedRequest?.icon.includes("muted") ? card.inkMuted : card.accent
-                    source: BinguxIcons.source(card.presentedRequest ? card.presentedRequest.icon : "dialog-information-symbolic", "dialog-information-symbolic")
+                    color: card.unavailable || card.presentedRequest && card.mutedShape(card.shapeOf(card.presentedRequest)) ? card.inkMuted : card.accent
+                    source: BinguxIcons.source(card.presentedRequest ? card.presentedRequest.icon : "circle-info-symbolic", "circle-info-symbolic")
                 }
             }
             ColumnLayout {

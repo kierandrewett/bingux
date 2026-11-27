@@ -463,7 +463,7 @@ fn engine_candidate(
             icon: if engine.id == "duckduckgo" {
                 "duckduckgo"
             } else {
-                "web-browser-symbolic"
+                "globe-symbolic"
             }
             .to_owned(),
             score: 0.1,
@@ -484,7 +484,7 @@ fn quick_chat_candidate(query: &str) -> Option<Candidate> {
             kind: ResultKind::Chat,
             title: "Ask AI".to_owned(),
             subtitle: "Ask the configured assistant".to_owned(),
-            icon: "help-browser-symbolic".to_owned(),
+            icon: "circle-question-symbolic".to_owned(),
             score: 1.0,
         },
         desktop_id: None,
@@ -1378,7 +1378,7 @@ fn calculation_candidate(query: &str) -> Option<Candidate> {
             kind: ResultKind::Calculation,
             title: value.clone(),
             subtitle: query.trim().to_owned(),
-            icon: "accessories-calculator".to_owned(),
+            icon: "calculator".to_owned(),
             score: 1.0,
         },
         desktop_id: None,
@@ -2052,7 +2052,7 @@ fn conversion_candidate(query: &str) -> Option<Candidate> {
             kind: ResultKind::Calculation,
             title: text.clone(),
             subtitle: query.trim().into(),
-            icon: "accessories-calculator".into(),
+            icon: "calculator".into(),
             score: 1.0,
         },
         desktop_id: None,

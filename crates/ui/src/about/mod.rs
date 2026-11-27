@@ -108,7 +108,7 @@ impl Component for AppMenu {
         // The window's commands are read when the menu opens, so a title
         // such as "Undo rename" is the one that applies then.
         menu_button(crate::tr!("ui-main-menu"), Vec::new())
-            .icon(Icon::OpenMenu)
+            .icon(Icon::LinesThree)
             .items_on_open(move || main_menu(own.clone(), commands.main_menu_items(), overlays))
     }
 }

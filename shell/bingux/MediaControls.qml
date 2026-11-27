@@ -170,7 +170,7 @@ FocusScope {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             objectName: "mediaPreviousPlayer"
-            iconName: "go-previous-symbolic"
+            iconName: "chevron-left-symbolic"
             label: "Previous media player"
             onClicked: root.cyclePlayer(-1)
         }
@@ -214,7 +214,7 @@ FocusScope {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             objectName: "mediaNextPlayer"
-            iconName: "go-next-symbolic"
+            iconName: "chevron-right-symbolic"
             label: "Next media player"
             onClicked: root.cyclePlayer(1)
         }
@@ -496,7 +496,7 @@ FocusScope {
                 objectName: "mediaPrevious"
                 Layout.column: 1
                 text: root.seekButtons ? "Back 10 seconds" : "Previous track"
-                iconName: root.seekButtons ? "media-seek-backward-symbolic" : "media-skip-backward-symbolic"
+                iconName: root.seekButtons ? "rewind-symbolic" : "skip-back-symbolic"
                 direction: -1
                 enabled: MediaMatch.canStep(root.player, -1)
                 onClicked: if (enabled) {
@@ -511,7 +511,7 @@ FocusScope {
                 Layout.column: 2
                 focus: true
                 text: root.player && root.player.isPlaying ? "Pause" : "Play"
-                iconName: root.player && root.player.isPlaying ? "media-playback-pause-symbolic" : "media-playback-start-symbolic"
+                iconName: root.player && root.player.isPlaying ? "pause-symbolic" : "play-symbolic"
                 enabled: root.controllable && (root.player.isPlaying ? root.player.canPause : root.player.canPlay)
                 onClicked: {
                     if (!enabled)
@@ -530,7 +530,7 @@ FocusScope {
                 objectName: "mediaNext"
                 Layout.column: 3
                 text: root.seekButtons ? "Forward 10 seconds" : "Next track"
-                iconName: root.seekButtons ? "media-seek-forward-symbolic" : "media-skip-forward-symbolic"
+                iconName: root.seekButtons ? "fast-forward-symbolic" : "skip-forward-symbolic"
                 direction: 1
                 enabled: MediaMatch.canStep(root.player, 1)
                 onClicked: if (enabled) {

@@ -33,17 +33,17 @@ impl Component for Row {
         rect()
             .expanded()
             .horizontal()
-            .child(icon_button(Icon::Refresh, |_: ()| {
+            .child(icon_button(Icon::ArrowCw, |_: ()| {
                 PLAIN.fetch_add(1, Ordering::SeqCst);
             }))
             .child(
-                icon_button(Icon::Refresh, |_: ()| {
+                icon_button(Icon::ArrowCw, |_: ()| {
                     WORKING.fetch_add(1, Ordering::SeqCst);
                 })
                 .working(true),
             )
             .child(
-                icon_button(Icon::Refresh, |_: ()| {
+                icon_button(Icon::ArrowCw, |_: ()| {
                     BUSY.fetch_add(1, Ordering::SeqCst);
                 })
                 .busy(true),

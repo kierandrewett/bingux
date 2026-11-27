@@ -146,7 +146,7 @@ impl Component for Content {
         let hint = (model.is_empty() && !*model.hint_dismissed.read() && !searching).then(|| {
             banner(tr!("calendar-empty-hint"))
                 .title(tr!("calendar-empty-title"))
-                .icon(Icon::XOfficeCalendar)
+                .icon(Icon::Calendar)
                 .action(tr!("calendar-empty-add"), move |_| {
                     editor::new_event(model, window, overlays)
                 })
@@ -178,7 +178,7 @@ impl Component for Content {
                 .position(Position::new_absolute().top(0.0).left(0.0))
                 .tw(&tokens, &[w_full(), h_full(), center(), bg(Paint::Scrim)])
                 .child(
-                    status_page(Icon::DocumentOpen, tr!("calendar-drop-title"))
+                    status_page(Icon::FolderOpen, tr!("calendar-drop-title"))
                         .description(tr!("calendar-drop-description")),
                 )
         });

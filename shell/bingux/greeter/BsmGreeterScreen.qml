@@ -136,7 +136,7 @@ Item {
                 visible: root.interactive && root.model.canSwitchUser && !root.model.unlockMode
                 theme: authTheme
                 backdrop: screen.backdrop
-                iconName: "avatar-default-symbolic"
+                iconName: "person-symbolic"
                 text: "Switch user"
                 onClicked: picker.open = true
             },
@@ -145,7 +145,7 @@ Item {
                 visible: root.interactive && root.model.unlockMode && root.model.selectedUid !== root.model.unlockUid && root.model.unlockUser !== null && !root.model.signingIn
                 theme: authTheme
                 backdrop: screen.backdrop
-                iconName: "go-previous-symbolic"
+                iconName: "chevron-left-symbolic"
                 text: root.model.unlockUser !== null ? "Back to " + root.model.unlockUser.displayName : ""
                 onClicked: root.client.selectUser(root.model.unlockUid)
             }
@@ -162,7 +162,7 @@ Item {
                 visible: root.interactive && root.model.connected
                 theme: authTheme
                 backdrop: screen.backdrop
-                iconName: "system-shutdown-symbolic"
+                iconName: "power-symbolic"
                 Accessible.name: "Power options"
                 onClicked: power.open = !power.open
             }
@@ -233,7 +233,7 @@ Item {
                             SymbolicIcon {
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 12
-                                source: BinguxIcons.source("pan-up-symbolic")
+                                source: BinguxIcons.source("chevron-up-symbolic")
                                 color: authTheme.ink
                             }
                             Text {

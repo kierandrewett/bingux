@@ -27,7 +27,7 @@ Item {
         if (root.microphoneMuted)
             rows.push({
                 key: "microphone",
-                icon: "audio-input-microphone-muted-symbolic",
+                icon: "microphone-slash-symbolic",
                 active: true,
                 label: "Microphone muted"
             });
@@ -35,7 +35,7 @@ Item {
             const connected = service.vpns.filter(vpn => vpn.connected);
             rows.push({
                 key: "vpn",
-                icon: "network-vpn-symbolic",
+                icon: "shield-symbolic",
                 active: connected.length > 0,
                 label: "VPN: " + (connected.length ? connected.map(vpn => vpn.name + ", " + vpn.subtitle).join("; ") : "Disconnected")
             });
@@ -43,14 +43,14 @@ Item {
         if (service.showControl("dnd"))
             rows.push({
                 key: "dnd",
-                icon: "notifications-disabled-symbolic",
+                icon: "bell-slash-symbolic",
                 active: service.doNotDisturb,
                 label: "Do Not Disturb: " + (service.doNotDisturb ? "On" : "Off")
             });
         if (service.showControl("nightLight"))
             rows.push({
                 key: "nightLight",
-                icon: "night-light-symbolic",
+                icon: "moon-stars-symbolic",
                 active: !!state.nightLightActive,
                 label: "Night Light: " + (!state.nightLightAvailable ? "Unavailable" : state.nightLightActive ? "On" : state.nightLight ? "Scheduled" : "Off")
             });
@@ -59,7 +59,10 @@ Item {
             const profile = ["power-saver", "balanced", "performance"].includes(power.profile) ? power.profile : "balanced";
             rows.push({
                 key: "power",
-                icon: "power-profile-" + profile + "-symbolic",
+                icon: ({
+                        "power-saver": "leaf",
+                        "performance": "bolt"
+                    }[profile] || "gauge") + "-symbolic",
                 active: !!power.available,
                 label: "Power mode: " + (!power.available ? "Unavailable" : profile === "power-saver" ? "Power Saver" : profile === "performance" ? "Performance" : "Balanced")
             });
@@ -67,7 +70,7 @@ Item {
         if (service.showControl("awake") || service.keepAwake)
             rows.push({
                 key: "awake",
-                icon: "display-brightness-symbolic",
+                icon: "sun-symbolic",
                 active: service.keepAwake,
                 label: "Keep Awake: " + (service.keepAwake ? "On" : "Off")
             });
@@ -126,22 +129,22 @@ Item {
 
     function networkIconName() {
         if (networkState === "wifi") {
-            return "network-wireless-signal-excellent-symbolic";
+            return "wifi-symbolic";
         }
 
         if (networkState === "wired") {
-            return "network-wired-symbolic";
+            return "network-symbolic";
         }
 
         if (networkState === "vpn") {
-            return "network-vpn-symbolic";
+            return "shield-symbolic";
         }
 
         if (networkState === "network") {
-            return "network-transmit-receive-symbolic";
+            return "arrows-up-down-symbolic";
         }
 
-        return "network-offline-symbolic";
+        return "wifi-cross-symbolic";
     }
 
     function networkAccessibleName() {
@@ -203,18 +206,18 @@ Item {
 
     function audioIconName() {
         if (!audioAvailable || audioMuted || audioVolume <= 0.01) {
-            return "audio-volume-muted-symbolic";
+            return "speaker-cross-symbolic";
         }
 
         if (audioVolume < 0.34) {
-            return "audio-volume-low-symbolic";
+            return "speaker-symbolic";
         }
 
         if (audioVolume < 0.67) {
-            return "audio-volume-medium-symbolic";
+            return "speaker-wave-1-symbolic";
         }
 
-        return "audio-volume-high-symbolic";
+        return "speaker-wave-2-symbolic";
     }
 
     function audioAccessibleName() {
@@ -238,19 +241,19 @@ Item {
         return UPower.onBattery ? "Battery " + percentage + " percent, discharging" : "Battery " + percentage + " percent, charging";
     }
 
-    // The battery-level-N icon: the charge rounded to the nearest ten (the same rounding as Icon::battery_level in
+    // The battery-N icon: the charge rounded to the nearest ten (the same rounding as Icon::battery_level in
     // crates/ui), the bolt version while charging, the tick version when full and plugged in.
     function batteryIconName() {
         if (!laptopBatteryAvailable) {
-            return "battery-missing-symbolic";
+            return "battery-exclamation-symbolic";
         }
 
         if (battery.state === UPowerDeviceState.FullyCharged) {
-            return "battery-level-100-charged-symbolic";
+            return "battery-100-check-symbolic";
         }
 
         const level = Math.min(100, Math.round(Math.round(battery.percentage * 100) / 10) * 10);
-        return "battery-level-" + level + (battery.state === UPowerDeviceState.Charging ? "-charging" : "") + "-symbolic";
+        return "battery-" + level + (battery.state === UPowerDeviceState.Charging ? "-bolt" : "") + "-symbolic";
     }
 
     function changeVolume(delta) {
@@ -305,7 +308,7 @@ Item {
             slotSize: root.controlSize
             shown: root.bluetoothAdapter !== null && root.bluetoothAdapter.enabled
             available: SessionServices.permits("bluetooth")
-            iconName: "bluetooth-active-symbolic"
+            iconName: "bluetooth-symbolic"
             label: !available ? "Not available in this session" : root.connectedBluetoothDevices > 0 ? "Bluetooth, " + root.connectedBluetoothDevices + " connected" : "Bluetooth on"
         }
         Repeater {

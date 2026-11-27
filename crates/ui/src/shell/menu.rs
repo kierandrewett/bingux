@@ -759,7 +759,7 @@ impl Component for MenuRow {
         // A submenu's arrow, or the tick of an item that also has an icon (the tab
         // list: each tab's icon, the selected one ticked at the end of its row).
         let trailing: Option<Element> = if has_sub {
-            Some(icons::icon(Icon::PanEnd, IconSize::Control, text_color).into_element())
+            Some(icons::icon(Icon::ChevronRight, IconSize::Control, text_color).into_element())
         } else if ticked && self.item.icon.is_some() {
             Some(icons::icon(Icon::Check, IconSize::Control, text_color).into_element())
         } else {
@@ -1120,11 +1120,13 @@ impl Component for MenuButton {
                 self.icon
                     .map(|icon| icons::icon(icon, IconSize::Control, Ink::Text.color(&tokens))),
             )
-            .maybe_child(
-                self.icon.is_none().then(|| {
-                    icons::icon(Icon::PanDown, IconSize::Mark, Paint::Muted.color(&tokens))
-                }),
-            )
+            .maybe_child(self.icon.is_none().then(|| {
+                icons::icon(
+                    Icon::ChevronDown,
+                    IconSize::Mark,
+                    Paint::Muted.color(&tokens),
+                )
+            }))
             .focusable(focus())
             .into_element()
     }

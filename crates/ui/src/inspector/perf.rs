@@ -781,14 +781,14 @@ fn summary(tokens: &Tokens, stats: &Stats, narrow: bool) -> Element {
         stats.fps.map_or_else(none, |fps| format!("{fps:.0} fps")),
         "Frame rate",
     )
-    .icon(Icon::Display);
+    .icon(Icon::Monitor);
     let average = stat_tile(
         if has { ms(stats.average) } else { none() },
         "Average frame",
     )
     .icon(Icon::Clock);
     let mut worst = stat_tile(if has { ms(stats.worst) } else { none() }, "Worst frame")
-        .icon(Icon::DialogWarning);
+        .icon(Icon::TriangleExclamation);
     if stats.worst > 2.0 * BUDGET_MS {
         worst = worst.tone(Tone::Danger);
     } else if stats.worst > BUDGET_MS {
@@ -808,7 +808,7 @@ fn summary(tokens: &Tokens, stats: &Stats, narrow: bool) -> Element {
         format!("Over {BUDGET_MS:.1} ms"),
     );
     long = if stats.long > 0 {
-        long.icon(Icon::DialogError).tone(Tone::Danger)
+        long.icon(Icon::CircleCross).tone(Tone::Danger)
     } else {
         long.icon(Icon::Check).tone(Tone::Accent)
     };

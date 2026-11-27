@@ -140,9 +140,9 @@ pub const TABLE: &[Spec] = &[
             .marks()
             .selection(selection)
             .batch_actions(vec![
-                batch_action("Copy names", |_: Vec<u32>| {}).icon(Icon::EditCopy),
+                batch_action("Copy names", |_: Vec<u32>| {}).icon(Icon::SquaresOverlap),
                 batch_action("Uninstall", remove)
-                    .icon(Icon::Delete)
+                    .icon(Icon::Trash)
                     .destructive(),
             ])
             .row_menu(move |keys: &[u32]| {
@@ -199,7 +199,7 @@ pub const TABLE: &[Spec] = &[
         let columns = use_hook(app_columns);
         data_table(Vec::<AppRow>::new(), columns, |app: &AppRow| app.id)
             .empty_state(
-                status_page(Icon::Applications, "No apps installed")
+                status_page(Icon::DotsNine, "No apps installed")
                     .description("Apps you install appear here.")
                     .action("Open Software", |()| {}),
             )
@@ -260,7 +260,7 @@ pub const LIST: &[Spec] = &[
         let selection = use_state(|| Selection::of([3_u32, 4]));
         list_view(
             &rows,
-            |person: &Person| list_row(person.name.clone()).icon(Icon::Users).value(person.role),
+            |person: &Person| list_row(person.name.clone()).icon(Icon::People).value(person.role),
             |person: &Person| person.id,
         )
         .label("People")
@@ -280,7 +280,7 @@ pub const LIST: &[Spec] = &[
             |person: &Person| {
                 list_row(person.name.clone())
                     .subtitle(person.role)
-                    .icon(Icon::Users)
+                    .icon(Icon::People)
                     .chevron()
             },
             |person: &Person| person.id,
@@ -303,11 +303,11 @@ pub const LIST: &[Spec] = &[
             move |person: &Person| {
                 let id = person.id;
                 list_row(person.name.clone())
-                    .icon(Icon::Users)
+                    .icon(Icon::People)
                     .value(person.role)
                     .actions(vec![
-                        swipe_action("Archive", |()| {}).icon(Icon::DocumentOpen),
-                        swipe_action("Delete", move |()| remove(id)).icon(Icon::Delete).destructive(),
+                        swipe_action("Archive", |()| {}).icon(Icon::FolderOpen),
+                        swipe_action("Delete", move |()| remove(id)).icon(Icon::Trash).destructive(),
                     ])
             },
             |person: &Person| person.id,
@@ -320,7 +320,7 @@ pub const LIST: &[Spec] = &[
         let rows = use_state(|| Rc::new(people(6)));
         list_view(
             &rows.read().clone(),
-            |person: &Person| list_row(person.name.clone()).icon(Icon::Users).value(person.role),
+            |person: &Person| list_row(person.name.clone()).icon(Icon::People).value(person.role),
             |person: &Person| person.id,
         )
         .on_reorder(move |(from, to): (usize, usize)| {
@@ -337,7 +337,7 @@ pub const LIST: &[Spec] = &[
         let rows = use_hook(|| Rc::new(people(100_000)));
         list_view(
             &rows,
-            |person: &Person| list_row(person.name.clone()).icon(Icon::Users).value(person.role),
+            |person: &Person| list_row(person.name.clone()).icon(Icon::People).value(person.role),
             |person: &Person| person.id,
         )
         .selection_mode(SelectionMode::Multiple)
@@ -351,7 +351,7 @@ pub const LIST: &[Spec] = &[
             |person: &Person| person.id,
         )
         .empty_state(
-            status_page(Icon::Users, "No people yet")
+            status_page(Icon::People, "No people yet")
                 .description("People you add appear here.")
                 .action("Add Person", |()| {}),
         )
@@ -371,13 +371,13 @@ pub const TOOLBAR: &[Spec] = &[
                 .customizable()
                 .group(
                     toolbar_group(vec![
-                        toolbar_item("back", "Back", Icon::GoPrevious, |()| {}).leading(),
-                        toolbar_item("forward", "Forward", Icon::GoNext, |()| {}).leading(),
+                        toolbar_item("back", "Back", Icon::ChevronLeft, |()| {}).leading(),
+                        toolbar_item("forward", "Forward", Icon::ChevronRight, |()| {}).leading(),
                     ])
                     .linked(),
                 )
                 .group(toolbar_group(vec![
-                    toolbar_item("sidebar", "Sidebar", Icon::SidebarShow, move |()| {
+                    toolbar_item("sidebar", "Sidebar", Icon::WindowSidebar, move |()| {
                         let mut sidebar = sidebar;
                         sidebar.set(!sidebar());
                     })
@@ -385,19 +385,18 @@ pub const TOOLBAR: &[Spec] = &[
                     .leading(),
                 ]))
                 .group(toolbar_group(vec![
-                    toolbar_item("new", "New folder", Icon::ListAdd, |()| {})
-                        .shortcut("Ctrl+Shift+N"),
-                    toolbar_item("copy", "Copy", Icon::EditCopy, |()| {}).secondary(),
-                    toolbar_item("delete", "Move to Trash", Icon::Delete, |()| {}).secondary(),
+                    toolbar_item("new", "New folder", Icon::Plus, |()| {}).shortcut("Ctrl+Shift+N"),
+                    toolbar_item("copy", "Copy", Icon::SquaresOverlap, |()| {}).secondary(),
+                    toolbar_item("delete", "Move to Trash", Icon::Trash, |()| {}).secondary(),
                 ]))
                 .group(
                     toolbar_group(vec![
-                        toolbar_item("list", "List", Icon::ViewList, move |()| {
+                        toolbar_item("list", "List", Icon::ListBullets, move |()| {
                             let mut grid = grid;
                             grid.set(false);
                         })
                         .toggled(!grid()),
-                        toolbar_item("grid", "Grid", Icon::ViewGrid, move |()| {
+                        toolbar_item("grid", "Grid", Icon::SquaresFour, move |()| {
                             let mut grid = grid;
                             grid.set(true);
                         })
@@ -406,7 +405,7 @@ pub const TOOLBAR: &[Spec] = &[
                     .linked(),
                 )
                 .group(toolbar_group(vec![
-                    toolbar_item("open", "Open", Icon::DocumentOpen, |()| {}).prominent(),
+                    toolbar_item("open", "Open", Icon::FolderOpen, |()| {}).prominent(),
                 ]))
                 .into_element()
         },
@@ -420,15 +419,15 @@ pub const TOOLBAR: &[Spec] = &[
             .window_controls()
             .group(
                 toolbar_group(vec![
-                    toolbar_item("back", "Back", Icon::GoPrevious, |()| {}).leading(),
-                    toolbar_item("forward", "Forward", Icon::GoNext, |()| {}).leading(),
+                    toolbar_item("back", "Back", Icon::ChevronLeft, |()| {}).leading(),
+                    toolbar_item("forward", "Forward", Icon::ChevronRight, |()| {}).leading(),
                 ])
                 .linked(),
             )
             .group(toolbar_group(vec![
-                toolbar_item("add", "Add", Icon::ListAdd, |()| {}),
-                toolbar_item("share", "Copy", Icon::EditCopy, |()| {}).secondary(),
-                toolbar_item("trash", "Move to Trash", Icon::Delete, |()| {}).secondary(),
+                toolbar_item("add", "Add", Icon::Plus, |()| {}),
+                toolbar_item("share", "Copy", Icon::SquaresOverlap, |()| {}).secondary(),
+                toolbar_item("trash", "Move to Trash", Icon::Trash, |()| {}).secondary(),
             ]))
             .into_element()
     })
@@ -436,12 +435,12 @@ pub const TOOLBAR: &[Spec] = &[
     Spec::live("A linked button group on its own", || {
         let grid = use_state(|| false);
         button_group(vec![
-            group_button(Icon::ViewList, "List", move |()| {
+            group_button(Icon::ListBullets, "List", move |()| {
                 let mut grid = grid;
                 grid.set(false);
             })
             .active(!grid()),
-            group_button(Icon::ViewGrid, "Grid", move |()| {
+            group_button(Icon::SquaresFour, "Grid", move |()| {
                 let mut grid = grid;
                 grid.set(true);
             })

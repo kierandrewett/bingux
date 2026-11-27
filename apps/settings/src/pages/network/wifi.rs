@@ -461,11 +461,11 @@ fn shareable(saved: &Saved) -> bool {
 /// The icon for a signal strength, large.
 fn signal_icon(signal: u8) -> Icon {
     match nm::signal_level(signal) {
-        4 => Icon::NetworkWirelessSignalExcellent,
-        3 => Icon::NetworkWirelessSignalGood,
-        2 => Icon::NetworkWirelessSignalOk,
-        1 => Icon::NetworkWirelessSignalWeak,
-        _ => Icon::NetworkWirelessSignalNone,
+        4 => Icon::Wifi,
+        3 => Icon::Wifi,
+        2 => Icon::Wifi2,
+        1 => Icon::Wifi1,
+        _ => Icon::Wifi0,
     }
 }
 
@@ -504,15 +504,14 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
                 menu_item(tr!("network-wifi-disconnect"), move |_| {
                     ui.disconnect(uuid.clone())
                 })
-                .icon(Icon::WindowClose),
+                .icon(Icon::Cross),
             );
         }
         (true, None) => {}
         (false, _) => {
             let target = join_target(model, network);
             items.push(
-                menu_item(tr!("network-wifi-connect"), move |_| ui.join(&target))
-                    .icon(Icon::NetworkWirelessSignalExcellent),
+                menu_item(tr!("network-wifi-connect"), move |_| ui.join(&target)).icon(Icon::Wifi),
             );
         }
     }
@@ -530,7 +529,7 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
             menu_item(tr!("network-wifi-share-action"), move |_| {
                 ui.share(target.clone())
             })
-            .icon(Icon::SendTo),
+            .icon(Icon::SquareArrowUp),
         );
     }
     items.push(menu_separator());
@@ -541,7 +540,7 @@ fn network_menu(ui: Ui, model: &Model, network: &Network) -> Vec<MenuItem> {
                 .router
                 .open(routes::wifi_network(&key.clone(), false))
         })
-        .icon(Icon::PreferencesSystem),
+        .icon(Icon::Gear),
     );
     items
 }
@@ -557,7 +556,7 @@ fn saved_items(ui: Ui, saved: &Saved, leave: bool) -> Vec<MenuItem> {
             menu_item(tr!("network-wifi-copy-password"), move |_| {
                 ui.copy_password(&copy)
             })
-            .icon(Icon::EditCopy),
+            .icon(Icon::SquaresOverlap),
         );
     }
     if shareable(saved) {
@@ -566,7 +565,7 @@ fn saved_items(ui: Ui, saved: &Saved, leave: bool) -> Vec<MenuItem> {
             menu_item(tr!("network-wifi-share-action"), move |_| {
                 ui.share(target.clone())
             })
-            .icon(Icon::SendTo),
+            .icon(Icon::SquareArrowUp),
         );
     }
     let forget = saved.clone();
@@ -574,7 +573,7 @@ fn saved_items(ui: Ui, saved: &Saved, leave: bool) -> Vec<MenuItem> {
         menu_item(tr!("network-wifi-forget"), move |_| {
             ui.confirm_forget(&forget, leave)
         })
-        .icon(Icon::UserTrash)
+        .icon(Icon::Trash)
         .destructive(),
     );
     items
@@ -666,7 +665,7 @@ fn connected_block(ui: Ui, model: &Model) -> Option<Element> {
         Some(network) => {
             hero.leading_signal(nm::signal_level(network.signal), network.security.secured())
         }
-        None => hero.leading(Icon::NetworkWirelessSignalExcellent),
+        None => hero.leading(Icon::Wifi),
     };
     Some(Element::from(
         Group::titled(&tr!("network-wifi-connected-network")).row(hero),
@@ -910,7 +909,7 @@ impl Component for SavedNetworksPage {
                 };
                 menu.push(
                     menu_item(tr!("network-wifi-connect"), move |_| ui.join(&target))
-                        .icon(Icon::NetworkWirelessSignalExcellent),
+                        .icon(Icon::Wifi),
                 );
                 menu.push(menu_separator());
             }
@@ -1011,7 +1010,7 @@ impl Component for WifiNetworkPage {
         };
         let hero = model::hero(
             tokens,
-            network.map_or(Icon::NetworkWirelessSignalNone, |n| signal_icon(n.signal)),
+            network.map_or(Icon::Wifi0, |n| signal_icon(n.signal)),
             ssid.clone(),
             state,
         );
@@ -1020,15 +1019,11 @@ impl Component for WifiNetworkPage {
         if connected {
             let uuid = profile.map(|saved| saved.uuid.clone());
             actions.push(
-                strip_action(
-                    Icon::WindowClose,
-                    tr!("network-wifi-disconnect"),
-                    move |_| {
-                        if let Some(uuid) = &uuid {
-                            ui.disconnect(uuid.clone());
-                        }
-                    },
-                )
+                strip_action(Icon::Cross, tr!("network-wifi-disconnect"), move |_| {
+                    if let Some(uuid) = &uuid {
+                        ui.disconnect(uuid.clone());
+                    }
+                })
                 .enabled(profile.is_some()),
             );
         } else {
@@ -1042,15 +1037,11 @@ impl Component for WifiNetworkPage {
                 (None, None) => None,
             };
             actions.push(
-                strip_action(
-                    Icon::NetworkWirelessSignalExcellent,
-                    tr!("network-wifi-connect"),
-                    move |_| {
-                        if let Some(target) = &target {
-                            ui.join(target);
-                        }
-                    },
-                )
+                strip_action(Icon::Wifi, tr!("network-wifi-connect"), move |_| {
+                    if let Some(target) = &target {
+                        ui.join(target);
+                    }
+                })
                 .enabled(network.is_some() && radio == Radio::On && !connecting),
             );
         }
@@ -1065,7 +1056,7 @@ impl Component for WifiNetworkPage {
         };
         if let Some(target) = share_target {
             actions.push(strip_action(
-                Icon::SendTo,
+                Icon::SquareArrowUp,
                 tr!("network-wifi-share-action"),
                 move |_| ui.share(target.clone()),
             ));
@@ -1073,7 +1064,7 @@ impl Component for WifiNetworkPage {
         if let Some(saved) = profile {
             let forget = saved.clone();
             actions.push(
-                strip_action(Icon::UserTrash, tr!("network-wifi-forget"), move |_| {
+                strip_action(Icon::Trash, tr!("network-wifi-forget"), move |_| {
                     ui.confirm_forget(&forget, true)
                 })
                 .destructive(),
@@ -1225,8 +1216,8 @@ pub fn wifi_row(ctx: NetCtx, ov: &Overview, airplane: bool) -> Option<Element> {
         Some(network) if usable && on => {
             item.leading_signal(nm::signal_level(network.signal), network.security.secured())
         }
-        _ if usable && on => item.leading(Icon::Network),
-        _ => item.leading(Icon::NetworkWirelessDisabled),
+        _ if usable && on => item.leading(Icon::Wifi),
+        _ => item.leading(Icon::WifiSlash),
     };
     Some(Element::from(
         item.trailing(

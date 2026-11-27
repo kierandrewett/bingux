@@ -399,7 +399,8 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> TableRow<T, K> {
         cells.push(text.into_element());
         if self.activates && !pick {
             cells.push(
-                icons::icon(Icon::PanEnd, IconSize::Mark, Ink::Muted.color(tokens)).into_element(),
+                icons::icon(Icon::ChevronRight, IconSize::Mark, Ink::Muted.color(tokens))
+                    .into_element(),
             );
         }
         rect()

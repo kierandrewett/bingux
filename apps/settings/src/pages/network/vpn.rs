@@ -221,12 +221,12 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
         menu_item(tr!("network-vpn-disconnect"), move |_| {
             set_link(ctx, toggle_name.clone(), false)
         })
-        .icon(Icon::WindowClose)
+        .icon(Icon::Cross)
     } else {
         menu_item(tr!("network-vpn-connect"), move |_| {
             set_link(ctx, toggle_name.clone(), true)
         })
-        .icon(Icon::NetworkVpn)
+        .icon(Icon::Shield)
     };
     vec![
         toggle,
@@ -238,7 +238,7 @@ fn vpn_menu(ctx: NetCtx, name: &str, up: bool) -> Vec<MenuItem> {
         menu_item(tr!("network-vpn-delete"), move |_| {
             confirm_delete(ctx, delete.clone())
         })
-        .icon(Icon::UserTrash)
+        .icon(Icon::Trash)
         .destructive(),
     ]
 }
@@ -261,7 +261,7 @@ fn vpn_row(ctx: NetCtx, ov: &Overview, vpn: &Vpn) -> Element {
         .enabled(!needs_connection),
     ));
     let mut item = row(vpn.name.clone())
-        .leading(Icon::NetworkVpn)
+        .leading(Icon::Shield)
         .subtitle(if needs_connection {
             tr!("network-vpn-needs-connection")
         } else {
@@ -289,7 +289,7 @@ pub fn vpn_group(ctx: NetCtx, ov: &Overview) -> Element {
         .collect();
     rows.push(Element::from(
         row(tr!("network-vpn-add-row"))
-            .leading(Icon::ListAdd)
+            .leading(Icon::Plus)
             .navigates()
             .on_press(move |_| ctx.router.open(routes::add_vpn(None))),
     ));
@@ -411,7 +411,7 @@ impl Component for VpnPage {
                 return veiled(
                     page_column().child(model::hero(
                         tokens,
-                        Icon::NetworkVpn,
+                        Icon::Shield,
                         name.clone(),
                         "Loading…".to_string(),
                     )),
@@ -428,20 +428,20 @@ impl Component for VpnPage {
         let toggle = name.clone();
         if link.on() {
             actions.push(strip_action(
-                Icon::WindowClose,
+                Icon::Cross,
                 tr!("network-vpn-disconnect"),
                 move |_| set_link(ctx, toggle.clone(), false),
             ));
         } else {
             actions.push(strip_action(
-                Icon::NetworkVpn,
+                Icon::Shield,
                 tr!("network-vpn-connect"),
                 move |_| set_link(ctx, toggle.clone(), true),
             ));
         }
         let delete = name.clone();
         actions.push(strip_action(
-            Icon::UserTrash,
+            Icon::Trash,
             tr!("network-vpn-delete"),
             move |_| confirm_delete(ctx, delete.clone()),
         ));
@@ -487,12 +487,7 @@ impl Component for VpnPage {
 
         veiled(
             page_column()
-                .child(model::hero(
-                    tokens,
-                    Icon::NetworkVpn,
-                    name.clone(),
-                    link.line(),
-                ))
+                .child(model::hero(tokens, Icon::Shield, name.clone(), link.line()))
                 .child(action_strip(actions))
                 .child(info)
                 .child(ProfileSettings { owner }),

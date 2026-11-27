@@ -20,17 +20,17 @@ static SAMPLE: LazyLock<Arc<RouteTable>> = LazyLock::new(|| {
             .index("Sample", |_| rect().into())
             .root("network")
             .title("Network")
-            .icon(Icon::Network)
+            .icon(Icon::Wifi)
             .group("Connections")
             .page(|_| SamplePage { name: "Network" }.into())
             .root("sound")
             .title("Sound")
-            .icon(Icon::Sound)
+            .icon(Icon::SpeakerWave2)
             .group("Hardware")
             .page(|_| SamplePage { name: "Sound" }.into())
             .root("power")
             .title("Power")
-            .icon(Icon::Power)
+            .icon(Icon::Battery100)
             .group("Hardware")
             .page(|_| SamplePage { name: "Power" }.into())
             .route("network/saved")
@@ -96,7 +96,7 @@ impl Component for SampleWindow {
         }
         if self.tool {
             split =
-                split.header_trailing(icon_button(Icon::ViewMore, |_| {}).tooltip("View options"));
+                split.header_trailing(icon_button(Icon::DotsThree, |_| {}).tooltip("View options"));
         }
         if self.search {
             let results: Element = SearchSample { query }.into();
@@ -162,8 +162,8 @@ pub const HEADER_BAR: &[Spec] = &[
         "Title, leading and trailing controls, window buttons",
         || {
             HeaderBar::new("Taxonomy")
-                .leading(icon_button(Icon::GoPrevious, |_| {}).tooltip("Back"))
-                .trailing(icon_button(Icon::ViewMore, |_| {}).tooltip("More"))
+                .leading(icon_button(Icon::ChevronLeft, |_| {}).tooltip("Back"))
+                .trailing(icon_button(Icon::DotsThree, |_| {}).tooltip("More"))
                 .trailing(WindowControls)
                 .into_element()
         },
@@ -202,13 +202,13 @@ fn screen_specimen(footer: bool, immersive: bool) -> Element {
     let header = HeaderBar::new("Window")
         .switcher(view_switcher(
             vec![
-                view("a", "Songs").icon(Icon::FolderMusic),
-                view("b", "Albums").icon(Icon::ViewGrid),
+                view("a", "Songs").icon(Icon::FolderMusicNote),
+                view("b", "Albums").icon(Icon::SquaresFour),
             ],
             "a",
             |_| {},
         ))
-        .trailing(icon_button(Icon::OpenMenu, |_| {}).tooltip("Menu"))
+        .trailing(icon_button(Icon::LinesThree, |_| {}).tooltip("Menu"))
         .trailing(WindowControls);
     let label = |text: &str| {
         rect()
@@ -330,7 +330,7 @@ impl Component for SearchSample {
         }
         search_highlight::page_block(
             "Network",
-            Icon::Network,
+            Icon::Wifi,
             page_column().child(group).into_element(),
         )
     }

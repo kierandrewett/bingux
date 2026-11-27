@@ -36,7 +36,7 @@ impl Component for MainMenuButton {
     fn render(&self) -> impl IntoElement {
         let ctx = self.ctx;
         if is_compact() {
-            return icon_button(Icon::OpenMenu, move |_: ()| PhoneMenu::open(ctx))
+            return icon_button(Icon::LinesThree, move |_: ()| PhoneMenu::open(ctx))
                 .tooltip(tr!("ui-main-menu"))
                 .into_element();
         }
@@ -179,7 +179,7 @@ impl MainMenu {
             tr!("browser-main-menu-zoom"),
             vec![
                 menu_control(
-                    Icon::ZoomOut,
+                    Icon::MagnifierMinus,
                     tr!("browser-main-menu-zoom-out", keys = keys(Command::ZoomOut)),
                     move |_: ()| ctx.run(Command::ZoomOut),
                 )
@@ -201,13 +201,13 @@ impl MainMenu {
                 )
                 .enabled(on),
                 menu_control(
-                    Icon::ZoomIn,
+                    Icon::MagnifierPlus,
                     tr!("browser-main-menu-zoom-in", keys = keys(Command::ZoomIn)),
                     move |_: ()| ctx.run(Command::ZoomIn),
                 )
                 .enabled(on),
                 menu_control(
-                    Icon::ViewFullscreen,
+                    Icon::CornersOut,
                     tr!(
                         "browser-main-menu-fullscreen",
                         keys = keys(Command::Fullscreen)

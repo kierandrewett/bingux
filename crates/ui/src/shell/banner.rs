@@ -76,10 +76,10 @@ impl BannerKind {
     pub fn icon(self) -> Option<Icon> {
         match self {
             BannerKind::Neutral => None,
-            BannerKind::Info => Some(Icon::DialogInformation),
+            BannerKind::Info => Some(Icon::CircleInfo),
             BannerKind::Success => Some(Icon::Check),
-            BannerKind::Warning => Some(Icon::DialogWarning),
-            BannerKind::Error => Some(Icon::DialogError),
+            BannerKind::Warning => Some(Icon::TriangleExclamation),
+            BannerKind::Error => Some(Icon::CircleCross),
         }
     }
 }
@@ -320,7 +320,7 @@ impl Component for Banner {
             })
             .children(actions);
         let dismiss = self.on_dismiss.clone().map(|on_dismiss| {
-            let button = icon_button(Icon::WindowClose, move |_| on_dismiss.call(()))
+            let button = icon_button(Icon::Cross, move |_| on_dismiss.call(()))
                 .size(NOTICE_BUTTON)
                 .radius(button_radius)
                 .ink(ink)

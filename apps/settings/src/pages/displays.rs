@@ -1792,7 +1792,7 @@ impl Component for Tile {
                     .text_overflow(TextOverflow::Ellipsis),
             );
         if monitor.primary {
-            title = title.child(icon(Icon::Starred, IconSize::Mark, glyph.color(&tokens)));
+            title = title.child(icon(Icon::StarFilled, IconSize::Mark, glyph.color(&tokens)));
         }
         let details = typography::CAPTION
             .in_ink(ink)

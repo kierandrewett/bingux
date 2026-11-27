@@ -90,7 +90,7 @@ impl Component for ErrorsCard {
                 &[w_full(), flex_row(), items(Align::Center), gap(S3), px(GUTTER), py(S3)],
             )
             .child(icons::icon(
-                Icon::DialogError,
+                Icon::CircleCross,
                 IconSize::Row,
                 Ink::Danger.color(&tokens),
             ))

@@ -32,9 +32,9 @@ impl Component for Scene {
             rect()
                 .expanded()
                 .tw(&tokens, &[bg(Paint::Bg), p(S8), flex_row(), gap(S8)])
-                .child(icon_button(Icon::Refresh, |_| {}).tooltip(TIPS[0]))
-                .child(icon_button(Icon::PanUp, |_| {}).tooltip(TIPS[1]))
-                .child(icon_button(Icon::FolderNew, |_| {}).tooltip(TIPS[2])),
+                .child(icon_button(Icon::ArrowCw, |_| {}).tooltip(TIPS[0]))
+                .child(icon_button(Icon::ChevronUp, |_| {}).tooltip(TIPS[1]))
+                .child(icon_button(Icon::FolderPlus, |_| {}).tooltip(TIPS[2])),
         )
     }
 }

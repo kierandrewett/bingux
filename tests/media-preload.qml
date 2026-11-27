@@ -54,10 +54,10 @@ ShellRoot {
                 signalName: "positionChanged"
             }
             function test_preload() {
-                art.source = Qt.resolvedUrl("icons/format-code-symbolic.svg");
+                art.source = Qt.resolvedUrl("icons/brackets-angle-symbolic.svg");
                 tryCompare(art, "status", Image.Ready);
                 compare(art.front.opacity, 1);
-                art.source = Qt.resolvedUrl("icons/format-quote-symbolic.svg");
+                art.source = Qt.resolvedUrl("icons/quotes-symbolic.svg");
                 tryVerify(() => art.front.source.toString() === art.source && art.status === Image.Ready);
                 compare(art.front.opacity, 1);
                 positionSpy.clear();

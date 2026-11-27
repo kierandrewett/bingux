@@ -64,7 +64,7 @@ TrayMenu {
     function reportFailure(title, detail) {
         console.warn("bingux-desktop-menu: " + title + ": " + detail);
         ShellNotifications.send(title, detail, {
-            icon: "dialog-error-symbolic"
+            icon: "circle-cross-symbolic"
         });
         requestFailed(title + ". " + detail);
     }

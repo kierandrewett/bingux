@@ -444,12 +444,12 @@ Item {
                     }
                     PreviewButton {
                         objectName: "previewBackgroundToggle"
-                        iconName: body.lightBackground ? "weather-clear-night-symbolic" : "weather-clear-symbolic"
+                        iconName: body.lightBackground ? "moon-symbolic" : "sun-symbolic"
                         Accessible.name: body.lightBackground ? "Use dark background" : "Use light background"
                         onClicked: body.lightBackground = !body.lightBackground
                     }
                     PreviewButton {
-                        iconName: "zoom-out-symbolic"
+                        iconName: "magnifier-minus-symbolic"
                         Accessible.name: "Zoom out"
                         enabled: body.details !== null && body.zoom > 0.5
                         onClicked: body.setZoom(body.targetZoom / 1.25)
@@ -473,14 +473,14 @@ Item {
                     }
                     PreviewButton {
                         objectName: "previewZoomIn"
-                        iconName: "zoom-in-symbolic"
+                        iconName: "magnifier-plus-symbolic"
                         Accessible.name: "Zoom in"
                         enabled: body.details !== null && body.zoom < 4
                         onClicked: body.setZoom(body.targetZoom * 1.25)
                     }
                     PreviewButton {
                         objectName: "previewFit"
-                        iconName: "zoom-fit-best-symbolic"
+                        iconName: "frame-corners-symbolic"
                         Accessible.name: "Reset zoom (Ctrl+0)"
                         enabled: body.details !== null
                         onClicked: body.setZoom(1)
@@ -530,7 +530,7 @@ Item {
                             }
                             PreviewButton {
                                 objectName: "previewInformationToggle"
-                                iconName: "pan-down-symbolic"
+                                iconName: "chevron-down-symbolic"
                                 iconRotation: body.showInformation ? 180 : 0
                                 Accessible.name: body.showInformation ? "Hide information" : "Show information"
                                 onClicked: body.showInformation = !body.showInformation

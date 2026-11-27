@@ -66,7 +66,7 @@ impl Component for BackButton {
     fn render(&self) -> impl IntoElement {
         let router = use_router();
         let items = history_menu(router.back_menu(), move |entry| router.pop_to(entry));
-        icon_button(Icon::GoPrevious, move |_| router.back())
+        icon_button(Icon::ChevronLeft, move |_| router.back())
             .tooltip(&crate::tr!("ui-nav-back"))
             .context_menu(items)
     }
@@ -81,7 +81,7 @@ impl Component for ForwardButton {
     fn render(&self) -> impl IntoElement {
         let router = use_router();
         let items = history_menu(router.forward_menu(), move |entry| router.forward_to(entry));
-        let button: IconButton = icon_button(Icon::GoNext, move |_| router.forward())
+        let button: IconButton = icon_button(Icon::ChevronRight, move |_| router.forward())
             .tooltip(&crate::tr!("ui-nav-forward"))
             .enabled(router.can_forward())
             .context_menu(items);

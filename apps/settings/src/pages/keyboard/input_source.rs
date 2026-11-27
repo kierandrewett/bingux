@@ -66,19 +66,19 @@ impl Component for InputSourcePage {
         let actions = Group::titled(&tr!("settings-keyboard-actions"))
             .row(
                 row(tr!("settings-keyboard-move-up"))
-                    .leading(Icon::PanUp)
+                    .leading(Icon::ChevronUp)
                     .enabled(index > 0 && !busy_now)
                     .on_press(move |_| edits.run(Edit::MoveUp(index))),
             )
             .row(
                 row(tr!("settings-keyboard-move-down"))
-                    .leading(Icon::PanDown)
+                    .leading(Icon::ChevronDown)
                     .enabled(index + 1 < count && !busy_now)
                     .on_press(move |_| edits.run(Edit::MoveDown(index))),
             )
             .row(
                 row(tr!("settings-keyboard-remove"))
-                    .leading(Icon::Delete)
+                    .leading(Icon::Trash)
                     .destructive()
                     .enabled(count > 1 && !busy_now)
                     .on_press(move |_| edits.run(Edit::Remove(index))),

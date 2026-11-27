@@ -83,7 +83,7 @@ fn table() -> Arc<RouteTable> {
             .index("Scroll", |_| rect().into())
             .root("network")
             .title("Network")
-            .icon(Icon::Network)
+            .icon(Icon::Wifi)
             .group("Connections")
             .page(|_| {
                 Tall {

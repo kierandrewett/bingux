@@ -124,13 +124,13 @@ fn window_commands(
     vec![
         Command::new("file.open", text::menu_open(), move |_| open_files(window))
             .shortcut("Ctrl+O")
-            .icon(Icon::DocumentOpen)
+            .icon(Icon::FolderOpen)
             .group(CommandGroup::File)
             .keywords(bingux_ui::i18n::keywords(&tr!("media-menu-open.keywords"))),
         Command::new("file.add-folder", text::menu_add_folder(), move |_| {
             add_folder(window)
         })
-        .icon(Icon::FolderMusic)
+        .icon(Icon::FolderMusicNote)
         .group(CommandGroup::File)
         .keywords(bingux_ui::i18n::keywords(&tr!(
             "media-menu-add-folder.keywords"
@@ -138,7 +138,7 @@ fn window_commands(
         Command::new("file.update-library", text::menu_scan(), |_| {
             engine().scan()
         })
-        .icon(Icon::Refresh)
+        .icon(Icon::ArrowCw)
         .group(CommandGroup::File)
         .keywords(bingux_ui::i18n::keywords(&tr!("media-menu-scan.keywords"))),
         Command::new(
@@ -151,11 +151,7 @@ fn window_commands(
             |_| engine().player.toggle(),
         )
         .shortcut("Ctrl+Space")
-        .icon(if playing {
-            Icon::Pause
-        } else {
-            Icon::MediaPlaybackStart
-        })
+        .icon(if playing { Icon::Pause } else { Icon::Play })
         .enabled(has_item)
         .group(controls)
         .section("transport"),
@@ -163,7 +159,7 @@ fn window_commands(
             engine().player.next()
         })
         .shortcut("Ctrl+Right")
-        .icon(Icon::MediaSkipForward)
+        .icon(Icon::SkipForward)
         .enabled(can_next)
         .group(controls)
         .section("transport"),
@@ -171,7 +167,7 @@ fn window_commands(
             engine().player.previous()
         })
         .shortcut("Ctrl+Left")
-        .icon(Icon::MediaSkipBackward)
+        .icon(Icon::SkipBack)
         .enabled(has_item)
         .group(controls)
         .section("transport"),
@@ -179,7 +175,7 @@ fn window_commands(
             change_volume(5.0)
         })
         .shortcut("Ctrl+Up")
-        .icon(Icon::Sound)
+        .icon(Icon::SpeakerWave2)
         .group(controls)
         .section("volume")
         .keywords(bingux_ui::i18n::keywords(&tr!(
@@ -208,7 +204,7 @@ fn window_commands(
             engine().player.set_shuffle(!shuffle)
         })
         .checked(shuffle)
-        .icon(Icon::MediaPlaylistShuffle)
+        .icon(Icon::Shuffle)
         .group(controls)
         .section("order")
         .keywords(bingux_ui::i18n::keywords(&tr!(
@@ -222,7 +218,7 @@ fn window_commands(
             })
         })
         .checked(repeat == Repeat::All)
-        .icon(Icon::MediaPlaylistRepeat)
+        .icon(Icon::Repeat)
         .group(controls)
         .section("order")
         .keywords(bingux_ui::i18n::keywords(&tr!(
@@ -264,7 +260,7 @@ fn window_commands(
         })
         .shortcut("Ctrl+Shift+M")
         .checked(mini)
-        .icon(Icon::ViewPip)
+        .icon(Icon::WindowInset)
         .group(CommandGroup::View)
         .keywords(bingux_ui::i18n::keywords(&tr!("media-menu-mini.keywords"))),
         Command::new("view.full-screen", text::menu_full_screen(), move |_| {
@@ -275,14 +271,14 @@ fn window_commands(
         })
         .shortcut("F11")
         .checked(fullscreen)
-        .icon(Icon::ViewFullscreen)
+        .icon(Icon::CornersOut)
         .group(CommandGroup::View),
         Command::new("go.up-next", text::menu_up_next(), move |_| {
             close_stage(ui);
             router.switch_root(&up_next);
         })
         .shortcut("Ctrl+U")
-        .icon(Icon::ViewListOrdered)
+        .icon(Icon::ListNumbers)
         .group(CommandGroup::Go)
         .keywords(bingux_ui::i18n::keywords(&tr!(
             "media-menu-up-next.keywords"
@@ -291,7 +287,7 @@ fn window_commands(
             crate::settings_page::open(window, overlays)
         })
         .shortcut("Ctrl+,")
-        .icon(Icon::PreferencesSystem)
+        .icon(Icon::Gear)
         .keywords(bingux_ui::i18n::keywords(&tr!(
             "media-menu-settings.keywords"
         ))),
@@ -532,11 +528,11 @@ impl Component for Content {
                     .on_seek(run_seek)
                     .on_open(move |_| open_stage(ui))
                     .trailing(
-                        icon_button(Icon::ViewPip, move |_| set_mini(ui, true))
+                        icon_button(Icon::WindowInset, move |_| set_mini(ui, true))
                             .tooltip(&text::mini_player()),
                     )
                     .trailing(
-                        icon_button(Icon::ViewFullscreen, move |_| open_stage(ui))
+                        icon_button(Icon::CornersOut, move |_| open_stage(ui))
                             .tooltip(&text::menu_player()),
                     );
                 if video {

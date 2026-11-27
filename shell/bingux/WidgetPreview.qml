@@ -145,7 +145,7 @@ FocusScope {
             active: false
             barLayout: root.barLayout
             barWindow: DesktopEditing.editor?.nativeWindow
-            presentation: root.controlPresentation(player.trackTitle, "applications-multimedia-symbolic", true, true)
+            presentation: root.controlPresentation(player.trackTitle, "music-notes-symbolic", true, true)
         }
     }
     Component {
@@ -164,7 +164,7 @@ FocusScope {
             summary: "Battery 84 percent, charging"
             barLayout: root.barLayout
             barWindow: DesktopEditing.editor?.nativeWindow
-            presentation: Object.assign({}, root.controlPresentation(label, "battery-level-80-charging-symbolic", true, true), {
+            presentation: Object.assign({}, root.controlPresentation(label, "battery-80-bolt-symbolic", true, true), {
                 custom: true
             })
         }
@@ -250,7 +250,7 @@ FocusScope {
             presentation: root.face
             Row {
                 Repeater {
-                    model: ["network-wireless-signal-excellent-symbolic", "audio-volume-high-symbolic", "bluetooth-active-symbolic"]
+                    model: ["wifi-symbolic", "speaker-wave-2-symbolic", "bluetooth-symbolic"]
                     StatusIndicator {
                         required property string modelData
                         shown: true
@@ -274,7 +274,7 @@ FocusScope {
             barWindow: DesktopEditing.editor?.nativeWindow
             capture: sampleCapture
             privacy: samplePrivacy
-            presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, label || "", "media-record-symbolic", false, true)
+            presentation: DesktopLayout.presentation(DesktopEditing.desktop, root.widgetId, root.container, label || "", "record-symbolic", false, true)
         }
     }
     Component {
@@ -305,7 +305,7 @@ FocusScope {
                     id: "mail",
                     title: "Mail",
                     tooltipTitle: "Mail",
-                    icon: BinguxIcons.source("mail-unread-symbolic"),
+                    icon: BinguxIcons.source("envelope-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false
@@ -314,7 +314,7 @@ FocusScope {
                     id: "vpn",
                     title: "VPN",
                     tooltipTitle: "VPN",
-                    icon: BinguxIcons.source("network-vpn-symbolic"),
+                    icon: BinguxIcons.source("shield-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false
@@ -323,7 +323,7 @@ FocusScope {
                     id: "drive",
                     title: "Files",
                     tooltipTitle: "Files",
-                    icon: BinguxIcons.source("drive-harddisk-symbolic"),
+                    icon: BinguxIcons.source("hard-drive-symbolic"),
                     menu: null,
                     onlyMenu: false,
                     hasMenu: false

@@ -28,49 +28,49 @@ impl ErrorPage {
     pub fn for_load(error: &LoadError, host: &str) -> Self {
         let (icon, title, text, retry) = match error.name.as_str() {
             "NS_ERROR_UNKNOWN_HOST" => (
-                Icon::NetworkError,
+                Icon::NetworkCross,
                 tr!("browser-error-unknown-host-title"),
                 tr!("browser-error-unknown-host-description", host = host),
                 true,
             ),
             "NS_ERROR_CONNECTION_REFUSED" => (
-                Icon::NetworkError,
+                Icon::NetworkCross,
                 tr!("browser-error-refused-title"),
                 tr!("browser-error-refused-description", host = host),
                 true,
             ),
             "NS_ERROR_NET_TIMEOUT" => (
-                Icon::NetworkError,
+                Icon::NetworkCross,
                 tr!("browser-error-timeout-title"),
                 tr!("browser-error-timeout-description", host = host),
                 true,
             ),
             "NS_ERROR_OFFLINE" | "NS_ERROR_NET_RESET" | "NS_ERROR_NET_INTERRUPT" => (
-                Icon::NetworkOffline,
+                Icon::WifiCross,
                 tr!("browser-error-offline-title"),
                 tr!("browser-error-offline-description"),
                 true,
             ),
             "NS_ERROR_PROXY_CONNECTION_REFUSED" => (
-                Icon::NetworkError,
+                Icon::NetworkCross,
                 tr!("browser-error-proxy-title"),
                 tr!("browser-error-proxy-description"),
                 true,
             ),
             "NS_ERROR_MALFORMED_URI" | "NS_ERROR_INVALID_CONTENT_ENCODING" => (
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 tr!("browser-error-malformed-title"),
                 tr!("browser-error-malformed-description"),
                 false,
             ),
             "NS_ERROR_FILE_NOT_FOUND" | "NS_ERROR_FILE_ACCESS_DENIED" => (
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 tr!("browser-error-file-title"),
                 tr!("browser-error-file-description"),
                 false,
             ),
             _ => (
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 tr!("browser-error-other-title"),
                 tr!("browser-error-other-description", host = host),
                 true,
@@ -89,21 +89,21 @@ impl ErrorPage {
     pub fn for_crash(reason: GoneReason) -> Self {
         match reason {
             GoneReason::Crashed => Self {
-                icon: Icon::DialogError,
+                icon: Icon::CircleCross,
                 title: tr!("browser-error-crashed-title"),
                 text: tr!("browser-error-crashed-description"),
                 code: "process crashed".to_string(),
                 retry: true,
             },
             GoneReason::Killed => Self {
-                icon: Icon::DialogError,
+                icon: Icon::CircleCross,
                 title: tr!("browser-error-killed-title"),
                 text: tr!("browser-error-killed-description"),
                 code: "process killed".to_string(),
                 retry: true,
             },
             GoneReason::CleanExit => Self {
-                icon: Icon::DialogInformation,
+                icon: Icon::CircleInfo,
                 title: tr!("browser-error-exited-title"),
                 text: tr!("browser-error-exited-description"),
                 code: "process exited".to_string(),

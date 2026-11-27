@@ -174,13 +174,13 @@ ShellRoot {
                             privacy: {
                                 display: "both",
                                 label: "Private",
-                                icon: "starred-symbolic"
+                                icon: "star-filled-symbolic"
                             }
                         }
                     });
                     for (const item of children) {
                         compare(item.presentation.label, "Private");
-                        compare(item.presentation.icon, "starred-symbolic");
+                        compare(item.presentation.icon, "star-filled-symbolic");
                     }
                     privacy.screenSharing = true;
                     verify(waitForRendering(children[0], 2000));

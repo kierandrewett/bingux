@@ -356,10 +356,10 @@ fn subtitle_items(
 /// The icon of the volume button for a level.
 fn volume_icon(permille: u32, muted: bool) -> Icon {
     match volume_level(permille, muted) {
-        0 => Icon::AudioVolumeMuted,
-        1 => Icon::AudioVolumeLow,
-        2 => Icon::AudioVolumeMedium,
-        _ => Icon::Sound,
+        0 => Icon::SpeakerCross,
+        1 => Icon::Speaker,
+        2 => Icon::SpeakerWave1,
+        _ => Icon::SpeakerWave2,
     }
 }
 
@@ -392,17 +392,11 @@ impl Component for MediaControls {
         let toggle = {
             let on_action = on_action.clone();
             let (icon, tip) = if state.ended {
-                (
-                    Icon::MediaPlaybackStart,
-                    crate::tr!("ui-preview-play-again.tooltip"),
-                )
+                (Icon::Play, crate::tr!("ui-preview-play-again.tooltip"))
             } else if state.playing {
                 (Icon::Pause, crate::tr!("ui-preview-pause.tooltip"))
             } else {
-                (
-                    Icon::MediaPlaybackStart,
-                    crate::tr!("ui-preview-play.tooltip"),
-                )
+                (Icon::Play, crate::tr!("ui-preview-play.tooltip"))
             };
             icon_button(icon, move |_| on_action.call(ControlAction::Toggle))
                 .ink(Ink::OnFloating)
@@ -495,14 +489,14 @@ impl Component for MediaControls {
             .child(rect().width(Size::px(VOLUME_WIDTH)).child(volume))
             .maybe_child((!state.subtitles.is_empty()).then(|| {
                 Element::from(MenuIcon {
-                    icon: Icon::MediaViewSubtitles,
+                    icon: Icon::Subtitles,
                     tooltip: crate::tr!("ui-preview-subtitles-tooltip"),
                     items: subtitle_items(&state.subtitles, state.subtitle, &on_action),
                     enabled: true,
                 })
             }))
             .child(MenuIcon {
-                icon: Icon::ViewMore,
+                icon: Icon::DotsThree,
                 tooltip: crate::tr!("ui-preview-playback-speed-tooltip"),
                 items: rate_items(state.rate, &on_action),
                 enabled: true,

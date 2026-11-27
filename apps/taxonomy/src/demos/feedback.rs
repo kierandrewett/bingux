@@ -127,7 +127,7 @@ impl Component for PopoverDemo {
                 Group::new(None::<String>).row(
                     row("Connection is secure")
                         .subtitle("What you send to this site is private on its way there.")
-                        .leading(Icon::NetworkWirelessEncrypted),
+                        .leading(Icon::Padlock),
                 ),
             )
             .child(
@@ -137,10 +137,7 @@ impl Component for PopoverDemo {
             );
         rect()
             .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
-            .child(
-                icon_button(Icon::NetworkWirelessEncrypted, move |_| open.set(true))
-                    .tooltip("Page info"),
-            )
+            .child(icon_button(Icon::Padlock, move |_| open.set(true)).tooltip("Page info"))
             .child(
                 popover(open(), &anchor, content.into_element())
                     .on_dismiss(move |_| open.set(false)),
@@ -204,7 +201,7 @@ pub const TOOLTIP: &[Spec] = &[
     Spec::live("Hover the icon", || {
         hover_tip(
             icon(
-                Icon::DialogInformation,
+                Icon::CircleInfo,
                 IconSize::Row,
                 Paint::Muted.color(&use_tokens()),
             ),
@@ -213,14 +210,14 @@ pub const TOOLTIP: &[Spec] = &[
     }),
     Spec::live("Icon with a tooltip", || {
         tooltip_icon(
-            Icon::DialogWarning,
+            Icon::TriangleExclamation,
             IconSize::Row,
             Paint::Warning,
             "Check the cable",
         )
     }),
     Spec::live("On an icon button", || {
-        icon_button(Icon::Delete, |_| {})
+        icon_button(Icon::Trash, |_| {})
             .tooltip("Delete")
             .into_element()
     }),
@@ -229,11 +226,7 @@ pub const TOOLTIP: &[Spec] = &[
         // button, and the bubble never jumps.
         let mut shown = use_state(|| false);
         icon_button(
-            if shown() {
-                Icon::ViewConceal
-            } else {
-                Icon::ViewReveal
-            },
+            if shown() { Icon::EyeSlash } else { Icon::Eye },
             move |_| shown.toggle(),
         )
         .tooltip(if shown() {
@@ -249,22 +242,22 @@ pub const TOOLTIP: &[Spec] = &[
             .child(
                 icon_button(
                     if muted() {
-                        Icon::AudioVolumeMuted
+                        Icon::SpeakerCross
                     } else {
-                        Icon::AudioVolumeMedium
+                        Icon::SpeakerWave1
                     },
                     move |_| muted.toggle(),
                 )
                 .tooltip(if muted() { "Unmute" } else { "Mute" }),
             )
-            .child(icon_button(Icon::Refresh, |_| {}).tooltip("Refresh"))
-            .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete"))
+            .child(icon_button(Icon::ArrowCw, |_| {}).tooltip("Refresh"))
+            .child(icon_button(Icon::Trash, |_| {}).tooltip("Delete"))
             .into_element()
     }),
     Spec::live("Opens above when there is room", || {
         hover_tip_preferring(
             icon(
-                Icon::DialogInformation,
+                Icon::CircleInfo,
                 IconSize::Row,
                 Paint::Muted.color(&use_tokens()),
             ),
@@ -275,7 +268,7 @@ pub const TOOLTIP: &[Spec] = &[
     Spec::live("Long text wraps", || {
         hover_tip(
             icon(
-                Icon::DialogInformation,
+                Icon::CircleInfo,
                 IconSize::Row,
                 Paint::Muted.color(&use_tokens()),
             ),
@@ -294,17 +287,17 @@ pub const TOOLTIP: &[Spec] = &[
         };
         hstack(S1)
             .child(cell(
-                icon_button(Icon::ListAdd, |_| {})
+                icon_button(Icon::Plus, |_| {})
                     .tooltip("New tab")
                     .into_element(),
             ))
             .child(cell(
-                icon_button(Icon::Refresh, |_| {})
+                icon_button(Icon::ArrowCw, |_| {})
                     .tooltip("Refresh (F5)")
                     .into_element(),
             ))
             .child(cell(
-                icon_button(Icon::Delete, |_| {})
+                icon_button(Icon::Trash, |_| {})
                     .tooltip("Move to Trash")
                     .into_element(),
             ))
@@ -316,7 +309,7 @@ pub const TOOLTIP: &[Spec] = &[
         rect()
             .tw(&tokens, &[w(Dim::Control), h(Dim::Control), clip()])
             .child(
-                icon_button(Icon::DialogInformation, |_| {})
+                icon_button(Icon::CircleInfo, |_| {})
                     .tooltip("Copies the selected files and folders into the folder open in the other tab")
                     .into_element(),
             )
@@ -640,9 +633,9 @@ fn reordered<T>(list: &mut Vec<T>, from: usize, to: usize) {
 /// The four pages of the first specimen, as rows with their icon.
 fn page_row(name: &str) -> Element {
     let icon = match name {
-        "Network" => Icon::Network,
-        "Sound" => Icon::Sound,
-        "Power" => Icon::Power,
+        "Network" => Icon::Wifi,
+        "Sound" => Icon::SpeakerWave2,
+        "Power" => Icon::Battery100,
         _ => Icon::Keyboard,
     };
     row(name).leading(icon).into_element()

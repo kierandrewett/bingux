@@ -48,13 +48,13 @@ ControlCentreOverview {
             return "Battery 84 percent, charging";
         }
         function batteryIconName() {
-            return "battery-level-80-charging-symbolic";
+            return "battery-80-bolt-symbolic";
         }
         function audioIconName() {
-            return "audio-volume-high-symbolic";
+            return "speaker-wave-2-symbolic";
         }
         function networkIconName() {
-            return "network-wireless-signal-excellent-symbolic";
+            return "wifi-symbolic";
         }
         function networkAccessibleName() {
             return "Wireless network connected";

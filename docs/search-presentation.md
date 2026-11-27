@@ -106,7 +106,7 @@ divider, icon tile background, or left accent strip.
 Tooltip visuals live in `TooltipBubble.qml`, shared by `DockTooltip` and the
 anchored `ShellTooltip` wrapper. Callers set `text`, `maximumWidth`, and `wrapText`;
 they do not duplicate fonts, padding, colors or borders. Search uses OS symbolic
-icons (`edit-clear-symbolic` with a close fallback, and `go-next-symbolic`) rather
+icons (`circle-cross-symbolic` with a close fallback, and `chevron-right-symbolic`) rather
 than text glyphs for clear and open actions. Search retains the shared tooltip
 only for the clear button. `MarqueeText.qml` owns the selection dwell timer and
 loop/reset behavior; run `tests/qml/run.sh SearchMarqueeTest.qml` (also with

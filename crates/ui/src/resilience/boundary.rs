@@ -349,7 +349,7 @@ impl Component for RichCard {
                 .a11y_alt(alert)
                 .tw(&tokens, &[w_full(), h_full(), bg(Paint::Bg)])
                 .child(
-                    status_page(Icon::DialogError, title)
+                    status_page(Icon::CircleCross, title)
                         .description(message)
                         .action(crate::tr!("ui-error-retry"), self.retry.clone())
                         .child(
@@ -372,7 +372,7 @@ impl Component for RichCard {
                             rect()
                                 .tw(&tokens, &[flex_row(), items(Align::Center), gap(S3), w_full()])
                                 .child(icons::icon(
-                                    Icon::DialogError,
+                                    Icon::CircleCross,
                                     IconSize::Row,
                                     Ink::Danger.color(&tokens),
                                 ))
@@ -394,7 +394,7 @@ impl Component for RichCard {
                 .tw(&tokens, ROW)
                 .tw(&tokens, &[bg(Paint::DangerSoft)])
                 .child(icons::icon(
-                    Icon::DialogError,
+                    Icon::CircleCross,
                     IconSize::Row,
                     Ink::Danger.color(&tokens),
                 ))

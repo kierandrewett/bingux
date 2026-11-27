@@ -38,7 +38,7 @@ AbstractButton {
                 // Keep the control discoverable with the bell in that state.
                 visible: root.count === 0
                 implicitSize: Theme.iconSize
-                source: root.presentation?.icon ? BinguxIcons.source(root.presentation.icon) : BinguxIcons.source("preferences-system-notifications-symbolic")
+                source: root.presentation?.icon ? BinguxIcons.source(root.presentation.icon) : BinguxIcons.source("bell-symbolic")
                 color: Theme.text
             }
             NotificationIndicator {

@@ -29,7 +29,7 @@ impl Component for DownloadsButton {
         rect()
             .on_sized(move |event: Event<SizedEventData>| anchor.set_if_modified(event.area))
             .child(
-                icon_button(Icon::FolderDownload, move |_: ()| {
+                icon_button(Icon::FolderArrowDown, move |_: ()| {
                     open.set(true);
                 })
                 .tooltip(&tip)

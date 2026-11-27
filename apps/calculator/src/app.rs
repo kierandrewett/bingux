@@ -205,7 +205,7 @@ impl Component for Content {
         let header = if compact && history_page {
             let back = calc.clone();
             HeaderBar::new(tr!("calculator-history-title")).leading(
-                icon_button(Icon::GoPrevious, move |_| {
+                icon_button(Icon::ChevronLeft, move |_| {
                     let mut page = back.history_page;
                     page.set(false);
                 })
@@ -239,10 +239,10 @@ impl Component for Content {
 /// The icon of a mode, for a phone's bottom bar.
 fn mode_icon(mode: Mode) -> Icon {
     match mode {
-        Mode::Basic => Icon::AccessoriesCalculator,
-        Mode::Scientific => Icon::ViewGrid,
-        Mode::Programmer => Icon::FormatCode,
-        Mode::Convert => Icon::Swap,
+        Mode::Basic => Icon::Calculator,
+        Mode::Scientific => Icon::SquaresFour,
+        Mode::Programmer => Icon::BracketsAngle,
+        Mode::Convert => Icon::ArrowsLeftRight,
     }
 }
 

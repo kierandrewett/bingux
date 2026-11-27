@@ -92,7 +92,7 @@ ShellRoot {
                 wait(250);
                 first.length = 2003;
                 tryCompare(next, "text", "Forward 10 seconds");
-                compare(next.displayedIcon, "media-seek-forward-symbolic");
+                compare(next.displayedIcon, "fast-forward-symbolic");
                 mouseClick(next);
                 mouseClick(previous);
                 compare(first.calls[1], 10);
@@ -108,7 +108,7 @@ ShellRoot {
                 tryCompare(next, "text", "Forward 10 seconds");
                 first.metadata = {};
                 tryCompare(next, "text", "Next track");
-                compare(next.displayedIcon, "media-skip-forward-symbolic");
+                compare(next.displayedIcon, "skip-forward-symbolic");
                 compare(previous.text, "Previous track");
                 report.setText("PASS music track controls, long-form seek clicks, disabled seeking, video provider and icon changes\nFAILURES 0\n");
             }

@@ -12,7 +12,7 @@ arrow-ccw	object-rotate-left
 arrow-cw	view-refresh	object-rotate-right	system-reboot
 arrow-down-line	download
 arrow-left-right-bars	flexible-space
-arrow-up	chrome-go-up
+arrow-up	go-up	chrome-go-up
 arrowhead	location-arrow
 arrows-cw	sync
 arrows-left-right	swap-horizontal

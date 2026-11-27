@@ -32,7 +32,7 @@ impl Component for Switcher {
         let width = bingux_ui::surface::window_size().width;
         // The dropdowns' labels grow with the text size, and the room they need with them.
         if is_compact() || width < DENSE_FROM * bingux_ui::access::text_scale().max(1.0) {
-            icon_button(Icon::Appearance, move |_| {
+            icon_button(Icon::Palette, move |_| {
                 window.open(
                     popup(tr!("taxonomy-switcher-title"), SwitcherSheet).width(Dim::PopupNarrow),
                 );

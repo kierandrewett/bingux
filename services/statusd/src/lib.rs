@@ -869,7 +869,7 @@ mod tests {
         let request = OsdRequest::new(
             0,
             output_names(),
-            "audio-volume-high-symbolic".to_owned(),
+            "speaker-wave-2-symbolic".to_owned(),
             String::new(),
             0.75,
             1.0,
@@ -878,7 +878,7 @@ mod tests {
 
         assert_eq!(
             osd_json(&request).unwrap(),
-            "{\"protocolVersion\":2,\"type\":\"osd\",\"monitorIndex\":0,\"outputNames\":[\"DP-1\"],\"icon\":\"audio-volume-high-symbolic\",\"label\":\"\",\"level\":0.75,\"maxLevel\":1.0}\n",
+            "{\"protocolVersion\":2,\"type\":\"osd\",\"monitorIndex\":0,\"outputNames\":[\"DP-1\"],\"icon\":\"speaker-wave-2-symbolic\",\"label\":\"\",\"level\":0.75,\"maxLevel\":1.0}\n",
         );
     }
 

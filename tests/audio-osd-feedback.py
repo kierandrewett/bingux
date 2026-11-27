@@ -243,7 +243,7 @@ def main():
                 # 30% to 45%: a volume key step. 0.45 sits between a third and two thirds.
                 state["sinks"][0] = device(speakers, "Speakers", 45)
                 write_state(state_path, state)
-                expect_pair(records, "audio-volume-medium-symbolic", "Speakers", 0.45)
+                expect_pair(records, "speaker-wave-1-symbolic", "Speakers", 0.45)
 
                 # A change under the rounding step is not a user change.
                 state["sinks"][0] = device(speakers, "Speakers", 45.2)
@@ -252,23 +252,23 @@ def main():
 
                 state["sinks"][0] = device(speakers, "Speakers", 45, muted=True)
                 write_state(state_path, state)
-                expect_pair(records, "audio-volume-muted-symbolic", "Speakers", 0.0)
+                expect_pair(records, "speaker-cross-symbolic", "Speakers", 0.0)
 
                 state["sinks"][0] = device(speakers, "Speakers", 100)
                 write_state(state_path, state)
-                expect_pair(records, "audio-volume-high-symbolic", "Speakers", 1.0)
+                expect_pair(records, "speaker-wave-2-symbolic", "Speakers", 1.0)
 
                 state["sinks"][0] = device(speakers, "Speakers", 120)
                 write_state(state_path, state)
-                expect_pair(records, "audio-volume-overamplified-symbolic", "Speakers", 1.2)
+                expect_pair(records, "speaker-wave-2-symbolic", "Speakers", 1.2)
 
                 state["sources"][0] = device(microphone, "Desk Microphone", 80, muted=True)
                 write_state(state_path, state)
-                expect_pair(records, "microphone-sensitivity-muted-symbolic", "Desk Microphone", 0.0)
+                expect_pair(records, "microphone-slash-symbolic", "Desk Microphone", 0.0)
 
                 state["sources"][0] = device(microphone, "Desk Microphone", 80)
                 write_state(state_path, state)
-                expect_pair(records, "microphone-sensitivity-high-symbolic", "Desk Microphone", 0.8)
+                expect_pair(records, "microphone-symbolic", "Desk Microphone", 0.8)
 
                 # Switching the default output changes the level without a user step.
                 state["default_sink"] = headset
@@ -277,7 +277,7 @@ def main():
 
                 state["sinks"][1] = device(headset, "Headset", 10)
                 write_state(state_path, state)
-                expect_pair(records, "audio-volume-low-symbolic", "Headset", 0.10)
+                expect_pair(records, "speaker-symbolic", "Headset", 0.10)
 
             if peer_errors:
                 raise AssertionError(f"fake compositor failed: {peer_errors[0]}")

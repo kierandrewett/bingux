@@ -311,7 +311,7 @@ class BinguxConfigTests(unittest.TestCase):
             "dock": ["icon:1", "label:2"],
             "sidebar": ["notes"],
         }
-        options = {"label:1": {"label": "Work"}, "icon:1": {"icon": "starred-symbolic"}}
+        options = {"label:1": {"label": "Work"}, "icon:1": {"icon": "star-filled-symbolic"}}
         write({"desktop": {"layout": layout, "widgetOptions": options}})
         self.assertEqual(read()["desktop"]["layout"], layout)
         self.assertEqual(read()["desktop"]["widgetOptions"], options)

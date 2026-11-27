@@ -22,7 +22,7 @@ pub struct BackButton {
 impl Component for BackButton {
     fn render(&self) -> impl IntoElement {
         let (ctx, key) = (self.ctx, self.key);
-        icon_button(Icon::GoPrevious, move |_: ()| {
+        icon_button(Icon::ChevronLeft, move |_: ()| {
             ctx.with(|browser| browser.back(key))
         })
         .tooltip(&tr!("browser-nav-back-tooltip"))
@@ -41,7 +41,7 @@ pub struct ForwardButton {
 impl Component for ForwardButton {
     fn render(&self) -> impl IntoElement {
         let (ctx, key) = (self.ctx, self.key);
-        icon_button(Icon::GoNext, move |_: ()| {
+        icon_button(Icon::ChevronRight, move |_: ()| {
             ctx.with(|browser| browser.forward(key))
         })
         .tooltip(&tr!("browser-nav-forward-tooltip"))
@@ -62,12 +62,12 @@ impl Component for ReloadButton {
     fn render(&self) -> impl IntoElement {
         let (ctx, key) = (self.ctx, self.key);
         if self.loading {
-            icon_button(Icon::WindowClose, move |_: ()| {
+            icon_button(Icon::Cross, move |_: ()| {
                 ctx.with(|browser| browser.stop(key))
             })
             .tooltip(&tr!("browser-nav-stop-tooltip"))
         } else {
-            icon_button(Icon::Refresh, move |_: ()| {
+            icon_button(Icon::ArrowCw, move |_: ()| {
                 ctx.with(|browser| browser.reload(key, false))
             })
             .tooltip(&tr!("browser-nav-reload-tooltip"))

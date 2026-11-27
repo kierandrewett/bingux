@@ -147,12 +147,12 @@ impl Component for AboutBody {
         };
 
         let mut header = HeaderBar::new(current.title()).draggable(false).trailing(
-            icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+            icon_button(Icon::Cross, move |_| overlays.dismiss_dialog())
                 .tooltip(&crate::tr!("ui-dialog-close")),
         );
         if current != Page::Main {
             header = header.leading(
-                icon_button(Icon::GoPrevious, move |_| page.set(Page::Main))
+                icon_button(Icon::ChevronLeft, move |_| page.set(Page::Main))
                     .tooltip(&crate::tr!("ui-nav-back")),
             );
         }
@@ -306,7 +306,7 @@ fn main_page(
                         Err(_) => overlays.toast(crate::tr!("ui-error-details-not-copied")),
                     },
                 )
-                .icon(Icon::EditCopy),
+                .icon(Icon::SquaresOverlap),
             )
             .into(),
     );

@@ -119,12 +119,12 @@ impl Form {
     fn icon(self) -> Icon {
         match self {
             Form::Headphones => Icon::Headphones,
-            Form::Speakers => Icon::Speakers,
-            Form::Microphone => Icon::AudioInputMicrophone,
-            Form::Webcam => Icon::CameraWeb,
-            Form::Display => Icon::Display,
+            Form::Speakers => Icon::SpeakerBox,
+            Form::Microphone => Icon::Microphone,
+            Form::Webcam => Icon::Webcam,
+            Form::Display => Icon::Monitor,
             Form::Bluetooth => Icon::Bluetooth,
-            Form::Card => Icon::Sound,
+            Form::Card => Icon::SpeakerWave2,
         }
     }
 }
@@ -1471,7 +1471,7 @@ impl Component for SpeakerTest {
             let channel = name.clone();
             let overlays = self.overlays;
             let mut playing = playing;
-            let speaker = icon_button(Icon::Speakers, move |_| {
+            let speaker = icon_button(Icon::SpeakerBox, move |_| {
                 if playing.read().is_some() {
                     return;
                 }
@@ -1691,13 +1691,13 @@ fn update_stream(mut model: ModelState, id: u32, change: impl FnOnce(&mut (f64, 
 /// The icon that shows a volume: crossed out when muted, then three steps up.
 fn level_icon(volume: f64, muted: bool) -> Icon {
     if muted || volume <= 0.0 {
-        Icon::AudioVolumeMuted
+        Icon::SpeakerCross
     } else if volume < 0.34 {
-        Icon::AudioVolumeLow
+        Icon::Speaker
     } else if volume < 0.67 {
-        Icon::AudioVolumeMedium
+        Icon::SpeakerWave1
     } else {
-        Icon::Sound
+        Icon::SpeakerWave2
     }
 }
 

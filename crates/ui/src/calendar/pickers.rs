@@ -84,7 +84,7 @@ impl Component for DatePicker {
             }
             open.set(next);
         })
-        .icon(Icon::XOfficeCalendar)
+        .icon(Icon::Calendar)
         .enabled(self.enabled);
 
         let grid = month_grid(*shown.read(), self.today, move |date: Date| {

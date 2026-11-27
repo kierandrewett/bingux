@@ -32,7 +32,7 @@ test("battery summary converts Quickshell charge fractions and follows updates",
     assert.equal(context.batteryAccessibleName(), "Battery status unavailable");
 });
 
-test("battery icon is the battery-level-N file for the charge, its state and presence", () => {
+test("battery icon is the battery-N file for the charge, its state and presence", () => {
     const state = { Unknown: 0, Charging: 1, Discharging: 2, Empty: 3, FullyCharged: 4 };
     const context = vm.createContext({
         laptopBatteryAvailable: true,
@@ -53,13 +53,13 @@ test("battery icon is the battery-level-N file for the charge, its state and pre
     ]) {
         context.battery.percentage = fraction;
         context.battery.state = state.Discharging;
-        assert.equal(context.batteryIconName(), `battery-level-${level}-symbolic`, `${fraction} discharging`);
+        assert.equal(context.batteryIconName(), `battery-${level}-symbolic`, `${fraction} discharging`);
         context.battery.state = state.Charging;
-        assert.equal(context.batteryIconName(), `battery-level-${level}-charging-symbolic`, `${fraction} charging`);
+        assert.equal(context.batteryIconName(), `battery-${level}-bolt-symbolic`, `${fraction} charging`);
     }
     context.battery.percentage = 1;
     context.battery.state = state.FullyCharged;
-    assert.equal(context.batteryIconName(), "battery-level-100-charged-symbolic");
+    assert.equal(context.batteryIconName(), "battery-100-check-symbolic");
     context.laptopBatteryAvailable = false;
-    assert.equal(context.batteryIconName(), "battery-missing-symbolic");
+    assert.equal(context.batteryIconName(), "battery-exclamation-symbolic");
 });

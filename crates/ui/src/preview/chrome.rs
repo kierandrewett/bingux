@@ -291,12 +291,12 @@ pub(super) fn header(
     let show_info = *info.read();
     if let Some(open) = nav.on_open.clone() {
         bar = bar.trailing(
-            icon_button(Icon::DocumentOpen, move |_| open.call(()))
+            icon_button(Icon::FolderOpen, move |_| open.call(()))
                 .tooltip(&crate::tr!("ui-preview-open.tooltip")),
         );
     }
     bar = bar.trailing(
-        icon_button(Icon::DialogInformation, move |_| {
+        icon_button(Icon::CircleInfo, move |_| {
             let mut info = info;
             let shown = *info.peek();
             info.set(!shown);
@@ -307,12 +307,12 @@ pub(super) fn header(
     if let Some(switch) = nav.on_mode.clone().filter(|_| !compact && nav.dock) {
         let (icon, tip, to) = match mode {
             Mode::Pane => (
-                Icon::WindowNew,
+                Icon::SquareArrowUpRight,
                 crate::tr!("ui-preview-popup.tooltip"),
                 Mode::Popup,
             ),
             Mode::Popup | Mode::Fullscreen | Mode::Window => (
-                Icon::SidebarShow,
+                Icon::WindowSidebar,
                 crate::tr!("ui-preview-dock.tooltip"),
                 Mode::Pane,
             ),
@@ -320,13 +320,13 @@ pub(super) fn header(
         bar = bar.trailing(icon_button(icon, move |_| switch.call(to)).tooltip(&tip));
     }
     let close = nav.on_close.clone();
-    bar.trailing(
-        icon_button(Icon::WindowClose, move |_| close.call(())).tooltip(&if mode == Mode::Pane {
+    bar.trailing(icon_button(Icon::Cross, move |_| close.call(())).tooltip(
+        &if mode == Mode::Pane {
             crate::tr!("ui-preview-hide.tooltip")
         } else {
             crate::tr!("ui-preview-close.tooltip")
-        }),
-    )
+        },
+    ))
 }
 
 /// The Info panel: the facts of the file, a name above each value, and the

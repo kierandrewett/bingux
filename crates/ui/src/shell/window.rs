@@ -363,16 +363,16 @@ impl Component for WindowControls {
             .component("WindowControls")
             .tw_layout(&[flex_row(), items(Align::Center), gap(S1)])
             .child(WindowControl {
-                icon: Icon::WindowMinimize,
+                icon: Icon::Minus,
                 tooltip: crate::tr!("ui-window-minimise"),
                 danger: false,
                 action: Action::Minimize,
             })
             .child(WindowControl {
                 icon: if maximized() {
-                    Icon::WindowRestore
+                    Icon::SquaresOverlapLeft
                 } else {
-                    Icon::WindowMaximize
+                    Icon::Square
                 },
                 tooltip: if maximized() {
                     crate::tr!("ui-window-restore")
@@ -383,7 +383,7 @@ impl Component for WindowControls {
                 action: Action::ToggleMaximize,
             })
             .child(WindowControl {
-                icon: Icon::WindowClose,
+                icon: Icon::Cross,
                 tooltip: crate::tr!("ui-window-close-button"),
                 danger: true,
                 action: Action::Close,

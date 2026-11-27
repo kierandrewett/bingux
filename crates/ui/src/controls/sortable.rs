@@ -8,7 +8,7 @@
 //!   in the card, a hairline between rows, the content at the card's gutter.
 //!   The grip is a [`Dim::RowButton`] square at the row's end, the same
 //!   distance ([`ROW_INSET`]) from the row's top, bottom and end as any
-//!   trailing button, with a 16 px [`Icon::DragHandle`] in muted ink that
+//!   trailing button, with a 16 px [`Icon::DotsSix`] in muted ink that
 //!   brightens on hover.
 //! * **Dragging.** The held row lifts: it grows a little, takes a shadow
 //!   ([`lift_shadow`]) and becomes slightly translucent, and follows the
@@ -719,7 +719,7 @@ impl Component for Grip {
                 on_step.call(step);
             })
             .child(icons::icon(
-                Icon::DragHandle,
+                Icon::DotsSix,
                 IconSize::Control,
                 if glow {
                     Paint::Text.color(&tokens)

@@ -3,64 +3,64 @@
 # sheets.py draws each group on its own sheets so icons are judged next to their siblings.
 
 [top-bar]
-view-app-grid network-wired network-wireless-signal-excellent network-wireless-signal-good
-network-wireless-signal-ok network-wireless-signal-weak network-wireless-signal-none
-network-wireless-disabled network-offline network-error network-wireless-encrypted
-preferences-system-notifications notifications-disabled
-audio-volume-high audio-volume-medium audio-volume-low audio-volume-muted
-bluetooth-active bluetooth-disabled airplane-mode network-vpn system-shutdown
+dots-nine network wifi
+wifi-2 wifi-1 wifi-0
+wifi-slash wifi-cross network-cross padlock
+bell bell-slash
+speaker-wave-2 speaker-wave-1 speaker speaker-cross
+bluetooth bluetooth-slash airplane shield power
 
 [battery]
-battery-level-0 battery-level-10 battery-level-20 battery-level-30 battery-level-40 battery-level-50
-battery-level-60 battery-level-70 battery-level-80 battery-level-90 battery-level-100 battery-level-100-charged
-battery-level-0-charging battery-level-10-charging battery-level-20-charging battery-level-30-charging
-battery-level-40-charging battery-level-50-charging battery-level-60-charging battery-level-70-charging
-battery-level-80-charging battery-level-90-charging battery-level-100-charging battery-missing
+battery-0 battery-10 battery-20 battery-30 battery-40 battery-50
+battery-60 battery-70 battery-80 battery-90 battery-100 battery-100-check
+battery-0-bolt battery-10-bolt battery-20-bolt battery-30-bolt
+battery-40-bolt battery-50-bolt battery-60-bolt battery-70-bolt
+battery-80-bolt battery-90-bolt battery-100-bolt battery-exclamation
 
 [sidebar]
-network-wireless network-wired bluetooth-active preferences-desktop-accessibility applications-graphics
-preferences-desktop system-search video-display audio-volume-high battery-level-100
-input-keyboard input-mouse preferences-system-time system-users view-app-grid help-about
+wifi network bluetooth person-circle palette
+monitor-dock magnifier monitor speaker-wave-2 battery-100
+keyboard mouse clock people dots-nine circle-info
 
 [controls-and-marks]
-object-select go-next go-previous pan-up pan-down pan-end edit-clear list-add list-remove
-view-reveal view-conceal starred non-starred window-close window-minimize window-maximize window-restore
+check chevron-right chevron-left chevron-up chevron-down circle-cross plus minus
+eye eye-slash star-filled star cross minus square squares-overlap-left
 
 [buttons-and-menus]
-open-menu view-more view-refresh object-rotate-right sidebar-show focus-top-bar edit-copy edit-delete
-user-trash view-filter find-location location-arrow document-edit pencil document-open send-to view-list view-grid
-media-playback-pause media-playback-stop preferences-system emblem-system folder folder-download bookmarks
+lines-three dots-three arrow-cw window-sidebar window squares-overlap trash
+trash funnel cursor-click arrowhead square-pencil pencil folder-open square-arrow-up list-bullets squares-four
+pause stop gear folder folder-arrow-down bookmark
 
 [status]
-dialog-error dialog-information dialog-warning help-browser dialog-password changes-prevent
-power-profile-power-saver power-profile-balanced power-profile-performance display-brightness
-night-light weather-clear-night action-unavailable folder-missing
+circle-cross circle-info triangle-exclamation circle-question key coffee-cup
+leaf gauge bolt sun
+moon-stars moon circle-slash folder-dashed
 
 [devices]
-audio-headphones audio-speakers audio-card audio-input-microphone input-keyboard input-mouse input-tablet
-input-touchpad input-gaming phone computer video-display printer camera-web media-removable network-server
-avatar-default user-info
+headphones speaker-box waveform microphone keyboard mouse tablet
+hand-tap gamepad phone laptop monitor printer webcam usb server
+person id-card
 
 [applications]
-web-browser x-office-calendar mail-unread image-generic video-generic applications-multimedia
-accessories-calculator addon application-x-executable preferences-other table presentation
-view-pin process-stop system-run utilities-terminal accessories-text-editor document-open-recent document-save
+globe calendar envelope image video-camera music-notes
+calculator puzzle-piece cube sliders table easel
+pushpin circle-stop circle-play prompt notepad clock-ccw floppy-disk
 
 [default-apps]
-web-browser mail-unread x-office-calendar folder default-app-text default-app-documents
-image-generic applications-multimedia video-generic
+globe envelope calendar folder file-text file-doc
+image music-notes video-camera
 
 [shell-power-and-media]
-system-switch-user system-log-out weather-clear-night system-reboot system-shutdown
-media-skip-backward media-seek-backward media-playback-pause media-playback-start media-seek-forward
-media-skip-forward media-playback-stop media-record screen-shared camera-photo
-audio-input-microphone audio-input-microphone-muted network-transmit-receive network-workgroup weather-clear
+person-arrows bracket-arrow-right moon arrow-cw power
+skip-back rewind pause play fast-forward
+skip-forward stop record monitor-arrow-up camera
+microphone microphone-slash arrows-up-down devices sun
 
 [notes-slash-menu]
-format-text-plaintext view-list view-list-ordered checkbox-checked format-text-bold format-text-italic
-format-text-strikethrough format-code format-quote insert-link
+letter-t list-bullets list-numbers square-check letter-b letter-i
+letter-s-strike brackets-angle quotes link
 
 [browser]
-go-up tab-new tab-group split-view window-private reader translate find-in-page
-reading-list bookmark-add download download-done sync lock-open lock-broken shield-check cookie
-location-pin autoplay-off flexible-space space separator tab-crashed hourglass
+arrow-up square-plus tabs window-split mask book-open translate file-magnifier
+glasses bookmark-plus arrow-down-line check-line arrows-cw padlock-open padlock-cross shield-check cookie
+map-pin play-slash arrow-left-right-bars bracket-bottom line-vertical square-face-sad hourglass

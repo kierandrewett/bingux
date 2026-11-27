@@ -167,21 +167,21 @@ impl Component for Chooser {
 
         let mut types = Group::titled(&tr!("network-vpn-add-type")).row(
             row("WireGuard")
-                .leading(Icon::NetworkVpn)
+                .leading(Icon::Shield)
                 .navigates()
                 .on_press(open("wireguard")),
         );
         for plugin in &installed {
             types = types.row(
                 row(plugin.name.clone())
-                    .leading(Icon::NetworkVpn)
+                    .leading(Icon::Shield)
                     .navigates()
                     .on_press(open(&plugin.short)),
             );
         }
         let import = Group::titled(&tr!("network-vpn-add-from-file")).row(
             row(tr!("network-vpn-add-import-from-file"))
-                .leading(Icon::DocumentOpen)
+                .leading(Icon::FolderOpen)
                 .navigates()
                 .on_press(open("import")),
         );

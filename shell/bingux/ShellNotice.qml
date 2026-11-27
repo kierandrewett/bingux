@@ -19,7 +19,7 @@ Rectangle {
     property real unit: 1
 
     readonly property color accent: tone === "danger" ? Theme.danger : tone === "warning" ? Theme.warning : tone === "success" ? Theme.success : Theme.accent
-    readonly property string glyph: tone === "danger" ? "dialog-error-symbolic" : tone === "warning" ? "dialog-warning-symbolic" : tone === "success" ? "object-select-symbolic" : "dialog-information-symbolic"
+    readonly property string glyph: tone === "danger" ? "circle-cross-symbolic" : tone === "warning" ? "triangle-exclamation-symbolic" : tone === "success" ? "check-symbolic" : "circle-info-symbolic"
     readonly property real inset: Math.round(18 * unit)
 
     width: parent ? parent.width : 300

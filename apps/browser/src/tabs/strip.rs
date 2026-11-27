@@ -66,9 +66,9 @@ impl Tab {
     /// the browser fetches nothing on its own.
     pub fn icon(&self) -> Icon {
         match self.kind {
-            TabKind::Settings => Icon::EmblemSystem,
-            TabKind::Web if self.private => Icon::NetworkWirelessEncrypted,
-            TabKind::Web => Icon::WebBrowser,
+            TabKind::Settings => Icon::Gear,
+            TabKind::Web if self.private => Icon::Padlock,
+            TabKind::Web => Icon::Globe,
         }
     }
 }

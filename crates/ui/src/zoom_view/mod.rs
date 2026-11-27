@@ -737,7 +737,7 @@ impl Component for ZoomView {
                     ],
                 )
                 .child(
-                    icon_button(Icon::ZoomOut, move |_| handle.zoom_out())
+                    icon_button(Icon::MagnifierMinus, move |_| handle.zoom_out())
                         .ink(Ink::OnFloating)
                         .tooltip(crate::tr!("ui-zoom-out.tooltip"))
                         .enabled(view.zoom > MIN_ZOOM),
@@ -754,12 +754,12 @@ impl Component for ZoomView {
                         ),
                 )
                 .child(
-                    icon_button(Icon::ZoomIn, move |_| handle.zoom_in())
+                    icon_button(Icon::MagnifierPlus, move |_| handle.zoom_in())
                         .ink(Ink::OnFloating)
                         .tooltip(crate::tr!("ui-zoom-in.tooltip")),
                 )
                 .child(
-                    icon_button(Icon::ZoomFitBest, toggle)
+                    icon_button(Icon::FrameCorners, toggle)
                         .ink(Ink::OnFloating)
                         .tooltip(if at_fit && natural.is_some() {
                             crate::tr!("ui-zoom-actual.tooltip")

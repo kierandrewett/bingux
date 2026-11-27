@@ -103,9 +103,9 @@ fn header(
             }
         }
     })
-    .icon(Icon::EditCopy)
+    .icon(Icon::SquaresOverlap)
     .compact();
-    let reset = icon_button(Icon::Refresh, move |_| reset_all(&reset_snap, window, id))
+    let reset = icon_button(Icon::ArrowCw, move |_| reset_all(&reset_snap, window, id))
         .tooltip("Reset every edit on this element")
         .enabled(any_edit);
     rect()

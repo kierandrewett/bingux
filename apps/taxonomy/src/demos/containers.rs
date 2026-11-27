@@ -76,9 +76,9 @@ pub const ROW: &[Spec] = &[
     }),
     Spec::live("Decorated", || {
         rows(vec![
-            row("Leading icon").leading(Icon::Network).into_element(),
+            row("Leading icon").leading(Icon::Wifi).into_element(),
             row("Leading tone")
-                .leading(Icon::DialogWarning)
+                .leading(Icon::TriangleExclamation)
                 .leading_tone(Tone::Warning)
                 .into_element(),
             row("Signal")
@@ -115,7 +115,7 @@ pub const ROW: &[Spec] = &[
         let mut on = use_state(|| true);
         rows(vec![
             row("Wired connection")
-                .leading(Icon::Network)
+                .leading(Icon::Wifi)
                 .subtitle("Connected · 1 Gbit/s")
                 .trailing(switch(on(), move |next: bool| on.set(next)))
                 .navigates()
@@ -149,9 +149,9 @@ pub const ROW: &[Spec] = &[
                 .subtitle("Allow · Any application · Screen sharing")
                 .trailing(
                     hstack(S2)
-                        .child(icon_button(Icon::PanUp, |_| {}).tooltip("Move rule up"))
+                        .child(icon_button(Icon::ChevronUp, |_| {}).tooltip("Move rule up"))
                         .child(icon_button(Icon::Pencil, |_| {}).tooltip("Edit rule"))
-                        .child(icon_button(Icon::Delete, |_| {}).tooltip("Delete rule")),
+                        .child(icon_button(Icon::Trash, |_| {}).tooltip("Delete rule")),
                 )
                 .into_element(),
         ])
@@ -159,7 +159,7 @@ pub const ROW: &[Spec] = &[
     Spec::live("Button, dropdown and chevron", || {
         rows(vec![
             row("Wi-Fi network")
-                .leading(Icon::Network)
+                .leading(Icon::Wifi)
                 .trailing(action_button("Connect", |_| {}).compact())
                 .navigates()
                 .on_press(|_| {})
@@ -387,7 +387,7 @@ pub const EXPANDER: &[Spec] = &[
     Spec::forced("Leading icon and a value", || {
         rows(vec![
             expander_row("Other wired adapters", expander_children())
-                .leading(Icon::NetworkWired)
+                .leading(Icon::Network)
                 .value("3 adapters")
                 .expanded(true)
                 .into_element(),
@@ -983,7 +983,7 @@ fn action_items() -> Vec<MenuItem> {
     vec![
         menu_item("Cut", |_| {}).shortcut("Ctrl+X"),
         menu_item("Copy", |_| {})
-            .icon(Icon::EditCopy)
+            .icon(Icon::SquaresOverlap)
             .shortcut("Ctrl+C"),
         menu_item("Paste", |_| {}).disabled(),
         menu_separator(),
@@ -1017,7 +1017,7 @@ pub const MENU: &[Spec] = &[
     })
     .script("click-text Actions; wait 300; key down; key down; key down; key down; key down; key down; key down; key right; wait 300; save {out}"),
     Spec::live("With an icon", || {
-        menu_button("More", vec![menu_item("Refresh", |_| {}).icon(Icon::Refresh)]).icon(Icon::ViewMore).into_element()
+        menu_button("More", vec![menu_item("Refresh", |_| {}).icon(Icon::ArrowCw)]).icon(Icon::DotsThree).into_element()
     }),
     Spec::live("Context menu at the pointer", || {
         let overlays = use_overlays();
@@ -1040,7 +1040,7 @@ pub const MENU: &[Spec] = &[
                     menu_controls(
                         "Zoom",
                         vec![
-                            menu_control(Icon::ZoomOut, "Zoom out", move |_| {
+                            menu_control(Icon::MagnifierMinus, "Zoom out", move |_| {
                                 level.set(level().saturating_sub(10))
                             }),
                             menu_value_control(
@@ -1048,8 +1048,8 @@ pub const MENU: &[Spec] = &[
                                 "Reset zoom",
                                 move |_| level.set(100),
                             ),
-                            menu_control(Icon::ZoomIn, "Zoom in", move |_| level.set(level() + 10)),
-                            menu_control(Icon::ViewFullscreen, "Full screen", |_| {})
+                            menu_control(Icon::MagnifierPlus, "Zoom in", move |_| level.set(level() + 10)),
+                            menu_control(Icon::CornersOut, "Full screen", |_| {})
                                 .divided()
                                 .closes_menu(),
                         ],

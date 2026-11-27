@@ -160,7 +160,7 @@ impl Component for Stepper {
             )
             .maybe(!enabled, |element| element.opacity(0.45))
             .maybe(enabled, |element| element.on_key_down(on_key_down))
-            .child(step_button(Icon::ListRemove, can_decrement, move |_| {
+            .child(step_button(Icon::Minus, can_decrement, move |_| {
                 decrement();
                 a11y_id.request_focus();
             }))
@@ -169,7 +169,7 @@ impl Component for Stepper {
                     .tw(&tokens, &[min_w(Dim::Box11), px(S2), center()])
                     .child(BODY.in_ink(Ink::Text).label(&tokens, text).max_lines(1)),
             )
-            .child(step_button(Icon::ListAdd, can_increment, move |_| {
+            .child(step_button(Icon::Plus, can_increment, move |_| {
                 increment();
                 a11y_id.request_focus();
             }))

@@ -5,7 +5,7 @@ Bingux follows GNOME Shell's panel activity design:
 - Recording: a filled Adwaita red button, elapsed `m:ss` time, and the rounded square stop glyph.
 - Screen sharing: a filled Adwaita orange button with screen-sharing and stop symbols,
   with a tooltip naming the sharing applications and showing their icons.
-- Camera: an orange `camera-web-symbolic` icon while GNOME reports a camera in use.
+- Camera: an orange `webcam-symbolic` icon while GNOME reports a camera in use.
 - Microphone and location: orange symbolic icons with descriptive tooltips naming
   the requesting application when the desktop entry is available.
 

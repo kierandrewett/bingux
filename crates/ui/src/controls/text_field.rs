@@ -870,7 +870,7 @@ impl Component for TextField {
                         .max_lines(1),
                 )
                 .child(
-                    icon_button(Icon::WindowClose, move |_| on_remove.call(()))
+                    icon_button(Icon::Cross, move |_| on_remove.call(()))
                         .size(Dim::InlineButton)
                         .tooltip(remove_label),
                 );
@@ -927,7 +927,7 @@ impl Component for TextField {
             }
             if clear {
                 trailing = trailing.child(
-                    icon_button(Icon::EditClear, move |_| {
+                    icon_button(Icon::CircleCross, move |_| {
                         value.set(String::new());
                         if let Some(on_change) = &on_change {
                             on_change.call(String::new());
@@ -946,9 +946,9 @@ impl Component for TextField {
                     crate::tr!("ui-field-show-password")
                 };
                 let icon = if revealed() {
-                    Icon::ViewConceal
+                    Icon::EyeSlash
                 } else {
-                    Icon::ViewReveal
+                    Icon::Eye
                 };
                 trailing = trailing.child(
                     icon_button(icon, move |_| revealed.set(!revealed()))

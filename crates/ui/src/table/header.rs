@@ -326,9 +326,9 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for HeaderCell<T, K> 
         let arrow = sorted.map(|direction| {
             icons::icon(
                 if direction.is_descending() {
-                    Icon::PanDown
+                    Icon::ChevronDown
                 } else {
-                    Icon::PanUp
+                    Icon::ChevronUp
                 },
                 IconSize::Mark,
                 Paint::Muted.color(&tokens),

@@ -756,7 +756,7 @@ pub(crate) mod tests {
             .index("Settings", |_| rect().into())
             .root("network")
             .title("Network")
-            .icon(Icon::Network)
+            .icon(Icon::Wifi)
             .group("Connections")
             .root("sound")
             .title("Sound")
@@ -847,10 +847,7 @@ pub(crate) mod tests {
         );
         assert_eq!(table.title_of(&loc("settings://display/0")), "Display 1");
         assert_eq!(table.title_of(&loc("settings://nowhere")), "Not found");
-        assert_eq!(
-            table.icon_of(&loc("settings://network")),
-            Some(Icon::Network)
-        );
+        assert_eq!(table.icon_of(&loc("settings://network")), Some(Icon::Wifi));
     }
 
     #[test]

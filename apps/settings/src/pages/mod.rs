@@ -179,22 +179,22 @@ impl PageId {
 
     pub fn icon(self) -> Icon {
         match self {
-            Self::Network => Icon::Network,
+            Self::Network => Icon::Wifi,
             Self::Bluetooth => Icon::Bluetooth,
-            Self::Appearance => Icon::Appearance,
-            Self::Accessibility => Icon::Accessibility,
-            Self::Desktop => Icon::Desktop,
-            Self::Privacy => Icon::PreferencesSystem,
-            Self::Search => Icon::Search,
-            Self::Displays => Icon::Display,
-            Self::Sound => Icon::Sound,
-            Self::Power => Icon::Power,
+            Self::Appearance => Icon::Palette,
+            Self::Accessibility => Icon::PersonCircle,
+            Self::Desktop => Icon::MonitorDock,
+            Self::Privacy => Icon::Gear,
+            Self::Search => Icon::Magnifier,
+            Self::Displays => Icon::Monitor,
+            Self::Sound => Icon::SpeakerWave2,
+            Self::Power => Icon::Battery100,
             Self::Keyboard => Icon::Keyboard,
             Self::Mouse => Icon::Mouse,
             Self::DateTime => Icon::Clock,
-            Self::Users => Icon::Users,
-            Self::Applications => Icon::Applications,
-            Self::About => Icon::About,
+            Self::Users => Icon::People,
+            Self::Applications => Icon::DotsNine,
+            Self::About => Icon::CircleInfo,
         }
     }
 

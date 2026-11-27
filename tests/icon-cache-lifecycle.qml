@@ -30,7 +30,7 @@ ShellRoot {
             report.setText("FAILURES " + qtest_results.failCount);
         }
         function test_shared_icon_lifetime() {
-            const source = Quickshell.iconPath("window-close-symbolic").toString();
+            const source = Quickshell.iconPath("cross-symbolic").toString();
             const first = icon.createObject(host.contentItem, {
                 source
             });

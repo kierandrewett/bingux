@@ -1,8 +1,8 @@
 // Presentation policy shared by the detail page and its checks.
 function connectionIcon(connection) {
-    if (connection.type === "802-11-wireless") return "network-wireless-symbolic";
-    if (["vpn", "wireguard", "tun"].includes(connection.type)) return "network-vpn-symbolic";
-    return "network-wired-symbolic";
+    if (connection.type === "802-11-wireless") return "wifi-symbolic";
+    if (["vpn", "wireguard", "tun"].includes(connection.type)) return "shield-symbolic";
+    return "network-symbolic";
 }
 function connectionName(connection) {
     if (connection.connected && connection.type === "802-3-ethernet") return "Ethernet";
@@ -42,5 +42,5 @@ function bluetoothIcon(icon) {
         "camera-photo",
         "camera-video",
     ];
-    return devices.includes(name) ? name + "-symbolic" : "bluetooth-active-symbolic";
+    return devices.includes(name) ? name + "-symbolic" : "bluetooth-symbolic";
 }

@@ -79,13 +79,13 @@ impl VolumeControl {
 /// The speaker for a level: muted, then no waves, one, two.
 pub(crate) fn volume_icon(level: f64, muted: bool) -> Icon {
     if muted || level <= 0.0 {
-        Icon::AudioVolumeMuted
+        Icon::SpeakerCross
     } else if level < 34.0 {
-        Icon::AudioVolumeLow
+        Icon::Speaker
     } else if level < 67.0 {
-        Icon::AudioVolumeMedium
+        Icon::SpeakerWave1
     } else {
-        Icon::AudioVolumeHigh
+        Icon::SpeakerWave2
     }
 }
 
@@ -223,8 +223,8 @@ mod tests {
 
     #[test]
     fn the_speaker_shows_the_level() {
-        assert_eq!(volume_icon(80.0, true), Icon::AudioVolumeMuted);
-        assert_eq!(volume_icon(10.0, false), Icon::AudioVolumeLow);
-        assert_eq!(volume_icon(80.0, false), Icon::AudioVolumeHigh);
+        assert_eq!(volume_icon(80.0, true), Icon::SpeakerCross);
+        assert_eq!(volume_icon(10.0, false), Icon::Speaker);
+        assert_eq!(volume_icon(80.0, false), Icon::SpeakerWave2);
     }
 }

@@ -284,7 +284,7 @@ ColumnLayout {
             }
             contentItem: SymbolicIcon {
                 implicitSize: 12
-                source: BinguxIcons.source("go-next-symbolic")
+                source: BinguxIcons.source("chevron-right-symbolic")
                 color: root.theme.ink
             }
         }

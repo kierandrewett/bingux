@@ -451,7 +451,7 @@ impl Component for Playback {
                                 ],
                             )
                             .child(
-                                icon_button(Icon::MediaPlaybackStart, move |_| {
+                                icon_button(Icon::Play, move |_| {
                                     toggle.call(ControlAction::Toggle)
                                 })
                                 .ink(Ink::OnFloating)

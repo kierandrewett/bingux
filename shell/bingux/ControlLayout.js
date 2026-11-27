@@ -96,14 +96,14 @@ const widgets = [
     { id: "controls-tiles", label: "Quick controls", group: true },
     { id: "control-media", label: "Media player", group: true },
     { id: "control-customise", label: "Customise button", group: true },
-    { id: "control-account", action: true, label: "User account", icon: "avatar-default-symbolic" },
+    { id: "control-account", action: true, label: "User account", icon: "person-symbolic" },
     { id: "control-header-space", label: "Header space", group: true },
-    { id: "control-battery", label: "Battery", icon: "battery-level-100-symbolic", group: true },
-    { id: "control-settings", action: true, label: "Settings", icon: "preferences-system-symbolic" },
-    { id: "control-session", action: true, label: "Power options", icon: "system-shutdown-symbolic" },
-    { id: "control-lock", action: true, label: "Lock", icon: "network-wireless-encrypted-symbolic" },
-    { id: "control-volume", label: "Volume", icon: "audio-volume-high-symbolic", group: true },
-    { id: "control-microphone", label: "Microphone", icon: "audio-input-microphone-symbolic", group: true },
+    { id: "control-battery", label: "Battery", icon: "battery-100-symbolic", group: true },
+    { id: "control-settings", action: true, label: "Settings", icon: "gear-symbolic" },
+    { id: "control-session", action: true, label: "Power options", icon: "power-symbolic" },
+    { id: "control-lock", action: true, label: "Lock", icon: "padlock-symbolic" },
+    { id: "control-volume", label: "Volume", icon: "speaker-wave-2-symbolic", group: true },
+    { id: "control-microphone", label: "Microphone", icon: "microphone-symbolic", group: true },
 ];
 function widget(id) {
     return widgets.find((item) => item.id === id);

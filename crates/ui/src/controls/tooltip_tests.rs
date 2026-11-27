@@ -85,12 +85,12 @@ impl Component for Toggle {
             .position(Position::new_absolute().left(self.at.0).top(self.at.1))
             .tw_layout(&[flex_row()])
             .maybe_child(queue.then(|| {
-                icon_button(Icon::ViewListOrdered, |_: ()| {})
+                icon_button(Icon::ListNumbers, |_: ()| {})
                     .tooltip("Queue")
                     .size(Dim::Control)
             }))
             .maybe_child((!gone).then(|| {
-                icon_button(Icon::ViewReveal, move |_: ()| flipped.toggle())
+                icon_button(Icon::Eye, move |_: ()| flipped.toggle())
                     .tooltip(if flipped() { self.on } else { self.off })
                     .size(Dim::Control)
             }))

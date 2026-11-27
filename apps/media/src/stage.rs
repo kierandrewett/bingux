@@ -342,21 +342,22 @@ impl Component for FilmStage {
         if status.subtitle_tracks().next().is_some() || !mini {
             tools = tools.child(
                 menu_button(text::subtitles(), subtitle_items(&status, window))
-                    .icon(Icon::MediaViewSubtitles),
+                    .icon(Icon::Subtitles),
             );
         }
         if status.audio_tracks().count() > 1 {
-            tools = tools
-                .child(menu_button(text::audio_track(), audio_items(&status)).icon(Icon::Sound));
+            tools = tools.child(
+                menu_button(text::audio_track(), audio_items(&status)).icon(Icon::SpeakerWave2),
+            );
         }
         if !status.chapters.is_empty() && !mini {
             tools = tools.child(
-                menu_button(text::chapters(), chapter_items(&status)).icon(Icon::ViewListOrdered),
+                menu_button(text::chapters(), chapter_items(&status)).icon(Icon::ListNumbers),
             );
         }
         if !mini {
             tools = tools.child(
-                menu_button(text::speed_menu(), speed_items(&status)).icon(Icon::MediaSeekForward),
+                menu_button(text::speed_menu(), speed_items(&status)).icon(Icon::FastForward),
             );
         }
         let mini_tip = if mini {
@@ -371,14 +372,14 @@ impl Component for FilmStage {
         };
         tools = tools
             .child(
-                icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
+                icon_button(Icon::WindowInset, move |_| toggle_mini(ui))
                     .active(mini)
                     .tooltip_side(TipSide::Above)
                     .tooltip(&mini_tip),
             )
             .child(
-                icon_button(Icon::ViewFullscreen, move |_| toggle_fullscreen(ui))
-                    .morph(Icon::ViewRestore, fullscreen)
+                icon_button(Icon::CornersOut, move |_| toggle_fullscreen(ui))
+                    .morph(Icon::CornersIn, fullscreen)
                     .tooltip_side(TipSide::Above)
                     .tooltip(&fullscreen_tip),
             );
@@ -436,7 +437,8 @@ impl Component for FilmStage {
         );
         let top = card(rect().tw(&tokens, &[flex_row(), items(Align::Center), gap(S2)]))
             .child(
-                icon_button(Icon::PanDown, move |_| close_stage(ui)).tooltip(&text::close_player()),
+                icon_button(Icon::ChevronDown, move |_| close_stage(ui))
+                    .tooltip(&text::close_player()),
             )
             .child(
                 EMPHASIS
@@ -566,7 +568,7 @@ impl Component for SongStage {
             text::mini_player()
         };
         let header = HeaderBar::new("")
-            .leading(icon_button(Icon::PanDown, close).tooltip(&text::close_player()))
+            .leading(icon_button(Icon::ChevronDown, close).tooltip(&text::close_player()))
             .trailing(
                 rect()
                     .tw(&tokens, &[flex_row(), items(Align::Center), gap(S1)])
@@ -574,12 +576,9 @@ impl Component for SongStage {
                         (!sleep_label.is_empty())
                             .then(|| CAPTION.in_ink(Ink::Muted).label(&tokens, sleep_label)),
                     )
-                    .child(
-                        menu_button(text::sleep_timer(), sleep_items(&status))
-                            .icon(Icon::WeatherClearNight),
-                    )
+                    .child(menu_button(text::sleep_timer(), sleep_items(&status)).icon(Icon::Moon))
                     .maybe_child((!mini).then(|| {
-                        icon_button(Icon::ViewListOrdered, move |_| {
+                        icon_button(Icon::ListNumbers, move |_| {
                             let mut stage = ui.stage;
                             stage.set(false);
                             router.switch_root(&queue_target);
@@ -587,7 +586,7 @@ impl Component for SongStage {
                         .tooltip(&text::queue())
                     }))
                     .child(
-                        icon_button(Icon::ViewPip, move |_| toggle_mini(ui))
+                        icon_button(Icon::WindowInset, move |_| toggle_mini(ui))
                             .active(mini)
                             .tooltip(&pip_tip),
                     ),

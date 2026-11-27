@@ -127,7 +127,7 @@ impl Component for CertErrorPage {
             }
             ctx.overlays.show_dialog(dialog);
         };
-        status_page(Icon::DialogWarning, tr!("browser-error-cert-title"))
+        status_page(Icon::TriangleExclamation, tr!("browser-error-cert-title"))
             .description(tr!(
                 "browser-error-cert-description",
                 problem = CertSentence(error).text(),

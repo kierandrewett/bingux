@@ -48,7 +48,7 @@ impl WeatherProvider {
                 snapshot.apparent_temperature_celsius,
                 snapshot.wind_speed_kmh,
             ),
-            icon: "weather-clear".to_owned(),
+            icon: "sun".to_owned(),
             score: 0.65,
         })
     }

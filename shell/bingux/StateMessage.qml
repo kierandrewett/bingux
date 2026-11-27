@@ -32,7 +32,7 @@ Item {
     signal actionTriggered
 
     readonly property color toneColor: tone === "danger" ? Theme.danger : tone === "warning" ? Theme.warning : tone === "success" ? Theme.success : Theme.muted
-    readonly property string displayedIcon: iconName !== "" ? iconName : tone === "danger" ? "dialog-error-symbolic" : tone === "warning" ? "dialog-warning-symbolic" : tone === "success" ? "object-select-symbolic" : ""
+    readonly property string displayedIcon: iconName !== "" ? iconName : tone === "danger" ? "circle-cross-symbolic" : tone === "warning" ? "triangle-exclamation-symbolic" : tone === "success" ? "check-symbolic" : ""
     readonly property bool hasGlyph: loading || displayedIcon !== ""
     readonly property color titleColor: tone === "neutral" && compact ? Theme.muted : Theme.text
     readonly property int glyphSize: compact ? Theme.iconSize : 28

@@ -241,19 +241,19 @@ fn device_menu(ctx: NetCtx, device: &Device, route: Target) -> Vec<MenuItem> {
         menu_item(tr!("network-ethernet-menu-disconnect"), move |_| {
             set_link(ctx, name.clone(), false)
         })
-        .icon(Icon::WindowClose)
+        .icon(Icon::Cross)
     } else {
         menu_item(tr!("network-ethernet-menu-connect"), move |_| {
             set_link(ctx, name.clone(), true)
         })
-        .icon(Icon::NetworkWired)
+        .icon(Icon::Network)
     };
     vec![
         toggle,
         menu_item(tr!("network-ethernet-menu-settings"), move |_| {
             ctx.router.open(route.clone())
         })
-        .icon(Icon::PreferencesSystem),
+        .icon(Icon::Gear),
     ]
 }
 
@@ -646,18 +646,14 @@ impl Component for EthernetPage {
         let link = {
             let name = device.name.clone();
             if shown_connected(&device) {
-                strip_action(
-                    Icon::WindowClose,
-                    tr!("network-ethernet-disconnect"),
-                    move |_| set_link(ctx, name.clone(), false),
-                )
+                strip_action(Icon::Cross, tr!("network-ethernet-disconnect"), move |_| {
+                    set_link(ctx, name.clone(), false)
+                })
             } else {
                 let (device, uuid) = (device.clone(), current.uuid.clone());
-                strip_action(
-                    Icon::NetworkWired,
-                    tr!("network-ethernet-connect"),
-                    move |_| use_profile_now(ctx, &device, "uuid", uuid.clone()),
-                )
+                strip_action(Icon::Network, tr!("network-ethernet-connect"), move |_| {
+                    use_profile_now(ctx, &device, "uuid", uuid.clone())
+                })
                 .enabled(usable)
             }
         };
@@ -665,7 +661,7 @@ impl Component for EthernetPage {
         if profiles.len() > 1 {
             let (device, name, uuid) = (device.clone(), current.name.clone(), current.uuid.clone());
             actions.push(strip_action(
-                Icon::UserTrash,
+                Icon::Trash,
                 tr!("network-delete"),
                 move |_| {
                     confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
@@ -676,7 +672,7 @@ impl Component for EthernetPage {
         let mut blocks = vec![
             hero(
                 tokens,
-                Icon::NetworkWired,
+                Icon::Network,
                 current.name.clone(),
                 link_state(&device),
             ),
@@ -740,11 +736,9 @@ fn unconfigured_page(ctx: NetCtx, tokens: crate::ui::Tokens, wired: &Wired) -> E
     let device = wired.device.clone();
     let connect = {
         let name = device.name.clone();
-        strip_action(
-            Icon::NetworkWired,
-            tr!("network-ethernet-connect"),
-            move |_| set_link(ctx, name.clone(), true),
-        )
+        strip_action(Icon::Network, tr!("network-ethernet-connect"), move |_| {
+            set_link(ctx, name.clone(), true)
+        })
         .enabled(!unplugged(&device) && !shown_connected(&device))
     };
     let mut facts = Group::new(None::<String>);
@@ -760,7 +754,7 @@ fn unconfigured_page(ctx: NetCtx, tokens: crate::ui::Tokens, wired: &Wired) -> E
     let mut page = page_column()
         .child(hero(
             tokens,
-            Icon::NetworkWired,
+            Icon::Network,
             wired.title.clone(),
             link_state(&device),
         ))
@@ -792,14 +786,14 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile, in_use: boo
                     let connect = connect.clone();
                     move |_| connect(())
                 })
-                .icon(Icon::NetworkWired),
+                .icon(Icon::Network),
             );
             let open = route.clone();
             items.push(
                 menu_item(tr!("network-ethernet-open"), move |_| {
                     ctx.router.open(open.clone())
                 })
-                .icon(Icon::PreferencesSystem),
+                .icon(Icon::Gear),
             );
             items.push(menu_separator());
         }
@@ -808,13 +802,13 @@ fn profile_row(ctx: NetCtx, device: &Device, profile: &WiredProfile, in_use: boo
             menu_item(tr!("network-delete"), move |_| {
                 confirm_delete(ctx, device.clone(), name.clone(), Some(uuid.clone()), false)
             })
-            .icon(Icon::UserTrash)
+            .icon(Icon::Trash)
             .destructive(),
         );
         items
     };
     let mut line = row(profile.name.clone())
-        .leading(Icon::NetworkWired)
+        .leading(Icon::Network)
         .selected(in_use)
         .context_menu(menu);
     if in_use {
@@ -910,7 +904,7 @@ impl Component for AddProfileRow {
             _ => placeholder_device(&self.device),
         };
         row(tr!("network-ethernet-add-profile"))
-            .leading(Icon::ListAdd)
+            .leading(Icon::Plus)
             .on_press(move |_| open_new_profile(ctx, &device, taken.clone(), new_name, new_error))
     }
 }
@@ -1073,7 +1067,7 @@ impl Component for ProfilePage {
         let use_action = {
             let (device, name) = (device.clone(), name.clone());
             strip_action(
-                Icon::NetworkWired,
+                Icon::Network,
                 tr!("network-ethernet-use-profile"),
                 move |_| use_profile_now(ctx, &device, "id", name.clone()),
             )
@@ -1081,7 +1075,7 @@ impl Component for ProfilePage {
         };
         let delete = {
             let (device, name, uuid) = (device.clone(), name.clone(), uuid.clone());
-            strip_action(Icon::UserTrash, tr!("network-delete"), move |_| {
+            strip_action(Icon::Trash, tr!("network-delete"), move |_| {
                 confirm_delete(ctx, device.clone(), name.clone(), uuid.clone(), true)
             })
         };
@@ -1098,7 +1092,7 @@ impl Component for ProfilePage {
         let open = routes::section(&owner.clone(), &Section::Usage);
         veiled(
             page_column()
-                .child(hero(tokens, Icon::NetworkWired, name.clone(), state))
+                .child(hero(tokens, Icon::Network, name.clone(), state))
                 .child(action_strip(vec![use_action, delete]))
                 .child(Group::new(None::<String>).row(connection_usage_row(ctx, name, open)))
                 .child(ProfileSettings { owner }),

@@ -18,20 +18,20 @@ Item {
         {
             id: "suspend",
             title: "Suspend",
-            icon: "weather-clear-night-symbolic",
+            icon: "moon-symbolic",
             confirm: false
         },
         {
             id: "reboot",
             title: "Restart",
-            icon: "system-reboot-symbolic",
+            icon: "arrow-cw-symbolic",
             confirm: true,
             destructive: true
         },
         {
             id: "poweroff",
             title: "Shut Down",
-            icon: "system-shutdown-symbolic",
+            icon: "power-symbolic",
             confirm: true,
             destructive: true
         }
@@ -157,7 +157,7 @@ Item {
                 Layout.fillWidth: true
                 visible: root.pending !== ""
                 text: "Cancel"
-                iconName: "window-close-symbolic"
+                iconName: "cross-symbolic"
                 onClicked: root.pending = ""
             }
         }

@@ -64,7 +64,7 @@ def compositor_peer(listener, stop, peer_state, errors):
                 "time": 123456,
                 "monitor_id": "DP-1",
                 "output_names": OUTPUT_NAMES,
-                "icon": "audio-volume-high-symbolic",
+                "icon": "audio-volume-high-symbolic",  # gsd's own name, passed on. rename.py: keep
                 "label": "Headphones",
             }
             while not stop.is_set():
@@ -160,7 +160,7 @@ def main():
                 "type": "osd",
                 "monitorIndex": 2,
                 "outputNames": OUTPUT_NAMES,
-                "icon": "audio-volume-high-symbolic",
+                "icon": "audio-volume-high-symbolic",  # rename.py: keep
                 "label": "Headphones",
                 "level": -1.0,
                 "maxLevel": -1.0,

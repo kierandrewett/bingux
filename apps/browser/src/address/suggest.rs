@@ -50,9 +50,9 @@ impl Suggestion {
     /// The icon a row has.
     pub fn icon(&self) -> Icon {
         match self.source {
-            Source::Typed if self.detail.is_empty() => Icon::Search,
-            Source::Typed => Icon::WebBrowser,
-            Source::Tab(_) => Icon::WindowNew,
+            Source::Typed if self.detail.is_empty() => Icon::Magnifier,
+            Source::Typed => Icon::Globe,
+            Source::Tab(_) => Icon::SquareArrowUpRight,
             Source::History => Icon::Clock,
         }
     }

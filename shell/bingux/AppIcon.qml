@@ -120,7 +120,7 @@ Item {
         anchors.margins: -Theme.spaceSmall * sizeRatio
         fadeOutDuration: Theme.audioBadgeFadeOut
         shown: root.playingAudio
-        iconName: "audio-volume-high-symbolic"
+        iconName: "speaker-wave-2-symbolic"
         color: root.accentColor
         foreground: root.accentForeground
     }

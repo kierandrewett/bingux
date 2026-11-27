@@ -177,11 +177,11 @@ fn summary(ov: &Overview, airplane: bool) -> String {
 /// The icon for a device kind.
 pub fn device_icon(kind: DeviceKind) -> Icon {
     match kind {
-        DeviceKind::Wifi => Icon::NetworkWirelessSignalExcellent,
-        DeviceKind::Modem => Icon::Network,
-        DeviceKind::Ethernet => Icon::NetworkWired,
-        DeviceKind::WireGuard | DeviceKind::Tun => Icon::NetworkVpn,
-        DeviceKind::Other => Icon::Network,
+        DeviceKind::Wifi => Icon::Wifi,
+        DeviceKind::Modem => Icon::Wifi,
+        DeviceKind::Ethernet => Icon::Network,
+        DeviceKind::WireGuard | DeviceKind::Tun => Icon::Shield,
+        DeviceKind::Other => Icon::Wifi,
     }
 }
 
@@ -309,14 +309,14 @@ fn status_group(ctx: NetCtx, ov: &Overview, airplane: bool) -> Element {
         (_, true) => {
             group = group.row(
                 row(tr!("network-airplane-on"))
-                    .leading(Icon::AirplaneMode)
+                    .leading(Icon::Airplane)
                     .subtitle(tr!("network-airplane-on-hint")),
             );
         }
         _ => {
             group = group.row(
                 row(tr!("network-not-connected"))
-                    .leading(Icon::Network)
+                    .leading(Icon::Wifi)
                     .subtitle(tr!("network-not-connected-hint")),
             );
         }

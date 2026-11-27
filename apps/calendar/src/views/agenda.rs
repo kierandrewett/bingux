@@ -79,7 +79,7 @@ impl Component for AgendaView {
         let occurrences = shown(model.occurrences(anchor, to));
         let days = by_day(&occurrences, anchor, to);
         if days.is_empty() {
-            return status_page(Icon::XOfficeCalendar, tr!("calendar-nothing-coming-up"))
+            return status_page(Icon::Calendar, tr!("calendar-nothing-coming-up"))
                 .description(tr!("calendar-no-events-in-days", days = *span.read()))
                 .action(tr!("calendar-add-event"), move |_| {
                     editor::open(model, window, overlays, Seed::at_day(&model, anchor));
@@ -186,7 +186,7 @@ impl Component for SearchResults {
         );
         let found = shown(found);
         if found.is_empty() {
-            return status_page(Icon::Search, tr!("calendar-no-results"))
+            return status_page(Icon::Magnifier, tr!("calendar-no-results"))
                 .description(tr!("calendar-nothing-matches", query = self.query.trim()))
                 .into_element();
         }

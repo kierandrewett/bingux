@@ -116,29 +116,25 @@ fn moved<'a>(previous: Option<&Device>, current: Option<&'a Device>) -> Option<&
 }
 
 fn output_feedback(device: &Device) -> Feedback {
+    // Above 100 % (amplified) is the same two waves as a high level; the bar shows the rest.
     let icon = if device.muted || device.volume <= 0.0 {
-        "audio-volume-muted-symbolic"
-    } else if device.volume > 1.0 {
-        "audio-volume-overamplified-symbolic"
+        "speaker-cross-symbolic"
     } else if device.volume < 1.0 / 3.0 {
-        "audio-volume-low-symbolic"
+        "speaker-symbolic"
     } else if device.volume < 2.0 / 3.0 {
-        "audio-volume-medium-symbolic"
+        "speaker-wave-1-symbolic"
     } else {
-        "audio-volume-high-symbolic"
+        "speaker-wave-2-symbolic"
     };
     feedback(device, icon)
 }
 
 fn input_feedback(device: &Device) -> Feedback {
+    // The set has one microphone: the level is the bar, not the glyph.
     let icon = if device.muted || device.volume <= 0.0 {
-        "microphone-sensitivity-muted-symbolic"
-    } else if device.volume < 1.0 / 3.0 {
-        "microphone-sensitivity-low-symbolic"
-    } else if device.volume < 2.0 / 3.0 {
-        "microphone-sensitivity-medium-symbolic"
+        "microphone-slash-symbolic"
     } else {
-        "microphone-sensitivity-high-symbolic"
+        "microphone-symbolic"
     };
     feedback(device, icon)
 }

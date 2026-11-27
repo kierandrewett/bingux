@@ -88,9 +88,9 @@ impl EngineRows {
     fn status_look(status: CheckStatus) -> (Icon, Option<Tone>) {
         match status {
             CheckStatus::Ok | CheckStatus::Info => (Icon::Check, None),
-            CheckStatus::Warn => (Icon::DialogWarning, Some(Tone::Warning)),
-            CheckStatus::Fail => (Icon::DialogError, Some(Tone::Danger)),
-            CheckStatus::Unknown => (Icon::About, None),
+            CheckStatus::Warn => (Icon::TriangleExclamation, Some(Tone::Warning)),
+            CheckStatus::Fail => (Icon::CircleCross, Some(Tone::Danger)),
+            CheckStatus::Unknown => (Icon::CircleInfo, None),
         }
     }
 
@@ -151,7 +151,7 @@ impl EngineRows {
                     .row(
                         row(tr!("browser-settings-not-reported"))
                             .subtitle(tr!("browser-settings-not-checked-description"))
-                            .leading(Icon::About),
+                            .leading(Icon::CircleInfo),
                     ),
             ];
         };
@@ -399,11 +399,11 @@ mod tests {
     fn a_failed_check_is_red_a_warning_is_amber_and_a_healthy_one_is_quiet() {
         assert_eq!(
             EngineRows::status_look(CheckStatus::Fail),
-            (Icon::DialogError, Some(Tone::Danger))
+            (Icon::CircleCross, Some(Tone::Danger))
         );
         assert_eq!(
             EngineRows::status_look(CheckStatus::Warn),
-            (Icon::DialogWarning, Some(Tone::Warning))
+            (Icon::TriangleExclamation, Some(Tone::Warning))
         );
         assert_eq!(
             EngineRows::status_look(CheckStatus::Ok),

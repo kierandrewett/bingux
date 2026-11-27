@@ -600,7 +600,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for DataTable<T, K> {
         let status = &self.status;
         let body: Element = match status {
             TableStatus::Failed(failure) => {
-                let mut page = status_page(Icon::DialogError, failure.title.clone());
+                let mut page = status_page(Icon::CircleCross, failure.title.clone());
                 if let Some(detail) = &failure.detail {
                     page = page.description(detail.clone());
                 }
@@ -612,7 +612,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for DataTable<T, K> {
             TableStatus::Loading => placeholder_rows(&tokens, &layout_plan, height, compact, marks),
             TableStatus::Ready if count == 0 => match &self.empty {
                 Some(empty) => empty.clone(),
-                None => status_page(Icon::ViewList, crate::tr!("ui-table-empty")).into(),
+                None => status_page(Icon::ListBullets, crate::tr!("ui-table-empty")).into(),
             },
             TableStatus::Ready => {
                 let data = RowsData {

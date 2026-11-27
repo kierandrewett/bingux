@@ -101,7 +101,7 @@ impl Component for Page {
     fn render(&self) -> impl IntoElement {
         let tokens = use_tokens();
         let button = || {
-            icon_button(Icon::ListAdd, |_: ()| {})
+            icon_button(Icon::Plus, |_: ()| {})
                 .size(Dim::Control)
                 .tooltip(&self.text)
         };
@@ -568,7 +568,7 @@ impl Component for FooterBar {
                 rect()
                     .position(Position::new_absolute().left(40.0).top(40.0))
                     .child(
-                        icon_button(Icon::MediaPlaybackStart, |_: ()| {})
+                        icon_button(Icon::Play, |_: ()| {})
                             .size(Dim::Control)
                             .tooltip("Pause (Space)")
                             .tooltip_side(TipSide::Above)

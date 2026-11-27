@@ -4,7 +4,7 @@ use bingux_ui::icons::Icon;
 
 /// One icon file, with the variant that names it and where it is used.
 pub struct IconFile {
-    /// The file stem without `-symbolic.svg`: `network-wireless`.
+    /// The file stem without `-symbolic.svg`, the icon's shape name: `wifi`.
     pub file: &'static str,
     /// The `Icon` variant name, when the set has one for this file.
     pub variant: Option<&'static str>,

@@ -664,7 +664,7 @@ ShellPopup {
                             anchors.centerIn: parent
                             visible: categoryButton.modelData.id === "" || categoryButton.modelData.id === "recent"
                             implicitSize: 16
-                            source: BinguxIcons.source(categoryButton.modelData.id === "recent" ? "document-open-recent-symbolic" : "view-grid-symbolic")
+                            source: BinguxIcons.source(categoryButton.modelData.id === "recent" ? "clock-ccw-symbolic" : "squares-four-symbolic")
                             color: Theme.text
                         }
                         Text {

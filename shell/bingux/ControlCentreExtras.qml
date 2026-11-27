@@ -13,31 +13,31 @@ Item {
         {
             id: "vpn",
             title: "VPN",
-            icon: "network-vpn-symbolic",
+            icon: "shield-symbolic",
             available: true
         },
         {
             id: "dnd",
             title: "Do Not Disturb",
-            icon: "notifications-disabled-symbolic",
+            icon: "bell-slash-symbolic",
             available: !!services.state.dndAvailable
         },
         {
             id: "nightLight",
             title: "Night Light",
-            icon: "night-light-symbolic",
+            icon: "moon-stars-symbolic",
             available: !!services.state.nightLightAvailable
         },
         {
             id: "power",
             title: "Power mode",
-            icon: "power-profile-balanced-symbolic",
+            icon: "gauge-symbolic",
             available: !!services.state.power && services.state.power.available
         },
         {
             id: "awake",
             title: "Keep Awake",
-            icon: "display-brightness-symbolic",
+            icon: "sun-symbolic",
             available: !!services.state.awakeAvailable
         }
     ]
@@ -78,7 +78,7 @@ Item {
             IconButton {
                 id: back
                 objectName: "controlExtrasBack"
-                iconName: "go-previous-symbolic"
+                iconName: "chevron-left-symbolic"
                 label: root.tailscaleOpen ? "Back to VPN" : "Back to Control Centre"
                 tooltipEnabled: false
                 onClicked: root.goBack()
@@ -134,7 +134,7 @@ Item {
                         objectName: "controlVpn_" + modelData.id
                         title: modelData.name
                         subtitle: modelData.subtitle
-                        iconName: "network-vpn-symbolic"
+                        iconName: "shield-symbolic"
                         rowInteractive: false
                         toggleVisible: true
                         selected: modelData.connected
@@ -154,7 +154,7 @@ Item {
                     visible: root.page === "vpn"
                     title: "Connection details"
                     subtitle: root.services.publicNetworkBusy ? "Checking public connection…" : root.publicNetwork.status === "ready" ? root.publicNetwork.ip : "Show current IP, provider and region"
-                    iconName: "network-wired-symbolic"
+                    iconName: "network-symbolic"
                     navigation: true
                     navigationRotation: root.publicNetworkOpen ? 90 : 0
                     onClicked: root.togglePublicNetwork()
@@ -252,7 +252,7 @@ Item {
                     objectName: "vpnEmpty"
                     compact: true
                     visible: root.page === "vpn" && root.services.vpns.length === 0
-                    iconName: "network-vpn-symbolic"
+                    iconName: "shield-symbolic"
                     title: "No VPN connections"
                     detail: "Add one in Network settings."
                 }
@@ -262,7 +262,10 @@ Item {
                         required property string modelData
                         objectName: "controlPower_" + modelData
                         title: modelData === "power-saver" ? "Power Saver" : modelData === "performance" ? "Performance" : "Balanced"
-                        iconName: "power-profile-" + modelData + "-symbolic"
+                        iconName: ({
+                                "power-saver": "leaf",
+                                "performance": "bolt"
+                            }[modelData] || "gauge") + "-symbolic"
                         selected: modelData === root.services.state.power.profile
                         enabled: !root.services.busy
                         onClicked: root.services.action({

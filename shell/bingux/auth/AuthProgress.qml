@@ -183,7 +183,7 @@ ColumnLayout {
             objectName: "progressPower"
             theme: root.theme
             backdrop: root.backdrop
-            iconName: "system-shutdown-symbolic"
+            iconName: "power-symbolic"
             Accessible.name: "Power options"
             onClicked: root.powerRequested()
         }

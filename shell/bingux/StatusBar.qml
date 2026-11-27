@@ -115,7 +115,7 @@ Item {
         objectName: "parityMask:search"
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        presentation: root.appearance("search", "Search", "system-search-symbolic", true, false)
+        presentation: root.appearance("search", "Search", "magnifier-symbolic", true, false)
         enabled: root.allowed("search")
         opacity: enabled ? 1 : 0.4
         onClicked: root.searchRequested()
@@ -125,7 +125,7 @@ Item {
         id: clockPill
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.verticalCenter: parent.verticalCenter
-        presentation: root.appearance("clock", clockLabel.text + " " + timeLabel.text, "x-office-calendar-symbolic", false, true)
+        presentation: root.appearance("clock", clockLabel.text + " " + timeLabel.text, "calendar-symbolic", false, true)
         z: 1
         horizontalPadding: Theme.barPrimaryPadding
         interactive: true
@@ -189,7 +189,7 @@ Item {
         id: metricsSlot
         SystemMetrics {
             systemMetrics: root.metrics
-            presentation: root.appearance("metrics", "System monitors", "computer-symbolic", true, true)
+            presentation: root.appearance("metrics", "System monitors", "laptop-symbolic", true, true)
             // Without a metrics feed (lock screen, greeter, installer) there is
             // nothing to read: the slot is absent instead of printing "CPU —".
             visible: root.metricsEnabled && root.allowed("metrics") && available
@@ -201,7 +201,7 @@ Item {
     Component {
         id: keyboardSlot
         InputSourceSelector {
-            presentation: root.appearance("keyboard", displayLabel, "input-keyboard-symbolic", false, true)
+            presentation: root.appearance("keyboard", displayLabel, "keyboard-symbolic", false, true)
             visible: root.allowed("keyboard") && (root.metrics?.desktopStateAvailable ?? false)
             parentWindow: root.hostWindow
             metrics: root.metrics
@@ -214,7 +214,7 @@ Item {
         id: controlsSlot
         Pill {
             id: systemPill
-            presentation: root.appearance("controls", "Control centre", "preferences-system-symbolic", true, false)
+            presentation: root.appearance("controls", "Control centre", "gear-symbolic", true, false)
             horizontalPadding: Theme.barPrimaryPadding
             interactive: true
             hovered: systemMouse.containsMouse
@@ -244,7 +244,7 @@ Item {
     Component {
         id: notificationsSlot
         BarNotificationButton {
-            presentation: root.appearance("notifications", "Notifications", "preferences-system-notifications-symbolic", true, false)
+            presentation: root.appearance("notifications", "Notifications", "bell-symbolic", true, false)
             count: root.notificationCount
             selected: root.notificationsOpen
             barWindow: root.hostWindow

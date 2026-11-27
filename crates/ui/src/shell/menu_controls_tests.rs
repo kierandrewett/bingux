@@ -58,7 +58,7 @@ impl Component for Page {
                         menu_controls(
                             "Zoom",
                             vec![
-                                menu_control(Icon::ZoomOut, "Zoom out", move |_| {
+                                menu_control(Icon::MagnifierMinus, "Zoom out", move |_| {
                                     level.set(level() - 10)
                                 }),
                                 menu_value_control(
@@ -66,10 +66,10 @@ impl Component for Page {
                                     "Reset zoom",
                                     move |_| level.set(100),
                                 ),
-                                menu_control(Icon::ZoomIn, "Zoom in", move |_| {
+                                menu_control(Icon::MagnifierPlus, "Zoom in", move |_| {
                                     level.set(level() + 10)
                                 }),
-                                menu_control(Icon::ViewFullscreen, "Full screen", move |_| {
+                                menu_control(Icon::CornersOut, "Full screen", move |_| {
                                     full.set(true)
                                 })
                                 .divided()

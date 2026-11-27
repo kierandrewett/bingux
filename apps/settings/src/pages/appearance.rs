@@ -490,7 +490,7 @@ impl Component for AppearancePage {
                         menu_item(tr!("settings-appearance-choose-picture"), move |_| {
                             choose_wallpaper(model, overlays, window)
                         })
-                        .icon(Icon::ImageGeneric),
+                        .icon(Icon::Image),
                         menu_separator(),
                         menu_item(tr!("settings-appearance-use-system-wallpaper"), move |_| {
                             set_wallpaper(model, overlays, None)

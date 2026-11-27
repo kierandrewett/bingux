@@ -221,7 +221,7 @@ GridLayout {
             id: accountControl
             widgetId: "control-account"
             objectName: "controlUserAccount"
-            iconName: "avatar-default-symbolic"
+            iconName: "person-symbolic"
             imageSource: root.accountImageSource
             label: "User account"
             onClicked: root.settings("users")
@@ -274,7 +274,7 @@ GridLayout {
             id: settingsControl
             widgetId: "control-settings"
             objectName: "controlSettings"
-            iconName: "preferences-system-symbolic"
+            iconName: "gear-symbolic"
             label: "Settings"
             onClicked: root.settings("")
         }
@@ -282,7 +282,7 @@ GridLayout {
             id: sessionPowerButton
             widgetId: "control-session"
             objectName: "controlSessionPower"
-            iconName: "system-shutdown-symbolic"
+            iconName: "power-symbolic"
             label: "Power options"
             onClicked: root.openDetail("session", sessionPowerButton)
         }
@@ -290,7 +290,7 @@ GridLayout {
             id: lockControl
             widgetId: "control-lock"
             objectName: "controlLock"
-            iconName: "network-wireless-encrypted-symbolic"
+            iconName: "padlock-symbolic"
             label: "Lock"
             onClicked: root.lockRequested()
         }
@@ -322,7 +322,7 @@ GridLayout {
             objectName: "controlInputRow"
             node: root.microphone
             label: "Microphone"
-            iconName: "audio-input-microphone-symbolic"
+            iconName: "microphone-symbolic"
             navigation: true
             navigationObjectName: "controlInputDetails"
             muteObjectName: "controlMicrophoneQuick"
@@ -381,7 +381,7 @@ GridLayout {
             rowInteractive: false
             controlName: "bluetooth"
             objectName: "controlBluetooth"
-            iconName: "bluetooth-active-symbolic"
+            iconName: "bluetooth-symbolic"
             title: "Bluetooth"
             toggleVisible: true
             enabled: root.bluetoothAdapter !== null
@@ -399,7 +399,7 @@ GridLayout {
             objectName: "controlVpn"
             rowInteractive: false
             navigation: true
-            iconName: "network-vpn-symbolic"
+            iconName: "shield-symbolic"
             title: "VPN"
             selected: root.connectedVpns.length > 0
             subtitle: root.connectedVpns.length ? root.connectedVpns.map(vpn => vpn.name).join(", ") : "Disconnected"
@@ -413,7 +413,7 @@ GridLayout {
             objectName: "controlDnd"
             title: "Do Not Disturb"
             subtitle: ""
-            iconName: "notifications-disabled-symbolic"
+            iconName: "bell-slash-symbolic"
             rowInteractive: false
             toggleVisible: true
             toggleEnabled: !!root.services.state.dndAvailable && !root.services.busy
@@ -431,7 +431,7 @@ GridLayout {
             objectName: "controlNightLight"
             title: "Night Light"
             subtitle: !root.services.state.nightLightAvailable ? "Unavailable" : root.services.state.nightLight && !root.services.state.nightLightActive ? "Scheduled" : ""
-            iconName: "night-light-symbolic"
+            iconName: "moon-stars-symbolic"
             rowInteractive: false
             toggleVisible: true
             toggleEnabled: !!root.services.state.nightLightAvailable && !root.services.busy
@@ -449,7 +449,7 @@ GridLayout {
             objectName: "controlPower"
             title: "Power mode"
             subtitle: !root.services.state.power.available ? "Unavailable" : root.services.state.power.profile === "power-saver" ? "Power Saver" : root.services.state.power.profile === "performance" ? "Performance" : "Balanced"
-            iconName: "power-profile-balanced-symbolic"
+            iconName: "gauge-symbolic"
             rowInteractive: false
             navigation: true
             enabled: root.services.state.power.available
@@ -463,7 +463,7 @@ GridLayout {
             objectName: "controlKeepAwake"
             title: "Keep Awake"
             subtitle: root.services.keepAwake ? "Until sign out" : ""
-            iconName: "display-brightness-symbolic"
+            iconName: "sun-symbolic"
             rowInteractive: false
             toggleVisible: true
             toggleEnabled: !!root.services.state.awakeAvailable
@@ -485,7 +485,7 @@ GridLayout {
         Layout.column: placed ? root.widgetLayout.controlColumn(mediaControl) : 0
         visible: root.permitted("media") && (placed || root.sectionRow(widgetId) >= 0)
         Layout.fillWidth: !barLayout
-        presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", player ? player.trackTitle || player.identity : "Media playback", "applications-multimedia-symbolic", true, true)
+        presentation: DesktopLayout.presentation(root.desktop, widgetId, container || "control-centre", player ? player.trackTitle || player.identity : "Media playback", "music-notes-symbolic", true, true)
         player: root.mediaPlayer
         playerOptions: root.mediaPlayers
         onPlayerSelected: selectedPlayer => root.playerSelected(selectedPlayer)

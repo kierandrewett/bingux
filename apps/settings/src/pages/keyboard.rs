@@ -500,15 +500,15 @@ fn source_menu(index: usize, count: usize, edits: SourceEdits) -> Vec<MenuItem> 
     let up = menu_item(tr!("settings-keyboard-move-up"), move |_| {
         edits.run(Edit::MoveUp(index))
     })
-    .icon(Icon::PanUp);
+    .icon(Icon::ChevronUp);
     let down = menu_item(tr!("settings-keyboard-move-down"), move |_| {
         edits.run(Edit::MoveDown(index))
     })
-    .icon(Icon::PanDown);
+    .icon(Icon::ChevronDown);
     let remove = menu_item(tr!("settings-keyboard-remove"), move |_| {
         edits.run(Edit::Remove(index))
     })
-    .icon(Icon::Delete)
+    .icon(Icon::Trash)
     .destructive();
     vec![
         if index > 0 { up } else { up.disabled() },
@@ -1000,7 +1000,7 @@ impl Component for KeyboardPage {
                     ))
                     .row(
                         row(tr!("settings-keyboard-add-source"))
-                            .leading(Icon::ListAdd)
+                            .leading(Icon::Plus)
                             .enabled(!busy)
                             .on_press(move |_| open_add_sheet(edits)),
                     )

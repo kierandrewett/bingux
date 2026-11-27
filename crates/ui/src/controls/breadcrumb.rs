@@ -93,7 +93,7 @@ impl<K: Clone + PartialEq + 'static> Component for Breadcrumb<K> {
             rect()
                 .tw(tokens, &[flex_row(), h_full(), items(Align::Center)])
                 .child(icons::icon(
-                    Icon::GoNext,
+                    Icon::ChevronRight,
                     IconSize::Text,
                     Ink::Muted.color(tokens),
                 ))

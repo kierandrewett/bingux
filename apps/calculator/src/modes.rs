@@ -195,7 +195,7 @@ impl Component for ConvertPanel {
                                     swap_calc.with(|s| s.swap_units());
                                     swap_calc.changed();
                                 })
-                                .icon(Icon::Swap)
+                                .icon(Icon::ArrowsLeftRight)
                                 .name(tr!("calculator-convert-swap.a11y"))
                                 .tooltip(tr!("calculator-convert-swap.a11y"))
                                 .tone(KeyTone::Plain),
@@ -242,7 +242,7 @@ impl Component for ConvertPanel {
                         ),
                     )
                     .child(
-                        icon_button(Icon::Refresh, move |_: ()| refresh.refresh_rates())
+                        icon_button(Icon::ArrowCw, move |_: ()| refresh.refresh_rates())
                             .tooltip(&tr!("calculator-rates-update.tooltip"))
                             .busy(fetching)
                             .refocus(calc.field_id),

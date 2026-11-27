@@ -529,12 +529,12 @@ impl Component for Content {
             .title_start(true)
             .title_slot(title_slot)
             .leading(
-                icon_button(Icon::DocumentOpen, move |_| open(())).tooltip(&copy::open_tooltip()),
+                icon_button(Icon::FolderOpen, move |_| open(())).tooltip(&copy::open_tooltip()),
             );
         if document {
             let mut sidebar_state = sidebar;
             header = header.leading(
-                icon_button(Icon::SidebarShow, move |_| {
+                icon_button(Icon::WindowSidebar, move |_| {
                     let shown = *sidebar_state.peek();
                     sidebar_state.set(!shown);
                 })
@@ -552,18 +552,18 @@ impl Component for Content {
             }
             header = header
                 .trailing(
-                    icon_button(Icon::ObjectRotateLeft, move |_| zoom.rotate(false))
+                    icon_button(Icon::ArrowCcw, move |_| zoom.rotate(false))
                         .tooltip(&copy::turn_left_tooltip()),
                 )
                 .trailing(
-                    icon_button(Icon::ObjectRotateRight, move |_| zoom.rotate(true))
+                    icon_button(Icon::ArrowCw, move |_| zoom.rotate(true))
                         .tooltip(&copy::turn_right_tooltip()),
                 );
         }
         if current.is_some() && !compact && !cropping_now {
             let mut info_state = info;
             header = header.trailing(
-                icon_button(Icon::DialogInformation, move |_| {
+                icon_button(Icon::CircleInfo, move |_| {
                     let shown = *info_state.peek();
                     info_state.set(!shown);
                 })
@@ -612,7 +612,7 @@ impl Component for Content {
             overlays,
         );
         header = header
-            .trailing(menu_button(copy::main_menu(), menu).icon(Icon::OpenMenu))
+            .trailing(menu_button(copy::main_menu(), menu).icon(Icon::LinesThree))
             .trailing(WindowControls);
 
         // What the arrows and the viewer's own buttons do.
@@ -669,7 +669,7 @@ impl Component for Content {
                     .folder(list.is_folder(path))
                     .into_element()
             }
-            (None, _) => status_page(Icon::ImageGeneric, copy::empty_title())
+            (None, _) => status_page(Icon::Image, copy::empty_title())
                 .description(copy::empty_line())
                 .action(copy::empty_action(), EventHandler::new(open))
                 .into_element(),

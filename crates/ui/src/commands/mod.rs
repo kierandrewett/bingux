@@ -967,7 +967,7 @@ fn standard(commands: Commands) -> Vec<Command> {
             move |_| commands.show_palette(),
         )
         .shortcut("Ctrl+Shift+P")
-        .icon(Icon::Search)
+        .icon(Icon::Magnifier)
         .keywords(keywords(crate::tr!("ui-command-palette.keywords")))
         .section("help")
         .hidden_from_palette(),
@@ -994,7 +994,7 @@ fn standard(commands: Commands) -> Vec<Command> {
                     }
                 },
             )
-            .icon(Icon::About)
+            .icon(Icon::CircleInfo)
             .keywords(keywords(crate::tr!("ui-command-about.keywords")))
             // The main menu ends with About from `about::app_menu_items`.
             .hidden_from_menu(),

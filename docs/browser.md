@@ -373,7 +373,7 @@ the library has to provide, in the order an app would use it:
    `Segmented`, `Stepper` and `Switch` (knob travel) has to use them.
 3. **Directional icons.** A per-icon "mirrors in RTL" flag (Back, Forward, chevrons, "next/previous",
    list-with-bullet, undo/redo, send; not Reload, Search, Play, a clock or a check mark) applied by the
-   `icon` element, so `Icon::GoPrevious` is drawn pointing right in `Rtl` without each app flipping.
+   `icon` element, so `Icon::ChevronLeft` is drawn pointing right in `Rtl` without each app flipping.
 4. **Text.** The text layout (`bingux-text-layout`, Skia paragraph) takes a base direction per paragraph:
    `Auto` by the first strong character (the default for user content such as titles and addresses),
    `Inherit` for chrome labels. `text_field` needs the matching caret and selection movement (Left

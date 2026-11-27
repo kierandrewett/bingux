@@ -655,7 +655,7 @@ impl IconButton {
     /// of the motion goes back from where the icon is. The caller sets the
     /// tooltip (which is also the button's accessible name) and the press
     /// handler to match the state it is in: Reload and Stop is
-    /// `icon_button(Icon::Refresh, f).morph(Icon::MediaPlaybackStop, loading)`.
+    /// `icon_button(Icon::ArrowCw, f).morph(Icon::Stop, loading)`.
     pub fn morph(mut self, to: Icon, on: bool) -> Self {
         self.morph = Some((to, on));
         self

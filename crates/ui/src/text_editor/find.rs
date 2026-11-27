@@ -404,23 +404,23 @@ impl Component for FindBar {
                             .shortcut("Alt+R"),
                     ],
                 )
-                .icon(Icon::Filter)
+                .icon(Icon::Funnel)
                 .into()
             } else {
                 rect()
                     .tw(&tokens, &[flex_row(), items(Align::Center)])
                     .child(
-                        icon_button(Icon::FindMatchCase, move |_| case.set(!c))
+                        icon_button(Icon::LettersAa, move |_| case.set(!c))
                             .active(c)
                             .tooltip(crate::tr!("ui-text-find-match-case.tooltip")),
                     )
                     .child(
-                        icon_button(Icon::FindWholeWord, move |_| whole.set(!word))
+                        icon_button(Icon::BracketsSquare, move |_| whole.set(!word))
                             .active(word)
                             .tooltip(crate::tr!("ui-text-find-whole-words.tooltip")),
                     )
                     .child(
-                        icon_button(Icon::FindRegex, move |_| regex.set(!r))
+                        icon_button(Icon::Asterisk, move |_| regex.set(!r))
                             .active(r)
                             .tooltip(crate::tr!("ui-text-find-regex.tooltip")),
                     )
@@ -460,9 +460,9 @@ impl Component for FindBar {
         let disclosure = (!self.read_only).then(|| {
             icon_button(
                 if replacing {
-                    Icon::PanDown
+                    Icon::ChevronDown
                 } else {
-                    Icon::PanEnd
+                    Icon::ChevronRight
                 },
                 move |_| {
                     replacing_state.set(!replacing);
@@ -510,17 +510,17 @@ impl Component for FindBar {
                     })),
             )
             .child(
-                icon_button(Icon::PanUp, move |_| find.step(&previous_handle, false))
+                icon_button(Icon::ChevronUp, move |_| find.step(&previous_handle, false))
                     .tooltip(crate::tr!("ui-text-find-previous.tooltip"))
                     .enabled(has_matches),
             )
             .child(
-                icon_button(Icon::PanDown, move |_| find.step(&next_handle, true))
+                icon_button(Icon::ChevronDown, move |_| find.step(&next_handle, true))
                     .tooltip(crate::tr!("ui-text-find-next.tooltip"))
                     .enabled(has_matches),
             )
             .child(
-                icon_button(Icon::WindowClose, move |_| close())
+                icon_button(Icon::Cross, move |_| close())
                     .tooltip(crate::tr!("ui-text-find-close.tooltip")),
             );
 
@@ -744,7 +744,7 @@ impl Component for GoToLineBar {
                     .child(CAPTION.in_ink(Ink::Muted).label(&tokens, hint).max_lines(1)),
             )
             .child(
-                icon_button(Icon::WindowClose, move |_| button_close())
+                icon_button(Icon::Cross, move |_| button_close())
                     .tooltip(crate::tr!("ui-text-find-close.tooltip")),
             )
     }

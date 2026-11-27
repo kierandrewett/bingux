@@ -189,7 +189,7 @@ impl Component for AddressBar {
             } else {
                 tr!("browser-address-placeholder")
             })
-            .leading(Icon::Search)
+            .leading(Icon::Magnifier)
             .a11y_id(id)
             .revert_to(shown.clone())
             .on_change(move |_: String| {

@@ -703,22 +703,10 @@ fn header_subtitle(model: &Loaded) -> Option<String> {
     }
 }
 
-/// The bundled glyph for the icon name BlueZ reports.
+/// The bundled glyph for the icon name BlueZ reports (scripts/icons/aliases.tsv
+/// maps BlueZ's names), or the Bluetooth rune for a name the set has no glyph for.
 fn device_icon(name: &str) -> Icon {
-    match name {
-        "audio-headphones" | "audio-headset" => Icon::Headphones,
-        "audio-card" | "audio-speakers" => Icon::Speakers,
-        "input-keyboard" => Icon::Keyboard,
-        "input-mouse" => Icon::Mouse,
-        "input-tablet" => Icon::InputTablet,
-        "input-gaming" => Icon::Gamepad,
-        "phone" => Icon::Phone,
-        "computer" => Icon::Computer,
-        "video-display" => Icon::Display,
-        "printer" => Icon::Printer,
-        "camera-photo" | "camera-video" | "camera-web" => Icon::CameraWeb,
-        _ => Icon::Bluetooth,
-    }
+    Icon::from_freedesktop(name).unwrap_or(Icon::Bluetooth)
 }
 
 /// What kind of device the icon name stands for, in words.
@@ -776,7 +764,7 @@ fn device_strip(device: &Device, ctx: Ctx, adapter_on: bool, idle: bool) -> Elem
     if device.paired {
         let forget = device.clone();
         actions.push(
-            strip_action(Icon::UserTrash, tr!("bluetooth-action-forget"), move |_| {
+            strip_action(Icon::Trash, tr!("bluetooth-action-forget"), move |_| {
                 confirm_forget(ctx, &forget)
             })
             .destructive()
@@ -789,11 +777,11 @@ fn device_strip(device: &Device, ctx: Ctx, adapter_on: bool, idle: bool) -> Elem
 /// The one action a device allows, with its icon and label.
 fn device_action(device: &Device) -> (Icon, String) {
     if device.connected {
-        (Icon::WindowClose, tr!("bluetooth-action-disconnect"))
+        (Icon::Cross, tr!("bluetooth-action-disconnect"))
     } else if device.paired {
         (Icon::Bluetooth, tr!("bluetooth-action-connect"))
     } else {
-        (Icon::ListAdd, tr!("bluetooth-action-pair"))
+        (Icon::Plus, tr!("bluetooth-action-pair"))
     }
 }
 
@@ -808,7 +796,7 @@ fn device_menu(ctx: Ctx, device: &Device) -> Vec<MenuItem> {
             menu_item(tr!("bluetooth-action-forget"), move |_| {
                 confirm_forget(ctx, &forget)
             })
-            .icon(Icon::UserTrash)
+            .icon(Icon::Trash)
             .destructive(),
         );
     }

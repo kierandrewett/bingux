@@ -209,7 +209,7 @@ ColumnLayout {
                 flat: true
                 alignLeft: true
                 text: "Start"
-                iconName: "media-playback-start-symbolic"
+                iconName: "play-symbolic"
                 enabled: !actionWorker.running
                 onClicked: root.act("start")
             }
@@ -218,7 +218,7 @@ ColumnLayout {
                 flat: true
                 alignLeft: true
                 text: "Stop"
-                iconName: "media-playback-stop-symbolic"
+                iconName: "stop-symbolic"
                 enabled: !actionWorker.running
                 onClicked: root.act("stop")
             }
@@ -227,7 +227,7 @@ ColumnLayout {
                 flat: true
                 alignLeft: true
                 text: "Restart"
-                iconName: "view-refresh-symbolic"
+                iconName: "arrow-cw-symbolic"
                 enabled: !actionWorker.running
                 onClicked: root.act("restart")
             }

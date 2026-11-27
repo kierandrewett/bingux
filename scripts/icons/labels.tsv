@@ -5,258 +5,246 @@
 # `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/bingux-ui.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
-#policy action: checkbox-checked crop document-edit document-open-recent document-save edit-copy edit-delete edit-find-match-case edit-find-regex edit-find-whole-word find-location format-code format-quote format-text-bold format-text-italic format-text-plaintext format-text-strikethrough insert-link location-arrow media-playlist-repeat media-playlist-repeat-song media-playlist-shuffle object-rotate-left object-rotate-right pencil send-to sidebar-show system-switch-user view-filter view-fullscreen view-grid view-list view-list-ordered view-pin view-pip view-refresh view-restore zoom-fit-best zoom-in zoom-out tab-new tab-group split-view reader translate find-in-page bookmark-add download download-done sync
-#policy control: go-next go-previous list-add list-drag-handle list-remove non-starred object-select open-menu pan-down pan-end pan-up system-log-out system-reboot swap-horizontal system-shutdown view-more window-close window-maximize window-minimize window-new window-restore go-up flexible-space space separator
-#policy detail: folder-missing accessories-text-editor action-unavailable default-app-documents default-app-text focus-top-bar input-tablet input-touchpad mail-unread media-view-subtitles phone preferences-other utilities-terminal view-conceal view-reveal web-browser x-office-calendar reading-list
-#policy drawn: network-offline network-wireless network-wireless-disabled network-wireless-signal-excellent network-wireless-signal-good network-wireless-signal-none network-wireless-signal-ok network-wireless-signal-weak emblem-symbolic-link
-#policy indicator: audio-card audio-volume-high audio-volume-low audio-volume-medium audio-volume-muted battery-level-0 battery-level-0-charging battery-level-10 battery-level-10-charging battery-level-100 battery-level-100-charged battery-level-100-charging battery-level-20 battery-level-20-charging battery-level-30 battery-level-30-charging battery-level-40 battery-level-40-charging battery-level-50 battery-level-50-charging battery-level-60 battery-level-60-charging battery-level-70 battery-level-70-charging battery-level-80 battery-level-80-charging battery-level-90 battery-level-90-charging battery-missing bluetooth-active bluetooth-disabled network-error network-transmit-receive network-wired network-wireless-hotspot
-#policy object: accessories-calculator addon airplane-mode application-pdf application-x-executable application-x-generic applications-multimedia audio-headphones audio-input-microphone audio-input-microphone-muted audio-speakers audio-x-generic avatar-default bookmarks camera-photo camera-web changes-prevent computer dialog-password display-brightness document-open drive-harddisk emblem-system folder folder-desktop folder-documents folder-download folder-music folder-new folder-pictures folder-publicshare folder-templates folder-videos font-x-generic image-generic input-gaming media-optical media-removable network-server network-workgroup night-light notifications-disabled package-x-generic power-profile-balanced power-profile-performance power-profile-power-saver preferences-system preferences-system-notifications presentation printer screen-shared table text-x-generic text-x-script user-home user-info user-trash video-generic weather-clear weather-clear-night lock-open cookie location-pin window-private
-#policy section: applications-graphics help-about input-keyboard input-mouse preferences-desktop-accessibility preferences-desktop preferences-system-time system-search system-users video-display view-app-grid
-#policy status: dialog-error dialog-information dialog-warning edit-clear help-browser media-eject media-playback-pause media-playback-start media-playback-stop media-record media-seek-backward media-seek-forward media-skip-backward media-skip-forward network-vpn network-wireless-encrypted process-stop starred system-run lock-broken shield-check autoplay-off tab-crashed hourglass
-#symmetric: avatar-default network-wireless network-wireless-signal-weak network-wireless-signal-ok network-wireless-signal-good network-wireless-signal-excellent network-wireless-signal-none
-#mark: list-drag-handle go-next go-previous pan-up pan-down pan-end object-select list-add list-remove window-close window-minimize window-maximize window-restore view-more
-#exempt centre: audio-volume-low
-#exempt dots: network-wireless-disabled
+#policy action: square-check crop square-pencil clock-ccw floppy-disk squares-overlap letters-aa asterisk brackets-square cursor-click brackets-angle quotes letter-b letter-i letter-t letter-s-strike link arrowhead repeat repeat-1 shuffle arrow-ccw pencil square-arrow-up window-sidebar person-arrows funnel corners-out squares-four list-bullets list-numbers pushpin window-inset arrow-cw corners-in frame-corners magnifier-plus magnifier-minus square-plus tabs window-split book-open translate file-magnifier bookmark-plus arrow-down-line check-line arrows-cw
+#policy control: chevron-right chevron-left plus dots-six minus star check lines-three chevron-down chevron-up bracket-arrow-right arrows-left-right power dots-three cross square square-arrow-up-right squares-overlap-left arrow-up arrow-left-right-bars bracket-bottom line-vertical
+#policy detail: folder-dashed notepad circle-slash file-doc window tablet hand-tap envelope subtitles phone sliders prompt eye-slash eye globe calendar glasses
+#policy drawn: wifi-cross wifi wifi-slash wifi-0 wifi-2 wifi-1 circle-arrow-up-right
+#policy indicator: waveform speaker-wave-2 speaker speaker-wave-1 speaker-cross battery-0 battery-0-bolt battery-10 battery-10-bolt battery-100 battery-100-check battery-100-bolt battery-20 battery-20-bolt battery-30 battery-30-bolt battery-40 battery-40-bolt battery-50 battery-50-bolt battery-60 battery-60-bolt battery-70 battery-70-bolt battery-80 battery-80-bolt battery-90 battery-90-bolt battery-exclamation bluetooth bluetooth-slash network-cross arrows-up-down network router
+#policy object: calculator puzzle-piece airplane file-pdf cube file music-notes headphones microphone microphone-slash speaker-box file-audio person bookmark camera webcam coffee-cup laptop key sun folder-open hard-drive folder folder-monitor folder-file-text folder-arrow-down folder-music-note folder-plus folder-image folder-person folder-file folder-play square-letters-aa image gamepad disc usb server devices moon-stars bell-slash package gauge bolt leaf gear bell easel printer monitor-arrow-up table file-text file-code house id-card trash video-camera moon padlock-open cookie map-pin mask
+#policy section: palette keyboard mouse person-circle monitor-dock clock magnifier people monitor dots-nine
+#policy status: circle-cross circle-info triangle-exclamation circle-question eject pause play stop record rewind fast-forward skip-back skip-forward shield padlock circle-stop star-filled circle-play padlock-cross shield-check play-slash square-face-sad hourglass
+#symmetric: person wifi wifi-1 wifi-2 wifi-0
+#mark: dots-six chevron-right chevron-left chevron-up chevron-down check plus minus cross square squares-overlap-left dots-three
+#exempt centre: speaker
+#exempt dots: wifi-slash
 # Icons that are flipped left to right when the interface reads right to left, because what they draw has a direction in the reading order: a
 # chevron or arrow that points forward or back, the panel a sidebar toggle shows at the start edge, a list's bullets at the start, a paper
 # plane that is sent. Not flipped: what is physical (a rotation, a speaker, a padlock, a fan), a media control (play points the way the
 # film runs), a check, a clock, a logo or a letter. design/rtl.md has the reasons. Checked by `build.py --check` and by the test
 # `icons::tests::mirrored_icons_are_the_ones_labels_tsv_names`.
-#mirror_rtl: go-next go-previous pan-end sidebar-show send-to view-list help-browser emblem-symbolic-link system-log-out
+#mirror_rtl: chevron-right chevron-left window-sidebar square-arrow-up list-bullets circle-question circle-arrow-up-right bracket-arrow-right
 
-network-wireless | Wi-Fi (sidebar), top-bar wireless | Wi-Fi fan | custom: two 2 px arcs and a dot
-network-wireless-signal-none | Wi-Fi list row: no signal | ghost fan | custom: two 2 px arcs and a dot, all dim
-network-wireless-signal-weak | Wi-Fi list row: weak | lit dot | custom: the dot, both arcs dim
-network-wireless-signal-ok | Wi-Fi list row: ok | dot and inner arc | custom: dot and inner arc, the outer arc dim
-network-wireless-signal-good | Wi-Fi list row: good | full fan | custom: two 2 px arcs and a dot (a fan has two arcs at most, so good and excellent are one drawing)
-network-wireless-signal-excellent | Wi-Fi list row, hero, top bar: full | full fan | custom: two 2 px arcs and a dot
-network-wireless-disabled | Wi-Fi off | fan with slash | custom: two 2 px arcs and a dot, a slash with a 1 px gap cut around it
-network-wireless-encrypted | Wi-Fi list row: secured network | padlock | custom: a rounded body, a round shackle and a keyhole
-network-wireless-hotspot | Hotspot | Wi-Fi over a router | custom: two arcs and a dot over a rounded base with a light
-network-offline | top bar: no network | fan with x | custom: two 2 px arcs and a dot, an x at the lower right with a gap cut around it
-network-error | top bar: network problem | network with x | custom: the filled Network glyph, an x at the lower right with a gap cut around it
-network-wired | Network (sidebar), wired connection row, top-bar wired | wired network | Network fill
-network-vpn | VPN (rows, Control Centre) | chequered shield | ShieldCheckered fill
-network-transmit-receive | top bar: connected, kind unknown | arrows up and down | ArrowsDownUp bold
-network-server | Server / share | server stack | HardDrives fill
-network-workgroup | Tailscale: local network access and exit node rows | devices on one network | Devices fill
-airplane-mode | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill
-bluetooth-active | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | custom: a 1.5 px rune 9 px wide
-bluetooth-disabled | Bluetooth off (top bar) | rune with slash | custom: the rune, a 1.5 px slash with a 1 px gap cut around it
-audio-volume-high | Sound (sidebar), volume high (top bar) | speaker with two waves | SpeakerHigh fill
-audio-volume-medium | volume medium (top bar) | speaker with one wave | SpeakerLow fill
-audio-volume-low | volume low (top bar) | speaker, no waves | SpeakerNone fill
-audio-volume-muted | volume muted (top bar) | speaker with x | SpeakerX fill
-audio-input-microphone | Microphone device, Sound page | microphone | Microphone fill
-audio-input-microphone-muted | Microphone muted (top bar, Control Centre, volume row) | microphone with a slash | MicrophoneSlash fill
-audio-headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill
-audio-speakers | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill
-audio-card | Generic Bluetooth audio device (shell; BlueZ's own icon name) | audio device / waveform | Waveform bold
-media-playback-pause | Pause (inspector toolbar) | two bars | Pause fill
-media-record | Recording (top-bar recording indicator and widget, capture notification) | record dot | Circle fill
-media-skip-backward | Previous track (media controls) | skip to start | SkipBack fill
-media-skip-forward | Next track (media controls) | skip to end | SkipForward fill
-media-seek-backward | Back 10 seconds (media controls) | rewind | Rewind fill
-media-seek-forward | Forward 10 seconds (media controls) | fast forward | FastForward fill
-preferences-system-notifications | Notifications (top bar) | bell | Bell fill
-notifications-disabled | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
-view-app-grid | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold
-system-shutdown | Power (top bar, power menu) | power symbol | custom: a 2 px circle (r 5, centre (8, 9)) open at the top, a 2 px bar from y 2 to 8
-system-log-out | Log Out (power menu) | arrow leaving a door | SignOut bold
-system-reboot | Restart (power menu) | circular arrow | ArrowClockwise bold
-system-switch-user | Switch User (power menu) | person with swap arrows | UserSwitch fill scale=0.98
-battery-level-100 | Power (sidebar), battery full | battery filled to the top | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-50 | battery half | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-0 | battery empty (top bar, Power) | empty battery | custom: the body and nub, all dim
-battery-level-10 | battery 10% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-20 | battery 20% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-30 | battery 30% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-40 | battery 40% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-60 | battery 60% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-70 | battery 70% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-80 | battery 80% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-90 | battery 90% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
-battery-level-100-charged | battery charged, plugged in | full battery with a tick | custom: the full battery with a check cut out of it
-battery-level-0-charging | charging at 0 to 9 % | empty battery with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-10-charging | charging at 10 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-20-charging | charging at 20 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-30-charging | charging at 30 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-40-charging | charging at 40 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-50-charging | charging at 50 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-60-charging | charging at 60 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-70-charging | charging at 70 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-80-charging | charging at 80 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-90-charging | charging at 90 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-level-100-charging | charging at 100 % | full battery with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
-battery-missing | no battery found | battery with an exclamation mark | custom: a solid body with an exclamation mark cut out of it
-power-profile-power-saver | Power mode: power saver | leaf | Leaf fill
-power-profile-balanced | Power mode: balanced | speedometer | custom: a dome (r 7) with a hub and a needle cut out, both inside the body
-power-profile-performance | Power mode: performance | lightning bolt | Lightning fill
-display-brightness | Brightness | sun | custom: a true circle (r 3) and eight 1.5 px rays
-night-light | Night light | moon and stars | MoonStars fill
-weather-clear | Light background (preview toolbar), clear weather (search result) | sun | Sun fill
-weather-clear-night | Dark style | moon | Moon fill
-preferences-desktop-accessibility | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
-applications-graphics | Appearance (sidebar) | palette | Palette fill
-preferences-desktop | Desktop (sidebar) | monitor with a dock | custom: a 2 px monitor outline on a stand, a dock pill inside it
-video-display | Displays (sidebar), display device | monitor | Monitor fill
-screen-shared | Screen sharing (top-bar privacy indicator) | monitor with an arrow | MonitorArrowUp fill
-system-search | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
-input-keyboard | Keyboard (sidebar, device, shortcuts row) | keyboard | custom: a solid 14 x 10 body with the keys cut out on the pixel grid
-input-mouse | Mouse (sidebar, device) | mouse | Mouse fill
-preferences-system-time | Date & time (sidebar) | clock | Clock fill
-system-users | Users (sidebar) | two people | Users fill
-help-about | About (sidebar) | circled i | Info fill
-computer | Computer (device, About hero) | laptop | Laptop fill
-preferences-system | Details button, Control Centre | cog | custom: a ring (r 5.2) with eight tapered teeth (r 7) and a round hole (r 2.2)
-emblem-system | Settings action | cog | custom: the same cog as preferences-system
-avatar-default | Account avatar placeholder | person | User fill mirror=left
-user-info | Account details | ID card | IdentificationCard fill
-preferences-other | Other settings | sliders | SlidersHorizontal bold
-object-select | Checkbox, selected row/option | tick | Check bold
-go-next | Row chevron, breadcrumb | chevron right | custom: a 1.5 px polyline with a mitred (sharp) point
-go-previous | Back button | chevron left | custom: a 1.5 px polyline with a mitred (sharp) point
-pan-up | Move up, expanders, parent folder | chevron up | custom: a 1.5 px polyline with a mitred (sharp) point
-pan-down | Dropdown arrow, expanders | chevron down | custom: a 1.5 px polyline with a mitred (sharp) point
-pan-end | Submenu arrow, tree branch | chevron right | custom: a 1.5 px polyline with a mitred (sharp) point
-edit-clear | Clear text in a search field | circled x | XCircle fill
-list-add | Add, stepper plus | plus | Plus bold
-list-drag-handle | Reorder grip of sortable lists | six dots | DotsSixVertical bold
-list-remove | Stepper minus | minus | Minus bold
-swap-horizontal | Swap the two units of the converter | arrows left and right | ArrowsLeftRight bold
-view-reveal | Show password | eye | Eye fill
-view-conceal | Hide password | eye with slash | EyeSlash fill
-starred | Preferred display mode | filled star | Star fill
-non-starred | Favourite (off) | outline star | Star bold
-window-close | Window close, dialogs | x | X bold
-window-minimize | Window minimize | bar | Minus bold
-window-maximize | Window maximize | square | Square bold
-window-restore | Window restore | two squares | CopySimple bold
-open-menu | Main menu button | hamburger | List bold
-view-more | More actions | three dots | DotsThreeVertical bold
-view-refresh | Refresh | circular arrow | ArrowClockwise bold
-object-rotate-right | Rotate | circular arrow | ArrowClockwise bold
-sidebar-show | Show sidebar | window with side pane | SidebarSimple fill
-focus-top-bar | Top bar | window with title bar | AppWindow fill
-edit-copy | Copy | two sheets | custom: two 1.5 px rounded squares of one radius, the back one cut away where the front one is
-edit-delete | Delete | trash can | Trash fill
-user-trash | Forget, Trash | trash can | Trash fill
-view-filter | Filter | funnel | Funnel fill
-find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
-location-arrow | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
-document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil (as `pencil`) across the opening, cut free by 1.5 px
+wifi | Wi-Fi (sidebar), top-bar wireless; Wi-Fi list row, hero, top bar: full; Wi-Fi list row: good | Wi-Fi fan | custom: two 2 px arcs and a dot
+wifi-0 | Wi-Fi list row: no signal | ghost fan | custom: two 2 px arcs and a dot, all dim
+wifi-1 | Wi-Fi list row: weak | lit dot | custom: the dot, both arcs dim
+wifi-2 | Wi-Fi list row: ok | dot and inner arc | custom: dot and inner arc, the outer arc dim
+wifi-slash | Wi-Fi off | fan with slash | custom: two 2 px arcs and a dot, a slash with a 1 px gap cut around it
+padlock | Wi-Fi list row: secured network | padlock | custom: a rounded body, a round shackle and a keyhole
+router | Hotspot | Wi-Fi over a router | custom: two arcs and a dot over a rounded base with a light
+wifi-cross | top bar: no network | fan with x | custom: two 2 px arcs and a dot, an x at the lower right with a gap cut around it
+network-cross | top bar: network problem | network with x | custom: the filled Network glyph, an x at the lower right with a gap cut around it
+network | Network (sidebar), wired connection row, top-bar wired | wired network | Network fill
+shield | VPN (rows, Control Centre) | chequered shield | ShieldCheckered fill
+arrows-up-down | top bar: connected, kind unknown | arrows up and down | ArrowsDownUp bold
+server | Server / share | server stack | HardDrives fill
+devices | Tailscale: local network access and exit node rows | devices on one network | Devices fill
+airplane | Airplane mode (top bar, Control Centre) | aeroplane | Airplane fill
+bluetooth | Bluetooth (sidebar, hero, top bar) | Bluetooth rune | custom: a 1.5 px rune 9 px wide
+bluetooth-slash | Bluetooth off (top bar) | rune with slash | custom: the rune, a 1.5 px slash with a 1 px gap cut around it
+speaker-wave-2 | Sound (sidebar), volume high (top bar) | speaker with two waves | SpeakerHigh fill
+speaker-wave-1 | volume medium (top bar) | speaker with one wave | SpeakerLow fill
+speaker | volume low (top bar) | speaker, no waves | SpeakerNone fill
+speaker-cross | volume muted (top bar) | speaker with x | SpeakerX fill
+microphone | Microphone device, Sound page | microphone | Microphone fill
+microphone-slash | Microphone muted (top bar, Control Centre, volume row) | microphone with a slash | MicrophoneSlash fill
+headphones | Headphones device (Sound, Bluetooth) | headphones | Headphones fill
+speaker-box | Speakers device (Sound, Bluetooth) | box speaker | SpeakerHifi fill
+waveform | Generic Bluetooth audio device (shell; BlueZ's own icon name) | audio device / waveform | Waveform bold
+pause | Pause (inspector toolbar) | two bars | Pause fill
+record | Recording (top-bar recording indicator and widget, capture notification) | record dot | Circle fill
+skip-back | Previous track (media controls) | skip to start | SkipBack fill
+skip-forward | Next track (media controls) | skip to end | SkipForward fill
+rewind | Back 10 seconds (media controls) | rewind | Rewind fill
+fast-forward | Forward 10 seconds (media controls) | fast forward | FastForward fill
+bell | Notifications (top bar) | bell | Bell fill
+bell-slash | Do not disturb (top bar, Control Centre) | bell with slash | BellSlash fill
+dots-nine | Applications (sidebar), top-bar launcher | grid of nine dots | DotsNine bold
+power | Power (top bar, power menu) | power symbol | custom: a 2 px circle (r 5, centre (8, 9)) open at the top, a 2 px bar from y 2 to 8
+bracket-arrow-right | Log Out (power menu) | arrow leaving a door | SignOut bold
+person-arrows | Switch User (power menu) | person with swap arrows | UserSwitch fill scale=0.98
+battery-100 | Power (sidebar), battery full | battery filled to the top | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-50 | battery half | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-0 | battery empty (top bar, Power) | empty battery | custom: the body and nub, all dim
+battery-10 | battery 10% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-20 | battery 20% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-30 | battery 30% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-40 | battery 40% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-60 | battery 60% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-70 | battery 70% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-80 | battery 80% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-90 | battery 90% | battery filled to the level | custom: a rounded body filled to the level, the rest dim, and a nub
+battery-100-check | battery charged, plugged in | full battery with a tick | custom: the full battery with a check cut out of it
+battery-0-bolt | charging at 0 to 9 % | empty battery with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-10-bolt | charging at 10 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-20-bolt | charging at 20 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-30-bolt | charging at 30 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-40-bolt | charging at 40 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-50-bolt | charging at 50 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-60-bolt | charging at 60 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-70-bolt | charging at 70 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-80-bolt | charging at 80 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-90-bolt | charging at 90 % | battery at its level with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-100-bolt | charging at 100 % | full battery with bolt | custom: the level battery with a bolt cut out of both the filled and the dim part
+battery-exclamation | no battery found | battery with an exclamation mark | custom: a solid body with an exclamation mark cut out of it
+leaf | Power mode: power saver | leaf | Leaf fill
+gauge | Power mode: balanced | speedometer | custom: a dome (r 7) with a hub and a needle cut out, both inside the body
+bolt | Power mode: performance | lightning bolt | Lightning fill
+sun | Brightness; Light background (preview toolbar), clear weather (search result) | sun | custom: a true circle (r 3) and eight 1.5 px rays
+moon-stars | Night light | moon and stars | MoonStars fill
+moon | Dark style | moon | Moon fill
+person-circle | Accessibility (sidebar) | person in circle | PersonSimpleCircle fill
+palette | Appearance (sidebar) | palette | Palette fill
+monitor-dock | Desktop (sidebar) | monitor with a dock | custom: a 2 px monitor outline on a stand, a dock pill inside it
+monitor | Displays (sidebar), display device | monitor | Monitor fill
+monitor-arrow-up | Screen sharing (top-bar privacy indicator) | monitor with an arrow | MonitorArrowUp fill
+magnifier | Search (sidebar, search fields) | magnifier | MagnifyingGlass bold
+keyboard | Keyboard (sidebar, device, shortcuts row) | keyboard | custom: a solid 14 x 10 body with the keys cut out on the pixel grid
+mouse | Mouse (sidebar, device) | mouse | Mouse fill
+clock | Date & time (sidebar) | clock | Clock fill
+people | Users (sidebar) | two people | Users fill
+laptop | Computer (device, About hero) | laptop | Laptop fill
+gear | Details button, Control Centre; Settings action | cog | custom: a ring (r 5.2) with eight tapered teeth (r 7) and a round hole (r 2.2)
+person | Account avatar placeholder | person | User fill mirror=left
+id-card | Account details | ID card | IdentificationCard fill
+sliders | Other settings | sliders | SlidersHorizontal bold
+check | Checkbox, selected row/option | tick | Check bold
+chevron-right | Row chevron, breadcrumb; Submenu arrow, tree branch | chevron right | custom: a 1.5 px polyline with a mitred (sharp) point
+chevron-left | Back button | chevron left | custom: a 1.5 px polyline with a mitred (sharp) point
+chevron-up | Move up, expanders, parent folder | chevron up | custom: a 1.5 px polyline with a mitred (sharp) point
+chevron-down | Dropdown arrow, expanders | chevron down | custom: a 1.5 px polyline with a mitred (sharp) point
+plus | Add, stepper plus | plus | Plus bold
+dots-six | Reorder grip of sortable lists | six dots | DotsSixVertical bold
+minus | Stepper minus; Window minimize | minus | Minus bold
+arrows-left-right | Swap the two units of the converter | arrows left and right | ArrowsLeftRight bold
+eye | Show password | eye | Eye fill
+eye-slash | Hide password | eye with slash | EyeSlash fill
+star-filled | Preferred display mode | filled star | Star fill
+star | Favourite (off) | outline star | Star bold
+cross | Window close, dialogs | x | X bold
+square | Window maximize | square | Square bold
+squares-overlap-left | Window restore | two squares | CopySimple bold
+lines-three | Main menu button | hamburger | List bold
+dots-three | More actions | three dots | DotsThreeVertical bold
+arrow-cw | Refresh; Rotate; Restart (power menu) | circular arrow | ArrowClockwise bold
+window-sidebar | Show sidebar | window with side pane | SidebarSimple fill
+window | Top bar | window with title bar | AppWindow fill
+squares-overlap | Copy | two sheets | custom: two 1.5 px rounded squares of one radius, the back one cut away where the front one is
+trash | Forget, Trash; Delete | trash can | Trash fill
+funnel | Filter | funnel | Funnel fill
+cursor-click | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
+arrowhead | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
+square-pencil | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil (as `pencil`) across the opening, cut free by 1.5 px
 pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: a pointed tip running into the body, and the eraser cut off by a 1.5 px seam
-document-open | Open | open folder | FolderOpen fill
-send-to | Share | square with arrow up | Export bold
-view-list | List view | bulleted list | custom: three 2 px dots and three 2 px bars on whole pixel rows 2 to 4, 7 to 9 and 12 to 14
-view-grid | Grid view | four squares | custom: four 5 x 5 squares on whole pixels
-view-list-ordered | Numbered list (notes slash menu) | numbered list | ListNumbers bold
-checkbox-checked | To-do list (notes slash menu) | ticked box | CheckSquare bold
-format-text-plaintext | Text paragraph (notes slash menu) | letter T | TextT bold
-format-text-bold | Bold (notes slash menu) | bold B | TextB bold
-format-text-italic | Italic (notes slash menu) | italic I | TextItalic bold
-format-text-strikethrough | Strikethrough (notes slash menu) | struck S | TextStrikethrough bold
-format-code | Code block, inline code (notes slash menu) | angle brackets | Code bold
-format-quote | Quote (notes slash menu) | quotation marks | Quotes fill
-insert-link | Link (notes slash menu) | chain link | Link bold
+folder-open | Open | open folder | FolderOpen fill
+square-arrow-up | Share | square with arrow up | Export bold
+list-bullets | List view | bulleted list | custom: three 2 px dots and three 2 px bars on whole pixel rows 2 to 4, 7 to 9 and 12 to 14
+squares-four | Grid view | four squares | custom: four 5 x 5 squares on whole pixels
+list-numbers | Numbered list (notes slash menu) | numbered list | ListNumbers bold
+square-check | To-do list (notes slash menu) | ticked box | CheckSquare bold
+letter-t | Text paragraph (notes slash menu) | letter T | TextT bold
+letter-b | Bold (notes slash menu) | bold B | TextB bold
+letter-i | Italic (notes slash menu) | italic I | TextItalic bold
+letter-s-strike | Strikethrough (notes slash menu) | struck S | TextStrikethrough bold
+brackets-angle | Code block, inline code (notes slash menu) | angle brackets | Code bold
+quotes | Quote (notes slash menu) | quotation marks | Quotes fill
+link | Link (notes slash menu) | chain link | Link bold
 folder | Folder, Files | folder | Folder fill
-folder-download | Downloads folder (file chooser list, sidebar, address bar) | folder with a down arrow | custom: Folder fill with a solid down arrow (2 px shaft, 6 x 3 head) cut out
-bookmarks | Website shortcuts | bookmark | BookmarkSimple fill
-dialog-error | Error status | circled x | XCircle fill
-dialog-information | Information status, notes | circled i | Info fill
-dialog-warning | Warning status | triangle with ! | Warning fill
-help-browser | Help | circled ? | Question fill
-dialog-password | Password | key | Key fill
-changes-prevent | Keep awake | coffee cup | Coffee fill
-input-gaming | Game controller (Bluetooth) | game pad | GameController fill
-input-tablet | Tablet (Bluetooth) | tablet | custom: a landscape 14 x 10 body with a screen and a home button cut out
-input-touchpad | Touchpad | finger tapping | HandTap bold
+folder-arrow-down | Downloads folder (file chooser list, sidebar, address bar) | folder with a down arrow | custom: Folder fill with a solid down arrow (2 px shaft, 6 x 3 head) cut out
+bookmark | Website shortcuts | bookmark | BookmarkSimple fill
+circle-cross | Error status; Clear text in a search field | circled x | XCircle fill
+circle-info | Information status, notes; About (sidebar) | circled i | Info fill
+triangle-exclamation | Warning status | triangle with ! | Warning fill
+circle-question | Help | circled ? | Question fill
+key | Password | key | Key fill
+coffee-cup | Keep awake | coffee cup | Coffee fill
+gamepad | Game controller (Bluetooth) | game pad | GameController fill
+tablet | Tablet (Bluetooth) | tablet | custom: a landscape 14 x 10 body with a screen and a home button cut out
+hand-tap | Touchpad | finger tapping | HandTap bold
 phone | Phone (Bluetooth, phone preview) | modern phone | DeviceMobileCamera bold scale=0.966 align=none
-camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
-camera-photo | Camera (Bluetooth device row), screenshot notification | still camera | Camera fill
-media-removable | USB drive | USB symbol | Usb fill
+webcam | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
+camera | Camera (Bluetooth device row), screenshot notification | still camera | Camera fill
+usb | USB drive | USB symbol | Usb fill
 printer | Printer (Bluetooth) | printer | Printer fill
-web-browser | Web (Applications, search) | globe | Globe bold
-x-office-calendar | Calendar (Applications, clock) | calendar with dates | CalendarDots fill
-mail-unread | Mail (Applications) | envelope | EnvelopeSimple fill
-image-generic | Image viewer (Applications), wallpapers | picture | Image fill
-video-generic | Video (Applications) | video camera | VideoCamera fill
-applications-multimedia | Music (Applications) | music note | MusicNotesSimple fill
-accessories-calculator | Calculation (search) | calculator | Calculator fill
-addon | Add-on sources (search), browser extensions | jigsaw piece | custom: one jigsaw piece, knobs top and right on narrow necks, same-size sockets left and bottom
-application-x-executable | Generic application tile | box | custom: a mitred hexagon, the left face solid, the top and right faces open
-user-home | Home (file chooser) | house | House fill
-folder-documents | Documents folder (file chooser list, sidebar, address bar) | folder with a page of text | custom: Folder fill with a page of text lines cut out
-folder-music | Music folder (file chooser list, sidebar, address bar) | folder with a music note | custom: Folder fill with a music note cut out
-folder-pictures | Pictures folder (file chooser list, sidebar, address bar) | folder with a picture | custom: Folder fill with a picture of a hill cut out
-folder-videos | Videos folder (file chooser list, sidebar, address bar) | folder with a play button | custom: Folder fill with a framed play triangle cut out
-drive-harddisk | Drive (file chooser) | hard disk | HardDrive fill
-text-x-generic | Text file (file chooser) | page with lines | FileText fill
-audio-x-generic | Audio file (file chooser) | page with audio | FileAudio fill
-package-x-generic | Archive file (file chooser) | box | Package fill
-folder-new | New folder (file chooser) | folder with plus | FolderPlus fill
-folder-missing | Folder not found (Files status page) | a folder drawn in dashes: the folder is not there | FolderDashed bold
-media-eject | Eject drive (file chooser sidebar) | eject mark | Eject fill
-media-optical | Optical disc (file chooser sidebar) | disc | Disc fill
-folder-templates | Templates folder (file chooser list, sidebar, address bar) | folder with a blank page | custom: Folder fill with a page with a folded corner cut out
-folder-publicshare | Public folder (file chooser list, sidebar, address bar) | folder with a person | custom: Folder fill with a person cut out
-folder-desktop | Desktop folder (file chooser list, sidebar, address bar) | folder with a screen | custom: Folder fill with a monitor cut out
-window-new | Open in new window (menus) | window with arrow | custom: a rounded box open at the top right with an arrow whose arms line up with the box's top and right edges
-default-app-text | Default applications: Text (plain text files) | page with lines | FileText fill
-default-app-documents | Default applications: Documents (PDF, office documents) | document file, DOC | FileDoc fill
-application-pdf | PDF file (file list, grid, properties) | page marked PDF | FilePdf fill
-font-x-generic | Font file (file list, grid, properties), text label | letters Aa | TextAa fill
+globe | Web (Applications, search) | globe | Globe bold
+calendar | Calendar (Applications, clock) | calendar with dates | CalendarDots fill
+envelope | Mail (Applications) | envelope | EnvelopeSimple fill
+image | Image viewer (Applications), wallpapers | picture | Image fill
+video-camera | Video (Applications) | video camera | VideoCamera fill
+music-notes | Music (Applications) | music note | MusicNotesSimple fill
+calculator | Calculation (search) | calculator | Calculator fill
+puzzle-piece | Add-on sources (search), browser extensions | jigsaw piece | custom: one jigsaw piece, knobs top and right on narrow necks, same-size sockets left and bottom
+cube | Generic application tile | box | custom: a mitred hexagon, the left face solid, the top and right faces open
+house | Home (file chooser) | house | House fill
+folder-file-text | Documents folder (file chooser list, sidebar, address bar) | folder with a page of text | custom: Folder fill with a page of text lines cut out
+folder-music-note | Music folder (file chooser list, sidebar, address bar) | folder with a music note | custom: Folder fill with a music note cut out
+folder-image | Pictures folder (file chooser list, sidebar, address bar) | folder with a picture | custom: Folder fill with a picture of a hill cut out
+folder-play | Videos folder (file chooser list, sidebar, address bar) | folder with a play button | custom: Folder fill with a framed play triangle cut out
+hard-drive | Drive (file chooser) | hard disk | HardDrive fill
+file-text | Text file (file chooser); Default applications: Text (plain text files) | page with lines | FileText fill
+file-audio | Audio file (file chooser) | page with audio | FileAudio fill
+package | Archive file (file chooser) | box | Package fill
+folder-plus | New folder (file chooser) | folder with plus | FolderPlus fill
+folder-dashed | Folder not found (Files status page) | a folder drawn in dashes: the folder is not there | FolderDashed bold
+eject | Eject drive (file chooser sidebar) | eject mark | Eject fill
+disc | Optical disc (file chooser sidebar) | disc | Disc fill
+folder-file | Templates folder (file chooser list, sidebar, address bar) | folder with a blank page | custom: Folder fill with a page with a folded corner cut out
+folder-person | Public folder (file chooser list, sidebar, address bar) | folder with a person | custom: Folder fill with a person cut out
+folder-monitor | Desktop folder (file chooser list, sidebar, address bar) | folder with a screen | custom: Folder fill with a monitor cut out
+square-arrow-up-right | Open in new window (menus) | window with arrow | custom: a rounded box open at the top right with an arrow whose arms line up with the box's top and right edges
+file-doc | Default applications: Documents (PDF, office documents) | document file, DOC | FileDoc fill
+file-pdf | PDF file (file list, grid, properties) | page marked PDF | FilePdf fill
+square-letters-aa | Font file (file list, grid, properties), text label | letters Aa | TextAa fill
 table | Spreadsheet (file list, grid, properties, tab titles) | table | Table fill
-presentation | Presentation (file list, grid, properties, tab titles) | slide on an easel | PresentationChart fill
-process-stop | Force quit, stop searching (shell) | circled stop | StopCircle fill
-system-run | Run an action (search result, shell) | circled play | PlayCircle fill
-view-pin | Pin to the dock (shell) | push pin | custom: a solid thumbtack: cap, shaft, flange and needle on whole pixel columns
-utilities-terminal | Terminal (shell sidebar, desktop widget) | terminal prompt | Terminal bold
-accessories-text-editor | Notes (shell sidebar, desktop widget) | notepad | Notepad fill
-action-unavailable | Action not available (on-screen display) | prohibited | Prohibit bold
-document-open-recent | Recent (emoji picker) | clock with a counter-clockwise arrow | ClockCounterClockwise bold
-document-save | Save, saving a recording (shell) | floppy disk | custom: a solid floppy, top right corner cut off, the shutter cut out as a 6 x 2 slot and the hub as a 4 px disc (Material's and Font Awesome's filled save)
-text-x-script | Source code and script (file list, grid, properties) | page with angle brackets | FileCode fill
-application-x-generic | Unknown file (file list, grid, properties) | blank page | File fill
-emblem-symbolic-link | Symbolic link badge on a file or folder icon | arrow in a disc | custom: disc with an up-right arrow cut out
-media-playback-start | Play (preview player, media controls) | right-pointing triangle | Play fill
-media-playback-stop | Stop (Files toolbar while a folder loads or a search runs) | filled rounded square | Stop fill
-view-fullscreen | Full screen (preview viewer, player) | four corner brackets | custom: four 1.5 px corner brackets with round corners, as lucide's maximize
-view-restore | Leave full screen (preview viewer, player) | four corner brackets pointing in | custom: four 1.5 px corner brackets turned in, as lucide's minimize
-zoom-in | Zoom in (image viewer) | magnifier with plus | MagnifyingGlassPlus bold
-zoom-out | Zoom out (image viewer) | magnifier with minus | MagnifyingGlassMinus bold
-zoom-fit-best | Fit to window (image viewer) | corner brackets | FrameCorners bold
-object-rotate-left | Rotate left (image viewer) | counter-clockwise circular arrow | ArrowCounterClockwise bold
+easel | Presentation (file list, grid, properties, tab titles) | slide on an easel | PresentationChart fill
+circle-stop | Force quit, stop searching (shell) | circled stop | StopCircle fill
+circle-play | Run an action (search result, shell) | circled play | PlayCircle fill
+pushpin | Pin to the dock (shell) | push pin | custom: a solid thumbtack: cap, shaft, flange and needle on whole pixel columns
+prompt | Terminal (shell sidebar, desktop widget) | terminal prompt | Terminal bold
+notepad | Notes (shell sidebar, desktop widget) | notepad | Notepad fill
+circle-slash | Action not available (on-screen display) | prohibited | Prohibit bold
+clock-ccw | Recent (emoji picker) | clock with a counter-clockwise arrow | ClockCounterClockwise bold
+floppy-disk | Save, saving a recording (shell) | floppy disk | custom: a solid floppy, top right corner cut off, the shutter cut out as a 6 x 2 slot and the hub as a 4 px disc (Material's and Font Awesome's filled save)
+file-code | Source code and script (file list, grid, properties) | page with angle brackets | FileCode fill
+file | Unknown file (file list, grid, properties) | blank page | File fill
+circle-arrow-up-right | Symbolic link badge on a file or folder icon | arrow in a disc | custom: disc with an up-right arrow cut out
+play | Play (preview player, media controls) | right-pointing triangle | Play fill
+stop | Stop (Files toolbar while a folder loads or a search runs) | filled rounded square | Stop fill
+corners-out | Full screen (preview viewer, player) | four corner brackets | custom: four 1.5 px corner brackets with round corners, as lucide's maximize
+corners-in | Leave full screen (preview viewer, player) | four corner brackets pointing in | custom: four 1.5 px corner brackets turned in, as lucide's minimize
+magnifier-plus | Zoom in (image viewer) | magnifier with plus | MagnifyingGlassPlus bold
+magnifier-minus | Zoom out (image viewer) | magnifier with minus | MagnifyingGlassMinus bold
+frame-corners | Fit to window (image viewer) | corner brackets | FrameCorners bold
+arrow-ccw | Rotate left (image viewer) | counter-clockwise circular arrow | ArrowCounterClockwise bold
 crop | Crop (Preview, image editing) | crop marks | Crop bold
-media-view-subtitles | Subtitles (preview player) | captions box | Subtitles bold
-edit-find-match-case | Match case (Text Editor find bar) | letters Aa | TextAa bold
-edit-find-regex | Regular expression (Text Editor find bar) | asterisk | Asterisk bold
-edit-find-whole-word | Whole words (Text Editor find bar) | letters in square brackets | BracketsSquare bold
-media-playlist-shuffle | Shuffle (media transport, Media) | two crossing arrows | Shuffle bold
-media-playlist-repeat | Repeat all (media transport, Media) | two arrows in a loop | Repeat bold
-media-playlist-repeat-song | Repeat one (media transport, Media) | a loop of arrows with a 1 | RepeatOnce bold
-view-pip | Mini player and picture in picture (Media) | a small window in the corner of a window | PictureInPicture fill
-go-up | Up one level (Files and Browser header) | arrow pointing up | ArrowUp bold
-tab-new | New tab (Browser main menu, Customise tray, Settings) | square with a plus | custom: a 1.5 px rounded square with a plus
-tab-group | Tab groups (Browser rail, group actions) | tab with one behind it | custom: a solid tab with a dot and a label cut out, a 1.5 px bar behind it
-split-view | Split view (Browser tray, split handle) | window cut in two | custom: a 1.5 px rounded square cut by a 1.5 px divider
-window-private | Private window (Browser header mark, main menu) | domino mask | custom: a solid mask with two eyes cut out
-reader | Reader view (Browser address chip, tray) | open book | custom: an open book in 1.5 px outline
+subtitles | Subtitles (preview player) | captions box | Subtitles bold
+letters-aa | Match case (Text Editor find bar) | letters Aa | TextAa bold
+asterisk | Regular expression (Text Editor find bar) | asterisk | Asterisk bold
+brackets-square | Whole words (Text Editor find bar) | letters in square brackets | BracketsSquare bold
+shuffle | Shuffle (media transport, Media) | two crossing arrows | Shuffle bold
+repeat | Repeat all (media transport, Media) | two arrows in a loop | Repeat bold
+repeat-1 | Repeat one (media transport, Media) | a loop of arrows with a 1 | RepeatOnce bold
+window-inset | Mini player and picture in picture (Media) | a small window in the corner of a window | PictureInPicture fill
+arrow-up | Up one level (Files and Browser header) | arrow pointing up | ArrowUp bold
+square-plus | New tab (Browser main menu, Customise tray, Settings) | square with a plus | custom: a 1.5 px rounded square with a plus
+tabs | Tab groups (Browser rail, group actions) | tab with one behind it | custom: a solid tab with a dot and a label cut out, a 1.5 px bar behind it
+window-split | Split view (Browser tray, split handle) | window cut in two | custom: a 1.5 px rounded square cut by a 1.5 px divider
+mask | Private window (Browser header mark, main menu) | domino mask | custom: a solid mask with two eyes cut out
+book-open | Reader view (Browser address chip, tray) | open book | custom: an open book in 1.5 px outline
 translate | Translate (Browser address chip, Languages settings) | the characters 文A | Translate bold
-find-in-page | Find in page (Browser tray, main menu) | page with a magnifier | custom: a 1.5 px page with a magnifier knocked out over its corner
-reading-list | Reading list (Browser rail, toolbar, Library) | glasses | custom: two 1.5 px rings, a bridge and the temples
-bookmark-add | Bookmark this page (Browser Library, Bookmark button) | bookmark with a plus | custom: the BookmarkSimple fill with a 1.5 px plus cut out
-download | Downloads (Browser toolbar, rail, Settings) | arrow onto a line | custom: a 1.5 px arrow onto a 1.5 px line
-download-done | A finished download (Browser downloads panel) | tick onto a line | custom: a 1.5 px tick onto the download line
-sync | Sync (Browser Settings) | two arrows chasing round | ArrowsClockwise bold
-lock-open | Not secure, http (Browser address chip, site card) | open padlock | custom: the padlock body with the shackle lifted open on the left
-lock-broken | Certificate not valid (Browser address chip, site card) | padlock with a cross | custom: the padlock body with a 1.5 px cross cut out
+file-magnifier | Find in page (Browser tray, main menu) | page with a magnifier | custom: a 1.5 px page with a magnifier knocked out over its corner
+glasses | Reading list (Browser rail, toolbar, Library) | glasses | custom: two 1.5 px rings, a bridge and the temples
+bookmark-plus | Bookmark this page (Browser Library, Bookmark button) | bookmark with a plus | custom: the BookmarkSimple fill with a 1.5 px plus cut out
+arrow-down-line | Downloads (Browser toolbar, rail, Settings) | arrow onto a line | custom: a 1.5 px arrow onto a 1.5 px line
+check-line | A finished download (Browser downloads panel) | tick onto a line | custom: a 1.5 px tick onto the download line
+arrows-cw | Sync (Browser Settings) | two arrows chasing round | ArrowsClockwise bold
+padlock-open | Not secure, http (Browser address chip, site card) | open padlock | custom: the padlock body with the shackle lifted open on the left
+padlock-cross | Certificate not valid (Browser address chip, site card) | padlock with a cross | custom: the padlock body with a 1.5 px cross cut out
 shield-check | Trackers blocked on this page (Browser omnibox, privacy report) | shield with a tick | ShieldCheck fill
 cookie | Cookies and site data (Browser site card) | bitten biscuit | custom: a solid disc, a bite and four chips cut out
-location-pin | Location permission (Browser prompts, site card) | map pin | custom: a solid map pin with a round hole
-autoplay-off | Autoplay blocked (Browser site card, site settings) | play with a slash | custom: the Play fill with the standard slash and its knock-out band
-flexible-space | Flexible space (Browser Customise tray) | double arrow between two bars | custom: two 1.5 px bars and a double arrow
-space | Space (Browser Customise tray) | open bracket under the baseline | custom: a 1.5 px open box
-separator | Separator (Browser Customise tray) | vertical bar | custom: a 2 px bar, round ends
-tab-crashed | This tab crashed (Browser error page) | sad face on a tile | custom: a solid rounded square with a sad face cut out
+map-pin | Location permission (Browser prompts, site card) | map pin | custom: a solid map pin with a round hole
+play-slash | Autoplay blocked (Browser site card, site settings) | play with a slash | custom: the Play fill with the standard slash and its knock-out band
+arrow-left-right-bars | Flexible space (Browser Customise tray) | double arrow between two bars | custom: two 1.5 px bars and a double arrow
+bracket-bottom | Space (Browser Customise tray) | open bracket under the baseline | custom: a 1.5 px open box
+line-vertical | Separator (Browser Customise tray) | vertical bar | custom: a 2 px bar, round ends
+square-face-sad | This tab crashed (Browser error page) | sad face on a tile | custom: a solid rounded square with a sad face cut out
 hourglass | The page is not responding (Browser error page) | hourglass | custom: a solid hourglass, corners rounded

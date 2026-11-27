@@ -33,13 +33,10 @@ impl Component for NewTabPage {
         };
         let found = search::use_search_with(History::recent(RECENT), has_history);
         let page = if private {
-            status_page(
-                Icon::NetworkWirelessEncrypted,
-                tr!("browser-new-tab-private-title"),
-            )
-            .description(tr!("browser-new-tab-private-description"))
+            status_page(Icon::Padlock, tr!("browser-new-tab-private-title"))
+                .description(tr!("browser-new-tab-private-description"))
         } else {
-            status_page(Icon::WebBrowser, tr!("browser-new-tab-title"))
+            status_page(Icon::Globe, tr!("browser-new-tab-title"))
                 .description(tr!("browser-new-tab-description"))
         };
         if found.hits.is_empty() {

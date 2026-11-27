@@ -1034,7 +1034,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             implicitSize: 20
                             color: Theme.muted
-                            source: BinguxIcons.source("system-search-symbolic")
+                            source: BinguxIcons.source("magnifier-symbolic")
                         }
 
                         Text {
@@ -1183,7 +1183,7 @@ PanelWindow {
                             SymbolicIcon {
                                 anchors.centerIn: parent
                                 implicitSize: 16
-                                source: BinguxIcons.source("edit-clear-symbolic", "window-close-symbolic")
+                                source: BinguxIcons.source("circle-cross-symbolic", "cross-symbolic")
                                 color: clearQueryMouse.containsMouse ? Theme.text : Theme.muted
                             }
                             MouseArea {
@@ -1213,7 +1213,7 @@ PanelWindow {
                         compact: true
                         visible: root.bodyState !== "" && !root.closing
                         tone: root.bodyState === "offline" || root.bodyState === "partial" ? "warning" : root.bodyState === "error" ? "danger" : "neutral"
-                        iconName: root.bodyState === "empty" ? "system-search-symbolic" : root.bodyState === "offline" ? "network-offline-symbolic" : ""
+                        iconName: root.bodyState === "empty" ? "magnifier-symbolic" : root.bodyState === "offline" ? "wifi-cross-symbolic" : ""
                         title: root.bodyState === "offline" ? "Search is not available" : root.bodyState === "empty" ? "No results" : root.queryError.replace(/\.$/, "")
                         detail: root.bodyState === "offline" ? "Search keeps trying to reconnect." : root.bodyState === "empty" ? "Try a different word, or fewer words." : ""
                         actionText: root.bodyState === "error" && searchInput.text.trim() !== "" ? "Try again" : ""
@@ -1508,7 +1508,7 @@ PanelWindow {
                                         SymbolicIcon {
                                             anchors.verticalCenter: parent.verticalCenter
                                             implicitSize: 14
-                                            source: BinguxIcons.source("dialog-error-symbolic")
+                                            source: BinguxIcons.source("circle-cross-symbolic")
                                             color: Theme.danger
                                         }
                                         Text {

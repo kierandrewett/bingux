@@ -596,7 +596,7 @@ impl Component for Content {
                     tab.id,
                     document.map(Document::display_title).unwrap_or_default(),
                 )
-                .icon(Icon::TextXGeneric)
+                .icon(Icon::FileText)
                 .edited(document.is_some_and(Document::is_unsaved))
             })
             .collect();
@@ -617,11 +617,11 @@ impl Component for Content {
             header =
                 header
                     .leading(
-                        icon_button(Icon::DocumentOpen, move |_| actions.open_dialog())
+                        icon_button(Icon::FolderOpen, move |_| actions.open_dialog())
                             .tooltip(&tip(commands, "file.open", "Open")),
                     )
                     .leading(
-                        icon_button(Icon::DocumentSave, move |_| document.save())
+                        icon_button(Icon::FloppyDisk, move |_| document.save())
                             .tooltip(&tip(commands, "file.save", "Save"))
                             .busy(saving),
                     );
@@ -629,8 +629,10 @@ impl Component for Content {
         let find_handle = handle.clone();
         let header = header
             .trailing(
-                icon_button(Icon::Search, move |_| find.open_from(&find_handle, false))
-                    .tooltip(&tip(commands, "find.find", "Find")),
+                icon_button(Icon::Magnifier, move |_| {
+                    find.open_from(&find_handle, false)
+                })
+                .tooltip(&tip(commands, "find.find", "Find")),
             )
             .trailing(app_menu(Vec::new()));
 
@@ -692,7 +694,7 @@ impl Component for Content {
                 .into(),
             Phase::Ready if binary => {
                 let content = content.clone();
-                status_page(Icon::ApplicationXGeneric, tr!("text-editor-binary-title"))
+                status_page(Icon::File, tr!("text-editor-binary-title"))
                     .description(tr!("text-editor-binary-description"))
                     .action(tr!("text-editor-open-anyway"), move |_| {
                         content.read_again(None, true)
@@ -801,7 +803,7 @@ impl Component for Content {
                             ],
                         )
                         .child(icon(
-                            Icon::DocumentOpen,
+                            Icon::FolderOpen,
                             IconSize::App,
                             Paint::Accent.color(&tokens),
                         ))
@@ -998,7 +1000,7 @@ fn window_commands(
             actions.open_dialog()
         })
         .shortcut("Ctrl+O")
-        .icon(Icon::DocumentOpen)
+        .icon(Icon::FolderOpen)
         .group(CommandGroup::File)
         .section("new"),
         Command::submenu(
@@ -1012,7 +1014,7 @@ fn window_commands(
             document.save()
         })
         .shortcut("Ctrl+S")
-        .icon(Icon::DocumentSave)
+        .icon(Icon::FloppyDisk)
         .enabled(ready)
         .group(CommandGroup::File)
         .section("save"),
@@ -1045,7 +1047,7 @@ fn window_commands(
             find.open_from(&find_handle, false);
         })
         .shortcut("Ctrl+F")
-        .icon(Icon::Search)
+        .icon(Icon::Magnifier)
         .enabled(ready)
         .group(CommandGroup::Edit)
         .section("find"),
@@ -1299,7 +1301,7 @@ fn status_bar(
             );
         }
         return row
-            .child(menu_button(tr!("text-editor-document-menu"), items).icon(Icon::ViewMore))
+            .child(menu_button(tr!("text-editor-document-menu"), items).icon(Icon::DotsThree))
             .into();
     }
     row.child(menu_button(language.name.clone(), language_menu))

@@ -81,7 +81,7 @@ def notify(payload):
                 (
                     "Bingux",
                     0,
-                    payload.get("icon", "dialog-error-symbolic"),
+                    payload.get("icon", "circle-cross-symbolic"),
                     str(payload["title"]),
                     html.escape(str(payload.get("body", ""))),
                     ["retry", "Retry"] if retry else [],

@@ -22,7 +22,7 @@ AbstractButton {
             id: face
             anchors.centerIn: parent
             presentation: root.presentation || {
-                icon: "system-search-symbolic",
+                icon: "magnifier-symbolic",
                 label: "Search",
                 showIcon: true,
                 showText: false

@@ -13,14 +13,11 @@ fn security(state: SecurityState) -> Security {
 fn a_secure_page_is_good_and_an_http_page_is_a_warning() {
     crate::locale::register();
     let secure = Summary::of(&security(SecurityState::Secure), "https://example.com");
-    assert_eq!(
-        (secure.tone, secure.icon),
-        (Tone::Good, Icon::NetworkWirelessEncrypted)
-    );
+    assert_eq!((secure.tone, secure.icon), (Tone::Good, Icon::Padlock));
     let plain = Summary::of(&security(SecurityState::Insecure), "http://example.com");
     assert_eq!(
         (plain.tone, plain.icon),
-        (Tone::Warning, Icon::DialogWarning)
+        (Tone::Warning, Icon::TriangleExclamation)
     );
 }
 

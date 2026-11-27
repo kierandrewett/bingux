@@ -66,13 +66,13 @@ ShellRoot {
         property var audioSource: microphoneNode
         property bool laptopBatteryAvailable: true
         function networkIconName() {
-            return "network-wireless-signal-excellent-symbolic";
+            return "wifi-symbolic";
         }
         function networkAccessibleName() {
             return "Wireless network connected";
         }
         function audioIconName() {
-            return audioMuted ? "audio-volume-muted-symbolic" : "audio-volume-high-symbolic";
+            return audioMuted ? "speaker-cross-symbolic" : "speaker-wave-2-symbolic";
         }
         function batteryAccessibleName() {
             return "Battery 84 percent, charging";
@@ -238,7 +238,7 @@ ShellRoot {
         id: compactControl
         ControlRow {
             title: "Test control"
-            iconName: "notifications-disabled-symbolic"
+            iconName: "bell-slash-symbolic"
             barLayout: true
             toggleVisible: true
             presentation: ({

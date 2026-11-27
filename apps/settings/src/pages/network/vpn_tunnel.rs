@@ -342,7 +342,7 @@ impl Component for WgTunnel {
             let owner = self.owner.clone();
             peers = peers.row(
                 row(tr!("network-vpn-peer-title", number = index + 1))
-                    .leading(Icon::NetworkServer)
+                    .leading(Icon::Server)
                     .subtitle(peer_summary(peer))
                     .subtitle_one_line()
                     .navigates()
@@ -356,7 +356,7 @@ impl Component for WgTunnel {
         let next = self.profile.peers.len();
         peers = peers.row(
             row(tr!("network-vpn-add-peer"))
-                .leading(Icon::ListAdd)
+                .leading(Icon::Plus)
                 .navigates()
                 .on_press(move |_| {
                     ctx.router
@@ -717,7 +717,7 @@ impl Component for PeerForm {
             page = page.child(
                 Group::new(None::<String>).row(
                     row(tr!("network-vpn-delete-peer"))
-                        .leading(Icon::UserTrash)
+                        .leading(Icon::Trash)
                         .destructive()
                         .on_press(move |_| confirm_delete_peer(ctx, &form, &label)),
                 ),
@@ -1272,7 +1272,7 @@ impl Component for ExtraRow {
         if secret {
             field = field.password();
         }
-        let remove = icon_button(Icon::UserTrash, move |_| {
+        let remove = icon_button(Icon::Trash, move |_| {
             let mut list = extras.read().clone();
             list.retain(|entry| entry.key != remove_key);
             let mut extras = extras;

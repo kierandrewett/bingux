@@ -48,9 +48,9 @@ impl Component for Host {
         let tokens = use_tokens();
         let mut bar = HeaderBar::new("Properties")
             .draggable(false)
-            .trailing(icon_button(Icon::WindowClose, |_| {}).tooltip("Close"));
+            .trailing(icon_button(Icon::Cross, |_| {}).tooltip("Close"));
         if self.0.leading {
-            bar = bar.leading(icon_button(Icon::GoPrevious, |_| {}).tooltip("Back"));
+            bar = bar.leading(icon_button(Icon::ChevronLeft, |_| {}).tooltip("Back"));
         }
         if self.0.slot {
             bar = bar.title_slot(

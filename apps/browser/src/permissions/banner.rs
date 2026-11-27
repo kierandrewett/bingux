@@ -39,7 +39,7 @@ impl Component for PermissionBanner {
         let tokens = use_tokens();
         let banner = banner(text.unwrap_or_else(|| shown.read().clone()))
             .kind(BannerKind::Info)
-            .icon(Icon::DialogInformation)
+            .icon(Icon::CircleInfo)
             .action(tr!("browser-permissions-block-button"), move |_: ()| {
                 ctx.with(|browser| browser.answer_permission(key, false, true))
             })

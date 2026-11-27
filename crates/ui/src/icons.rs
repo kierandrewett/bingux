@@ -10,307 +10,292 @@
 
 use freya::prelude::*;
 
-/// Every bundled icon. Names follow the Adwaita symbolic icon each one replaces,
-/// so the QML shell and the Rust apps share one vocabulary.
+/// Every bundled icon, named after what it draws (`scripts/icons/aliases.tsv`):
+/// `Calendar`, `Shield`, `ChevronRight`. The QML shell asks for the same names
+/// (`calendar-symbolic`); [`Icon::from_freedesktop`] finds an icon by its shape
+/// name or by a freedesktop name it stands for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icon {
-    GoPrevious,
-    GoNext,
-    SidebarShow,
-    Computer,
-    PreferencesSystem,
-    EmblemSystem,
-    Display,
-    WindowClose,
-    WindowMinimize,
-    WindowMaximize,
-    WindowRestore,
-    Appearance,
-    Desktop,
-    Search,
-    Filter,
-    Network,
+    ChevronLeft,
+    ChevronRight,
+    WindowSidebar,
+    Laptop,
+    Gear,
+    Monitor,
+    Cross,
+    Minus,
+    Square,
+    SquaresOverlapLeft,
+    Palette,
+    MonitorDock,
+    Magnifier,
+    Funnel,
+    Wifi,
     Bluetooth,
-    Sound,
-    Power,
+    SpeakerWave2,
+    Battery100,
     Keyboard,
     Mouse,
-    Accessibility,
+    PersonCircle,
     Clock,
-    Users,
-    About,
-    Refresh,
-    Delete,
+    People,
+    CircleInfo,
+    ArrowCw,
+    Trash,
     Check,
-    ListAdd,
-    ListRemove,
+    Plus,
     /// Two arrows, one each way: swap two values (the units of a converter).
-    Swap,
-    PanDown,
-    PanUp,
-    PanEnd,
-    EditClear,
-    DialogInformation,
-    DialogWarning,
-    DialogError,
-    EditCopy,
+    ArrowsLeftRight,
+    ChevronDown,
+    ChevronUp,
+    CircleCross,
+    TriangleExclamation,
+    SquaresOverlap,
     Folder,
-    DocumentOpen,
-    OpenMenu,
-    ViewMore,
-    UserTrash,
-    Application,
-    Applications,
+    FolderOpen,
+    LinesThree,
+    DotsThree,
+    Cube,
+    DotsNine,
     Headphones,
-    Speakers,
+    SpeakerBox,
     Gamepad,
     Phone,
     Pause,
-    Inspect,
-    NetworkWirelessSignalNone,
-    NetworkWirelessSignalWeak,
-    NetworkWirelessSignalOk,
-    NetworkWirelessSignalGood,
-    NetworkWirelessSignalExcellent,
+    CursorClick,
+    Wifi0,
+    Wifi1,
+    Wifi2,
     /// The padlock: a secured network, and anything locked or not permitted
     /// (a folder the person has no permission to read). It is the set's only
     /// padlock.
-    NetworkWirelessEncrypted,
-    NetworkWired,
-    NetworkVpn,
-    AirplaneMode,
-    NetworkWirelessHotspot,
-    NetworkWirelessDisabled,
-    NetworkOffline,
-    NetworkError,
-    AudioInputMicrophone,
-    AudioVolumeMuted,
-    AudioVolumeLow,
-    AudioVolumeMedium,
-    CameraWeb,
-    DisplayBrightness,
-    NightLight,
-    WeatherClearNight,
-    PowerProfilePowerSaver,
-    PowerProfileBalanced,
-    PowerProfilePerformance,
-    SystemShutdown,
-    BatteryLevel0,
-    BatteryLevel10,
-    BatteryLevel20,
-    BatteryLevel30,
-    BatteryLevel40,
-    BatteryLevel50,
-    BatteryLevel60,
-    BatteryLevel70,
-    BatteryLevel80,
-    BatteryLevel90,
-    BatteryLevel100,
-    ViewReveal,
-    ViewConceal,
-    DocumentEdit,
-    /// A pencil: edit something (a path, a connection, an access point). `DocumentEdit` is only for editing a document.
+    Padlock,
+    Network,
+    Shield,
+    Airplane,
+    Router,
+    WifiSlash,
+    WifiCross,
+    NetworkCross,
+    Microphone,
+    SpeakerCross,
+    Speaker,
+    SpeakerWave1,
+    Webcam,
+    Sun,
+    MoonStars,
+    Moon,
+    Leaf,
+    Gauge,
+    Bolt,
+    Power,
+    Battery0,
+    Battery10,
+    Battery20,
+    Battery30,
+    Battery40,
+    Battery50,
+    Battery60,
+    Battery70,
+    Battery80,
+    Battery90,
+    Eye,
+    EyeSlash,
+    SquarePencil,
+    /// A pencil: edit something (a path, a connection, an access point). `SquarePencil` is only for editing a document.
     Pencil,
-    UserInfo,
-    Starred,
-    NonStarred,
-    ObjectRotateRight,
+    IdCard,
+    StarFilled,
+    Star,
     /// Play.
-    MediaPlaybackStart,
+    Play,
     /// Stop: the Files toolbar's Reload button while a folder loads.
-    MediaPlaybackStop,
+    Stop,
     /// Full screen.
-    ViewFullscreen,
+    CornersOut,
     /// Leave full screen.
-    ViewRestore,
+    CornersIn,
     /// Zoom in.
-    ZoomIn,
+    MagnifierPlus,
     /// Zoom out.
-    ZoomOut,
+    MagnifierMinus,
     /// Fit to the window.
-    ZoomFitBest,
+    FrameCorners,
     /// Rotate counter-clockwise.
-    ObjectRotateLeft,
+    ArrowCcw,
     /// Crop a picture.
     Crop,
     /// Subtitles.
-    MediaViewSubtitles,
-    DialogPassword,
-    SendTo,
-    FolderDownload,
-    InputTouchpad,
-    PreferencesOther,
-    ViewList,
-    MediaRemovable,
+    Subtitles,
+    Key,
+    SquareArrowUp,
+    FolderArrowDown,
+    HandTap,
+    Sliders,
+    ListBullets,
+    Usb,
     Printer,
-    InputTablet,
-    NetworkServer,
-    AvatarDefault,
+    Tablet,
+    Server,
+    Person,
     /// An arrow pointing up and right: where the computer is (Weather's My Location).
-    LocationArrow,
-    MailUnread,
-    ApplicationsMultimedia,
-    AccessoriesCalculator,
-    WebBrowser,
-    XOfficeCalendar,
-    HelpBrowser,
-    ViewGrid,
-    TopBar,
-    NotificationsDisabled,
+    Arrowhead,
+    Envelope,
+    MusicNotes,
+    Calculator,
+    Globe,
+    Calendar,
+    CircleQuestion,
+    SquaresFour,
+    Window,
+    BellSlash,
     /// A coffee cup: keep the computer awake. Not a padlock: something locked
-    /// is [`Icon::NetworkWirelessEncrypted`].
-    ChangesPrevent,
-    Bookmarks,
-    AddOn,
-    VideoGeneric,
-    ImageGeneric,
-    UserHome,
-    FolderDocuments,
-    FolderMusic,
-    FolderPictures,
-    FolderVideos,
-    DriveHarddisk,
-    TextXGeneric,
-    AudioXGeneric,
-    PackageXGeneric,
-    FolderNew,
+    /// is [`Icon::Padlock`].
+    CoffeeCup,
+    Bookmark,
+    PuzzlePiece,
+    VideoCamera,
+    Image,
+    House,
+    FolderFileText,
+    FolderMusicNote,
+    FolderImage,
+    FolderPlay,
+    HardDrive,
+    FileText,
+    FileAudio,
+    Package,
+    FolderPlus,
     /// A folder drawn in dashes: a folder that is not there (not found).
-    FolderMissing,
-    MediaEject,
-    MediaOptical,
-    FolderTemplates,
-    FolderPublicshare,
-    FolderDesktop,
-    WindowNew,
-    DefaultAppText,
-    DefaultAppDocuments,
-    DragHandle,
+    FolderDashed,
+    Eject,
+    Disc,
+    FolderFile,
+    FolderPerson,
+    FolderMonitor,
+    SquareArrowUpRight,
+    FileDoc,
+    DotsSix,
     /// A PDF file.
-    ApplicationPdf,
+    FilePdf,
     /// A spreadsheet.
     Table,
     /// A presentation.
-    Presentation,
+    Easel,
     /// A font file.
-    FontXGeneric,
+    SquareLettersAa,
     /// Source code or a script.
-    TextXScript,
+    FileCode,
     /// A file of no known kind.
-    ApplicationXGeneric,
+    File,
     /// The badge on the icon of a symbolic link.
-    EmblemSymbolicLink,
+    CircleArrowUpRight,
     /// Recording: the dot of a recording indicator.
-    MediaRecord,
+    Record,
     /// Previous track.
-    MediaSkipBackward,
+    SkipBack,
     /// Next track.
-    MediaSkipForward,
+    SkipForward,
     /// Back 10 seconds.
-    MediaSeekBackward,
+    Rewind,
     /// Forward 10 seconds.
-    MediaSeekForward,
+    FastForward,
     /// Microphone muted.
-    AudioInputMicrophoneMuted,
+    MicrophoneSlash,
     /// Connected, kind of network unknown.
-    NetworkTransmitReceive,
+    ArrowsUpDown,
     /// Devices on one local network.
-    NetworkWorkgroup,
+    Devices,
     /// Screen sharing in progress.
-    ScreenShared,
+    MonitorArrowUp,
     /// Log out of the session.
-    SystemLogOut,
-    /// Restart the machine.
-    SystemReboot,
+    BracketArrowRight,
     /// Switch to another user.
-    SystemSwitchUser,
-    /// A clear day: the sun.
-    WeatherClear,
+    PersonArrows,
     /// A still camera.
-    CameraPhoto,
+    Camera,
     /// A numbered list.
-    ViewListOrdered,
+    ListNumbers,
     /// A ticked box.
-    CheckboxChecked,
+    SquareCheck,
     /// A paragraph of plain text.
-    FormatTextPlaintext,
+    LetterT,
     /// Bold text.
-    FormatTextBold,
+    LetterB,
     /// Italic text.
-    FormatTextItalic,
+    LetterI,
     /// Struck-through text.
-    FormatTextStrikethrough,
+    LetterSStrike,
     /// Code, written as angle brackets.
-    FormatCode,
+    BracketsAngle,
     /// A quotation, written as quotation marks.
-    FormatQuote,
+    Quotes,
     /// A link, written as a chain.
-    InsertLink,
+    Link,
     /// Match case, a find option (Text Editor's find bar).
-    FindMatchCase,
+    LettersAa,
     /// Regular expression, a find option.
-    FindRegex,
+    Asterisk,
     /// Whole words, a find option.
-    FindWholeWord,
+    BracketsSquare,
     /// Save a document.
-    DocumentSave,
+    FloppyDisk,
     /// Recent documents.
-    DocumentOpenRecent,
+    ClockCcw,
     /// Shuffle the queue (Media).
-    MediaPlaylistShuffle,
+    Shuffle,
     /// Repeat the queue (Media).
-    MediaPlaylistRepeat,
+    Repeat,
     /// Repeat the item playing (Media).
-    MediaPlaylistRepeatSong,
+    Repeat1,
     /// The mini player, picture in picture (Media).
-    ViewPip,
-    /// The volume near its top: a speaker with two waves (the Sound page's glyph).
-    AudioVolumeHigh,
+    WindowInset,
     /// Up one level: an arrow pointing up (Files, the Browser header).
-    GoUp,
+    ArrowUp,
     /// New tab: a rounded square with a plus (Browser).
-    TabNew,
+    SquarePlus,
     /// Tab groups: a solid tab with one behind it (Browser).
-    TabGroup,
+    Tabs,
     /// Split view: a rounded square cut in two (Browser).
-    SplitView,
+    WindowSplit,
     /// A private window: a domino mask (Browser).
-    WindowPrivate,
+    Mask,
     /// Reader view: an open book (Browser).
-    Reader,
+    BookOpen,
     /// Translate: the characters 文A (Browser).
     Translate,
     /// Find in page: a page with a magnifier over its corner (Browser).
-    FindInPage,
+    FileMagnifier,
     /// Reading list: glasses (Browser).
-    ReadingList,
+    Glasses,
     /// Bookmark this page: a bookmark with a plus (Browser).
-    BookmarkAdd,
+    BookmarkPlus,
     /// Downloads: an arrow onto a line (Browser).
-    Download,
+    ArrowDownLine,
     /// A finished download: a tick onto the same line (Browser).
-    DownloadDone,
+    CheckLine,
     /// Sync: two arrows chasing round (Browser).
-    Sync,
+    ArrowsCw,
     /// Not secure: the padlock with its shackle open (Browser).
-    LockOpen,
+    PadlockOpen,
     /// Certificate not valid: the padlock with a cross (Browser).
-    LockBroken,
+    PadlockCross,
     /// Trackers blocked: a shield with a tick (Browser).
     ShieldCheck,
     /// Cookies and site data (Browser).
     Cookie,
     /// Location permission: a map pin (Browser).
-    LocationPin,
+    MapPin,
     /// Autoplay blocked: play with a slash (Browser).
-    AutoplayOff,
+    PlaySlash,
     /// Flexible space in a customisable toolbar (Browser).
-    FlexibleSpace,
+    ArrowLeftRightBars,
     /// Space in a customisable toolbar (Browser).
-    Space,
+    BracketBottom,
     /// Separator in a customisable toolbar (Browser).
-    Separator,
+    LineVertical,
     /// This tab crashed: a sad face on a tile (Browser).
-    TabCrashed,
+    SquareFaceSad,
     /// Not responding: an hourglass (Browser).
     Hourglass,
     /// Any icon of the chat fork at any weight, as the fork draws it (feature `chat-icons`).
@@ -320,502 +305,478 @@ pub enum Icon {
 
 impl Icon {
     /// Every icon, in declaration order.
-    pub const ALL: [Icon; 216] = [
-        Self::GoPrevious,
-        Self::GoNext,
-        Self::SidebarShow,
-        Self::Computer,
-        Self::PreferencesSystem,
-        Self::EmblemSystem,
-        Self::Display,
-        Self::WindowClose,
-        Self::WindowMinimize,
-        Self::WindowMaximize,
-        Self::WindowRestore,
-        Self::Appearance,
-        Self::Desktop,
-        Self::Search,
-        Self::Filter,
-        Self::Network,
+    pub const ALL: [Icon; 202] = [
+        Self::ChevronLeft,
+        Self::ChevronRight,
+        Self::WindowSidebar,
+        Self::Laptop,
+        Self::Gear,
+        Self::Monitor,
+        Self::Cross,
+        Self::Minus,
+        Self::Square,
+        Self::SquaresOverlapLeft,
+        Self::Palette,
+        Self::MonitorDock,
+        Self::Magnifier,
+        Self::Funnel,
+        Self::Wifi,
         Self::Bluetooth,
-        Self::Sound,
-        Self::Power,
+        Self::SpeakerWave2,
+        Self::Battery100,
         Self::Keyboard,
         Self::Mouse,
-        Self::Accessibility,
+        Self::PersonCircle,
         Self::Clock,
-        Self::Users,
-        Self::About,
-        Self::Refresh,
-        Self::Delete,
+        Self::People,
+        Self::CircleInfo,
+        Self::ArrowCw,
+        Self::Trash,
         Self::Check,
-        Self::ListAdd,
-        Self::ListRemove,
-        Self::Swap,
-        Self::PanDown,
-        Self::PanUp,
-        Self::PanEnd,
-        Self::EditClear,
-        Self::DialogInformation,
-        Self::DialogWarning,
-        Self::DialogError,
-        Self::EditCopy,
+        Self::Plus,
+        Self::ArrowsLeftRight,
+        Self::ChevronDown,
+        Self::ChevronUp,
+        Self::CircleCross,
+        Self::TriangleExclamation,
+        Self::SquaresOverlap,
         Self::Folder,
-        Self::DocumentOpen,
-        Self::OpenMenu,
-        Self::ViewMore,
-        Self::UserTrash,
-        Self::Application,
-        Self::Applications,
+        Self::FolderOpen,
+        Self::LinesThree,
+        Self::DotsThree,
+        Self::Cube,
+        Self::DotsNine,
         Self::Headphones,
-        Self::Speakers,
+        Self::SpeakerBox,
         Self::Gamepad,
         Self::Phone,
         Self::Pause,
-        Self::Inspect,
-        Self::NetworkWirelessSignalNone,
-        Self::NetworkWirelessSignalWeak,
-        Self::NetworkWirelessSignalOk,
-        Self::NetworkWirelessSignalGood,
-        Self::NetworkWirelessSignalExcellent,
-        Self::NetworkWirelessEncrypted,
-        Self::NetworkWired,
-        Self::NetworkVpn,
-        Self::AirplaneMode,
-        Self::NetworkWirelessHotspot,
-        Self::NetworkWirelessDisabled,
-        Self::NetworkOffline,
-        Self::NetworkError,
-        Self::AudioInputMicrophone,
-        Self::AudioVolumeMuted,
-        Self::AudioVolumeLow,
-        Self::AudioVolumeMedium,
-        Self::CameraWeb,
-        Self::DisplayBrightness,
-        Self::NightLight,
-        Self::WeatherClearNight,
-        Self::PowerProfilePowerSaver,
-        Self::PowerProfileBalanced,
-        Self::PowerProfilePerformance,
-        Self::SystemShutdown,
-        Self::BatteryLevel0,
-        Self::BatteryLevel10,
-        Self::BatteryLevel20,
-        Self::BatteryLevel30,
-        Self::BatteryLevel40,
-        Self::BatteryLevel50,
-        Self::BatteryLevel60,
-        Self::BatteryLevel70,
-        Self::BatteryLevel80,
-        Self::BatteryLevel90,
-        Self::BatteryLevel100,
-        Self::ViewReveal,
-        Self::ViewConceal,
-        Self::DocumentEdit,
+        Self::CursorClick,
+        Self::Wifi0,
+        Self::Wifi1,
+        Self::Wifi2,
+        Self::Padlock,
+        Self::Network,
+        Self::Shield,
+        Self::Airplane,
+        Self::Router,
+        Self::WifiSlash,
+        Self::WifiCross,
+        Self::NetworkCross,
+        Self::Microphone,
+        Self::SpeakerCross,
+        Self::Speaker,
+        Self::SpeakerWave1,
+        Self::Webcam,
+        Self::Sun,
+        Self::MoonStars,
+        Self::Moon,
+        Self::Leaf,
+        Self::Gauge,
+        Self::Bolt,
+        Self::Power,
+        Self::Battery0,
+        Self::Battery10,
+        Self::Battery20,
+        Self::Battery30,
+        Self::Battery40,
+        Self::Battery50,
+        Self::Battery60,
+        Self::Battery70,
+        Self::Battery80,
+        Self::Battery90,
+        Self::Eye,
+        Self::EyeSlash,
+        Self::SquarePencil,
         Self::Pencil,
-        Self::UserInfo,
-        Self::Starred,
-        Self::NonStarred,
-        Self::ObjectRotateRight,
-        Self::MediaPlaybackStart,
-        Self::MediaPlaybackStop,
-        Self::ViewFullscreen,
-        Self::ViewRestore,
-        Self::ZoomIn,
-        Self::ZoomOut,
-        Self::ZoomFitBest,
-        Self::ObjectRotateLeft,
+        Self::IdCard,
+        Self::StarFilled,
+        Self::Star,
+        Self::Play,
+        Self::Stop,
+        Self::CornersOut,
+        Self::CornersIn,
+        Self::MagnifierPlus,
+        Self::MagnifierMinus,
+        Self::FrameCorners,
+        Self::ArrowCcw,
         Self::Crop,
-        Self::MediaViewSubtitles,
-        Self::DialogPassword,
-        Self::SendTo,
-        Self::FolderDownload,
-        Self::InputTouchpad,
-        Self::PreferencesOther,
-        Self::ViewList,
-        Self::MediaRemovable,
+        Self::Subtitles,
+        Self::Key,
+        Self::SquareArrowUp,
+        Self::FolderArrowDown,
+        Self::HandTap,
+        Self::Sliders,
+        Self::ListBullets,
+        Self::Usb,
         Self::Printer,
-        Self::InputTablet,
-        Self::NetworkServer,
-        Self::AvatarDefault,
-        Self::LocationArrow,
-        Self::MailUnread,
-        Self::ApplicationsMultimedia,
-        Self::AccessoriesCalculator,
-        Self::WebBrowser,
-        Self::XOfficeCalendar,
-        Self::HelpBrowser,
-        Self::ViewGrid,
-        Self::TopBar,
-        Self::NotificationsDisabled,
-        Self::ChangesPrevent,
-        Self::Bookmarks,
-        Self::AddOn,
-        Self::VideoGeneric,
-        Self::ImageGeneric,
-        Self::UserHome,
-        Self::FolderDocuments,
-        Self::FolderMusic,
-        Self::FolderPictures,
-        Self::FolderVideos,
-        Self::DriveHarddisk,
-        Self::TextXGeneric,
-        Self::AudioXGeneric,
-        Self::PackageXGeneric,
-        Self::FolderNew,
-        Self::FolderMissing,
-        Self::MediaEject,
-        Self::MediaOptical,
-        Self::FolderTemplates,
-        Self::FolderPublicshare,
-        Self::FolderDesktop,
-        Self::WindowNew,
-        Self::DefaultAppText,
-        Self::DefaultAppDocuments,
-        Self::DragHandle,
-        Self::ApplicationPdf,
+        Self::Tablet,
+        Self::Server,
+        Self::Person,
+        Self::Arrowhead,
+        Self::Envelope,
+        Self::MusicNotes,
+        Self::Calculator,
+        Self::Globe,
+        Self::Calendar,
+        Self::CircleQuestion,
+        Self::SquaresFour,
+        Self::Window,
+        Self::BellSlash,
+        Self::CoffeeCup,
+        Self::Bookmark,
+        Self::PuzzlePiece,
+        Self::VideoCamera,
+        Self::Image,
+        Self::House,
+        Self::FolderFileText,
+        Self::FolderMusicNote,
+        Self::FolderImage,
+        Self::FolderPlay,
+        Self::HardDrive,
+        Self::FileText,
+        Self::FileAudio,
+        Self::Package,
+        Self::FolderPlus,
+        Self::FolderDashed,
+        Self::Eject,
+        Self::Disc,
+        Self::FolderFile,
+        Self::FolderPerson,
+        Self::FolderMonitor,
+        Self::SquareArrowUpRight,
+        Self::FileDoc,
+        Self::DotsSix,
+        Self::FilePdf,
         Self::Table,
-        Self::Presentation,
-        Self::FontXGeneric,
-        Self::TextXScript,
-        Self::ApplicationXGeneric,
-        Self::EmblemSymbolicLink,
-        Self::MediaRecord,
-        Self::MediaSkipBackward,
-        Self::MediaSkipForward,
-        Self::MediaSeekBackward,
-        Self::MediaSeekForward,
-        Self::AudioInputMicrophoneMuted,
-        Self::NetworkTransmitReceive,
-        Self::NetworkWorkgroup,
-        Self::ScreenShared,
-        Self::SystemLogOut,
-        Self::SystemReboot,
-        Self::SystemSwitchUser,
-        Self::WeatherClear,
-        Self::CameraPhoto,
-        Self::ViewListOrdered,
-        Self::CheckboxChecked,
-        Self::FormatTextPlaintext,
-        Self::FormatTextBold,
-        Self::FormatTextItalic,
-        Self::FormatTextStrikethrough,
-        Self::FormatCode,
-        Self::FormatQuote,
-        Self::InsertLink,
-        Self::FindMatchCase,
-        Self::FindRegex,
-        Self::FindWholeWord,
-        Self::DocumentSave,
-        Self::DocumentOpenRecent,
-        Self::MediaPlaylistShuffle,
-        Self::MediaPlaylistRepeat,
-        Self::MediaPlaylistRepeatSong,
-        Self::ViewPip,
-        Self::AudioVolumeHigh,
-        Self::GoUp,
-        Self::TabNew,
-        Self::TabGroup,
-        Self::SplitView,
-        Self::WindowPrivate,
-        Self::Reader,
+        Self::Easel,
+        Self::SquareLettersAa,
+        Self::FileCode,
+        Self::File,
+        Self::CircleArrowUpRight,
+        Self::Record,
+        Self::SkipBack,
+        Self::SkipForward,
+        Self::Rewind,
+        Self::FastForward,
+        Self::MicrophoneSlash,
+        Self::ArrowsUpDown,
+        Self::Devices,
+        Self::MonitorArrowUp,
+        Self::BracketArrowRight,
+        Self::PersonArrows,
+        Self::Camera,
+        Self::ListNumbers,
+        Self::SquareCheck,
+        Self::LetterT,
+        Self::LetterB,
+        Self::LetterI,
+        Self::LetterSStrike,
+        Self::BracketsAngle,
+        Self::Quotes,
+        Self::Link,
+        Self::LettersAa,
+        Self::Asterisk,
+        Self::BracketsSquare,
+        Self::FloppyDisk,
+        Self::ClockCcw,
+        Self::Shuffle,
+        Self::Repeat,
+        Self::Repeat1,
+        Self::WindowInset,
+        Self::ArrowUp,
+        Self::SquarePlus,
+        Self::Tabs,
+        Self::WindowSplit,
+        Self::Mask,
+        Self::BookOpen,
         Self::Translate,
-        Self::FindInPage,
-        Self::ReadingList,
-        Self::BookmarkAdd,
-        Self::Download,
-        Self::DownloadDone,
-        Self::Sync,
-        Self::LockOpen,
-        Self::LockBroken,
+        Self::FileMagnifier,
+        Self::Glasses,
+        Self::BookmarkPlus,
+        Self::ArrowDownLine,
+        Self::CheckLine,
+        Self::ArrowsCw,
+        Self::PadlockOpen,
+        Self::PadlockCross,
         Self::ShieldCheck,
         Self::Cookie,
-        Self::LocationPin,
-        Self::AutoplayOff,
-        Self::FlexibleSpace,
-        Self::Space,
-        Self::Separator,
-        Self::TabCrashed,
+        Self::MapPin,
+        Self::PlaySlash,
+        Self::ArrowLeftRightBars,
+        Self::BracketBottom,
+        Self::LineVertical,
+        Self::SquareFaceSad,
         Self::Hourglass,
     ];
 
     /// The embedded SVG source for this icon.
     pub fn bytes(self) -> &'static [u8] {
         match self {
-            Self::GoPrevious => include_bytes!("../icons/go-previous-symbolic.svg"),
-            Self::GoNext => include_bytes!("../icons/go-next-symbolic.svg"),
-            Self::SidebarShow => include_bytes!("../icons/sidebar-show-symbolic.svg"),
-            Self::Computer => include_bytes!("../icons/computer-symbolic.svg"),
-            Self::PreferencesSystem => include_bytes!("../icons/preferences-system-symbolic.svg"),
-            Self::EmblemSystem => include_bytes!("../icons/emblem-system-symbolic.svg"),
-            Self::Display => include_bytes!("../icons/video-display-symbolic.svg"),
-            Self::WindowClose => include_bytes!("../icons/window-close-symbolic.svg"),
-            Self::WindowMinimize => include_bytes!("../icons/window-minimize-symbolic.svg"),
-            Self::WindowMaximize => include_bytes!("../icons/window-maximize-symbolic.svg"),
-            Self::WindowRestore => include_bytes!("../icons/window-restore-symbolic.svg"),
-            Self::Appearance => include_bytes!("../icons/applications-graphics-symbolic.svg"),
-            Self::Desktop => include_bytes!("../icons/preferences-desktop-symbolic.svg"),
-            Self::Search => include_bytes!("../icons/system-search-symbolic.svg"),
-            Self::Filter => include_bytes!("../icons/view-filter-symbolic.svg"),
-            Self::Network => include_bytes!("../icons/network-wireless-symbolic.svg"),
-            Self::Bluetooth => include_bytes!("../icons/bluetooth-active-symbolic.svg"),
-            Self::Sound => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
-            Self::Power => include_bytes!("../icons/battery-level-100-symbolic.svg"),
-            Self::Keyboard => include_bytes!("../icons/input-keyboard-symbolic.svg"),
-            Self::Mouse => include_bytes!("../icons/input-mouse-symbolic.svg"),
-            Self::Accessibility => {
-                include_bytes!("../icons/preferences-desktop-accessibility-symbolic.svg")
+            Self::ChevronLeft => include_bytes!("../icons/chevron-left-symbolic.svg"),
+            Self::ChevronRight => include_bytes!("../icons/chevron-right-symbolic.svg"),
+            Self::WindowSidebar => include_bytes!("../icons/window-sidebar-symbolic.svg"),
+            Self::Laptop => include_bytes!("../icons/laptop-symbolic.svg"),
+            Self::Gear => include_bytes!("../icons/gear-symbolic.svg"),
+            Self::Monitor => include_bytes!("../icons/monitor-symbolic.svg"),
+            Self::Cross => include_bytes!("../icons/cross-symbolic.svg"),
+            Self::Minus => include_bytes!("../icons/minus-symbolic.svg"),
+            Self::Square => include_bytes!("../icons/square-symbolic.svg"),
+            Self::SquaresOverlapLeft => {
+                include_bytes!("../icons/squares-overlap-left-symbolic.svg")
             }
-            Self::Clock => include_bytes!("../icons/preferences-system-time-symbolic.svg"),
-            Self::Users => include_bytes!("../icons/system-users-symbolic.svg"),
-            Self::About => include_bytes!("../icons/help-about-symbolic.svg"),
-            Self::Refresh => include_bytes!("../icons/view-refresh-symbolic.svg"),
-            Self::Delete => include_bytes!("../icons/edit-delete-symbolic.svg"),
-            Self::Check => include_bytes!("../icons/object-select-symbolic.svg"),
-            Self::ListAdd => include_bytes!("../icons/list-add-symbolic.svg"),
-            Self::ListRemove => include_bytes!("../icons/list-remove-symbolic.svg"),
-            Self::Swap => include_bytes!("../icons/swap-horizontal-symbolic.svg"),
-            Self::PanDown => include_bytes!("../icons/pan-down-symbolic.svg"),
-            Self::PanUp => include_bytes!("../icons/pan-up-symbolic.svg"),
-            Self::PanEnd => include_bytes!("../icons/pan-end-symbolic.svg"),
-            Self::EditClear => include_bytes!("../icons/edit-clear-symbolic.svg"),
-            Self::DialogInformation => include_bytes!("../icons/dialog-information-symbolic.svg"),
-            Self::DialogWarning => include_bytes!("../icons/dialog-warning-symbolic.svg"),
-            Self::DialogError => include_bytes!("../icons/dialog-error-symbolic.svg"),
-            Self::EditCopy => include_bytes!("../icons/edit-copy-symbolic.svg"),
+            Self::Palette => include_bytes!("../icons/palette-symbolic.svg"),
+            Self::MonitorDock => include_bytes!("../icons/monitor-dock-symbolic.svg"),
+            Self::Magnifier => include_bytes!("../icons/magnifier-symbolic.svg"),
+            Self::Funnel => include_bytes!("../icons/funnel-symbolic.svg"),
+            Self::Wifi => include_bytes!("../icons/wifi-symbolic.svg"),
+            Self::Bluetooth => include_bytes!("../icons/bluetooth-symbolic.svg"),
+            Self::SpeakerWave2 => include_bytes!("../icons/speaker-wave-2-symbolic.svg"),
+            Self::Battery100 => include_bytes!("../icons/battery-100-symbolic.svg"),
+            Self::Keyboard => include_bytes!("../icons/keyboard-symbolic.svg"),
+            Self::Mouse => include_bytes!("../icons/mouse-symbolic.svg"),
+            Self::PersonCircle => {
+                include_bytes!("../icons/person-circle-symbolic.svg")
+            }
+            Self::Clock => include_bytes!("../icons/clock-symbolic.svg"),
+            Self::People => include_bytes!("../icons/people-symbolic.svg"),
+            Self::CircleInfo => include_bytes!("../icons/circle-info-symbolic.svg"),
+            Self::ArrowCw => include_bytes!("../icons/arrow-cw-symbolic.svg"),
+            Self::Trash => include_bytes!("../icons/trash-symbolic.svg"),
+            Self::Check => include_bytes!("../icons/check-symbolic.svg"),
+            Self::Plus => include_bytes!("../icons/plus-symbolic.svg"),
+            Self::ArrowsLeftRight => include_bytes!("../icons/arrows-left-right-symbolic.svg"),
+            Self::ChevronDown => include_bytes!("../icons/chevron-down-symbolic.svg"),
+            Self::ChevronUp => include_bytes!("../icons/chevron-up-symbolic.svg"),
+            Self::CircleCross => include_bytes!("../icons/circle-cross-symbolic.svg"),
+            Self::TriangleExclamation => {
+                include_bytes!("../icons/triangle-exclamation-symbolic.svg")
+            }
+            Self::SquaresOverlap => include_bytes!("../icons/squares-overlap-symbolic.svg"),
             Self::Folder => include_bytes!("../icons/folder-symbolic.svg"),
-            Self::DocumentOpen => include_bytes!("../icons/document-open-symbolic.svg"),
-            Self::OpenMenu => include_bytes!("../icons/open-menu-symbolic.svg"),
-            Self::ViewMore => include_bytes!("../icons/view-more-symbolic.svg"),
-            Self::UserTrash => include_bytes!("../icons/user-trash-symbolic.svg"),
-            Self::Application => include_bytes!("../icons/application-x-executable-symbolic.svg"),
-            Self::Applications => include_bytes!("../icons/view-app-grid-symbolic.svg"),
-            Self::Headphones => include_bytes!("../icons/audio-headphones-symbolic.svg"),
-            Self::Speakers => include_bytes!("../icons/audio-speakers-symbolic.svg"),
-            Self::Gamepad => include_bytes!("../icons/input-gaming-symbolic.svg"),
+            Self::FolderOpen => include_bytes!("../icons/folder-open-symbolic.svg"),
+            Self::LinesThree => include_bytes!("../icons/lines-three-symbolic.svg"),
+            Self::DotsThree => include_bytes!("../icons/dots-three-symbolic.svg"),
+            Self::Cube => include_bytes!("../icons/cube-symbolic.svg"),
+            Self::DotsNine => include_bytes!("../icons/dots-nine-symbolic.svg"),
+            Self::Headphones => include_bytes!("../icons/headphones-symbolic.svg"),
+            Self::SpeakerBox => include_bytes!("../icons/speaker-box-symbolic.svg"),
+            Self::Gamepad => include_bytes!("../icons/gamepad-symbolic.svg"),
             Self::Phone => include_bytes!("../icons/phone-symbolic.svg"),
-            Self::Pause => include_bytes!("../icons/media-playback-pause-symbolic.svg"),
+            Self::Pause => include_bytes!("../icons/pause-symbolic.svg"),
             // The element picker, as GTK's own inspector uses.
-            Self::Inspect => include_bytes!("../icons/find-location-symbolic.svg"),
-            Self::NetworkWirelessSignalNone => {
-                include_bytes!("../icons/network-wireless-signal-none-symbolic.svg")
+            Self::CursorClick => include_bytes!("../icons/cursor-click-symbolic.svg"),
+            Self::Wifi0 => {
+                include_bytes!("../icons/wifi-0-symbolic.svg")
             }
-            Self::NetworkWirelessSignalWeak => {
-                include_bytes!("../icons/network-wireless-signal-weak-symbolic.svg")
+            Self::Wifi1 => {
+                include_bytes!("../icons/wifi-1-symbolic.svg")
             }
-            Self::NetworkWirelessSignalOk => {
-                include_bytes!("../icons/network-wireless-signal-ok-symbolic.svg")
+            Self::Wifi2 => {
+                include_bytes!("../icons/wifi-2-symbolic.svg")
             }
-            Self::NetworkWirelessSignalGood => {
-                include_bytes!("../icons/network-wireless-signal-good-symbolic.svg")
+            Self::Padlock => {
+                include_bytes!("../icons/padlock-symbolic.svg")
             }
-            Self::NetworkWirelessSignalExcellent => {
-                include_bytes!("../icons/network-wireless-signal-excellent-symbolic.svg")
+            Self::Network => include_bytes!("../icons/network-symbolic.svg"),
+            Self::Shield => include_bytes!("../icons/shield-symbolic.svg"),
+            Self::Airplane => include_bytes!("../icons/airplane-symbolic.svg"),
+            Self::Router => {
+                include_bytes!("../icons/router-symbolic.svg")
             }
-            Self::NetworkWirelessEncrypted => {
-                include_bytes!("../icons/network-wireless-encrypted-symbolic.svg")
+            Self::WifiSlash => {
+                include_bytes!("../icons/wifi-slash-symbolic.svg")
             }
-            Self::NetworkWired => include_bytes!("../icons/network-wired-symbolic.svg"),
-            Self::NetworkVpn => include_bytes!("../icons/network-vpn-symbolic.svg"),
-            Self::AirplaneMode => include_bytes!("../icons/airplane-mode-symbolic.svg"),
-            Self::NetworkWirelessHotspot => {
-                include_bytes!("../icons/network-wireless-hotspot-symbolic.svg")
+            Self::WifiCross => include_bytes!("../icons/wifi-cross-symbolic.svg"),
+            Self::NetworkCross => include_bytes!("../icons/network-cross-symbolic.svg"),
+            Self::Microphone => {
+                include_bytes!("../icons/microphone-symbolic.svg")
             }
-            Self::NetworkWirelessDisabled => {
-                include_bytes!("../icons/network-wireless-disabled-symbolic.svg")
+            Self::SpeakerCross => include_bytes!("../icons/speaker-cross-symbolic.svg"),
+            Self::Speaker => include_bytes!("../icons/speaker-symbolic.svg"),
+            Self::SpeakerWave1 => include_bytes!("../icons/speaker-wave-1-symbolic.svg"),
+            Self::Webcam => include_bytes!("../icons/webcam-symbolic.svg"),
+            Self::Sun => include_bytes!("../icons/sun-symbolic.svg"),
+            Self::MoonStars => include_bytes!("../icons/moon-stars-symbolic.svg"),
+            Self::Moon => include_bytes!("../icons/moon-symbolic.svg"),
+            Self::Leaf => {
+                include_bytes!("../icons/leaf-symbolic.svg")
             }
-            Self::NetworkOffline => include_bytes!("../icons/network-offline-symbolic.svg"),
-            Self::NetworkError => include_bytes!("../icons/network-error-symbolic.svg"),
-            Self::AudioInputMicrophone => {
-                include_bytes!("../icons/audio-input-microphone-symbolic.svg")
+            Self::Gauge => {
+                include_bytes!("../icons/gauge-symbolic.svg")
             }
-            Self::AudioVolumeMuted => include_bytes!("../icons/audio-volume-muted-symbolic.svg"),
-            Self::AudioVolumeLow => include_bytes!("../icons/audio-volume-low-symbolic.svg"),
-            Self::AudioVolumeMedium => include_bytes!("../icons/audio-volume-medium-symbolic.svg"),
-            Self::CameraWeb => include_bytes!("../icons/camera-web-symbolic.svg"),
-            Self::DisplayBrightness => include_bytes!("../icons/display-brightness-symbolic.svg"),
-            Self::NightLight => include_bytes!("../icons/night-light-symbolic.svg"),
-            Self::WeatherClearNight => include_bytes!("../icons/weather-clear-night-symbolic.svg"),
-            Self::PowerProfilePowerSaver => {
-                include_bytes!("../icons/power-profile-power-saver-symbolic.svg")
+            Self::Bolt => {
+                include_bytes!("../icons/bolt-symbolic.svg")
             }
-            Self::PowerProfileBalanced => {
-                include_bytes!("../icons/power-profile-balanced-symbolic.svg")
-            }
-            Self::PowerProfilePerformance => {
-                include_bytes!("../icons/power-profile-performance-symbolic.svg")
-            }
-            Self::SystemShutdown => include_bytes!("../icons/system-shutdown-symbolic.svg"),
-            Self::BatteryLevel0 => include_bytes!("../icons/battery-level-0-symbolic.svg"),
-            Self::BatteryLevel10 => include_bytes!("../icons/battery-level-10-symbolic.svg"),
-            Self::BatteryLevel20 => include_bytes!("../icons/battery-level-20-symbolic.svg"),
-            Self::BatteryLevel30 => include_bytes!("../icons/battery-level-30-symbolic.svg"),
-            Self::BatteryLevel40 => include_bytes!("../icons/battery-level-40-symbolic.svg"),
-            Self::BatteryLevel50 => include_bytes!("../icons/battery-level-50-symbolic.svg"),
-            Self::BatteryLevel60 => include_bytes!("../icons/battery-level-60-symbolic.svg"),
-            Self::BatteryLevel70 => include_bytes!("../icons/battery-level-70-symbolic.svg"),
-            Self::BatteryLevel80 => include_bytes!("../icons/battery-level-80-symbolic.svg"),
-            Self::BatteryLevel90 => include_bytes!("../icons/battery-level-90-symbolic.svg"),
-            Self::BatteryLevel100 => include_bytes!("../icons/battery-level-100-symbolic.svg"),
-            Self::ViewReveal => include_bytes!("../icons/view-reveal-symbolic.svg"),
-            Self::ViewConceal => include_bytes!("../icons/view-conceal-symbolic.svg"),
-            Self::DocumentEdit => include_bytes!("../icons/document-edit-symbolic.svg"),
+            Self::Power => include_bytes!("../icons/power-symbolic.svg"),
+            Self::Battery0 => include_bytes!("../icons/battery-0-symbolic.svg"),
+            Self::Battery10 => include_bytes!("../icons/battery-10-symbolic.svg"),
+            Self::Battery20 => include_bytes!("../icons/battery-20-symbolic.svg"),
+            Self::Battery30 => include_bytes!("../icons/battery-30-symbolic.svg"),
+            Self::Battery40 => include_bytes!("../icons/battery-40-symbolic.svg"),
+            Self::Battery50 => include_bytes!("../icons/battery-50-symbolic.svg"),
+            Self::Battery60 => include_bytes!("../icons/battery-60-symbolic.svg"),
+            Self::Battery70 => include_bytes!("../icons/battery-70-symbolic.svg"),
+            Self::Battery80 => include_bytes!("../icons/battery-80-symbolic.svg"),
+            Self::Battery90 => include_bytes!("../icons/battery-90-symbolic.svg"),
+            Self::Eye => include_bytes!("../icons/eye-symbolic.svg"),
+            Self::EyeSlash => include_bytes!("../icons/eye-slash-symbolic.svg"),
+            Self::SquarePencil => include_bytes!("../icons/square-pencil-symbolic.svg"),
             Self::Pencil => include_bytes!("../icons/pencil-symbolic.svg"),
-            Self::UserInfo => include_bytes!("../icons/user-info-symbolic.svg"),
-            Self::Starred => include_bytes!("../icons/starred-symbolic.svg"),
-            Self::NonStarred => include_bytes!("../icons/non-starred-symbolic.svg"),
-            Self::ObjectRotateRight => include_bytes!("../icons/object-rotate-right-symbolic.svg"),
-            Self::MediaPlaybackStart => {
-                include_bytes!("../icons/media-playback-start-symbolic.svg")
+            Self::IdCard => include_bytes!("../icons/id-card-symbolic.svg"),
+            Self::StarFilled => include_bytes!("../icons/star-filled-symbolic.svg"),
+            Self::Star => include_bytes!("../icons/star-symbolic.svg"),
+            Self::Play => {
+                include_bytes!("../icons/play-symbolic.svg")
             }
-            Self::MediaPlaybackStop => include_bytes!("../icons/media-playback-stop-symbolic.svg"),
-            Self::ViewFullscreen => include_bytes!("../icons/view-fullscreen-symbolic.svg"),
-            Self::ViewRestore => include_bytes!("../icons/view-restore-symbolic.svg"),
-            Self::ZoomIn => include_bytes!("../icons/zoom-in-symbolic.svg"),
-            Self::ZoomOut => include_bytes!("../icons/zoom-out-symbolic.svg"),
-            Self::ZoomFitBest => include_bytes!("../icons/zoom-fit-best-symbolic.svg"),
-            Self::ObjectRotateLeft => include_bytes!("../icons/object-rotate-left-symbolic.svg"),
+            Self::Stop => include_bytes!("../icons/stop-symbolic.svg"),
+            Self::CornersOut => include_bytes!("../icons/corners-out-symbolic.svg"),
+            Self::CornersIn => include_bytes!("../icons/corners-in-symbolic.svg"),
+            Self::MagnifierPlus => include_bytes!("../icons/magnifier-plus-symbolic.svg"),
+            Self::MagnifierMinus => include_bytes!("../icons/magnifier-minus-symbolic.svg"),
+            Self::FrameCorners => include_bytes!("../icons/frame-corners-symbolic.svg"),
+            Self::ArrowCcw => include_bytes!("../icons/arrow-ccw-symbolic.svg"),
             Self::Crop => include_bytes!("../icons/crop-symbolic.svg"),
-            Self::MediaViewSubtitles => {
-                include_bytes!("../icons/media-view-subtitles-symbolic.svg")
+            Self::Subtitles => {
+                include_bytes!("../icons/subtitles-symbolic.svg")
             }
-            Self::DialogPassword => include_bytes!("../icons/dialog-password-symbolic.svg"),
-            Self::SendTo => include_bytes!("../icons/send-to-symbolic.svg"),
-            Self::FolderDownload => include_bytes!("../icons/folder-download-symbolic.svg"),
-            Self::InputTouchpad => include_bytes!("../icons/input-touchpad-symbolic.svg"),
-            Self::PreferencesOther => include_bytes!("../icons/preferences-other-symbolic.svg"),
-            Self::ViewList => include_bytes!("../icons/view-list-symbolic.svg"),
-            Self::MediaRemovable => include_bytes!("../icons/media-removable-symbolic.svg"),
+            Self::Key => include_bytes!("../icons/key-symbolic.svg"),
+            Self::SquareArrowUp => include_bytes!("../icons/square-arrow-up-symbolic.svg"),
+            Self::FolderArrowDown => include_bytes!("../icons/folder-arrow-down-symbolic.svg"),
+            Self::HandTap => include_bytes!("../icons/hand-tap-symbolic.svg"),
+            Self::Sliders => include_bytes!("../icons/sliders-symbolic.svg"),
+            Self::ListBullets => include_bytes!("../icons/list-bullets-symbolic.svg"),
+            Self::Usb => include_bytes!("../icons/usb-symbolic.svg"),
             Self::Printer => include_bytes!("../icons/printer-symbolic.svg"),
-            Self::InputTablet => include_bytes!("../icons/input-tablet-symbolic.svg"),
-            Self::NetworkServer => include_bytes!("../icons/network-server-symbolic.svg"),
-            Self::AvatarDefault => include_bytes!("../icons/avatar-default-symbolic.svg"),
-            Self::LocationArrow => include_bytes!("../icons/location-arrow-symbolic.svg"),
-            Self::MailUnread => include_bytes!("../icons/mail-unread-symbolic.svg"),
-            Self::ApplicationsMultimedia => {
-                include_bytes!("../icons/applications-multimedia-symbolic.svg")
+            Self::Tablet => include_bytes!("../icons/tablet-symbolic.svg"),
+            Self::Server => include_bytes!("../icons/server-symbolic.svg"),
+            Self::Person => include_bytes!("../icons/person-symbolic.svg"),
+            Self::Arrowhead => include_bytes!("../icons/arrowhead-symbolic.svg"),
+            Self::Envelope => include_bytes!("../icons/envelope-symbolic.svg"),
+            Self::MusicNotes => {
+                include_bytes!("../icons/music-notes-symbolic.svg")
             }
-            Self::AccessoriesCalculator => {
-                include_bytes!("../icons/accessories-calculator-symbolic.svg")
+            Self::Calculator => {
+                include_bytes!("../icons/calculator-symbolic.svg")
             }
-            Self::WebBrowser => include_bytes!("../icons/web-browser-symbolic.svg"),
-            Self::XOfficeCalendar => include_bytes!("../icons/x-office-calendar-symbolic.svg"),
-            Self::HelpBrowser => include_bytes!("../icons/help-browser-symbolic.svg"),
-            Self::ViewGrid => include_bytes!("../icons/view-grid-symbolic.svg"),
-            Self::TopBar => include_bytes!("../icons/focus-top-bar-symbolic.svg"),
-            Self::NotificationsDisabled => {
-                include_bytes!("../icons/notifications-disabled-symbolic.svg")
+            Self::Globe => include_bytes!("../icons/globe-symbolic.svg"),
+            Self::Calendar => include_bytes!("../icons/calendar-symbolic.svg"),
+            Self::CircleQuestion => include_bytes!("../icons/circle-question-symbolic.svg"),
+            Self::SquaresFour => include_bytes!("../icons/squares-four-symbolic.svg"),
+            Self::Window => include_bytes!("../icons/window-symbolic.svg"),
+            Self::BellSlash => {
+                include_bytes!("../icons/bell-slash-symbolic.svg")
             }
-            Self::ChangesPrevent => include_bytes!("../icons/changes-prevent-symbolic.svg"),
-            Self::Bookmarks => include_bytes!("../icons/bookmarks-symbolic.svg"),
-            Self::AddOn => include_bytes!("../icons/addon-symbolic.svg"),
-            Self::VideoGeneric => include_bytes!("../icons/video-generic-symbolic.svg"),
-            Self::ImageGeneric => include_bytes!("../icons/image-generic-symbolic.svg"),
-            Self::UserHome => include_bytes!("../icons/user-home-symbolic.svg"),
-            Self::FolderDocuments => include_bytes!("../icons/folder-documents-symbolic.svg"),
-            Self::FolderMusic => include_bytes!("../icons/folder-music-symbolic.svg"),
-            Self::FolderPictures => include_bytes!("../icons/folder-pictures-symbolic.svg"),
-            Self::FolderVideos => include_bytes!("../icons/folder-videos-symbolic.svg"),
-            Self::DriveHarddisk => include_bytes!("../icons/drive-harddisk-symbolic.svg"),
-            Self::TextXGeneric => include_bytes!("../icons/text-x-generic-symbolic.svg"),
-            Self::AudioXGeneric => include_bytes!("../icons/audio-x-generic-symbolic.svg"),
-            Self::PackageXGeneric => include_bytes!("../icons/package-x-generic-symbolic.svg"),
-            Self::FolderNew => include_bytes!("../icons/folder-new-symbolic.svg"),
-            Self::FolderMissing => include_bytes!("../icons/folder-missing-symbolic.svg"),
-            Self::MediaEject => include_bytes!("../icons/media-eject-symbolic.svg"),
-            Self::MediaOptical => include_bytes!("../icons/media-optical-symbolic.svg"),
-            Self::FolderTemplates => include_bytes!("../icons/folder-templates-symbolic.svg"),
-            Self::FolderPublicshare => include_bytes!("../icons/folder-publicshare-symbolic.svg"),
-            Self::FolderDesktop => include_bytes!("../icons/folder-desktop-symbolic.svg"),
-            Self::WindowNew => include_bytes!("../icons/window-new-symbolic.svg"),
-            Self::DefaultAppText => include_bytes!("../icons/default-app-text-symbolic.svg"),
-            Self::DefaultAppDocuments => {
-                include_bytes!("../icons/default-app-documents-symbolic.svg")
+            Self::CoffeeCup => include_bytes!("../icons/coffee-cup-symbolic.svg"),
+            Self::Bookmark => include_bytes!("../icons/bookmark-symbolic.svg"),
+            Self::PuzzlePiece => include_bytes!("../icons/puzzle-piece-symbolic.svg"),
+            Self::VideoCamera => include_bytes!("../icons/video-camera-symbolic.svg"),
+            Self::Image => include_bytes!("../icons/image-symbolic.svg"),
+            Self::House => include_bytes!("../icons/house-symbolic.svg"),
+            Self::FolderFileText => include_bytes!("../icons/folder-file-text-symbolic.svg"),
+            Self::FolderMusicNote => include_bytes!("../icons/folder-music-note-symbolic.svg"),
+            Self::FolderImage => include_bytes!("../icons/folder-image-symbolic.svg"),
+            Self::FolderPlay => include_bytes!("../icons/folder-play-symbolic.svg"),
+            Self::HardDrive => include_bytes!("../icons/hard-drive-symbolic.svg"),
+            Self::FileText => include_bytes!("../icons/file-text-symbolic.svg"),
+            Self::FileAudio => include_bytes!("../icons/file-audio-symbolic.svg"),
+            Self::Package => include_bytes!("../icons/package-symbolic.svg"),
+            Self::FolderPlus => include_bytes!("../icons/folder-plus-symbolic.svg"),
+            Self::FolderDashed => include_bytes!("../icons/folder-dashed-symbolic.svg"),
+            Self::Eject => include_bytes!("../icons/eject-symbolic.svg"),
+            Self::Disc => include_bytes!("../icons/disc-symbolic.svg"),
+            Self::FolderFile => include_bytes!("../icons/folder-file-symbolic.svg"),
+            Self::FolderPerson => include_bytes!("../icons/folder-person-symbolic.svg"),
+            Self::FolderMonitor => include_bytes!("../icons/folder-monitor-symbolic.svg"),
+            Self::SquareArrowUpRight => {
+                include_bytes!("../icons/square-arrow-up-right-symbolic.svg")
             }
-            Self::DragHandle => include_bytes!("../icons/list-drag-handle-symbolic.svg"),
-            Self::ApplicationPdf => include_bytes!("../icons/application-pdf-symbolic.svg"),
+            Self::FileDoc => {
+                include_bytes!("../icons/file-doc-symbolic.svg")
+            }
+            Self::DotsSix => include_bytes!("../icons/dots-six-symbolic.svg"),
+            Self::FilePdf => include_bytes!("../icons/file-pdf-symbolic.svg"),
             Self::Table => include_bytes!("../icons/table-symbolic.svg"),
-            Self::Presentation => include_bytes!("../icons/presentation-symbolic.svg"),
-            Self::FontXGeneric => include_bytes!("../icons/font-x-generic-symbolic.svg"),
-            Self::TextXScript => include_bytes!("../icons/text-x-script-symbolic.svg"),
-            Self::ApplicationXGeneric => {
-                include_bytes!("../icons/application-x-generic-symbolic.svg")
+            Self::Easel => include_bytes!("../icons/easel-symbolic.svg"),
+            Self::SquareLettersAa => include_bytes!("../icons/square-letters-aa-symbolic.svg"),
+            Self::FileCode => include_bytes!("../icons/file-code-symbolic.svg"),
+            Self::File => {
+                include_bytes!("../icons/file-symbolic.svg")
             }
-            Self::EmblemSymbolicLink => {
-                include_bytes!("../icons/emblem-symbolic-link-symbolic.svg")
+            Self::CircleArrowUpRight => {
+                include_bytes!("../icons/circle-arrow-up-right-symbolic.svg")
             }
-            Self::MediaRecord => include_bytes!("../icons/media-record-symbolic.svg"),
-            Self::MediaSkipBackward => include_bytes!("../icons/media-skip-backward-symbolic.svg"),
-            Self::MediaSkipForward => include_bytes!("../icons/media-skip-forward-symbolic.svg"),
-            Self::MediaSeekBackward => include_bytes!("../icons/media-seek-backward-symbolic.svg"),
-            Self::MediaSeekForward => include_bytes!("../icons/media-seek-forward-symbolic.svg"),
-            Self::AudioInputMicrophoneMuted => {
-                include_bytes!("../icons/audio-input-microphone-muted-symbolic.svg")
+            Self::Record => include_bytes!("../icons/record-symbolic.svg"),
+            Self::SkipBack => include_bytes!("../icons/skip-back-symbolic.svg"),
+            Self::SkipForward => include_bytes!("../icons/skip-forward-symbolic.svg"),
+            Self::Rewind => include_bytes!("../icons/rewind-symbolic.svg"),
+            Self::FastForward => include_bytes!("../icons/fast-forward-symbolic.svg"),
+            Self::MicrophoneSlash => {
+                include_bytes!("../icons/microphone-slash-symbolic.svg")
             }
-            Self::NetworkTransmitReceive => {
-                include_bytes!("../icons/network-transmit-receive-symbolic.svg")
+            Self::ArrowsUpDown => {
+                include_bytes!("../icons/arrows-up-down-symbolic.svg")
             }
-            Self::NetworkWorkgroup => include_bytes!("../icons/network-workgroup-symbolic.svg"),
-            Self::ScreenShared => include_bytes!("../icons/screen-shared-symbolic.svg"),
-            Self::SystemLogOut => include_bytes!("../icons/system-log-out-symbolic.svg"),
-            Self::SystemReboot => include_bytes!("../icons/system-reboot-symbolic.svg"),
-            Self::SystemSwitchUser => include_bytes!("../icons/system-switch-user-symbolic.svg"),
-            Self::WeatherClear => include_bytes!("../icons/weather-clear-symbolic.svg"),
-            Self::CameraPhoto => include_bytes!("../icons/camera-photo-symbolic.svg"),
-            Self::ViewListOrdered => include_bytes!("../icons/view-list-ordered-symbolic.svg"),
-            Self::CheckboxChecked => include_bytes!("../icons/checkbox-checked-symbolic.svg"),
-            Self::FormatTextPlaintext => {
-                include_bytes!("../icons/format-text-plaintext-symbolic.svg")
+            Self::Devices => include_bytes!("../icons/devices-symbolic.svg"),
+            Self::MonitorArrowUp => include_bytes!("../icons/monitor-arrow-up-symbolic.svg"),
+            Self::BracketArrowRight => include_bytes!("../icons/bracket-arrow-right-symbolic.svg"),
+            Self::PersonArrows => include_bytes!("../icons/person-arrows-symbolic.svg"),
+            Self::Camera => include_bytes!("../icons/camera-symbolic.svg"),
+            Self::ListNumbers => include_bytes!("../icons/list-numbers-symbolic.svg"),
+            Self::SquareCheck => include_bytes!("../icons/square-check-symbolic.svg"),
+            Self::LetterT => {
+                include_bytes!("../icons/letter-t-symbolic.svg")
             }
-            Self::FormatTextBold => include_bytes!("../icons/format-text-bold-symbolic.svg"),
-            Self::FormatTextItalic => include_bytes!("../icons/format-text-italic-symbolic.svg"),
-            Self::FormatTextStrikethrough => {
-                include_bytes!("../icons/format-text-strikethrough-symbolic.svg")
+            Self::LetterB => include_bytes!("../icons/letter-b-symbolic.svg"),
+            Self::LetterI => include_bytes!("../icons/letter-i-symbolic.svg"),
+            Self::LetterSStrike => {
+                include_bytes!("../icons/letter-s-strike-symbolic.svg")
             }
-            Self::FormatCode => include_bytes!("../icons/format-code-symbolic.svg"),
-            Self::FormatQuote => include_bytes!("../icons/format-quote-symbolic.svg"),
-            Self::InsertLink => include_bytes!("../icons/insert-link-symbolic.svg"),
-            Self::FindMatchCase => include_bytes!("../icons/edit-find-match-case-symbolic.svg"),
-            Self::FindRegex => include_bytes!("../icons/edit-find-regex-symbolic.svg"),
-            Self::FindWholeWord => include_bytes!("../icons/edit-find-whole-word-symbolic.svg"),
-            Self::DocumentSave => include_bytes!("../icons/document-save-symbolic.svg"),
-            Self::DocumentOpenRecent => {
-                include_bytes!("../icons/document-open-recent-symbolic.svg")
+            Self::BracketsAngle => include_bytes!("../icons/brackets-angle-symbolic.svg"),
+            Self::Quotes => include_bytes!("../icons/quotes-symbolic.svg"),
+            Self::Link => include_bytes!("../icons/link-symbolic.svg"),
+            Self::LettersAa => include_bytes!("../icons/letters-aa-symbolic.svg"),
+            Self::Asterisk => include_bytes!("../icons/asterisk-symbolic.svg"),
+            Self::BracketsSquare => include_bytes!("../icons/brackets-square-symbolic.svg"),
+            Self::FloppyDisk => include_bytes!("../icons/floppy-disk-symbolic.svg"),
+            Self::ClockCcw => {
+                include_bytes!("../icons/clock-ccw-symbolic.svg")
             }
-            Self::MediaPlaylistShuffle => {
-                include_bytes!("../icons/media-playlist-shuffle-symbolic.svg")
+            Self::Shuffle => {
+                include_bytes!("../icons/shuffle-symbolic.svg")
             }
-            Self::MediaPlaylistRepeat => {
-                include_bytes!("../icons/media-playlist-repeat-symbolic.svg")
+            Self::Repeat => {
+                include_bytes!("../icons/repeat-symbolic.svg")
             }
-            Self::MediaPlaylistRepeatSong => {
-                include_bytes!("../icons/media-playlist-repeat-song-symbolic.svg")
+            Self::Repeat1 => {
+                include_bytes!("../icons/repeat-1-symbolic.svg")
             }
-            Self::ViewPip => include_bytes!("../icons/view-pip-symbolic.svg"),
-            Self::AudioVolumeHigh => include_bytes!("../icons/audio-volume-high-symbolic.svg"),
-            Self::GoUp => include_bytes!("../icons/go-up-symbolic.svg"),
-            Self::TabNew => include_bytes!("../icons/tab-new-symbolic.svg"),
-            Self::TabGroup => include_bytes!("../icons/tab-group-symbolic.svg"),
-            Self::SplitView => include_bytes!("../icons/split-view-symbolic.svg"),
-            Self::WindowPrivate => include_bytes!("../icons/window-private-symbolic.svg"),
-            Self::Reader => include_bytes!("../icons/reader-symbolic.svg"),
+            Self::WindowInset => include_bytes!("../icons/window-inset-symbolic.svg"),
+            Self::ArrowUp => include_bytes!("../icons/arrow-up-symbolic.svg"),
+            Self::SquarePlus => include_bytes!("../icons/square-plus-symbolic.svg"),
+            Self::Tabs => include_bytes!("../icons/tabs-symbolic.svg"),
+            Self::WindowSplit => include_bytes!("../icons/window-split-symbolic.svg"),
+            Self::Mask => include_bytes!("../icons/mask-symbolic.svg"),
+            Self::BookOpen => include_bytes!("../icons/book-open-symbolic.svg"),
             Self::Translate => include_bytes!("../icons/translate-symbolic.svg"),
-            Self::FindInPage => include_bytes!("../icons/find-in-page-symbolic.svg"),
-            Self::ReadingList => include_bytes!("../icons/reading-list-symbolic.svg"),
-            Self::BookmarkAdd => include_bytes!("../icons/bookmark-add-symbolic.svg"),
-            Self::Download => include_bytes!("../icons/download-symbolic.svg"),
-            Self::DownloadDone => include_bytes!("../icons/download-done-symbolic.svg"),
-            Self::Sync => include_bytes!("../icons/sync-symbolic.svg"),
-            Self::LockOpen => include_bytes!("../icons/lock-open-symbolic.svg"),
-            Self::LockBroken => include_bytes!("../icons/lock-broken-symbolic.svg"),
+            Self::FileMagnifier => include_bytes!("../icons/file-magnifier-symbolic.svg"),
+            Self::Glasses => include_bytes!("../icons/glasses-symbolic.svg"),
+            Self::BookmarkPlus => include_bytes!("../icons/bookmark-plus-symbolic.svg"),
+            Self::ArrowDownLine => include_bytes!("../icons/arrow-down-line-symbolic.svg"),
+            Self::CheckLine => include_bytes!("../icons/check-line-symbolic.svg"),
+            Self::ArrowsCw => include_bytes!("../icons/arrows-cw-symbolic.svg"),
+            Self::PadlockOpen => include_bytes!("../icons/padlock-open-symbolic.svg"),
+            Self::PadlockCross => include_bytes!("../icons/padlock-cross-symbolic.svg"),
             Self::ShieldCheck => include_bytes!("../icons/shield-check-symbolic.svg"),
             Self::Cookie => include_bytes!("../icons/cookie-symbolic.svg"),
-            Self::LocationPin => include_bytes!("../icons/location-pin-symbolic.svg"),
-            Self::AutoplayOff => include_bytes!("../icons/autoplay-off-symbolic.svg"),
-            Self::FlexibleSpace => include_bytes!("../icons/flexible-space-symbolic.svg"),
-            Self::Space => include_bytes!("../icons/space-symbolic.svg"),
-            Self::Separator => include_bytes!("../icons/separator-symbolic.svg"),
-            Self::TabCrashed => include_bytes!("../icons/tab-crashed-symbolic.svg"),
+            Self::MapPin => include_bytes!("../icons/map-pin-symbolic.svg"),
+            Self::PlaySlash => include_bytes!("../icons/play-slash-symbolic.svg"),
+            Self::ArrowLeftRightBars => {
+                include_bytes!("../icons/arrow-left-right-bars-symbolic.svg")
+            }
+            Self::BracketBottom => include_bytes!("../icons/bracket-bottom-symbolic.svg"),
+            Self::LineVertical => include_bytes!("../icons/line-vertical-symbolic.svg"),
+            Self::SquareFaceSad => include_bytes!("../icons/square-face-sad-symbolic.svg"),
             Self::Hourglass => include_bytes!("../icons/hourglass-symbolic.svg"),
             #[cfg(feature = "chat-icons")]
             // A weight the fork lacks is drawn in the regular weight, which every fork icon has.
@@ -904,15 +865,14 @@ impl Icon {
     pub const fn mirrors_in_rtl(self) -> bool {
         matches!(
             self,
-            Self::GoPrevious
-                | Self::GoNext
-                | Self::PanEnd
-                | Self::SidebarShow
-                | Self::SendTo
-                | Self::ViewList
-                | Self::HelpBrowser
-                | Self::EmblemSymbolicLink
-                | Self::SystemLogOut
+            Self::ChevronLeft
+                | Self::ChevronRight
+                | Self::WindowSidebar
+                | Self::SquareArrowUp
+                | Self::ListBullets
+                | Self::CircleQuestion
+                | Self::CircleArrowUpRight
+                | Self::BracketArrowRight
         )
     }
 
@@ -921,20 +881,22 @@ impl Icon {
     /// charge as the filled part of the body and the rest dimmed.
     pub const fn battery_level(percent: u8) -> Self {
         match (percent.saturating_add(5) / 10) * 10 {
-            0 => Self::BatteryLevel0,
-            10 => Self::BatteryLevel10,
-            20 => Self::BatteryLevel20,
-            30 => Self::BatteryLevel30,
-            40 => Self::BatteryLevel40,
-            50 => Self::BatteryLevel50,
-            60 => Self::BatteryLevel60,
-            70 => Self::BatteryLevel70,
-            80 => Self::BatteryLevel80,
-            90 => Self::BatteryLevel90,
-            _ => Self::BatteryLevel100,
+            0 => Self::Battery0,
+            10 => Self::Battery10,
+            20 => Self::Battery20,
+            30 => Self::Battery30,
+            40 => Self::Battery40,
+            50 => Self::Battery50,
+            60 => Self::Battery60,
+            70 => Self::Battery70,
+            80 => Self::Battery80,
+            90 => Self::Battery90,
+            _ => Self::Battery100,
         }
     }
 }
+
+include!("icon_aliases.rs");
 
 #[cfg(test)]
 mod tests {
@@ -953,8 +915,8 @@ mod tests {
     #[test]
     fn mirrored_icons_are_the_ones_labels_tsv_names() {
         let labelled = labelled();
-        // Some files are one drawing under two names (pan-end is go-next), so an
-        // icon is every file whose bytes it is.
+        // Two files may hold the same drawing, so an icon is every file whose
+        // bytes it is.
         let files_of = |icon: Icon| -> Vec<String> {
             let bytes = icon.bytes();
             std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/icons"))
@@ -986,12 +948,34 @@ mod tests {
 
     #[test]
     fn battery_level_picks_the_nearest_ten_and_never_goes_past_full() {
-        assert_eq!(Icon::battery_level(0), Icon::BatteryLevel0);
-        assert_eq!(Icon::battery_level(4), Icon::BatteryLevel0);
-        assert_eq!(Icon::battery_level(5), Icon::BatteryLevel10);
-        assert_eq!(Icon::battery_level(49), Icon::BatteryLevel50);
-        assert_eq!(Icon::battery_level(85), Icon::BatteryLevel90);
-        assert_eq!(Icon::battery_level(100), Icon::BatteryLevel100);
-        assert_eq!(Icon::battery_level(255), Icon::BatteryLevel100);
+        assert_eq!(Icon::battery_level(0), Icon::Battery0);
+        assert_eq!(Icon::battery_level(4), Icon::Battery0);
+        assert_eq!(Icon::battery_level(5), Icon::Battery10);
+        assert_eq!(Icon::battery_level(49), Icon::Battery50);
+        assert_eq!(Icon::battery_level(85), Icon::Battery90);
+        assert_eq!(Icon::battery_level(100), Icon::Battery100);
+        assert_eq!(Icon::battery_level(255), Icon::Battery100);
+    }
+
+    #[test]
+    fn freedesktop_names_find_the_icon_that_draws_them() {
+        assert_eq!(Icon::from_freedesktop("wifi"), Some(Icon::Wifi));
+        assert_eq!(
+            Icon::from_freedesktop("network-wireless-signal-good-symbolic"),
+            Some(Icon::Wifi)
+        );
+        assert_eq!(
+            Icon::from_freedesktop("audio-headset"),
+            Some(Icon::Headphones)
+        );
+        assert_eq!(
+            Icon::from_freedesktop("camera-video"),
+            Some(Icon::VideoCamera)
+        );
+        assert_eq!(
+            Icon::from_freedesktop("power-profile-power-saver"),
+            Some(Icon::Leaf)
+        );
+        assert_eq!(Icon::from_freedesktop("no-such-icon"), None);
     }
 }

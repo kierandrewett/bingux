@@ -113,7 +113,7 @@ impl<T: 'static, K: Clone + Eq + Hash + 'static> Component for BatchBar<T, K> {
             }
             buttons.push(Element::from(button));
         }
-        let clear = icon_button(Icon::WindowClose, {
+        let clear = icon_button(Icon::Cross, {
             let latest = latest.clone();
             move |()| latest.get().clear_selection()
         })

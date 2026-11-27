@@ -72,7 +72,7 @@ impl Component for MasterDetail {
                             &[w_full(), flex_row(), items(Align::Center), px(S2), py(S2)],
                         )
                         .child(
-                            icon_button(Icon::GoPrevious, move |_| on_back.call(()))
+                            icon_button(Icon::ChevronLeft, move |_| on_back.call(()))
                                 .tooltip(self.back_label.as_str()),
                         ),
                 )

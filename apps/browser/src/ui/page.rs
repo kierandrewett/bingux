@@ -89,7 +89,7 @@ impl Component for PageArea {
             }
             .into(),
             Shown::Waiting => {
-                status_page(Icon::WebBrowser, tr!("browser-engine-starting")).into_element()
+                status_page(Icon::Globe, tr!("browser-engine-starting")).into_element()
             }
         };
         let status = hover.map(|address| {

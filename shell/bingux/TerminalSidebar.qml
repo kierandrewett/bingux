@@ -67,32 +67,32 @@ Scope {
         {
             id: "terminal",
             label: "Terminal",
-            icon: "utilities-terminal-symbolic"
+            icon: "prompt-symbolic"
         },
         {
             id: "notes",
             label: "Notes",
-            icon: "accessories-text-editor-symbolic"
+            icon: "notepad-symbolic"
         },
         {
             id: "monitor",
             label: "System",
-            icon: "computer-symbolic"
+            icon: "laptop-symbolic"
         },
         {
             id: "calendar",
             label: "Calendar",
-            icon: "x-office-calendar-symbolic"
+            icon: "calendar-symbolic"
         },
         {
             id: "media",
             label: "Media",
-            icon: "applications-multimedia-symbolic"
+            icon: "music-notes-symbolic"
         },
         {
             id: "tasks",
             label: "Tasks",
-            icon: "view-list-symbolic"
+            icon: "list-bullets-symbolic"
         }
     ]
     readonly property var contentTypes: DesktopEditing.desktop.layout ? DesktopEditing.desktop.layout.sidebar.map(id => allContentTypes.find(type => type.id === id)).filter(type => type) : allContentTypes
@@ -112,7 +112,7 @@ Scope {
     readonly property var currentContent: contentTypes.find(type => type.id === contentType) || {
         id: "",
         label: "Sidebar",
-        icon: "sidebar-show-symbolic"
+        icon: "window-sidebar-symbolic"
     }
     readonly property Item activePanel: panelFor(contentType)
     function panelFor(id) {
@@ -751,7 +751,7 @@ Scope {
                             horizontalPadding: Theme.barControlPadding
                             implicitHeight: Theme.barHeight
                             hoverEnabled: true
-                            trailingIconName: contentMenu.visible ? "pan-up-symbolic" : "pan-down-symbolic"
+                            trailingIconName: contentMenu.visible ? "chevron-up-symbolic" : "chevron-down-symbolic"
                             background: BarControlSurface {
                                 hovered: contentPicker.hovered
                                 pressed: contentPicker.down
@@ -1053,7 +1053,7 @@ Scope {
                     Layout.fillWidth: true
                     implicitHeight: 36
                     text: root.detached ? "Dock in sidebar" : "Pop out window"
-                    iconName: root.detached ? "view-restore-symbolic" : "window-new-symbolic"
+                    iconName: root.detached ? "corners-in-symbolic" : "square-arrow-up-right-symbolic"
                     flat: true
                     alignLeft: true
                     cornerRadius: contentMenu.contentRadius
@@ -1094,7 +1094,7 @@ Scope {
                         Item {
                             SymbolicIcon {
                                 anchors.centerIn: parent
-                                source: BinguxIcons.source("sidebar-show-symbolic")
+                                source: BinguxIcons.source("window-sidebar-symbolic")
                                 rotation: parent.parent.segmentValue === "top" ? 90 : parent.parent.segmentValue === "right" ? 180 : 0
                                 implicitSize: 16
                                 color: parent.parent.segmentSelected ? Theme.text : Theme.muted

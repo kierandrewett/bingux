@@ -112,25 +112,25 @@ Item {
             id: "accept-dns",
             name: "Tailscale DNS",
             description: "Use DNS settings from your tailnet",
-            icon: "network-server-symbolic"
+            icon: "server-symbolic"
         },
         {
             id: "accept-routes",
             name: "Subnet routes",
             description: "Reach networks shared by other nodes",
-            icon: "network-wired-symbolic"
+            icon: "network-symbolic"
         },
         {
             id: "exit-node-allow-lan-access",
             name: "Local network access",
             description: "Keep LAN access while using an exit node",
-            icon: "network-workgroup-symbolic"
+            icon: "devices-symbolic"
         },
         {
             id: "shields-up",
             name: "Block incoming connections",
             description: "Reject incoming connections over Tailscale",
-            icon: "network-wireless-encrypted-symbolic"
+            icon: "padlock-symbolic"
         }
     ]
     ColumnLayout {
@@ -158,7 +158,7 @@ Item {
             visible: root.tab !== "exit"
             title: root.service.connected ? "Connected" : root.service.subtitle || "Unavailable"
             subtitle: root.tab === "devices" ? root.devices.filter(node => node.online).length + " of " + root.devices.length + " tailnet devices online" : ""
-            iconName: "network-vpn-symbolic"
+            iconName: "shield-symbolic"
             rowInteractive: false
             selected: !!root.service.connected
             toggleVisible: true
@@ -177,7 +177,7 @@ Item {
             implicitHeight: 48
             title: root.selectedExit ? (root.activeExit ? root.exitLabel(root.activeExit) : "Exit node unavailable") : "Direct connection"
             subtitle: !root.service.connected ? "Tailscale is disconnected" : root.selectedExit ? (root.activeExit && root.activeExit.online ? "Current exit node" : "Exit node is offline") : "Choose a location to use an exit node"
-            iconName: "network-workgroup-symbolic"
+            iconName: "devices-symbolic"
             rowInteractive: false
             actionLabel: root.selectedExit ? "Stop using" : ""
             enabled: root.editable
@@ -290,7 +290,7 @@ Item {
                                 x: 6
                                 anchors.verticalCenter: parent.verticalCenter
                                 implicitSize: 18
-                                source: BinguxIcons.source(root.tab === "exit" ? "network-vpn-symbolic" : ["android", "iOS"].includes(nodeRow.modelData.os) ? "phone-symbolic" : "computer-symbolic")
+                                source: BinguxIcons.source(root.tab === "exit" ? "shield-symbolic" : ["android", "iOS"].includes(nodeRow.modelData.os) ? "phone-symbolic" : "laptop-symbolic")
                                 color: nodeRow.activeExit ? Theme.accent : Theme.muted
                             }
                             NodeCell {
@@ -349,7 +349,7 @@ Item {
                                 anchors.centerIn: parent
                                 visible: !root.countryFlag(nodeRow.modelData)
                                 implicitSize: 22
-                                source: BinguxIcons.source("computer-symbolic")
+                                source: BinguxIcons.source("laptop-symbolic")
                                 color: Theme.muted
                             }
                         }

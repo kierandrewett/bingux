@@ -49,7 +49,7 @@ pub(super) fn header(
     };
     HeaderBar::new("Inspector")
         .leading(
-            icon_button(Icon::Inspect, move |_| {
+            icon_button(Icon::CursorClick, move |_| {
                 super::set_picking(!super::picking());
             })
             .tooltip("Inspect an element (Ctrl+Shift+I)")
@@ -70,7 +70,7 @@ pub(super) fn header(
                 .tooltip(pause_label)
                 .active(paused),
         )
-        .trailing(icon_button(Icon::Refresh, |_| super::refresh()).tooltip("Refresh (F5)"))
+        .trailing(icon_button(Icon::ArrowCw, |_| super::refresh()).tooltip("Refresh (F5)"))
         .trailing(Element::from(WindowControls))
         .into()
 }

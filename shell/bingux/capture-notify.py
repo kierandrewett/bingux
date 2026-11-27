@@ -83,7 +83,7 @@ class CaptureNotification:
             (
                 "Capture",
                 self.identifier,
-                "media-record-symbolic" if self.kind == "recording" else "camera-photo-symbolic",
+                "record-symbolic" if self.kind == "recording" else "camera-symbolic",
                 summary if summary is not None else self.title + " saved",
                 body if body is not None else self.path.name,
                 actions,

@@ -125,7 +125,7 @@ impl Component for PropertyRowView {
             .child(match row.on_reset.clone() {
                 // The slot is kept when nothing changed, so every row's editor
                 // ends at the same edge.
-                Some(on_reset) => icon_button(Icon::Refresh, on_reset)
+                Some(on_reset) => icon_button(Icon::ArrowCw, on_reset)
                     .size(Dim::Box7)
                     .radius(Radius::Mark)
                     .tooltip(crate::tr!("ui-property-reset.tooltip"))

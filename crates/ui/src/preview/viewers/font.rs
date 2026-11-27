@@ -367,7 +367,7 @@ impl Component for FontView {
         let pick_line = pick.map(|character| {
             let copy = dedicated.then(|| {
                 Element::from(
-                    icon_button(Icon::EditCopy, move |_| {
+                    icon_button(Icon::SquaresOverlap, move |_| {
                         crate::clipboard::Clipboard::general().write_text(character.to_string());
                         if let Some(overlays) = overlays {
                             overlays.toast(crate::tr!("ui-preview-font-character-copied"));

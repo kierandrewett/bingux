@@ -548,7 +548,7 @@ fn chevron_glyph(tokens: &crate::theme::Tokens) -> Rect {
     rect()
         .tw(tokens, &[w(Dim::Box5), h(Dim::Dense), center()])
         .child(icons::icon(
-            Icon::PanEnd,
+            Icon::ChevronRight,
             IconSize::Mark,
             Ink::Muted.color(tokens),
         ))
@@ -776,7 +776,11 @@ impl Component for Chevron {
                     ],
                 ))
                 .child(icons::icon(
-                    if open() { Icon::PanDown } else { Icon::PanEnd },
+                    if open() {
+                        Icon::ChevronDown
+                    } else {
+                        Icon::ChevronRight
+                    },
                     IconSize::Mark,
                     if lit { Ink::Text } else { Ink::Muted }.color(&tokens),
                 )),
@@ -1013,7 +1017,7 @@ impl Component for CompactTrail {
                 }))
                 .child(name_label)
                 .child(icons::icon(
-                    Icon::PanDown,
+                    Icon::ChevronDown,
                     IconSize::Row,
                     Ink::Muted.color(&tokens),
                 )),

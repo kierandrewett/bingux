@@ -1273,9 +1273,9 @@ impl Component for HeaderCell {
         let arrow = sorted.map(|descending| {
             icons::icon(
                 if descending {
-                    Icon::PanDown
+                    Icon::ChevronDown
                 } else {
-                    Icon::PanUp
+                    Icon::ChevronUp
                 },
                 IconSize::Mark,
                 Paint::Text.color(&tokens),

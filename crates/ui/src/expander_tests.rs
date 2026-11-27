@@ -96,7 +96,7 @@ fn expander(case: Case) -> Element {
     match case.kind {
         Kind::Plain => header,
         Kind::Subtitle => header.subtitle(subtitle),
-        Kind::Leading => header.subtitle(subtitle).leading(Icon::NetworkWired),
+        Kind::Leading => header.subtitle(subtitle).leading(Icon::Network),
         Kind::Value => header.subtitle(subtitle).value("3 adapters"),
         Kind::Nested => {
             let inner =

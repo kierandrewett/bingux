@@ -32,7 +32,7 @@ ShellRoot {
         function test_surface() {
             const window = surface.testWindows[0];
             const card = window.testCard;
-            show("audio-volume-high-symbolic", .65, 1, "Headphones");
+            show("speaker-wave-2-symbolic", .65, 1, "Headphones");
             tryCompare(card, "opacity", 1);
             tryCompare(card, "scale", 1);
             waitForRendering(card);
@@ -58,7 +58,7 @@ ShellRoot {
             surface.sidebarScreen = Quickshell.screens[0];
             surface.rightInset = 0;
             const bar = findChild(card, "osdLevel");
-            show("audio-volume-overamplified-symbolic", 1.25, 1.5, "Headphones");
+            show("speaker-wave-2-symbolic", 1.25, 1.5, "Headphones");
             if (!Theme.reducedMotion) {
                 wait(40);
                 check(percentage.animating && percentage.progress > 0 && percentage.progress < 1 && percentage.direction === 1, "Increasing percentages slide upwards");
@@ -68,13 +68,13 @@ ShellRoot {
             check(card.percentLabel === "125%", "Amplified volume is not incorrectly labelled as a percentage of the maximum");
             tryCompare(percentage, "displayedValue", 125);
             check(percentage.label(percentage.displayedValue) === "125%", "Sliding percentages support values above 99");
-            show("audio-volume-muted-symbolic", 0, 1, "Headphones");
+            show("speaker-cross-symbolic", 0, 1, "Headphones");
             if (!Theme.reducedMotion) {
                 wait(35);
                 check(percentage.animating && percentage.direction === -1, "Decreasing percentages slide downwards");
             }
             check(findChild(card, "osdDetail").text === "Muted", "Mute is clearly labelled");
-            show("display-brightness-symbolic", .72, 0, "");
+            show("sun-symbolic", .72, 0, "");
             check(card.hasLevel && card.percentLabel === "72%", "Brightness uses the default maximum when omitted by the compositor");
             wait(180);
             tryCompare(percentage, "displayedValue", 72);
@@ -86,25 +86,28 @@ ShellRoot {
                 check(window.visible && card.opacity > 0 && card.opacity < 1 && card.scale === 1, "Close retains the surface and fades without scaling");
                 check(findChild(card, "osdTitle").text === "Brightness", "Content remains present through the fade");
             }
-            show("keyboard-brightness-symbolic", .4, 1, "");
+            show("keyboard-symbolic", .4, 1, "");
             tryCompare(card, "opacity", 1);
             check(findChild(card, "osdTitle").text === "Keyboard brightness", "A new request reverses a close without blanking");
-            show("microphone-sensitivity-muted-symbolic", 0, 1, "");
+            show("microphone-slash-symbolic", 0, 1, "");
             check(findChild(card, "osdTitle").text === "Microphone" && findChild(card, "osdDetail").text === "Muted", "Microphone mute is supported");
-            show("dialog-information-symbolic", -1, -1, "Touchpad disabled");
+            show("circle-info-symbolic", -1, -1, "Touchpad disabled");
             check(!findChild(card, "osdTrack").visible, "Status-only requests hide the level bar");
             const statusHeight = card.height;
             check(card.height === Theme.osdHeight, "Every OSD card has the same height");
-            show("action-unavailable-symbolic", -1, -1, "");
+            show("circle-slash-symbolic", -1, -1, "");
             wait(50);
             check(card.unavailable && card.width === Theme.osdWidth && card.height === statusHeight, "Unavailable actions keep the full OSD size");
             check(findChild(card, "osdTitle").text === "Action unavailable" && findChild(card, "osdTitle").visible && !findChild(card, "osdDetail").visible && !findChild(card, "osdPercent").visible && !findChild(card, "osdTrack").visible, "Unavailable actions say so in words");
-            show("action-unavailable-symbolic", -1, -1, "Brightness");
+            show("circle-slash-symbolic", -1, -1, "Brightness");
             wait(50);
             check(findChild(card, "osdTitle").text === "Brightness unavailable" && !findChild(card, "osdDetail").visible, "Unavailable actions name the control");
             card.grabToImage(result => result.saveToFile("/tmp/bingux-notification-polish/osd-unavailable.png"));
             wait(50);
-            show("audio-volume-high-symbolic", .65, 1, "Headphones");
+            show("audio-volume-muted-symbolic", 0, 1, "Headphones"); // gsd's own name. rename.py: keep
+            wait(50);
+            check(findChild(card, "osdTitle").text === "Volume" && findChild(card, "osdDetail").text === "Muted", "gnome-settings-daemon's own icon names are read through the aliases");
+            show("speaker-wave-2-symbolic", .65, 1, "Headphones");
             wait(50);
             check(!card.unavailable && card.width === Theme.osdWidth && card.height === statusHeight && findChild(card, "osdTitle").visible, "Volume restores the full OSD after an unavailable action");
             tryVerify(() => !window.visible, 2200);

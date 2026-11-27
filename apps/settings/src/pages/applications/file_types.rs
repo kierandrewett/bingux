@@ -335,7 +335,7 @@ fn toolbar(
     limit: State<usize>,
     (category_now, handler_now, sort_now): (Option<Category>, HandlerFilter, TypeSort),
 ) -> Element {
-    let search = icon_button(Icon::Search, move |_| {
+    let search = icon_button(Icon::Magnifier, move |_| {
         let mut searching = searching;
         let mut query = query;
         let open = *searching.read();
@@ -403,7 +403,7 @@ fn toolbar(
             submenu(tr!("settings-applications-sort-by"), sorts),
         ],
     )
-    .icon(Icon::Filter);
+    .icon(Icon::Funnel);
     hstack(S2).child(menu).child(search).into()
 }
 

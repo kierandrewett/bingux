@@ -45,10 +45,10 @@ pub const OPEN: &[Spec] = &[
 
 pub const TOOLS: &[Spec] = &[Spec::forced("The tools", || {
     rows(vec![
-            row("Elements").subtitle("The element tree of the window, as a tree_view; hover to highlight, press to select").leading(Icon::Display).into_element(),
-            row("Properties").subtitle("Computed style, box model and the token each value is; edit a prop and see it live").leading(Icon::PreferencesSystem).into_element(),
+            row("Elements").subtitle("The element tree of the window, as a tree_view; hover to highlight, press to select").leading(Icon::Monitor).into_element(),
+            row("Properties").subtitle("Computed style, box model and the token each value is; edit a prop and see it live").leading(Icon::Gear).into_element(),
             row("Performance").subtitle("Frame times as a timeline chart and a sampled flame graph; long frames are named").leading(Icon::Clock).into_element(),
-            row("Accessibility").subtitle("The accessibility tree with checks for missing names and roles").leading(Icon::Accessibility).into_element(),
-            row("Phone preview").subtitle("Holds the watched window at 390 x 800, compact density, touch").leading(Icon::Desktop).into_element(),
+            row("Accessibility").subtitle("The accessibility tree with checks for missing names and roles").leading(Icon::PersonCircle).into_element(),
+            row("Phone preview").subtitle("Holds the watched window at 390 x 800, compact density, touch").leading(Icon::MonitorDock).into_element(),
         ])
 })];

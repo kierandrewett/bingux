@@ -505,7 +505,7 @@ impl Component for AboutPage {
                                     ],
                                 )
                                 .child(icon(
-                                    Icon::Computer,
+                                    Icon::Laptop,
                                     IconSize::Hero,
                                     Paint::Text.color(&tokens),
                                 )),

@@ -42,7 +42,7 @@ AbstractButton {
             anchors.centerIn: parent
             visible: !root.presentation?.custom
             implicitSize: Theme.iconSize
-            source: BinguxIcons.source("view-more-symbolic")
+            source: BinguxIcons.source("dots-three-symbolic")
         }
     }
     BarTooltip {

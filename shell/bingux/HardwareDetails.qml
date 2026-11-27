@@ -44,7 +44,7 @@ Item {
         spacing: 10
         Header {
             title: "GPU"
-            iconName: "video-display-symbolic"
+            iconName: "monitor-symbolic"
             expandable: false
         }
         Caption {
@@ -113,7 +113,7 @@ Item {
         spacing: 10
         Header {
             title: "Storage"
-            iconName: "drive-harddisk-symbolic"
+            iconName: "hard-drive-symbolic"
             expandable: false
         }
         Repeater {
@@ -229,7 +229,7 @@ Item {
                 flat: true
                 alignLeft: true
                 text: root.selectedProcesses.length > 1 ? "Copy PIDs" : "Copy PID"
-                iconName: "edit-copy-symbolic"
+                iconName: "squares-overlap-symbolic"
                 onClicked: root.processAction("copy")
             }
             ActionButton {
@@ -238,7 +238,7 @@ Item {
                 alignLeft: true
                 text: "Pause"
                 objectName: "processAction_pause"
-                iconName: "media-playback-pause-symbolic"
+                iconName: "pause-symbolic"
                 enabled: !actionRunner.running && root.selectedProcesses.length > 0 && root.selectedProcesses.every(process => !!process.startTime)
                 onClicked: root.processAction("pause")
             }
@@ -248,7 +248,7 @@ Item {
                 alignLeft: true
                 text: "Resume"
                 objectName: "processAction_resume"
-                iconName: "media-playback-start-symbolic"
+                iconName: "play-symbolic"
                 enabled: !actionRunner.running && root.selectedProcesses.length > 0 && root.selectedProcesses.every(process => !!process.startTime)
                 onClicked: root.processAction("resume")
             }
@@ -258,7 +258,7 @@ Item {
                 alignLeft: true
                 text: root.selectedProcesses.length > 1 ? "End processes" : "End process"
                 objectName: "processAction_end"
-                iconName: "media-playback-stop-symbolic"
+                iconName: "stop-symbolic"
                 enabled: !actionRunner.running && root.selectedProcesses.length > 0 && root.selectedProcesses.every(process => !!process.startTime)
                 onClicked: root.processAction("end")
             }
@@ -268,7 +268,7 @@ Item {
                 alignLeft: true
                 text: "Force quit"
                 objectName: "processAction_kill"
-                iconName: "process-stop-symbolic"
+                iconName: "circle-stop-symbolic"
                 enabled: !actionRunner.running && root.selectedProcesses.length > 0 && root.selectedProcesses.every(process => !!process.startTime)
                 onClicked: root.processAction("kill")
             }
@@ -316,7 +316,7 @@ Item {
             visible: header.expandable
             implicitWidth: 24
             implicitHeight: 24
-            iconName: header.expanded ? "pan-up-symbolic" : "pan-down-symbolic"
+            iconName: header.expanded ? "chevron-up-symbolic" : "chevron-down-symbolic"
             label: (header.expanded ? "Hide " : "Show ") + header.title.toLowerCase() + " details"
             onClicked: header.toggled()
         }

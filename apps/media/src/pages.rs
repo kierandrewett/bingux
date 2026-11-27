@@ -66,7 +66,7 @@ impl Component for Empty {
         let live = use_media();
         let window = use_window();
         if *live.scanning.read() {
-            return status_page(Icon::Refresh, text::scanning()).into_element();
+            return status_page(Icon::ArrowCw, text::scanning()).into_element();
         }
         let whole_library_empty = live.library.read().is_empty();
         if !whole_library_empty {
@@ -77,7 +77,7 @@ impl Component for Empty {
         // Files dropped here play, as they do anywhere in the window; the
         // page lights up to say it takes them.
         drop_target(
-            status_page(Icon::FolderMusic, text::empty_title())
+            status_page(Icon::FolderMusicNote, text::empty_title())
                 .description(text::empty_body())
                 .action(text::empty_action(), move |_| add_folder(window)),
         )
@@ -138,7 +138,7 @@ impl Component for SongsPage {
         let songs = Arc::new(library.songs());
         if songs.is_empty() {
             return Empty {
-                icon: Icon::AudioXGeneric,
+                icon: Icon::FileAudio,
                 title: text::empty_section_songs(),
                 body: text::empty_section_songs_body(),
             }
@@ -181,9 +181,9 @@ fn play_pair(songs: Arc<Vec<Track>>, ui: Ui) -> Element {
         .child(
             action_button(text::play(), play_all)
                 .suggested()
-                .icon(Icon::MediaPlaybackStart),
+                .icon(Icon::Play),
         )
-        .child(action_button(text::shuffle(), shuffle).icon(Icon::MediaPlaylistShuffle))
+        .child(action_button(text::shuffle(), shuffle).icon(Icon::Shuffle))
         .into_element()
 }
 
@@ -276,7 +276,7 @@ impl Component for AlbumsPage {
         let albums = live.library.read().albums();
         if albums.is_empty() {
             return Empty {
-                icon: Icon::MediaOptical,
+                icon: Icon::Disc,
                 title: text::empty_section_albums(),
                 body: text::empty_section_albums_body(),
             }
@@ -327,7 +327,7 @@ impl Component for AlbumPage {
             .into_iter()
             .find(|album| album.key == self.key)
         else {
-            return status_page(Icon::MediaOptical, tr!("media-album-missing")).into_element();
+            return status_page(Icon::Disc, tr!("media-album-missing")).into_element();
         };
         let tracks = Arc::new(album.tracks.clone());
         // An album by one artist does not say so on every row; a
@@ -411,7 +411,7 @@ impl Component for ArtistsPage {
         let artists = live.library.read().artists();
         if artists.is_empty() {
             return Empty {
-                icon: Icon::AvatarDefault,
+                icon: Icon::Person,
                 title: text::empty_section_artists(),
                 body: text::empty_section_artists_body(),
             }
@@ -428,7 +428,7 @@ impl Component for ArtistsPage {
                         text::count_albums(artist.albums.len()),
                         text::count_songs(artist.track_count())
                     ))
-                    .leading(Icon::AvatarDefault)
+                    .leading(Icon::Person)
                     .navigates()
                     .on_press(move |_| router.push(&target)),
             );
@@ -461,7 +461,7 @@ impl Component for ArtistPage {
             .into_iter()
             .find(|artist| artist.name == self.name)
         else {
-            return status_page(Icon::AvatarDefault, tr!("media-artist-missing")).into_element();
+            return status_page(Icon::Person, tr!("media-artist-missing")).into_element();
         };
         let songs: Vec<Item> = artist
             .albums
@@ -492,7 +492,7 @@ impl Component for ArtistPage {
                             .child(
                                 action_button(text::play(), play_all)
                                     .suggested()
-                                    .icon(Icon::MediaPlaybackStart),
+                                    .icon(Icon::Play),
                             ),
                     ),
             )
@@ -610,7 +610,7 @@ impl Component for VideosPage {
         let videos = library.videos_by_added();
         if videos.is_empty() {
             return Empty {
-                icon: Icon::VideoGeneric,
+                icon: Icon::VideoCamera,
                 title: text::empty_section_videos(),
                 body: text::empty_section_videos_body(),
             }
@@ -643,7 +643,7 @@ impl Component for QueuePage {
         let ui = use_ui();
         let queue = live.queue.read().clone();
         let Some(current) = queue.current() else {
-            return status_page(Icon::ViewListOrdered, text::empty_queue())
+            return status_page(Icon::ListNumbers, text::empty_queue())
                 .description(text::empty_queue_body())
                 .into_element();
         };
@@ -668,9 +668,9 @@ impl Component for QueuePage {
                 .maybe_subtitle(subtitle)
                 .value(item.duration.map(text::clock).unwrap_or_default())
                 .leading(if item.kind == Kind::Video {
-                    Icon::VideoGeneric
+                    Icon::VideoCamera
                 } else {
-                    Icon::AudioXGeneric
+                    Icon::FileAudio
                 })
                 .context_menu(menu)
                 .on_press(move |_| {
@@ -740,7 +740,7 @@ impl Component for SearchResults {
         let library: Arc<Snapshot> = live.library.read().clone();
         let (songs, videos) = library.search(&query);
         if songs.is_empty() && videos.is_empty() {
-            return status_page(Icon::Search, text::no_results())
+            return status_page(Icon::Magnifier, text::no_results())
                 .description(text::no_results_body())
                 .into_element();
         }
@@ -770,7 +770,7 @@ impl Component for SearchResults {
                 let item = video.item();
                 group = group.row(
                     row(video.title.clone())
-                        .leading(Icon::VideoGeneric)
+                        .leading(Icon::VideoCamera)
                         .value(video.duration.map(text::clock).unwrap_or_default())
                         .on_press(move |_| play(vec![item.clone()], 0, ui)),
                 );

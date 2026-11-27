@@ -50,8 +50,8 @@ struct Host(Case);
 
 fn modes(icons: bool) -> Vec<View> {
     let views = [
-        ("basic", "Basic", Icon::AccessoriesCalculator),
-        ("scientific", "Scientific", Icon::ViewGrid),
+        ("basic", "Basic", Icon::Calculator),
+        ("scientific", "Scientific", Icon::SquaresFour),
     ];
     views
         .into_iter()

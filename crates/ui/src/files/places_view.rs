@@ -287,7 +287,7 @@ impl Component for PlacesMenu {
                 ),
             )
             .child(icons::icon(
-                Icon::PanDown,
+                Icon::ChevronDown,
                 IconSize::Mark,
                 Paint::Muted.color(&tokens),
             ));
@@ -295,7 +295,7 @@ impl Component for PlacesMenu {
             rect()
                 .on_sized(move |event: Event<SizedEventData>| area.set_if_modified(event.area))
                 .child(
-                    icon_button(Icon::SidebarShow, move |_: ()| open.set(!open()))
+                    icon_button(Icon::WindowSidebar, move |_: ()| open.set(!open()))
                         .active(open())
                         .tooltip(&crate::tr!("ui-files-places-title")),
                 )

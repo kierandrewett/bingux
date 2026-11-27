@@ -318,11 +318,7 @@ fn add_tile(
 ) -> Element {
     let face = rect()
         .tw(tokens, &[w_full(), h_full(), center(), bg(Paint::Control)])
-        .child(icon(
-            Icon::ListAdd,
-            IconSize::Row,
-            Paint::Muted.color(tokens),
-        ));
+        .child(icon(Icon::Plus, IconSize::Row, Paint::Muted.color(tokens)));
     tile(
         tokens,
         thumb(tokens, false, face.into()),
@@ -364,7 +360,7 @@ fn picture_tile(
         .error_renderer(move |_: String| {
             rect()
                 .tw_layout(&[center()])
-                .child(icon(Icon::ImageGeneric, IconSize::Row, muted))
+                .child(icon(Icon::Image, IconSize::Row, muted))
                 .into()
         });
     tile(

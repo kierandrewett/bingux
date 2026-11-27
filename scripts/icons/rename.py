@@ -38,6 +38,10 @@ SRC = HERE / "src"
 ICON_DIRS = (SRC, REPO / "crates/ui/icons")
 ICONS_RS = REPO / "crates/ui/src/icons.rs"
 SUFFIX = "-symbolic.svg"
+# A line that names an old or outside name on purpose (a test that feeds one in) carries this mark.
+KEEP_MARK = "rename.py: keep"
+# Docs that name icons in backticks (`go-next`), renamed there too.
+ICON_GUIDES = ("docs/bingux-ui.md", "docs/icons.md")
 
 # Generated or out of scope: see the module docstring.
 SKIP_PREFIXES = (
@@ -341,6 +345,9 @@ def tracked_files() -> list[str]:
 def rename_text(names: dict[str, str], variants: dict[str, str], plan: Plan) -> None:
     name_alt = "|".join(sorted(map(re.escape, names), key=len, reverse=True))
     symbolic = re.compile(rf"(?<![A-Za-z0-9_-])({name_alt})-symbolic(?![A-Za-z0-9_])")
+    # The icon guides name an icon in backticks: `go-next` is `chevron-right`. Only there: elsewhere a
+    # backticked `sync` or `presentation` is a word, not an icon.
+    quoted = re.compile(rf"`({name_alt})`")
     variant_re = None
     if variants:
         variant_alt = "|".join(sorted(map(re.escape, variants), key=len, reverse=True))
@@ -351,9 +358,17 @@ def rename_text(names: dict[str, str], variants: dict[str, str], plan: Plan) -> 
             text = file.read_text()
         except UnicodeDecodeError:
             continue
-        new = symbolic.sub(lambda m: f"{names[m.group(1)]}-symbolic", text)
-        if variant_re is not None and file.suffix in (".rs", ".md"):
-            new = variant_re.sub(lambda m: f"Icon::{variants[m.group(1)]}", new)
+        lines = text.split("\n")
+        for index, line in enumerate(lines):
+            if KEEP_MARK in line:
+                continue
+            line = symbolic.sub(lambda m: f"{names[m.group(1)]}-symbolic", line)
+            if variant_re is not None and file.suffix in (".rs", ".md"):
+                line = variant_re.sub(lambda m: f"Icon::{variants[m.group(1)]}", line)
+            if path in ICON_GUIDES:
+                line = quoted.sub(lambda m: f"`{names[m.group(1)]}`", line)
+            lines[index] = line
+        new = "\n".join(lines)
         if new != text:
             plan.write(file, new)
 

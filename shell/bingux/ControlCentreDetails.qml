@@ -342,7 +342,7 @@ Item {
             IconButton {
                 id: back
                 objectName: "controlDetailBack"
-                iconName: "go-previous-symbolic"
+                iconName: "chevron-left-symbolic"
                 label: "Back to Control Centre"
                 tooltipEnabled: false
                 onClicked: root.backRequested()
@@ -387,14 +387,14 @@ Item {
             node: root.outputNode
             maximum: 1.5
             label: "Output"
-            iconName: "audio-volume-high-symbolic"
+            iconName: "speaker-wave-2-symbolic"
         }
         AudioLevel {
             objectName: "controlMicrophone"
             visible: root.page === "audio" && root.audioTab === "input"
             node: root.inputNode
             label: "Microphone"
-            iconName: "audio-input-microphone-symbolic"
+            iconName: "microphone-symbolic"
         }
         Flickable {
             id: deviceList
@@ -455,7 +455,7 @@ Item {
                     visible: root.page === "network" && root.wifiDisabled
                     title: "Wi-Fi is off"
                     subtitle: root.wifiRadioBusy ? "Turning on Wi-Fi…" : "Turn it on to find and connect to networks"
-                    iconName: "network-wireless-disabled-symbolic"
+                    iconName: "wifi-slash-symbolic"
                     actionLabel: root.wifiRadioBusy ? "Turning on…" : "Turn on"
                     enabled: !root.wifiRadioBusy
                     onActionTriggered: root.setWifiEnabled(true)
@@ -470,14 +470,14 @@ Item {
                             title: modelData.name
                             subtitle: modelData.security === "Open" ? "Open network" : "Secured · " + modelData.security
                             navigation: true
-                            iconName: "network-wireless-signal-" + (modelData.signal > 75 ? "excellent" : modelData.signal > 50 ? "good" : modelData.signal > 25 ? "ok" : "weak") + "-symbolic"
+                            iconName: (modelData.signal > 50 ? "wifi" : modelData.signal > 25 ? "wifi-2" : "wifi-1") + "-symbolic"
                             onClicked: root.settingsRequested("network")
                         }
                     }
                     EmptyMessage {
                         visible: root.networkSections.nearby.length === 0
                         loading: wifiQuery.running
-                        iconName: "network-wireless-symbolic"
+                        iconName: "wifi-symbolic"
                         title: wifiQuery.running ? "Looking for networks…" : "No other networks nearby"
                     }
                 }
@@ -499,12 +499,12 @@ Item {
                 }
                 EmptyMessage {
                     visible: root.page === "network" && !networkQuery.running && root.networkSections.current.length === 0
-                    iconName: "network-offline-symbolic"
+                    iconName: "wifi-cross-symbolic"
                     title: "No active network connection"
                 }
                 EmptyMessage {
                     visible: root.page === "bluetooth" && (!root.bluetoothAdapter || !root.bluetoothAdapter.enabled)
-                    iconName: "bluetooth-disabled-symbolic"
+                    iconName: "bluetooth-slash-symbolic"
                     title: root.bluetoothAdapter ? "Bluetooth is off" : "Bluetooth is unavailable"
                 }
                 DetailSection {
@@ -538,7 +538,7 @@ Item {
                     ControlRow {
                         objectName: "controlBluetoothDiscover"
                         title: root.discoveryAdapter ? "Stop searching" : root.discoveryRunning ? "Searching…" : "Search for devices"
-                        iconName: root.discoveryRunning ? "process-stop-symbolic" : "view-refresh-symbolic"
+                        iconName: root.discoveryRunning ? "circle-stop-symbolic" : "arrow-cw-symbolic"
                         enabled: !!root.discoveryAdapter || !root.discoveryRunning
                         onClicked: root.toggleDiscovery()
                     }
@@ -568,7 +568,7 @@ Item {
                             required property var modelData
                             title: modelData.description || modelData.name
                             selected: modelData === (root.audioTab === "output" ? root.outputNode : root.inputNode)
-                            iconName: root.audioTab === "output" ? "audio-speakers-symbolic" : "audio-input-microphone-symbolic"
+                            iconName: root.audioTab === "output" ? "speaker-box-symbolic" : "microphone-symbolic"
                             onClicked: if (root.audioTab === "output")
                                 root.outputSelected(modelData)
                             else
@@ -577,7 +577,7 @@ Item {
                     }
                     EmptyMessage {
                         visible: (root.audioTab === "output" ? root.audioOutputs : root.audioInputs).length === 0
-                        iconName: root.audioTab === "output" ? "audio-speakers-symbolic" : "audio-input-microphone-symbolic"
+                        iconName: root.audioTab === "output" ? "speaker-box-symbolic" : "microphone-symbolic"
                         title: root.audioTab === "output" ? "No output devices" : "No microphones"
                     }
                 }

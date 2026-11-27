@@ -45,12 +45,12 @@ impl EnginePage {
         let restart = if restartable { "yes" } else { "no" };
         let (icon, title, text) = match cause {
             FailureCause::Crashed => (
-                Icon::DialogError,
+                Icon::CircleCross,
                 tr!("browser-engine-crashed-title"),
                 tr!("browser-engine-crashed-description", restart = restart),
             ),
             FailureCause::ProtocolViolation => (
-                Icon::DialogError,
+                Icon::CircleCross,
                 tr!("browser-engine-crashed-title"),
                 tr!(
                     "browser-engine-violation-description",
@@ -59,22 +59,22 @@ impl EnginePage {
                 ),
             ),
             FailureCause::ProfileLocked => (
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 tr!("browser-engine-locked-title"),
                 tr!("browser-engine-locked-description"),
             ),
             FailureCause::SandboxFloor => (
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 tr!("browser-engine-sandbox-title"),
                 tr!("browser-engine-sandbox-description", message = message),
             ),
             FailureCause::ProfileUnsafe => (
-                Icon::DialogWarning,
+                Icon::TriangleExclamation,
                 tr!("browser-engine-unsafe-title"),
                 tr!("browser-engine-unsafe-description", message = message),
             ),
             FailureCause::StartFailed => (
-                Icon::DialogError,
+                Icon::CircleCross,
                 tr!("browser-engine-start-failed-title"),
                 tr!("browser-engine-start-failed-description", message = message),
             ),

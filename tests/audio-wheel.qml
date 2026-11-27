@@ -39,7 +39,7 @@ ShellRoot {
             width: 368
             node: outputNode
             label: "Volume"
-            iconName: "audio-volume-high-symbolic"
+            iconName: "speaker-wave-2-symbolic"
             maximum: 1.5
         }
         AudioLevel {
@@ -49,7 +49,7 @@ ShellRoot {
             width: 368
             node: inputNode
             label: "Microphone"
-            iconName: "audio-input-microphone-symbolic"
+            iconName: "microphone-symbolic"
         }
         TestCase {
             when: window.visible

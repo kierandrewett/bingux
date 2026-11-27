@@ -41,7 +41,7 @@ KioskScreen {
     primaryVisible: pages.current === "login"
     primaryEnabled: canSubmit && response.text.length > 0
     secondaryText: "Switch user"
-    secondaryIcon: "avatar-default-symbolic"
+    secondaryIcon: "person-symbolic"
     secondaryVisible: pages.current === "login" && multipleAccounts && interactive
     cardBodyHeight: 232
 
@@ -334,7 +334,7 @@ KioskScreen {
                     SessionLink {
                         objectName: "greeterSession"
                         visible: root.catalog.sessions.length > 1
-                        iconName: "emblem-system-symbolic"
+                        iconName: "gear-symbolic"
                         text: root.selectedSession ? root.selectedSession.name : "Session"
                         enabled: !root.authentication.finishing
                         Accessible.name: "Session: " + (root.selectedSession ? root.selectedSession.name : "none")
@@ -373,7 +373,7 @@ KioskScreen {
                     objectName: "greeterOtherUser"
                     Layout.fillWidth: true
                     text: "Other…"
-                    iconName: "avatar-default-symbolic"
+                    iconName: "person-symbolic"
                     selected: root.customUser
                     enabled: !root.authentication.finishing
                     onClicked: root.openCustomUser()

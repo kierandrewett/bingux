@@ -210,7 +210,7 @@ ShellRoot {
             mouseMove(dock.contentItem, pinTarget.x, pinTarget.y, 50);
             check(dock.dropIndex === 0, "Dragging into pinned section selects the requested slot");
             const pinBadge = findChild(button, "dockPinPreview");
-            check(pinBadge && pinBadge.shown && pinBadge.iconName === "view-pin-symbolic", "Dragging into pinned section shows a pin badge");
+            check(pinBadge && pinBadge.shown && pinBadge.iconName === "pushpin-symbolic", "Dragging into pinned section shows a pin badge");
             wait(200);
             dock.testSurface.grabToImage(result => result.saveToFile("/tmp/bingux-notification-polish/dock-pin-preview.png"));
             wait(30);

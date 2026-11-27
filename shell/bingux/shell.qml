@@ -1139,7 +1139,7 @@ ShellRoot {
             }
             BarSearchButton {
                 id: searchPill
-                presentation: topBar.appearance("search", "Search", "system-search-symbolic", true, false)
+                presentation: topBar.appearance("search", "Search", "magnifier-symbolic", true, false)
                 parent: topBar.hostFor(searchPill)
                 Layout.column: topBar.controlColumn(searchPill)
                 Layout.row: topBar.controlRow(searchPill)
@@ -1148,7 +1148,7 @@ ShellRoot {
             }
             Pill {
                 id: clockPill
-                presentation: topBar.appearance("clock", clockLabel.text + " " + timeLabel.text, "x-office-calendar-symbolic", false, true)
+                presentation: topBar.appearance("clock", clockLabel.text + " " + timeLabel.text, "calendar-symbolic", false, true)
                 parent: topBar.hostFor(clockPill)
                 Layout.column: topBar.controlColumn(clockPill)
                 Layout.row: topBar.controlRow(clockPill)
@@ -1212,7 +1212,7 @@ ShellRoot {
                     columnSpacing: Theme.barControlGap
                     RecordingIndicator {
                         id: captureStatus
-                        presentation: topBar.appearance("capture", label || tooltip, "media-record-symbolic", false, true)
+                        presentation: topBar.appearance("capture", label || tooltip, "record-symbolic", false, true)
                         parent: topBar.hostFor(captureStatus)
                         Layout.column: topBar.controlColumn(captureStatus)
                         Layout.row: topBar.controlRow(captureStatus)
@@ -1233,7 +1233,7 @@ ShellRoot {
                         Tray {
                             id: tray
                             panelLayout: trayContainer.panelLayout
-                            presentation: topBar.appearance("tray", "System tray", "view-more-symbolic", true, false)
+                            presentation: topBar.appearance("tray", "System tray", "dots-three-symbolic", true, false)
                             parentWindow: topBar.windowFor(trayContainer)
                         }
                     }
@@ -1250,7 +1250,7 @@ ShellRoot {
                     SystemMetrics {
                         id: metricsPill
                         panelLayout: ["sidebar", "control-centre"].includes(topBar.zoneFor(metricsPill)) || (topBar.overflows(metricsPill) && !!barOverflow.hostItem)
-                        presentation: topBar.appearance("metrics", "System monitors", "computer-symbolic", true, true)
+                        presentation: topBar.appearance("metrics", "System monitors", "laptop-symbolic", true, true)
                         parent: topBar.hostFor(metricsPill)
                         Layout.column: topBar.controlColumn(metricsPill)
                         Layout.row: topBar.controlRow(metricsPill)
@@ -1274,7 +1274,7 @@ ShellRoot {
                     }
                     InputSourceSelector {
                         id: inputSourceSelector
-                        presentation: topBar.appearance("keyboard", displayLabel, "input-keyboard-symbolic", false, true)
+                        presentation: topBar.appearance("keyboard", displayLabel, "keyboard-symbolic", false, true)
                         parent: topBar.hostFor(inputSourceSelector)
                         Layout.column: topBar.controlColumn(inputSourceSelector)
                         Layout.row: topBar.controlRow(inputSourceSelector)
@@ -1286,7 +1286,7 @@ ShellRoot {
                     }
                     Pill {
                         id: systemPill
-                        presentation: topBar.appearance("controls", "Control centre", "preferences-system-symbolic", true, false)
+                        presentation: topBar.appearance("controls", "Control centre", "gear-symbolic", true, false)
                         parent: topBar.hostFor(systemPill)
                         Layout.column: topBar.controlColumn(systemPill)
                         Layout.row: topBar.controlRow(systemPill)
@@ -1326,7 +1326,7 @@ ShellRoot {
                     BarOverflowButton {
                         id: overflowButton
                         parent: topBar.hostFor(overflowButton)
-                        presentation: topBar.appearance("overflow", "More", "view-more-symbolic", true, false)
+                        presentation: topBar.appearance("overflow", "More", "dots-three-symbolic", true, false)
                         Layout.column: topBar.controlColumn(overflowButton)
                         Layout.row: topBar.controlRow(overflowButton)
                         visible: topBar.overflowItems.length > 0
@@ -1336,7 +1336,7 @@ ShellRoot {
                     }
                     BarNotificationButton {
                         id: notificationButton
-                        presentation: topBar.appearance("notifications", "Notifications", "preferences-system-notifications-symbolic", true, false)
+                        presentation: topBar.appearance("notifications", "Notifications", "bell-symbolic", true, false)
                         parent: topBar.hostFor(notificationButton)
                         Layout.column: topBar.controlColumn(notificationButton)
                         Layout.row: topBar.controlRow(notificationButton)

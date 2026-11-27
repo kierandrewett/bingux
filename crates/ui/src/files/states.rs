@@ -26,19 +26,19 @@ pub fn loading_state() -> Element {
 pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element {
     let (icon, title, description) = if recent {
         (
-            Icon::DocumentOpenRecent,
+            Icon::ClockCcw,
             tr!("ui-files-state-recent-title"),
             tr!("ui-files-state-recent-description"),
         )
     } else if filtered {
         (
-            Icon::Filter,
+            Icon::Funnel,
             tr!("ui-files-state-filtered-title"),
             tr!("ui-files-state-filtered-description"),
         )
     } else if hidden_items {
         (
-            Icon::ViewConceal,
+            Icon::EyeSlash,
             tr!("ui-files-state-hidden-title"),
             tr!("ui-files-state-hidden-description"),
         )
@@ -56,7 +56,7 @@ pub fn empty_state(recent: bool, hidden_items: bool, filtered: bool) -> Element 
 /// to read it.
 pub fn stopped_state() -> Element {
     Element::from(
-        status_page(Icon::MediaPlaybackStop, tr!("ui-files-state-stopped-title"))
+        status_page(Icon::Stop, tr!("ui-files-state-stopped-title"))
             .description(tr!("ui-files-state-stopped-description")),
     )
 }
@@ -64,7 +64,7 @@ pub fn stopped_state() -> Element {
 /// The Trash with nothing in it: a status page, not an empty list.
 pub fn trash_empty_state() -> Element {
     Element::from(
-        status_page(Icon::UserTrash, tr!("ui-files-state-trash-title"))
+        status_page(Icon::Trash, tr!("ui-files-state-trash-title"))
             .description(tr!("ui-files-state-trash-description")),
     )
 }
@@ -82,8 +82,11 @@ pub fn no_results_state(
 ) -> Element {
     if let Some(reason) = invalid {
         return Element::from(
-            status_page(Icon::DialogWarning, tr!("ui-files-search-invalid-title"))
-                .description(reason.to_string()),
+            status_page(
+                Icon::TriangleExclamation,
+                tr!("ui-files-search-invalid-title"),
+            )
+            .description(reason.to_string()),
         );
     }
     let (title, description) = match running {
@@ -104,7 +107,7 @@ pub fn no_results_state(
             ),
         ),
     };
-    let mut page = status_page(Icon::Search, title).description(description);
+    let mut page = status_page(Icon::Magnifier, title).description(description);
     if running != Some(true) && !hints.is_empty() {
         page = page.child(Element::from(HintRow { hints }));
     }
@@ -144,21 +147,12 @@ pub fn error_state(error: &ListError) -> Element {
     // that is not there, a file for "not a folder", the drive for one that
     // does not answer. A warning sign says none of that.
     let (icon, title) = match error {
-        ListError::PermissionDenied => (
-            Icon::NetworkWirelessEncrypted,
-            tr!("ui-files-error-permission-title"),
-        ),
-        ListError::NotFound => (Icon::FolderMissing, tr!("ui-files-error-not-found-title")),
-        ListError::NotADirectory => (
-            Icon::ApplicationXGeneric,
-            tr!("ui-files-error-not-folder-title"),
-        ),
-        ListError::Unresponsive => (
-            Icon::DriveHarddisk,
-            tr!("ui-files-error-unresponsive-title"),
-        ),
+        ListError::PermissionDenied => (Icon::Padlock, tr!("ui-files-error-permission-title")),
+        ListError::NotFound => (Icon::FolderDashed, tr!("ui-files-error-not-found-title")),
+        ListError::NotADirectory => (Icon::File, tr!("ui-files-error-not-folder-title")),
+        ListError::Unresponsive => (Icon::HardDrive, tr!("ui-files-error-unresponsive-title")),
         ListError::Cancelled | ListError::Other(_) => {
-            (Icon::DialogError, tr!("ui-files-error-open-title"))
+            (Icon::CircleCross, tr!("ui-files-error-open-title"))
         }
     };
     Element::from(status_page(icon, title).description(error.to_string()))

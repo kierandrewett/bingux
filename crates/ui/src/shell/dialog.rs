@@ -96,9 +96,9 @@ pub enum DialogIcon {
 impl DialogIcon {
     fn glyph(self) -> Icon {
         match self {
-            DialogIcon::Info => Icon::DialogInformation,
-            DialogIcon::Warning => Icon::DialogWarning,
-            DialogIcon::Error => Icon::DialogError,
+            DialogIcon::Info => Icon::CircleInfo,
+            DialogIcon::Warning => Icon::TriangleExclamation,
+            DialogIcon::Error => Icon::CircleCross,
         }
     }
 

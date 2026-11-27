@@ -4,5 +4,5 @@
   "description": "A counter that shows widget placement, popups and actions.",
   "apiVersion": 1,
   "entry": "Service.qml",
-  "widgets": [{ "id": "counter", "name": "Counter", "icon": "list-add-symbolic", "component": "Counter.qml" }]
+  "widgets": [{ "id": "counter", "name": "Counter", "icon": "plus-symbolic", "component": "Counter.qml" }]
 }

@@ -54,8 +54,8 @@ Item {
             visible: root.sharingVisible
             barWindow: root.barWindow
             filled: true
-            iconName: "screen-shared-symbolic"
-            trailingIcon: "media-playback-stop-symbolic"
+            iconName: "monitor-arrow-up-symbolic"
+            trailingIcon: "stop-symbolic"
             interactive: root.screenSharing && root.privacyState.available
             tooltip: root.screenSharing ? "Stop screen sharing" : "Screen sharing ended"
             tooltipDetails: root.screenSharing ? root.privacyState.screenSharingDetails : []
@@ -66,7 +66,7 @@ Item {
             objectName: "cameraIndicator"
             visible: root.privacyState.cameraInUse
             barWindow: root.barWindow
-            iconName: "camera-web-symbolic"
+            iconName: "webcam-symbolic"
             tooltip: root.privacyState.cameraTooltip
             tooltipDetails: root.privacyState.cameraDetails
         }
@@ -75,7 +75,7 @@ Item {
             objectName: "microphoneIndicator"
             visible: root.privacyState.microphoneInUse
             barWindow: root.barWindow
-            iconName: "audio-input-microphone-symbolic"
+            iconName: "microphone-symbolic"
             tooltip: root.privacyState.microphoneTooltip
             tooltipDetails: root.privacyState.microphoneDetails
         }
@@ -84,7 +84,7 @@ Item {
             objectName: "locationIndicator"
             visible: root.systemMetrics.locationInUse
             barWindow: root.barWindow
-            iconName: "find-location-symbolic"
+            iconName: "cursor-click-symbolic"
             tooltip: root.privacyState.locationTooltip
             tooltipDetails: root.privacyState.locationDetails
         }

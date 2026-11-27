@@ -172,7 +172,7 @@ ShellPopup {
             anchors.fill: parent
             fill: true
             visible: !root.detailOpen && controls.implicitHeight === 0
-            iconName: "preferences-system-symbolic"
+            iconName: "gear-symbolic"
             title: "No controls here"
             detail: "Choose which controls appear in Customise."
         }

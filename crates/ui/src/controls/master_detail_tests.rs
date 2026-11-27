@@ -62,7 +62,7 @@ impl Component for Stack {
                                 }
                             }))
                             .child(
-                                icon_button(Icon::Delete, move |_| {
+                                icon_button(Icon::Trash, move |_| {
                                     let mut list = names.write();
                                     if let Some(at) = list.iter().position(|item| *item == remove) {
                                         list.remove(at);

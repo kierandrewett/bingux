@@ -23,7 +23,7 @@ ShellRoot {
                 ControlRow {
                     required property int index
                     title: "Studio speakers with a descriptive device name"
-                    iconName: "audio-speakers-symbolic"
+                    iconName: "speaker-box-symbolic"
                     selected: index === 0
                 }
             }

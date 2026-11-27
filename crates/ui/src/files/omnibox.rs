@@ -264,7 +264,7 @@ impl Component for LocationField {
         // frame of the field has them and the swap from the trail shows no frame without its icon.
         let text_ink = Paint::Text.color(&tokens);
         icons::warm(Icon::Folder, IconSize::Control, Paint::Muted.color(&tokens));
-        for icon in [Icon::WindowClose, Icon::Pencil, Icon::Search] {
+        for icon in [Icon::Cross, Icon::Pencil, Icon::Magnifier] {
             icons::warm(icon, IconSize::Control, text_ink);
         }
         // The recent searches are read once, off the UI thread.
@@ -972,7 +972,7 @@ impl Component for LocationField {
             .leading(if path_mode {
                 Icon::Folder
             } else {
-                Icon::Search
+                Icon::Magnifier
             })
             .label(&crate::tr!("ui-files-omni-label"))
             .danger(complaint.read().is_some())
@@ -983,8 +983,7 @@ impl Component for LocationField {
             .alt_digit(scopes().len(), on_digit)
             .on_change(on_change);
         if phone {
-            field =
-                field.close_action(Icon::WindowClose, &crate::tr!("ui-files-omni-close-action"));
+            field = field.close_action(Icon::Cross, &crate::tr!("ui-files-omni-close-action"));
         }
         let _ = (
             step as fn(Option<usize>, usize, bool) -> Option<usize>,

@@ -104,7 +104,7 @@ impl Component for ApplicationsPage {
         let list = held.read().clone();
         let group = if list.is_empty() {
             Group::new(None::<String>)
-                .row(row(tr!("sound-applications-empty")).leading(Icon::Sound))
+                .row(row(tr!("sound-applications-empty")).leading(Icon::SpeakerWave2))
         } else {
             Group::new(None::<String>).rows(
                 list.iter()

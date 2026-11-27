@@ -30,7 +30,7 @@ const PROVIDERS: [(&str, &str, Icon); 7] = [
     (
         "applications",
         i18n_id!("settings-search-provider-applications"),
-        Icon::Applications,
+        Icon::DotsNine,
     ),
     (
         "files",
@@ -40,27 +40,23 @@ const PROVIDERS: [(&str, &str, Icon); 7] = [
     (
         "calculation",
         i18n_id!("settings-search-provider-calculation"),
-        Icon::AccessoriesCalculator,
+        Icon::Calculator,
     ),
     (
         "conversions",
         i18n_id!("settings-search-provider-conversions"),
-        Icon::Refresh,
+        Icon::ArrowCw,
     ),
-    (
-        "web",
-        i18n_id!("settings-search-provider-web"),
-        Icon::WebBrowser,
-    ),
+    ("web", i18n_id!("settings-search-provider-web"), Icon::Globe),
     (
         "web-shortcuts",
         i18n_id!("settings-search-provider-web-shortcuts"),
-        Icon::Bookmarks,
+        Icon::Bookmark,
     ),
     (
         "external",
         i18n_id!("settings-search-provider-external"),
-        Icon::AddOn,
+        Icon::PuzzlePiece,
     ),
 ];
 const MIN_MEGABYTES: i64 = 1;
@@ -829,14 +825,14 @@ fn engine_row(engine: Engine, engines: &[Engine], default: &str, ctx: Ctx) -> Ro
         }))
         .child(
             rect().child(
-                icon_button(Icon::Delete, move |_| {
+                icon_button(Icon::Trash, move |_| {
                     confirm_remove(ctx, &engine_name, &default_for_remove, &without);
                 })
                 .tooltip(&tr!("settings-search-remove-engine")),
             ),
         );
     row(engine.name.clone())
-        .leading(Icon::WebBrowser)
+        .leading(Icon::Globe)
         .subtitle(&tr!(
             "settings-search-shortcut",
             shortcut = &engine.shortcut
@@ -1096,7 +1092,7 @@ fn files_group(data: &Model, ctx: Ctx) -> Group {
                     .destructive(),
                 ];
                 let trailing = rect().child(
-                    icon_button(Icon::Delete, move |_| {
+                    icon_button(Icon::Trash, move |_| {
                         confirm_remove_folder(ctx, folder.clone(), remaining.clone());
                     })
                     .tooltip(&tr!("settings-search-remove-folder")),

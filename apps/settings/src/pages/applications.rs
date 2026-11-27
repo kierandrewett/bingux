@@ -54,7 +54,7 @@ pub(crate) const KINDS: [Kind; 9] = [
     Kind {
         slug: "web",
         title: || tr!("settings-applications-kind-web"),
-        icon: Icon::WebBrowser,
+        icon: Icon::Globe,
         mimes: &[
             "x-scheme-handler/http",
             "x-scheme-handler/https",
@@ -64,13 +64,13 @@ pub(crate) const KINDS: [Kind; 9] = [
     Kind {
         slug: "mail",
         title: || tr!("settings-applications-kind-mail"),
-        icon: Icon::MailUnread,
+        icon: Icon::Envelope,
         mimes: &["x-scheme-handler/mailto"],
     },
     Kind {
         slug: "calendar",
         title: || tr!("settings-applications-kind-calendar"),
-        icon: Icon::XOfficeCalendar,
+        icon: Icon::Calendar,
         mimes: &["text/calendar"],
     },
     Kind {
@@ -82,31 +82,31 @@ pub(crate) const KINDS: [Kind; 9] = [
     Kind {
         slug: "text",
         title: || tr!("settings-applications-kind-text"),
-        icon: Icon::DefaultAppText,
+        icon: Icon::FileText,
         mimes: &["text/plain"],
     },
     Kind {
         slug: "documents",
         title: || tr!("settings-applications-kind-documents"),
-        icon: Icon::DefaultAppDocuments,
+        icon: Icon::FileDoc,
         mimes: &["application/pdf"],
     },
     Kind {
         slug: "photos",
         title: || tr!("settings-applications-kind-photos"),
-        icon: Icon::ImageGeneric,
+        icon: Icon::Image,
         mimes: &["image/png", "image/jpeg"],
     },
     Kind {
         slug: "music",
         title: || tr!("settings-applications-kind-music"),
-        icon: Icon::ApplicationsMultimedia,
+        icon: Icon::MusicNotes,
         mimes: &["audio/mpeg", "audio/flac", "audio/ogg"],
     },
     Kind {
         slug: "video",
         title: || tr!("settings-applications-kind-video"),
-        icon: Icon::VideoGeneric,
+        icon: Icon::VideoCamera,
         mimes: &["video/mp4", "video/x-matroska", "video/webm"],
     },
 ];
@@ -491,13 +491,13 @@ fn kind_menu(app: Option<AppEntry>, overlays: Overlays, router: Router) -> Vec<M
             apps::launch(app, move |reason| overlays.toast(reason));
         }
     })
-    .icon(Icon::DocumentOpen);
+    .icon(Icon::FolderOpen);
     let details = menu_item(tr!("settings-applications-show-details"), move |_| {
         if let Some(route) = &route {
             router.open(route.clone());
         }
     })
-    .icon(Icon::DialogInformation);
+    .icon(Icon::CircleInfo);
     [open, details]
         .into_iter()
         .map(|item| if available { item } else { item.disabled() })
@@ -527,11 +527,11 @@ fn default_menu(
         menu_item(tr!("settings-applications-open"), move |_| {
             apps::launch(&open, move |reason| overlays.toast(reason))
         })
-        .icon(Icon::DocumentOpen),
+        .icon(Icon::FolderOpen),
         menu_item(tr!("settings-applications-show-details"), move |_| {
             router.open(details.clone())
         })
-        .icon(Icon::DialogInformation),
+        .icon(Icon::CircleInfo),
     ]
 }
 
@@ -605,17 +605,17 @@ fn app_menu(
     let uninstall_item = menu_item(tr!("settings-applications-uninstall"), move |_| {
         ask_uninstall(uninstall.clone(), model, busy, overlays, None)
     })
-    .icon(Icon::UserTrash)
+    .icon(Icon::Trash)
     .destructive();
     vec![
         menu_item(tr!("settings-applications-open"), move |_| {
             apps::launch(&open, move |reason| overlays.toast(reason))
         })
-        .icon(Icon::DocumentOpen),
+        .icon(Icon::FolderOpen),
         menu_item(tr!("settings-applications-show-details"), move |_| {
             router.open(details.clone())
         })
-        .icon(Icon::DialogInformation),
+        .icon(Icon::CircleInfo),
         menu_separator(),
         if removable {
             uninstall_item
@@ -683,7 +683,7 @@ fn installed_tools(
     order: Sort,
     filter: Option<Source>,
 ) -> Element {
-    let search = icon_button(Icon::Search, move |_| {
+    let search = icon_button(Icon::Magnifier, move |_| {
         let mut searching = searching;
         let mut query = query;
         let open = *searching.read();
@@ -722,7 +722,7 @@ fn installed_tools(
             submenu(tr!("settings-applications-sort-by"), sort_items),
         ],
     )
-    .icon(Icon::Filter);
+    .icon(Icon::Funnel);
     hstack(S2).child(filter_menu).child(search).into()
 }
 

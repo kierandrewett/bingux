@@ -57,7 +57,7 @@ Start the shell with `BINGUX_NO_EXTENSIONS=1` to bypass all extensions during re
         {
             "id": "status",
             "name": "Home status",
-            "icon": "user-home-symbolic",
+            "icon": "house-symbolic",
             "component": "Status.qml",
             "preview": "Preview.qml",
             "contexts": ["desktop"]

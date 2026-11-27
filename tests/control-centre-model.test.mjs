@@ -34,9 +34,10 @@ test("offline profiles remain available without claiming a current connection", 
     assert.equal(sections.other.length, 1);
 });
 
+// bluetoothIcon passes BlueZ's own names on; BinguxIcons resolves them through the aliases.
 test("Bluetooth devices use symbolic glyphs rather than full-colour icon backgrounds", () => {
-    assert.equal(model.bluetoothIcon("audio-headphones"), "audio-headphones-symbolic");
-    assert.equal(model.bluetoothIcon("input-keyboard-symbolic"), "input-keyboard-symbolic");
-    assert.equal(model.bluetoothIcon("vendor-device-picture"), "bluetooth-active-symbolic");
-    assert.equal(model.bluetoothIcon(""), "bluetooth-active-symbolic");
+    assert.equal(model.bluetoothIcon("audio-headphones"), "audio-headphones-symbolic"); // rename.py: keep
+    assert.equal(model.bluetoothIcon("input-keyboard-symbolic"), "input-keyboard-symbolic"); // rename.py: keep
+    assert.equal(model.bluetoothIcon("vendor-device-picture"), "bluetooth-symbolic");
+    assert.equal(model.bluetoothIcon(""), "bluetooth-symbolic");
 });

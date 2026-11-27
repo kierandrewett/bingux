@@ -1132,7 +1132,11 @@ impl Component for Row {
                         }),
                     )
                     .maybe_child((self.navigates && !split).then(|| {
-                        icons::icon(Icon::GoNext, IconSize::Mark, Paint::Muted.color(&tokens))
+                        icons::icon(
+                            Icon::ChevronRight,
+                            IconSize::Mark,
+                            Paint::Muted.color(&tokens),
+                        )
                     }))
                     .maybe_child(
                         self.disclosure
@@ -1303,7 +1307,7 @@ impl Component for Row {
                         })
                 })
                 .child(icons::icon(
-                    Icon::GoNext,
+                    Icon::ChevronRight,
                     IconSize::Mark,
                     Paint::Muted.color(&tokens),
                 ));
@@ -2246,7 +2250,7 @@ impl Component for DisclosureChevron {
             .component("DisclosureChevron")
             .rotate(progress * 90.0)
             .child(icons::icon(
-                Icon::GoNext,
+                Icon::ChevronRight,
                 IconSize::Mark,
                 Paint::Muted.color(&tokens),
             ))

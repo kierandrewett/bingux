@@ -67,7 +67,7 @@ impl Component for Sheet {
         let header = HeaderBar::new(tr!("weather-add-title"))
             .draggable(false)
             .trailing(
-                icon_button(Icon::WindowClose, move |_| overlays.dismiss_dialog())
+                icon_button(Icon::Cross, move |_| overlays.dismiss_dialog())
                     .tooltip(&tr!("weather-add-close")),
             );
         let field = search_field(query, on_change)
@@ -80,7 +80,7 @@ impl Component for Sheet {
         let mut results = rect().tw(&tokens, &[w_full(), flex_col(), gap(S3)]);
         if typed.trim().chars().count() < 2 {
             results = results.child(
-                status_page(Icon::Search, tr!("weather-add-hint-title"))
+                status_page(Icon::Magnifier, tr!("weather-add-hint-title"))
                     .description(tr!("weather-add-hint-body")),
             );
         } else {
@@ -104,7 +104,7 @@ impl Component for Sheet {
                 Some(_) if settled => {
                     results = results.child(
                         status_page(
-                            Icon::Search,
+                            Icon::Magnifier,
                             tr!("weather-add-no-results-title", query = typed.clone()),
                         )
                         .description(tr!("weather-add-no-results-body")),
@@ -134,7 +134,7 @@ impl Component for Sheet {
         let bring_back = location_off.then(|| {
             Group::new(None::<String>).row(
                 row(tr!("weather-use-my-location"))
-                    .leading(Icon::LocationArrow)
+                    .leading(Icon::Arrowhead)
                     .on_press(move |_| {
                         hub.use_location(true);
                         overlays.dismiss_dialog();

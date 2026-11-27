@@ -241,9 +241,9 @@ impl Component for PickedTable {
             data_table(&rows, columns, |item: &Item| item.id)
                 .selection(selection)
                 .batch_actions(vec![
-                    batch_action("Copy names", |_: Vec<u32>| {}).icon(Icon::EditCopy),
+                    batch_action("Copy names", |_: Vec<u32>| {}).icon(Icon::SquaresOverlap),
                     batch_action("Uninstall", |_: Vec<u32>| {})
-                        .icon(Icon::Delete)
+                        .icon(Icon::Trash)
                         .destructive(),
                 ]),
         )

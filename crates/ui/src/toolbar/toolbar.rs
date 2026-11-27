@@ -55,12 +55,12 @@ pub struct Toolbar {
 ///     .id("main")
 ///     .customizable()
 ///     .group(toolbar_group(vec![
-///         toolbar_item("back", "Back", Icon::GoPrevious, back).leading(),
-///         toolbar_item("forward", "Forward", Icon::GoNext, forward).leading(),
+///         toolbar_item("back", "Back", Icon::ChevronLeft, back).leading(),
+///         toolbar_item("forward", "Forward", Icon::ChevronRight, forward).leading(),
 ///     ]).linked())
 ///     .group(toolbar_group(vec![
-///         toolbar_item("add", "Add", Icon::ListAdd, add),
-///         toolbar_item("share", "Share", Icon::DocumentOpen, share).secondary(),
+///         toolbar_item("add", "Add", Icon::Plus, add),
+///         toolbar_item("share", "Share", Icon::FolderOpen, share).secondary(),
 ///     ]))
 /// ```
 pub fn toolbar() -> Toolbar {
@@ -379,7 +379,7 @@ impl Component for Toolbar {
                 Action::Press { on_press, toggled } => {
                     let on_press = on_press.clone();
                     let mut button = icon_button(
-                        item.icon.unwrap_or(Icon::ViewMore),
+                        item.icon.unwrap_or(Icon::DotsThree),
                         EventHandler::new(move |()| {
                             take.call(());
                             on_press.call(());
@@ -401,7 +401,7 @@ impl Component for Toolbar {
                 }
                 Action::Menu(items) => MenuStop {
                     label: item.label.clone(),
-                    icon: item.icon.unwrap_or(Icon::ViewMore),
+                    icon: item.icon.unwrap_or(Icon::DotsThree),
                     items: items.clone(),
                     enabled: item.enabled,
                     a11y_id,
@@ -472,7 +472,7 @@ impl Component for Toolbar {
             }
             Element::from(MenuStop {
                 label: crate::tr!("ui-toolbar-more"),
-                icon: Icon::ViewMore,
+                icon: Icon::DotsThree,
                 items: rows,
                 enabled: true,
                 a11y_id: id_for("\u{0}overflow"),

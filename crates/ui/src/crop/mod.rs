@@ -686,7 +686,7 @@ impl Component for CropBar {
                 .min_width(Dim::Box24)
             }))
             .maybe_child((choices && aspect.can_swap()).then(|| {
-                icon_button(Icon::ObjectRotateRight, move |_| handle.swap_aspect())
+                icon_button(Icon::ArrowCw, move |_| handle.swap_aspect())
                     .tooltip(crate::tr!("ui-crop-turn.tooltip"))
             }))
             .child(
