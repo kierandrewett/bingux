@@ -1,0 +1,235 @@
+# Bingux icon names: every icon is named after what it draws (docs: ~/dev/bingux-doop/docs/icon-names.md).
+# One row per icon: the shape name, then every other name it answers to, tab separated. The first other name that
+# is a file in src/ is the drawing the icon keeps; any other file named in the row is a duplicate drawing and goes.
+# The other names are the freedesktop (Adwaita) names the set used to have and the names other programs send
+# (gnome-settings-daemon's on-screen display, BlueZ devices). Only this file holds them: build.py writes the shell's
+# BinguxIconAliases.js and Rust's `Icon::from_freedesktop` from it, rename.py renames everything else by it, and
+# ui-lint rejects them in Bingux code.
+# BlueZ camera-video is the video camera, not the webcam: BlueZ gives it to camcorders and video cameras, and
+# Adwaita's camera-video is a camcorder; camera-web is the webcam's own name.
+airplane	airplane-mode
+arrow-ccw	object-rotate-left
+arrow-cw	view-refresh	object-rotate-right	system-reboot
+arrow-down-line	download
+arrow-left-right-bars	flexible-space
+arrow-up	chrome-go-up
+arrowhead	location-arrow
+arrows-cw	sync
+arrows-left-right	swap-horizontal
+arrows-up-down	network-transmit-receive
+asterisk	edit-find-regex
+battery-0	battery-level-0
+battery-0-bolt	battery-level-0-charging
+battery-10	battery-level-10
+battery-10-bolt	battery-level-10-charging
+battery-100	battery-level-100
+battery-100-bolt	battery-level-100-charging
+battery-100-check	battery-level-100-charged
+battery-20	battery-level-20
+battery-20-bolt	battery-level-20-charging
+battery-30	battery-level-30
+battery-30-bolt	battery-level-30-charging
+battery-40	battery-level-40
+battery-40-bolt	battery-level-40-charging
+battery-50	battery-level-50
+battery-50-bolt	battery-level-50-charging
+battery-60	battery-level-60
+battery-60-bolt	battery-level-60-charging
+battery-70	battery-level-70
+battery-70-bolt	battery-level-70-charging
+battery-80	battery-level-80
+battery-80-bolt	battery-level-80-charging
+battery-90	battery-level-90
+battery-90-bolt	battery-level-90-charging
+battery-exclamation	battery-missing
+bell	preferences-system-notifications
+bell-slash	notifications-disabled
+bluetooth	bluetooth-active
+bluetooth-slash	bluetooth-disabled
+bolt	power-profile-performance
+book-open	reader
+bookmark	bookmarks
+bookmark-plus	bookmark-add
+bracket-arrow-right	system-log-out
+bracket-bottom	space
+brackets-angle	format-code
+brackets-square	edit-find-whole-word
+calculator	accessories-calculator
+calendar	x-office-calendar
+camera	camera-photo
+check	object-select
+check-line	download-done
+chevron-down	pan-down
+chevron-left	go-previous
+chevron-right	go-next	pan-end
+chevron-up	pan-up
+circle-arrow-up-right	emblem-symbolic-link
+circle-cross	dialog-error	edit-clear
+circle-info	dialog-information	help-about
+circle-play	system-run
+circle-question	help-browser
+circle-slash	action-unavailable
+circle-stop	process-stop
+clock	preferences-system-time
+clock-ccw	document-open-recent
+coffee-cup	changes-prevent
+cookie	cookie
+corners-in	view-restore
+corners-out	view-fullscreen
+crop	crop
+cross	window-close
+cube	application-x-executable
+cursor-click	find-location
+devices	network-workgroup
+disc	media-optical
+dots-nine	view-app-grid
+dots-six	list-drag-handle
+dots-three	view-more
+easel	presentation
+eject	media-eject
+envelope	mail-unread
+eye	view-reveal
+eye-slash	view-conceal
+fast-forward	media-seek-forward
+file	application-x-generic
+file-audio	audio-x-generic
+file-code	text-x-script
+file-doc	default-app-documents
+file-magnifier	find-in-page
+file-pdf	application-pdf
+file-text	text-x-generic	default-app-text
+floppy-disk	document-save
+folder	folder
+folder-arrow-down	folder-download
+folder-dashed	folder-missing
+folder-file	folder-templates
+folder-file-text	folder-documents
+folder-image	folder-pictures
+folder-monitor	folder-desktop
+folder-music-note	folder-music
+folder-open	document-open
+folder-person	folder-publicshare
+folder-play	folder-videos
+folder-plus	folder-new
+frame-corners	zoom-fit-best
+funnel	view-filter
+gamepad	input-gaming
+gauge	power-profile-balanced
+gear	preferences-system	emblem-system
+glasses	reading-list
+globe	web-browser
+hand-tap	input-touchpad	touchpad-disabled	touchpad-enabled
+hard-drive	drive-harddisk
+headphones	audio-headphones	audio-headset
+hourglass	hourglass
+house	user-home
+id-card	user-info
+image	image-generic
+key	dialog-password
+keyboard	input-keyboard	keyboard-brightness
+laptop	computer
+leaf	power-profile-power-saver
+letter-b	format-text-bold
+letter-i	format-text-italic
+letter-s-strike	format-text-strikethrough
+letter-t	format-text-plaintext
+letters-aa	edit-find-match-case
+line-vertical	separator
+lines-three	open-menu
+link	insert-link
+list-bullets	view-list
+list-numbers	view-list-ordered
+magnifier	system-search
+magnifier-minus	zoom-out
+magnifier-plus	zoom-in
+map-pin	location-pin
+mask	window-private
+microphone	audio-input-microphone	microphone-sensitivity-high	microphone-sensitivity-low	microphone-sensitivity-medium
+microphone-slash	audio-input-microphone-muted	microphone-disabled	microphone-sensitivity-muted
+minus	list-remove	window-minimize
+monitor	video-display
+monitor-arrow-up	screen-shared
+monitor-dock	preferences-desktop
+moon	weather-clear-night
+moon-stars	night-light
+mouse	input-mouse
+music-notes	applications-multimedia
+network	network-wired
+network-cross	network-error
+notepad	accessories-text-editor
+package	package-x-generic
+padlock	network-wireless-encrypted
+padlock-cross	lock-broken
+padlock-open	lock-open
+palette	applications-graphics
+pause	media-playback-pause
+pencil	pencil
+people	system-users
+person	avatar-default
+person-arrows	system-switch-user
+person-circle	preferences-desktop-accessibility
+phone	phone
+play	media-playback-start
+play-slash	autoplay-off
+plus	list-add
+power	system-shutdown
+printer	printer
+prompt	utilities-terminal
+pushpin	view-pin
+puzzle-piece	addon	chrome-puzzle	puzzle-piece
+quotes	format-quote
+record	media-record
+repeat	media-playlist-repeat
+repeat-1	media-playlist-repeat-song
+rewind	media-seek-backward
+router	network-wireless-hotspot
+server	network-server
+shield	network-vpn	shield
+shield-check	shield-check
+shield-keyhole	chrome-bitwarden
+shuffle	media-playlist-shuffle
+skip-back	media-skip-backward
+skip-forward	media-skip-forward
+sliders	preferences-other
+speaker	audio-volume-low
+speaker-box	audio-speakers
+speaker-cross	audio-volume-muted
+speaker-wave-1	audio-volume-medium
+speaker-wave-2	audio-volume-high	audio-volume-overamplified
+square	window-maximize
+square-arrow-up	send-to
+square-arrow-up-right	window-new
+square-check	checkbox-checked
+square-face-sad	tab-crashed
+square-letters-aa	font-x-generic
+square-pencil	document-edit
+square-plus	tab-new
+squares-four	view-grid
+squares-overlap	edit-copy
+squares-overlap-left	window-restore
+star	non-starred
+star-filled	starred
+stop	media-playback-stop
+subtitles	media-view-subtitles
+sun	display-brightness	weather-clear
+table	table
+tablet	input-tablet
+tabs	tab-group
+translate	translate
+trash	user-trash	edit-delete
+triangle-exclamation	dialog-warning
+ublock-origin	chrome-ublock-origin
+usb	media-removable
+video-camera	video-generic	camera-video
+waveform	audio-card
+webcam	camera-web
+wifi	network-wireless	network-wireless-signal-excellent	network-wireless-signal-good
+wifi-0	network-wireless-signal-none
+wifi-1	network-wireless-signal-weak
+wifi-2	network-wireless-signal-ok
+wifi-cross	network-offline
+wifi-slash	network-wireless-disabled
+window	focus-top-bar
+window-inset	view-pip
+window-sidebar	sidebar-show
+window-split	split-view
