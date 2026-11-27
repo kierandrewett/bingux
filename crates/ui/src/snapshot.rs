@@ -132,17 +132,28 @@ impl Snapshot {
         self
     }
 
-    /// Drive events, tasks and animations for `duration`. With frames on,
-    /// every 16 ms step is recorded; without, this is one plain poll.
+    /// Drive events, tasks and animations for `duration`: at least that much
+    /// wall time, and at least one 16 ms step for every 16 ms of it. With
+    /// frames on, every step is recorded.
+    ///
+    /// The count of steps is what makes a settle the same on a loaded machine.
+    /// An animation moves by the time since its last tick, capped at 34 ms
+    /// (freya-animation's `MAX_TICK`), so a machine that takes 150 ms over a
+    /// step moves a motion by 34 ms in it: 500 ms of wall time alone was about
+    /// 100 ms of motion there, and a test that let a 160 ms motion end with a
+    /// 500 ms settle saw it half way. Each step sleeps 16 ms before its tick,
+    /// so it moves every motion by at least 16 ms, and the steps add up to at
+    /// least `duration` of motion whatever the load.
     pub fn settle(&mut self, duration: Duration) -> &mut Self {
-        if self.recorder.is_none() {
-            self.runner.poll(FRAME, duration);
-            return self;
-        }
-        let end = Instant::now() + duration;
-        while Instant::now() < end {
+        let steps = (duration.as_millis() / FRAME.as_millis()).max(1);
+        let start = Instant::now();
+        let mut taken = 0;
+        while taken < steps || start.elapsed() < duration {
             self.runner.poll_n(FRAME, 1);
-            self.capture_frame();
+            if self.recorder.is_some() {
+                self.capture_frame();
+            }
+            taken += 1;
         }
         self
     }
@@ -460,7 +471,13 @@ impl Snapshot {
     /// One keyboard event with its physical `code`, for a test of what the
     /// code decides (a key repeat, a DOM `code`): [`Snapshot::key`] sends
     /// `Code::Unidentified`. Runs the frames a key needs to move focus.
-    pub fn key_event(&mut self, name: KeyboardEventName, key: Key, code: Code, modifiers: Modifiers) -> &mut Self {
+    pub fn key_event(
+        &mut self,
+        name: KeyboardEventName,
+        key: Key,
+        code: Code,
+        modifiers: Modifiers,
+    ) -> &mut Self {
         self.input(format!("key_event {name:?} {modifiers:?} {key:?} {code:?}"));
         self.runner.run_in(|| {
             Platform::get()
@@ -468,7 +485,12 @@ impl Snapshot {
                 .navigation_mode
                 .set(NavigationMode::Keyboard);
         });
-        self.runner.send_event(PlatformEvent::Keyboard { name, key, code, modifiers });
+        self.runner.send_event(PlatformEvent::Keyboard {
+            name,
+            key,
+            code,
+            modifiers,
+        });
         for _ in 0..3 {
             self.runner.sync_and_update();
         }
