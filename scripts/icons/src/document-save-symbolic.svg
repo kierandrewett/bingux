@@ -1,3 +1,5 @@
-<svg viewBox="0 0 16 16">
-  <fork name="FloppyDisk" weight="bold" mode="exact"/>
+<svg viewBox="0 0 16 16" fill="none">
+  <polygon points="2,2 11,2 14,5 14,14 2,14" fill="black" data-round="2"/>
+  <rect x="4" y="4" width="6" height="2" rx="0.5" fill="black" data-op="cut"/>
+  <circle cx="8" cy="10.5" r="2" fill="black" data-op="cut"/>
 </svg>

@@ -3866,8 +3866,9 @@ into the source from `labels.tsv` (`Bluetooth bold scale=1.1`):
 1. `mirror=left|right`: keep that half, replace the other with its mirror (the fork's
    `User` fill is lopsided: its right shoulder reaches about 0.8 px further from the middle than the left, so the
    avatar uses `mirror=left`, and is never moved sideways, so it stays symmetric about x = 8);
-2. `scale`: one factor on both axes about the middle of the box. Only Bluetooth uses it
-   (1.1): the other glyphs keep the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
+2. `scale`: one factor on both axes about the middle of the box. Bluetooth (1.1) and the
+   phone (0.966, with `align=none`: the fork's DeviceMobileCamera is 14.5 px tall, this puts it on rows 1 to 15)
+   use it: the other glyphs keep the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
 3. `dx`, `dy` (rare) and the automatic shift: of the translations of at most half a pixel
    (in quarter pixels) that keep the ink in the box, the one that leaves the fewest soft
    edge pixels at 16 px (ties: the smallest move). `align=none` turns the automatic
@@ -3956,10 +3957,12 @@ weak, and what was decided:
 | `network-vpn`                                                        | `Shield` fill                                      | a plain shield                                                        | `ShieldCheckered` fill: the chequer of Material's VPN icon                                           |
 | `preferences-desktop-wallpaper` (now `preferences-desktop`)          | `ImageSquare` bold                                 | a picture is the wallpaper, not the Desktop page                      | drawn: a monitor on a stand with a dock pill inside                                                  |
 | `view-app-grid`                                                      | solid nine-dot square                              | a solid blob                                                          | `DotsNine` bold (nine round dots, no mass)                                                           |
-| `input-tablet`, `phone`                                              | `DeviceTablet`, `DeviceMobile` fill                | two plain rounded rectangles, neither read as a tablet or a phone     | drawn: a landscape 14 x 10 body and a tall 6 x 14 body, each with a screen and a home button cut out |
+| `input-tablet`, `phone`                                              | `DeviceTablet`, `DeviceMobile` fill                | two plain rounded rectangles, neither read as a tablet or a phone     | tablet drawn: a landscape 14 x 10 body, screen and button cut out; phone: `DeviceMobileCamera` bold  |
 | `web-browser`, `mail-unread`, `x-office-calendar`                    | `Globe`, `EnvelopeSimple`, `CalendarBlank` fill    | the globe's filled disc hid its meridians; the calendar had no dates  | `Globe` bold, `EnvelopeSimple` fill, `CalendarDots` fill                                             |
 | Default applications: Text                                           | `document-edit` (`NotePencil` fill)                | an editor, not a text file                                            | `default-app-text`: `FileText` fill                                                                  |
 | Default applications: Documents                                      | `document-open` (`FolderOpen`)                     | a folder, not a document                                              | `default-app-documents`: `FileDoc` fill                                                              |
+| `document-edit`, `pencil`                                            | drawn: a pencil cut into tip, body and eraser      | a blob at 16 px; the tip did not read                                 | drawn: one pointed tip and body, the eraser cut off by a 1.5 px seam; the page frame is kept         |
+| `document-save`                                                      | `FloppyDisk` bold                                  | a thin outline that read as basic                                     | drawn: a solid floppy, corner cut off, the shutter slot and the hub cut out                          |
 | `help-about`                                                         | `Info` regular                                     | 1 px wire in a set of fills and bold outlines                         | `Info` fill, as in `5d49113`                                                                         |
 | `audio-volume-low`                                                   | `SpeakerNone`                                      | a bare cone can read as mute                                          | kept: 0, 1, 2 waves are monotone and mute has the X                                                  |
 | `battery-level-*`                                                    | five fork glyphs for eleven levels, outlined cells | a line per cell, not filled; the level read badly                     | drawn: a body filled to the level, the rest dimmed                                                   |

@@ -1,7 +1,7 @@
 # file | where the user sees it (label, surface) | the conventional metaphor | chat fork glyph + weight, or custom
 # Read by build.py (checks), map-fork.py (writes the <fork/> sources) and review.py (sheets). Names are Adwaita file names without -symbolic.svg.
 # The glyph column is `custom: ..` or `ForkName weight [scale=.. dx=.. dy=.. mirror=.. align=..]`. The weight is `bold` (1.5 px outline) or `fill`,
-# the look of the icons as released in 5d49113; `regular` (1 px) is not used. `scale` is one factor on both axes (only Bluetooth uses it) and
+# the look of the icons as released in 5d49113; `regular` (1 px) is not used. `scale` is one factor on both axes (Bluetooth and phone use it) and
 # `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/bingux-ui.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
@@ -144,8 +144,8 @@ user-trash | Forget, Trash | trash can | Trash fill
 view-filter | Filter | funnel | Funnel fill
 find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
 location-arrow | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
-document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil across the opening
-pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: tip, body and eraser, cut apart by 1 px seams
+document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil (as `pencil`) across the opening, cut free by 1.5 px
+pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: a pointed tip running into the body, and the eraser cut off by a 1.5 px seam
 document-open | Open | open folder | FolderOpen fill
 send-to | Share | square with arrow up | Export bold
 view-list | List view | bulleted list | custom: three 2 px dots and three 2 px bars on whole pixel rows 2 to 4, 7 to 9 and 12 to 14
@@ -171,7 +171,7 @@ changes-prevent | Keep awake | coffee cup | Coffee fill
 input-gaming | Game controller (Bluetooth) | game pad | GameController fill
 input-tablet | Tablet (Bluetooth) | tablet | custom: a landscape 14 x 10 body with a screen and a home button cut out
 input-touchpad | Touchpad | finger tapping | HandTap bold
-phone | Phone (Bluetooth, phone preview) | phone | custom: a tall 6 x 14 body with a screen and a home button cut out
+phone | Phone (Bluetooth, phone preview) | modern phone | DeviceMobileCamera bold scale=0.966 align=none
 camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
 camera-photo | Camera (Bluetooth device row), screenshot notification | still camera | Camera fill
 media-removable | USB drive | USB symbol | Usb fill
@@ -215,7 +215,7 @@ utilities-terminal | Terminal (shell sidebar, desktop widget) | terminal prompt 
 accessories-text-editor | Notes (shell sidebar, desktop widget) | notepad | Notepad fill
 action-unavailable | Action not available (on-screen display) | prohibited | Prohibit bold
 document-open-recent | Recent (emoji picker) | clock with a counter-clockwise arrow | ClockCounterClockwise bold
-document-save | Save, saving a recording (shell) | floppy disk | FloppyDisk bold
+document-save | Save, saving a recording (shell) | floppy disk | custom: a solid floppy, top right corner cut off, the shutter cut out as a 6 x 2 slot and the hub as a 4 px disc (Material's and Font Awesome's filled save)
 text-x-script | Source code and script (file list, grid, properties) | page with angle brackets | FileCode fill
 application-x-generic | Unknown file (file list, grid, properties) | blank page | File fill
 emblem-symbolic-link | Symbolic link badge on a file or folder icon | arrow in a disc | custom: disc with an up-right arrow cut out
