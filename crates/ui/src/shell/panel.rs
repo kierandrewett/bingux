@@ -682,6 +682,9 @@ pub(crate) struct Panel {
     /// The tallest the rows of an anchored, scrolling panel get before they
     /// scroll, when it is not [`Dim::MenuList`].
     list_cap: Option<f32>,
+    /// Rows above the scrolling ones that do not scroll, and their height.
+    head: Vec<Element>,
+    head_height: f32,
 }
 
 impl Panel {
@@ -715,6 +718,8 @@ impl Panel {
             on_escape: None,
             tall: false,
             list_cap: None,
+            head: Vec::new(),
+            head_height: 0.0,
         }
     }
 
@@ -816,6 +821,15 @@ impl Panel {
         self
     }
 
+    /// Rows that stay in place above the scrolling ones, `height` tall in all:
+    /// the commands of a list, which a scrolled list must not take away. The
+    /// rows' own height ([`Panel::size`]) counts only what scrolls.
+    pub(crate) fn head(mut self, height: f32, rows: Vec<Element>) -> Self {
+        self.head_height = height;
+        self.head = rows;
+        self
+    }
+
     /// The height of the rows' viewport: all of them, or the cap when the
     /// panel scrolls.
     fn viewport(&self) -> f32 {
@@ -825,6 +839,12 @@ impl Panel {
         } else {
             self.content_height
         }
+    }
+
+    /// The height of the card of an anchored panel: the rows that stay put, the
+    /// rows' viewport, and the card's own padding.
+    fn card_height(&self) -> f32 {
+        self.head_height + self.viewport() + 2.0 * S2.px()
     }
 
     /// Lets a choice sheet grow as tall as a form's sheet, instead of the
@@ -1062,8 +1082,7 @@ impl Panel {
         local: Option<LocalMenu>,
     ) -> Option<Rect> {
         let pill = self.pill.as_ref()?;
-        let viewport = self.viewport();
-        let size = (self.width, viewport + 2.0 * S2.px());
+        let size = (self.width, self.card_height());
         let placed = match local {
             Some(local) => PanelRect {
                 x: local.margin,
@@ -1247,7 +1266,7 @@ impl Panel {
         local: Option<LocalMenu>,
     ) -> Rect {
         let viewport = self.viewport();
-        let size = (self.width, viewport + 2.0 * S2.px());
+        let size = (self.width, self.card_height());
         let anchor = self.trigger.anchor();
         // In a popup window the card sits at the window's margin; its place on the screen is the
         // compositor's business.
@@ -1285,6 +1304,7 @@ impl Panel {
             // A press or wheel turn inside the panel never reaches the shield.
             .on_pointer_down(|event: Event<PointerEventData>| event.stop_propagation())
             .on_wheel(|event: Event<WheelEventData>| event.stop_propagation())
+            .children(self.head.clone())
             .child(self.body(
                 tokens,
                 viewport,
@@ -1616,8 +1636,7 @@ impl Panel {
         parent: Option<ParentSlot>,
         own: &ParentSlot,
     ) -> Rect {
-        let viewport = self.viewport();
-        let size = (self.width, viewport + 2.0 * S2.px());
+        let size = (self.width, self.card_height());
         // The layout the menu assumes: placed where it asks, with no window to hold it in.
         let direction = use_direction();
         let placed = menu_rect(self.trigger, size, (0.0, 0.0), direction);

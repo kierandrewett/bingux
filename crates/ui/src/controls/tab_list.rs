@@ -7,9 +7,12 @@
 //!   its title, a speaker while it plays sound or is muted, and a close button
 //!   while the pointer or the keys are on it (a pinned tab has none). The
 //!   selected tab is ticked.
-//! * **Opening** puts the selected tab in the middle of the list ([`centre_offset`]);
-//!   the list takes the room the window has below the button ([`cap`]) and
-//!   scrolls past it.
+//! * **Opening** puts the selected tab in the middle of the tabs that scroll
+//!   ([`centre_offset`]). The card stops at three quarters of the window's
+//!   height ([`card_cap`]), as Firefox's panel stops short of the window's edge. What is
+//!   above the tabs, the commands and (while they are few) the pinned tabs, stays
+//!   put ([`head_len`]) and the other tabs scroll under it: a scrolled list never
+//!   takes *Search all tabs* off the screen.
 //! * **Choosing** a tab selects it and closes the list; the speaker and the
 //!   close button answer for their tab and leave it open. Down, Up, Home and
 //!   End walk the rows ([`step`]), Enter chooses, Delete closes the tab, and
@@ -149,14 +152,56 @@ pub(crate) fn step(lines: &[Line], from: Option<usize>, down: bool) -> Option<us
     }
 }
 
-/// The height the lines get: what the window has below the button, less the
-/// panel's gap, its edge and its padding, but at least [`MIN_HEIGHT`].
-pub(crate) fn cap(window_height: f32, button_bottom: f32) -> f32 {
-    (window_height - button_bottom - PANEL_GAP - PANEL_EDGE - 2.0 * S2.px()).max(MIN_HEIGHT)
+/// The share of the window's height the open card takes at most: a list of
+/// forty tabs does not run to the window's bottom edge (the design's frame is
+/// 600 px of 800).
+pub(crate) const CARD_SHARE: f32 = 0.75;
+
+/// The tallest the whole card is: that share of the window, and never past what
+/// the window has below the button less the panel's gap and its edge.
+pub(crate) fn card_cap(window_height: f32, button_bottom: f32) -> f32 {
+    (window_height - button_bottom - PANEL_GAP - PANEL_EDGE).min(window_height * CARD_SHARE)
 }
 
-/// The least height the list is given however small the window.
+/// The height the scrolling lines get inside a card of at most `card`, with
+/// `head` of it taken by the lines that stay put and the card's padding off
+/// both ends, but at least [`MIN_HEIGHT`].
+pub(crate) fn viewport_cap(card: f32, head: f32) -> f32 {
+    (card - head - 2.0 * S2.px()).max(MIN_HEIGHT)
+}
+
+/// The least height the scrolling lines are given however small the window.
 pub(crate) const MIN_HEIGHT: f32 = 160.0;
+
+/// How many of the first lines stay in place while the rest scroll: the
+/// commands with their separator, and with them the pinned tabs under their
+/// label when those (and the commands) take no more than half of a card of
+/// `card`. A long block of pinned tabs would leave the others no room, so it
+/// scrolls with them. A list with nothing but pinned tabs scrolls them all.
+pub(crate) fn head_len(lines: &[Line], metrics: Metrics, card: f32) -> usize {
+    let commands = lines
+        .iter()
+        .take_while(|line| matches!(line, Line::Search | Line::CloseDuplicates))
+        .count();
+    let commands =
+        commands + usize::from(commands > 0 && lines.get(commands) == Some(&Line::Separator));
+    if lines.get(commands) != Some(&Line::Header) {
+        return commands;
+    }
+    // The pinned block ends at its separator: the others follow it.
+    let Some(end) = lines[commands..]
+        .iter()
+        .position(|line| *line == Line::Separator)
+        .map(|at| commands + at + 1)
+    else {
+        return commands;
+    };
+    if content_height(&lines[..end], metrics) <= card / 2.0 {
+        end
+    } else {
+        commands
+    }
+}
 
 // ---- The button and its panel ------------------------------------------------
 
@@ -193,7 +238,11 @@ impl Component for TabListButton {
             self.close_duplicates.is_some(),
         ));
         let metrics = Metrics::current();
-        let viewport = content_height(&all, metrics).min(cap(window.height, anchor.read().max_y()));
+        let card = card_cap(window.height, anchor.read().max_y());
+        // The lines before `head` stay put; the others scroll under them.
+        let head = head_len(&all, metrics, card);
+        let head_height = content_height(&all[..head], metrics);
+        let viewport = content_height(&all[head..], metrics).min(viewport_cap(card, head_height));
         let selected_line = all.iter().position(
             |line| matches!(line, Line::Tab(index) if self.tabs[*index].id == self.selected),
         );
@@ -203,8 +252,11 @@ impl Component for TabListButton {
         let show = {
             let all = all.clone();
             EventHandler::new(move |_: ()| {
-                let at =
-                    selected_line.map_or(0.0, |line| centre_offset(&all, line, viewport, metrics));
+                let at = selected_line
+                    .and_then(|line| line.checked_sub(head))
+                    .map_or(0.0, |line| {
+                        centre_offset(&all[head..], line, viewport, metrics)
+                    });
                 scroll.scroll_to_y(-(at as i32));
                 highlighted.set(None);
                 open.set(true);
@@ -282,8 +334,8 @@ impl Component for TabListButton {
                     highlighted.set(Some(next));
                     scroll.scroll_to_y(
                         -(keep_in_view(
-                            &all,
-                            next,
+                            &all[head..],
+                            next.checked_sub(head),
                             viewport,
                             -<(i32, i32)>::from(scroll).1 as f32,
                             metrics,
@@ -293,8 +345,11 @@ impl Component for TabListButton {
             }
         };
 
-        let rows: Vec<Element> = std::iter::once(Element::from(FocusOnMount { id: panel_id }))
-            .chain(all.iter().enumerate().map(|(index, line)| {
+        // Every line drawn; what is left after the split is the head.
+        let mut drawn: Vec<Element> = all
+            .iter()
+            .enumerate()
+            .map(|(index, line)| {
                 let on_hover = EventHandler::new(move |inside: bool| {
                     if inside {
                         highlighted.set(Some(index));
@@ -353,7 +408,10 @@ impl Component for TabListButton {
                         })
                     }
                 }
-            }))
+            })
+            .collect();
+        let rows: Vec<Element> = std::iter::once(Element::from(FocusOnMount { id: panel_id }))
+            .chain(drawn.split_off(head))
             .collect();
 
         let panel = Panel::new(
@@ -362,8 +420,9 @@ impl Component for TabListButton {
             PanelTrigger::Control(PanelRect::from_area(&anchor.read())),
             rows,
         )
-        .size(Dim::TabList.px(), content_height(&all, metrics))
-        .list_cap(cap(window.height, anchor.read().max_y()))
+        .size(Dim::TabList.px(), content_height(&all[head..], metrics))
+        .list_cap(viewport_cap(card, head_height))
+        .head(head_height, drawn)
         .scroll(scroll)
         .navigation(panel_id, on_key, |_: (f32, f32)| {})
         .on_dismiss(close.clone());
@@ -387,9 +446,19 @@ impl Component for TabListButton {
     }
 }
 
-/// The scroll that keeps line `line` in view, moving no more than it must:
-/// `current` is how far the lines are scrolled now.
-fn keep_in_view(lines: &[Line], line: usize, viewport: f32, current: f32, metrics: Metrics) -> f32 {
+/// The scroll that keeps line `line` of the scrolling `lines` in view, moving
+/// no more than it must: `current` is how far the lines are scrolled now, and a
+/// line of the head (`None`) is always in view.
+fn keep_in_view(
+    lines: &[Line],
+    line: Option<usize>,
+    viewport: f32,
+    current: f32,
+    metrics: Metrics,
+) -> f32 {
+    let Some(line) = line else {
+        return current;
+    };
     let top: f32 = lines[..line].iter().map(|line| line.height(metrics)).sum();
     let bottom = top + lines[line].height(metrics);
     let furthest = (content_height(lines, metrics) - viewport).max(0.0);
@@ -784,17 +853,56 @@ mod tests {
     }
 
     #[test]
-    fn the_list_takes_the_room_below_its_button_and_never_less_than_a_few_rows() {
-        let roomy = cap(800.0, 40.0);
+    fn the_card_stops_at_three_quarters_of_the_window_and_the_scrolling_rows_never_have_less_than_a_few()
+     {
+        let card = card_cap(800.0, 40.0);
+        assert_eq!(card, 600.0, "three quarters of 800, as the design's frame");
+        assert!(card_cap(900.0, 40.0) > card, "a taller window gives more");
         assert!(
-            roomy > 600.0 && roomy < 760.0,
-            "the room below the button, less the gaps: {roomy}"
+            card_cap(500.0, 400.0) < 100.0,
+            "and never past the window's edge below a button low in it"
         );
-        assert!(cap(900.0, 40.0) > roomy, "a taller window gives more");
+        let m = Metrics::regular();
+        let head = m.row * 2.0 + m.separator;
         assert_eq!(
-            cap(200.0, 40.0),
+            viewport_cap(card, head),
+            card - head - 2.0 * S2.px(),
+            "the card less what stays put and its padding"
+        );
+        assert_eq!(
+            viewport_cap(200.0, head),
             MIN_HEIGHT,
             "a short window still shows some rows"
+        );
+    }
+
+    #[test]
+    fn the_commands_and_a_short_block_of_pinned_tabs_stay_put_and_a_long_one_scrolls() {
+        let m = Metrics::regular();
+        let card = 600.0;
+        // Search, Close duplicates, Separator, Header, Tab(0), Tab(1), Separator, Tab(2..).
+        let tabs = items(&[true, true, false, false, false]);
+        let all = lines(&tabs, true, true);
+        assert_eq!(
+            head_len(&all, m, card),
+            7,
+            "the commands, their separator and the pinned block with its separator"
+        );
+        assert_eq!(
+            head_len(&all, m, content_height(&all[..7], m) * 2.0 - 1.0),
+            3,
+            "a pinned block over half of the card scrolls with the others; the commands stay"
+        );
+        let unpinned = items(&[false; 30]);
+        let all = lines(&unpinned, true, false);
+        assert_eq!(head_len(&all, m, card), 2, "Search and its separator");
+        let all = lines(&unpinned, false, false);
+        assert_eq!(head_len(&all, m, card), 0, "no commands: all of it scrolls");
+        let pinned_only = lines(&items(&[true, true]), true, false);
+        assert_eq!(
+            head_len(&pinned_only, m, card),
+            2,
+            "pinned tabs with no others have nothing to stay above: the list scrolls them"
         );
     }
 }

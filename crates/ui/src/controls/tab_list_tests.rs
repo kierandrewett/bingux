@@ -17,11 +17,11 @@ use crate::surface::use_tokens;
 use crate::theme::{DEFAULT_ACCENT, Scheme, SharedTokens, Tokens, freya_theme};
 use crate::window::WindowHost;
 
-/// What the host was asked to do, in order: `select 3`, `close 4`, `mute 2`,
-/// `search`, `close-duplicates`.
 /// The room the strip has.
 const STRIP: f32 = 900.0;
 
+/// What the host was asked to do, in order: `select 3`, `close 4`, `mute 2`,
+/// `search`, `close-duplicates`.
 #[derive(Clone)]
 struct Log(Rc<RefCell<Vec<String>>>);
 
@@ -169,6 +169,27 @@ fn labelled(shot: &mut Snapshot, class: &'static str, label: &str) -> Option<Are
             (data.builder.class_name() == Some(class)
                 && data.builder.label() == Some(label.as_str()))
             .then(|| node.layout().area)
+        })
+        .into_iter()
+        .next()
+}
+
+/// The area of the icon button named `label` inside the list's row named `row`. A tab shows its
+/// speaker and close button in the strip too, under the same names, so a button is found by its
+/// place in the row and not by name alone.
+fn in_row(shot: &mut Snapshot, row: &str, label: &str) -> Option<Area> {
+    let row = lines(shot).into_iter().find(|(name, ..)| name == row)?.1;
+    let label = label.to_string();
+    shot.runner()
+        .find_many(|node, element| {
+            let data = element.accessibility();
+            let area = node.layout().area;
+            let (x, y) = centre(&area);
+            (data.builder.class_name() == Some("IconButton")
+                && data.builder.label() == Some(label.as_str())
+                && (row.min_x()..=row.max_x()).contains(&x)
+                && (row.min_y()..=row.max_y()).contains(&y))
+            .then_some(area)
         })
         .into_iter()
         .next()
@@ -341,14 +362,89 @@ fn a_row_has_a_sound_button_only_while_its_tab_plays_or_is_muted_and_a_close_but
 }
 
 #[test]
+fn the_sound_and_close_buttons_of_a_row_answer_for_that_tab_and_leave_the_list_open() {
+    let spec = Spec::new(4, 0, 1).with_status(2, TabStatus::Audio);
+    let mut shot = start(spec.clone());
+    open_list(&mut shot);
+    let sound = in_row(&mut shot, "Page 2", "Mute Page 2").expect("the speaker of Page 2");
+    let at = centre(&sound);
+    shot.click(at.0, at.1);
+    rest(&mut shot);
+    assert_eq!(spec.log.all(), ["mute 2"]);
+    assert_eq!(
+        lines(&mut shot).len(),
+        6,
+        "the list stays open: {:?}",
+        labels(&mut shot)
+    );
+    let rows = lines(&mut shot);
+    let at = centre(&rows.iter().find(|(name, ..)| name == "Page 4").unwrap().1);
+    shot.hover(at.0, at.1);
+    rest(&mut shot);
+    let close = in_row(&mut shot, "Page 4", "Close Page 4").expect("the close button of Page 4");
+    let at = centre(&close);
+    shot.click(at.0, at.1);
+    rest(&mut shot);
+    assert_eq!(spec.log.all(), ["mute 2", "close 4"]);
+    assert_eq!(
+        labels(&mut shot),
+        [
+            "Search all tabs",
+            "Close duplicate tabs",
+            "Page 1",
+            "Page 2",
+            "Page 3"
+        ],
+        "the tab's row went and the list is still open"
+    );
+}
+
+#[test]
+fn a_press_on_the_strips_own_speaker_under_the_open_list_closes_the_list_and_mutes_nothing() {
+    // Why the test above finds the buttons by their row and not by name alone: the strip's own
+    // tab of Page 2 has a speaker of the same name, which comes first in the tree and lies under
+    // the list's scrim. A press there is a press outside the list. Looking up "Mute Page 2" took
+    // that one, nothing reached the host, and it read as a row that did not answer.
+    let spec = Spec::new(4, 0, 1).with_status(2, TabStatus::Audio);
+    let mut shot = start(spec.clone());
+    open_list(&mut shot);
+    let named = shot.runner().find_many(|node, element| {
+        let data = element.accessibility();
+        (data.builder.class_name() == Some("IconButton")
+            && data.builder.label() == Some("Mute Page 2"))
+        .then(|| node.layout().area)
+    });
+    assert_eq!(
+        named.len(),
+        2,
+        "the strip's speaker and the row's: {named:?}"
+    );
+    let in_strip = named[0];
+    assert!(
+        in_strip.min_y() < lines(&mut shot)[0].1.min_y(),
+        "the first is the strip's, above the list: {in_strip:?}"
+    );
+    let at = centre(&in_strip);
+    shot.click(at.0, at.1);
+    rest(&mut shot);
+    assert!(
+        spec.log.all().is_empty(),
+        "outside the list: {:?}",
+        spec.log.all()
+    );
+    assert!(
+        lines(&mut shot).is_empty(),
+        "a press outside closes the list"
+    );
+}
+
+#[test]
 fn a_rows_sound_and_close_buttons_are_named_for_their_tab() {
-    // Pressing them through the snapshot harness did not reach the host (the row
-    // moves its highlight under the pointer first): only their names are held here.
     let spec = Spec::new(4, 0, 1).with_status(2, TabStatus::Audio);
     let mut shot = start(spec);
     open_list(&mut shot);
     assert!(
-        labelled(&mut shot, "IconButton", "Mute Page 2").is_some(),
+        in_row(&mut shot, "Page 2", "Mute Page 2").is_some(),
         "the speaker of the playing tab names what it does"
     );
     let rows = lines(&mut shot);
@@ -356,7 +452,7 @@ fn a_rows_sound_and_close_buttons_are_named_for_their_tab() {
     shot.hover(at.0, at.1);
     rest(&mut shot);
     assert!(
-        labelled(&mut shot, "IconButton", "Close Page 4").is_some(),
+        in_row(&mut shot, "Page 4", "Close Page 4").is_some(),
         "the close button of the row under the pointer names its tab"
     );
 }
@@ -389,6 +485,62 @@ fn a_list_taller_than_the_window_has_room_for_stops_at_the_window() {
         "the list ends inside the window: {body:?}"
     );
     assert!(body.height() > 200.0, "and still shows rows: {body:?}");
+}
+
+#[test]
+fn the_commands_and_pinned_tabs_stay_in_view_over_forty_tabs_and_the_card_stops_short_of_the_window()
+ {
+    // Firefox's all-tabs panel keeps Search All Tabs and Close Duplicate Tabs where they are and
+    // scrolls the tab list under them; the list opens on the selected tab, Page 30, which
+    // scrolled them out of the window when the whole list was one scroll.
+    let window = (1280.0, 800.0);
+    let mut shot = open_in(Spec::new(40, 2, 30), window);
+    open_list(&mut shot);
+    let body = one_area(&mut shot, "PanelRows");
+    let rows = lines(&mut shot);
+    let area = |label: &str| {
+        rows.iter()
+            .find(|(name, ..)| name == label)
+            .unwrap_or_else(|| panic!("no {label} row"))
+            .1
+    };
+    for label in [
+        "Search all tabs",
+        "Close duplicate tabs",
+        "Pinned",
+        "Page 1",
+        "Page 2",
+    ] {
+        let row = area(label);
+        assert!(
+            row.min_y() >= 0.0 && row.max_y() <= body.min_y() + 0.5,
+            "{label} {row:?} is in the window and above the rows that scroll {body:?}"
+        );
+    }
+    let selected = area("Page 30");
+    assert!(
+        selected.min_y() >= body.min_y() - 0.5 && selected.max_y() <= body.max_y() + 0.5,
+        "Page 30 {selected:?} is the one the list scrolled to, inside {body:?}"
+    );
+    let card = body.max_y() - area("Search all tabs").min_y();
+    assert!(
+        card <= window.1 * 0.75,
+        "the card, from its first row to the end of the rows, is at most three quarters of the window, not the whole of it: {card}"
+    );
+    // The wheel scrolls the tabs and leaves what is above them alone.
+    let before = area("Search all tabs");
+    let scrolled_from = area("Page 30");
+    let over = centre(&body);
+    shot.scroll(over.0, over.1, -200.0);
+    rest(&mut shot);
+    let rows = lines(&mut shot);
+    let again = |label: &str| rows.iter().find(|(name, ..)| name == label).unwrap().1;
+    assert_eq!(
+        again("Search all tabs"),
+        before,
+        "the commands did not move"
+    );
+    assert_ne!(again("Page 30"), scrolled_from, "the tabs did");
 }
 
 #[test]
