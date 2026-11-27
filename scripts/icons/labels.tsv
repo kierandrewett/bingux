@@ -1,8 +1,8 @@
 # file | where the user sees it (label, surface) | the conventional metaphor | chat fork glyph + weight, or custom
-# Read by build.py (checks), map-fork.py (writes the <fork/> sources) and review.py (sheets). Names are Adwaita file names without -symbolic.svg.
+# Read by build.py (checks), map-fork.py (writes the <fork/> sources) and review.py (sheets). Names are shape names (aliases.tsv) without -symbolic.svg.
 # The glyph column is `custom: ..` or `ForkName weight [scale=.. dx=.. dy=.. mirror=.. align=..]`. The weight is `bold` (1.5 px outline) or `fill`,
 # the look of the icons as released in 5d49113; `regular` (1 px) is not used. `scale` is one factor on both axes (Bluetooth and phone use it) and
-# `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/bingux-ui.md).
+# `dx`/`dy` a translation; build.py adds the half pixel shift that leaves the fewest soft edges. Nothing is ever warped (docs/icons.md).
 # Directives below (read by labels.py): #policy <category>: files (fill/outline policy), #symmetric, #mark, #exempt <rule>, #mirror_rtl.
 
 #policy action: square-check crop square-pencil clock-ccw floppy-disk squares-overlap letters-aa asterisk brackets-square cursor-click brackets-angle quotes letter-b letter-i letter-t letter-s-strike link arrowhead repeat repeat-1 shuffle arrow-ccw pencil square-arrow-up window-sidebar person-arrows funnel corners-out squares-four list-bullets list-numbers pushpin window-inset arrow-cw corners-in frame-corners magnifier-plus magnifier-minus square-plus tabs window-split book-open translate file-magnifier bookmark-plus arrow-down-line check-line arrows-cw

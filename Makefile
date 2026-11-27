@@ -101,7 +101,7 @@ icons:
 	scripts/icons/colour.py
 
 # Sources match labels.tsv, sources are valid, output is current, and every icon
-# meets the size, centre, crispness and symmetry rules (docs/bingux-ui.md, Icons).
+# meets the size, centre, crispness and symmetry rules (docs/icons.md).
 icons-check:
 	scripts/icons/map-fork.py --check
 	scripts/icons/build.py --check

@@ -1014,7 +1014,7 @@ Every length is a token. The strip is `Dim::TabBar` tall (40 px, 44 px at compac
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Width            | **Natural width, left-aligned, never stretched**: a tab is as wide as its icon, title and close circle need (the widest title's, shared by all tabs so the stride is even), `Dim::TabMax` (200 px) at most. With few tabs the strip ends after the New tab button, which follows the last tab, and the rest of the bar is empty (it drags the window). Only when the tabs no longer fit do they share the strip equally and shrink together: the title fades out first (`fade_text`, never an ellipsis), then, under `Dim::TabTitleMin` (96 px; 120 px on a phone), each tab is its favicon only (the close circle shows on the chosen tab and under the pointer, in the favicon's place when the two do not fit together; a tab without an icon keeps its title), down to `Dim::TabMin` (36 px; the 44 px touch target on a phone). Beyond that the strip scrolls sideways instead of squeezing, with fade edges where the tabs continue (into `Paint::Strip`), and the New tab button moves to a fixed place at the strip's end beside a Tab list button. **Scrolling**: the wheel over the strip (the vertical wheel too, forwards when turned down), a touchpad's two-finger movement and a finger dragged along the tabs scroll it; a wheel notch glides on `MOVE_MS`, a touchpad and a finger are followed at once; the selected tab is scrolled into view by the shortest distance whenever the selection moves. The offset is kept from the strip's start edge (`controls/tab_scroll.rs`), so the same rules hold right to left.                                                                                                                                                                                  |
 | Tab              | `[icon] [title] [close]` on one row (mirrored right to left). The title takes the room that is left; one that does not fit fades out over its last 24 px (`fade_text`) before the close slot, which is never faded. The close circle's slot is always laid out in a tab that shows its title, so a tab never changes width when the button appears. The button is the `icon_button` of `Dim::TabClose` (a 16 px circle with a 12 px glyph, the 44 px target at compact density, centred in the tile and the same distance from its top, bottom and end, so a press on it is stopped before it can reach the header bar's window drag), named "Close <title>", drawn (fading in with the fill) on the selected tab, on a tab the pointer is over, and on every tab that shows a title on a touch screen and at compact density; pressing it neither selects nor drags the tab. **Every tab closes, a lone one too**: the strip reports the id and the host decides (Files closes the window). The chosen tab is the raised tile (`Paint::Raised`); an unchosen one has no fill at rest, shows `Ink::Muted` text (4.5:1 on the strip, and under the hover and pressed fills), and has a faint 1 px, 16 px tall hairline in the gap after it that is hidden next to the chosen tab and the tab the pointer is on (and while a tab is dragged).                                                                                                                                                                                                                                                                                                                                                                               |
-| End of the strip | The New tab button (`on_new`) follows the last tab, a gap after it, an `icon_button` of `Dim::TabButton` (30 px square, 44 px at compact density) in a cluster as tall as the strip, the same distance from the strip's top, its bottom and its trailing edge as a tab is (5 px; flush at compact density). It never scrolls: when the tabs overflow it is at a fixed place at the end of the strip. Then a Tab list button (`Icon::ChevronDown`) before it opens a menu of every tab: each tab's icon, its name (`MenuItem::name()`: cut in the middle, the whole name the tooltip), the selected one ticked at the end of its row, mirrored in a right-to-left interface.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| End of the strip | The New tab button (`on_new`) follows the last tab, a gap after it, an `icon_button` of `Dim::TabButton` (30 px square, 44 px at compact density) in a cluster as tall as the strip, the same distance from the strip's top, its bottom and its trailing edge as a tab is (5 px; flush at compact density). It never scrolls: when the tabs overflow it is at a fixed place at the end of the strip. Then a Tab list button (`Icon::ChevronDown`) before it opens a menu of every tab: each tab's icon, its name (`MenuItem::name()`: cut in the middle, the whole name the tooltip), the selected one ticked at the end of its row, mirrored in a right-to-left interface.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | Motion           | Adding a tab grows it in and the others narrow to make room; closing one shrinks it away and the others widen (`MOVE_MS`, instant with reduced motion). The widths are laid out from one clock, so the strip never exceeds its container during the motion. **Rapid closure**: after a tab is closed with its button or a middle click the others keep their width until the pointer leaves the strip's row, so the next close button comes under the pointer (and is shown as hovered though the pointer has not moved); the widths then grow to what the tabs need (or the room, if less). `tab_close::RapidClose` is the state machine, over a clock the strip passes in. Closing with the keyboard or the menu, or adding a tab, does not hold.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Pointer          | A press selects (a mouse as it goes down, a finger when it lifts). A middle click closes. **The tab the pointer is on is worked out from where the pointer and the tabs are**, not from enter and leave events, so exactly one tab is hovered and it stays right when the tabs move under a pointer that does not (a wheel notch, a tab closing, a rapid close); its fill (`Paint::Hover`, the whole tab, corner `Radius::Tab`) fades in and out on `MOVE_MS`; pressed (`Paint::Pressed`) is at once; the chosen tab is `Paint::Raised`, one opaque colour so a held tab hides the titles it slides over; a held tab is lifted. With `on_reorder`, a tab dragged more than 6 px follows the pointer, drawn over the others, which slide aside on the springs of `crate::reorder`; letting go settles it into its place and calls `on_reorder(id, to)` once, after it has settled. Dragging past the strip's end scrolls it. Escape, or letting go more than a header's height above or below the strip, puts the tab back. The strip uses `crate::drag::PointerDrag` and `crate::reorder::Reorder`, as `sortable` does. A right click, or a finger held on a tab, opens its menu (`tab_close::menu_rows`): Close tab (Ctrl+W), Close other tabs, Close tabs to the left (greyed out on the first tab) and Close tabs to the right (with `on_close_many`, which gets the ids in strip order), Duplicate tab (`on_duplicate`), Reopen closed tab (Ctrl+Shift+T, `on_reopen(available, f)`; greyed out without a closed tab), and Move left and Move right with `on_reorder`, which is how touch reorders. `on_hover` reports each change of the tab the pointer is on, so a host can accept a drag on it (see Files below). |
 | Keyboard         | Only the selected tab is in the tab order. The arrows are the screen's: Left and Right move the selection and the focus (Right goes back in a right-to-left strip), Home and End go to the first and the last; Ctrl+Shift+Left and Right move the selected tab (`on_reorder`); Delete or Ctrl+W closes the selected tab (also a lone one) and the focus follows to its neighbour; Ctrl+T calls `on_new`; Ctrl+Shift+T calls `on_reopen`. The tab's focus ring is drawn inside the tab, with its rounded corners, so the scroll region cannot clip it; it shows for keyboard focus only. The dragged tab is lifted by a layer (`HELD_LAYER`) because Freya paints by depth in the tree, so a tab's contents would otherwise draw over a neighbour's fill. A tab wider than the room left in a scrolling region shows its start.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -1830,7 +1830,7 @@ What the dialog has:
 
 | Part                       | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Toolbar                    | Back, Forward, Parent folder (a chevron up), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay. While a folder is being read (a first load, the check of a cached listing, a read F5 asked for, a subfolder search) the same button turns into Stop: `icon_button(Icon::ArrowCw, f).morph(Icon::Stop, stopping)`, so its box, hover, pressed and focus state carry through, and its tooltip and name are `Refresh (F5)` and `Stop (Esc)`. Stop shows after 150 ms of reading and stays at least 300 ms (`Dwell::LOADING`); pressing it, or Escape while it shows, stops the read (`Reload::stop`) and keeps the listing. See "Reload and Stop" in `docs/files.md`.                                                                                                                                                                                                                                                                                                                          |
+| Toolbar                    | Back, Forward, Parent folder (a chevron up), Refresh, the address bar, the file type dropdown, New folder, a list or thumbnails switch and the view menu (sort, hidden files). Every button follows the `Control` radius like any other button, and the view menu opens against its own button, not at the pointer. Refresh (also F5 and Ctrl+R) reads the folder again even when no change was seen, as a network or removable drive sends none; the selection, scroll position and filter stay. While a folder is being read (a first load, the check of a cached listing, a read F5 asked for, a subfolder search) the same button turns into Stop: `icon_button(Icon::ArrowCw, f).morph(Icon::Stop, stopping)`, so its box, hover, pressed and focus state carry through, and its tooltip and name are `Refresh (F5)` and `Stop (Esc)`. Stop shows after 150 ms of reading and stays at least 300 ms (`Dwell::LOADING`); pressing it, or Escape while it shows, stops the read (`Reload::stop`) and keeps the listing. See "Reload and Stop" in `docs/files.md`.                                                                                                                                                                                                                                                                                                                                       |
 | Address bar (`AddressBar`) | The path as crumbs (the same box becomes the location and search field, see [Location field and search](#location-field-and-search)). The field takes the `Control` radius and a 4 px padding, so each crumb inside it takes the `Inner` radius (12 less 4). Each crumb has a chevron that lists that folder's subfolders. A trail that does not fit keeps its first and last crumb and hides the middle behind one `…` menu. Click the empty end, press Ctrl+L, or type `/` or `~` to edit the path as text. Typing shows completions (folders first); Tab completes, Up and Down choose, Enter opens, Escape closes. Errors show inline: not found, not a folder, no permission, not responding. `~`, relative paths and `file://` work. A **named place** shows its icon and name, never a path: Home, **Trash** (field `trash:///`, and `trash:///Old folder/` inside it, completed from the bin) and **Recent** (`recent:///`); typing any spelling of one (`trash://`, `~/.local/share/Trash/files`, `Trash`) opens it. See [File views](#file-views).                                                                                                                                                                                                                                                                                                                                               |
 | Sidebar (`PlacesSidebar`)  | Recent, Home and the user folders (with their own icons by path), Bookmarks, then Drives: Computer and every mount, each with a usage bar and "X free of Y". A drive that does not answer says "Not responding". There are no buttons on the rows: every row has a context menu (right click, long press, the Menu key or Shift+F10) of text items, built in `files/place_menu.rs` from `PlaceFacts` by a pure `place_plan` that the tests read, in the list menu's grouping: open (Open or, for a drive that is not mounted, Mount; Open in new tab where the window has tabs), what changes the place (Rename… for a bookmark, Eject and Unmount or Unmount for a drive, Empty Trash on the Trash, grey while it is empty), the path and bookmark (Copy path, Add to or Remove from bookmarks), then Properties. Properties opens the list's Properties dialog for the place's folder (`properties::show_folder_properties`; the Trash shows its item count and size, a drive its free space bar); Recent and a drive that is not mounted have none. The menu's shortcut hints are keys the focused row answers to through the same command handler: Enter, Alt+Enter, F2, Delete, Ctrl+Shift+C. The folders have their own icons: a folder with a page for Documents, a down arrow for Downloads, and so on. A phone gets `PlacesMenu`, a sheet with the same rows that closes before Properties opens. |
 | File type filter           | A dropdown in the toolbar on a desktop; on a phone a "File type" row at the bottom. The sidebar runs the dialog's full height: there is no footer under it, and the name field of Save, the request's choices and any problem sit in a strip at the bottom of the content pane. With no filters in the request it offers All files, Images, Audio, Video, Documents, Archives and Text. `presets(true)` adds those after the request's own. The list shows only matching files (folders always stay) and the empty state says when the filter hides everything. The status pill floats over the bottom-right corner of the list on an opaque floating surface and takes no row. It says `95 items`, `1 of 95 selected (19 kB)` when something is selected, `3 of 120 match` while a search is on, and what a running operation is doing; it does not report hidden files or what the filter hides. It follows the pointer over the whole window: when the pointer comes within a small margin it slides to the other bottom corner, and it returns when the pointer leaves the list.                                                                                                                                                                                                                                                                                                                       |
@@ -3759,30 +3759,27 @@ load)` loads a `Resource<T>` in the background: it is `Loading`, then
   over 120 ms. Motion is off under reduced motion (`tokens.motion(ms)`
   returns 0).
 - Icons are the Bingux set under `crates/ui/icons/`; see
-  [Icons](#icons) for how to use one and how to add another.
+  [Icons](#icons) for how to use one and [icons.md](icons.md) for how one is
+  drawn and added.
 - A dropdown draws a symbolic icon before each option with `.icons(Vec<Icon>)`,
   in the same order as the options. Sound uses it for each device's kind.
 
 ## Icons
 
-The icon set is the chat app's icon fork (`@chat/icons`, a rounded fork of
-Phosphor: continuous "squircle" corners, its fill and weight choices and its own
-custom icons). Icons are the fork's drawings, not redrawn: `scripts/icons/build.py`
-takes the fork's outline, puts it on the 16 px grid (one uniform scale at most, and a
-shift of at most half a pixel that leaves the fewest soft edges, see
-[Fitting](#fitting-the-pixel-rules)) and writes one SVG per
-icon, tinted with the text colour at draw time.
+This section is how an application uses an icon. How an icon is drawn, named,
+checked and added (the 16 px grid, keylines, weights, corners, modifiers, names,
+the fill and outline policy, the pixel rules) is written once, in
+[icons.md](icons.md); nothing here repeats it. The set is the chat app's icon
+fork (`@chat/icons`, a rounded fork of Phosphor) put on the 16 px grid by
+`scripts/icons/build.py`, plus icons drawn by hand to the same rules; each is one
+SVG tinted with the text colour at draw time.
 
-**Names say what an icon draws.** An icon is named after its drawing, not after one
-use of it: `calendar`, `shield`, `padlock-cross`, `battery-50-bolt`. A name is
-`object[-variant][-modifier]`: the object drawn, what tells siblings apart (a level,
-a count, a direction, a letter) and a shape drawn on it or cut out of it (`-slash`,
-`-cross`, `-check`, `-plus`, `-bolt`); a glyph inside a container names the container
-first (`circle-info`, `folder-plus`). The SVG file is `NAME-symbolic.svg`, the Rust
-variant the name in CamelCase (`Icon::Battery50Bolt`), and the QML shell asks for
-`NAME-symbolic`. `scripts/icons/aliases.tsv` lists, for each icon, the freedesktop
-names it stands for (its old Adwaita name, the names gnome-settings-daemon and BlueZ
-send): `build.py` turns it into the shell's `BinguxIconAliases.js` and Rust's
+**Names say what an icon draws** ([icons.md, Names](icons.md#names)). The SVG file
+is `NAME-symbolic.svg`, the Rust variant the name in CamelCase
+(`Icon::Battery50Bolt`), and the QML shell asks for `NAME-symbolic`.
+`scripts/icons/aliases.tsv` lists, for each icon, the freedesktop names it stands
+for (its old Adwaita name, the names gnome-settings-daemon and BlueZ send):
+`build.py` turns it into the shell's `BinguxIconAliases.js` and Rust's
 `Icon::from_freedesktop`, which read what other programs send. Bingux code asks for
 the shape name; `ui-lint` reports an alias in the shell. `scripts/icons/rename.py`
 renames the tree by the table when an icon arrives under another name.
@@ -3813,7 +3810,7 @@ icon(Icon::Magnifier, IconSize::Control, Paint::Muted.color(&tokens))
 | `Hero`     | 48 px             | The icon of an empty or status page        |
 
 The icons are designed on 16 px and are crispest there; 18 and 20 px are scaled
-copies and are checked against a looser bound (below).
+copies ([icons.md, The grid](icons.md#the-grid)).
 
 ### Every fork icon is an `Icon` (`chat-icons` feature)
 
@@ -3829,199 +3826,17 @@ so it can look softer than a named icon. `scripts/icons/review.py catalogue` ren
 the whole fork, fitted, to PNG pages; `review.py candidates House:fill Mountains:regular`
 shows chosen glyphs side by side; to adopt one, give it a row in `labels.tsv`.
 
-### Fill and outline: the policy
+### Icons that show a state
 
-Each icon in `scripts/icons/labels.tsv` has a category (`#policy <category>: ...`
-lines) and the category decides its fork weight; `build.py --check` fails an icon
-whose weight does not match. The look is the one released in commit `5d49113`: outlines
-are the fork's `bold` weight (strokes 1.5 px at 16 px, exactly as the fork draws them) and
-objects are `fill`. The fork's `regular` weight (1 px wire) is not used by a named icon:
-at 16 px it reads thin, small and rounder than the neighbouring fills, because the
-corner radius of the fork's drawing is large next to a 1 px line. A named icon is never
-thickened or thinned to a whole pixel (an offset with round joins also rounds the
-corners): a 1.5 px stroke has one half-covered pixel row per edge, which is
-how it looks, and is accepted.
+A level or state (battery, Wi-Fi signal, volume) is one icon per state with the
+same footprint, so the glyph does not jump when the state changes. Pick a battery
+icon with `Icon::battery_level(percent)` (Rust, nearest ten) or
+`SystemIndicators.batteryIconName()` (the shell, the same rounding); the parts
+that are off are drawn dimmed in the icon itself, so tint it with one colour.
 
-| Category    | Weight           | What belongs there                                                                                                                                                                                                                                                               |
-| ----------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `object`    | `fill`           | Things: devices (laptop, printer, webcam, headphones), places (folders, home, trash), tools, lock, bell, sun/moon                                                                                                                                                                |
-| `status`    | `fill`           | Badges whose meaning is the mass: error, info, warning, help, secure/insecure, VPN, play, pause, eject, starred                                                                                                                                                                  |
-| `detail`    | `bold` or `fill` | Things recognised by their inner structure: globe (`bold`), envelope, calendar with dates, text and document files, eye (`fill`), touchpad (`bold`); the phone and the tablet are drawn                                                                                          |
-| `section`   | `bold` or `fill` | The settings sidebar: Network, Bluetooth, Search, Power and Applications (`DotsNine`: nine round dots) are outlines; Displays, Sound, Appearance, Accessibility, Date and time, Users, Mouse and About are fills; the Keyboard and the Desktop (a monitor with a dock) are drawn |
-| `action`    | `bold` or `fill` | Verbs: share, refresh, search, zoom, rotate (`bold`); delete, filter, sidebar toggle (`fill`); copy, edit, full screen, list and grid views are drawn                                                                                                                            |
-| `indicator` | `bold` or `fill` | Levels and states: wired network (`fill`); volume (`fill`); battery, Bluetooth and the hotspot are drawn by hand (`custom`)                                                                                                                                                      |
-| `control`   | `bold`           | Tick, plus, minus, close, menu, more, drag handle, window controls, outline star; the chevrons, power and window-new are drawn                                                                                                                                                   |
-| `drawn`     | strokes          | Drawn by hand: the Wi-Fi family (two 2 px arcs and a dot, symmetric about x = 8), the symbolic-link badge, never a fork glyph                                                                                                                                                    |
-
-Default applications: Web, Mail, Calendar, Text and Documents are fills, like Files,
-Photos, Music and Video; Text and Documents have their own icons (`file-text`,
-`file-doc`) so changing them never changes `square-pencil` or
-`folder-open`. `square-pencil` is only for editing a document (a text editor, a
-note); every other edit (a path, a connection, an access point, a rule) is `pencil`.
-
-The controls family is drawn by hand where a fork glyph cannot be placed on whole
-pixels or is the wrong picture: the chevrons (`chevron-*`) are
-1.5 px polylines with a mitred point and a sharp inner angle; `list-bullets` and
-`squares-four` sit on whole pixels (2 px bars and dots on rows 2-4, 7-9, 12-14; four 5 px
-squares); `squares-overlap` draws both sheets with one radius; `corners-out` and
-`corners-in` are four corner brackets, out and in, as lucide's maximize and
-minimize; `gear` is one cog (a ring, eight tapered
-teeth, a round hole); `sun` is a true circle with eight rays;
-`power` is a true circle (r 5, centre (8, 9)) open at the top, with the bar
-above it; `gauge` keeps its needle inside the dial.
-
-### Fitting: the pixel rules
-
-`build.py` places a fork glyph with three per-icon attributes, which `map-fork.py` writes
-into the source from `labels.tsv` (`Bluetooth bold scale=1.1`):
-
-1. `mirror=left|right`: keep that half, replace the other with its mirror (the fork's
-   `User` fill is lopsided: its right shoulder reaches about 0.8 px further from the middle than the left, so the
-   avatar uses `mirror=left`, and is never moved sideways, so it stays symmetric about x = 8);
-2. `scale`: one factor on both axes about the middle of the box. Bluetooth (1.1) and the
-   phone (0.966, with `align=none`: the fork's DeviceMobileCamera is 14.5 px tall, this puts it on rows 1 to 15)
-   use it: the other glyphs keep the size the fork draws, 10 px (the nine dots) to 16 px (a battery);
-3. `dx`, `dy` (rare) and the automatic shift: of the translations of at most half a pixel
-   (in quarter pixels) that keep the ink in the box, the one that leaves the fewest soft
-   edge pixels at 16 px (ties: the smallest move). `align=none` turns the automatic
-   shift off.
-
-A glyph is only ever moved and scaled uniformly. Nothing warps one axis, thickens a stroke,
-snaps an edge or flattens a curve, so circles stay circles (the Applications dots, the
-battery cells' ends, Bluetooth's loops) and the fork's corners are the fork's own: when
-an edge cannot meet a pixel line it renders soft. `build.py` raises an error for a
-non-uniform scale (`affine`). When there is no `mirror`, the SVG is the fork's own path data
-under `translate(..) scale(..)`, byte for byte.
-
-Rules, checked on the rasterised icon
-(`scripts/icons/raster.py`: exact-area coverage, no hinting; the ink box is read from a
-64 px raster):
-
-| Rule                                         | Limit                                                                                          | Applies to                                                                                                                                                                                                                                              |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Ink long side                                | 10 to 16 px                                                                                    | every icon not in `#mark`: the fork's own sizes (nine dots 10.5 px, battery 16 px); catches a glyph that is lost or leaves the box                                                                                                                      |
-| Ink long side, `mark`                        | 8 to 13 px                                                                                     | `#mark`: chevrons, tick, plus, minus, close, more, window controls                                                                                                                                                                                      |
-| Ink in the box                               | no ink outside the 16 x 16 box                                                                 | every icon (checked when it is compiled)                                                                                                                                                                                                                |
-| Centre of the ink from the centre of the box | at most 1.5 px each axis                                                                       | every icon: the fork centres glyphs by their mass (a lock's shackle, a play triangle, headphones), which puts the ink box up to 1.4 px off                                                                                                              |
-| Soft edge pixels at 16 px                    | at most 1.35 x the fewest any placement gives, plus 6                                          | every icon: pixels with 15 to 85 % coverage in a straight run of 3 or more on a horizontal or vertical edge. A bold stroke always leaves such a row, so the limit is relative to the icon's own best translation (quarter pixels, at most half a pixel) |
-| Soft edge pixels at 14, 18, 20 px            | at most 100, 120, 140                                                                          | every icon: scaled copies cannot be crisp, the bound catches regressions                                                                                                                                                                                |
-| Symmetry                                     | centre within 0.05 px; mirrored coverage differs by at most 0.15 at any pixel, 0.03 on average | `#symmetric`: the avatar and the Wi-Fi family. The other glyphs are symmetric in the fork but may be shifted half a pixel for crispness                                                                                                                 |
-| Counters                                     | a fork glyph keeps every hole and cut-out                                                      | every fork icon (`#exempt counters:` to waive)                                                                                                                                                                                                          |
-| Sidebar set                                  | ink covers 10 to 55 % of the box                                                               | the icons of `groups.txt` `[sidebar]`: fills 40 to 50 %, outlines 10 to 40 %                                                                                                                                                                            |
-| Policy                                       | weight matches the category                                                                    | every icon                                                                                                                                                                                                                                              |
-
-`#exempt size|centre|soft: ...` lines waive a rule where the footprint is the point:
-the volume and Wi-Fi level icons must keep the footprint of the full icon, so a bare
-dot or a bare cone is not centred or sized by itself.
-
-### Checks
-
-```sh
-scripts/icons/map-fork.py --check   # sources match labels.tsv
-scripts/icons/build.py --check      # sources valid, output current, every rule above;
-                                    # prints the icons with the most soft edge pixels
-scripts/icons/build.py --measure    # every icon: class, ink size, centre, soft pixels
-scripts/icons/build.py --lint --src DIR   # the rules on a draft directory (a probe icon)
-scripts/icons/build.py --suggest [icon ...]  # the scale that brings a glyph into the size rule
-make icons-check                    # the first two, the colour icons and golden.py
-scripts/icons/golden.py             # every icon at 16-32 px, 1x and 2x, against golden.json (see "Visual integrity checks")
-scripts/icons/golden.py --update    # approve a change you have looked at (--sheet FILE draws the set)
-```
-
-A failing check names the icon, the number and the fix: `probe-small: ink is 4.00 x
-4.00 px (icon): the long side must be 10 to 16 px; change scale`, `probe-soft: 48
-soft edge pixels at 16 px, 20 at its best placement (allowed 33)`, `avatar-default: not
-left-right symmetric`.
-After editing `scale`, `dx` or `dy` in `labels.tsv`, run `map-fork.py`, `build.py` and
-`build.py --check`; never edit `crates/ui/icons/*.svg` (they are written).
-
-Icons that show a state (Wi-Fi signal, battery level, volume) are one drawing per
-state with the same footprint, so the glyph does not jump when the state changes:
-the battery levels share one body (the same rectangle), as do the four volume icons.
-
-**Dimmed ink.** A level icon keeps the parts that are "off" in view instead of dropping them: a Wi-Fi
-arc without signal, the empty end of a battery. A source marks such a shape `data-dim="yes"`; `build.py`
-writes it as a second path with `fill-opacity="0.4"` (`DIM_ALPHA`, one value for every icon), never
-overlapping the solid path. The icon is still tinted with one colour at draw time (Freya's `SvgViewer`
-sets `fill` on the root, which a path's own `fill-opacity` keeps; the QML shell's `MultiEffect`
-colorization keeps the alpha too). The pixel rules and `golden.py` judge the whole silhouette, dim part
-included. A cut removes ink from both layers: the charging bolt on a battery is cut out of the filled and the dim part alike. `review.py` draws both layers.
-
-Battery: `battery-N` (0 to 100 in tens) is a rounded body filled from the left to N % with the
-rest and the nub dimmed; `battery-N-bolt` is the same with the bolt, so it shows the level and the charge;
-`battery-100-check` is full with a tick; `battery-exclamation` is a solid body with an exclamation mark. Pick
-one with `Icon::battery_level(percent)` (Rust, nearest ten) or `SystemIndicators.batteryIconName()`
-(the shell, the same rounding). Wi-Fi has two arcs at most (IC-03), so the full fan is one drawing,
-`wifi`; `wifi-0`, `wifi-1` and `wifi-2` light none, the dot, and the dot and inner arc.
-
-### Choose the icon for where it is used
-
-Pick the conventional metaphor for the label the user reads next to the icon, not
-the glyph whose name matches. A sidebar "Network" page needs a network glyph, not a
-node diagram; "Share" is a box with an up arrow, not a paper plane.
-`scripts/icons/labels.tsv` records, for every icon, where it appears, the metaphor
-people expect there, the fork glyph or drawing, and its category. Mappings that were
-weak, and what was decided:
-
-| Icon                                                                 | Was                                                | Problem                                                               | Now                                                                                                  |
-| -------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `hand-tap`                                                     | `HandPointing` regular                             | 1 px wire, thinner than its neighbours                                | `HandTap` bold, as in `5d49113`                                                                      |
-| `shield`                                                        | `Shield` fill                                      | a plain shield                                                        | `ShieldCheckered` fill: the chequer of Material's VPN icon                                           |
-| `preferences-desktop-wallpaper` (now `monitor-dock`)          | `ImageSquare` bold                                 | a picture is the wallpaper, not the Desktop page                      | drawn: a monitor on a stand with a dock pill inside                                                  |
-| `dots-nine`                                                      | solid nine-dot square                              | a solid blob                                                          | `DotsNine` bold (nine round dots, no mass)                                                           |
-| `tablet`, `phone`                                              | `DeviceTablet`, `DeviceMobile` fill                | two plain rounded rectangles, neither read as a tablet or a phone     | tablet drawn: a landscape 14 x 10 body, screen and button cut out; phone: `DeviceMobileCamera` bold  |
-| `globe`, `envelope`, `calendar`                    | `Globe`, `EnvelopeSimple`, `CalendarBlank` fill    | the globe's filled disc hid its meridians; the calendar had no dates  | `Globe` bold, `EnvelopeSimple` fill, `CalendarDots` fill                                             |
-| Default applications: Text                                           | `square-pencil` (`NotePencil` fill)                | an editor, not a text file                                            | `file-text`: `FileText` fill                                                                  |
-| Default applications: Documents                                      | `folder-open` (`FolderOpen`)                     | a folder, not a document                                              | `file-doc`: `FileDoc` fill                                                              |
-| `square-pencil`, `pencil`                                            | drawn: a pencil cut into tip, body and eraser      | a blob at 16 px; the tip did not read                                 | drawn: one pointed tip and body, the eraser cut off by a 1.5 px seam; the page frame is kept         |
-| `floppy-disk`                                                      | `FloppyDisk` bold                                  | a thin outline that read as basic                                     | drawn: a solid floppy, corner cut off, the shutter slot and the hub cut out                          |
-| `circle-info`                                                         | `Info` regular                                     | 1 px wire in a set of fills and bold outlines                         | `Info` fill, as in `5d49113`                                                                         |
-| `speaker`                                                   | `SpeakerNone`                                      | a bare cone can read as mute                                          | kept: 0, 1, 2 waves are monotone and mute has the X                                                  |
-| `battery-level-*`                                                    | five fork glyphs for eleven levels, outlined cells | a line per cell, not filled; the level read badly                     | drawn: a body filled to the level, the rest dimmed                                                   |
-| `battery-level-*-charging`                                           | `BatteryCharging`                                  | the bolt is small at 16 px, level is lost                             | drawn: the same level fill with the bolt turned inside out on it                                     |
-| `squares-overlap-left`                                                     | `CopySimple`                                       | close to `squares-overlap`                                                  | kept: two squares are the convention                                                                 |
-| `cursor-click`                                                      | `CursorClick`                                      | no "inspect" glyph                                                    | kept for the inspector toolbar                                                                       |
-| `network`                                                      | `Network` bold                                     | the squares were outlines                                             | `Network` fill                                                                                       |
-| `arrow-up`                                                              | a folder with an arrow out of it                   | a second, heavier "up" beside the chevrons                            | removed: the parent-folder button is `chevron-up`                                                        |
-| `security-high`, `security-low`, `system-lock-screen`                | shields and a padlock                              | three more padlock-like icons                                         | removed: the shell uses the padlock (`padlock`)                                   |
-| `preferences-desktop-keyboard-shortcuts`                             | `Keyboard` bold                                    | the same drawing as `keyboard`                                  | removed: the shortcuts row uses `Icon::Keyboard`                                                     |
-| `x-office-document`, `x-office-spreadsheet`, `x-office-presentation` | a page marked DOC, XLS, PPT                        | a file extension is not a picture, and DOC is `file-doc` | removed: documents are `file-text`, spreadsheets `table`, presentations `easel`          |
-| `waveform`                                                         | `Waveform` bold                                    | the Sound page's fallback device is not a sound card                  | the Sound page uses `Icon::SpeakerWave2`; the file stays for the shell's Bluetooth devices (BlueZ names it) |
-| `square-pencil`                                                      | `NotePencil` fill                                  | used for every edit, and a pencil that looked odd                     | drawn pencil; `pencil` is the general edit icon                                                      |
-
-### Add or change an icon
-
-1. Find the fork glyph: `review.py catalogue` (all of them), or
-   `~/dev/chat/packages/icons/src/generated/<Name>.ts`.
-2. Add a row to `scripts/icons/labels.tsv` (`file | where it appears | metaphor |
-<ForkName> <weight>`) and name it in one `#policy` line, plus `#symmetric` or
-   `#mark` where they apply. For an icon the fork does not have, mark the row `custom`
-   and draw `src/<file>-symbolic.svg` by hand from plain SVG shapes on the 16 grid (see
-   the header of `scripts/icons/build.py`: `stroke` 1 or 2, `fill`, `data-op="cut"`,
-   `rx` for a continuous corner, and `<fork/>` pieces), category `drawn` or the
-   category of the fork piece.
-3. `scripts/icons/import-chat.py` vendors the whole fork (it only needs to run when the
-   chat package changes).
-4. `scripts/icons/build.py --suggest <file>` prints the `scale` that brings the glyph
-   into the size rule (nothing prints when 1 fits; there is nothing else to fit).
-   `scripts/icons/map-fork.py` writes the source, `scripts/icons/build.py`
-   compiles it into `crates/ui/icons/` and the shell's copy,
-   `scripts/icons/build.py --check` judges it.
-5. Add the variant to `Icon`, to `Icon::ALL` and to `Icon::bytes()` in
-   `crates/ui/src/icons.rs`.
-6. Look at it. `scripts/icons/review.py sheets --out /tmp/icons` writes one labelled PNG
-   per group (Icon variant, file, category, glyph and fit, where it is used, metaphor;
-   16 px dark and light, 18 px, 48 px) and `icons.txt`, the same table as plain text.
-   `review.py compare BEFORE_DIR AFTER_DIR --group sidebar` shows a set before and
-   after. `scripts/icons/sheets.py --out /tmp/icons` renders the same at 12 to 48 px
-   with Freya's own rasteriser, plus a top-bar mock.
-   The taxonomy's Icons / Icon set page is one grid of every file in `icons/`, sorted by
-   file name: the glyph (16 to 48 px, 24 by default) with its name under it, a name
-   filter, the name in a tooltip, a press copies it. It carries no per-icon detail; that
-   is `review.py`'s job.
-
-The fork's geometry is MIT-licensed Phosphor work; `crates/ui/icons/COPYING`
-carries the licence and attribution.
+The taxonomy's Icons / Icon set page is one grid of every file in `icons/`, sorted
+by file name: the glyph (16 to 48 px, 24 by default) with its name under it, a
+name filter, the name in a tooltip, a press copies it.
 
 ### In the QML shell
 
