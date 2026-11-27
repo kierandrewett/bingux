@@ -144,7 +144,7 @@ user-trash | Forget, Trash | trash can | Trash fill
 view-filter | Filter | funnel | Funnel fill
 find-location | Inspect element (inspector toolbar) | cursor clicking | CursorClick bold
 location-arrow | My location (Weather's list of places) | arrow pointing up and right | custom: a filled kite pointing up and right, one tip and a notch, corners rounded by 1 px
-document-edit | Edit a document (text editor, notes) | pencil on page | custom: a 1.5 px frame open at the top right and the pencil across the opening
+document-edit | Edit a document (text editor, notes) | page being typed in | custom: a 1.5 px page open at the bottom right, two text lines, and a text cursor (I-beam) in the opening; no pencil
 pencil | Edit (a path, a connection, an access point, controls) | pencil | custom: a solid pencil at 45 degrees: tip, body and eraser, cut apart by 1 px seams
 document-open | Open | open folder | FolderOpen fill
 send-to | Share | square with arrow up | Export bold
@@ -171,7 +171,7 @@ changes-prevent | Keep awake | coffee cup | Coffee fill
 input-gaming | Game controller (Bluetooth) | game pad | GameController fill
 input-tablet | Tablet (Bluetooth) | tablet | custom: a landscape 14 x 10 body with a screen and a home button cut out
 input-touchpad | Touchpad | finger tapping | HandTap bold
-phone | Phone (Bluetooth, phone preview) | phone | custom: a tall 6 x 14 body with a screen and a home button cut out
+phone | Phone (Bluetooth, phone preview) | phone | custom: a tall 8 x 14 solid body with 2 px walls, a screen and a round home button cut out
 camera-web | Webcam (Sound page, Bluetooth) | webcam | Webcam fill
 camera-photo | Camera (Bluetooth device row), screenshot notification | still camera | Camera fill
 media-removable | USB drive | USB symbol | Usb fill
@@ -215,7 +215,7 @@ utilities-terminal | Terminal (shell sidebar, desktop widget) | terminal prompt 
 accessories-text-editor | Notes (shell sidebar, desktop widget) | notepad | Notepad fill
 action-unavailable | Action not available (on-screen display) | prohibited | Prohibit bold
 document-open-recent | Recent (emoji picker) | clock with a counter-clockwise arrow | ClockCounterClockwise bold
-document-save | Save, saving a recording (shell) | floppy disk | FloppyDisk bold
+document-save | Save, saving a recording (shell) | floppy disk | custom: a solid floppy with the top right corner cut off, the shutter notch with its window tab, and the label cut out
 text-x-script | Source code and script (file list, grid, properties) | page with angle brackets | FileCode fill
 application-x-generic | Unknown file (file list, grid, properties) | blank page | File fill
 emblem-symbolic-link | Symbolic link badge on a file or folder icon | arrow in a disc | custom: disc with an up-right arrow cut out
